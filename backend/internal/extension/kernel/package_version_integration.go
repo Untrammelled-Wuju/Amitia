@@ -74,7 +74,35 @@ func (r *Runtime) deactivatePackageVersionAfterUninstall(ctx context.Context, ex
 	return nil
 }
 
-func (r *Runtime) runPackageFinalGate(ctx context.Context, operationID string) error {
-	_, err := r.VerifyPackageFinalGate(ctx, operationID)
+func (r *Runtime) runPackageFinalGate(ctx context.Context, operationID string, guard PackageWriteGuard) error {
+	_, err := r.verifyPackageFinalGateWithGuard(ctx, operationID, guard)
 	return err
+}
+
+func (r *Runtime) FinalizePackageOperation(ctx context.Context, operationID, extensionID string, leaseGuard *PackageLeaseGuard, guard PackageWriteGuard) error {
+	if leaseGuard != nil {
+		if err := leaseGuard.AssertAlive(ctx); err != nil {
+			_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationRequiresRecovery), "finalize_assert_lease", PackageErrCodeLeaseLost, err.Error(), false, guard)
+			return fmt.Errorf("kernel: lease assert failed during finalization: %w", err)
+		}
+	}
+	if err := r.container.PackageRepository.SetOperation(ctx, operationID, string(PackageOperationFinalizing), "finalizing", "", "", false, guard); err != nil {
+		return fmt.Errorf("kernel: failed to transition operation to finalizing: %w", err)
+	}
+	if err := r.runPackageFinalGate(ctx, operationID, guard); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationRequiresRecovery), "final_gate", PackageErrCodeFinalGateFailed, err.Error(), false, guard)
+		return fmt.Errorf("kernel: final gate failed during finalization: %w", err)
+	}
+	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operationID, extensionID, guard.FencingToken); err != nil {
+		if IsPackageOperationError(err, PackageErrCodeLeaseFenced) || IsPackageOperationError(err, OperationErrTransitionConflict) {
+			_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationRequiresRecovery), "finalize_lease_release", PackageErrCodeLeaseFenced, err.Error(), false, guard)
+			return fmt.Errorf("kernel: lease conflict during finalization: %w", err)
+		}
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationReleasePending), "finalize_lease_release", "PACKAGE_LEASE_RELEASE_FAILED", err.Error(), false, guard)
+		return fmt.Errorf("kernel: lease release failed during finalization: %w", err)
+	}
+	if leaseGuard != nil {
+		leaseGuard.MarkLeaseReleased()
+	}
+	return nil
 }

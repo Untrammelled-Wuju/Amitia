@@ -37,7 +37,9 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodUINavigate:       {{PermissionID: "ui.navigate", Resource: "ui"}},
 		MethodClipboardWrite:   {{PermissionID: "clipboard.write", Resource: "clipboard"}},
 		MethodClipboardRead:    {{PermissionID: "clipboard.read", Resource: "clipboard"}},
-		MethodRuntimeHealth:    {{PermissionID: "runtime.health.read", Resource: "runtime"}},
+		MethodRuntimeHealth:      {{PermissionID: "runtime.health.read", Resource: "runtime"}},
+		MethodMigrationSQLExecute: {},
+		MethodMigrationSQLQuery:   {},
 	}
 }
 
@@ -107,6 +109,8 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		return RiskMedium
 	case MethodToolExecute:
 		return RiskHigh
+	case MethodMigrationSQLExecute:
+		return RiskHigh
 	default:
 		return RiskLow
 	}
@@ -123,6 +127,10 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 		return SideEffectWrite
 	case MethodToolExecute:
 		return SideEffectExternal
+	case MethodMigrationSQLExecute:
+		return SideEffectWrite
+	case MethodMigrationSQLQuery:
+		return SideEffectReadOnly
 	default:
 		return SideEffectNone
 	}
@@ -150,6 +158,8 @@ func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegi
 		{ID: "clipboard.write", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 		{ID: "clipboard.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
 		{ID: "runtime.health.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
+		{ID: "migration.sql.execute", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
+		{ID: "migration.sql.query", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
 	}
 	for _, d := range defs {
 		registry.Register(d)

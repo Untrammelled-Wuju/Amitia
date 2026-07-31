@@ -1,4 +1,3 @@
-import { BrowserWindow, ipcMain, type IpcMainEvent } from "electron";
 import {
   ActionPriorities,
   EventSources,
@@ -6,10 +5,6 @@ import {
   type DesktopPetActionRequest,
 } from "./action-scheduler";
 import type { DragController, DragEvent, DragState } from "./drag-controller";
-
-const PET_CLICK_CHANNEL = "pet:click";
-const PET_DOUBLE_CLICK_CHANNEL = "pet:double-click";
-const PET_HOVER_CHANNEL = "pet:hover";
 
 const DEFAULT_HOVER_COOLDOWN_MS = 3000;
 const DEFAULT_CLICK_COOLDOWN_MS = 500;
@@ -47,32 +42,6 @@ export class DesktopPetEventBridge {
   private pendingClickTimer: ReturnType<typeof setTimeout> | null;
   private pendingClickX: number;
   private pendingClickY: number;
-  private win: BrowserWindow | null = null;
-  private closedListener: (() => void) | null = null;
-
-  private readonly boundClick = (
-    _event: IpcMainEvent,
-    payload: PetPointerPayload,
-  ): void => {
-    if (!payload) return;
-    this.handleClick(payload.x, payload.y);
-  };
-
-  private readonly boundDoubleClick = (
-    _event: IpcMainEvent,
-    payload: PetPointerPayload,
-  ): void => {
-    if (!payload) return;
-    this.handleDoubleClick(payload.x, payload.y);
-  };
-
-  private readonly boundHover = (
-    _event: IpcMainEvent,
-    payload: PetPointerPayload,
-  ): void => {
-    if (!payload) return;
-    this.handleHover(payload.x, payload.y);
-  };
 
   constructor(
     scheduler: DesktopPetActionScheduler,
@@ -88,34 +57,6 @@ export class DesktopPetEventBridge {
     this.pendingClickTimer = null;
     this.pendingClickX = 0;
     this.pendingClickY = 0;
-  }
-
-  attach(win: BrowserWindow): void {
-    this.detach();
-    this.win = win;
-    ipcMain.on(PET_CLICK_CHANNEL, this.boundClick);
-    ipcMain.on(PET_DOUBLE_CLICK_CHANNEL, this.boundDoubleClick);
-    ipcMain.on(PET_HOVER_CHANNEL, this.boundHover);
-    this.closedListener = (): void => {
-      this.detach();
-    };
-    win.once("closed", this.closedListener);
-  }
-
-  detach(): void {
-    ipcMain.removeListener(PET_CLICK_CHANNEL, this.boundClick);
-    ipcMain.removeListener(PET_DOUBLE_CLICK_CHANNEL, this.boundDoubleClick);
-    ipcMain.removeListener(PET_HOVER_CHANNEL, this.boundHover);
-    if (this.pendingClickTimer !== null) {
-      clearTimeout(this.pendingClickTimer);
-      this.pendingClickTimer = null;
-    }
-    const win = this.win;
-    if (win && !win.isDestroyed() && this.closedListener) {
-      win.removeListener("closed", this.closedListener);
-    }
-    this.closedListener = null;
-    this.win = null;
   }
 
   handleClick(x: number, y: number): void {
@@ -218,7 +159,10 @@ export class DesktopPetEventBridge {
   }
 
   dispose(): void {
-    this.detach();
+    if (this.pendingClickTimer !== null) {
+      clearTimeout(this.pendingClickTimer);
+      this.pendingClickTimer = null;
+    }
   }
 
   private processSingleClick(): void {

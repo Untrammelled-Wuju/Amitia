@@ -25,10 +25,10 @@ func TestPackageGenerationInstallPersistsEvidenceAndReadModel(t *testing.T) {
 	foundCommit := false
 	foundSwitch := false
 	for _, step := range steps {
-		if step.StepName == "commit_installed_tree" {
+		if step.StepName == StepCommitInstalledTree {
 			foundCommit = step.TargetGeneration == operation.TargetGeneration && step.CurrentPointerJSON != ""
 		}
-		if step.StepName == "switch_current_pointer" {
+		if step.StepName == StepInstallSwitchCurrentPointer {
 			foundSwitch = step.TargetGeneration == operation.TargetGeneration && step.CurrentPointerJSON != ""
 		}
 	}
@@ -159,10 +159,26 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 	if err := container.PackageRepository.CreateOperation(ctx, operation); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := container.PackageGenerationStore.QuarantineCurrent(installed.ExtensionID, stable.GenerationID, operationID); err != nil {
+	quarantinedCurrent, err := container.PackageGenerationStore.QuarantineCurrent(installed.ExtensionID, stable.GenerationID, operationID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := container.PackageGenerationStore.QuarantineGeneration(ctx, stable); err != nil {
+	quarantinePath, err := container.PackageGenerationStore.QuarantineGeneration(ctx, stable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qm := PackageQuarantineMetadata{
+		QuarantineID:             "quarantine-" + operationID,
+		OperationID:              operationID,
+		ExtensionID:              installed.ExtensionID,
+		GenerationQuarantinePath: quarantinePath,
+		CurrentQuarantinePath:    quarantinedCurrent.Path,
+		OriginalGenerationPath:   installed.InstallPath,
+		TreeHash:                 stable.TreeHash,
+		ArtifactID:               artifact.ArtifactID,
+		State:                    "active",
+	}
+	if err := container.PackageRepository.PutQuarantineMetadata(ctx, qm, PackageWriteGuard{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := runtime.recoverPackageOperation(ctx, operation); err != nil {

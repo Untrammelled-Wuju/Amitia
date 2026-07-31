@@ -24,9 +24,10 @@ func packageMigrationDefinitionsAsSQL(definitions []migration.MigrationDefinitio
 	}
 }
 
-func packageMigrationSQLStagingDir(t *testing.T, definitions []migration.MigrationDefinition) string {
+func packageMigrationSQLStagingDir(t *testing.T, extensionID string, definitions []migration.MigrationDefinition) string {
 	t.Helper()
 	dir := t.TempDir()
+	prefix := migration.ExtensionNamespacePrefix(extensionID)
 	for _, def := range definitions {
 		entry := strings.ReplaceAll(def.Entry, "\\", "/")
 		path := filepath.Join(dir, entry)
@@ -35,13 +36,13 @@ func packageMigrationSQLStagingDir(t *testing.T, definitions []migration.Migrati
 		}
 		var content string
 		if def.Direction == migration.DirectionForward {
-			content = fmt.Sprintf("CREATE TABLE IF NOT EXISTS ext_mig_%s (id INTEGER PRIMARY KEY, value TEXT);", def.MigrationID)
+			content = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %smig_%s (id INTEGER PRIMARY KEY, value TEXT);", prefix, def.MigrationID)
 		} else {
 			forwardID := ""
 			if def.ForwardMigrationID != nil {
 				forwardID = *def.ForwardMigrationID
 			}
-			content = fmt.Sprintf("DROP TABLE IF EXISTS ext_mig_%s;", forwardID)
+			content = fmt.Sprintf("DROP TABLE IF EXISTS %smig_%s;", prefix, forwardID)
 		}
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			t.Fatal(err)
@@ -156,7 +157,7 @@ func TestPackageMigrationUpdateForwardSuccessPersistsEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stagingPath := packageMigrationSQLStagingDir(t, definitions)
+	stagingPath := packageMigrationSQLStagingDir(t, manifest.Extension.ID, definitions)
 	execution, err := runtime.executePackageUpdateMigrations(context.Background(), "package-op-success", preflight, PackageRollbackPoint{RollbackPointID: "rollback-success", ExtensionID: manifest.Extension.ID, SourceVersion: "1.0.0"}, packageMigrationPackage(manifest, definitions), stagingPath)
 	if err != nil {
 		t.Fatal(err)
@@ -188,7 +189,7 @@ func TestPackageMigrationUpdateReverseFailureRequiresManualRecovery(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	stagingPath := packageMigrationSQLStagingDir(t, definitions)
+	stagingPath := packageMigrationSQLStagingDir(t, manifest.Extension.ID, definitions)
 	execution, err := runtime.executePackageUpdateMigrations(context.Background(), "package-op-reverse-fail", preflight, PackageRollbackPoint{RollbackPointID: "rollback-reverse-fail", ExtensionID: manifest.Extension.ID, SourceVersion: "1.0.0"}, packageMigrationPackage(manifest, definitions), stagingPath)
 	if err != nil {
 		t.Fatal(err)

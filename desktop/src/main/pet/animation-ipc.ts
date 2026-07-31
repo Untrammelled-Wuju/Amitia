@@ -3,6 +3,11 @@ import { join, isAbsolute, normalize, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { ANIMATION_IPC_CHANNELS } from "../../shared/animation-ipc";
 import type {
+  PetDragIpcPayload,
+  PetHitMaskPayload,
+  RuntimeReadyPayload,
+} from "../../shared/animation-ipc";
+import type {
   PackagePlaybackSnapshot,
   PlaybackEvent,
   PlaybackSnapshot,
@@ -13,7 +18,7 @@ import type {
 import type { LoadedInstallation } from "./resource-loader";
 import type { InstallationInfo } from "./manager";
 import { buildPetResourceUrl } from "./resource-resolver";
-import { registerPetProtocol } from "./resource-protocol";
+import { PetResourceProtocolRegistry } from "./resource-protocol";
 
 const MIME_MAP: Record<string, string> = {
   ".png": "image/png",
@@ -49,24 +54,32 @@ const MAX_COORDINATE = 1_000_000;
 const MAX_STRING_LENGTH = 4096;
 const MAX_PENDING_COMMANDS = 32;
 const COMMAND_TTL_MS = 10_000;
+const RUNTIME_READY_TIMEOUT_MS = 30_000;
+const MAX_MASK_REVISION = 0x7fffffff;
+const MAX_RESOURCE_BYTES = 64 * 1024 * 1024;
+
+export type RendererDeliveryStatus = "delivered" | "queued" | "rejected";
 
 export type RendererDeliveryFailureReason =
   | "window_missing"
   | "window_destroyed"
   | "renderer_not_ready"
-  | "send_failed";
+  | "send_failed"
+  | "queue_overflow"
+  | "command_invalid"
+  | "ttl_expired"
+  | "renderer_reset";
 
-export type RendererDeliveryResult =
-  | { delivered: true }
-  | {
-      delivered: false;
-      reason: RendererDeliveryFailureReason;
-      error?: string;
-    };
+export interface RendererDeliveryResult {
+  status: RendererDeliveryStatus;
+  reason?: RendererDeliveryFailureReason;
+  error?: string;
+}
 
-interface PendingCommand {
+interface PendingPlayCommand {
   command: PlayActionCommand;
   queuedAt: number;
+  expiresAt: number;
 }
 
 interface DurableState {
@@ -115,22 +128,42 @@ function isValidSnapshot(payload: unknown): payload is PlaybackSnapshot {
   return true;
 }
 
-function isValidHitMaskPayload(payload: unknown): payload is {
-  width: number;
-  height: number;
-  threshold: number;
-  data: Uint8Array;
-  frameHash: string;
-} {
+function isValidHitMaskPayload(payload: unknown): payload is PetHitMaskPayload {
   if (!payload || typeof payload !== "object") return false;
   const p = payload as Record<string, unknown>;
   if (typeof p.width !== "number" || !Number.isFinite(p.width) || p.width <= 0 || p.width > 256) return false;
   if (typeof p.height !== "number" || !Number.isFinite(p.height) || p.height <= 0 || p.height > 256) return false;
-  if (typeof p.threshold !== "number" || !Number.isFinite(p.threshold)) return false;
+  if (typeof p.threshold !== "number" || !Number.isFinite(p.threshold) || p.threshold < 0 || p.threshold > 255) return false;
   if (!(p.data instanceof Uint8Array)) return false;
   const expected = Math.floor(p.width) * Math.floor(p.height);
   if (p.data.length < expected) return false;
-  if (typeof p.frameHash !== "string" || p.frameHash.length > MAX_STRING_LENGTH) return false;
+  if (typeof p.packageRevision !== "number" || p.packageRevision < 0) return false;
+  if (typeof p.actionKey !== "string" || p.actionKey.length > MAX_STRING_LENGTH) return false;
+  if (typeof p.frameIndex !== "number" || p.frameIndex < 0) return false;
+  if (typeof p.playbackInstanceId !== "string" || p.playbackInstanceId.length > MAX_STRING_LENGTH) return false;
+  if (typeof p.maskRevision !== "number" || p.maskRevision < 0 || p.maskRevision > MAX_MASK_REVISION) return false;
+  return true;
+}
+
+function isValidDragPayload(payload: unknown): payload is PetDragIpcPayload {
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.pointerId !== "number" || !Number.isFinite(p.pointerId)) return false;
+  if (typeof p.screenX !== "number" || !Number.isFinite(p.screenX) || Math.abs(p.screenX) > MAX_COORDINATE) return false;
+  if (typeof p.screenY !== "number" || !Number.isFinite(p.screenY) || Math.abs(p.screenY) > MAX_COORDINATE) return false;
+  if (typeof p.canvasX !== "number" || !Number.isFinite(p.canvasX)) return false;
+  if (typeof p.canvasY !== "number" || !Number.isFinite(p.canvasY)) return false;
+  if (typeof p.occurredAt !== "number" || !Number.isFinite(p.occurredAt)) return false;
+  return true;
+}
+
+function isValidRuntimeReadyPayload(payload: unknown): payload is RuntimeReadyPayload {
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  if (p.snapshotApplied !== true) return false;
+  if (typeof p.packageId !== "string" || p.packageId.length > MAX_STRING_LENGTH) return false;
+  if (typeof p.packageRevision !== "number" || p.packageRevision < 0) return false;
+  if (typeof p.defaultActionKey !== "string" || p.defaultActionKey.length > MAX_STRING_LENGTH) return false;
   return true;
 }
 
@@ -217,24 +250,31 @@ export interface AnimationIpcAdapterDeps {
   onClick?: (x: number, y: number) => void;
   onDoubleClick?: (x: number, y: number) => void;
   onHover?: (x: number, y: number) => void;
-  onPlayActionForwarded?: (command: PlayActionCommand) => void;
-  onHitMask?: (width: number, height: number, data: Uint8Array, threshold: number) => void;
-  onRendererReady?: () => void;
-  onRendererReadyAck?: (payload: { snapshotApplied: boolean }) => void;
+  onHitMask?: (payload: PetHitMaskPayload) => void;
+  onRendererBootstrapped?: () => void;
+  onRuntimeReady?: (payload: RuntimeReadyPayload) => void;
   onDeliveryFailed?: (reason: RendererDeliveryFailureReason, command?: PlayActionCommand) => void;
+  onDragStart?: (payload: PetDragIpcPayload) => void;
+  onDragMove?: (payload: PetDragIpcPayload) => void;
+  onDragEnd?: (payload: PetDragIpcPayload) => void;
+  onDragCancel?: (payload: PetDragIpcPayload) => void;
 }
 
 export class AnimationIpcAdapter {
   private deps: AnimationIpcAdapterDeps;
   private registered = false;
   private powerMonitorListenersAttached = false;
-  private rendererReady = false;
-  private pendingCommands: PendingCommand[] = [];
+  private bootstrapped = false;
+  private runtimeReady = false;
+  private pendingCommands: PendingPlayCommand[] = [];
   private durable: DurableState = {
     packageSnapshot: null,
     defaultActionKey: null,
     windowVisible: true,
   };
+  private runtimeReadyPromise: Promise<RuntimeReadyPayload | null> | null = null;
+  private runtimeReadyResolve: ((payload: RuntimeReadyPayload | null) => void) | null = null;
+  private runtimeReadyTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(deps: AnimationIpcAdapterDeps) {
     this.deps = deps;
@@ -294,37 +334,77 @@ export class AnimationIpcAdapter {
     this.deps.onHover?.(data.x, data.y);
   };
 
-  private readonly onRendererReady = (
+  private readonly onRendererBootstrapped = (
     event: Electron.IpcMainEvent,
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
-    this.rendererReady = true;
+    this.bootstrapped = true;
     this.flushDurableState();
-    this.flushPendingCommands();
-    this.deps.onRendererReady?.();
+    this.deps.onRendererBootstrapped?.();
   };
 
-  private readonly onRendererReadyAck = (
+  private readonly onRuntimeReady = (
     event: Electron.IpcMainEvent,
-    payload: { snapshotApplied: boolean },
+    payload: RuntimeReadyPayload,
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
-    this.deps.onRendererReadyAck?.(payload);
+    if (!isValidRuntimeReadyPayload(payload)) return;
+    this.runtimeReady = true;
+    this.flushPendingCommands();
+    this.deps.onRuntimeReady?.(payload);
+    if (this.runtimeReadyResolve) {
+      this.runtimeReadyResolve(payload);
+      this.runtimeReadyResolve = null;
+    }
+    if (this.runtimeReadyTimeout) {
+      clearTimeout(this.runtimeReadyTimeout);
+      this.runtimeReadyTimeout = null;
+    }
   };
 
   private readonly onHitMask = (
     event: Electron.IpcMainEvent,
-    payload: {
-      width: number;
-      height: number;
-      threshold: number;
-      data: Uint8Array;
-      frameHash: string;
-    },
+    payload: PetHitMaskPayload,
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
     if (!isValidHitMaskPayload(payload)) return;
-    this.deps.onHitMask?.(payload.width, payload.height, payload.data, payload.threshold);
+    this.deps.onHitMask?.(payload);
+  };
+
+  private readonly onDragStart = (
+    event: Electron.IpcMainEvent,
+    payload: PetDragIpcPayload,
+  ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
+    if (!isValidDragPayload(payload)) return;
+    this.deps.onDragStart?.(payload);
+  };
+
+  private readonly onDragMove = (
+    event: Electron.IpcMainEvent,
+    payload: PetDragIpcPayload,
+  ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
+    if (!isValidDragPayload(payload)) return;
+    this.deps.onDragMove?.(payload);
+  };
+
+  private readonly onDragEnd = (
+    event: Electron.IpcMainEvent,
+    payload: PetDragIpcPayload,
+  ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
+    if (!isValidDragPayload(payload)) return;
+    this.deps.onDragEnd?.(payload);
+  };
+
+  private readonly onDragCancel = (
+    event: Electron.IpcMainEvent,
+    payload: PetDragIpcPayload,
+  ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
+    if (!isValidDragPayload(payload)) return;
+    this.deps.onDragCancel?.(payload);
   };
 
   private readonly onGetPackageSnapshot = async (
@@ -385,9 +465,11 @@ export class AnimationIpcAdapter {
   register(): void {
     if (this.registered) return;
     this.registered = true;
-    this.rendererReady = false;
+    this.bootstrapped = false;
+    this.runtimeReady = false;
 
-    registerPetProtocol(() => {
+    const registry = PetResourceProtocolRegistry.getInstance();
+    registry.setActiveInstallationResolver(() => {
       const installation = this.deps.getActiveInstallation();
       const loaded = this.deps.getLoadedInstallation();
       if (!installation || !loaded) return null;
@@ -407,9 +489,13 @@ export class AnimationIpcAdapter {
     ipcMain.on(ANIMATION_IPC_CHANNELS.sendClick, this.onSendClick);
     ipcMain.on(ANIMATION_IPC_CHANNELS.sendDoubleClick, this.onSendDoubleClick);
     ipcMain.on(ANIMATION_IPC_CHANNELS.sendHover, this.onSendHover);
-    ipcMain.on(ANIMATION_IPC_CHANNELS.rendererReady, this.onRendererReady);
-    ipcMain.on(ANIMATION_IPC_CHANNELS.rendererReadyAck, this.onRendererReadyAck);
+    ipcMain.on(ANIMATION_IPC_CHANNELS.rendererBootstrapped, this.onRendererBootstrapped);
+    ipcMain.on(ANIMATION_IPC_CHANNELS.runtimeReady, this.onRuntimeReady);
     ipcMain.on(ANIMATION_IPC_CHANNELS.hitMask, this.onHitMask);
+    ipcMain.on(ANIMATION_IPC_CHANNELS.dragStart, this.onDragStart);
+    ipcMain.on(ANIMATION_IPC_CHANNELS.dragMove, this.onDragMove);
+    ipcMain.on(ANIMATION_IPC_CHANNELS.dragEnd, this.onDragEnd);
+    ipcMain.on(ANIMATION_IPC_CHANNELS.dragCancel, this.onDragCancel);
 
     this.attachPowerMonitorListeners();
   }
@@ -428,16 +514,53 @@ export class AnimationIpcAdapter {
     powerMonitor.off("resume", this.onResume);
   }
 
-  isRendererReady(): boolean {
-    return this.rendererReady;
+  isBootstrapped(): boolean {
+    return this.bootstrapped;
+  }
+
+  isRuntimeReady(): boolean {
+    return this.runtimeReady;
+  }
+
+  waitForRuntimeReady(timeoutMs: number = RUNTIME_READY_TIMEOUT_MS): Promise<RuntimeReadyPayload | null> {
+    if (this.runtimeReady) {
+      return Promise.resolve(null);
+    }
+    if (!this.runtimeReadyPromise) {
+      this.runtimeReadyPromise = new Promise<RuntimeReadyPayload | null>((resolve) => {
+        this.runtimeReadyResolve = resolve;
+        this.runtimeReadyTimeout = setTimeout(() => {
+          this.runtimeReadyResolve = null;
+          this.runtimeReadyTimeout = null;
+          resolve(null);
+        }, timeoutMs);
+      });
+    }
+    return this.runtimeReadyPromise;
   }
 
   resetRendererReady(): void {
-    this.rendererReady = false;
+    this.bootstrapped = false;
+    this.runtimeReady = false;
+    this.cancelAllPendingCommands("renderer_reset");
+    if (this.runtimeReadyTimeout) {
+      clearTimeout(this.runtimeReadyTimeout);
+      this.runtimeReadyTimeout = null;
+    }
+    this.runtimeReadyResolve = null;
+    this.runtimeReadyPromise = null;
+  }
+
+  private cancelAllPendingCommands(reason: RendererDeliveryFailureReason): void {
+    const commands = this.pendingCommands;
     this.pendingCommands = [];
+    for (const entry of commands) {
+      this.deps.onDeliveryFailed?.(reason, entry.command);
+    }
   }
 
   private flushDurableState(): void {
+    if (!this.bootstrapped) return;
     if (this.durable.packageSnapshot) {
       this.sendToRenderer(ANIMATION_IPC_CHANNELS.switchPackage, this.durable.packageSnapshot);
     }
@@ -454,35 +577,43 @@ export class AnimationIpcAdapter {
     const commands = this.pendingCommands;
     this.pendingCommands = [];
     for (const entry of commands) {
-      if (now - entry.queuedAt > COMMAND_TTL_MS) {
-        this.deps.onDeliveryFailed?.("renderer_not_ready", entry.command);
+      if (now > entry.expiresAt) {
+        this.deps.onDeliveryFailed?.("ttl_expired", entry.command);
         continue;
       }
       const result = this.deliverToRenderer(ANIMATION_IPC_CHANNELS.playAction, entry.command);
-      if (!result.delivered) {
-        this.deps.onDeliveryFailed?.(result.reason, entry.command);
+      if (result.status !== "delivered") {
+        this.deps.onDeliveryFailed?.(result.reason ?? "send_failed", entry.command);
       }
     }
   }
 
   sendPlayAction(command: PlayActionCommand): RendererDeliveryResult {
-    if (!this.rendererReady) {
+    if (!this.runtimeReady) {
+      const existing = this.pendingCommands.find(
+        (c) => c.command.commandId === command.commandId,
+      );
+      if (existing) {
+        return { status: "queued" };
+      }
       if (this.pendingCommands.length >= MAX_PENDING_COMMANDS) {
         const dropped = this.pendingCommands.shift();
         if (dropped) {
-          this.deps.onDeliveryFailed?.("renderer_not_ready", dropped.command);
+          this.deps.onDeliveryFailed?.("queue_overflow", dropped.command);
         }
       }
-      this.pendingCommands.push({ command, queuedAt: Date.now() });
-      this.deps.onPlayActionForwarded?.(command);
-      return { delivered: false, reason: "renderer_not_ready" };
+      const now = Date.now();
+      this.pendingCommands.push({
+        command,
+        queuedAt: now,
+        expiresAt: now + COMMAND_TTL_MS,
+      });
+      return { status: "queued" };
     }
 
     const result = this.deliverToRenderer(ANIMATION_IPC_CHANNELS.playAction, command);
-    if (result.delivered) {
-      this.deps.onPlayActionForwarded?.(command);
-    } else {
-      this.deps.onDeliveryFailed?.(result.reason, command);
+    if (result.status !== "delivered") {
+      this.deps.onDeliveryFailed?.(result.reason ?? "send_failed", command);
     }
     return result;
   }
@@ -501,39 +632,43 @@ export class AnimationIpcAdapter {
 
   sendSwitchPackage(snapshot: PackagePlaybackSnapshot): RendererDeliveryResult {
     this.durable.packageSnapshot = snapshot;
-    if (!this.rendererReady) return { delivered: false, reason: "renderer_not_ready" };
+    if (!this.bootstrapped) return { status: "queued" };
+    if (!this.runtimeReady) return { status: "queued" };
     return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.switchPackage, snapshot);
   }
 
   sendWindowHidden(): RendererDeliveryResult {
     this.durable.windowVisible = false;
-    if (!this.rendererReady) return { delivered: false, reason: "renderer_not_ready" };
+    if (!this.bootstrapped) return { status: "queued" };
+    if (!this.runtimeReady) return { status: "queued" };
     return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.windowHidden);
   }
 
   sendWindowShown(): RendererDeliveryResult {
     this.durable.windowVisible = true;
-    if (!this.rendererReady) return { delivered: false, reason: "renderer_not_ready" };
+    if (!this.bootstrapped) return { status: "queued" };
+    if (!this.runtimeReady) return { status: "queued" };
     return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.windowShown);
   }
 
   sendRecovery(snapshot: PlaybackRecoverySnapshot): RendererDeliveryResult {
-    if (!this.rendererReady) return { delivered: false, reason: "renderer_not_ready" };
+    if (!this.runtimeReady) return { status: "rejected", reason: "renderer_not_ready" };
     return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.recovery, snapshot);
   }
 
   sendUpdateDefaultAction(actionKey: string): RendererDeliveryResult {
     this.durable.defaultActionKey = actionKey;
-    if (!this.rendererReady) return { delivered: false, reason: "renderer_not_ready" };
+    if (!this.bootstrapped) return { status: "queued" };
+    if (!this.runtimeReady) return { status: "queued" };
     return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.updateDefaultAction, actionKey);
   }
 
   private deliverToRenderer(channel: string, data?: unknown): RendererDeliveryResult {
     const win = this.deps.getPetWindow();
-    if (!win) return { delivered: false, reason: "window_missing" };
-    if (win.isDestroyed()) return { delivered: false, reason: "window_destroyed" };
-    if (!this.rendererReady && channel !== ANIMATION_IPC_CHANNELS.switchPackage) {
-      return { delivered: false, reason: "renderer_not_ready" };
+    if (!win) return { status: "rejected", reason: "window_missing" };
+    if (win.isDestroyed()) return { status: "rejected", reason: "window_destroyed" };
+    if (!this.runtimeReady && channel !== ANIMATION_IPC_CHANNELS.switchPackage) {
+      return { status: "rejected", reason: "renderer_not_ready" };
     }
     try {
       if (data !== undefined) {
@@ -541,10 +676,10 @@ export class AnimationIpcAdapter {
       } else {
         win.webContents.send(channel);
       }
-      return { delivered: true };
+      return { status: "delivered" };
     } catch (err) {
       return {
-        delivered: false,
+        status: "rejected",
         reason: "send_failed",
         error: err instanceof Error ? err.message : String(err),
       };
@@ -567,6 +702,9 @@ export class AnimationIpcAdapter {
     if (!this.registered) return;
     this.registered = false;
 
+    const registry = PetResourceProtocolRegistry.getInstance();
+    registry.clearActiveInstallationResolver();
+
     ipcMain.removeHandler(ANIMATION_IPC_CHANNELS.getPackageSnapshot);
     ipcMain.removeHandler(ANIMATION_IPC_CHANNELS.resolveResourceUrl);
     ipcMain.removeHandler(ANIMATION_IPC_CHANNELS.getDiagnostics);
@@ -576,14 +714,25 @@ export class AnimationIpcAdapter {
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.sendClick, this.onSendClick);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.sendDoubleClick, this.onSendDoubleClick);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.sendHover, this.onSendHover);
-    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.rendererReady, this.onRendererReady);
-    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.rendererReadyAck, this.onRendererReadyAck);
+    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.rendererBootstrapped, this.onRendererBootstrapped);
+    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.runtimeReady, this.onRuntimeReady);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.hitMask, this.onHitMask);
+    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.dragStart, this.onDragStart);
+    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.dragMove, this.onDragMove);
+    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.dragEnd, this.onDragEnd);
+    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.dragCancel, this.onDragCancel);
 
     this.detachPowerMonitorListeners();
     this.powerMonitorListenersAttached = false;
-    this.rendererReady = false;
-    this.pendingCommands = [];
+    this.bootstrapped = false;
+    this.runtimeReady = false;
+    this.cancelAllPendingCommands("renderer_reset");
+    if (this.runtimeReadyTimeout) {
+      clearTimeout(this.runtimeReadyTimeout);
+      this.runtimeReadyTimeout = null;
+    }
+    this.runtimeReadyResolve = null;
+    this.runtimeReadyPromise = null;
   }
 }
 

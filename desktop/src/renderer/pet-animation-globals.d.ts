@@ -1,5 +1,6 @@
 import type { PackagePlaybackSnapshot } from "../desktop-pet/animation/contracts";
 import type { PlaybackEvent, PlaybackSnapshot, PlayActionCommand, PlaybackRecoverySnapshot } from "../desktop-pet/animation/contracts";
+import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeReadyPayload } from "../shared/animation-ipc";
 
 export interface ResolveResourceUrlResult {
   url: string;
@@ -15,9 +16,13 @@ export interface PetAnimationApi {
   sendClick(x: number, y: number): void;
   sendDoubleClick(x: number, y: number): void;
   sendHover(x: number, y: number): void;
-  sendRendererReady(): void;
-  sendRendererReadyAck(payload: { snapshotApplied: boolean }): void;
-  reportHitMask(width: number, height: number, data: Uint8Array, threshold: number): void;
+  sendRendererBootstrapped(): void;
+  sendRuntimeReady(payload: RuntimeReadyPayload): void;
+  reportHitMask(payload: PetHitMaskPayload): void;
+  sendDragStart(payload: PetDragIpcPayload): void;
+  sendDragMove(payload: PetDragIpcPayload): void;
+  sendDragEnd(payload: PetDragIpcPayload): void;
+  sendDragCancel(payload: PetDragIpcPayload): void;
   onPlayAction(callback: (command: PlayActionCommand) => void): () => void;
   onPause(callback: () => void): () => void;
   onResume(callback: () => void): () => void;

@@ -305,16 +305,8 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "record_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
-	if err := r.runPackageFinalGate(ctx, operationID); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "final_gate", "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
+	if err := r.FinalizePackageOperation(ctx, operationID, session.ExtensionID, leaseGuard, guard); err != nil {
 		return KernelInstallResult{}, err
-	}
-	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true, guard); err != nil {
-		return KernelInstallResult{}, err
-	}
-	if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", stopErr.Error(), false, guard)
-		return KernelInstallResult{}, stopErr
 	}
 	return KernelInstallResult{ExtensionID: session.ExtensionID, Version: session.Version,
 		InstallationID: installationID, PackageHash: artifact.ArchiveHash,

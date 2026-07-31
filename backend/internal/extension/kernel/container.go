@@ -78,6 +78,9 @@ type Container struct {
 	PackageGenerationStore *PackageGenerationStore
 	ArtifactMaintenance    *PackageArtifactMaintenance
 	PackageTrustRepository *PackageTrustRepository
+	UserDataSnapshotStore  *UserDataSnapshotStore
+	ResourceSnapshotStore  *ResourceSnapshotStore
+	PackageSnapshotRepo    *PackageSnapshotRepository
 	LifecycleManager       *lifecycle_manager.Manager
 	ContributionRegistry   *contribution.ContributionRegistry
 	ContributionInstaller  *TypedContributionInstaller

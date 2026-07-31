@@ -96,18 +96,18 @@ func lookupExtensionIDByOperationTx(ctx context.Context, tx *sql.Tx, operationID
 }
 
 type PackageQuarantineMetadata struct {
-	QuarantineID            string
-	OperationID             string
-	ExtensionID             string
+	QuarantineID             string
+	OperationID              string
+	ExtensionID              string
 	GenerationQuarantinePath string
 	CurrentQuarantinePath    string
-	OriginalGenerationPath  string
-	OriginalCurrentPath     string
-	TreeHash                string
-	ArtifactID              string
-	State                   string
-	CreatedAt               string
-	ReleasedAt              string
+	OriginalGenerationPath   string
+	OriginalCurrentPath      string
+	TreeHash                 string
+	ArtifactID               string
+	State                    string
+	CreatedAt                string
+	ReleasedAt               string
 }
 
 var validQuarantineStates = map[string]struct{}{

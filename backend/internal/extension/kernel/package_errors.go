@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 )
@@ -48,7 +49,7 @@ var (
 	ErrPackageFinalGateFailed                 = errors.New("kernel: final gate validation failed")
 	ErrPackageVersionActivateTargetNotFound   = errors.New("kernel: package version activate target not found")
 	ErrPackageInstallationNotFound            = errors.New("kernel: package installation not found")
-	ErrPackageVersionRepositoryUnavailable     = errors.New("kernel: package version repository unavailable")
+	ErrPackageVersionRepositoryUnavailable    = errors.New("kernel: package version repository unavailable")
 	ErrPackageInstallationGenerationIDMissing = errors.New("kernel: package installation generation id missing")
 	ErrPackageVersionDeactivateTargetNotFound = errors.New("kernel: package version deactivate target not found")
 	ErrPackageCompensationFailed              = errors.New("kernel: package compensation failed")
@@ -57,23 +58,24 @@ var (
 )
 
 const (
-	PackageErrCodeIdempotencyKeyRequired      = "PACKAGE_IDEMPOTENCY_KEY_REQUIRED"
-	PackageErrCodeIdempotencyKeyReused        = "PACKAGE_IDEMPOTENCY_KEY_REUSED"
-	PackageErrCodeOperationConflict           = "PACKAGE_OPERATION_CONFLICT"
-	PackageErrCodeLeaseAcquireFailed         = "PACKAGE_LEASE_ACQUIRE_FAILED"
-	PackageErrCodeLeaseLost                   = "PACKAGE_LEASE_LOST"
-	PackageErrCodeLeaseFenced                 = "PACKAGE_LEASE_FENCED"
-	PackageErrCodeMigrationFailed             = "PACKAGE_MIGRATION_FAILED"
-	PackageErrCodeMigrationIrreversible       = "PACKAGE_MIGRATION_IRREVERSIBLE"
-	PackageErrCodeRecoveryAmbiguous           = "PACKAGE_RECOVERY_AMBIGUOUS"
-	PackageErrCodeArtifactMetadataMismatch   = "PACKAGE_ARTIFACT_METADATA_MISMATCH"
-	PackageErrCodeQuarantineRestoreFailed     = "PACKAGE_QUARANTINE_RESTORE_FAILED"
-	PackageErrCodeSnapshotIncomplete          = "PACKAGE_SNAPSHOT_INCOMPLETE"
-	PackageErrCodeVersionHistoryCorrupted    = "PACKAGE_VERSION_HISTORY_CORRUPTED"
-	PackageErrCodeFinalGateFailed            = "PACKAGE_FINAL_GATE_FAILED"
+	PackageErrCodeIdempotencyKeyRequired          = "PACKAGE_IDEMPOTENCY_KEY_REQUIRED"
+	PackageErrCodeIdempotencyKeyReused            = "PACKAGE_IDEMPOTENCY_KEY_REUSED"
+	PackageErrCodeOperationConflict               = "PACKAGE_OPERATION_CONFLICT"
+	PackageErrCodeLeaseAcquireFailed              = "PACKAGE_LEASE_ACQUIRE_FAILED"
+	PackageErrCodeLeaseLost                       = "PACKAGE_LEASE_LOST"
+	PackageErrCodeLeaseFenced                     = "PACKAGE_LEASE_FENCED"
+	PackageErrCodeMigrationFailed                 = "PACKAGE_MIGRATION_FAILED"
+	PackageErrCodeMigrationIrreversible           = "PACKAGE_MIGRATION_IRREVERSIBLE"
+	PackageErrCodeRecoveryAmbiguous               = "PACKAGE_RECOVERY_AMBIGUOUS"
+	PackageErrCodeArtifactMetadataMismatch        = "PACKAGE_ARTIFACT_METADATA_MISMATCH"
+	PackageErrCodeQuarantineRestoreFailed         = "PACKAGE_QUARANTINE_RESTORE_FAILED"
+	PackageErrCodeSnapshotIncomplete              = "PACKAGE_SNAPSHOT_INCOMPLETE"
+	PackageErrCodeRollbackSnapshotIncomplete      = "PACKAGE_ROLLBACK_SNAPSHOT_INCOMPLETE"
+	PackageErrCodeVersionHistoryCorrupted         = "PACKAGE_VERSION_HISTORY_CORRUPTED"
+	PackageErrCodeFinalGateFailed                 = "PACKAGE_FINAL_GATE_FAILED"
 	PackageErrCodeVersionActivateTargetNotFound   = "PACKAGE_VERSION_ACTIVATE_TARGET_NOT_FOUND"
 	PackageErrCodeInstallationNotFound            = "PACKAGE_INSTALLATION_NOT_FOUND"
-	PackageErrCodeVersionRepositoryUnavailable     = "PACKAGE_VERSION_REPOSITORY_UNAVAILABLE"
+	PackageErrCodeVersionRepositoryUnavailable    = "PACKAGE_VERSION_REPOSITORY_UNAVAILABLE"
 	PackageErrCodeInstallationGenerationIDMissing = "PACKAGE_INSTALLATION_GENERATION_ID_MISSING"
 	PackageErrCodeVersionDeactivateTargetNotFound = "PACKAGE_VERSION_DEACTIVATE_TARGET_NOT_FOUND"
 	PackageErrCodeCompensationFailed              = "PACKAGE_COMPENSATION_FAILED"
@@ -108,23 +110,24 @@ func NewPackageError(code string, httpStatus int, cause error) *PackageError {
 }
 
 var packageErrorHTTPStatus = map[string]int{
-	PackageErrCodeIdempotencyKeyRequired:    400,
-	PackageErrCodeIdempotencyKeyReused:      409,
-	PackageErrCodeOperationConflict:         409,
-	PackageErrCodeLeaseAcquireFailed:        409,
-	PackageErrCodeLeaseLost:                 409,
-	PackageErrCodeLeaseFenced:               409,
-	PackageErrCodeMigrationFailed:           500,
-	PackageErrCodeMigrationIrreversible:     422,
-	PackageErrCodeRecoveryAmbiguous:         409,
-	PackageErrCodeArtifactMetadataMismatch: 409,
-	PackageErrCodeQuarantineRestoreFailed:  500,
-	PackageErrCodeSnapshotIncomplete:       409,
-	PackageErrCodeVersionHistoryCorrupted:  409,
-	PackageErrCodeFinalGateFailed:          409,
+	PackageErrCodeIdempotencyKeyRequired:          400,
+	PackageErrCodeIdempotencyKeyReused:            409,
+	PackageErrCodeOperationConflict:               409,
+	PackageErrCodeLeaseAcquireFailed:              409,
+	PackageErrCodeLeaseLost:                       409,
+	PackageErrCodeLeaseFenced:                     409,
+	PackageErrCodeMigrationFailed:                 500,
+	PackageErrCodeMigrationIrreversible:           422,
+	PackageErrCodeRecoveryAmbiguous:               409,
+	PackageErrCodeArtifactMetadataMismatch:        409,
+	PackageErrCodeQuarantineRestoreFailed:         500,
+	PackageErrCodeSnapshotIncomplete:              409,
+	PackageErrCodeRollbackSnapshotIncomplete:      409,
+	PackageErrCodeVersionHistoryCorrupted:         409,
+	PackageErrCodeFinalGateFailed:                 409,
 	PackageErrCodeVersionActivateTargetNotFound:   409,
 	PackageErrCodeInstallationNotFound:            404,
-	PackageErrCodeVersionRepositoryUnavailable:     503,
+	PackageErrCodeVersionRepositoryUnavailable:    503,
 	PackageErrCodeInstallationGenerationIDMissing: 409,
 	PackageErrCodeVersionDeactivateTargetNotFound: 409,
 	PackageErrCodeCompensationFailed:              500,
@@ -183,4 +186,53 @@ func PackageErrorResponse(err error) (int, string, string) {
 		return PackageErrorHTTPStatus(opErr.Code), opErr.Code, err.Error()
 	}
 	return 422, "", err.Error()
+}
+
+type RepositoryErrorKind string
+
+const (
+	RepositoryErrorNotFound    RepositoryErrorKind = "not_found"
+	RepositoryErrorUnavailable RepositoryErrorKind = "unavailable"
+	RepositoryErrorCorrupt     RepositoryErrorKind = "corrupt"
+	RepositoryErrorConflict    RepositoryErrorKind = "conflict"
+)
+
+type RepositoryError struct {
+	Kind  RepositoryErrorKind
+	Cause error
+}
+
+func (e *RepositoryError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("repository %s: %v", e.Kind, e.Cause)
+	}
+	return fmt.Sprintf("repository %s", e.Kind)
+}
+
+func (e *RepositoryError) Unwrap() error {
+	return e.Cause
+}
+
+func NewRepositoryError(kind RepositoryErrorKind, cause error) *RepositoryError {
+	return &RepositoryError{Kind: kind, Cause: cause}
+}
+
+func IsRepositoryErrorKind(err error, kind RepositoryErrorKind) bool {
+	var repoErr *RepositoryError
+	return errors.As(err, &repoErr) && repoErr.Kind == kind
+}
+
+func IsRepositoryError(err error) bool {
+	var repoErr *RepositoryError
+	return errors.As(err, &repoErr)
+}
+
+func ClassifyRepositoryError(action string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return NewRepositoryError(RepositoryErrorNotFound, err)
+	}
+	return NewRepositoryError(RepositoryErrorUnavailable, err)
 }

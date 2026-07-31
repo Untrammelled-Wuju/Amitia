@@ -57,13 +57,13 @@ func (r *Runtime) preparePackageGeneration(ctx context.Context, operationID stri
 		stable = PackageGenerationCurrent{}
 	}
 	prepared, err := r.container.PackageGenerationStore.PrepareGeneration(ctx, PackageGenerationPrepareRequest{
-		ExtensionID:      artifact.ExtensionID,
-		GenerationID:     "generation-" + uuid.NewString(),
-		Version:          artifact.Version,
-		ArtifactID:       artifact.ArtifactID,
-		OperationID:      operationID,
-		SourcePath:       sourcePath,
-		FencingToken:     fencingToken,
+		ExtensionID:  artifact.ExtensionID,
+		GenerationID: "generation-" + uuid.NewString(),
+		Version:      artifact.Version,
+		ArtifactID:   artifact.ArtifactID,
+		OperationID:  operationID,
+		SourcePath:   sourcePath,
+		FencingToken: fencingToken,
 	})
 	if err != nil {
 		return PackagePreparedGeneration{}, stable, err

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
@@ -32,11 +33,11 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 }
 
 func (r *Runtime) finalizePackageOperation(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard, completionNote string) error {
-	if err := r.runPackageFinalGate(ctx, operation.OperationID); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, "requires_recovery", completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
+	if err := r.runPackageFinalGate(ctx, operation.OperationID, guard); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, StatusRequiresRecovery, completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
 		return err
 	}
-	return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", completionNote, "", "", true, guard)
+	return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, StatusCompleted, completionNote, "", "", true, guard)
 }
 
 func (r *Runtime) recoverPackageOperation(ctx context.Context, operation PackageOperationRecord) error {
@@ -81,18 +82,17 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "failed", "recovered_compensated", "PACKAGE_INSTALL_FAILED", "generation switch compensated during recovery", true, guard)
 		}
 		err = r.proveInstalledPackageOperation(ctx, operation, completed)
-		if err == nil {
-			if operation.PreviewSessionID != "" {
-				if consumeErr := r.container.PackageRepository.ConsumePreview(ctx, operation.PreviewSessionID); consumeErr != nil && !strings.Contains(consumeErr.Error(), "already consumed") {
-					return r.requirePackageRecovery(ctx, operation, "preview completion could not be persisted", consumeErr, guard)
-				}
-			}
-			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "final gate failed during recovery", err, guard)
-			}
-			return nil
+		if err != nil {
+			return r.requirePackageRecovery(ctx, operation, "installed package consistency could not be proven", err, guard)
 		}
-		return r.requirePackageRecovery(ctx, operation, "installed package consistency could not be proven", err, guard)
+		if err := r.newPackageRecoveryFinalizer().FinalizeInstallRecovery(ctx, operation, completed, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "install recovery finalizer failed", err, guard)
+		}
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
+		}
+		leaseGuard.MarkLeaseReleased()
+		return nil
 	case "update":
 		compensated, reconcileErr := r.reconcileInstalledPackageGeneration(ctx, operation)
 		if reconcileErr != nil {
@@ -102,65 +102,69 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "failed", "recovered_compensated", "PACKAGE_UPDATE_FAILED", "update generation switch compensated during recovery", true, guard)
 		}
 		err = r.proveUpdatedPackageOperation(ctx, operation, completed)
-		if err == nil {
-			if operation.PreviewSessionID != "" {
-				if consumeErr := r.container.PackageRepository.ConsumePreview(ctx, operation.PreviewSessionID); consumeErr != nil && !strings.Contains(consumeErr.Error(), "already consumed") {
-					return r.requirePackageRecovery(ctx, operation, "update preview completion could not be persisted", consumeErr, guard)
-				}
-			}
-			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "update final gate failed during recovery", err, guard)
-			}
-			return nil
+		if err != nil {
+			return r.requirePackageRecovery(ctx, operation, "updated package consistency could not be proven", err, guard)
 		}
-		return r.requirePackageRecovery(ctx, operation, "updated package consistency could not be proven", err, guard)
+		if err := r.newPackageRecoveryFinalizer().FinalizeUpdateRecovery(ctx, operation, completed, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "update recovery finalizer failed", err, guard)
+		}
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
+		}
+		leaseGuard.MarkLeaseReleased()
+		return nil
 	case "rollback":
 		compensated, reconcileErr := r.reconcileInstalledPackageGeneration(ctx, operation)
 		if reconcileErr != nil {
 			return r.requirePackageRecovery(ctx, operation, "rollback generation reconciliation failed", reconcileErr, guard)
 		}
 		if compensated {
+			if err := r.reconcileRollbackResourceQuarantine(ctx, operation, true); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "rollback resource quarantine restore failed", err, guard)
+			}
 			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "failed", "recovered_compensated", "PACKAGE_ROLLBACK_FAILED", "rollback generation switch compensated during recovery", true, guard)
 		}
-		err = r.proveRollbackPackageOperation(ctx, operation, completed)
-		if err == nil {
-			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "rollback final gate failed during recovery", err, guard)
-			}
-			return nil
+		if err := r.reconcileRollbackResourceQuarantine(ctx, operation, false); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "rollback resource quarantine purge failed", err, guard)
 		}
-		return r.requirePackageRecovery(ctx, operation, "rollback consistency could not be proven", err, guard)
+		err = r.proveRollbackPackageOperation(ctx, operation, completed)
+		if err != nil {
+			return r.requirePackageRecovery(ctx, operation, "rollback consistency could not be proven", err, guard)
+		}
+		if err := r.newPackageRecoveryFinalizer().FinalizeRollbackRecovery(ctx, operation, completed, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "rollback recovery finalizer failed", err, guard)
+		}
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
+		}
+		leaseGuard.MarkLeaseReleased()
+		return nil
 	case "uninstall":
 		outcome, reconcileErr := r.reconcileUninstallPackageGeneration(ctx, operation)
 		if reconcileErr != nil {
 			return r.requirePackageRecovery(ctx, operation, "uninstall generation reconciliation failed", reconcileErr, guard)
 		}
 		if outcome == "compensated" {
+			if err := r.reconcileUninstallCompensatedState(ctx, operation, guard); err != nil {
+				return r.requirePackageRecovery(ctx, operation, "uninstall compensated state reconciliation failed", err, guard)
+			}
 			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "failed", "recovered_compensated", "PACKAGE_UNINSTALL_FAILED", "uninstall quarantine restored during recovery", true, guard)
 		}
-		if outcome == "completed" {
-			if err := r.reconcileUninstallArtifactPath(ctx, operation, guard); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "uninstall artifact path reconciliation failed", err, guard)
-			}
-			if err := r.proveUninstalledPackageOperation(ctx, operation, completed); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "uninstall consistency could not be proven after completion", err, guard)
-			}
-			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "uninstall final gate failed during recovery", err, guard)
-			}
-			return nil
-		}
-		if err := r.reconcileUninstallArtifactPath(ctx, operation, guard); err != nil {
-			return r.requirePackageRecovery(ctx, operation, "uninstall artifact path reconciliation failed", err, guard)
+		if err := r.reconcileUninstallCompletedState(ctx, operation, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "uninstall completed state reconciliation failed", err, guard)
 		}
 		err = r.proveUninstalledPackageOperation(ctx, operation, completed)
-		if err == nil {
-			if err := r.finalizePackageOperation(ctx, operation, guard, "recovered_completed"); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "uninstall final gate failed during recovery", err, guard)
-			}
-			return nil
+		if err != nil {
+			return r.requirePackageRecovery(ctx, operation, "uninstall consistency could not be proven", err, guard)
 		}
-		return r.requirePackageRecovery(ctx, operation, "uninstall consistency could not be proven", err, guard)
+		if err := r.newPackageRecoveryFinalizer().FinalizeUninstallRecovery(ctx, operation, completed, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "uninstall recovery finalizer failed", err, guard)
+		}
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
+		}
+		leaseGuard.MarkLeaseReleased()
+		return nil
 	default:
 		return r.requirePackageRecovery(ctx, operation, "unsupported package operation type", nil, guard)
 	}
@@ -246,6 +250,91 @@ func (r *Runtime) reconcileUninstallArtifactPath(ctx context.Context, operation 
 		return fmt.Errorf("kernel: failed to clear stale artifact installed path during recovery: %w", err)
 	}
 	return nil
+}
+
+func (r *Runtime) reconcileUninstallCompensatedState(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) error {
+	qm, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+	hasQuarantineMetadata := qmErr == nil
+	if operation.ArtifactID != "" {
+		artifact, err := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+		if err != nil {
+			if !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
+				return fmt.Errorf("kernel: artifact unavailable for compensated recovery: %w", err)
+			}
+		} else if artifact.InstalledPath == "" && hasQuarantineMetadata && qm.OriginalGenerationPath != "" {
+			if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, operation.ArtifactID, qm.OriginalGenerationPath, guard); err != nil {
+				return fmt.Errorf("kernel: restore artifact installed path failed: %w", err)
+			}
+		}
+		if hasQuarantineMetadata || operation.ArtifactID != "" {
+			if _, refErr := r.container.PackageRepository.AcquireArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID, time.Time{}); refErr != nil {
+				return fmt.Errorf("kernel: restore artifact installation reference failed: %w", refErr)
+			}
+		}
+	}
+	if operation.TargetVersion != "" && operation.ExtensionID != "" {
+		versionRecord, vErr := r.container.PackageRepository.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion)
+		if vErr == nil && (versionRecord.VersionState == string(PackageVersionStateRetained) || versionRecord.VersionState == string(PackageVersionStateRemoved)) {
+			db := r.container.PackageRepository.DB()
+			if db == nil {
+				return errors.New("kernel: package version database unavailable for compensated recovery")
+			}
+			tx, txErr := db.BeginTx(ctx, nil)
+			if txErr != nil {
+				return fmt.Errorf("kernel: begin version state restore transaction: %w", txErr)
+			}
+			defer tx.Rollback()
+			if _, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state=?, retained_until='', uninstalled_at='', uninstall_operation_id='' WHERE version_id=?`,
+				string(PackageVersionStateCurrent), versionRecord.VersionID); err != nil {
+				return fmt.Errorf("kernel: restore version state failed: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE extension_installations SET current_version_id=?, current_generation_id=? WHERE extension_id=?`,
+				versionRecord.VersionID, versionRecord.GenerationID, operation.ExtensionID); err != nil {
+				return fmt.Errorf("kernel: restore installation current version failed: %w", err)
+			}
+			if err := tx.Commit(); err != nil {
+				return fmt.Errorf("kernel: commit version state restore: %w", err)
+			}
+		}
+	}
+	if hasQuarantineMetadata {
+		qm.State = "restored"
+		_ = r.container.PackageRepository.PutQuarantineMetadata(ctx, qm, guard)
+	}
+	return nil
+}
+
+func (r *Runtime) reconcileUninstallCompletedState(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) error {
+	if err := r.reconcileUninstallArtifactPath(ctx, operation, guard); err != nil {
+		return err
+	}
+	if operation.ArtifactID != "" && operation.ExtensionID != "" {
+		if err := r.container.PackageRepository.ReleaseArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID); err != nil {
+			return fmt.Errorf("kernel: release artifact installation reference failed: %w", err)
+		}
+	}
+	if operation.TargetVersion != "" && operation.ExtensionID != "" {
+		if err := r.container.PackageRepository.RemovePackageVersion(ctx, operation.ExtensionID, operation.TargetVersion); err != nil {
+			if !strings.Contains(err.Error(), "not found for remove") {
+				return fmt.Errorf("kernel: remove package version state failed: %w", err)
+			}
+		}
+	}
+	qm, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+	if qmErr == nil && qm.QuarantineID != "" {
+		_ = r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, qm.QuarantineID, guard)
+	}
+	return nil
+}
+
+func (r *Runtime) reconcileRollbackResourceQuarantine(ctx context.Context, operation PackageOperationRecord, isCompensated bool) error {
+	if r.container.ResourceSnapshotStore == nil {
+		return nil
+	}
+	if isCompensated {
+		return r.container.ResourceSnapshotStore.RestoreQuarantinedResources(ctx, operation.OperationID)
+	}
+	return r.container.ResourceSnapshotStore.PurgeQuarantinedResources(ctx, operation.OperationID)
 }
 
 func (r *Runtime) resolveQuarantineCurrentPath(ctx context.Context, operation PackageOperationRecord) (string, error) {
@@ -364,11 +453,11 @@ func (r *Runtime) reconcileInstalledPackageGeneration(ctx context.Context, opera
 }
 
 type CommitGenerationStepResult struct {
-	Path               string `json:"path"`
-	TreeHash           string `json:"treeHash"`
-	StableGeneration   string `json:"stableGeneration"`
-	TargetGeneration   string `json:"targetGeneration"`
-	ArtifactHash       string `json:"artifactHash"`
+	Path             string `json:"path"`
+	TreeHash         string `json:"treeHash"`
+	StableGeneration string `json:"stableGeneration"`
+	TargetGeneration string `json:"targetGeneration"`
+	ArtifactHash     string `json:"artifactHash"`
 }
 
 type CommitRepositoryResult struct {
@@ -532,7 +621,30 @@ func (r *Runtime) proveRollbackPackageOperation(ctx context.Context, operation P
 		return fmt.Errorf("rollback artifact verification failed: %w", err)
 	}
 	installedPath, _ := installation.Metadata["installedPath"].(string)
-	return r.proveInstalledTree(installedPath, installation, "")
+	if err := r.proveInstalledTree(installedPath, installation, ""); err != nil {
+		return err
+	}
+	point, pointErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.TargetVersion)
+	if pointErr == nil {
+		if r.container.ResourceSnapshotStore != nil && point.ResourceSnapshotJSON != "" {
+			if err := r.container.ResourceSnapshotStore.VerifyResourceSnapshotEntries(ctx, point.ResourceSnapshotJSON); err != nil {
+				return fmt.Errorf("rollback resource snapshot verification failed: %w", err)
+			}
+			if err := r.container.ResourceSnapshotStore.VerifyNoActiveQuarantine(ctx, operation.OperationID); err != nil {
+				return fmt.Errorf("rollback resource quarantine verification failed: %w", err)
+			}
+		}
+		if r.container.UserDataSnapshotStore != nil && point.UserDataMigrationStateJSON != "" {
+			restoreOperationID := point.SourceOperationID
+			if restoreOperationID == "" {
+				restoreOperationID = "restore-" + point.RollbackPointID
+			}
+			if err := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID); err != nil {
+				return fmt.Errorf("rollback user data restore verification failed: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 func (r *Runtime) proveUninstalledPackageOperation(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep) error {

@@ -218,7 +218,10 @@ func (r *PackageRepository) GetArtifact(ctx context.Context, id string) (Package
 			&a.VerificationReportJSON, &a.CreatedAt, &a.VerifiedAt, &a.QuarantinedAt,
 			&a.ReferenceCount, &a.RetentionState, &a.RetentionUntil, &a.LastVerifiedAt,
 			&a.VerificationStatus, &a.GCError, &a.GCAttemptedAt, &a.DeletedAt)
-	return a, err
+	if err != nil {
+		return a, ClassifyRepositoryError("get artifact", err)
+	}
+	return a, nil
 }
 
 func (r *PackageRepository) GetArtifactByVersion(ctx context.Context, extensionID, version string) (PackageArtifact, error) {
@@ -678,7 +681,10 @@ func (r *PackageRepository) GetRollbackPoint(ctx context.Context, extensionID, v
 		&p.ResourceSnapshotJSON, &p.MigrationStateSnapshotJSON, &p.UserDataMigrationStateJSON,
 		&p.SnapshotHash, &p.RetentionState, &p.RetentionUntil, &p.SourceOperationID,
 		&p.InstalledPath, &p.CreatedAt, &p.ExpiresAt)
-	return p, err
+	if err != nil {
+		return p, ClassifyRepositoryError("get rollback point", err)
+	}
+	return p, nil
 }
 
 func (r *PackageRepository) PutExport(ctx context.Context, ticket PackageExportTicket) error {
@@ -716,4 +722,67 @@ func (r *PackageRepository) GetExport(ctx context.Context, exportID, userID, ext
 
 func (r *PackageRepository) DB() *sql.DB {
 	return r.db
+}
+
+func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Context, operationID, extensionID string, fencingToken int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return storageOperationError("begin finalize operation and release lease", err)
+	}
+	defer tx.Rollback()
+	var currentStatus string
+	var artifactID string
+	if err := tx.QueryRowContext(ctx, `SELECT status, artifact_id FROM extension_package_operations WHERE operation_id=?`,
+		operationID).Scan(&currentStatus, &artifactID); err != nil {
+		return classifyOperationRead("read operation for finalize", err)
+	}
+	if currentStatus != string(PackageOperationFinalizing) {
+		return operationStateError(OperationErrTransitionConflict,
+			"operation is not in finalizing state, current: "+currentStatus, nil)
+	}
+	var leaseOpID string
+	var leaseFencingToken int64
+	leaseErr := tx.QueryRowContext(ctx,
+		`SELECT operation_id, fencing_token FROM extension_package_operation_leases WHERE extension_id=?`,
+		extensionID).Scan(&leaseOpID, &leaseFencingToken)
+	if leaseErr == nil {
+		if leaseOpID != operationID {
+			return operationStateError(PackageErrCodeLeaseFenced,
+				"lease taken over by another operation: "+leaseOpID, nil)
+		}
+		if leaseFencingToken != fencingToken {
+			return operationStateError(PackageErrCodeLeaseFenced,
+				"fencing token mismatch during finalization", nil)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=?`,
+			extensionID, operationID); err != nil {
+			return storageOperationError("delete lease during finalization", err)
+		}
+	} else if !errors.Is(leaseErr, sql.ErrNoRows) {
+		return storageOperationError("read lease during finalization", leaseErr)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := tx.ExecContext(ctx,
+		`UPDATE extension_package_operations SET status=?, current_step=?, error_code='', error_detail='',
+		recovery_required=0, updated_at=?, completed_at=?, lease_owner='', lease_expires_at=''
+		WHERE operation_id=? AND status=?`,
+		string(PackageOperationCompleted), "completed", now, now, operationID, string(PackageOperationFinalizing))
+	if err != nil {
+		return storageOperationError("finalize operation to completed", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("inspect finalize operation", err)
+	}
+	if rows != 1 {
+		return operationStateError(OperationErrTransitionConflict,
+			"operation status changed during finalization", nil)
+	}
+	if artifactID != "" {
+		if err := releaseArtifactReferenceTx(ctx, tx, artifactID, ArtifactReferenceOperation, operationID); err != nil {
+			return storageOperationError("release terminal operation artifact during finalization", err)
+		}
+	}
+	return tx.Commit()
 }

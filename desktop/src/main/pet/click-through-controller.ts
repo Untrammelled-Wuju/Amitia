@@ -14,6 +14,7 @@ export class ClickThroughController {
   private isIgnoring = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastProcessTime = 0;
+  private lastContentSize: { width: number; height: number } | null = null;
   private readonly boundTick = (): void => {
     this.processMousePosition();
   };
@@ -30,6 +31,7 @@ export class ClickThroughController {
     this.isIgnoring = false;
     this.isDragging = false;
     this.lastProcessTime = 0;
+    this.lastContentSize = null;
     win.once("closed", () => {
       this.detach();
     });
@@ -51,6 +53,7 @@ export class ClickThroughController {
     this.isDragging = false;
     this.isIgnoring = false;
     this.lastProcessTime = 0;
+    this.lastContentSize = null;
   }
 
   updateFrame(width: number, height: number, alphaData: Uint8Array): void {
@@ -63,7 +66,7 @@ export class ClickThroughController {
     data: Uint8Array,
     threshold: number,
   ): void {
-    this.tester.setFrame(width, height, data);
+    this.tester.setFrame(width, height, data, threshold);
     this.hitMaskThreshold = threshold;
   }
 
@@ -104,27 +107,74 @@ export class ClickThroughController {
     if (!win || win.isDestroyed()) return;
     if (this.isDragging) return;
     if (this.mode === "none") return;
-    if (this.mode === "alpha" && !this.tester.hasFrame()) return;
+
+    let contentWidth = 0;
+    let contentHeight = 0;
+    try {
+      const [cw, ch] = win.getContentSize();
+      contentWidth = cw;
+      contentHeight = ch;
+    } catch {
+      void 0;
+    }
+    const sizeChanged =
+      this.lastContentSize === null ||
+      this.lastContentSize.width !== contentWidth ||
+      this.lastContentSize.height !== contentHeight;
+    if (sizeChanged) {
+      this.lastContentSize = { width: contentWidth, height: contentHeight };
+      this.lastProcessTime = 0;
+    }
 
     const now = Date.now();
     if (now - this.lastProcessTime < POLL_INTERVAL_MS) return;
     this.lastProcessTime = now;
 
+    if (contentWidth <= 0 || contentHeight <= 0) return;
+
     const cursor = screen.getCursorScreenPoint();
     const [winX, winY] = win.getPosition();
     const localX = cursor.x - winX;
     const localY = cursor.y - winY;
+    if (
+      localX < 0 ||
+      localY < 0 ||
+      localX > contentWidth ||
+      localY > contentHeight
+    ) {
+      this.setIgnoreState(true);
+      return;
+    }
+    const x01 = localX / contentWidth;
+    const y01 = localY / contentHeight;
 
     let hit: boolean;
     if (this.mode === "boundingBox") {
-      const box = this.tester.getBoundingBox();
-      hit =
-        localX >= box.minX &&
-        localX <= box.maxX &&
-        localY >= box.minY &&
-        localY <= box.maxY;
+      const box = this.tester.getNormalizedBoundingBox();
+      if (box.maxX < box.minX || box.maxY < box.minY) {
+        hit = false;
+      } else {
+        hit =
+          x01 >= box.minX &&
+          x01 <= box.maxX &&
+          y01 >= box.minY &&
+          y01 <= box.maxY;
+      }
     } else {
-      hit = this.tester.isHit(localX, localY);
+      if (!this.tester.hasFrame()) {
+        const box = this.tester.getNormalizedBoundingBox();
+        if (box.maxX < box.minX || box.maxY < box.minY) {
+          hit = false;
+        } else {
+          hit =
+            x01 >= box.minX &&
+            x01 <= box.maxX &&
+            y01 >= box.minY &&
+            y01 <= box.maxY;
+        }
+      } else {
+        hit = this.tester.isHitNormalized(x01, y01);
+      }
     }
     this.setIgnoreState(!hit);
   }

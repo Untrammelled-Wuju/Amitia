@@ -27,6 +27,17 @@ const DEV_SERVER_URL =
 const VISIBLE_MARGIN = 20;
 const EDGE_OFFSET = 40;
 
+const LOAD_TIMEOUT_MS = 15000;
+
+export class DesktopPetWindowLoadError extends Error {
+  readonly reason: string;
+  constructor(reason: string, detail?: string) {
+    super(`DesktopPetWindowLoadError: ${reason}${detail ? ` (${detail})` : ""}`);
+    this.name = "DesktopPetWindowLoadError";
+    this.reason = reason;
+  }
+}
+
 function clampScale(scale: number): number {
   if (!Number.isFinite(scale)) return PET_WINDOW_SCALE_DEFAULT;
   return Math.min(PET_WINDOW_SCALE_MAX, Math.max(PET_WINDOW_SCALE_MIN, scale));
@@ -47,6 +58,8 @@ export class DesktopPetWindowAdapter {
   private intentionalClose = false;
 
   private loadTimeout: ReturnType<typeof setTimeout> | null = null;
+  private loadSettled = false;
+  private loadReject: ((error: Error) => void) | null = null;
 
   private readonly onDisplayRemoved = (
     _event: Electron.Event,
@@ -79,14 +92,14 @@ export class DesktopPetWindowAdapter {
     };
   }
 
-  async create(): Promise<BrowserWindow> {
+  createWindow(): BrowserWindow {
     if (this.window && !this.window.isDestroyed()) {
       return this.window;
     }
 
     const { width, height } = this.calculateSize();
     const initial = this.resolveInitialPosition();
-    const preloadPath = join(currentDir, "../preload/pet-combined-preload.cjs");
+    const preloadPath = join(currentDir, "../preload/animation-preload.cjs");
 
     const constructorOptions: Electron.BrowserWindowConstructorOptions = {
       width,
@@ -103,10 +116,11 @@ export class DesktopPetWindowAdapter {
       focusable: false,
       webPreferences: {
         preload: preloadPath,
-        sandbox: false,
+        sandbox: true,
         nodeIntegration: false,
         contextIsolation: true,
         webSecurity: true,
+        allowRunningInsecureContent: false,
         backgroundThrottling: false,
       },
     };
@@ -122,85 +136,106 @@ export class DesktopPetWindowAdapter {
     this.registerWindowEvents();
     this.registerScreenEvents();
 
-    if (this.loadTimeout) {
-      clearTimeout(this.loadTimeout);
-      this.loadTimeout = null;
+    return this.window;
+  }
+
+  async loadRenderer(): Promise<void> {
+    const win = this.window;
+    if (!win || win.isDestroyed()) {
+      throw new DesktopPetWindowLoadError("window_not_available");
     }
-    let loadSettled = false;
 
-    this.window.once("ready-to-show", () => {
-      if (loadSettled) return;
-      loadSettled = true;
-      if (this.loadTimeout) {
-        clearTimeout(this.loadTimeout);
-        this.loadTimeout = null;
-      }
-      const w = this.window;
-      if (!w || w.isDestroyed()) return;
-      w.show();
-    });
+    this.loadSettled = false;
+    this.loadReject = null;
 
-    this.window.webContents.on("did-finish-load", () => {
-      if (loadSettled) return;
-      loadSettled = true;
-      if (this.loadTimeout) {
-        clearTimeout(this.loadTimeout);
-        this.loadTimeout = null;
-      }
-      const w = this.window;
-      if (!w || w.isDestroyed()) return;
-      w.show();
-    });
+    return new Promise<void>((resolve, reject) => {
+      this.loadReject = reject;
 
-    this.window.webContents.on(
-      "did-fail-load",
-      (_event, errorCode, errorDescription) => {
-        if (loadSettled) return;
-        loadSettled = true;
+      const cleanup = (): void => {
         if (this.loadTimeout) {
           clearTimeout(this.loadTimeout);
           this.loadTimeout = null;
         }
-        console.error(
-          "[DesktopPetWindowAdapter] 窗口加载失败:",
-          errorCode,
-          errorDescription,
-        );
-      },
-    );
+        win.webContents.removeAllListeners("did-finish-load");
+        win.webContents.removeAllListeners("did-fail-load");
+        win.webContents.removeAllListeners("render-process-gone");
+        win.removeAllListeners("unresponsive");
+      };
 
-    this.loadTimeout = setTimeout(() => {
-      if (loadSettled) return;
-      loadSettled = true;
-      this.loadTimeout = null;
-      console.error(
-        "[DesktopPetWindowAdapter] 窗口初始化超时(5s)，已进入错误状态",
-      );
-    }, 5000);
-
-    if (isDevMode()) {
-      const petDevUrl = `${DEV_SERVER_URL}/pet.html`;
-      try {
-        await this.window.loadURL(petDevUrl);
-      } catch (err) {
-        console.error("[DesktopPetWindowAdapter] 开发模式加载 pet.html 失败:", err);
-        const petHtmlPath = join(currentDir, "../renderer/pet.html");
-        try {
-          await this.window.loadFile(petHtmlPath);
-        } catch (err2) {
-          console.error("[DesktopPetWindowAdapter] 回退加载 pet.html 也失败:", err2);
+      const settle = (error: Error | null): void => {
+        if (this.loadSettled) return;
+        this.loadSettled = true;
+        cleanup();
+        if (error) {
+          this.loadReject = null;
+          reject(error);
+        } else {
+          this.loadReject = null;
+          resolve();
         }
-      }
-    } else {
-      const petHtmlPath = join(currentDir, "../renderer/pet.html");
-      try {
-        await this.window.loadFile(petHtmlPath);
-      } catch (err) {
-        console.error("[DesktopPetWindowAdapter] 加载 pet.html 失败:", err);
-      }
-    }
+      };
 
-    return this.window;
+      win.webContents.once("did-finish-load", () => {
+        settle(null);
+      });
+
+      win.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
+        settle(new DesktopPetWindowLoadError("did-fail-load", `code=${errorCode} desc=${errorDescription}`));
+      });
+
+      win.webContents.on("render-process-gone", (_event, details) => {
+        settle(new DesktopPetWindowLoadError("render-process-gone", `reason=${details?.reason ?? "unknown"}`));
+      });
+
+      win.on("unresponsive", () => {
+        settle(new DesktopPetWindowLoadError("unresponsive"));
+      });
+
+      this.loadTimeout = setTimeout(() => {
+        settle(new DesktopPetWindowLoadError("load_timeout", `${LOAD_TIMEOUT_MS}ms`));
+      }, LOAD_TIMEOUT_MS);
+
+      const doLoad = async (): Promise<void> => {
+        if (isDevMode()) {
+          const petDevUrl = `${DEV_SERVER_URL}/pet.html`;
+          try {
+            await win.loadURL(petDevUrl);
+          } catch {
+            const petHtmlPath = join(currentDir, "../renderer/pet.html");
+            try {
+              await win.loadFile(petHtmlPath);
+            } catch (err2) {
+              settle(new DesktopPetWindowLoadError("load_failed", err2 instanceof Error ? err2.message : String(err2)));
+            }
+          }
+        } else {
+          const petHtmlPath = join(currentDir, "../renderer/pet.html");
+          try {
+            await win.loadFile(petHtmlPath);
+          } catch (err) {
+            settle(new DesktopPetWindowLoadError("load_failed", err instanceof Error ? err.message : String(err)));
+          }
+        }
+      };
+
+      void doLoad();
+    });
+  }
+
+  showWhenRuntimeReady(): void {
+    const win = this.window;
+    if (!win || win.isDestroyed()) return;
+    if (this.loadTimeout) {
+      clearTimeout(this.loadTimeout);
+      this.loadTimeout = null;
+    }
+    win.show();
+  }
+
+  async create(): Promise<BrowserWindow> {
+    const win = this.createWindow();
+    await this.loadRenderer();
+    return win;
   }
 
   async destroy(): Promise<void> {
@@ -209,6 +244,8 @@ export class DesktopPetWindowAdapter {
       clearTimeout(this.loadTimeout);
       this.loadTimeout = null;
     }
+    this.loadSettled = false;
+    this.loadReject = null;
     const win = this.window;
     this.window = null;
     if (win && !win.isDestroyed()) {

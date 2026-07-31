@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -165,20 +166,13 @@ func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, ste
 	if db == nil {
 		return nil, fmt.Errorf("kernel: migration sql db unavailable for %s", def.MigrationID)
 	}
-	statements := splitSQLStatementsSafe(string(scriptContent))
-	if len(statements) == 0 {
-		return nil, fmt.Errorf("kernel: migration sql has no executable statements: %s", def.Entry)
+	parsedStmts, validateErr := migration.ValidateRawStatements(string(scriptContent), pmr.extensionID)
+	if validateErr != nil {
+		return nil, fmt.Errorf("kernel: migration sql validation failed in %s: %w", def.Entry, validateErr)
 	}
-	for _, stmt := range statements {
-		if match := forbiddenMigrationTableRegex.FindString(stmt); match != "" {
-			return nil, fmt.Errorf("kernel: migration sql references forbidden host table %q in %s", strings.ToLower(match), def.Entry)
-		}
-		if match := forbiddenSQLCommandRegex.FindString(stmt); match != "" {
-			return nil, fmt.Errorf("kernel: migration sql uses forbidden command %q in %s", strings.ToUpper(match), def.Entry)
-		}
-		if err := validateExtNamespace(stmt); err != nil {
-			return nil, fmt.Errorf("kernel: migration sql namespace violation in %s: %w", def.Entry, err)
-		}
+	statements := make([]string, len(parsedStmts))
+	for i, ps := range parsedStmts {
+		statements[i] = ps.Raw
 	}
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -299,6 +293,9 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 	invokeResult, invokeErr := host.Invoke(ctx, functionName, invokeInput)
 	_ = host.Stop(ctx, "migration_complete")
 	if invokeErr != nil {
+		if strings.Contains(invokeErr.Error(), PackageErrCodeMigrationSandboxViolation) {
+			return nil, fmt.Errorf("kernel: migration javascript sandbox violation in %s: %w", def.MigrationID, invokeErr)
+		}
 		return nil, fmt.Errorf("kernel: migration javascript %s invoke failed for %s: %w", functionName, def.MigrationID, invokeErr)
 	}
 	if len(def.Postcondition) > 0 {
@@ -333,6 +330,18 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 	if marshalErr != nil {
 		return nil, fmt.Errorf("kernel: migration javascript evidence marshal: %w", marshalErr)
 	}
+	if pmr.runtime.container != nil && pmr.runtime.container.Store != nil {
+		db := pmr.runtime.container.Store.DB()
+		if db != nil {
+			conn, err := db.Conn(ctx)
+			if err == nil {
+				defer conn.Close()
+				if err := pmr.writeMigrationJournal(ctx, conn, step, def, evidenceJSON); err != nil {
+					log.Printf("[migration-javascript] failed to write migration journal for %s: %v", def.MigrationID, err)
+				}
+			}
+		}
+	}
 	return evidenceJSON, nil
 }
 
@@ -351,6 +360,20 @@ type migrationExecutorBase struct {
 	scriptContent []byte
 }
 
+func (e *migrationExecutorBase) validateNamespace(name string) error {
+	if migration.IsSystemTable(name) {
+		return fmt.Errorf("kernel: migration object %q is a system table", name)
+	}
+	if migration.IsHostTable(name) {
+		return fmt.Errorf("kernel: migration object %q is a host table", name)
+	}
+	prefix := migration.ExtensionNamespacePrefix(e.extensionID)
+	if !strings.HasPrefix(strings.ToLower(name), prefix) {
+		return fmt.Errorf("kernel: migration object %q does not belong to namespace %q", name, prefix)
+	}
+	return nil
+}
+
 func (e *migrationExecutorBase) executeScriptSQL(ctx context.Context) (int, error) {
 	if len(e.scriptContent) == 0 {
 		return 0, nil
@@ -362,20 +385,13 @@ func (e *migrationExecutorBase) executeScriptSQL(ctx context.Context) (int, erro
 	if db == nil {
 		return 0, fmt.Errorf("kernel: migration executor: database unavailable")
 	}
-	statements := splitSQLStatementsSafe(string(e.scriptContent))
-	if len(statements) == 0 {
-		return 0, nil
+	parsedStmts, validateErr := migration.ValidateRawStatements(string(e.scriptContent), e.extensionID)
+	if validateErr != nil {
+		return 0, fmt.Errorf("kernel: migration executor: sql validation failed: %w", validateErr)
 	}
-	for _, stmt := range statements {
-		if match := forbiddenMigrationTableRegex.FindString(stmt); match != "" {
-			return 0, fmt.Errorf("kernel: migration executor: sql references forbidden host table %q", strings.ToLower(match))
-		}
-		if match := forbiddenSQLCommandRegex.FindString(stmt); match != "" {
-			return 0, fmt.Errorf("kernel: migration executor: sql uses forbidden command %q", strings.ToUpper(match))
-		}
-		if err := validateExtNamespace(stmt); err != nil {
-			return 0, fmt.Errorf("kernel: migration executor: sql namespace violation: %w", err)
-		}
+	statements := make([]string, len(parsedStmts))
+	for i, ps := range parsedStmts {
+		statements[i] = ps.Raw
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -403,10 +419,10 @@ func (e *migrationExecutorBase) executeScriptSQL(ctx context.Context) (int, erro
 
 type ConfigMigrationExecutor struct {
 	migrationExecutorBase
-	snapshotContributions     []domain.ContributionDefinition
-	snapshotRequirements      []sqlite.PermissionRequirement
-	snapshotGrants            []sqlite.PermissionGrant
-	scriptStatementsExecuted  int
+	snapshotContributions    []domain.ContributionDefinition
+	snapshotRequirements     []sqlite.PermissionRequirement
+	snapshotGrants           []sqlite.PermissionGrant
+	scriptStatementsExecuted int
 }
 
 func (e *ConfigMigrationExecutor) Prepare(ctx context.Context) error {
@@ -582,6 +598,9 @@ func (e *UserDataMigrationExecutor) Prepare(ctx context.Context) error {
 		if dd.Namespace == "" {
 			continue
 		}
+		if err := e.validateNamespace(dd.Namespace); err != nil {
+			return fmt.Errorf("kernel: userdata migration prepare: %w", err)
+		}
 		rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", dd.Namespace))
 		if err != nil {
 			continue
@@ -620,6 +639,9 @@ func (e *UserDataMigrationExecutor) Verify(ctx context.Context) error {
 		if dd.Namespace == "" {
 			continue
 		}
+		if err := e.validateNamespace(dd.Namespace); err != nil {
+			return fmt.Errorf("kernel: userdata migration verify: %w", err)
+		}
 		var count int
 		if err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", dd.Namespace)).Scan(&count); err != nil {
 			return fmt.Errorf("kernel: userdata migration verify: count %s: %w", dd.Namespace, err)
@@ -639,6 +661,9 @@ func (e *UserDataMigrationExecutor) Compensate(ctx context.Context) error {
 	for table, jsonlData := range e.jsonlExports {
 		if jsonlData == "" {
 			continue
+		}
+		if err := e.validateNamespace(table); err != nil {
+			return fmt.Errorf("kernel: userdata migration compensate: %w", err)
 		}
 		records, err := parseJSONL(jsonlData)
 		if err != nil {
@@ -1150,7 +1175,8 @@ func isExtNamespaceTable(name string) bool {
 }
 
 func (pmr *packageMigrationRuntime) computeExtSchemaHash(ctx context.Context, executor migrationQueryExecutor) (string, error) {
-	rows, err := executor.QueryContext(ctx, "SELECT name, sql FROM sqlite_master WHERE type='table' AND name LIKE 'ext_%' ORDER BY name")
+	nsPrefix := migration.ExtensionNamespacePrefix(pmr.extensionID) + "%"
+	rows, err := executor.QueryContext(ctx, "SELECT name, sql FROM sqlite_master WHERE type='table' AND name LIKE ? ORDER BY name", nsPrefix)
 	if err != nil {
 		return "", err
 	}

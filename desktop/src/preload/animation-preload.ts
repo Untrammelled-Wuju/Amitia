@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { ANIMATION_IPC_CHANNELS } from "../shared/animation-ipc";
+import type {
+  PetDragIpcPayload,
+  PetHitMaskPayload,
+  RuntimeReadyPayload,
+} from "../shared/animation-ipc";
 import type { PackagePlaybackSnapshot } from "../desktop-pet/animation/contracts";
 import type { PlaybackEvent, PlaybackSnapshot, PlayActionCommand, PlaybackRecoverySnapshot } from "../desktop-pet/animation/contracts";
 
@@ -86,16 +91,32 @@ const animationApi = {
     ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendHover, { x, y });
   },
 
-  sendRendererReady(): void {
-    ipcRenderer.send(ANIMATION_IPC_CHANNELS.rendererReady);
+  sendRendererBootstrapped(): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.rendererBootstrapped);
   },
 
-  sendRendererReadyAck(payload: { snapshotApplied: boolean }): void {
-    ipcRenderer.send(ANIMATION_IPC_CHANNELS.rendererReadyAck, payload);
+  sendRuntimeReady(payload: RuntimeReadyPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.runtimeReady, payload);
   },
 
-  reportHitMask(width: number, height: number, data: Uint8Array, threshold: number): void {
-    ipcRenderer.send(ANIMATION_IPC_CHANNELS.hitMask, { width, height, data, threshold });
+  reportHitMask(payload: PetHitMaskPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.hitMask, payload);
+  },
+
+  sendDragStart(payload: PetDragIpcPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.dragStart, payload);
+  },
+
+  sendDragMove(payload: PetDragIpcPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.dragMove, payload);
+  },
+
+  sendDragEnd(payload: PetDragIpcPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.dragEnd, payload);
+  },
+
+  sendDragCancel(payload: PetDragIpcPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.dragCancel, payload);
   },
 
   onPlayAction(

@@ -534,7 +534,8 @@
 }
 
 .onboarding-world .ob-model-name-row input,
-.onboarding-world .ob-model-name-row .ob-model-select {
+.onboarding-world .ob-model-name-row .ob-model-select,
+.onboarding-world .ob-model-name-row .ob-provider-select {
   flex: 1;
   min-width: 0;
   height: 36px;
@@ -843,8 +844,8 @@
 }
 
 .onboarding-world .ob-voice-model-test-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  align-items: center;
   gap: 7px;
 }
 

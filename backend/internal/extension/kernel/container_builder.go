@@ -207,6 +207,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	packageArtifactStore := NewPackageArtifactStore(b.extRoot)
 	packageGenerationStore := NewPackageGenerationStore(b.extRoot)
 	packageTrustRepo := NewPackageTrustRepository(db)
+	userDataSnapshotStore := NewUserDataSnapshotStore(db)
+	resourceSnapshotStore := NewResourceSnapshotStore(db, b.extRoot)
+	if err := resourceSnapshotStore.EnsureSchema(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: ensure resource snapshot schema: %w", err)
+	}
+	packageSnapshotRepo := NewPackageSnapshotRepository(db)
 	trustService := trust.NewTrustService(trust.TrustServiceConfig{})
 	if err := packageTrustRepo.Restore(ctx, trustService); err != nil {
 		return nil, fmt.Errorf("kernel: restore package trust: %w", err)
@@ -365,6 +371,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ScopeSnapshotStore:  host_api.NewSnapshotStoreAdapter(scopeStore),
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
+	}
+	if err := setupMigrationSandboxRoutes(hostAPIGateway, MigrationSandboxDeps{
+		DB: store.DB(),
+	}); err != nil {
+		return nil, fmt.Errorf("kernel: setup migration sandbox routes: %w", err)
 	}
 	scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewKernelToolExecutorAdapter(executionKernel)))
 	jsFactory.SetHostAPI(hostAPIGateway)
@@ -679,6 +690,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PackageArtifactStore:   packageArtifactStore,
 		PackageGenerationStore: packageGenerationStore,
 		PackageTrustRepository: packageTrustRepo,
+		UserDataSnapshotStore:  userDataSnapshotStore,
+		ResourceSnapshotStore:  resourceSnapshotStore,
+		PackageSnapshotRepo:    packageSnapshotRepo,
 		LifecycleManager:       lifecycleMgr,
 		ContributionRegistry:   contribRegistry,
 		ContributionInstaller:  typedInstaller,

@@ -41,6 +41,9 @@ const (
 	MethodMemoryQuery      Method = "host.memory.query"
 	MethodProviderInvoke   Method = "host.provider.invoke"
 	MethodRuntimeHealth    Method = "host.runtime.health"
+
+	MethodMigrationSQLExecute Method = "migration.sql.execute"
+	MethodMigrationSQLQuery   Method = "migration.sql.query"
 )
 
 type RiskLevel string

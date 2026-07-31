@@ -14,14 +14,14 @@ import (
 )
 
 type PackageFinalGateResult struct {
-	Passed        bool                    `json:"passed"`
-	OperationID   string                  `json:"operationId"`
-	OperationType string                  `json:"operationType"`
-	ExtensionID   string                  `json:"extensionId"`
-	Version       string                  `json:"version"`
-	Checks        []PackageFinalGateCheck `json:"checks"`
+	Passed        bool                      `json:"passed"`
+	OperationID   string                    `json:"operationId"`
+	OperationType string                    `json:"operationType"`
+	ExtensionID   string                    `json:"extensionId"`
+	Version       string                    `json:"version"`
+	Checks        []PackageFinalGateCheck   `json:"checks"`
 	Findings      []PackageFinalGateFinding `json:"findings,omitempty"`
-	VerifiedAt    string                  `json:"verifiedAt"`
+	VerifiedAt    string                    `json:"verifiedAt"`
 }
 
 type PackageFinalGateCheck struct {
@@ -31,16 +31,16 @@ type PackageFinalGateCheck struct {
 }
 
 type PackageFinalGateFinding struct {
-	FindingID    string `json:"findingId"`
-	OperationID  string `json:"operationId"`
-	ExtensionID  string `json:"extensionId"`
-	FindingType  string `json:"findingType"`
-	ResourceID   string `json:"resourceId,omitempty"`
-	Severity     string `json:"severity"`
-	Expected     string `json:"expected,omitempty"`
-	Actual       string `json:"actual,omitempty"`
-	DetectedAt   string `json:"detectedAt"`
-	ResolvedAt   string `json:"resolvedAt,omitempty"`
+	FindingID   string `json:"findingId"`
+	OperationID string `json:"operationId"`
+	ExtensionID string `json:"extensionId"`
+	FindingType string `json:"findingType"`
+	ResourceID  string `json:"resourceId,omitempty"`
+	Severity    string `json:"severity"`
+	Expected    string `json:"expected,omitempty"`
+	Actual      string `json:"actual,omitempty"`
+	DetectedAt  string `json:"detectedAt"`
+	ResolvedAt  string `json:"resolvedAt,omitempty"`
 }
 
 func (r *PackageRepository) ListOperationSteps(ctx context.Context, operationID string) ([]PackageOperationStep, error) {
@@ -66,6 +66,10 @@ func (r *PackageRepository) ListOperationSteps(ctx context.Context, operationID 
 }
 
 func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string) (PackageFinalGateResult, error) {
+	return r.verifyPackageFinalGateWithGuard(ctx, operationID, PackageWriteGuard{})
+}
+
+func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operationID string, guard PackageWriteGuard) (PackageFinalGateResult, error) {
 	result := PackageFinalGateResult{
 		OperationID: operationID,
 		Checks:      make([]PackageFinalGateCheck, 0, 10),
@@ -119,10 +123,10 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	result.Checks = append(result.Checks, checkIdentity)
 
 	checkStatus := PackageFinalGateCheck{Name: "operation_status_completed"}
-	if operation.Status == string(PackageOperationCompleted) || operation.Status == string(PackageOperationInProgress) {
+	if operation.Status == string(PackageOperationCompleted) || operation.Status == string(PackageOperationInProgress) || operation.Status == string(PackageOperationFinalizing) {
 		checkStatus.Passed = true
 	} else {
-		checkStatus.Detail = fmt.Sprintf("operation status is %s, expected completed or in_progress", operation.Status)
+		checkStatus.Detail = fmt.Sprintf("operation status is %s, expected completed, in_progress or finalizing", operation.Status)
 	}
 	result.Checks = append(result.Checks, checkStatus)
 
@@ -161,13 +165,22 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	}
 
 	if isUninstall {
-		checkArtifact := PackageFinalGateCheck{Name: "artifact_path_absent", Passed: true}
+		checkArtifact := PackageFinalGateCheck{Name: "artifact_path_absent"}
 		artifact, artifactErr := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
-		if artifactErr == nil && artifact.InstalledPath != "" {
-			if _, statErr := os.Stat(artifact.InstalledPath); statErr == nil || !os.IsNotExist(statErr) {
-				checkArtifact.Passed = false
-				checkArtifact.Detail = "installed path still exists after uninstall"
+		if artifactErr == nil {
+			if artifact.InstalledPath == "" {
+				checkArtifact.Passed = true
+			} else {
+				if _, statErr := os.Stat(artifact.InstalledPath); statErr == nil || !os.IsNotExist(statErr) {
+					checkArtifact.Detail = "installed path still exists after uninstall"
+				} else {
+					checkArtifact.Passed = true
+				}
 			}
+		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorNotFound) {
+			checkArtifact.Passed = true
+		} else {
+			checkArtifact.Detail = fmt.Sprintf("artifact query failed: %v", artifactErr)
 		}
 		result.Checks = append(result.Checks, checkArtifact)
 	} else {
@@ -292,17 +305,26 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 		} else {
 			permClean := true
 			requirements, reqErr := r.container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(operation.ExtensionID))
-			if reqErr == nil && len(requirements) > 0 {
+			if reqErr != nil {
+				permClean = false
+				checkPerm.Detail = fmt.Sprintf("permission requirements query failed: %v", reqErr)
+			} else if len(requirements) > 0 {
 				permClean = false
 				checkPerm.Detail = "permission requirements still exist after uninstall"
 			}
 			grants, grantErr := r.container.PermissionRepository.ListGrants(ctx, domain.ExtensionID(operation.ExtensionID))
-			if grantErr == nil && len(grants) > 0 {
+			if grantErr != nil {
+				permClean = false
+				checkPerm.Detail = fmt.Sprintf("permission grants query failed: %v", grantErr)
+			} else if len(grants) > 0 {
 				permClean = false
 				checkPerm.Detail = "permission grants still exist after uninstall"
 			}
 			bindings, bindErr := r.container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(operation.ExtensionID))
-			if bindErr == nil && len(bindings) > 0 {
+			if bindErr != nil {
+				permClean = false
+				checkPerm.Detail = fmt.Sprintf("scope bindings query failed: %v", bindErr)
+			} else if len(bindings) > 0 {
 				permClean = false
 				checkPerm.Detail = "scope bindings still exist after uninstall"
 			}
@@ -466,10 +488,14 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 		} else {
 			rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
 			if rpErr != nil {
-				if operation.OperationType == "rollback" {
-					checkSnapshot.Passed = true
+				if IsRepositoryErrorKind(rpErr, RepositoryErrorNotFound) {
+					if operation.OperationType == "rollback" {
+						checkSnapshot.Detail = "rollback point not found for rollback operation"
+					} else {
+						checkSnapshot.Passed = true
+					}
 				} else {
-					checkSnapshot.Detail = fmt.Sprintf("rollback point unavailable: %v", rpErr)
+					checkSnapshot.Detail = fmt.Sprintf("rollback point query failed: %v", rpErr)
 				}
 			} else {
 				if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
@@ -479,8 +505,13 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 					resourceEmpty := rollbackPoint.ResourceSnapshotJSON == ""
 					migrationEmpty := rollbackPoint.MigrationStateSnapshotJSON == ""
 					userDataEmpty := rollbackPoint.UserDataMigrationStateJSON == ""
-					if configEmpty || resourceEmpty || migrationEmpty || userDataEmpty {
-						checkSnapshot.Detail = fmt.Sprintf("snapshot incomplete: config=%v resource=%v migration=%v userData=%v", !configEmpty, !resourceEmpty, !migrationEmpty, !userDataEmpty)
+					snapshotHashEmpty := rollbackPoint.SnapshotHash == ""
+					if configEmpty || resourceEmpty || migrationEmpty || userDataEmpty || snapshotHashEmpty {
+						if isRollbackSnapshotExempt(rollbackPoint) {
+							checkSnapshot.Passed = true
+						} else {
+							checkSnapshot.Detail = fmt.Sprintf("snapshot incomplete: config=%v resource=%v migration=%v userData=%v hash=%v", !configEmpty, !resourceEmpty, !migrationEmpty, !userDataEmpty, !snapshotHashEmpty)
+						}
 					} else {
 						checkSnapshot.Passed = true
 					}
@@ -545,21 +576,21 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 		if !check.Passed {
 			allPassed = false
 			findings = append(findings, PackageFinalGateFinding{
-				FindingID:    "gate-finding-" + uuid.NewString(),
-				OperationID:  operationID,
-				ExtensionID:  operation.ExtensionID,
-				FindingType:  check.Name,
-				Severity:     "error",
-				Expected:     "passed",
-				Actual:       check.Detail,
-				DetectedAt:   result.VerifiedAt,
+				FindingID:   "gate-finding-" + uuid.NewString(),
+				OperationID: operationID,
+				ExtensionID: operation.ExtensionID,
+				FindingType: check.Name,
+				Severity:    "error",
+				Expected:    "passed",
+				Actual:      check.Detail,
+				DetectedAt:  result.VerifiedAt,
 			})
 		}
 	}
 	result.Passed = allPassed
 	result.Findings = findings
 
-	if persistErr := r.recordFinalGateResult(ctx, operationID, result); persistErr != nil {
+	if persistErr := r.recordFinalGateResult(ctx, operationID, result, guard); persistErr != nil {
 		return result, fmt.Errorf("kernel: final gate finding persistence failed: %w", persistErr)
 	}
 
@@ -584,7 +615,7 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	return result, nil
 }
 
-func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string, result PackageFinalGateResult) error {
+func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string, result PackageFinalGateResult, guard PackageWriteGuard) error {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return fmt.Errorf("kernel: package repository unavailable")
 	}
@@ -597,12 +628,13 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 	if result.Passed {
 		status = "completed"
 	}
-	operation, _ := r.container.PackageRepository.getAuthoritativeOperationByID(ctx, operationID)
-	guard := PackageWriteGuard{}
-	if operation.OperationID != "" {
-		lease, leaseErr := r.container.PackageRepository.getExtensionLease(ctx, operation.ExtensionID)
-		if leaseErr == nil && lease.OperationID == operationID {
-			guard = PackageWriteGuard{ExtensionID: operation.ExtensionID, FencingToken: lease.FencingToken}
+	if guard.IsZero() {
+		operation, _ := r.container.PackageRepository.getAuthoritativeOperationByID(ctx, operationID)
+		if operation.OperationID != "" {
+			lease, leaseErr := r.container.PackageRepository.getExtensionLease(ctx, operation.ExtensionID)
+			if leaseErr == nil && lease.OperationID == operationID {
+				guard = PackageWriteGuard{ExtensionID: operation.ExtensionID, FencingToken: lease.FencingToken}
+			}
 		}
 	}
 	if err := r.container.PackageRepository.PutStep(ctx, PackageOperationStep{
@@ -631,4 +663,15 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 		}
 	}
 	return nil
+}
+
+func isRollbackSnapshotExempt(point PackageRollbackPoint) bool {
+	if point.MigrationStateSnapshotJSON == "" {
+		return false
+	}
+	var migrationState packageMigrationStateSnapshot
+	if err := json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState); err != nil {
+		return false
+	}
+	return migrationState.Mode == "none"
 }

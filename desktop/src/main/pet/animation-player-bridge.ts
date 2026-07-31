@@ -87,14 +87,13 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     }
 
     const oldKey = this.currentAction?.key ?? null;
-    this.currentPlaybackId = randomUUID();
     this.pendingAction = action;
     this.loopCount = 0;
     this.currentFrameIndex = 0;
     this.state = "loading";
 
     if (oldKey !== action.key) {
-      this.callbacks.onActionSwitch?.(action.key, oldKey, this.currentPlaybackId);
+      this.callbacks.onActionSwitch?.(action.key, oldKey, this.currentPlaybackId ?? "");
     }
 
     this.sendPlayCommand(action);
@@ -192,11 +191,10 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     return result;
   }
 
-  handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string }): void {
+  handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string; playbackInstanceId?: string; frameIndex?: number }): void {
     switch (event.type) {
       case "playback.action_started":
         if (event.actionKey) {
-          const oldKey = this.currentAction?.key ?? null;
           const loaded = this.loaded;
           const newAction = loaded?.actions.get(event.actionKey) ?? null;
           if (newAction) {
@@ -204,6 +202,9 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
             this.pendingAction = null;
             this.state = "playing";
           }
+        }
+        if (event.playbackInstanceId) {
+          this.currentPlaybackId = event.playbackInstanceId;
         }
         break;
       case "playback.action_completed":
@@ -267,7 +268,7 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
       returnOverride: buildReturnTarget(action),
     };
     const result: RendererDeliveryResult = this.animationIpc.sendPlayAction(command);
-    if (!result.delivered) {
+    if (result.status !== "delivered" && result.status !== "queued") {
       this.state = "stopped";
       this.pendingAction = null;
       this.reportError(

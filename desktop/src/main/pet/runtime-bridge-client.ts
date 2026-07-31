@@ -23,6 +23,7 @@ import {
   type RuntimeSessionContext,
   type WindowPayload,
   OutboxPriorityDroppable,
+  OutboxPriorityMergeable,
   OutboxPriorityMustRetain,
   outboxPriorityForEvent,
   inferClickEventType,

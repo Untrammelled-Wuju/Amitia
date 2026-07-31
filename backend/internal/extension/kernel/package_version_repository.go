@@ -146,10 +146,7 @@ func (r *PackageRepository) UpsertPackageVersionTx(ctx context.Context, tx *sql.
 		&existing.VersionState, &existing.RetainedUntil, &existing.InstalledPath, &existing.InstalledTreeHash, &existing.ArchiveHash,
 		&existing.ManifestHash, &existing.ContentTreeHash, &existing.GenerationID)
 	if lookupErr == nil {
-		versionState := packageVersionStateOf(candidate)
-		if versionState == "" {
-			versionState = string(PackageVersionStatePending)
-		}
+		versionState := string(PackageVersionStatePending)
 		_, updateErr := tx.ExecContext(ctx, `UPDATE package_versions SET
 			artifact_id=?, generation_id=?, manifest_hash=?, content_tree_hash=?,
 			version_state=?, retained_until=?, installed_at=?,
@@ -450,25 +447,25 @@ type PackageManifestChange struct {
 }
 
 type PackageVersionComparison struct {
-	ExtensionID          string                  `json:"extensionId"`
-	FromVersion          string                  `json:"fromVersion"`
-	ToVersion            string                  `json:"toVersion"`
-	FromArtifactID       string                  `json:"fromArtifactId"`
-	ToArtifactID         string                  `json:"toArtifactId"`
-	FromArchiveHash      string                  `json:"fromArchiveHash"`
-	ToArchiveHash        string                  `json:"toArchiveHash"`
-	FromManifestHash     string                  `json:"fromManifestHash"`
-	ToManifestHash       string                  `json:"toManifestHash"`
-	FromContentTreeHash  string                  `json:"fromContentTreeHash"`
-	ToContentTreeHash    string                  `json:"toContentTreeHash"`
-	FromSignatureStatus  string                  `json:"fromSignatureStatus"`
-	ToSignatureStatus    string                  `json:"toSignatureStatus"`
-	ArtifactChanges      []PackageArtifactChange `json:"artifactChanges"`
-	ManifestChanges      []PackageManifestChange `json:"manifestChanges"`
-	FromManifest         manifest_v2.Manifest    `json:"-"`
-	ToManifest           manifest_v2.Manifest    `json:"-"`
-	FromFiles            []amitiax.FileEntry     `json:"-"`
-	ToFiles              []amitiax.FileEntry     `json:"-"`
+	ExtensionID         string                  `json:"extensionId"`
+	FromVersion         string                  `json:"fromVersion"`
+	ToVersion           string                  `json:"toVersion"`
+	FromArtifactID      string                  `json:"fromArtifactId"`
+	ToArtifactID        string                  `json:"toArtifactId"`
+	FromArchiveHash     string                  `json:"fromArchiveHash"`
+	ToArchiveHash       string                  `json:"toArchiveHash"`
+	FromManifestHash    string                  `json:"fromManifestHash"`
+	ToManifestHash      string                  `json:"toManifestHash"`
+	FromContentTreeHash string                  `json:"fromContentTreeHash"`
+	ToContentTreeHash   string                  `json:"toContentTreeHash"`
+	FromSignatureStatus string                  `json:"fromSignatureStatus"`
+	ToSignatureStatus   string                  `json:"toSignatureStatus"`
+	ArtifactChanges     []PackageArtifactChange `json:"artifactChanges"`
+	ManifestChanges     []PackageManifestChange `json:"manifestChanges"`
+	FromManifest        manifest_v2.Manifest    `json:"-"`
+	ToManifest          manifest_v2.Manifest    `json:"-"`
+	FromFiles           []amitiax.FileEntry     `json:"-"`
+	ToFiles             []amitiax.FileEntry     `json:"-"`
 }
 
 func (r *PackageRepository) ComparePackageVersions(ctx context.Context, extensionID, fromVersion, toVersion string) (*PackageVersionComparison, error) {

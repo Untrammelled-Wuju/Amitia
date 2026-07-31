@@ -93,8 +93,17 @@ export default defineConfig({
         vite: {
           build: {
             outDir: resolve(__dirname, "dist/main"),
-            rollupOptions: {
+            lib: {
+              entry: resolve(__dirname, "src/main/index.ts"),
+              formats: ["cjs"],
+              fileName: () => "[name].cjs",
+            },
+            rolldownOptions: {
               external: ["electron", "electron-updater", "electron-log", "electron-is-dev"],
+              output: {
+                format: "cjs",
+                entryFileNames: "[name].cjs",
+              },
             },
           },
         },

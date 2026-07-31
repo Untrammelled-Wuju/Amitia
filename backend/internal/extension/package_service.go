@@ -33,7 +33,7 @@ type PackageService struct {
 
 func NewPackageService(repository *Repository, registry *Registry, validator *SchemaValidator, compiler *WorkflowCompiler, workflowInstaller *WorkshopInstaller, agentSkills *AgentSkillService) *PackageService {
 	service := &PackageService{repository: repository, registry: registry, validator: validator, compiler: compiler, workflowInstaller: workflowInstaller, agentSkills: agentSkills, limits: DefaultPackageLimits()}
-	for _, name := range []string{"extension_package_import_total", "extension_package_import_failure_total", "extension_package_export_total", "extension_package_upgrade_total", "extension_package_upgrade_failure_total", "extension_package_rollback_total", "extension_package_uninstall_total", "extension_package_checksum_failure_total", "extension_package_signature_invalid_total", "extension_package_secret_detected_total", "extension_package_conflict_total", "extension_package_cleanup_failure_total", "package_preview_total", "package_preview_rejected_total", "package_install_total", "package_install_failed_total", "package_operation_requires_recovery", "package_signature_invalid_total", "package_signer_unknown_total", "package_unsigned_confirmed_total", "package_integrity_failed_total", "package_legacy_read_calls", "package_legacy_write_calls", "package_blob_bytes", "package_staging_orphans", "package_artifact_missing", "package_definition_file_mismatch"} {
+	for _, name := range []string{"extension_package_import_total", "extension_package_import_failure_total", "extension_package_export_total", "extension_package_upgrade_total", "extension_package_upgrade_failure_total", "extension_package_rollback_total", "extension_package_uninstall_total", "extension_package_checksum_failure_total", "extension_package_signature_invalid_total", "extension_package_secret_detected_total", "extension_package_conflict_total", "extension_package_cleanup_failure_total", "package_preview_total", "package_preview_rejected_total", "package_install_total", "package_install_failed_total", "package_operation_requires_recovery", "package_signature_invalid_total", "package_signer_unknown_total", "package_unsigned_confirmed_total", "package_integrity_failed_total", "package_legacy_read_calls", "package_legacy_write_calls", "package_blob_bytes", "package_staging_orphans", "package_artifact_missing", "package_definition_file_mismatch", "legacy_data_detected", "legacy_migration_required", "legacy_write_attempts"} {
 		service.metrics.Store(name, new(uint64))
 	}
 	return service
@@ -57,10 +57,7 @@ func (s *PackageService) StartupCleanup(ctx context.Context) error {
 		return err
 	}
 	s.repository.RetryOwnedResourceCleanup(ctx)
-	if err := s.recoverPackageOperations(ctx); err != nil {
-		return err
-	}
-	return s.cleanupPackageRecoveryDebris(ctx)
+	return nil
 }
 
 func (s *PackageService) MigrateLegacyPackageData(ctx context.Context) error {
@@ -475,6 +472,15 @@ func (s *PackageService) Metrics() map[string]uint64 {
 	})
 	result["package_legacy_read_calls"] = uint64(kernelruntime.GlobalLegacyReadCounter().PackageReadCallsFallbacks())
 	result["package_legacy_write_calls"] = uint64(kernelruntime.GlobalLegacyCallCounter().PackageWriteCalls())
+	result["legacy_write_attempts"] = 0
+	if s.repository != nil && s.repository.db != nil && s.repository.db.Migrator().HasTable("extension_package_legacy_migrations") {
+		var legacyDetected int64
+		s.repository.db.Raw(`SELECT COUNT(*) FROM extension_package_legacy_migrations WHERE migration_status NOT IN ('completed')`).Scan(&legacyDetected)
+		result["legacy_data_detected"] = uint64(legacyDetected)
+		var migrationRequired int64
+		s.repository.db.Raw(`SELECT COUNT(*) FROM extension_package_legacy_migrations WHERE migration_status IN ('manual_required', 'pending_manual_migration')`).Scan(&migrationRequired)
+		result["legacy_migration_required"] = uint64(migrationRequired)
+	}
 	if s.repository != nil && s.repository.db != nil && s.repository.db.Migrator().HasTable("extension_artifacts") {
 		var blobBytes int64
 		if s.repository.db.Raw(`SELECT COALESCE(SUM(LENGTH(content_blob)), 0) FROM extension_artifacts`).Scan(&blobBytes).Error == nil && blobBytes > 0 {

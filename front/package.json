@@ -3,7 +3,7 @@
   "version": "26.1.8",
   "private": true,
   "type": "module",
-  "main": "../desktop/dist/main/index.js",
+  "main": "../desktop/dist/main/index.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",

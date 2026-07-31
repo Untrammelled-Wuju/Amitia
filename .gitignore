@@ -121,3 +121,13 @@ backend/worker.test.exe
 
 # State machine refactor acceptance temp
 state-machine-refactor-acceptance/
+
+# WorkBuddy AI working directory
+.workbuddy-ai/
+
+# Merge conflict files
+*.orig
+
+# Backend test/legacy binaries
+backend/kernel.test.exe
+backend/legacy-package-migrate.exe

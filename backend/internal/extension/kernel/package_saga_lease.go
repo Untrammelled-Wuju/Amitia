@@ -65,14 +65,15 @@ func packageWriteGuard(lease PackageExtensionLease) PackageWriteGuard {
 }
 
 type PackageLeaseGuard struct {
-	runtime     *Runtime
-	extensionID string
-	operationID string
-	cancel      context.CancelFunc
-	lastErr     error
-	mu          sync.Mutex
-	stopped     bool
-	done        chan struct{}
+	runtime       *Runtime
+	extensionID   string
+	operationID   string
+	cancel        context.CancelFunc
+	lastErr       error
+	mu            sync.Mutex
+	stopped       bool
+	leaseReleased bool
+	done          chan struct{}
 }
 
 func (r *Runtime) newPackageLeaseGuard(extensionID, operationID string) *PackageLeaseGuard {
@@ -130,6 +131,12 @@ func (g *PackageLeaseGuard) AssertAlive(ctx context.Context) error {
 	return g.runtime.renewPackageExtensionLease(ctx, g.extensionID, g.operationID)
 }
 
+func (g *PackageLeaseGuard) MarkLeaseReleased() {
+	g.mu.Lock()
+	g.leaseReleased = true
+	g.mu.Unlock()
+}
+
 func (g *PackageLeaseGuard) Stop(ctx context.Context) error {
 	g.mu.Lock()
 	if g.stopped {
@@ -137,6 +144,7 @@ func (g *PackageLeaseGuard) Stop(ctx context.Context) error {
 		return nil
 	}
 	g.stopped = true
+	alreadyReleased := g.leaseReleased
 	g.mu.Unlock()
 	if g.cancel != nil {
 		g.cancel()
@@ -145,15 +153,29 @@ func (g *PackageLeaseGuard) Stop(ctx context.Context) error {
 	case <-g.done:
 	case <-time.After(5 * time.Second):
 	}
-	releaseErr := g.runtime.releasePackageExtensionLease(ctx, g.extensionID, g.operationID)
 	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.lastErr != nil {
-		return fmt.Errorf("kernel: lease lost before stop: %w", g.lastErr)
+	lastErr := g.lastErr
+	g.mu.Unlock()
+	if lastErr != nil {
+		return fmt.Errorf("kernel: lease lost before stop: %w", lastErr)
 	}
+	if alreadyReleased {
+		return nil
+	}
+	releaseErr := g.runtime.releasePackageExtensionLease(ctx, g.extensionID, g.operationID)
 	if releaseErr != nil {
-		bgCtx := context.Background()
-		_ = g.runtime.container.PackageRepository.SetOperation(bgCtx, g.operationID, "finalizing", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", releaseErr.Error(), false, PackageWriteGuard{})
+		if IsPackageOperationError(releaseErr, OperationErrLeaseConflict) {
+			return nil
+		}
+		_ = g.runtime.container.PackageRepository.PutConsistencyFinding(context.Background(),
+			PackageConsistencyFinding{
+				FindingID:         "stale-lease-" + g.operationID,
+				Metric:            "stale_extension_leases",
+				Count:             1,
+				ResourceIDsJSON:   `["` + g.operationID + `"]`,
+				ErrorDetail:       releaseErr.Error(),
+				RecommendedAction: "manual_lease_cleanup",
+			})
 		return releaseErr
 	}
 	return nil

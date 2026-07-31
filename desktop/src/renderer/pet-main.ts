@@ -18,6 +18,7 @@ import type {
   PlayActionCommand,
 } from "../desktop-pet/animation/contracts";
 import type { PetAnimationApi } from "./pet-animation-globals";
+import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeReadyPayload } from "../shared/animation-ipc";
 
 function resolveResourceUrl(relativePath: string, configUrl: string): string {
   try {
@@ -81,6 +82,7 @@ function reportEventToMain(api: PetAnimationApi, event: PlaybackEvent): void {
 const SNAPSHOT_HEARTBEAT_MS = 15000;
 const SNAPSHOT_FRAME_MERGE_MS = 500;
 const SNAPSHOT_HIDDEN_MS = 5000;
+const DRAG_THRESHOLD_PX = 5;
 
 const KEY_SNAPSHOT_EVENTS: ReadonlySet<PlaybackEventType> = new Set<PlaybackEventType>([
   "playback.action_started",
@@ -93,6 +95,11 @@ const KEY_SNAPSHOT_EVENTS: ReadonlySet<PlaybackEventType> = new Set<PlaybackEven
 let lastSnapshotHash = "";
 let lastSnapshotSentAt = 0;
 let frameUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+
+let currentPackageRevision = 0;
+let currentActionKey: string | null = null;
+let currentPlaybackInstanceId: string = "";
+let maskRevision = 0;
 
 function computeSnapshotHash(snapshot: PlaybackSnapshot): string {
   return `${snapshot.phase}:${snapshot.packageRevision}:${snapshot.currentActionKey}:${snapshot.currentCommandId}:${snapshot.frameIndex}:${snapshot.cycleIndex}:${snapshot.queueLength}`;
@@ -207,6 +214,81 @@ function attachInteractionListeners(api: PetAnimationApi): () => void {
   };
 }
 
+function buildDragPayload(e: PointerEvent): PetDragIpcPayload {
+  return {
+    pointerId: e.pointerId,
+    screenX: e.screenX,
+    screenY: e.screenY,
+    canvasX: e.offsetX,
+    canvasY: e.offsetY,
+    occurredAt: Date.now(),
+  };
+}
+
+function attachDragListeners(api: PetAnimationApi): () => void {
+  let pointerDown = false;
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let activePointerId = -1;
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (pointerDown) return;
+    pointerDown = true;
+    activePointerId = e.pointerId;
+    startX = e.screenX;
+    startY = e.screenY;
+    dragging = false;
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!pointerDown || e.pointerId !== activePointerId) return;
+    const dx = e.screenX - startX;
+    const dy = e.screenY - startY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (!dragging && dist >= DRAG_THRESHOLD_PX) {
+      dragging = true;
+      api.sendDragStart(buildDragPayload(e));
+      return;
+    }
+    if (dragging) {
+      api.sendDragMove(buildDragPayload(e));
+    }
+  };
+
+  const onPointerUp = (e: PointerEvent) => {
+    if (!pointerDown || e.pointerId !== activePointerId) return;
+    if (dragging) {
+      api.sendDragEnd(buildDragPayload(e));
+    }
+    pointerDown = false;
+    dragging = false;
+    activePointerId = -1;
+  };
+
+  const onPointerCancel = (e: PointerEvent) => {
+    if (!pointerDown || e.pointerId !== activePointerId) return;
+    if (dragging) {
+      api.sendDragCancel(buildDragPayload(e));
+    }
+    pointerDown = false;
+    dragging = false;
+    activePointerId = -1;
+  };
+
+  document.addEventListener("pointerdown", onPointerDown);
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", onPointerUp);
+  document.addEventListener("pointercancel", onPointerCancel);
+
+  return () => {
+    document.removeEventListener("pointerdown", onPointerDown);
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    document.removeEventListener("pointercancel", onPointerCancel);
+  };
+}
+
 async function main(): Promise<void> {
   const canvas = document.getElementById("pet-canvas") as HTMLCanvasElement | null;
   if (!canvas) {
@@ -235,6 +317,14 @@ async function main(): Promise<void> {
   const eventListener: EventListener = (event: PlaybackEvent) => {
     reportEventToMain(api, event);
     if (engine.isDisposed()) return;
+
+    if (event.type === "playback.action_started" && event.actionKey) {
+      currentActionKey = event.actionKey;
+      if (event.playbackInstanceId) {
+        currentPlaybackInstanceId = event.playbackInstanceId;
+      }
+    }
+
     if (KEY_SNAPSHOT_EVENTS.has(event.type)) {
       if (frameUpdateTimer !== null) {
         clearTimeout(frameUpdateTimer);
@@ -246,8 +336,20 @@ async function main(): Promise<void> {
       hitMaskAdapter.updateHitMask(hitMaskPlaceholderFrame);
       const mask = hitMaskAdapter.getMask();
       if (mask.width > 0 && mask.height > 0) {
+        maskRevision += 1;
+        const hitMaskPayload: PetHitMaskPayload = {
+          width: mask.width,
+          height: mask.height,
+          data: mask.data,
+          threshold: mask.threshold,
+          packageRevision: currentPackageRevision,
+          actionKey: currentActionKey ?? "",
+          frameIndex: event.frameIndex ?? 0,
+          playbackInstanceId: currentPlaybackInstanceId,
+          maskRevision,
+        };
         try {
-          api.reportHitMask(mask.width, mask.height, mask.data, mask.threshold);
+          api.reportHitMask(hitMaskPayload);
         } catch {
           void 0;
         }
@@ -257,6 +359,7 @@ async function main(): Promise<void> {
   const unsubEvent = engine.onEvent(eventListener);
 
   const disposeListeners = attachInteractionListeners(api);
+  const disposeDragListeners = attachDragListeners(api);
 
   const unsubPlayAction = api.onPlayAction((command: PlayActionCommand) => {
     void engine.playAction(command);
@@ -327,27 +430,33 @@ async function main(): Promise<void> {
     unsubRecovery();
     unsubUpdateDefault();
     disposeListeners();
+    disposeDragListeners();
     disposeSnapshotReporting();
     document.removeEventListener("visibilitychange", onVisibilityChange);
     hitMaskAdapter.dispose();
     engine.dispose();
   });
 
-  api.sendRendererReady();
+  api.sendRendererBootstrapped();
 
   try {
     const snapshot = await api.getPackageSnapshot();
     if (snapshot) {
+      currentPackageRevision = snapshot.packageRevision;
       await engine.initialize(snapshot);
       console.log("[PetAnimation] engine initialized successfully");
-      api.sendRendererReadyAck({ snapshotApplied: true });
+      const runtimeReadyPayload: RuntimeReadyPayload = {
+        snapshotApplied: true,
+        packageId: snapshot.packageId,
+        packageRevision: snapshot.packageRevision,
+        defaultActionKey: snapshot.defaultActionKey,
+      };
+      api.sendRuntimeReady(runtimeReadyPayload);
     } else {
       console.warn("[PetAnimation] no package snapshot available, waiting...");
-      api.sendRendererReadyAck({ snapshotApplied: false });
     }
   } catch (error) {
     console.error("[PetAnimation] initialization failed:", error);
-    api.sendRendererReadyAck({ snapshotApplied: false });
   }
 }
 

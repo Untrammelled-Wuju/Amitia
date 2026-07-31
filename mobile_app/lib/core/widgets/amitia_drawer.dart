@@ -7,7 +7,6 @@ import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/app_routes.dart';
 import '../../app/drawer_route_state.dart';
-import '../../shared/mock_data/mock_data.dart';
 import 'amitia_misc.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
@@ -145,31 +144,32 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                       _DrawerMainPanel(
                         character: character,
                         routeState: _routeState,
+                        isDark: isDark,
+                        onToggleTheme: () {
+                          ref.read(themeModeProvider.notifier).state = isDark ? ThemeMode.light : ThemeMode.dark;
+                        },
+                        onSearchTap: () => _navigateTo(AppRoutes.conversations),
                         onMoreTap: _goToMorePanel,
                         onNavigate: _navigateTo,
-                        onCharacterTap: () => _showCharacterSwitchSheet(context),
                       ),
                       _DrawerMorePanel(
                         routeState: _routeState,
                         isDevMode: isDevMode,
-                        onBack: _backToMainPanel,
+                        onToggleDevMode: () {
+                          ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
+                        },
                         onNavigate: _navigateTo,
                       ),
                     ],
                   ),
                 ),
-                _DrawerBottomArea(
-                  isDark: isDark,
-                  isDevMode: isDevMode,
-                  onToggleTheme: () {
-                    ref.read(themeModeProvider.notifier).state = isDark ? ThemeMode.light : ThemeMode.dark;
-                  },
-                  onToggleDevMode: () {
-                    ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
-                  },
-                  onSettingsTap: () => _navigateTo(AppRoutes.settings),
-                  settingsSelected: _routeState.settingsSelected,
-                ),
+                if (_currentPanel == DrawerPanel.more)
+                  _DrawerMoreBottomArea(onBack: _backToMainPanel)
+                else
+                  _DrawerBottomArea(
+                    onSettingsTap: () => _navigateTo(AppRoutes.settings),
+                    settingsSelected: _routeState.settingsSelected,
+                  ),
               ],
             ),
           ),
@@ -177,72 +177,25 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       ),
     );
   }
-
-  void _showCharacterSwitchSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Text('切换角色', style: AppTypography.sectionTitle(context)),
-              ),
-              ...MockData.characters.map((c) {
-                final isSelected = c.id == ref.read(currentCharacterIdProvider);
-                return ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Color(int.parse('FF${c.avatarColor.replaceAll('#', '')}', radix: 16)),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(child: Text(c.avatarInitial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
-                  ),
-                  title: Text(c.name),
-                  subtitle: Text(c.status, style: AppTypography.caption(context)),
-                  trailing: isSelected ? Icon(Icons.check_circle, color: context.accentPrimary, size: 22) : null,
-                  onTap: () {
-                    ref.read(currentCharacterIdProvider.notifier).state = c.id;
-                    Navigator.pop(sheetContext);
-                  },
-                );
-              }),
-              const Divider(height: 1),
-              ListTile(
-                leading: Icon(Icons.people_outline, color: context.accentPrimary),
-                title: Text('管理全部角色', style: TextStyle(color: context.accentPrimary)),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _navigateTo(AppRoutes.characters);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _DrawerMainPanel extends StatelessWidget {
   final _CharInfo character;
   final DrawerRouteState routeState;
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onSearchTap;
   final VoidCallback onMoreTap;
   final ValueChanged<String> onNavigate;
-  final VoidCallback onCharacterTap;
 
   const _DrawerMainPanel({
     required this.character,
     required this.routeState,
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.onSearchTap,
     required this.onMoreTap,
     required this.onNavigate,
-    required this.onCharacterTap,
   });
 
   @override
@@ -250,48 +203,12 @@ class _DrawerMainPanel extends StatelessWidget {
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        _CharacterArea(
+        _DrawerHeader(
           name: character.name,
-          status: character.status,
-          identity: character.description,
-          avatarInitial: character.avatarInitial,
-          avatarColor: character.avatarColor,
-          onTap: onCharacterTap,
+          isDark: isDark,
+          onToggleTheme: onToggleTheme,
+          onSearchTap: onSearchTap,
         ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-          child: Row(
-            children: [
-              Expanded(
-                child: _QuickAction(
-                  icon: Icons.add_comment_outlined,
-                  label: '新建对话',
-                  onTap: () => onNavigate(AppRoutes.chat),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: _QuickAction(
-                  icon: Icons.search,
-                  label: '搜索会话',
-                  onTap: () => onNavigate(AppRoutes.conversations),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          child: Text('最近会话', style: AppTypography.label(context)),
-        ),
-        ...MockData.conversations.take(5).map((conv) => _RecentConversationTile(
-              title: conv.title,
-              subtitle: conv.lastMessage,
-              onTap: () => onNavigate(AppRoutes.chat),
-            )),
-        const SizedBox(height: AppSpacing.sm),
-        const Divider(height: 1),
         const SizedBox(height: AppSpacing.sm),
         _MainMenuItem(
           icon: Icons.chat_bubble_outline,
@@ -332,13 +249,13 @@ class _DrawerMainPanel extends StatelessWidget {
 class _DrawerMorePanel extends StatelessWidget {
   final DrawerRouteState routeState;
   final bool isDevMode;
-  final VoidCallback onBack;
+  final VoidCallback onToggleDevMode;
   final ValueChanged<String> onNavigate;
 
   const _DrawerMorePanel({
     required this.routeState,
     required this.isDevMode,
-    required this.onBack,
+    required this.onToggleDevMode,
     required this.onNavigate,
   });
 
@@ -347,13 +264,9 @@ class _DrawerMorePanel extends StatelessWidget {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                onPressed: onBack,
-              ),
               Text('更多', style: AppTypography.pageTitle(context)),
             ],
           ),
@@ -383,6 +296,36 @@ class _DrawerMorePanel extends StatelessWidget {
                 _MoreGroup(label: '开发与诊断', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
                   _MoreItemData(icon: Icons.developer_mode, label: '开发者工具', route: AppRoutes.developer, item: MoreDrawerItem.developer),
                 ]),
+              const SizedBox(height: AppSpacing.sm),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: onToggleDevMode,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDevMode ? context.accentPrimary.withValues(alpha: 0.12) : context.surfaceSecondary,
+                          borderRadius: AppRadius.brTag,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.developer_mode, size: 18, color: isDevMode ? context.accentPrimary : context.textTertiary),
+                            const SizedBox(width: 6),
+                            Text('开发者模式', style: TextStyle(fontSize: 13, color: isDevMode ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
+                            const SizedBox(width: 8),
+                            Text(isDevMode ? '开' : '关', style: TextStyle(fontSize: 12, color: isDevMode ? context.accentPrimary : context.textTertiary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -429,18 +372,10 @@ class _MoreItemData {
 }
 
 class _DrawerBottomArea extends StatelessWidget {
-  final bool isDark;
-  final bool isDevMode;
-  final VoidCallback onToggleTheme;
-  final VoidCallback onToggleDevMode;
   final VoidCallback onSettingsTap;
   final bool settingsSelected;
 
   const _DrawerBottomArea({
-    required this.isDark,
-    required this.isDevMode,
-    required this.onToggleTheme,
-    required this.onToggleDevMode,
     required this.onSettingsTap,
     required this.settingsSelected,
   });
@@ -454,44 +389,6 @@ class _DrawerBottomArea extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: Row(
             children: [
-              GestureDetector(
-                onTap: () => onToggleTheme(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: context.accentSoft,
-                    borderRadius: AppRadius.brTag,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined, size: 18, color: context.accentPrimary),
-                      const SizedBox(width: 6),
-                      Text(isDark ? '暗色' : '亮色', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: onToggleDevMode,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDevMode ? context.accentPrimary.withValues(alpha: 0.12) : context.surfaceSecondary,
-                    borderRadius: AppRadius.brTag,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.developer_mode, size: 18, color: isDevMode ? context.accentPrimary : context.textTertiary),
-                      const SizedBox(width: 6),
-                      Text('开发者', style: TextStyle(fontSize: 13, color: isDevMode ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                ),
-              ),
-              const Spacer(),
               GestureDetector(
                 onTap: onSettingsTap,
                 child: Container(
@@ -518,121 +415,71 @@ class _DrawerBottomArea extends StatelessWidget {
   }
 }
 
-class _CharacterArea extends StatelessWidget {
-  final String name;
-  final String status;
-  final String identity;
-  final String avatarInitial;
-  final String avatarColor;
-  final VoidCallback onTap;
+class _DrawerMoreBottomArea extends StatelessWidget {
+  final VoidCallback onBack;
 
-  const _CharacterArea({
+  const _DrawerMoreBottomArea({required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: SizedBox(
+            width: double.infinity,
+            child: _MainMenuItem(
+              icon: Icons.arrow_back_ios_new,
+              label: '返回主菜单',
+              isSelected: false,
+              onTap: onBack,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DrawerHeader extends StatelessWidget {
+  final String name;
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onSearchTap;
+
+  const _DrawerHeader({
     required this.name,
-    required this.status,
-    required this.identity,
-    required this.avatarInitial,
-    required this.avatarColor,
-    required this.onTap,
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.onSearchTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(int.parse('FF${avatarColor.replaceAll('#', '')}', radix: 16));
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              child: Center(
-                child: Text(avatarInitial, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              style: AppTypography.pageTitle(context).copyWith(fontSize: 17),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: AppTypography.cardTitle(context).copyWith(fontSize: 17)),
-                  const SizedBox(height: 2),
-                  Text(status, style: AppTypography.label(context)),
-                  const SizedBox(height: 2),
-                  Text(identity, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-            Icon(Icons.swap_horiz, color: context.textTertiary, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _QuickAction({required this.icon, required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: context.surfaceSecondary,
-          borderRadius: AppRadius.brSmall,
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 20, color: context.accentPrimary),
-            const SizedBox(height: 4),
-            Text(label, style: AppTypography.label(context)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RecentConversationTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _RecentConversationTile({required this.title, required this.subtitle, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        child: Row(
-          children: [
-            Icon(Icons.chat_bubble_outline, size: 16, color: context.textTertiary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: AppTypography.body(context).copyWith(fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(subtitle, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.search, size: 22),
+            onPressed: onSearchTap,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, size: 22),
+            onPressed: onToggleTheme,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
       ),
     );
   }

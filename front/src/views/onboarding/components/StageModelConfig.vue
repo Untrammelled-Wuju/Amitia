@@ -223,7 +223,7 @@
                     :model-value="modelName"
                     @update:model-value="emit('update:modelName', $event)"
                     placeholder="选择一个模型"
-                    class="ob-model-select"
+                    class="ob-provider-select"
                     :class="{ 'ob-field-error': fieldErrors.modelName }"
                   >
                     <el-option
@@ -395,45 +395,39 @@ watch(
 
 <style scoped>
 .ob-provider-select :deep(.el-select__wrapper) {
-  height: 30px;
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 9px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 10px;
   border: 1px solid var(--ob-line);
-  border-radius: 999px;
-  background: transparent;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.035);
   box-shadow: none;
-  color: var(--ob-muted);
-  transition:
-    border-color 0.25s ease,
-    background 0.25s ease;
+  color: var(--ob-text);
+  transition: border-color 0.25s ease;
 }
 
 .ob-provider-select :deep(.el-select__wrapper:hover) {
-  border-color: rgba(200, 121, 91, 0.45);
-  background: var(--ob-accent-soft);
-  color: var(--ob-text);
+  border-color: rgba(200, 121, 91, 0.56);
 }
 
 .ob-provider-select :deep(.el-select__wrapper.is-focused) {
-  border-color: rgba(200, 121, 91, 0.45);
-  background: var(--ob-accent-soft);
-  color: var(--ob-text);
+  border-color: rgba(200, 121, 91, 0.56);
   box-shadow: none;
 }
 
 .ob-provider-select :deep(.el-select__placeholder) {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ob-muted);
 }
 
 .ob-provider-select :deep(.el-select__selected-item) {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ob-text);
 }
 
 .ob-provider-select :deep(.el-select__caret) {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ob-muted);
 }
 </style>

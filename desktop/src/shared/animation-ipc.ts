@@ -20,10 +20,42 @@ export const ANIMATION_IPC_CHANNELS = {
   systemResume: "pet:animation:system-resume",
   recovery: "pet:animation:recovery",
   updateDefaultAction: "pet:animation:update-default-action",
-  rendererReady: "pet:animation:renderer-ready",
-  rendererReadyAck: "pet:animation:renderer-ready-ack",
+  rendererBootstrapped: "pet:animation:renderer-bootstrapped",
+  runtimeReady: "pet:animation:runtime-ready",
   hitMask: "pet:animation:hit-mask",
+  dragStart: "pet:animation:drag-start",
+  dragMove: "pet:animation:drag-move",
+  dragEnd: "pet:animation:drag-end",
+  dragCancel: "pet:animation:drag-cancel",
 } as const;
 
 export type AnimationIpcChannel =
   (typeof ANIMATION_IPC_CHANNELS)[keyof typeof ANIMATION_IPC_CHANNELS];
+
+export interface PetDragIpcPayload {
+  pointerId: number;
+  screenX: number;
+  screenY: number;
+  canvasX: number;
+  canvasY: number;
+  occurredAt: number;
+}
+
+export interface PetHitMaskPayload {
+  width: number;
+  height: number;
+  data: Uint8Array;
+  threshold: number;
+  packageRevision: number;
+  actionKey: string;
+  frameIndex: number;
+  playbackInstanceId: string;
+  maskRevision: number;
+}
+
+export interface RuntimeReadyPayload {
+  snapshotApplied: true;
+  packageId: string;
+  packageRevision: number;
+  defaultActionKey: string;
+}

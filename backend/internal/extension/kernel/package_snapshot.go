@@ -20,12 +20,12 @@ import (
 const packageConfigSnapshotSchemaVersion = "1.0.0"
 
 type packageConfigSnapshot struct {
-	Metadata       map[string]any                       `json:"metadata"`
-	Contributions  []domain.ContributionDefinition      `json:"contributions"`
-	Permissions    packageConfigPermissionSnapshot      `json:"permissions"`
-	ScopeBindings  []sqlite.ScopeBinding                `json:"scopeBindings"`
-	SchemaVersion  string                               `json:"schemaVersion"`
-	CapturedAt     string                               `json:"capturedAt"`
+	Metadata      map[string]any                  `json:"metadata"`
+	Contributions []domain.ContributionDefinition `json:"contributions"`
+	Permissions   packageConfigPermissionSnapshot `json:"permissions"`
+	ScopeBindings []sqlite.ScopeBinding           `json:"scopeBindings"`
+	SchemaVersion string                          `json:"schemaVersion"`
+	CapturedAt    string                          `json:"capturedAt"`
 }
 
 type packageConfigPermissionSnapshot struct {
@@ -59,11 +59,11 @@ type packageMigrationStateSnapshot struct {
 }
 
 type packageUserDataMigrationState struct {
-	Mode           string           `json:"mode"`
-	Snapshots      []string         `json:"snapshots,omitempty"`
-	Completed      []string         `json:"completed,omitempty"`
-	AffectedTables []string         `json:"affectedTables,omitempty"`
-	RecordCounts   map[string]int64 `json:"recordCounts,omitempty"`
+	Mode           string            `json:"mode"`
+	Snapshots      []string          `json:"snapshots,omitempty"`
+	Completed      []string          `json:"completed,omitempty"`
+	AffectedTables []string          `json:"affectedTables,omitempty"`
+	RecordCounts   map[string]int64  `json:"recordCounts,omitempty"`
 	DataExports    map[string]string `json:"dataExports,omitempty"`
 }
 
@@ -443,6 +443,9 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 		if entry.RestoreStrategy != "repository_upsert" || entry.ResourceHash != packageSnapshotDigest(raw) {
 			return fmt.Errorf("kernel: resource snapshot integrity failed: %s", entry.Resource.ResourceID)
 		}
+		if entry.ContentHash != "" && !verifyResourceContentHash(entry, raw) {
+			return fmt.Errorf("kernel: resource content hash mismatch for %s", entry.Resource.ResourceID)
+		}
 	}
 	current, err := r.container.ResourceRepository.ListResources(ctx, extensionID)
 	if err != nil {
@@ -488,14 +491,28 @@ func (r *Runtime) restorePackageMigrationState(ctx context.Context, point Packag
 			}
 		}
 	}
-	return nil
+	return r.restoreUserDataSnapshot(ctx, point)
+}
+
+func (r *Runtime) restoreUserDataSnapshot(ctx context.Context, point PackageRollbackPoint) error {
+	if point.UserDataMigrationStateJSON == "" {
+		return nil
+	}
+	if r.container.UserDataSnapshotStore == nil {
+		return nil
+	}
+	operationID := point.SourceOperationID
+	if operationID == "" {
+		operationID = "restore-" + point.RollbackPointID
+	}
+	return r.container.UserDataSnapshotStore.RestoreUserDataFromSnapshot(ctx, point.ExtensionID, operationID, point.UserDataMigrationStateJSON)
 }
 
 type installationStandardColumns struct {
-	LastOperationID      string
-	CurrentGenerationID  string
-	CurrentVersionID     string
-	CurrentArtifactID    string
+	LastOperationID     string
+	CurrentGenerationID string
+	CurrentVersionID    string
+	CurrentArtifactID   string
 }
 
 func (r *Runtime) getInstallationStandardColumns(ctx context.Context, extensionID string) (installationStandardColumns, error) {

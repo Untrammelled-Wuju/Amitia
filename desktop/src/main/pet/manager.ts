@@ -18,6 +18,7 @@ import { ResourceCache } from "./resource-cache";
 import type { PlaybackSnapshot } from "../../desktop-pet/animation/contracts";
 import { DesktopPetWindowAdapter } from "./window-adapter";
 import { AnimationIpcAdapter } from "./animation-ipc";
+import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeReadyPayload } from "../../shared/animation-ipc";
 import { AnimationPlayerBridge } from "./animation-player-bridge";
 import {
   DesktopPetActionScheduler,
@@ -905,24 +906,27 @@ export class DesktopPetManager {
       getPetWindow: () => this.windowAdapter?.getNativeWindow() ?? null,
       onPlaybackEvent: (event) => this.handlePlaybackEvent(event),
       onSnapshotUpdate: (snapshot) => this.handleSnapshotUpdate(snapshot),
-      onClick: (x, y) => this.handleClick(x, y),
-      onDoubleClick: (x, y) => this.handleDoubleClick(x, y),
-      onHover: (x, y) => this.handleHover(x, y),
-      onPlayActionForwarded: (command) => {
-        this.bridgeClient?.reportPlayback({
-          actionKey: command.actionKey,
-          playbackId: this.currentPlaybackId ?? "",
-          commandId: command.commandId,
-          frameIndex: 0,
-          cycleIndex: 0,
-        });
+      onClick: (x, y) => {
+        this.handleClick(x, y);
+        this.eventBridge?.handleClick(x, y);
       },
-      onHitMask: (width, height, data, threshold) =>
-        this.handleHitMask(width, height, data, threshold),
-      onRendererReady: () => this.handleRendererReady(),
-      onRendererReadyAck: (payload) => this.handleRendererReadyAck(payload),
+      onDoubleClick: (x, y) => {
+        this.handleDoubleClick(x, y);
+        this.eventBridge?.handleDoubleClick(x, y);
+      },
+      onHover: (x, y) => {
+        this.handleHover(x, y);
+        this.eventBridge?.handleHover(x, y);
+      },
+      onHitMask: (payload) => this.handleHitMask(payload),
+      onRendererBootstrapped: () => this.handleRendererBootstrapped(),
+      onRuntimeReady: (payload) => this.handleRuntimeReady(payload),
       onDeliveryFailed: (reason, command) =>
         this.handleDeliveryFailed(reason, command),
+      onDragStart: (payload) => this.dragController?.handleDragStart(payload),
+      onDragMove: (payload) => this.dragController?.handleDragMove(payload),
+      onDragEnd: (payload) => this.dragController?.handleDragEnd(payload),
+      onDragCancel: (payload) => this.dragController?.handleDragCancel(payload),
     });
     animationIpc.register();
 
@@ -979,13 +983,11 @@ export class DesktopPetManager {
     const dragController = new DragController(
       windowAdapter,
       clickThroughController,
-      () => this.windowAdapter?.getNativeWindow() ?? null,
       (event, state) => this.handleDragEvent(event, state),
     );
     dragController.attach(win);
 
     const eventBridge = new DesktopPetEventBridge(scheduler, dragController);
-    eventBridge.attach(win);
 
     const chatStateBridge = new ChatStateBridge(scheduler);
     chatStateBridge.attachLoaded(loaded);
@@ -1165,7 +1167,7 @@ export class DesktopPetManager {
     }
   }
 
-  private handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string }): void {
+  private handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string; playbackInstanceId?: string; frameIndex?: number }): void {
     if (this.actionPlayer && this.actionPlayer instanceof AnimationPlayerBridge) {
       this.actionPlayer.handlePlaybackEvent(event);
     }
@@ -1234,28 +1236,34 @@ export class DesktopPetManager {
     void actionKey;
   }
 
-  private handleHitMask(
-    width: number,
-    height: number,
-    data: Uint8Array,
-    threshold: number,
-  ): void {
-    this.clickThroughController?.updateHitMask(width, height, data, threshold);
+  private handleHitMask(payload: PetHitMaskPayload): void {
+    this.clickThroughController?.updateHitMask(
+      payload.width,
+      payload.height,
+      payload.data,
+      payload.threshold,
+    );
   }
 
-  private handleRendererReady(): void {
+  private handleRendererBootstrapped(): void {
     this.petLogger.logWindowRecovered(
-      "renderer-ready",
+      "renderer-bootstrapped",
       this.activeInstallationId ?? undefined,
     );
   }
 
-  private handleRendererReadyAck(payload: { snapshotApplied: boolean }): void {
+  private handleRuntimeReady(payload: RuntimeReadyPayload): void {
     if (!payload.snapshotApplied) {
       console.warn(
-        "[DesktopPetManager] 渲染进程 Ready ACK: snapshot 未应用",
+        "[DesktopPetManager] 渲染进程 RuntimeReady: snapshot 未应用",
       );
+      return;
     }
+    this.windowAdapter?.showWhenRuntimeReady();
+    this.petLogger.logWindowRecovered(
+      "runtime-ready",
+      this.activeInstallationId ?? undefined,
+    );
   }
 
   private handleDeliveryFailed(
@@ -2199,7 +2207,7 @@ export class DesktopPetManager {
             deviceId: this.bridgeClient.getDeviceId(),
             installationId: this.activeInstallationId ?? "",
             petId: this.activeInstallation?.characterId ?? this.activeInstallationId ?? "",
-            releaseId: this.loadedInstallation?.packageId ?? "",
+            releaseId: this.loadedInstallation?.manifest.packageId ?? "",
             runtimeInstanceId: this.bridgeClient.getRuntimeId(),
           };
           this.bridgeClient.setSessionContext(ctx);

@@ -44,7 +44,7 @@ export function useImmersiveOnboarding() {
   const detectingVision = ref(false);
   const visionReady = ref(false);
   const visionDetected = ref(false);
-  const visionStatusText = ref("请选择一种视觉模式");
+  const visionStatusText = ref("请选择视觉模型配置方式");
   const visionModelKey = ref("");
   const visionModelName = ref("doubao-seed-2-0-lite-260428");
   const visionModelURL = ref("https://ark.cn-beijing.volces.com/api/v3");

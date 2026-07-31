@@ -77,82 +77,122 @@ function isPathWithinInstall(installPath: string, fullPath: string): boolean {
   }
 }
 
+export class PetResourceProtocolRegistry {
+  private static instance: PetResourceProtocolRegistry | null = null;
+  private registered = false;
+  private getActiveInstallation: (() => ActiveInstallationInfo | null) | null = null;
+
+  private constructor() {}
+
+  static getInstance(): PetResourceProtocolRegistry {
+    if (!PetResourceProtocolRegistry.instance) {
+      PetResourceProtocolRegistry.instance = new PetResourceProtocolRegistry();
+    }
+    return PetResourceProtocolRegistry.instance;
+  }
+
+  setActiveInstallationResolver(
+    getActiveInstallation: () => ActiveInstallationInfo | null,
+  ): void {
+    this.getActiveInstallation = getActiveInstallation;
+    this.ensureRegistered();
+  }
+
+  clearActiveInstallationResolver(): void {
+    this.getActiveInstallation = null;
+  }
+
+  private ensureRegistered(): void {
+    if (this.registered) return;
+    this.registered = true;
+    protocol.handle(PET_PROTOCOL_SCHEME, async (request) => {
+      const resolver = this.getActiveInstallation;
+      if (!resolver) {
+        return new Response(JSON.stringify({ error: "no_active_installation" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      const active = resolver();
+      if (!active) {
+        return new Response(JSON.stringify({ error: "no_active_installation" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      const parsed = parsePetUrl(request.url);
+      if (!parsed) {
+        return new Response(JSON.stringify({ error: "invalid_url" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      if (parsed.installationId !== active.installationId) {
+        return new Response(JSON.stringify({ error: "installation_mismatch" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      if (isUnsafeRelativePath(parsed.relativePath)) {
+        return new Response(JSON.stringify({ error: "unsafe_path" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      const fullPath = join(active.installPath, parsed.relativePath);
+      if (!isPathWithinInstall(active.installPath, fullPath)) {
+        return new Response(JSON.stringify({ error: "path_outside_install" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      let stats;
+      try {
+        stats = await fsStat(fullPath);
+      } catch {
+        return new Response(JSON.stringify({ error: "resource_not_found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      if (stats.isDirectory()) {
+        return new Response(JSON.stringify({ error: "resource_not_found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+
+      try {
+        const content = await readFile(fullPath);
+        const mimeType = getMimeFromPath(fullPath);
+        return new Response(new Uint8Array(content), {
+          status: 200,
+          headers: {
+            "Content-Type": mimeType,
+            ...SECURITY_HEADERS,
+          },
+        });
+      } catch {
+        return new Response(JSON.stringify({ error: "read_failed" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+      }
+    });
+  }
+}
+
 export function registerPetProtocol(
   getActiveInstallation: () => ActiveInstallationInfo | null,
 ): void {
-  protocol.handle(PET_PROTOCOL_SCHEME, async (request) => {
-    const active = getActiveInstallation();
-    if (!active) {
-      return new Response(JSON.stringify({ error: "no_active_installation" }), {
-        status: 503,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    const parsed = parsePetUrl(request.url);
-    if (!parsed) {
-      return new Response(JSON.stringify({ error: "invalid_url" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    if (parsed.installationId !== active.installationId) {
-      return new Response(JSON.stringify({ error: "installation_mismatch" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    if (isUnsafeRelativePath(parsed.relativePath)) {
-      return new Response(JSON.stringify({ error: "unsafe_path" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    const fullPath = join(active.installPath, parsed.relativePath);
-    if (!isPathWithinInstall(active.installPath, fullPath)) {
-      return new Response(JSON.stringify({ error: "path_outside_install" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    let stats;
-    try {
-      stats = await fsStat(fullPath);
-    } catch {
-      return new Response(JSON.stringify({ error: "resource_not_found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    if (stats.isDirectory()) {
-      return new Response(JSON.stringify({ error: "resource_not_found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    try {
-      const content = await readFile(fullPath);
-      const mimeType = getMimeFromPath(fullPath);
-      return new Response(new Uint8Array(content), {
-        status: 200,
-        headers: {
-          "Content-Type": mimeType,
-          ...SECURITY_HEADERS,
-        },
-      });
-    } catch {
-      return new Response(JSON.stringify({ error: "read_failed" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-  });
+  PetResourceProtocolRegistry.getInstance().setActiveInstallationResolver(getActiveInstallation);
 }
 
 interface ParsedPetUrl {
