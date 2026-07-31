@@ -6,7 +6,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -p tsconfig.json && vite build && node -e \"const{cpSync}=require('fs');cpSync('src/renderer/update-check','dist/renderer/update-check',{recursive:true});cpSync('src/renderer/pet.html','dist/renderer/pet.html')\"",
+    "build": "tsc -p tsconfig.json && vite build && node scripts/copy-static-assets.mjs && node scripts/verify-renderer-build.mjs",
     "dist:win": "node scripts/build-release.mjs",
     "dist:win:dir": "electron-builder --win --x64 --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit",

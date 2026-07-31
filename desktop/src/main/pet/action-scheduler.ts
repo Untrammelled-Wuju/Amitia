@@ -1,6 +1,6 @@
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
 import { ResourceLoader } from "./resource-loader";
-import type { ActionPlayer, PlayerCallbacks } from "./action-player";
+import type { ActionPlayer, PlayerCallbacks, PlayerLike } from "./action-player";
 
 export type EventSource =
   | "system"
@@ -117,7 +117,7 @@ type PlayerInternal = {
 
 export class DesktopPetActionScheduler {
   private loaded: LoadedInstallation | null = null;
-  private player: ActionPlayer;
+  private player: PlayerLike;
   private callbacks: SchedulerCallbacks;
   private queue: DesktopPetActionRequest[] = [];
   private current: DesktopPetActionRequest | null = null;
@@ -128,7 +128,7 @@ export class DesktopPetActionScheduler {
   private resourceLoader: ResourceLoader;
   private originalPlayerCallbacks: PlayerCallbacks;
 
-  constructor(player: ActionPlayer, callbacks?: SchedulerCallbacks) {
+  constructor(player: PlayerLike, callbacks?: SchedulerCallbacks) {
     this.player = player;
     this.callbacks = callbacks ?? {};
     this.resourceLoader = new ResourceLoader();

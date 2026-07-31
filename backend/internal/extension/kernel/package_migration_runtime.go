@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -24,6 +25,13 @@ var ErrPackageMigrationTypeUnsupported = errors.New("PACKAGE_MIGRATION_TYPE_UNSU
 var forbiddenMigrationTableRegex = regexp.MustCompile(`(?i)\b(users|characters|messages|package_operations|package_installations|schema_migrations|extension_migration_definitions|extension_migration_operations|extension_migration_steps|extension_migration_checkpoints|extension_data_snapshots|extension_snapshot_entries)\b`)
 
 var forbiddenSQLCommandRegex = regexp.MustCompile(`(?i)\b(ATTACH|DETACH|load_extension)\b|VACUUM\s+INTO|PRAGMA\s+writable_schema`)
+
+var tableReferenceRegex = regexp.MustCompile(`(?i)\b(?:CREATE\s+TABLE|ALTER\s+TABLE|INSERT\s+INTO|UPDATE|DELETE\s+FROM|DROP\s+TABLE)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:["` + "`" + `\[])?([A-Za-z_][A-Za-z0-9_]*)`)
+
+type migrationQueryExecutor interface {
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+}
 
 type packageMigrationRuntime struct {
 	runtime       *Runtime
@@ -125,7 +133,7 @@ func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, ste
 	if db == nil {
 		return nil, fmt.Errorf("kernel: migration sql db unavailable for %s", def.MigrationID)
 	}
-	statements := splitSQLStatements(string(scriptContent))
+	statements := splitSQLStatementsSafe(string(scriptContent))
 	if len(statements) == 0 {
 		return nil, fmt.Errorf("kernel: migration sql has no executable statements: %s", def.Entry)
 	}
@@ -135,6 +143,9 @@ func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, ste
 		}
 		if match := forbiddenSQLCommandRegex.FindString(stmt); match != "" {
 			return nil, fmt.Errorf("kernel: migration sql uses forbidden command %q in %s", strings.ToUpper(match), def.Entry)
+		}
+		if err := validateExtNamespace(stmt); err != nil {
+			return nil, fmt.Errorf("kernel: migration sql namespace violation in %s: %w", def.Entry, err)
 		}
 	}
 	conn, err := db.Conn(ctx)
@@ -148,9 +159,14 @@ func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, ste
 		}
 		_ = conn.Close()
 	}()
+	beforeHash, hashErr := pmr.computeExtSchemaHash(ctx, conn)
+	if hashErr != nil {
+		return nil, fmt.Errorf("kernel: migration sql before hash: %w", hashErr)
+	}
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		return nil, fmt.Errorf("kernel: migration sql begin immediate: %w", err)
 	}
+	transactionID := fmt.Sprintf("tx-%s-%d", pmr.packageOpID, step.Order)
 	var totalRowsAffected int64
 	var statementsExecuted int
 	for _, stmt := range statements {
@@ -164,15 +180,22 @@ func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, ste
 		statementsExecuted++
 	}
 	if len(def.Postcondition) > 0 {
-		postResult, postErr := migration.NewPreconditionValidator().ValidatePostconditions(ctx, def.Postcondition)
-		if postErr != nil {
-			return nil, fmt.Errorf("kernel: migration sql postcondition validate %s: %w", def.MigrationID, postErr)
-		}
-		if !postResult.Passed {
-			return nil, fmt.Errorf("kernel: migration sql postconditions failed for %s: %v", def.MigrationID, postResult.Errors)
+		for _, cond := range def.Postcondition {
+			if err := pmr.verifyPostconditionFromDB(ctx, conn, cond); err != nil {
+				return nil, fmt.Errorf("kernel: migration sql postcondition failed for %s: %w", def.MigrationID, err)
+			}
 		}
 	}
+	afterHash, hashErr := pmr.computeExtSchemaHash(ctx, conn)
+	if hashErr != nil {
+		return nil, fmt.Errorf("kernel: migration sql after hash: %w", hashErr)
+	}
 	baseEvidence["executionMode"] = "sql_executed"
+	baseEvidence["executor_type"] = "sql"
+	baseEvidence["transaction_id"] = transactionID
+	baseEvidence["affected_records"] = totalRowsAffected
+	baseEvidence["before_hash"] = beforeHash
+	baseEvidence["after_hash"] = afterHash
 	baseEvidence["rowsAffected"] = totalRowsAffected
 	baseEvidence["statementsExecuted"] = statementsExecuted
 	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
@@ -225,17 +248,31 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 		return nil, fmt.Errorf("kernel: migration javascript %s invoke failed for %s: %w", functionName, def.MigrationID, invokeErr)
 	}
 	if len(def.Postcondition) > 0 {
-		postResult, postErr := migration.NewPreconditionValidator().ValidatePostconditions(ctx, def.Postcondition)
-		if postErr != nil {
-			return nil, fmt.Errorf("kernel: migration javascript postcondition validate %s: %w", def.MigrationID, postErr)
+		var db *sql.DB
+		if pmr.runtime.container != nil && pmr.runtime.container.Store != nil {
+			db = pmr.runtime.container.Store.DB()
 		}
-		if !postResult.Passed {
-			return nil, fmt.Errorf("kernel: migration javascript postconditions failed for %s: %v", def.MigrationID, postResult.Errors)
+		if db == nil {
+			postResult, postErr := migration.NewPreconditionValidator().ValidatePostconditions(ctx, def.Postcondition)
+			if postErr != nil {
+				return nil, fmt.Errorf("kernel: migration javascript postcondition validate %s: %w", def.MigrationID, postErr)
+			}
+			if !postResult.Passed {
+				return nil, fmt.Errorf("kernel: migration javascript postconditions failed for %s: %v", def.MigrationID, postResult.Errors)
+			}
+		} else {
+			for _, cond := range def.Postcondition {
+				if err := pmr.verifyPostconditionFromDB(ctx, db, cond); err != nil {
+					return nil, fmt.Errorf("kernel: migration javascript postcondition failed for %s: %w", def.MigrationID, err)
+				}
+			}
 		}
 	}
 	resultJSON, _ := json.Marshal(invokeResult)
 	baseEvidence["executionMode"] = "javascript_executed"
+	baseEvidence["executor_type"] = "javascript"
 	baseEvidence["function"] = functionName
+	baseEvidence["functionInvoked"] = functionName
 	baseEvidence["invokeResult"] = json.RawMessage(resultJSON)
 	baseEvidence["hostInstance"] = host.InstanceID()
 	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
@@ -271,28 +308,348 @@ func hashEvidenceBytes(evidence []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func splitSQLStatements(content string) []string {
-	rawStatements := strings.Split(content, ";")
+func splitSQLStatementsSafe(content string) []string {
 	var statements []string
-	for _, raw := range rawStatements {
-		lines := strings.Split(raw, "\n")
-		var kept []string
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
-			if strings.HasPrefix(trimmed, "--") {
-				continue
-			}
-			kept = append(kept, line)
+	var buf strings.Builder
+	runes := []rune(content)
+	n := len(runes)
+	i := 0
+	singleQuote := false
+	doubleQuote := false
+	bracketQuote := false
+	lineComment := false
+	blockComment := false
+	beginDepth := 0
+	caseDepth := 0
+	flush := func() {
+		stmt := strings.TrimSpace(buf.String())
+		if stmt == "" || isCommentOnly(stmt) {
+			buf.Reset()
+			return
 		}
-		stmt := strings.TrimSpace(strings.Join(kept, "\n"))
-		if stmt != "" {
-			statements = append(statements, stmt)
+		statements = append(statements, stmt)
+		buf.Reset()
+	}
+	for i < n {
+		r := runes[i]
+		if lineComment {
+			buf.WriteRune(r)
+			if r == '\n' {
+				lineComment = false
+			}
+			i++
+			continue
+		}
+		if blockComment {
+			buf.WriteRune(r)
+			if r == '*' && i+1 < n && runes[i+1] == '/' {
+				buf.WriteRune('/')
+				i += 2
+				blockComment = false
+				continue
+			}
+			i++
+			continue
+		}
+		if singleQuote {
+			buf.WriteRune(r)
+			if r == '\'' {
+				if i+1 < n && runes[i+1] == '\'' {
+					buf.WriteRune('\'')
+					i += 2
+					continue
+				}
+				singleQuote = false
+			}
+			i++
+			continue
+		}
+		if doubleQuote {
+			buf.WriteRune(r)
+			if r == '"' {
+				if i+1 < n && runes[i+1] == '"' {
+					buf.WriteRune('"')
+					i += 2
+					continue
+				}
+				doubleQuote = false
+			}
+			i++
+			continue
+		}
+		if bracketQuote {
+			buf.WriteRune(r)
+			if r == ']' {
+				bracketQuote = false
+			}
+			i++
+			continue
+		}
+		if r == '-' && i+1 < n && runes[i+1] == '-' {
+			lineComment = true
+			buf.WriteRune('-')
+			buf.WriteRune('-')
+			i += 2
+			continue
+		}
+		if r == '/' && i+1 < n && runes[i+1] == '*' {
+			blockComment = true
+			buf.WriteRune('/')
+			buf.WriteRune('*')
+			i += 2
+			continue
+		}
+		if r == '\'' {
+			singleQuote = true
+			buf.WriteRune(r)
+			i++
+			continue
+		}
+		if r == '"' {
+			doubleQuote = true
+			buf.WriteRune(r)
+			i++
+			continue
+		}
+		if r == '[' {
+			bracketQuote = true
+			buf.WriteRune(r)
+			i++
+			continue
+		}
+		if r == ';' {
+			if beginDepth > 0 {
+				buf.WriteRune(';')
+				i++
+				continue
+			}
+			flush()
+			i++
+			continue
+		}
+		if isSQLWordChar(r) {
+			word, wordLen := readSQLWord(runes, i)
+			switch strings.ToUpper(word) {
+			case "BEGIN":
+				beginDepth++
+			case "CASE":
+				caseDepth++
+			case "END":
+				if caseDepth > 0 {
+					caseDepth--
+				} else if beginDepth > 0 {
+					beginDepth--
+				}
+			}
+			buf.WriteString(word)
+			i += wordLen
+			continue
+		}
+		buf.WriteRune(r)
+		i++
+	}
+	flush()
+	return statements
+}
+
+func isCommentOnly(stmt string) bool {
+	runes := []rune(stmt)
+	n := len(runes)
+	i := 0
+	for i < n {
+		r := runes[i]
+		if r == '-' && i+1 < n && runes[i+1] == '-' {
+			for i < n && runes[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		if r == '/' && i+1 < n && runes[i+1] == '*' {
+			i += 2
+			for i+1 < n && !(runes[i] == '*' && runes[i+1] == '/') {
+				i++
+			}
+			if i+1 < n {
+				i += 2
+			} else {
+				i = n
+			}
+			continue
+		}
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			i++
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isSQLWordChar(r rune) bool {
+	return r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+}
+
+func readSQLWord(runes []rune, i int) (string, int) {
+	start := i
+	for i < len(runes) && isSQLWordChar(runes[i]) {
+		i++
+	}
+	return string(runes[start:i]), i - start
+}
+
+func sanitizeSQLForAnalysis(stmt string) string {
+	var buf strings.Builder
+	runes := []rune(stmt)
+	n := len(runes)
+	i := 0
+	for i < n {
+		r := runes[i]
+		if r == '-' && i+1 < n && runes[i+1] == '-' {
+			for i < n && runes[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		if r == '/' && i+1 < n && runes[i+1] == '*' {
+			i += 2
+			for i+1 < n && !(runes[i] == '*' && runes[i+1] == '/') {
+				i++
+			}
+			if i+1 < n {
+				i += 2
+			} else {
+				i = n
+			}
+			continue
+		}
+		if r == '\'' {
+			i++
+			for i < n {
+				if runes[i] == '\'' {
+					if i+1 < n && runes[i+1] == '\'' {
+						i += 2
+						continue
+					}
+					i++
+					break
+				}
+				i++
+			}
+			buf.WriteByte(' ')
+			continue
+		}
+		buf.WriteRune(r)
+		i++
+	}
+	return buf.String()
+}
+
+func extractTableReferences(stmt string) []string {
+	sanitized := sanitizeSQLForAnalysis(stmt)
+	matches := tableReferenceRegex.FindAllStringSubmatch(sanitized, -1)
+	var refs []string
+	for _, m := range matches {
+		if len(m) > 1 && m[1] != "" {
+			refs = append(refs, m[1])
 		}
 	}
-	return statements
+	return refs
+}
+
+func validateExtNamespace(stmt string) error {
+	refs := extractTableReferences(stmt)
+	for _, ref := range refs {
+		if !strings.HasPrefix(strings.ToLower(ref), "ext_") {
+			return fmt.Errorf("kernel: migration table %q must use ext_ prefix", ref)
+		}
+	}
+	return nil
+}
+
+func (pmr *packageMigrationRuntime) computeExtSchemaHash(ctx context.Context, executor migrationQueryExecutor) (string, error) {
+	rows, err := executor.QueryContext(ctx, "SELECT name, sql FROM sqlite_master WHERE type='table' AND name LIKE 'ext_%' ORDER BY name")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	h := sha256.New()
+	for rows.Next() {
+		var name, sqlText string
+		if err := rows.Scan(&name, &sqlText); err != nil {
+			return "", err
+		}
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		h.Write([]byte(sqlText))
+		h.Write([]byte{0})
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	sum := h.Sum(nil)
+	return "sha256:" + hex.EncodeToString(sum), nil
+}
+
+func (pmr *packageMigrationRuntime) verifyPostconditionFromDB(ctx context.Context, executor migrationQueryExecutor, condition migration.MigrationCondition) error {
+	switch strings.ToLower(condition.Type) {
+	case "table_exists":
+		var spec struct {
+			Table string `json:"table"`
+		}
+		if err := json.Unmarshal(condition.Expected, &spec); err != nil {
+			return fmt.Errorf("kernel: postcondition %s table_exists unmarshal: %w", condition.Name, err)
+		}
+		if spec.Table == "" {
+			return fmt.Errorf("kernel: postcondition %s table_exists missing table", condition.Name)
+		}
+		var count int
+		if err := executor.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", spec.Table).Scan(&count); err != nil {
+			return fmt.Errorf("kernel: postcondition %s table_exists query: %w", condition.Name, err)
+		}
+		if count == 0 {
+			return fmt.Errorf("kernel: postcondition %s table_exists: table %s not found", condition.Name, spec.Table)
+		}
+		return nil
+	case "column_exists":
+		var spec struct {
+			Table  string `json:"table"`
+			Column string `json:"column"`
+		}
+		if err := json.Unmarshal(condition.Expected, &spec); err != nil {
+			return fmt.Errorf("kernel: postcondition %s column_exists unmarshal: %w", condition.Name, err)
+		}
+		if spec.Table == "" || spec.Column == "" {
+			return fmt.Errorf("kernel: postcondition %s column_exists missing table or column", condition.Name)
+		}
+		var count int
+		if err := executor.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", spec.Table, spec.Column).Scan(&count); err != nil {
+			return fmt.Errorf("kernel: postcondition %s column_exists query: %w", condition.Name, err)
+		}
+		if count == 0 {
+			return fmt.Errorf("kernel: postcondition %s column_exists: column %s not found in %s", condition.Name, spec.Column, spec.Table)
+		}
+		return nil
+	case "schema_version":
+		var spec struct {
+			Version int64 `json:"version"`
+		}
+		if err := json.Unmarshal(condition.Expected, &spec); err != nil {
+			return fmt.Errorf("kernel: postcondition %s schema_version unmarshal: %w", condition.Name, err)
+		}
+		var actual int64
+		if err := executor.QueryRowContext(ctx, "PRAGMA user_version").Scan(&actual); err != nil {
+			return fmt.Errorf("kernel: postcondition %s schema_version query: %w", condition.Name, err)
+		}
+		if actual != spec.Version {
+			return fmt.Errorf("kernel: postcondition %s schema_version: expected %d, got %d", condition.Name, spec.Version, actual)
+		}
+		return nil
+	default:
+		if !bytes.Equal(condition.Expected, condition.Actual) {
+			return fmt.Errorf("kernel: postcondition %s: expected %s, got %s", condition.Name, string(condition.Expected), string(condition.Actual))
+		}
+		return nil
+	}
 }
 
 func (pmr *packageMigrationRuntime) handler() migration.ReversibleStepHandler {

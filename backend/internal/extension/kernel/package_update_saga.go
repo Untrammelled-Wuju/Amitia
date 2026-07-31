@@ -55,10 +55,10 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
-	idempotencyKey := request.IdempotencyKey
-	if idempotencyKey == "" {
-		idempotencyKey = computePackageIdempotencyKey("update", confirmed.session.ExtensionID, confirmed.session.Version, request.UserID, request.ScopeType, request.ScopeID, confirmed.session.SessionID)
+	if request.IdempotencyKey == "" {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeIdempotencyKeyRequired, 400, ErrPackageIdempotencyKeyRequired)
 	}
+	idempotencyKey := request.IdempotencyKey
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -87,7 +87,13 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", confirmed.session.ExtensionID, leaseErr)
 	}
-	defer r.releasePackageExtensionLease(context.Background(), confirmed.session.ExtensionID, operationID)
+	leaseGuard := r.newPackageLeaseGuard(confirmed.session.ExtensionID, operationID)
+	if startErr := leaseGuard.Start(ctx); startErr != nil {
+		_ = r.releasePackageExtensionLease(context.Background(), confirmed.session.ExtensionID, operationID)
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
+		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
+	}
+	defer leaseGuard.Stop(context.Background())
 	guard := packageWriteGuard(lease)
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
@@ -160,7 +166,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "validate_and_diff", err, nil, guard)
 	}
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID}
-	if renewErr := r.renewPackageExtensionLease(ctx, confirmed.session.ExtensionID, operationID); renewErr != nil {
+	if renewErr := leaseGuard.AssertAlive(ctx); renewErr != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "renew_lease", renewErr, nil, guard)
 	}
 	rollbackPoint, err := r.createPackageRollbackPoint(ctx, op.OperationID, "active", current, &currentDefinition, currentModules, currentContributions)
@@ -178,7 +184,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if package_security.ComputeDirHash(staging.Path, r.container.PackageSecurity.GetHasher()) == "" {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "verify_staging_tree", fmt.Errorf("kernel: staging hash empty"), nil, guard)
 	}
-	targetGeneration, stableGeneration, err := r.preparePackageGeneration(ctx, op.OperationID, confirmed.artifact, staging.Path)
+	targetGeneration, stableGeneration, err := r.preparePackageGeneration(ctx, op.OperationID, confirmed.artifact, staging.Path, guard.FencingToken)
 	if err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "commit_target_generation", err, nil, guard)
 	}
@@ -302,13 +308,13 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.container.PackageRepository.ConsumePreview(ctx, confirmed.session.SessionID); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "consume_preview_session", err, compensation, guard)
 	}
+	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "update", confirmed.session.ExtensionID, confirmed.session.Version, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, confirmed.artifact.ArchiveHash, confirmed.artifact.ManifestHash, confirmed.artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "record_version", err, compensation, guard)
+	}
 	if err := r.runPackageFinalGate(ctx, op.OperationID); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "final_gate", err, compensation, guard)
 	}
 	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, guard); err != nil {
-		return KernelInstallResult{}, err
-	}
-	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "update", confirmed.session.ExtensionID, confirmed.session.Version, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, confirmed.artifact.ArchiveHash, confirmed.artifact.ManifestHash, confirmed.artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
 		return KernelInstallResult{}, err
 	}
 	return KernelInstallResult{OperationID: op.OperationID, TraceID: op.TraceID, Operation: "update", ExtensionID: confirmed.session.ExtensionID, Version: confirmed.session.Version, InstallationID: current.InstallationID, PackageHash: confirmed.artifact.ArchiveHash, ContentTreeHash: confirmed.artifact.ContentTreeHash, ArtifactPath: confirmed.artifact.ArchivePath, InstallPath: targetGeneration.GenerationPath, DefinitionHash: targetGeneration.Current.TreeHash, InstalledAt: current.UpdatedAt}, nil

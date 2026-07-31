@@ -48,7 +48,7 @@ func (s *PackageService) AttachKernelProxy(proxy *KernelLifecycleProxy) error {
 	return nil
 }
 
-func (s *PackageService) Restore(ctx context.Context) error {
+func (s *PackageService) StartupCleanup(ctx context.Context) error {
 	if !s.repository.db.Migrator().HasTable("extension_package_import_sessions") {
 		return nil
 	}
@@ -57,6 +57,13 @@ func (s *PackageService) Restore(ctx context.Context) error {
 		return err
 	}
 	s.repository.RetryOwnedResourceCleanup(ctx)
+	if err := s.recoverPackageOperations(ctx); err != nil {
+		return err
+	}
+	return s.cleanupPackageRecoveryDebris(ctx)
+}
+
+func (s *PackageService) MigrateLegacyPackageData(ctx context.Context) error {
 	if err := s.repository.db.WithContext(ctx).Exec(`UPDATE extensions SET owner_user_id = (SELECT user_id FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_type = COALESCE((SELECT scope_type FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_type), scope_id = COALESCE((SELECT scope_id FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_id) WHERE source = 'instructions' AND owner_user_id = ''`).Error; err != nil {
 		return err
 	}
@@ -66,10 +73,18 @@ func (s *PackageService) Restore(ctx context.Context) error {
 	if err := s.repository.db.WithContext(ctx).Exec(`UPDATE extension_versions SET artifact_id = COALESCE((SELECT artifact_id FROM extension_artifacts WHERE extension_artifacts.extension_id = extension_versions.extension_id AND extension_artifacts.extension_version = extension_versions.version LIMIT 1), artifact_id), artifact_hash = CASE WHEN artifact_hash = '' THEN checksum ELSE artifact_hash END, package_hash = CASE WHEN package_hash = '' THEN checksum ELSE package_hash END, source = CASE WHEN source = '' THEN COALESCE((SELECT source FROM extension_artifacts WHERE extension_artifacts.extension_id = extension_versions.extension_id AND extension_artifacts.extension_version = extension_versions.version LIMIT 1), '') ELSE source END, compatibility_status = CASE WHEN compatibility_status = '' THEN 'compatible' ELSE compatibility_status END, capabilities_json = CASE WHEN capabilities_json = '' THEN '[]' ELSE capabilities_json END, validation_status = CASE WHEN validation_status = '' THEN 'valid' ELSE validation_status END`).Error; err != nil {
 		return err
 	}
-	if err := s.recoverPackageOperations(ctx); err != nil {
+	return nil
+}
+
+// Deprecated: Use StartupCleanup and MigrateLegacyPackageData instead.
+func (s *PackageService) Restore(ctx context.Context) error {
+	if !s.repository.db.Migrator().HasTable("extension_package_import_sessions") {
+		return nil
+	}
+	if err := s.StartupCleanup(ctx); err != nil {
 		return err
 	}
-	return s.cleanupPackageRecoveryDebris(ctx)
+	return s.MigrateLegacyPackageData(ctx)
 }
 
 func (s *PackageService) PreviewImport(ctx context.Context, request PreviewPackageImportRequest) (preview PackageImportPreview, err error) {

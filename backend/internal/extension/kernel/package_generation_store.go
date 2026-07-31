@@ -31,6 +31,7 @@ type PackageGenerationCurrent struct {
 	ArtifactID   string    `json:"artifactID"`
 	TreeHash     string    `json:"treeHash"`
 	OperationID  string    `json:"operationID"`
+	FencingToken int64     `json:"fencingToken"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
@@ -42,6 +43,7 @@ type PackageGenerationPrepareRequest struct {
 	OperationID      string
 	SourcePath       string
 	ExpectedTreeHash string
+	FencingToken     int64
 }
 
 type PackagePreparedGeneration struct {
@@ -829,7 +831,7 @@ func (s *PackageGenerationStore) verifyGenerationPath(ctx context.Context, path,
 }
 
 func currentFromPrepare(request PackageGenerationPrepareRequest, treeHash string) PackageGenerationCurrent {
-	return PackageGenerationCurrent{ExtensionID: request.ExtensionID, GenerationID: request.GenerationID, Version: request.Version, ArtifactID: request.ArtifactID, TreeHash: treeHash, OperationID: request.OperationID, UpdatedAt: time.Now().UTC()}
+	return PackageGenerationCurrent{ExtensionID: request.ExtensionID, GenerationID: request.GenerationID, Version: request.Version, ArtifactID: request.ArtifactID, TreeHash: treeHash, OperationID: request.OperationID, FencingToken: request.FencingToken, UpdatedAt: time.Now().UTC()}
 }
 
 func validateCurrent(current PackageGenerationCurrent) error {

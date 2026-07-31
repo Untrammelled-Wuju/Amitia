@@ -87,13 +87,20 @@ func (im *ReleaseImporter) ImportPackage(req *ImportPackageRequest) (*ImportPack
 		return nil, err
 	}
 
-	if _, err := os.Stat(req.PackageDir); err != nil {
+	safePackageDir, err := im.storage.ResolveImportPackageDir(req.PackageDir)
+	if err != nil {
+		im.storage.RemoveStagingDir(releaseID)
+		failPackageOperation(im.repo, op, OpStageStageFiles, "PACKAGE_DIR_INVALID", err.Error())
+		return nil, NewInstallationError(ErrCodePackagePathTraversal, err.Error(), ErrPackagePathTraversal)
+	}
+
+	if _, err := os.Stat(safePackageDir); err != nil {
 		im.storage.RemoveStagingDir(releaseID)
 		failPackageOperation(im.repo, op, OpStageStageFiles, "PACKAGE_DIR_NOT_FOUND", err.Error())
 		return nil, err
 	}
 
-	if err := copyDirContents(req.PackageDir, stagingDir); err != nil {
+	if err := copyDirContents(safePackageDir, stagingDir); err != nil {
 		im.storage.RemoveStagingDir(releaseID)
 		failPackageOperation(im.repo, op, OpStageStageFiles, "COPY_PACKAGE_FAILED", err.Error())
 		return nil, err
@@ -107,7 +114,7 @@ func (im *ReleaseImporter) ImportPackage(req *ImportPackageRequest) (*ImportPack
 		if entries, dErr := os.ReadDir(actionsDir); dErr == nil {
 			for _, entry := range entries {
 				if entry.IsDir() && !containsString(req.IncludedActions, entry.Name()) {
-					os.RemoveAll(filepath.Join(actionsDir, entry.Name()))
+					removeTree(filepath.Join(actionsDir, entry.Name()))
 				}
 			}
 		}

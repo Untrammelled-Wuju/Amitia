@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -78,7 +79,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         final task = tasks[index];
         return _RunningTaskCard(
           task: task,
-          onTap: () => context.push('/agent/task/${task.id}'),
+          onTap: () => context.push(AppRoutes.agentTask(task.id)),
         );
       },
     );
@@ -96,7 +97,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         final task = tasks[index];
         return _PendingTaskCard(
           task: task,
-          onTap: () => context.push('/agent/task/${task.id}'),
+          onTap: () => context.push(AppRoutes.agentTask(task.id)),
           onApprove: () => _showPermissionSheet(task),
         );
       },
@@ -115,7 +116,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
         final task = tasks[index];
         return _CompletedTaskCard(
           task: task,
-          onTap: () => context.push('/agent/task/${task.id}'),
+          onTap: () => context.push(AppRoutes.agentTask(task.id)),
         );
       },
     );
@@ -234,7 +235,7 @@ class _RunningTaskCard extends StatelessWidget {
                 Text('已运行 ${task.elapsed ?? '00:00'}', style: AppTypography.label(context)),
                 const Spacer(),
                 GestureDetector(
-                  onTap: () {},
+                  onTap: () => showAmitiaConfirmDialog(context, title: '暂停任务', message: '确定要暂停此任务吗？暂停后可以继续执行。', confirmLabel: '暂停').then((confirmed) { if (confirmed == true) { amitiaSnackBar(context, '任务已暂停'); } }),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -399,7 +400,7 @@ class _QuickTaskItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {},
+      onTap: () => amitiaComingSoon(context, task.title),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(

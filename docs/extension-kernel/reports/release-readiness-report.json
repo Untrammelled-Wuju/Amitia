@@ -1,8 +1,8 @@
 {
-  "reportId": "final-acceptance-1785434508699091400",
-  "generatedAt": "2026-07-30T18:04:42.7443699Z",
-  "startedAt": "2026-07-30T18:01:48.6990914Z",
-  "endedAt": "2026-07-30T18:04:42.7443699Z",
+  "reportId": "final-acceptance-1785473545234674600",
+  "generatedAt": "2026-07-31T04:54:56.3813515Z",
+  "startedAt": "2026-07-31T04:52:25.2346746Z",
+  "endedAt": "2026-07-31T04:54:56.3813515Z",
   "items": [
     {
       "itemId": "stage1.freeze_audit",
@@ -16,8 +16,8 @@
         "初始 Total()=0,跟踪指标数量=20",
         "旧系统调用计数器就绪 (冻结审计完成)"
       ],
-      "startedAt": "2026-07-30T18:01:48.6990914Z",
-      "completedAt": "2026-07-30T18:01:48.6990914Z"
+      "startedAt": "2026-07-31T04:52:25.2346746Z",
+      "completedAt": "2026-07-31T04:52:25.2346746Z"
     },
     {
       "itemId": "stage1.base_extraction",
@@ -34,8 +34,8 @@
         "workflow_migration.Registry 实例化成功",
         "plugin_migration.Registry 实例化成功"
       ],
-      "startedAt": "2026-07-30T18:01:48.6990914Z",
-      "completedAt": "2026-07-30T18:01:48.6990914Z"
+      "startedAt": "2026-07-31T04:52:25.2346746Z",
+      "completedAt": "2026-07-31T04:52:25.2346746Z"
     },
     {
       "itemId": "stage2.kernel_core",
@@ -51,8 +51,8 @@
         "ExecutionKernel 实例化成功",
         "Container.Recover 成功"
       ],
-      "startedAt": "2026-07-30T18:01:48.6990914Z",
-      "completedAt": "2026-07-30T18:01:49.2739314Z"
+      "startedAt": "2026-07-31T04:52:25.2346746Z",
+      "completedAt": "2026-07-31T04:52:25.8769151Z"
     },
     {
       "itemId": "stage3.amitiax_manifest",
@@ -66,8 +66,8 @@
         "空归档安装正确失败 (Fail Closed)",
         "错误数量=1,包含 missing_archive 错误码"
       ],
-      "startedAt": "2026-07-30T18:01:49.2739314Z",
-      "completedAt": "2026-07-30T18:01:49.2739314Z"
+      "startedAt": "2026-07-31T04:52:25.8769151Z",
+      "completedAt": "2026-07-31T04:52:25.8769151Z"
     },
     {
       "itemId": "stage3.runtimes",
@@ -84,8 +84,8 @@
         "jsonrpc.MethodRegistry 实例化成功",
         "多 Runtime 实现均已抽取 (JS/Task/WASM/TrustedService/JSONRPC)"
       ],
-      "startedAt": "2026-07-30T18:01:49.2739314Z",
-      "completedAt": "2026-07-30T18:01:49.2739314Z"
+      "startedAt": "2026-07-31T04:52:25.8769151Z",
+      "completedAt": "2026-07-31T04:52:25.8769151Z"
     },
     {
       "itemId": "stage4.ui_contribution",
@@ -102,8 +102,8 @@
         "extension_page_host.NewPageHost 实例化成功",
         "ui_ordering.NewOrderingEngine 实例化成功"
       ],
-      "startedAt": "2026-07-30T18:01:49.2739314Z",
-      "completedAt": "2026-07-30T18:01:49.2745189Z"
+      "startedAt": "2026-07-31T04:52:25.8769151Z",
+      "completedAt": "2026-07-31T04:52:25.8769151Z"
     },
     {
       "itemId": "stage5.builtin_tools",
@@ -117,8 +117,8 @@
         "内置 Tool 注册到 system/amitia-core 成功",
         "查询验证: toolID=system/amitia-core/echo, legacyID=echo"
       ],
-      "startedAt": "2026-07-30T18:01:49.2745189Z",
-      "completedAt": "2026-07-30T18:01:49.2745189Z"
+      "startedAt": "2026-07-31T04:52:25.8769151Z",
+      "completedAt": "2026-07-31T04:52:25.8769151Z"
     },
     {
       "itemId": "stage5.skills_mcp_workflow",
@@ -133,8 +133,8 @@
         "workflow_migration.Registry 注册成功",
         "Skill/MCP/Workflow 迁移注册表均可写入和读取"
       ],
-      "startedAt": "2026-07-30T18:01:49.2745189Z",
-      "completedAt": "2026-07-30T18:01:49.2745189Z"
+      "startedAt": "2026-07-31T04:52:25.8769151Z",
+      "completedAt": "2026-07-31T04:52:25.8769151Z"
     },
     {
       "itemId": "stage5.plugins_legacy",
@@ -149,8 +149,8 @@
         "data_migration.Registry 实例化成功",
         "Plugins 与旧 Amitiax 迁移基础设施就绪"
       ],
-      "startedAt": "2026-07-30T18:01:49.2745189Z",
-      "completedAt": "2026-07-30T18:01:49.2745189Z"
+      "startedAt": "2026-07-31T04:52:25.8769151Z",
+      "completedAt": "2026-07-31T04:52:25.8769151Z"
     },
     {
       "itemId": "stage6.sdk_cli",
@@ -164,8 +164,8 @@
         "前端扩展 API 客户端存在 (SDK 集成点)",
         "Plugin CLI 通过 dev_mode.RebuildPipeline 提供构建能力"
       ],
-      "startedAt": "2026-07-30T18:01:49.2745189Z",
-      "completedAt": "2026-07-30T18:01:49.2762102Z"
+      "startedAt": "2026-07-31T04:52:25.8769151Z",
+      "completedAt": "2026-07-31T04:52:25.8785579Z"
     },
     {
       "itemId": "stage6.dev_mode_console",
@@ -181,8 +181,8 @@
         "dev_mode.SessionManager 实例化成功",
         "developer_console.DiagnosticRepository 实例化成功"
       ],
-      "startedAt": "2026-07-30T18:01:49.2762102Z",
-      "completedAt": "2026-07-30T18:01:49.2762102Z"
+      "startedAt": "2026-07-31T04:52:25.8785579Z",
+      "completedAt": "2026-07-31T04:52:25.8785579Z"
     },
     {
       "itemId": "stage6.center_detail",
@@ -197,8 +197,8 @@
         "PluginListView.vue 存在",
         "UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪)"
       ],
-      "startedAt": "2026-07-30T18:01:49.2762102Z",
-      "completedAt": "2026-07-30T18:01:49.2807413Z"
+      "startedAt": "2026-07-31T04:52:25.8785579Z",
+      "completedAt": "2026-07-31T04:52:25.8813148Z"
     },
     {
       "itemId": "stage7.equivalence",
@@ -212,8 +212,8 @@
         "Kernel ModelTools 返回 0 个工具,无错误",
         "legacy_fallback_total=0 (等价性: Kernel 完全替代旧系统)"
       ],
-      "startedAt": "2026-07-30T18:01:49.2807413Z",
-      "completedAt": "2026-07-30T18:01:49.8621907Z"
+      "startedAt": "2026-07-31T04:52:25.8813148Z",
+      "completedAt": "2026-07-31T04:52:26.5141018Z"
     },
     {
       "itemId": "stage7.stability",
@@ -227,8 +227,8 @@
         "稳定性: 无 legacy 调用增长",
         "稳定性: Container 反复构建和关闭无异常"
       ],
-      "startedAt": "2026-07-30T18:01:49.8621907Z",
-      "completedAt": "2026-07-30T18:01:51.4683435Z"
+      "startedAt": "2026-07-31T04:52:26.5141018Z",
+      "completedAt": "2026-07-31T04:52:28.3910873Z"
     },
     {
       "itemId": "stage7.security",
@@ -243,8 +243,8 @@
         "检查器放行时调用不被拒绝",
         "nil 权限检查器时 Fail Closed (P0-01 已修复)"
       ],
-      "startedAt": "2026-07-30T18:01:51.4683435Z",
-      "completedAt": "2026-07-30T18:01:51.4683435Z"
+      "startedAt": "2026-07-31T04:52:28.3910873Z",
+      "completedAt": "2026-07-31T04:52:28.3910873Z"
     },
     {
       "itemId": "stage7.cutover",
@@ -259,8 +259,8 @@
         "legacy_fallback_total=0 (无旧系统回退)",
         "GlobalLegacyCallCounter.Total()=0 (旧系统不承担生产执行)"
       ],
-      "startedAt": "2026-07-30T18:01:51.4683435Z",
-      "completedAt": "2026-07-30T18:01:51.9773771Z"
+      "startedAt": "2026-07-31T04:52:28.3910873Z",
+      "completedAt": "2026-07-31T04:52:29.0006948Z"
     },
     {
       "itemId": "stage7.legacy_plugin",
@@ -274,8 +274,8 @@
         "LegacyCallCounter.Total()=0 (旧 PluginRuntime 不承担生产执行)",
         "旧 PluginRuntime 已通过迁移注册表弃用"
       ],
-      "startedAt": "2026-07-30T18:01:51.9773771Z",
-      "completedAt": "2026-07-30T18:01:51.9773771Z"
+      "startedAt": "2026-07-31T04:52:29.0006948Z",
+      "completedAt": "2026-07-31T04:52:29.0006948Z"
     },
     {
       "itemId": "stage7.legacy_skill",
@@ -289,8 +289,8 @@
         "LegacyCallCounter.Total()=0 (旧 Skill Handler 不承担生产执行)",
         "旧 Skill 兼容层已通过迁移注册表弃用"
       ],
-      "startedAt": "2026-07-30T18:01:51.9773771Z",
-      "completedAt": "2026-07-30T18:01:51.9773771Z"
+      "startedAt": "2026-07-31T04:52:29.0006948Z",
+      "completedAt": "2026-07-31T04:52:29.0006948Z"
     },
     {
       "itemId": "stage7.legacy_amitiax",
@@ -304,8 +304,8 @@
         "amitiax.Installer (新安装器) 实例化成功并正确 Fail Closed",
         "旧 Amitiax 安装器已通过迁移注册表弃用"
       ],
-      "startedAt": "2026-07-30T18:01:51.9773771Z",
-      "completedAt": "2026-07-30T18:01:51.9773771Z"
+      "startedAt": "2026-07-31T04:52:29.0006948Z",
+      "completedAt": "2026-07-31T04:52:29.0006948Z"
     },
     {
       "itemId": "stage7.legacy_data",
@@ -319,8 +319,8 @@
         "data_migration.List() 返回非 nil 切片",
         "旧数据模型已通过迁移注册表标记弃用"
       ],
-      "startedAt": "2026-07-30T18:01:51.9773771Z",
-      "completedAt": "2026-07-30T18:01:51.9773771Z"
+      "startedAt": "2026-07-31T04:52:29.0006948Z",
+      "completedAt": "2026-07-31T04:52:29.0006948Z"
     },
     {
       "itemId": "arch.single_chain",
@@ -336,8 +336,8 @@
         "GlobalLegacyCallCounter.Total()=0",
         "legacy_fallback_total=0"
       ],
-      "startedAt": "2026-07-30T18:01:51.9773771Z",
-      "completedAt": "2026-07-30T18:01:52.4950704Z"
+      "startedAt": "2026-07-31T04:52:29.0006948Z",
+      "completedAt": "2026-07-31T04:52:29.6155143Z"
     },
     {
       "itemId": "arch.domain_invariants",
@@ -353,8 +353,8 @@
         "EventService 启动成功",
         "默认事件类型数量=17"
       ],
-      "startedAt": "2026-07-30T18:01:52.4950704Z",
-      "completedAt": "2026-07-30T18:01:53.1399675Z"
+      "startedAt": "2026-07-31T04:52:29.6155143Z",
+      "completedAt": "2026-07-31T04:52:30.336751Z"
     },
     {
       "itemId": "build.compiles",
@@ -367,8 +367,8 @@
         "go build ./... 退出码 0",
         "输出长度=0 字节"
       ],
-      "startedAt": "2026-07-30T18:01:53.1399675Z",
-      "completedAt": "2026-07-30T18:04:42.1902068Z"
+      "startedAt": "2026-07-31T04:52:30.336751Z",
+      "completedAt": "2026-07-31T04:54:55.7447287Z"
     },
     {
       "itemId": "build.frontend",
@@ -382,8 +382,8 @@
         "TypeScript 类型检查工具已配置",
         "前端构建基础设施就绪"
       ],
-      "startedAt": "2026-07-30T18:04:42.1902068Z",
-      "completedAt": "2026-07-30T18:04:42.1937951Z"
+      "startedAt": "2026-07-31T04:54:55.7447287Z",
+      "completedAt": "2026-07-31T04:54:55.7491997Z"
     },
     {
       "itemId": "platform.windows",
@@ -397,8 +397,8 @@
         "ContainerBuilder 在 Windows 上构建和关闭正常",
         "Windows 平台验收通过"
       ],
-      "startedAt": "2026-07-30T18:04:42.1937951Z",
-      "completedAt": "2026-07-30T18:04:42.7443699Z"
+      "startedAt": "2026-07-31T04:54:55.7491997Z",
+      "completedAt": "2026-07-31T04:54:56.3813515Z"
     },
     {
       "itemId": "platform.macos",
@@ -407,8 +407,8 @@
       "description": "macOS 启动关闭通过",
       "status": "skipped",
       "required": false,
-      "startedAt": "2026-07-30T18:04:42.7443699Z",
-      "completedAt": "2026-07-30T18:04:42.7443699Z"
+      "startedAt": "2026-07-31T04:54:56.3813515Z",
+      "completedAt": "2026-07-31T04:54:56.3813515Z"
     },
     {
       "itemId": "platform.linux",
@@ -417,8 +417,8 @@
       "description": "Linux 启动关闭通过",
       "status": "skipped",
       "required": false,
-      "startedAt": "2026-07-30T18:04:42.7443699Z",
-      "completedAt": "2026-07-30T18:04:42.7443699Z"
+      "startedAt": "2026-07-31T04:54:56.3813515Z",
+      "completedAt": "2026-07-31T04:54:56.3813515Z"
     }
   ],
   "summary": {
@@ -443,6 +443,6 @@
     "stabilityApproved": true,
     "devExperienceApproved": true,
     "releaseApproved": true,
-    "timestamp": "2026-07-30T18:04:42.7443699Z"
+    "timestamp": "2026-07-31T04:54:56.3813515Z"
   }
 }

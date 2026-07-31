@@ -6,6 +6,7 @@ abstract final class AppRoutes {
   static const channelsWechat = '/channels/wechat';
   static const channelsQq = '/channels/qq';
   static const characters = '/characters';
+  static const charactersCreate = '/characters/create';
   static const agent = '/agent';
   static const memory = '/memory';
   static const memoryTimeline = '/memory/timeline';
@@ -21,6 +22,7 @@ abstract final class AppRoutes {
   static const extensions = '/extensions';
   static const extensionsPackages = '/extensions/packages';
   static const extensionsMcp = '/extensions/mcp';
+  static const extensionsMcpNew = '/extensions/mcp/new';
   static const extensionsAgentSkills = '/extensions/agent-skills';
   static const extensionsPlugins = '/extensions/plugins';
   static const extensionsSkills = '/extensions/skills';
@@ -28,6 +30,7 @@ abstract final class AppRoutes {
   static const workshop = '/workshop';
   static const workshopSkills = '/workshop/skills';
   static const workshopPet = '/workshop/pet';
+  static const workshopPetCreate = '/workshop/pet/create';
   static const workshopPetTasks = '/workshop/pet/tasks';
   static const workshopPetInstallations = '/workshop/pet/installations';
   static const settings = '/settings';
@@ -47,8 +50,7 @@ abstract final class AppRoutes {
   static const settingsPrivacyScan = '/settings/privacy-scan';
   static const settingsDeployment = '/settings/deployment';
   static const settingsAbout = '/settings/about';
-  static const toolbox = '/toolbox';
-  static const about = '/about';
+  static const settingsToolbox = '/settings/toolbox';
   static const onboarding = '/onboarding';
   static const login = '/login';
   static const privacy = '/privacy';
@@ -68,16 +70,12 @@ abstract final class AppRoutes {
   static String agentTask(String id) => '/agent/task/$id';
   static String mcpDetail(String id) => '/extensions/mcp/$id';
   static String mcpEdit(String id) => '/extensions/mcp/$id/edit';
-  static String mcpTools(String id) => '/extensions/mcp/$id/tools';
-  static String mcpPrompts(String id) => '/extensions/mcp/$id/prompts';
-  static String mcpResources(String id) => '/extensions/mcp/$id/resources';
-  static String mcpTasks(String id) => '/extensions/mcp/$id/tasks';
-  static String mcpPermissions(String id) => '/extensions/mcp/$id/permissions';
   static String skillDetail(String id) => '/extensions/skills/$id';
   static String pluginDetail(String id) => '/extensions/plugins/$id';
   static String extensionPage(String pageId) => '/extension/page/$pageId';
   static String petProcessing(String taskId) => '/workshop/pet/processing/$taskId';
   static String petActionEditor(String taskId, String actionKey) => '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
+  static String skillDraftEditor(String id) => '/workshop/skills/$id/editor';
   static String modelConfig(String type) => '/settings/models/$type';
   static String kernelPage(String page) => '/developer/kernel/$page';
 }

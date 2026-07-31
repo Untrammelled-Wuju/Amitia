@@ -15,9 +15,10 @@ import { getAmitiaDataDir } from "../path-manager";
 import { ResourceLoader } from "./resource-loader";
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
 import { ResourceCache } from "./resource-cache";
-import type { CachedFrame } from "./resource-cache";
 import { DesktopPetWindowAdapter } from "./window-adapter";
-import { ActionPlayer } from "./action-player";
+import { type PlayerLike } from "./action-player";
+import { AnimationIpcAdapter } from "./animation-ipc";
+import { AnimationPlayerBridge } from "./animation-player-bridge";
 import {
   DesktopPetActionScheduler,
   ActionPriorities,
@@ -323,9 +324,11 @@ export class DesktopPetManager {
   private activeInstallation: InstallationInfo | null = null;
   private activeSettings: RuntimeSettingsInfo | null = null;
   private loadedInstallation: LoadedInstallation | null = null;
+  private packageRevision = 0;
 
   private windowAdapter: DesktopPetWindowAdapter | null = null;
-  private actionPlayer: ActionPlayer | null = null;
+  private actionPlayer: PlayerLike | null = null;
+  private animationIpc: AnimationIpcAdapter | null = null;
   private scheduler: DesktopPetActionScheduler | null = null;
   private idleController: IdleController | null = null;
   private eventBridge: DesktopPetEventBridge | null = null;
@@ -515,6 +518,7 @@ export class DesktopPetManager {
     this.activeInstallation = installation;
     this.activeSettings = settings;
     this.loadedInstallation = loaded;
+    this.packageRevision += 1;
 
     try {
       await this.callEnableApi(installationId);
@@ -782,6 +786,7 @@ export class DesktopPetManager {
       this.activeInstallation = installation;
       this.activeSettings = settings;
       this.loadedInstallation = loaded;
+      this.packageRevision += 1;
       await this.startRuntime(installation, settings, loaded);
       this.setupRecoveryHandlers();
       this.petLogger.logEnable(installation.id, installation.name);
@@ -894,14 +899,36 @@ export class DesktopPetManager {
     this.recoveryWindowCloseListener = windowCloseListener;
     this.recoveryWindowCrashedListener = windowCrashedListener;
 
-    const actionPlayer = new ActionPlayer({
-      onFrameChange: (actionKey, frameIndex) =>
-        this.handleFrameChange(actionKey, frameIndex),
+    const animationIpc = new AnimationIpcAdapter({
+      getActiveInstallation: () => this.activeInstallation,
+      getLoadedInstallation: () => this.loadedInstallation,
+      getPackageRevision: () => this.packageRevision,
+      getPetWindow: () => this.windowAdapter?.getNativeWindow() ?? null,
+      onPlaybackEvent: (event) => this.handlePlaybackEvent(event),
+      onSnapshotUpdate: (snapshot) => this.handleSnapshotUpdate(snapshot),
+      onClick: (x, y) => this.handleClick(x, y),
+      onDoubleClick: (x, y) => this.handleDoubleClick(x, y),
+      onHover: (x, y) => this.handleHover(x, y),
+      onPlayActionForwarded: (command) => {
+        this.sendBridgeEvent("play_action_forwarded", command.actionKey);
+      },
+    });
+    animationIpc.register();
+
+    const actionPlayer = new AnimationPlayerBridge({
       onActionSwitch: (newKey, oldKey) =>
         this.handleActionSwitch(newKey, oldKey),
+      onActionComplete: (actionKey, loopCount) =>
+        this.handleActionComplete(actionKey, loopCount),
       onError: (err) =>
-        console.error("[DesktopPetManager] ActionPlayer 错误:", err),
+        console.error("[DesktopPetManager] AnimationPlayerBridge 错误:", err),
     });
+    actionPlayer.setAnimationIpc(animationIpc);
+    actionPlayer.setInstallationContext(
+      loaded.installationId,
+      this.activeInstallationId ?? loaded.installationId,
+      this.packageRevision,
+    );
     actionPlayer.attachLoaded(loaded);
 
     const scheduler = new DesktopPetActionScheduler(actionPlayer, {
@@ -941,6 +968,7 @@ export class DesktopPetManager {
 
     this.windowAdapter = windowAdapter;
     this.actionPlayer = actionPlayer;
+    this.animationIpc = animationIpc;
     this.scheduler = scheduler;
     this.idleController = idleController;
     this.clickThroughController = clickThroughController;
@@ -951,19 +979,7 @@ export class DesktopPetManager {
 
     this.registerChatStateIpc();
 
-    try {
-      await this.resourceCache.preloadDefaultIdle(loaded);
-      await this.resourceCache.preloadClickActions(loaded, [
-        "clicked",
-        "double_clicked",
-        "hovered",
-      ]);
-    } catch (err) {
-      console.warn(
-        "[DesktopPetManager] 预加载资源失败, 将按需加载:",
-        this.errorMessage(err),
-      );
-    }
+    this.sendInitialPackageSnapshot();
 
     idleController.start();
   }
@@ -1006,6 +1022,11 @@ export class DesktopPetManager {
       this.actionPlayer?.stop();
     } catch (err) {
       console.warn("[DesktopPetManager] 停止播放器失败:", err);
+    }
+    try {
+      this.animationIpc?.unregister();
+    } catch (err) {
+      console.warn("[DesktopPetManager] 注销动画IPC失败:", err);
     }
     try {
       this.eventBridge?.dispose();
@@ -1052,6 +1073,7 @@ export class DesktopPetManager {
 
     this.windowAdapter = null;
     this.actionPlayer = null;
+    this.animationIpc = null;
     this.scheduler = null;
     this.idleController = null;
     this.eventBridge = null;
@@ -1094,90 +1116,76 @@ export class DesktopPetManager {
     this.setState("disabled", installationId, "已停用");
   }
 
-  private async handleFrameChange(
-    actionKey: string,
-    frameIndex: number,
-  ): Promise<void> {
-    const loaded = this.loadedInstallation;
-    const win = this.windowAdapter?.getNativeWindow();
-    if (!loaded || !win || win.isDestroyed()) return;
-
-    const action = loaded.actions.get(actionKey);
-    if (!action || !action.available) return;
-
-    let frame: CachedFrame | null = null;
-    try {
-      frame = await this.resourceCache.getFrame(loaded, actionKey, frameIndex);
-    } catch (err) {
-      const message = this.errorMessage(err);
-      console.warn(
-        "[DesktopPetManager] 加载帧失败:",
-        actionKey,
-        frameIndex,
-        message,
-      );
-      this.petLogger.logActionLoadFailed(
-        actionKey,
-        `frame=${frameIndex} error=${message}`,
-      );
+  private sendInitialPackageSnapshot(): void {
+    if (!this.animationIpc || !this.activeInstallation || !this.loadedInstallation) {
       return;
     }
-    if (!frame) return;
-
-    if (this.clickThroughController && frame.alphaData) {
-      try {
-        this.clickThroughController.updateFrame(
-          frame.width,
-          frame.height,
-          frame.alphaData,
-        );
-      } catch (err) {
-        console.warn(
-          "[DesktopPetManager] 更新点击穿透帧失败:",
-          this.errorMessage(err),
-        );
-      }
-    }
-
-    if (win.isDestroyed()) return;
-    const payload: PetFrameUpdatePayload = {
-      actionKey,
-      frameIndex,
-      dataURL: frame.dataURL,
-      width: frame.width,
-      height: frame.height,
-      loopType: action.loopType,
-      fps: action.fps,
-      anchor: action.anchor,
-    };
     try {
-      win.webContents.send(PET_FRAME_UPDATE_CHANNEL, payload);
+      const snapshot = this.animationIpc.buildSnapshot(
+        this.activeInstallation,
+        this.loadedInstallation,
+        this.packageRevision,
+      );
+      this.animationIpc.sendSwitchPackage(snapshot);
+      if (this.loadedInstallation.defaultAction) {
+        this.animationIpc.sendUpdateDefaultAction(this.loadedInstallation.defaultAction.key);
+      }
     } catch (err) {
       console.warn(
-        "[DesktopPetManager] 发送帧更新失败:",
+        "[DesktopPetManager] 发送初始包快照失败:",
         this.errorMessage(err),
       );
     }
   }
 
+  private handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string }): void {
+    if (this.actionPlayer && this.actionPlayer instanceof AnimationPlayerBridge) {
+      this.actionPlayer.handlePlaybackEvent(event);
+    }
+    switch (event.type) {
+      case "playback.action_started":
+        if (event.actionKey) {
+          this.sendBridgeEvent("action_started", event.actionKey);
+        }
+        break;
+      case "playback.action_completed":
+        this.sendBridgeEvent("playback_completed", event.actionKey ?? "");
+        break;
+      case "playback.action_interrupted":
+        this.sendBridgeEvent("playback_interrupted", event.actionKey ?? "");
+        break;
+      case "playback.action_failed":
+        console.warn(
+          "[DesktopPetManager] 动画失败:",
+          event.actionKey,
+          event.reason,
+        );
+        break;
+    }
+  }
+
+  private handleSnapshotUpdate(_snapshot: unknown): void {
+  }
+
+  private handleActionComplete(actionKey: string, _loopCount: number): void {
+    this.sendBridgeEvent("action_complete", actionKey);
+  }
+
+  private handleClick(x: number, y: number): void {
+    this.sendBridgeEvent("clicked", `${x},${y}`);
+  }
+
+  private handleDoubleClick(x: number, y: number): void {
+    this.sendBridgeEvent("double_clicked", `${x},${y}`);
+  }
+
+  private handleHover(x: number, y: number): void {
+    this.sendBridgeEvent("hovered", `${x},${y}`);
+  }
+
   private handleActionSwitch(newKey: string, oldKey: string | null): void {
     this.currentActionKey = newKey;
     this.petLogger.logActionSwitch(newKey, oldKey, "scheduler");
-    const win = this.windowAdapter?.getNativeWindow();
-    if (!win || win.isDestroyed()) return;
-    const payload: PetActionSwitchPayload = {
-      actionKey: newKey,
-      previousActionKey: oldKey,
-      source: "scheduler",
-    };
-    try {
-      win.webContents.send(PET_ACTION_SWITCH_CHANNEL, payload);
-    } catch (err) {
-      console.warn(
-        "[DesktopPetManager] 发送动作切换失败:",
-        this.errorMessage(err),
-      );
-    }
     this.sendBridgeEvent("action_switch", newKey);
   }
 

@@ -105,7 +105,7 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeQuarantineRestoreFailed:  500,
 	PackageErrCodeSnapshotIncomplete:       409,
 	PackageErrCodeVersionHistoryCorrupted:  409,
-	PackageErrCodeFinalGateFailed:          412,
+	PackageErrCodeFinalGateFailed:          409,
 }
 
 func PackageErrorHTTPStatus(code string) int {

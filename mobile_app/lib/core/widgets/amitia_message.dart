@@ -351,13 +351,13 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
           children: [
             Row(
               children: [
-                _InputAction(icon: Icons.attach_file_outlined, onTap: () {}),
+                _InputAction(icon: Icons.attach_file_outlined, onTap: () => amitiaComingSoon(context, '附件')),
                 const SizedBox(width: 6),
-                _InputAction(icon: Icons.image_outlined, onTap: () {}),
+                _InputAction(icon: Icons.image_outlined, onTap: () => amitiaComingSoon(context, '图片')),
                 const SizedBox(width: 6),
-                _InputAction(icon: Icons.code, onTap: () {}),
+                _InputAction(icon: Icons.code, onTap: () => amitiaComingSoon(context, '代码块')),
                 const SizedBox(width: 6),
-                _InputAction(icon: Icons.mic_outlined, onTap: () {}),
+                _InputAction(icon: Icons.mic_outlined, onTap: () => amitiaComingSoon(context, '语音输入')),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(

@@ -157,6 +157,12 @@ func (r *repository) UpdateInstallationStatus(id, status string) error {
 		updates["last_enabled_at"] = now
 	case StatusDisabled:
 		updates["last_disabled_at"] = now
+	case StatusUninstalling:
+		updates["lifecycle_state"] = LifecycleUninstalling
+	case StatusUninstalled:
+		updates["lifecycle_state"] = LifecycleUninstalled
+	case StatusInvalid:
+		updates["lifecycle_state"] = LifecycleInvalid
 	}
 	return r.db.Model(&Installation{}).Where("id = ?", id).Updates(updates).Error
 }

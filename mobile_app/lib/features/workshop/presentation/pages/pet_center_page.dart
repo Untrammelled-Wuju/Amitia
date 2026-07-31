@@ -101,7 +101,7 @@ class PetCenterPage extends ConsumerWidget {
 
   Widget _buildQuickActions(BuildContext context) {
     final actions = [
-      (Icons.add_circle_outline, '创建桌宠', () => context.push('/workshop/pet/create')),
+      (Icons.add_circle_outline, '创建桌宠', () => context.push(AppRoutes.workshopPetCreate)),
       (Icons.list_alt, '任务列表', () => context.push(AppRoutes.workshopPetTasks)),
       (Icons.install_desktop, '安装管理', () => context.push(AppRoutes.workshopPetInstallations)),
     ];

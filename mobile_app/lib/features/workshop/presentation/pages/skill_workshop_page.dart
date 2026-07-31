@@ -5,6 +5,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -258,7 +259,7 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
       }
     }
     final draftId = draft?.id ?? 'sd_new';
-    context.push('/workshop/skills/$draftId/editor');
+    context.push(AppRoutes.skillDraftEditor(draftId));
   }
 
   void _showInstallConfirm(WorkshopSession session) {

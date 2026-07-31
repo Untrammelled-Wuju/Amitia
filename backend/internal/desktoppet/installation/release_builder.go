@@ -18,17 +18,18 @@ import (
 )
 
 type actionConfig struct {
-	ActionKey  string       `json:"actionKey"`
-	ActionName string       `json:"actionName"`
-	FrameCount int          `json:"frameCount"`
-	DefaultFps int          `json:"defaultFps"`
-	LoopType   string       `json:"loopType"`
-	Frames     []frameEntry `json:"frames"`
+	ActionKey   string       `json:"actionKey"`
+	ActionName  string       `json:"actionName"`
+	FrameCount  int          `json:"frameCount"`
+	DefaultFps  int          `json:"defaultFps"`
+	LoopType    string       `json:"loopType"`
+	Frames      []frameEntry `json:"frames"`
 }
 
 type frameEntry struct {
 	FrameID     string `json:"frameId"`
 	Index       int    `json:"index"`
+	File        string `json:"file"`
 	DurationMs  int    `json:"durationMs"`
 	AssetID     string `json:"assetId"`
 	ContentHash string `json:"contentHash"`
@@ -474,13 +475,15 @@ func (b *ReleaseBuilder) stageActionFrames(stagingDir, actionKey string, detail 
 			return nil, err
 		}
 		ext := extForMimeType(f.MimeType)
-		dst := filepath.Join(framesDir, f.FrameID+ext)
+		fileName := fmt.Sprintf("%04d%s", f.LogicalIndex, ext)
+		dst := filepath.Join(framesDir, fileName)
 		if err := copyFileContents(src, dst); err != nil {
 			return nil, err
 		}
 		frames = append(frames, frameEntry{
 			FrameID:     f.FrameID,
 			Index:       f.LogicalIndex,
+			File:        fmt.Sprintf("frames/%s", fileName),
 			DurationMs:  f.DurationMS,
 			AssetID:     f.AssetID,
 			ContentHash: f.ContentHash,

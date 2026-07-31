@@ -115,12 +115,14 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", session.ExtensionID, leaseErr)
 	}
+	leaseGuard := r.newPackageLeaseGuard(session.ExtensionID, operationID)
+	if startErr := leaseGuard.Start(ctx); startErr != nil {
+		_ = r.releasePackageExtensionLease(context.Background(), session.ExtensionID, operationID)
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
+		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
+	}
+	defer leaseGuard.Stop(context.Background())
 	guard := packageWriteGuard(lease)
-	defer func() {
-		if releaseErr := r.releasePackageExtensionLease(context.Background(), session.ExtensionID, operationID); releaseErr != nil {
-			// 记录stale lease finding，不伪装为完全成功
-		}
-	}()
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
@@ -141,7 +143,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	targetGeneration := PackagePreparedGeneration{}
 	currentSwitched := false
 	step := func(order int, name, status, result, code string) error {
-		if renewErr := r.renewPackageExtensionLease(ctx, session.ExtensionID, operationID); renewErr != nil {
+		if renewErr := leaseGuard.AssertAlive(ctx); renewErr != nil {
 			return renewErr
 		}
 		stamp := time.Now().UTC().Format(time.RFC3339Nano)
@@ -206,7 +208,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 			return fail("create_rollback_point", err, "")
 		}
 	}
-	targetGeneration, stableGeneration, err = r.preparePackageGeneration(ctx, operationID, artifact, staging.Path)
+	targetGeneration, stableGeneration, err = r.preparePackageGeneration(ctx, operationID, artifact, staging.Path, guard.FencingToken)
 	if err != nil {
 		return fail("commit_installed_tree", err, "")
 	}
@@ -292,14 +294,15 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err := step(8, "mark_installation_disabled", "completed", "{}", ""); err != nil {
 		return KernelInstallResult{}, err
 	}
+	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, artifactHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "record_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, guard)
+		return KernelInstallResult{}, err
+	}
 	if err := r.runPackageFinalGate(ctx, operationID); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "final_gate", "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
 	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true, guard); err != nil {
-		return KernelInstallResult{}, err
-	}
-	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, artifactHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
 		return KernelInstallResult{}, err
 	}
 	return KernelInstallResult{ExtensionID: session.ExtensionID, Version: session.Version,
@@ -421,6 +424,12 @@ func (r *Runtime) createPackageRollbackPoint(ctx context.Context, sourceOperatio
 	configJSON, secretRefsJSON, resourceJSON, migrationJSON, userDataMigrationJSON, err := r.capturePackageStateSnapshots(ctx, installed)
 	if err != nil {
 		return PackageRollbackPoint{}, err
+	}
+	if configJSON == "" || resourceJSON == "" || migrationJSON == "" || userDataMigrationJSON == "" {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: rollback point requires complete snapshots (config/resource/migration/userdata)")
+	}
+	if string(definitionJSON) == "" || string(moduleJSON) == "" || string(contributionJSON) == "" || string(permissionJSON) == "" || string(scopeJSON) == "" {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: rollback point requires complete package snapshots (definition/module/contribution/permission/scope)")
 	}
 	installedPath, _ := installed.Metadata["installedPath"].(string)
 	artifactID, _ := installed.Metadata["artifactId"].(string)

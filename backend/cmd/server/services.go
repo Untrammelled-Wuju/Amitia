@@ -156,6 +156,9 @@ func (a reflectionMemoryServiceAdapter) CreateReflectionMemory(req interaction.R
 }
 
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
+	if config.AppCfg == nil {
+		config.AppCfg = &config.Config{}
+	}
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
 	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
 	relTimeCoordinator := temporal.NewRelationshipTimeCoordinator(relTimeRepo, temporal.SystemClock{})
@@ -259,13 +262,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Error("extension package recovery failed: ", err)
 		panic("failed to recover extension package operations")
 	}
+	if err := extensionRuntime.Packages.StartupCleanup(context.Background()); err != nil {
+		log.Warn("extension package startup cleanup warning: ", err)
+	}
 	legacyReport, legacyErr := extensionRuntime.Packages.DetectLegacyPackages(context.Background())
 	if legacyErr != nil {
 		log.Warn("legacy extension package detection failed: ", legacyErr)
 	} else if legacyReport.PendingManual > 0 {
-		log.Warn(fmt.Sprintf("legacy extension packages require manual migration: %d pending (total %d, completed %d)", legacyReport.PendingManual, legacyReport.Total, legacyReport.Completed))
+		log.Warn(fmt.Sprintf("legacy extension packages migration_required: %d pending (total %d, completed %d), run explicit migration command", legacyReport.PendingManual, legacyReport.Total, legacyReport.Completed))
 		for _, extID := range legacyReport.PendingExtensions {
-			log.Warn(fmt.Sprintf("legacy extension pending manual migration: %s", extID))
+			log.Warn(fmt.Sprintf("legacy extension migration_required: %s, run explicit migration command", extID))
 		}
 	} else {
 		log.Info(fmt.Sprintf("legacy extension migration status: %d completed (total %d)", legacyReport.Completed, legacyReport.Total))
@@ -518,20 +524,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	installationUninstaller := installation.NewUninstaller(installationRepo, processingDataDir)
 
 	runtimeConfig := runtime.DefaultRuntimeConfig()
-	if config.AppCfg.DesktopPetRuntime.Enabled {
-		runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
-		runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
-		runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
-		runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
-		runtimeConfig.MaxMessageBytes = config.AppCfg.DesktopPetRuntime.MaxMessageBytes
-		runtimeConfig.RegisterTimeoutSec = config.AppCfg.DesktopPetRuntime.RegisterTimeoutSec
-		runtimeConfig.SendQueueSize = config.AppCfg.DesktopPetRuntime.SendQueueSize
-		runtimeConfig.CommandTimeoutSec = config.AppCfg.DesktopPetRuntime.CommandTimeoutSec
-		runtimeConfig.MaxRetryAttempts = config.AppCfg.DesktopPetRuntime.MaxRetryAttempts
-		runtimeConfig.RetryBaseDelayMs = config.AppCfg.DesktopPetRuntime.RetryBaseDelayMs
-		runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
-		runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
-	}
+	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
+	runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
+	runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
+	runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
+	runtimeConfig.MaxMessageBytes = config.AppCfg.DesktopPetRuntime.MaxMessageBytes
+	runtimeConfig.RegisterTimeoutSec = config.AppCfg.DesktopPetRuntime.RegisterTimeoutSec
+	runtimeConfig.SendQueueSize = config.AppCfg.DesktopPetRuntime.SendQueueSize
+	runtimeConfig.CommandTimeoutSec = config.AppCfg.DesktopPetRuntime.CommandTimeoutSec
+	runtimeConfig.MaxRetryAttempts = config.AppCfg.DesktopPetRuntime.MaxRetryAttempts
+	runtimeConfig.RetryBaseDelayMs = config.AppCfg.DesktopPetRuntime.RetryBaseDelayMs
+	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
+	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
 
 	runtimeCmdStore := runtime.NewCommandStore(ctx.DB)
 	runtimeStateStore := runtime.NewStateStore(ctx.DB)

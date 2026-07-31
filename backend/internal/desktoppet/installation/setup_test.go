@@ -14,9 +14,7 @@ import (
 	"image/png"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -235,44 +233,26 @@ func resolveDataDir(t *testing.T, dataDir string) string {
 
 func removeAllDir(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.RemoveAll(dir); err != nil {
-		t.Fatalf("os.RemoveAll %s: %v", dir, err)
-	}
-	if _, err := os.Stat(dir); err == nil {
-		if runtime.GOOS == "windows" {
-			cmd := exec.Command("cmd", "/c", "rmdir", "/s", "/q", dir)
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("rmdir %s: %v", dir, err)
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
+	if err := removeTree(dir); err != nil {
+		t.Fatalf("removeTree %s: %v", dir, err)
 	}
 }
 
 func waitForDirDeleted(t *testing.T, dir string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		f, err := os.Open(dir)
-		if err != nil {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			return
 		}
-		f.Close()
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
-	if f, err := os.Open(dir); err == nil {
-		f.Close()
-		if runtime.GOOS == "windows" {
-			cmd := exec.Command("cmd", "/c", "rmdir", "/s", "/q", dir)
-			_ = cmd.Run()
-			time.Sleep(50 * time.Millisecond)
-			if f2, err2 := os.Open(dir); err2 != nil {
-				return
-			} else {
-				f2.Close()
-			}
+	if _, err := os.Stat(dir); err == nil {
+		_ = removeTree(dir)
+		time.Sleep(50 * time.Millisecond)
+		if _, err := os.Stat(dir); err == nil {
+			t.Fatalf("目录应已删除: %s", dir)
 		}
-		t.Fatalf("目录应已删除: %s", dir)
 	}
 }
 

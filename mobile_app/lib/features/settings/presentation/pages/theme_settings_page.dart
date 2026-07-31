@@ -141,7 +141,7 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
                     AmitiaButton(
                       label: '次按钮',
                       isSecondary: true,
-                      onPressed: () {},
+                      onPressed: () => amitiaSnackBar(context, '预览按钮已点击'),
                     ),
                   ],
                 ),

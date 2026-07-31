@@ -70,7 +70,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
             child: AmitiaIconButton(
               icon: Icons.add,
               color: context.accentPrimary,
-              onPressed: () => context.push('/workshop/pet/create'),
+              onPressed: () => context.push(AppRoutes.workshopPetCreate),
             ),
           ),
         ],
@@ -83,7 +83,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                 title: '暂无任务',
                 subtitle: '点击右上角创建新桌宠',
                 actionText: '创建桌宠',
-                onAction: () => context.push('/workshop/pet/create'),
+                onAction: () => context.push(AppRoutes.workshopPetCreate),
               )
             : ListView.builder(
                 padding: const EdgeInsets.all(AppSpacing.pagePadding),

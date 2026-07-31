@@ -33,19 +33,21 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 func (r *Runtime) recoverPackageOperation(ctx context.Context, operation PackageOperationRecord) error {
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, operation.ExtensionID, operation.OperationID)
 	if leaseErr != nil {
-		return nil
+		return r.requirePackageRecovery(ctx, operation, "recovery lease acquire failed", leaseErr, PackageWriteGuard{})
 	}
 	guard := packageWriteGuard(lease)
 	defer func() {
 		if releaseErr := r.releasePackageExtensionLease(context.Background(), operation.ExtensionID, operation.OperationID); releaseErr != nil {
-			_ = r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
+			if putErr := r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
 				FindingID:         "stale-lease-" + operation.OperationID,
 				Metric:            "stale_extension_leases",
 				Count:             1,
 				ResourceIDsJSON:   `["` + operation.OperationID + `"]`,
 				ErrorDetail:       releaseErr.Error(),
 				RecommendedAction: "manual_lease_cleanup",
-			})
+			}); putErr != nil {
+				fmt.Printf("kernel: failed to persist stale lease finding for %s: %v\n", operation.OperationID, errors.Join(releaseErr, putErr))
+			}
 		}
 	}()
 	_, steps, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
@@ -54,7 +56,7 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 	}
 	completed := completedPackageSteps(steps)
 	switch operation.OperationType {
-	case "install", "update":
+	case "install":
 		compensated, reconcileErr := r.reconcileInstalledPackageGeneration(ctx, operation)
 		if reconcileErr != nil {
 			return r.requirePackageRecovery(ctx, operation, "generation reconciliation failed", reconcileErr, guard)
@@ -72,6 +74,24 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "recovered_completed", "", "", true, guard)
 		}
 		return r.requirePackageRecovery(ctx, operation, "installed package consistency could not be proven", err, guard)
+	case "update":
+		compensated, reconcileErr := r.reconcileInstalledPackageGeneration(ctx, operation)
+		if reconcileErr != nil {
+			return r.requirePackageRecovery(ctx, operation, "update generation reconciliation failed", reconcileErr, guard)
+		}
+		if compensated {
+			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "failed", "recovered_compensated", "PACKAGE_UPDATE_FAILED", "update generation switch compensated during recovery", true, guard)
+		}
+		err = r.proveUpdatedPackageOperation(ctx, operation, completed)
+		if err == nil {
+			if operation.PreviewSessionID != "" {
+				if consumeErr := r.container.PackageRepository.ConsumePreview(ctx, operation.PreviewSessionID); consumeErr != nil && !strings.Contains(consumeErr.Error(), "already consumed") {
+					return r.requirePackageRecovery(ctx, operation, "update preview completion could not be persisted", consumeErr, guard)
+				}
+			}
+			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "completed", "recovered_completed", "", "", true, guard)
+		}
+		return r.requirePackageRecovery(ctx, operation, "updated package consistency could not be proven", err, guard)
 	case "rollback":
 		compensated, reconcileErr := r.reconcileInstalledPackageGeneration(ctx, operation)
 		if reconcileErr != nil {
@@ -126,7 +146,7 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 		if !errors.Is(currentErr, ErrPackageGenerationNotFound) {
 			return "", currentErr
 		}
-		state := PackageQuarantinedCurrent{Current: stable, Path: filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)}
+		state := PackageQuarantinedCurrent{Current: stable, Path: r.resolveQuarantineCurrentPath(ctx, operation)}
 		if err := r.container.PackageGenerationStore.RestoreQuarantinedGeneration(ctx, stable); err != nil {
 			return "", err
 		}
@@ -144,18 +164,42 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 	if !errors.Is(currentErr, ErrPackageGenerationNotFound) {
 		return "", currentErr
 	}
-	quarantine, err := r.container.PackageGenerationStore.quarantinePath(stable)
-	if err != nil {
-		return "", err
+	quarantinePath, currentQuarantinePath := r.resolveQuarantinePathsForCleanup(ctx, operation, stable)
+	if quarantinePath != "" {
+		if err := os.RemoveAll(quarantinePath); err != nil {
+			return "", err
+		}
 	}
-	currentQuarantine := filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)
-	if err := os.RemoveAll(quarantine); err != nil {
-		return "", err
-	}
-	if err := os.RemoveAll(currentQuarantine); err != nil {
-		return "", err
+	if currentQuarantinePath != "" {
+		if err := os.RemoveAll(currentQuarantinePath); err != nil {
+			return "", err
+		}
 	}
 	return "completed", nil
+}
+
+func (r *Runtime) resolveQuarantineCurrentPath(ctx context.Context, operation PackageOperationRecord) string {
+	qm, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+	if err == nil && qm.CurrentQuarantinePath != "" {
+		return qm.CurrentQuarantinePath
+	}
+	return filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)
+}
+
+func (r *Runtime) resolveQuarantinePathsForCleanup(ctx context.Context, operation PackageOperationRecord, stable PackageGenerationCurrent) (string, string) {
+	qm, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+	if err == nil && qm.GenerationQuarantinePath != "" {
+		currentQuarantine := qm.CurrentQuarantinePath
+		if currentQuarantine == "" {
+			currentQuarantine = filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)
+		}
+		return qm.GenerationQuarantinePath, currentQuarantine
+	}
+	quarantine, qErr := r.container.PackageGenerationStore.quarantinePath(stable)
+	if qErr != nil {
+		return "", ""
+	}
+	return quarantine, filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)
 }
 
 func completedPackageSteps(steps []PackageOperationStep) map[string]PackageOperationStep {
@@ -210,7 +254,7 @@ func (r *Runtime) reconcileInstalledPackageGeneration(ctx context.Context, opera
 			return false, err
 		}
 		defer r.container.PackageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
-		prepared, err := r.container.PackageGenerationStore.PrepareGeneration(ctx, PackageGenerationPrepareRequest{ExtensionID: target.ExtensionID, GenerationID: target.GenerationID, Version: target.Version, ArtifactID: target.ArtifactID, OperationID: target.OperationID, SourcePath: staging.Path, ExpectedTreeHash: target.TreeHash})
+		prepared, err := r.container.PackageGenerationStore.PrepareGeneration(ctx, PackageGenerationPrepareRequest{ExtensionID: target.ExtensionID, GenerationID: target.GenerationID, Version: target.Version, ArtifactID: target.ArtifactID, OperationID: target.OperationID, SourcePath: staging.Path, ExpectedTreeHash: target.TreeHash, FencingToken: target.FencingToken})
 		if err != nil {
 			return false, err
 		}
@@ -245,12 +289,20 @@ func (r *Runtime) reconcileInstalledPackageGeneration(ctx context.Context, opera
 	return true, nil
 }
 
+type CommitGenerationStepResult struct {
+	Path               string `json:"path"`
+	TreeHash           string `json:"treeHash"`
+	StableGeneration   string `json:"stableGeneration"`
+	TargetGeneration   string `json:"targetGeneration"`
+	ArtifactHash       string `json:"artifactHash"`
+}
+
 func (r *Runtime) proveInstalledPackageOperation(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep) error {
-	commitTree, ok := completed["commit_installed_tree"]
+	commitTree, ok := completed[StepCommitInstalledTree]
 	if !ok {
 		return errors.New("installed tree commit step missing")
 	}
-	if _, ok := completed["commit_kernel_repositories"]; !ok {
+	if _, ok := completed[StepCommitKernelRepositories]; !ok {
 		return errors.New("kernel repository commit step missing")
 	}
 	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
@@ -274,11 +326,11 @@ func (r *Runtime) proveInstalledPackageOperation(ctx context.Context, operation 
 	if installedPath == "" || artifact.InstalledPath == "" || filepath.Clean(installedPath) != filepath.Clean(artifact.InstalledPath) {
 		return errors.New("installed path identity mismatch")
 	}
-	var commitResult map[string]string
-	if err := json.Unmarshal([]byte(commitTree.ResultJSON), &commitResult); err != nil || filepath.Clean(commitResult["path"]) != filepath.Clean(installedPath) {
+	var commitResult CommitGenerationStepResult
+	if err := json.Unmarshal([]byte(commitTree.ResultJSON), &commitResult); err != nil || filepath.Clean(commitResult.Path) != filepath.Clean(installedPath) {
 		return errors.New("installed path journal mismatch")
 	}
-	if err := r.proveInstalledTree(installedPath, installation, commitResult["artifactHash"]); err != nil {
+	if err := r.proveInstalledTree(installedPath, installation, commitResult.ArtifactHash); err != nil {
 		return err
 	}
 	definition, err := r.container.DefinitionRepository.GetExtension(ctx, installation.ExtensionID, installation.InstalledVersion)
@@ -303,11 +355,75 @@ func (r *Runtime) proveInstalledPackageOperation(ctx context.Context, operation 
 	return nil
 }
 
+func (r *Runtime) proveUpdatedPackageOperation(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep) error {
+	commitTree, ok := completed[StepCommitInstalledTree]
+	if !ok {
+		return errors.New("update tree commit step missing")
+	}
+	if _, ok := completed[StepCommitUpdateState]; !ok {
+		return errors.New("update state commit step missing")
+	}
+	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
+	if err != nil {
+		return fmt.Errorf("installation unavailable: %w", err)
+	}
+	if installation.PackageID != operation.ArtifactID || installation.InstalledVersion.String() != operation.TargetVersion || installation.InstallationState != domain.InstallationStateInstalled {
+		return errors.New("update installation identity mismatch")
+	}
+	artifact, err := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+	if err != nil {
+		return fmt.Errorf("update artifact unavailable: %w", err)
+	}
+	if artifact.ExtensionID != operation.ExtensionID || artifact.Version != operation.TargetVersion {
+		return errors.New("update artifact identity mismatch")
+	}
+	if _, err := r.VerifyStoredPackage(ctx, artifact); err != nil {
+		return fmt.Errorf("update artifact verification failed: %w", err)
+	}
+	installedPath, _ := installation.Metadata["installedPath"].(string)
+	if installedPath == "" || artifact.InstalledPath == "" || filepath.Clean(installedPath) != filepath.Clean(artifact.InstalledPath) {
+		return errors.New("update installed path identity mismatch")
+	}
+	var commitResult CommitGenerationStepResult
+	if err := json.Unmarshal([]byte(commitTree.ResultJSON), &commitResult); err != nil || filepath.Clean(commitResult.Path) != filepath.Clean(installedPath) {
+		return errors.New("update installed path journal mismatch")
+	}
+	if err := r.proveInstalledTree(installedPath, installation, commitResult.TreeHash); err != nil {
+		return err
+	}
+	if _, ok := completed[StepCreateRollbackPoint]; !ok {
+		return errors.New("update rollback point step missing")
+	}
+	if _, ok := completed[StepExecuteMigrations]; !ok {
+		return errors.New("update migration step missing")
+	}
+	definition, err := r.container.DefinitionRepository.GetExtension(ctx, installation.ExtensionID, installation.InstalledVersion)
+	if err != nil {
+		return fmt.Errorf("update definition unavailable: %w", err)
+	}
+	modules, err := r.container.ModuleRepository.ListModules(ctx, installation.ExtensionID)
+	if err != nil {
+		return fmt.Errorf("update modules unavailable: %w", err)
+	}
+	contributions, err := r.container.ContributionRepository.ListContributions(ctx, installation.ExtensionID)
+	if err != nil {
+		return fmt.Errorf("update contributions unavailable: %w", err)
+	}
+	expectedContributions := 0
+	for _, module := range definition.Modules {
+		expectedContributions += len(module.Contributions)
+	}
+	if len(modules) != len(definition.Modules) || len(contributions) != expectedContributions {
+		return errors.New("update definitions incomplete")
+	}
+	return nil
+}
+
 func (r *Runtime) proveRollbackPackageOperation(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep) error {
-	if _, ok := completed["validate_rollback_point"]; !ok {
+	if _, ok := completed[StepValidateRollbackPoint]; !ok {
 		return errors.New("rollback point validation step missing")
 	}
-	if _, ok := completed["restore_repositories"]; !ok {
+	if _, ok := completed[StepRestoreRepositories]; !ok {
 		return errors.New("repository restore step missing")
 	}
 	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
@@ -329,10 +445,10 @@ func (r *Runtime) proveRollbackPackageOperation(ctx context.Context, operation P
 }
 
 func (r *Runtime) proveUninstalledPackageOperation(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep) error {
-	if _, ok := completed["move_to_quarantine"]; !ok {
+	if _, ok := completed[StepMoveToQuarantine]; !ok {
 		return errors.New("quarantine move step missing")
 	}
-	if _, ok := completed["cleanup_kernel_repositories"]; !ok {
+	if _, ok := completed[StepCleanupKernelRepositories]; !ok {
 		return errors.New("repository cleanup step missing")
 	}
 	_, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
@@ -351,9 +467,16 @@ func (r *Runtime) proveUninstalledPackageOperation(ctx context.Context, operatio
 			return errors.New("installed path absence could not be proven")
 		}
 	}
-	quarantinePath := filepath.Join(r.root, "quarantine", operation.OperationID)
-	if _, statErr := os.Stat(quarantinePath); statErr == nil || !os.IsNotExist(statErr) {
-		return errors.New("quarantine finalization could not be proven")
+	qm, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+	if qmErr == nil && qm.GenerationQuarantinePath != "" {
+		if _, statErr := os.Stat(qm.GenerationQuarantinePath); statErr == nil || !os.IsNotExist(statErr) {
+			return errors.New("quarantine finalization could not be proven")
+		}
+	} else {
+		quarantinePath := filepath.Join(r.root, "quarantine", operation.OperationID)
+		if _, statErr := os.Stat(quarantinePath); statErr == nil || !os.IsNotExist(statErr) {
+			return errors.New("quarantine finalization could not be proven")
+		}
 	}
 	return nil
 }

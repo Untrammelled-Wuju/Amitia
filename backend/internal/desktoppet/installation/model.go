@@ -123,6 +123,9 @@ func (i *Installation) CanEnable() bool {
 	if i == nil {
 		return false
 	}
+	if i.LifecycleState == LifecycleUninstalled || i.LifecycleState == LifecycleUninstalling || i.LifecycleState == LifecycleInvalid {
+		return false
+	}
 	if i.LifecycleState != "" {
 		return i.LifecycleState == LifecycleInstalled || i.DesiredState == DesiredDisabled
 	}

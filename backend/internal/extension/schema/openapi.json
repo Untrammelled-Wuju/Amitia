@@ -2733,6 +2733,29 @@
         "summary": "Get a package operation audit record"
       }
     },
+    "/extensions/package-operations/{operationId}/final-gate": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Final gate verification result"
+          },
+          "404": {
+            "description": "Operation not found"
+          }
+        },
+        "summary": "Verify the final gate for a package operation"
+      }
+    },
     "/extensions/packages": {
       "get": {
         "responses": {
@@ -2805,6 +2828,13 @@
         "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}],
         "responses": {"200": {"description": "Package operation"}},
         "summary": "Get a package operation compatibility view"
+      }
+    },
+    "/extension-package-operations/{operationId}/final-gate": {
+      "get": {
+        "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}],
+        "responses": {"200": {"description": "Final gate verification result"}, "404": {"description": "Operation not found"}},
+        "summary": "Verify the final gate for a package operation (compatibility view)"
       }
     },
     "/extensions/packages/operations/install": {
@@ -5945,6 +5975,30 @@
           }
         },
         "summary": "Atomically rollback without restoring revoked grants"
+      }
+    },
+    "/extensions/{id}/versions/{version}/rollback/preview": {
+      "get": {
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "schema": {"type": "string"}},
+          {"in": "path", "name": "version", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "Rollback preview with affected resources"},
+          "404": {"description": "Extension or version not found"}
+        },
+        "summary": "Preview a version rollback without executing it"
+      },
+      "post": {
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "schema": {"type": "string"}},
+          {"in": "path", "name": "version", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {"description": "Rollback preview with affected resources"},
+          "404": {"description": "Extension or version not found"}
+        },
+        "summary": "Preview a version rollback without executing it"
       }
     }
   },

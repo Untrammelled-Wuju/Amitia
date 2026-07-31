@@ -1,5 +1,5 @@
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
-import type { ActionPlayer } from "./action-player";
+import type { ActionPlayer, PlayerLike } from "./action-player";
 import type { DesktopPetActionScheduler } from "./action-scheduler";
 
 export interface IdleControllerConfig {
@@ -27,7 +27,7 @@ interface WeightedCandidate {
 }
 
 export class IdleController {
-  private player: ActionPlayer;
+  private player: PlayerLike;
   private scheduler: DesktopPetActionScheduler;
   private loaded: LoadedInstallation | null = null;
   private config: IdleControllerConfig;
@@ -38,7 +38,7 @@ export class IdleController {
   private running = false;
 
   constructor(
-    player: ActionPlayer,
+    player: PlayerLike,
     scheduler: DesktopPetActionScheduler,
     config?: Partial<IdleControllerConfig>,
   ) {

@@ -26,7 +26,7 @@ func testRepository(t *testing.T) (*gorm.DB, *Repository) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply([]migration.Migration{migration.ExtensionsMigration()}); err != nil {
+	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply([]migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration()}); err != nil {
 		t.Fatal(err)
 	}
 	return db, NewRepository(db)
@@ -385,7 +385,7 @@ func TestLegacyAdapterAndRuntimeRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 	items, _ := runtime.Registry.List(context.Background(), SkillFilter{})
-	expected := len(tool.GetAll()) + len(tool.GetMemoryTools())
+	expected := len(tool.GetAll()) + len(tool.GetMemoryTools()) + 1
 	if len(items) != expected {
 		t.Fatalf("expected %d legacy skills, got %d", expected, len(items))
 	}

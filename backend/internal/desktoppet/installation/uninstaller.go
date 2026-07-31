@@ -90,7 +90,7 @@ func (u *uninstaller) Uninstall(userId, installationId string) error {
 	if err := u.ensureNotProtected(installDir); err != nil {
 		return NewInstallationError(ErrCodeInstallationInvalid, err.Error(), ErrInstallationInvalid)
 	}
-	if err := os.RemoveAll(installDir); err != nil {
+	if err := removeTree(installDir); err != nil {
 		log.Logger.Errorf("uninstaller: 删除安装目录失败 installationId=%s dir=%s err=%v", installationId, installDir, err)
 		return NewInstallationError(ErrCodeInstallationFailed,
 			fmt.Sprintf("删除安装目录失败: %s", installDir), err)
@@ -135,7 +135,7 @@ func (u *uninstaller) PurgeGenerationData(userId, generationTaskId string, confi
 		return NewInstallationError(ErrCodeInstallationFailed,
 			fmt.Sprintf("查询生成任务目录失败: %s", genTaskDir), err)
 	}
-	if err := os.RemoveAll(genTaskDir); err != nil {
+	if err := removeTree(genTaskDir); err != nil {
 		return NewInstallationError(ErrCodeInstallationFailed,
 			fmt.Sprintf("删除生成任务目录失败: %s", genTaskDir), err)
 	}

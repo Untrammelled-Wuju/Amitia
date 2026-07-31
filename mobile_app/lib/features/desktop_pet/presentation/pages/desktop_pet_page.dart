@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -53,7 +55,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
                 label: '生成新桌宠',
                 icon: Icons.auto_awesome_outlined,
                 isFullWidth: true,
-                onPressed: () {},
+                onPressed: () => context.push(AppRoutes.workshopPet),
               ),
             ),
           ],
@@ -113,7 +115,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
         child: GestureDetector(
-          onTap: () {},
+          onTap: () => amitiaComingSoon(context, '动作管理'),
           behavior: HitTestBehavior.opaque,
           child: Row(
             children: [

@@ -610,7 +610,7 @@ func (c *Coordinator) stageToStagingDir(petID, releaseID, installationID string)
 	if _, err := os.Stat(published); err != nil {
 		return "", fmt.Errorf("published 目录不存在: %w", err)
 	}
-	_ = os.RemoveAll(stagingDir)
+	_ = removeTree(stagingDir)
 	if err := copyDirContents(published, stagingDir); err != nil {
 		return "", fmt.Errorf("复制 published 到 staging 失败: %w", err)
 	}
@@ -704,7 +704,7 @@ func (c *Coordinator) completeOp(op *InstallationOperation) error {
 }
 
 func (c *Coordinator) cleanupStagingDir(stagingDir string) error {
-	return os.RemoveAll(stagingDir)
+	return removeTree(stagingDir)
 }
 
 func (c *Coordinator) markInstallationInvalid(installationID string) error {

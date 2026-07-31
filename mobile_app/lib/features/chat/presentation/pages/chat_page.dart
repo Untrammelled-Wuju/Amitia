@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_message.dart';
+import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../shared/models/models.dart';
 import '../../../../shared/mock_data/mock_data.dart';
@@ -84,6 +86,51 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return false;
   }
 
+  void _showChatActionsSheet(BuildContext context) {
+    showAmitiaActionSheet<int>(
+      context,
+      title: '聊天操作',
+      actions: const [
+        AmitiaActionSheetItem(icon: Icons.person_outline, label: '查看角色详情', value: 0),
+        AmitiaActionSheetItem(icon: Icons.cleaning_services_outlined, label: '清空聊天记录', value: 1, isDestructive: true),
+        AmitiaActionSheetItem(icon: Icons.file_download_outlined, label: '导出聊天记录', value: 2),
+        AmitiaActionSheetItem(icon: Icons.share_outlined, label: '分享对话', value: 3),
+      ],
+    ).then((result) {
+      if (result == null || !mounted) return;
+      switch (result) {
+        case 0:
+          context.push(AppRoutes.character(ref.read(currentCharacterIdProvider)));
+        case 1:
+          showAmitiaConfirmDialog(
+            context,
+            title: '清空聊天记录',
+            message: '确定要清空当前聊天记录吗？此操作不可撤销。',
+            confirmLabel: '清空',
+            isDestructive: true,
+          ).then((confirmed) {
+            if (confirmed == true && mounted) {
+              setState(() {
+                _messages.clear();
+                _messages.add(ChatMessage(
+                  id: 'sys${DateTime.now().millisecondsSinceEpoch}',
+                  role: MessageRole.system,
+                  type: MessageType.systemNotice,
+                  content: '聊天记录已清空',
+                  time: DateTime.now(),
+                ));
+              });
+              amitiaSnackBar(context, '聊天记录已清空');
+            }
+          });
+        case 2:
+          amitiaComingSoon(context, '导出聊天记录');
+        case 3:
+          amitiaComingSoon(context, '分享对话');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
@@ -125,11 +172,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         actions: [
           AmitiaIconButton(
             icon: Icons.search,
-            onPressed: () => context.push('/conversations'),
+            onPressed: () => context.push(AppRoutes.conversations),
           ),
           AmitiaIconButton(
             icon: Icons.more_horiz,
-            onPressed: () {},
+            onPressed: () => _showChatActionsSheet(context),
           ),
         ],
       ),

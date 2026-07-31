@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,9 +17,12 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
+const packageConfigSnapshotSchemaVersion = "1.0.0"
+
 type packageConfigSnapshot struct {
-	Metadata   map[string]any `json:"metadata"`
-	CapturedAt string         `json:"capturedAt"`
+	Metadata      map[string]any `json:"metadata"`
+	SchemaVersion string         `json:"schemaVersion"`
+	CapturedAt    string         `json:"capturedAt"`
 }
 
 type packageResourceSnapshotEntry struct {
@@ -43,9 +47,11 @@ type packageMigrationStateSnapshot struct {
 }
 
 type packageUserDataMigrationState struct {
-	Mode      string   `json:"mode"`
-	Snapshots []string `json:"snapshots,omitempty"`
-	Completed []string `json:"completed,omitempty"`
+	Mode           string           `json:"mode"`
+	Snapshots      []string         `json:"snapshots,omitempty"`
+	Completed      []string         `json:"completed,omitempty"`
+	AffectedTables []string         `json:"affectedTables,omitempty"`
+	RecordCounts   map[string]int64 `json:"recordCounts,omitempty"`
 }
 
 type packageSnapshotHashPayload struct {
@@ -69,7 +75,7 @@ type packageSnapshotHashPayload struct {
 
 func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed domain.ExtensionInstallation) (string, string, string, string, string, error) {
 	metadata, refs := sanitizePackageSnapshotMap(installed.Metadata)
-	configJSON, err := json.Marshal(packageConfigSnapshot{Metadata: metadata, CapturedAt: installed.UpdatedAt.UTC().Format(time.RFC3339Nano)})
+	configJSON, err := json.Marshal(packageConfigSnapshot{Metadata: metadata, SchemaVersion: packageConfigSnapshotSchemaVersion, CapturedAt: installed.UpdatedAt.UTC().Format(time.RFC3339Nano)})
 	if err != nil {
 		return "", "", "", "", "", err
 	}
@@ -109,10 +115,19 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 	sort.Slice(operations, func(i, j int) bool { return operations[i].OperationID < operations[j].OperationID })
 	migrationSnapshot := packageMigrationStateSnapshot{Mode: "none"}
 	userState := packageUserDataMigrationState{Mode: "none"}
+	affectedTableSet := make(map[string]struct{})
 	if len(definitions) > 0 || len(operations) > 0 {
 		migrationSnapshot.Mode = "repository"
 		migrationSnapshot.Definitions = definitions
 		userState.Mode = "repository"
+		userState.RecordCounts = make(map[string]int64)
+	}
+	for _, definition := range definitions {
+		for _, domain := range definition.DataDomains {
+			if domain.Namespace != "" {
+				affectedTableSet[domain.Namespace] = struct{}{}
+			}
+		}
 	}
 	for _, operation := range operations {
 		steps, stepErr := r.container.MigrationRepository.ListMigrationSteps(ctx, operation.OperationID)
@@ -127,9 +142,16 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		if operation.Status == migration.OperationStatusCompleted {
 			userState.Completed = append(userState.Completed, operation.OperationID)
 		}
+		if userState.RecordCounts != nil {
+			userState.RecordCounts[operation.OperationID] = int64(len(steps))
+		}
 	}
 	sort.Strings(userState.Snapshots)
 	sort.Strings(userState.Completed)
+	for table := range affectedTableSet {
+		userState.AffectedTables = append(userState.AffectedTables, table)
+	}
+	sort.Strings(userState.AffectedTables)
 	migrationJSON, err := json.Marshal(migrationSnapshot)
 	if err != nil {
 		return "", "", "", "", "", err
@@ -275,6 +297,29 @@ func (r *Runtime) restorePackageMigrationState(ctx context.Context, point Packag
 	return nil
 }
 
+type installationStandardColumns struct {
+	LastOperationID      string
+	CurrentGenerationID  string
+	CurrentVersionID     string
+	CurrentArtifactID    string
+}
+
+func (r *Runtime) getInstallationStandardColumns(ctx context.Context, extensionID string) (installationStandardColumns, error) {
+	var cols installationStandardColumns
+	db := r.container.PackageRepository.DB()
+	if db == nil {
+		return cols, fmt.Errorf("kernel: installation database unavailable for standard columns")
+	}
+	err := db.QueryRowContext(ctx, `SELECT COALESCE(last_operation_id, ''), COALESCE(current_generation_id, ''), COALESCE(current_version_id, ''), COALESCE(current_artifact_id, '') FROM extension_installations WHERE extension_id = ?`, extensionID).Scan(&cols.LastOperationID, &cols.CurrentGenerationID, &cols.CurrentVersionID, &cols.CurrentArtifactID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return cols, fmt.Errorf("kernel: installation row missing for extension %s", extensionID)
+		}
+		return cols, fmt.Errorf("kernel: query installation standard columns: %w", err)
+	}
+	return cols, nil
+}
+
 func (r *Runtime) restoreForwardPackagePoint(ctx context.Context, point PackageRollbackPoint) error {
 	if err := validatePackageSnapshot(point); err != nil {
 		return err
@@ -318,9 +363,25 @@ func (r *Runtime) restoreForwardPackagePoint(ctx context.Context, point PackageR
 	installation.PackageID = artifact.ArtifactID
 	installation.EnablementState = domain.EnablementDisabled
 	installation.UpdatedAt = time.Now().UTC()
+	stdCols, stdErr := r.getInstallationStandardColumns(ctx, point.ExtensionID)
+	if stdErr != nil {
+		return stdErr
+	}
 	currentMetadata := installation.Metadata
 	installation.Metadata = map[string]any{"installedPath": point.InstalledPath, "artifactId": artifact.ArtifactID, "archiveHash": artifact.ArchiveHash, "manifestHash": artifact.ManifestHash, "contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash, "installedTreeHash": installedTreeHash}
-	for _, key := range []string{"ownerUserId", "scopeType", "scopeId", "operationId", "generation"} {
+	if stdCols.LastOperationID != "" {
+		installation.Metadata["lastOperationId"] = stdCols.LastOperationID
+	}
+	if stdCols.CurrentGenerationID != "" {
+		installation.Metadata["generationId"] = stdCols.CurrentGenerationID
+	}
+	if stdCols.CurrentVersionID != "" {
+		installation.Metadata["currentVersionId"] = stdCols.CurrentVersionID
+	}
+	if stdCols.CurrentArtifactID != "" {
+		installation.Metadata["currentArtifactId"] = stdCols.CurrentArtifactID
+	}
+	for _, key := range []string{"ownerUserId", "scopeType", "scopeId"} {
 		if value, exists := currentMetadata[key]; exists {
 			installation.Metadata[key] = value
 		}
@@ -388,7 +449,7 @@ func (r *Runtime) restoreForwardPackagePoint(ctx context.Context, point PackageR
 
 func isPackageOperationalMetadataKey(key string) bool {
 	switch key {
-	case "installedPath", "artifactId", "archiveHash", "manifestHash", "contentTreeHash", "artifactHash", "installedTreeHash", "ownerUserId", "scopeType", "scopeId", "operationId", "generation":
+	case "installedPath", "artifactId", "archiveHash", "manifestHash", "contentTreeHash", "artifactHash", "installedTreeHash", "ownerUserId", "scopeType", "scopeId", "operationId", "generation", "lastOperationId", "generationId", "currentVersionId", "currentArtifactId":
 		return true
 	default:
 		return false

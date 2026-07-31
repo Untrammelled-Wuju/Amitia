@@ -300,6 +300,15 @@ func TestBaseline_FinalGateProbe_MetricNames(t *testing.T) {
 		"installation_without_files",
 		"files_without_installation",
 		"active_contribution_for_disabled_installation",
+		"unresolved_package_operations",
+		"orphan_artifacts",
+		"orphan_installation_generations",
+		"installation_read_model_mismatches",
+		"unsigned_production_packages",
+		"untrusted_installed_packages",
+		"corrupted_artifacts",
+		"failed_uninstall_restores",
+		"ambiguous_recovery_operations",
 	}
 	if len(names) != len(required) {
 		t.Fatalf("expected %d metric names, got %d", len(required), len(names))

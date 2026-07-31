@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../shared/mock_data/mock_data.dart';
 
 class GameCenterPage extends ConsumerWidget {
@@ -44,7 +47,7 @@ class GameCenterPage extends ConsumerWidget {
                 icon: Icons.extension_outlined,
                 isFullWidth: true,
                 isSecondary: true,
-                onPressed: () {},
+                onPressed: () => context.push(AppRoutes.extensions),
               ),
             ),
           ],
@@ -83,7 +86,7 @@ class GameCenterPage extends ConsumerWidget {
               label: '连接',
               isSecondary: true,
               height: 36,
-              onPressed: () {},
+              onPressed: () => amitiaComingSoon(context, '游戏连接'),
             ),
           ],
         ),
@@ -172,7 +175,7 @@ class GameCenterPage extends ConsumerWidget {
                 ),
               ),
               GestureDetector(
-                onTap: () {},
+                onTap: () => amitiaComingSoon(context, '安装插件'),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(

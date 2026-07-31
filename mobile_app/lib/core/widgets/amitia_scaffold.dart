@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+
+enum AmitiaAppBarNavigation {
+  drawer,
+  back,
+  none,
+}
 
 class AmitiaScaffold extends StatelessWidget {
   final Widget? body;
@@ -44,6 +51,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
   final Widget? leading;
   final bool showBackButton;
+  final AmitiaAppBarNavigation navigation;
   final bool centerTitle;
   final double elevation;
 
@@ -54,6 +62,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.leading,
     this.showBackButton = false,
+    this.navigation = AmitiaAppBarNavigation.none,
     this.centerTitle = false,
     this.elevation = 0,
   });
@@ -63,10 +72,30 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget? effectiveLeading = leading;
+    if (effectiveLeading == null) {
+      if (navigation == AmitiaAppBarNavigation.back || showBackButton) {
+        effectiveLeading = IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
+        );
+      } else if (navigation == AmitiaAppBarNavigation.drawer) {
+        effectiveLeading = IconButton(
+          icon: const Icon(Icons.menu, size: 22),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        );
+      }
+    }
     return AppBar(
       title: titleWidget ?? (title != null ? Text(title!, style: AppTypography.pageTitle(context)) : null),
       actions: actions,
-      leading: leading ?? (showBackButton ? IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 20), onPressed: () => Navigator.pop(context)) : null),
+      leading: effectiveLeading,
       centerTitle: centerTitle,
       elevation: elevation,
       scrolledUnderElevation: 0,

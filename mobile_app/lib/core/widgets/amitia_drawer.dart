@@ -5,68 +5,28 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+import '../../app/app_routes.dart';
+import '../../app/drawer_route_state.dart';
+import '../../shared/mock_data/mock_data.dart';
 import 'amitia_misc.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 final currentCharacterIdProvider = StateProvider<String>((ref) => 'c1');
 final isAgentModeProvider = StateProvider<bool>((ref) => false);
-
-class DrawerMenuItem {
-  final String title;
-  final IconData icon;
-  final String route;
-
-  const DrawerMenuItem({required this.title, required this.icon, required this.route});
-}
-
-class DrawerMenuGroup {
-  final String? label;
-  final List<DrawerMenuItem> items;
-
-  const DrawerMenuGroup({this.label, required this.items});
-}
-
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
+final mockStartupStageProvider = StateProvider<MockStartupStage>((ref) => MockStartupStage.ready);
 
-final drawerMenuGroups = <DrawerMenuGroup>[
-  const DrawerMenuGroup(items: [
-    DrawerMenuItem(title: '对话', icon: Icons.chat_bubble_outline, route: '/chat'),
-    DrawerMenuItem(title: '概览', icon: Icons.dashboard_outlined, route: '/dashboard'),
-    DrawerMenuItem(title: '角色', icon: Icons.people_outline, route: '/characters'),
-    DrawerMenuItem(title: 'Agent', icon: Icons.auto_awesome, route: '/agent'),
-    DrawerMenuItem(title: '记忆', icon: Icons.memory, route: '/memory'),
-    DrawerMenuItem(title: '扩展', icon: Icons.extension_outlined, route: '/extensions'),
-    DrawerMenuItem(title: '创意工坊', icon: Icons.brush_outlined, route: '/workshop'),
-    DrawerMenuItem(title: '渠道连接', icon: Icons.sync_alt, route: '/channels/wechat'),
-    DrawerMenuItem(title: '游戏中心', icon: Icons.sports_esports_outlined, route: '/game-center'),
-    DrawerMenuItem(title: '桌宠中心', icon: Icons.pets_outlined, route: '/desktop-pet'),
-  ]),
-  const DrawerMenuGroup(label: '辅助功能', items: [
-    DrawerMenuItem(title: '数据与备份', icon: Icons.backup_outlined, route: '/settings/backup'),
-    DrawerMenuItem(title: '日程提醒', icon: Icons.notifications_active_outlined, route: '/reminders'),
-    DrawerMenuItem(title: '聊天记录', icon: Icons.history_edu_outlined, route: '/chat-logs'),
-    DrawerMenuItem(title: '表情包', icon: Icons.emoji_emotions_outlined, route: '/emotes'),
-    DrawerMenuItem(title: '设置', icon: Icons.settings_outlined, route: '/settings'),
-    DrawerMenuItem(title: '工具箱', icon: Icons.build_outlined, route: '/toolbox'),
-    DrawerMenuItem(title: '关于 Amitia', icon: Icons.info_outline, route: '/about'),
-  ]),
-];
+enum MockStartupStage {
+  firstLaunch,
+  needsLogin,
+  privacyRequired,
+  ready,
+}
 
-const developerMenuGroup = DrawerMenuGroup(label: '开发者模式', items: [
-  DrawerMenuItem(title: '开发者主页', icon: Icons.developer_mode, route: '/developer'),
-  DrawerMenuItem(title: 'Kernel 内核', icon: Icons.memory, route: '/developer/kernel'),
-  DrawerMenuItem(title: 'WASM 模块', icon: Icons.code, route: '/developer/kernel/wasm'),
-  DrawerMenuItem(title: 'Hook 系统', icon: Icons.link, route: '/developer/kernel/hooks'),
-  DrawerMenuItem(title: '可信服务', icon: Icons.verified_user, route: '/developer/kernel/trusted-services'),
-  DrawerMenuItem(title: '内核任务', icon: Icons.task_alt, route: '/developer/kernel/tasks'),
-  DrawerMenuItem(title: '事件总线', icon: Icons.event, route: '/developer/kernel/events'),
-  DrawerMenuItem(title: '调度管理', icon: Icons.schedule, route: '/developer/kernel/schedules'),
-  DrawerMenuItem(title: '桌面贡献', icon: Icons.desktop_windows, route: '/developer/kernel/desktop'),
-  DrawerMenuItem(title: '更新管理', icon: Icons.system_update, route: '/developer/kernel/updates'),
-  DrawerMenuItem(title: '诊断控制台', icon: Icons.terminal, route: '/developer/kernel/dev-console'),
-  DrawerMenuItem(title: '数据库迁移', icon: Icons.storage, route: '/developer/kernel/migrations'),
-  DrawerMenuItem(title: '开发模式设置', icon: Icons.tune, route: '/developer/kernel/dev-mode'),
-]);
+class _CharInfo {
+  final String name, status, description, avatarInitial, avatarColor;
+  _CharInfo(this.name, this.status, this.description, this.avatarInitial, this.avatarColor);
+}
 
 class AmitiaDrawer extends ConsumerStatefulWidget {
   final String currentRoute;
@@ -78,124 +38,44 @@ class AmitiaDrawer extends ConsumerStatefulWidget {
 }
 
 class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
+  late PageController _pageController;
+  late DrawerRouteState _routeState;
+  bool _pageInitialized = false;
+
   @override
-  Widget build(BuildContext context) {
-    final themeMode = ref.watch(themeModeProvider);
-    final isDark = themeMode == ThemeMode.dark;
-    final isDevMode = ref.watch(isDeveloperModeProvider);
-    final characterId = ref.watch(currentCharacterIdProvider);
-    final character = _getCharacter(characterId);
+  void initState() {
+    super.initState();
+    _routeState = resolveDrawerRouteState(widget.currentRoute);
+    _pageController = PageController(initialPage: _routeState.initialPanel == DrawerPanel.more ? 1 : 0);
+    _pageInitialized = true;
+  }
 
-    final allGroups = isDevMode ? [...drawerMenuGroups, developerMenuGroup] : drawerMenuGroups;
+  @override
+  void didUpdateWidget(AmitiaDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentRoute != widget.currentRoute) {
+      _routeState = resolveDrawerRouteState(widget.currentRoute);
+      if (_pageInitialized) {
+        final targetPage = _routeState.initialPanel == DrawerPanel.more ? 1 : 0;
+        if (_pageController.hasClients && (_pageController.page?.round() ?? 0) != targetPage) {
+          _pageController.jumpToPage(targetPage);
+        }
+      }
+    }
+  }
 
-    return Material(
-      color: context.surfacePrimary,
-      child: SafeArea(
-        child: SizedBox(
-          width: MediaQuery.sizeOf(context).width * 0.82 > 340 ? 340 : MediaQuery.sizeOf(context).width * 0.82,
-          child: Column(
-            children: [
-              _CharacterArea(
-                name: character.name,
-                status: character.status,
-                identity: character.description,
-                avatarInitial: character.avatarInitial,
-                avatarColor: character.avatarColor,
-                onTap: () => _navigateTo('/characters'),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                  children: allGroups.map((group) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (group.label != null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 20, top: 12, bottom: 4),
-                            child: Text(group.label!, style: AppTypography.label(context)),
-                          ),
-                        ...group.items.map((item) => _DrawerItem(
-                              item: item,
-                              isSelected: widget.currentRoute == item.route ||
-                                  (item.route == '/chat' && widget.currentRoute.startsWith('/chat')),
-                              onTap: () => _navigateTo(item.route),
-                            )),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        ref.read(themeModeProvider.notifier).state = isDark ? ThemeMode.light : ThemeMode.dark;
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: context.accentSoft,
-                          borderRadius: AppRadius.brTag,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined, size: 18, color: context.accentPrimary),
-                            const SizedBox(width: 6),
-                            Text(isDark ? '暗色' : '亮色', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () {
-                        ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isDevMode ? context.accentPrimary.withValues(alpha: 0.12) : context.surfaceSecondary,
-                          borderRadius: AppRadius.brTag,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.developer_mode, size: 18, color: isDevMode ? context.accentPrimary : context.textTertiary),
-                            const SizedBox(width: 6),
-                            Text('开发者', style: TextStyle(fontSize: 13, color: isDevMode ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text('v1.0.0', style: AppTypography.label(context)),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => _navigateTo('/settings/runtime'),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: context.success.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.circle, size: 10, color: context.success),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _goToMorePanel() {
+    _pageController.animateToPage(1, duration: const Duration(milliseconds: 260), curve: Curves.easeInOutCubic);
+  }
+
+  void _backToMainPanel() {
+    _pageController.animateToPage(0, duration: const Duration(milliseconds: 260), curve: Curves.easeInOutCubic);
   }
 
   void _navigateTo(String route) {
@@ -216,11 +96,408 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     final c = chars[id] ?? chars['c1']!;
     return _CharInfo(c.$1, c.$2, c.$3, c.$4, c.$5);
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
+    final isDevMode = ref.watch(isDeveloperModeProvider);
+    final characterId = ref.watch(currentCharacterIdProvider);
+    final character = _getCharacter(characterId);
+
+    return PopScope(
+      canPop: _routeState.initialPanel == DrawerPanel.main,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _routeState.initialPanel == DrawerPanel.more) {
+          _backToMainPanel();
+        }
+      },
+      child: Material(
+        color: context.surfacePrimary,
+        child: SafeArea(
+          child: SizedBox(
+            width: MediaQuery.sizeOf(context).width * 0.82 > 340 ? 340 : MediaQuery.sizeOf(context).width * 0.82,
+            child: Column(
+              children: [
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      _DrawerMainPanel(
+                        character: character,
+                        routeState: _routeState,
+                        onMoreTap: _goToMorePanel,
+                        onNavigate: _navigateTo,
+                        onCharacterTap: () => _showCharacterSwitchSheet(context),
+                      ),
+                      _DrawerMorePanel(
+                        routeState: _routeState,
+                        isDevMode: isDevMode,
+                        onBack: _backToMainPanel,
+                        onNavigate: _navigateTo,
+                      ),
+                    ],
+                  ),
+                ),
+                _DrawerBottomArea(
+                  isDark: isDark,
+                  isDevMode: isDevMode,
+                  onToggleTheme: () {
+                    ref.read(themeModeProvider.notifier).state = isDark ? ThemeMode.light : ThemeMode.dark;
+                  },
+                  onToggleDevMode: () {
+                    ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
+                  },
+                  onSettingsTap: () => _navigateTo(AppRoutes.settings),
+                  settingsSelected: _routeState.settingsSelected,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCharacterSwitchSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Text('切换角色', style: AppTypography.sectionTitle(context)),
+              ),
+              ...MockData.characters.map((c) {
+                final isSelected = c.id == ref.read(currentCharacterIdProvider);
+                return ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Color(int.parse('FF${c.avatarColor.replaceAll('#', '')}', radix: 16)),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(child: Text(c.avatarInitial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
+                  ),
+                  title: Text(c.name),
+                  subtitle: Text(c.status, style: AppTypography.caption(context)),
+                  trailing: isSelected ? Icon(Icons.check_circle, color: context.accentPrimary, size: 22) : null,
+                  onTap: () {
+                    ref.read(currentCharacterIdProvider.notifier).state = c.id;
+                    Navigator.pop(sheetContext);
+                  },
+                );
+              }),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.people_outline, color: context.accentPrimary),
+                title: Text('管理全部角色', style: TextStyle(color: context.accentPrimary)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _navigateTo(AppRoutes.characters);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
-class _CharInfo {
-  final String name, status, description, avatarInitial, avatarColor;
-  _CharInfo(this.name, this.status, this.description, this.avatarInitial, this.avatarColor);
+class _DrawerMainPanel extends StatelessWidget {
+  final _CharInfo character;
+  final DrawerRouteState routeState;
+  final VoidCallback onMoreTap;
+  final ValueChanged<String> onNavigate;
+  final VoidCallback onCharacterTap;
+
+  const _DrawerMainPanel({
+    required this.character,
+    required this.routeState,
+    required this.onMoreTap,
+    required this.onNavigate,
+    required this.onCharacterTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        _CharacterArea(
+          name: character.name,
+          status: character.status,
+          identity: character.description,
+          avatarInitial: character.avatarInitial,
+          avatarColor: character.avatarColor,
+          onTap: onCharacterTap,
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          child: Row(
+            children: [
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.add_comment_outlined,
+                  label: '新建对话',
+                  onTap: () => onNavigate(AppRoutes.chat),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.search,
+                  label: '搜索会话',
+                  onTap: () => onNavigate(AppRoutes.conversations),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Text('最近会话', style: AppTypography.label(context)),
+        ),
+        ...MockData.conversations.take(5).map((conv) => _RecentConversationTile(
+              title: conv.title,
+              subtitle: conv.lastMessage,
+              onTap: () => onNavigate(AppRoutes.chat),
+            )),
+        const SizedBox(height: AppSpacing.sm),
+        const Divider(height: 1),
+        const SizedBox(height: AppSpacing.sm),
+        _MainMenuItem(
+          icon: Icons.chat_bubble_outline,
+          label: '对话',
+          isSelected: routeState.mainItem == MainDrawerItem.chat,
+          onTap: () => onNavigate(AppRoutes.chat),
+        ),
+        _MainMenuItem(
+          icon: Icons.auto_awesome,
+          label: '任务',
+          isSelected: routeState.mainItem == MainDrawerItem.tasks,
+          onTap: () => onNavigate(AppRoutes.agent),
+        ),
+        _MainMenuItem(
+          icon: Icons.people_outline,
+          label: '角色',
+          isSelected: routeState.mainItem == MainDrawerItem.characters,
+          onTap: () => onNavigate(AppRoutes.characters),
+        ),
+        _MainMenuItem(
+          icon: Icons.memory,
+          label: '记忆',
+          isSelected: routeState.mainItem == MainDrawerItem.memory,
+          onTap: () => onNavigate(AppRoutes.memory),
+        ),
+        _MainMenuItem(
+          icon: Icons.apps_outlined,
+          label: '更多',
+          isSelected: routeState.mainItem == MainDrawerItem.more,
+          showArrow: true,
+          onTap: onMoreTap,
+        ),
+      ],
+    );
+  }
+}
+
+class _DrawerMorePanel extends StatelessWidget {
+  final DrawerRouteState routeState;
+  final bool isDevMode;
+  final VoidCallback onBack;
+  final ValueChanged<String> onNavigate;
+
+  const _DrawerMorePanel({
+    required this.routeState,
+    required this.isDevMode,
+    required this.onBack,
+    required this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+                onPressed: onBack,
+              ),
+              Text('更多', style: AppTypography.pageTitle(context)),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            children: [
+              _MoreGroup(label: '能力与扩展', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
+                _MoreItemData(icon: Icons.extension_outlined, label: '扩展中心', route: AppRoutes.extensions, item: MoreDrawerItem.extensions),
+                _MoreItemData(icon: Icons.brush_outlined, label: '创意工坊', route: AppRoutes.workshop, item: MoreDrawerItem.workshop),
+              ]),
+              _MoreGroup(label: '连接与体验', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
+                _MoreItemData(icon: Icons.sports_esports_outlined, label: '游戏中心', route: AppRoutes.gameCenter, item: MoreDrawerItem.gameCenter),
+                _MoreItemData(icon: Icons.sync_alt, label: '渠道中心', route: AppRoutes.channels, item: MoreDrawerItem.channels),
+                _MoreItemData(icon: Icons.pets_outlined, label: '桌宠中心', route: AppRoutes.desktopPet, item: MoreDrawerItem.desktopPet),
+                _MoreItemData(icon: Icons.notifications_active_outlined, label: '日程与提醒', route: AppRoutes.reminders, item: MoreDrawerItem.reminders),
+              ]),
+              _MoreGroup(label: '数据与内容', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
+                _MoreItemData(icon: Icons.dashboard_outlined, label: '数据概览', route: AppRoutes.dashboard, item: MoreDrawerItem.dashboard),
+                _MoreItemData(icon: Icons.history_edu_outlined, label: '聊天记录', route: AppRoutes.chatLogs, item: MoreDrawerItem.chatLogs),
+                _MoreItemData(icon: Icons.file_download_outlined, label: '聊天记录导入', route: AppRoutes.chatImport, item: MoreDrawerItem.chatImport),
+                _MoreItemData(icon: Icons.emoji_emotions_outlined, label: '表情包', route: AppRoutes.emotes, item: MoreDrawerItem.emotes),
+              ]),
+              if (isDevMode)
+                _MoreGroup(label: '开发与诊断', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
+                  _MoreItemData(icon: Icons.developer_mode, label: '开发者工具', route: AppRoutes.developer, item: MoreDrawerItem.developer),
+                ]),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MoreGroup extends StatelessWidget {
+  final String label;
+  final List<_MoreItemData> items;
+  final ValueChanged<String> onNavigate;
+  final MoreDrawerItem selectedItem;
+
+  const _MoreGroup({required this.label, required this.items, required this.onNavigate, required this.selectedItem});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 20, top: 12, bottom: 4),
+          child: Text(label, style: AppTypography.label(context)),
+        ),
+        ...items.map((item) => _MainMenuItem(
+              icon: item.icon,
+              label: item.label,
+              isSelected: item.item == selectedItem,
+              onTap: () => onNavigate(item.route),
+            )),
+      ],
+    );
+  }
+}
+
+class _MoreItemData {
+  final IconData icon;
+  final String label;
+  final String route;
+  final MoreDrawerItem item;
+
+  const _MoreItemData({required this.icon, required this.label, required this.route, required this.item});
+}
+
+class _DrawerBottomArea extends StatelessWidget {
+  final bool isDark;
+  final bool isDevMode;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onToggleDevMode;
+  final VoidCallback onSettingsTap;
+  final bool settingsSelected;
+
+  const _DrawerBottomArea({
+    required this.isDark,
+    required this.isDevMode,
+    required this.onToggleTheme,
+    required this.onToggleDevMode,
+    required this.onSettingsTap,
+    required this.settingsSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () => onToggleTheme(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: context.accentSoft,
+                    borderRadius: AppRadius.brTag,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined, size: 18, color: context.accentPrimary),
+                      const SizedBox(width: 6),
+                      Text(isDark ? '暗色' : '亮色', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onToggleDevMode,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDevMode ? context.accentPrimary.withValues(alpha: 0.12) : context.surfaceSecondary,
+                    borderRadius: AppRadius.brTag,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.developer_mode, size: 18, color: isDevMode ? context.accentPrimary : context.textTertiary),
+                      const SizedBox(width: 6),
+                      Text('开发者', style: TextStyle(fontSize: 13, color: isDevMode ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: onSettingsTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: settingsSelected ? context.accentSoft : context.surfaceSecondary,
+                    borderRadius: AppRadius.brTag,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.settings_outlined, size: 18, color: settingsSelected ? context.accentPrimary : context.textTertiary),
+                      const SizedBox(width: 6),
+                      Text('设置', style: TextStyle(fontSize: 13, color: settingsSelected ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _CharacterArea extends StatelessWidget {
@@ -271,7 +548,7 @@ class _CharacterArea extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: context.textTertiary, size: 22),
+            Icon(Icons.swap_horiz, color: context.textTertiary, size: 20),
           ],
         ),
       ),
@@ -279,12 +556,84 @@ class _CharacterArea extends StatelessWidget {
   }
 }
 
-class _DrawerItem extends StatelessWidget {
-  final DrawerMenuItem item;
-  final bool isSelected;
+class _QuickAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
   final VoidCallback onTap;
 
-  const _DrawerItem({required this.item, required this.isSelected, required this.onTap});
+  const _QuickAction({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: context.surfaceSecondary,
+          borderRadius: AppRadius.brSmall,
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 20, color: context.accentPrimary),
+            const SizedBox(height: 4),
+            Text(label, style: AppTypography.label(context)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentConversationTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _RecentConversationTile({required this.title, required this.subtitle, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Row(
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 16, color: context.textTertiary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTypography.body(context).copyWith(fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(subtitle, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MainMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final bool showArrow;
+  final VoidCallback onTap;
+
+  const _MainMenuItem({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    this.showArrow = false,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -303,16 +652,19 @@ class _DrawerItem extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(item.icon, size: 20, color: isSelected ? context.accentPrimary : context.textSecondary),
+              Icon(icon, size: 20, color: isSelected ? context.accentPrimary : context.textSecondary),
               const SizedBox(width: 14),
               Text(
-                item.title,
+                label,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
                   color: isSelected ? context.accentPrimary : context.textPrimary,
                 ),
               ),
+              const Spacer(),
+              if (showArrow)
+                Icon(Icons.chevron_right, color: context.textTertiary, size: 22),
             ],
           ),
         ),

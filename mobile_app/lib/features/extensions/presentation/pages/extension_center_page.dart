@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
@@ -59,6 +62,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
         top: false,
         child: Column(
           children: [
+            _buildManagementEntries(context),
             _buildCategoryTabs(context),
             const SizedBox(height: AppSpacing.sm),
             Expanded(
@@ -180,4 +184,80 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
         return '主题';
     }
   }
+
+  Widget _buildManagementEntries(BuildContext context) {
+    final entries = <_MgmtEntry>[
+      _MgmtEntry(title: '扩展包', icon: Icons.inventory_2_outlined, route: AppRoutes.extensionsPackages),
+      _MgmtEntry(title: 'MCP', icon: Icons.hub_outlined, route: AppRoutes.extensionsMcp),
+      _MgmtEntry(title: 'Agent Skills', icon: Icons.smart_toy_outlined, route: AppRoutes.extensionsAgentSkills),
+      _MgmtEntry(title: '兼容 Skills', icon: Icons.extension_outlined, route: AppRoutes.extensionsSkills),
+      _MgmtEntry(title: '系统插件', icon: Icons.widgets_outlined, route: AppRoutes.extensionsPlugins),
+      _MgmtEntry(title: '执行记录', icon: Icons.history_outlined, route: AppRoutes.extensionsRuns),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        const AmitiaSectionHeader(title: '管理入口'),
+        const SizedBox(height: AppSpacing.sm),
+        SizedBox(
+          height: 80,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            itemCount: entries.length,
+            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+            itemBuilder: (context, index) {
+              final e = entries[index];
+              return GestureDetector(
+                onTap: () => context.push(e.route),
+                child: AmitiaCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  child: SizedBox(
+                    width: 56,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: context.accentSoft,
+                            borderRadius: AppRadius.brSmall,
+                          ),
+                          child: Icon(e.icon, size: 20, color: context.accentPrimary),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          e.title,
+                          style: AppTypography.label(context),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+      ],
+    );
+  }
+}
+
+class _MgmtEntry {
+  final String title;
+  final IconData icon;
+  final String route;
+
+  _MgmtEntry({
+    required this.title,
+    required this.icon,
+    required this.route,
+  });
 }

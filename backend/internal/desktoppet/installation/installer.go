@@ -592,7 +592,7 @@ func (s *installer) atomicMoveDir(src, dst string) error {
 			}
 		}
 	}
-	return os.RemoveAll(src)
+	return removeTree(src)
 }
 
 func (s *installer) rollback(installId string, state *installState) {
@@ -605,13 +605,13 @@ func (s *installer) rollback(installId string, state *installState) {
 
 	if state.tmpCreated {
 		if _, err := os.Stat(tmpDir); err == nil {
-			_ = os.RemoveAll(tmpDir)
+			_ = removeTree(tmpDir)
 		}
 	}
 
 	if state.finalMoved {
 		if _, err := os.Stat(finalDir); err == nil {
-			_ = os.RemoveAll(finalDir)
+			_ = removeTree(finalDir)
 		}
 	}
 

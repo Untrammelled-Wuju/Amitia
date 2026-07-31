@@ -9,6 +9,22 @@ export interface PlayerCallbacks {
   onError?: (error: Error) => void;
 }
 
+export interface PlayerLike {
+  attachLoaded(loaded: LoadedInstallation): void;
+  detachLoaded(): void;
+  setSustainedActionMap(map: Record<string, string>): void;
+  play(action: RuntimeAction): void;
+  pause(): void;
+  resume(): void;
+  stop(): void;
+  switchAction(action: RuntimeAction): void;
+  getCurrentAction(): RuntimeAction | null;
+  getCurrentFrameIndex(): number;
+  getState(): PlayerState;
+  getLoopCount(): number;
+  getFallbackChain(action: RuntimeAction, loaded?: LoadedInstallation | null): RuntimeAction[];
+}
+
 const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_CATCHUP_PER_TICK = 64;
 
@@ -85,7 +101,7 @@ function cancelScheduledRaf(id: number | null): void {
   handle.cancel();
 }
 
-export class ActionPlayer {
+export class ActionPlayer implements PlayerLike {
   private currentAction: RuntimeAction | null = null;
   private currentFrameIndex = 0;
   private lastTimestamp = 0;

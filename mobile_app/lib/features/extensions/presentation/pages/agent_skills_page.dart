@@ -356,7 +356,7 @@ class _ImportSkillSheet extends StatelessWidget {
           Text('导入 Agent Skill', style: AppTypography.pageTitle(context)),
           const SizedBox(height: 16),
           GestureDetector(
-            onTap: () {},
+            onTap: () => amitiaComingSoon(context, '导入Agent Skill'),
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(

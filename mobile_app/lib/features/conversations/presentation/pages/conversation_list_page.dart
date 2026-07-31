@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -132,7 +133,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                   icon: Icons.add_comment_outlined,
                   backgroundColor: context.accentPrimary,
                   color: Colors.white,
-                  onPressed: () => context.go('/chat'),
+                  onPressed: () => context.go(AppRoutes.chat),
                 ),
               ],
             ),
@@ -162,7 +163,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                           ...entry.value.map((conv) => _ConversationItem(
                                 conversation: conv,
                                 timeText: _formatTime(conv.lastTime),
-                                onTap: () => context.go('/chat'),
+                                onTap: () => context.go(AppRoutes.chat),
                                 onMore: () => _showActionsSheet(conv),
                               )),
                         ],

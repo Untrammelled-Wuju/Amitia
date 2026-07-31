@@ -37,6 +37,8 @@ import '../features/extensions/presentation/pages/compatible_skills_page.dart';
 import '../features/extensions/presentation/pages/execution_runs_page.dart';
 import '../features/extensions/presentation/pages/extension_run_detail_page.dart';
 import '../features/extensions/presentation/pages/extension_page_host_page.dart';
+import '../features/extensions/presentation/pages/skill_detail_page.dart';
+import '../features/extensions/presentation/pages/plugin_detail_page.dart';
 import '../features/game_center/presentation/pages/game_center_page.dart';
 import '../features/desktop_pet/presentation/pages/desktop_pet_page.dart';
 import '../features/workshop/presentation/pages/workshop_home_page.dart';
@@ -51,6 +53,8 @@ import '../features/workshop/presentation/pages/pet_installations_page.dart';
 import '../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../features/channels/presentation/pages/wechat_page.dart';
 import '../features/channels/presentation/pages/qq_page.dart';
+import '../features/channels/presentation/pages/channel_center_page.dart';
+import '../features/characters/presentation/pages/character_create_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
 import '../features/settings/presentation/pages/model_settings_page.dart';
 import '../features/settings/presentation/pages/appearance_settings_page.dart';
@@ -70,7 +74,6 @@ import '../features/settings/presentation/pages/user_settings_page.dart';
 import '../features/settings/presentation/pages/privacy_scan_page.dart';
 import '../features/settings/presentation/pages/about_page_new.dart';
 import '../features/toolbox/presentation/pages/toolbox_page.dart';
-import '../features/about/presentation/pages/about_page.dart';
 import '../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/privacy/presentation/pages/privacy_page.dart';
@@ -116,7 +119,27 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/chat',
     navigatorKey: _shellNavigatorKey,
-    errorBuilder: (context, state) => NotFoundPage(attemptedPath: state.matchedLocation),
+    redirect: (context, state) {
+      final stage = ref.read(mockStartupStageProvider);
+      final location = state.matchedLocation;
+
+      if (location == '/about') return '/settings/about';
+      if (location == '/toolbox') return '/settings/toolbox';
+
+      switch (stage) {
+        case MockStartupStage.firstLaunch:
+          if (location != '/onboarding') return '/onboarding';
+        case MockStartupStage.needsLogin:
+          if (location != '/login') return '/login';
+        case MockStartupStage.privacyRequired:
+          if (location != '/privacy') return '/privacy';
+        case MockStartupStage.ready:
+          if (location == '/onboarding' || location == '/login' || location == '/privacy') return '/chat';
+      }
+
+      return null;
+    },
+    errorBuilder: (context, state) => NotFoundPage(attemptedPath: state.uri.toString()),
     routes: [
       GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingPage()),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
@@ -129,11 +152,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/chat', builder: (context, state) => const ChatPage()),
           GoRoute(path: '/conversations', builder: (context, state) => const ConversationListPage()),
           GoRoute(path: '/dashboard', builder: (context, state) => const DashboardPage()),
+          GoRoute(path: '/channels', builder: (context, state) => const ChannelCenterPage()),
           GoRoute(path: '/channels/wechat', builder: (context, state) => const WechatPage()),
           GoRoute(path: '/channels/qq', builder: (context, state) => const QqPage()),
           GoRoute(path: '/agent', builder: (context, state) => const AgentPage()),
           GoRoute(path: '/agent/task/:id', builder: (context, state) => AgentTaskDetailPage(taskId: state.pathParameters['id']!)),
           GoRoute(path: '/characters', builder: (context, state) => const CharacterListPage()),
+          GoRoute(path: '/characters/create', builder: (context, state) => const CharacterCreatePage()),
           GoRoute(path: '/characters/:id', builder: (context, state) => CharacterDetailPage(characterId: state.pathParameters['id']!)),
           GoRoute(path: '/characters/:id/life-rules', builder: (context, state) => CharacterLifeRulesPage(characterId: state.pathParameters['id']!)),
           GoRoute(path: '/characters/:id/voice', builder: (context, state) => CharacterVoicePage(characterId: state.pathParameters['id']!)),
@@ -160,8 +185,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/extensions/mcp/:id', builder: (context, state) => McpDetailPage(mcpId: state.pathParameters['id']!)),
           GoRoute(path: '/extensions/mcp/:id/edit', builder: (context, state) => McpEditPage(mcpId: state.pathParameters['id']!)),
           GoRoute(path: '/extensions/agent-skills', builder: (context, state) => const AgentSkillsPage()),
-          GoRoute(path: '/extensions/plugins', builder: (context, state) => const SystemPluginsPage()),
           GoRoute(path: '/extensions/skills', builder: (context, state) => const CompatibleSkillsPage()),
+          GoRoute(path: '/extensions/skills/:id', builder: (context, state) => SkillDetailPage(skillId: state.pathParameters['id']!)),
+          GoRoute(path: '/extensions/plugins', builder: (context, state) => const SystemPluginsPage()),
+          GoRoute(path: '/extensions/plugins/:id', builder: (context, state) => PluginDetailPage(pluginId: state.pathParameters['id']!)),
           GoRoute(path: '/extensions/runs', builder: (context, state) => const ExecutionRunsPage()),
           GoRoute(path: '/extensions/runs/:id', builder: (context, state) => ExtensionRunDetailPage(runId: state.pathParameters['id']!)),
           GoRoute(path: '/extension/page/:pageId', builder: (context, state) => ExtensionPageHostPage(pageId: state.pathParameters['pageId']!)),
@@ -169,7 +196,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/desktop-pet', builder: (context, state) => const DesktopPetPage()),
           GoRoute(path: '/workshop', builder: (context, state) => const WorkshopHomePage()),
           GoRoute(path: '/workshop/skills', builder: (context, state) => const SkillWorkshopPage()),
-          GoRoute(path: '/workshop/skills/:id', builder: (context, state) => SkillDraftEditorPage(draftId: state.pathParameters['id']!)),
+          GoRoute(path: '/workshop/skills/:id/editor', builder: (context, state) => SkillDraftEditorPage(draftId: state.pathParameters['id']!)),
           GoRoute(path: '/workshop/pet', builder: (context, state) => const PetCenterPage()),
           GoRoute(path: '/workshop/pet/create', builder: (context, state) => const PetCreatePage()),
           GoRoute(path: '/workshop/pet/tasks', builder: (context, state) => const PetTasksPage()),
@@ -194,8 +221,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/settings/user', builder: (context, state) => const UserSettingsPage()),
           GoRoute(path: '/settings/privacy-scan', builder: (context, state) => const PrivacyScanPage()),
           GoRoute(path: '/settings/about', builder: (context, state) => const AboutPageNew()),
-          GoRoute(path: '/toolbox', builder: (context, state) => const ToolboxPage()),
-          GoRoute(path: '/about', builder: (context, state) => const AboutPage()),
+          GoRoute(path: '/settings/toolbox', builder: (context, state) => const ToolboxPage()),
           GoRoute(path: '/developer', builder: (context, state) => const DeveloperHomePage()),
           GoRoute(path: '/developer/kernel', builder: (context, state) => const KernelHomePage()),
           GoRoute(path: '/developer/kernel/wasm', builder: (context, state) => const WasmPage()),

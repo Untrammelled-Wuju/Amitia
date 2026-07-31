@@ -252,10 +252,6 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 	}
 
 	w.updateStage(task.ID, executionID, StagePackaging, ProgressManifest)
-	if err := w.buildPackage(task, sourceVal); err != nil {
-		log.Logger.Errorf("build package for task %s failed: %v", task.ID, err)
-		return err
-	}
 
 	w.updateProgress(task.ID, executionID, ProgressPackage)
 	return nil
@@ -421,6 +417,7 @@ func (w *Worker) loadRevisionFrames(rootRelPath string) ([]image.Image, error) {
 	return frames, nil
 }
 
+// Deprecated: 不再在生产流程中调用，Package 构建已由独立流程处理
 func (w *Worker) buildPackage(task *processing.ProcessingTask, sourceVal *processing.SourceValidationResult) error {
 	selector := processing.NewDefaultActionSelector("")
 	defaultAction, err := selector.SelectDefaultAction(sourceVal.SucceededActions)
@@ -758,13 +755,12 @@ func (w *Worker) persistRevision(
 		return fmt.Errorf("create measurement records failed: %w", err)
 	}
 
-	if err := w.repo.ActivateRevision(tx, action.ID, result.RevisionID); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("activate revision failed: %w", err)
-	}
-
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("commit revision transaction failed: %w", err)
+	}
+
+	if err := w.repo.ActivateRevision(w.db, action.ID, result.RevisionID); err != nil {
+		return fmt.Errorf("activate revision failed: %w", err)
 	}
 
 	return nil

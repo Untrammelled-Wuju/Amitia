@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
 
 type PackageFinalGateResult struct {
@@ -19,6 +19,7 @@ type PackageFinalGateResult struct {
 	ExtensionID   string                  `json:"extensionId"`
 	Version       string                  `json:"version"`
 	Checks        []PackageFinalGateCheck `json:"checks"`
+	Findings      []PackageFinalGateFinding `json:"findings,omitempty"`
 	VerifiedAt    string                  `json:"verifiedAt"`
 }
 
@@ -26,6 +27,19 @@ type PackageFinalGateCheck struct {
 	Name   string `json:"name"`
 	Passed bool   `json:"passed"`
 	Detail string `json:"detail,omitempty"`
+}
+
+type PackageFinalGateFinding struct {
+	FindingID    string `json:"findingId"`
+	OperationID  string `json:"operationId"`
+	ExtensionID  string `json:"extensionId"`
+	FindingType  string `json:"findingType"`
+	ResourceID   string `json:"resourceId,omitempty"`
+	Severity     string `json:"severity"`
+	Expected     string `json:"expected,omitempty"`
+	Actual       string `json:"actual,omitempty"`
+	DetectedAt   string `json:"detectedAt"`
+	ResolvedAt   string `json:"resolvedAt,omitempty"`
 }
 
 func (r *PackageRepository) ListOperationSteps(ctx context.Context, operationID string) ([]PackageOperationStep, error) {
@@ -138,8 +152,8 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 				if statErr != nil || !info.IsDir() {
 					checkArtifact.Detail = fmt.Sprintf("installed path unavailable: %v", statErr)
 				} else {
-					actualHash := package_security.ComputeDirHash(installedPath, r.container.PackageSecurity.GetHasher())
-					if actualHash == "" || actualHash != expectedHash {
+					actualHash, hashErr := computeGenerationTreeHash(ctx, installedPath)
+					if hashErr != nil || actualHash != expectedHash {
 						checkArtifact.Detail = "installed tree hash mismatch"
 					} else {
 						checkArtifact.Passed = true
@@ -154,7 +168,11 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	if isUninstall {
 		checkTrust.Passed = true
 	} else if r.container.TrustService == nil {
-		checkTrust.Passed = true
+		checkTrust.Passed = false
+		checkTrust.Detail = "trust service unavailable, fail closed"
+	} else if r.container.PackageTrustRepository == nil {
+		checkTrust.Passed = false
+		checkTrust.Detail = "trust policy repository unavailable, fail closed"
 	} else {
 		artifactForTrust, artErr := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
 		if artErr != nil {
@@ -179,39 +197,38 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	result.Checks = append(result.Checks, checkTrust)
 
 	checkGen := PackageFinalGateCheck{Name: "generation_pointer_consistent"}
-	if r.container.PackageGenerationStore != nil {
-		if isUninstall {
-			_, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
-			if errors.Is(currentErr, ErrPackageGenerationNotFound) {
-				checkGen.Passed = true
-			} else if currentErr == nil {
-				checkGen.Detail = "generation current pointer still exists after uninstall"
-			} else {
-				checkGen.Detail = fmt.Sprintf("generation current read failed: %v", currentErr)
-			}
-		} else if installErr != nil {
-			checkGen.Detail = "installation unavailable, cannot verify generation"
+	if r.container.PackageGenerationStore == nil {
+		checkGen.Passed = false
+		checkGen.Detail = "generation store unavailable, fail closed"
+	} else if isUninstall {
+		_, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
+		if errors.Is(currentErr, ErrPackageGenerationNotFound) {
+			checkGen.Passed = true
+		} else if currentErr == nil {
+			checkGen.Detail = "generation current pointer still exists after uninstall"
 		} else {
-			generationID, _ := installation.Metadata["generationId"].(string)
-			if generationID == "" {
-				checkGen.Passed = true
+			checkGen.Detail = fmt.Sprintf("generation current read failed: %v", currentErr)
+		}
+	} else if installErr != nil {
+		checkGen.Detail = "installation unavailable, cannot verify generation"
+	} else {
+		generationID, _ := installation.Metadata["generationId"].(string)
+		if generationID == "" {
+			checkGen.Passed = true
+		} else {
+			current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
+			if currentErr != nil {
+				checkGen.Detail = fmt.Sprintf("generation current read failed: %v", currentErr)
+			} else if current.GenerationID != generationID {
+				checkGen.Detail = fmt.Sprintf("generation id mismatch: %s != %s", current.GenerationID, generationID)
 			} else {
-				current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
-				if currentErr != nil {
-					checkGen.Detail = fmt.Sprintf("generation current read failed: %v", currentErr)
-				} else if current.GenerationID != generationID {
-					checkGen.Detail = fmt.Sprintf("generation id mismatch: %s != %s", current.GenerationID, generationID)
+				if verifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, current); verifyErr != nil {
+					checkGen.Detail = fmt.Sprintf("generation verification failed: %v", verifyErr)
 				} else {
-					if verifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, current); verifyErr != nil {
-						checkGen.Detail = fmt.Sprintf("generation verification failed: %v", verifyErr)
-					} else {
-						checkGen.Passed = true
-					}
+					checkGen.Passed = true
 				}
 			}
 		}
-	} else {
-		checkGen.Passed = true
 	}
 	result.Checks = append(result.Checks, checkGen)
 
@@ -353,31 +370,111 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	}
 	result.Checks = append(result.Checks, checkConsistency)
 
+	if !isUninstall && installErr == nil {
+		checkStoredPkg := PackageFinalGateCheck{Name: "stored_package_verification"}
+		artifactForVerify, artVErr := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+		if artVErr != nil {
+			checkStoredPkg.Detail = fmt.Sprintf("artifact unavailable for stored package verification: %v", artVErr)
+		} else if _, verifyErr := r.VerifyStoredPackage(ctx, artifactForVerify); verifyErr != nil {
+			checkStoredPkg.Detail = fmt.Sprintf("stored package verification failed: %v", verifyErr)
+		} else {
+			checkStoredPkg.Passed = true
+		}
+		result.Checks = append(result.Checks, checkStoredPkg)
+	}
+
+	checkVersion := PackageFinalGateCheck{Name: "version_record_consistent"}
+	if isUninstall {
+		checkVersion.Passed = true
+	} else if r.container.PackageRepository == nil {
+		checkVersion.Passed = false
+		checkVersion.Detail = "package repository unavailable for version record check"
+	} else {
+		versionRecord, vErr := r.container.PackageRepository.GetCurrentPackageVersion(ctx, operation.ExtensionID)
+		if vErr != nil {
+			checkVersion.Passed = false
+			checkVersion.Detail = fmt.Sprintf("current version record missing: %v", vErr)
+		} else if versionRecord.ArtifactID != operation.ArtifactID {
+			checkVersion.Passed = false
+			checkVersion.Detail = fmt.Sprintf("version record artifact mismatch: %s != %s", versionRecord.ArtifactID, operation.ArtifactID)
+		} else if versionRecord.Version != operation.TargetVersion {
+			checkVersion.Passed = false
+			checkVersion.Detail = fmt.Sprintf("version record version mismatch: %s != %s", versionRecord.Version, operation.TargetVersion)
+		} else {
+			checkVersion.Passed = true
+		}
+	}
+	result.Checks = append(result.Checks, checkVersion)
+
 	allPassed := true
+	var findings []PackageFinalGateFinding
 	for _, check := range result.Checks {
 		if !check.Passed {
 			allPassed = false
-			break
+			findings = append(findings, PackageFinalGateFinding{
+				FindingID:    "gate-finding-" + uuid.NewString(),
+				OperationID:  operationID,
+				ExtensionID:  operation.ExtensionID,
+				FindingType:  check.Name,
+				Severity:     "error",
+				Expected:     "passed",
+				Actual:       check.Detail,
+				DetectedAt:   result.VerifiedAt,
+			})
 		}
 	}
 	result.Passed = allPassed
+	result.Findings = findings
 
-	r.recordFinalGateResult(ctx, operationID, result)
+	if persistErr := r.recordFinalGateResult(ctx, operationID, result); persistErr != nil {
+		if allPassed {
+			return result, fmt.Errorf("kernel: final gate finding persistence failed: %w", persistErr)
+		}
+	}
+
+	if !allPassed {
+		var failedDetails string
+		for _, f := range findings {
+			if failedDetails != "" {
+				failedDetails += "; "
+			}
+			failedDetails += f.FindingType + ": " + f.Actual
+		}
+		return result, &PackageError{
+			Code:              PackageErrCodeFinalGateFailed,
+			HTTPStatus:        409,
+			Retryable:         false,
+			RecoveryRequired:  true,
+			RecommendedAction: "requires_recovery",
+			Cause:             fmt.Errorf("%s: %s", ErrPackageFinalGateFailed, failedDetails),
+		}
+	}
 
 	return result, nil
 }
 
-func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string, result PackageFinalGateResult) {
+func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string, result PackageFinalGateResult) error {
 	if r.container == nil || r.container.PackageRepository == nil {
-		return
+		return fmt.Errorf("kernel: package repository unavailable")
 	}
-	raw, _ := json.Marshal(result)
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("kernel: marshal final gate result: %w", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	status := "failed"
 	if result.Passed {
 		status = "completed"
 	}
-	_ = r.container.PackageRepository.PutStep(ctx, PackageOperationStep{
+	operation, _ := r.container.PackageRepository.getAuthoritativeOperationByID(ctx, operationID)
+	guard := PackageWriteGuard{}
+	if operation.OperationID != "" {
+		lease, leaseErr := r.container.PackageRepository.getExtensionLease(ctx, operation.ExtensionID)
+		if leaseErr == nil && lease.OperationID == operationID {
+			guard = PackageWriteGuard{ExtensionID: operation.ExtensionID, FencingToken: lease.FencingToken}
+		}
+	}
+	if err := r.container.PackageRepository.PutStep(ctx, PackageOperationStep{
 		StepID:       "package-step-final-gate-" + operationID,
 		OperationID:  operationID,
 		StepName:     "final_gate_verification",
@@ -387,5 +484,20 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 		ResultJSON:   string(raw),
 		StartedAt:    now,
 		CompletedAt:  now,
-	}, PackageWriteGuard{})
+	}, guard); err != nil {
+		return fmt.Errorf("kernel: persist final gate step: %w", err)
+	}
+	for _, finding := range result.Findings {
+		if err := r.container.PackageRepository.PutConsistencyFinding(ctx, PackageConsistencyFinding{
+			FindingID:         finding.FindingID,
+			Metric:            "final_gate_" + finding.FindingType,
+			Count:             1,
+			ResourceIDsJSON:   fmt.Sprintf(`["%s","%s"]`, finding.OperationID, finding.ExtensionID),
+			ErrorDetail:       finding.Actual,
+			RecommendedAction: "requires_recovery",
+		}); err != nil {
+			return fmt.Errorf("kernel: persist final gate finding %s: %w", finding.FindingID, err)
+		}
+	}
+	return nil
 }

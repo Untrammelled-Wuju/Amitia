@@ -30,7 +30,8 @@ func packageGenerationFromInstallation(installation domain.ExtensionInstallation
 	treeHash, _ := metadata["installedTreeHash"].(string)
 	operationID, _ := metadata["lastOperationId"].(string)
 	artifactID, _ := metadata["artifactId"].(string)
-	return PackageGenerationCurrent{ExtensionID: string(installation.ExtensionID), GenerationID: generationID, Version: installation.InstalledVersion.String(), ArtifactID: artifactID, TreeHash: treeHash, OperationID: operationID, UpdatedAt: installation.UpdatedAt}
+	fencingToken, _ := metadata["fencingToken"].(float64)
+	return PackageGenerationCurrent{ExtensionID: string(installation.ExtensionID), GenerationID: generationID, Version: installation.InstalledVersion.String(), ArtifactID: artifactID, TreeHash: treeHash, OperationID: operationID, FencingToken: int64(fencingToken), UpdatedAt: installation.UpdatedAt}
 }
 
 func packageGenerationJSON(current PackageGenerationCurrent) string {
@@ -44,7 +45,7 @@ func packageGenerationJSON(current PackageGenerationCurrent) string {
 	return string(data)
 }
 
-func (r *Runtime) preparePackageGeneration(ctx context.Context, operationID string, artifact PackageArtifact, sourcePath string) (PackagePreparedGeneration, PackageGenerationCurrent, error) {
+func (r *Runtime) preparePackageGeneration(ctx context.Context, operationID string, artifact PackageArtifact, sourcePath string, fencingToken int64) (PackagePreparedGeneration, PackageGenerationCurrent, error) {
 	if r.container == nil || r.container.PackageGenerationStore == nil {
 		return PackagePreparedGeneration{}, PackageGenerationCurrent{}, fmt.Errorf("kernel: package generation store unavailable")
 	}
@@ -56,12 +57,13 @@ func (r *Runtime) preparePackageGeneration(ctx context.Context, operationID stri
 		stable = PackageGenerationCurrent{}
 	}
 	prepared, err := r.container.PackageGenerationStore.PrepareGeneration(ctx, PackageGenerationPrepareRequest{
-		ExtensionID:  artifact.ExtensionID,
-		GenerationID: "generation-" + uuid.NewString(),
-		Version:      artifact.Version,
-		ArtifactID:   artifact.ArtifactID,
-		OperationID:  operationID,
-		SourcePath:   sourcePath,
+		ExtensionID:      artifact.ExtensionID,
+		GenerationID:     "generation-" + uuid.NewString(),
+		Version:          artifact.Version,
+		ArtifactID:       artifact.ArtifactID,
+		OperationID:      operationID,
+		SourcePath:       sourcePath,
+		FencingToken:     fencingToken,
 	})
 	if err != nil {
 		return PackagePreparedGeneration{}, stable, err
@@ -108,6 +110,7 @@ func packageInstallationMetadata(base map[string]any, current PackageGenerationC
 	base["installedPath"] = path
 	base["installedTreeHash"] = current.TreeHash
 	base["lastOperationId"] = operationID
+	base["fencingToken"] = current.FencingToken
 	base["currentUpdatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
 	return base
 }

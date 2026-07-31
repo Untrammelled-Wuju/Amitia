@@ -38,6 +38,7 @@ type Handler struct {
 	pending     *PendingTracker
 	state       StateStore
 	eventSink   RuntimeEventSink
+	deduper     *eventDeduplicator
 	upgrader    websocket.Upgrader
 	onRegister  func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
 	onResult    func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
@@ -60,6 +61,7 @@ func NewHandler(
 		pending:   pending,
 		state:     state,
 		eventSink: eventSink,
+		deduper:   newEventDeduplicator(defaultEventDedupCapacity),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -299,21 +301,65 @@ func (h *Handler) dispatchEvent(msg *contracts.RuntimeMessage, payload *contract
 	if h.eventSink == nil {
 		return
 	}
-	switch payload.EventType {
-	case "clicked", "dragged", "playback_completed", "playback_interrupted":
-	default:
+	standardType, ok := normalizeRuntimeEventType(payload.EventType)
+	if !ok {
+		return
+	}
+	if h.deduper != nil && h.deduper.isDuplicate(msg.MessageID) {
+		log.Logger.Debugf("runtime handler: dropping duplicate event type=%s messageId=%s", standardType, msg.MessageID)
 		return
 	}
 	event := RuntimeDomainEvent{
-		EventType:      payload.EventType,
+		EventType:      standardType,
 		InstallationID: summary.InstallationID,
 		UserID:         msg.UserID,
 		Timestamp:      time.Now(),
 		Payload:        payload.Data,
 	}
 	if err := h.eventSink.OnRuntimeEvent(context.Background(), event); err != nil {
-		log.Logger.Errorf("runtime handler: event sink delivery failed type=%s err=%v", payload.EventType, err)
+		log.Logger.Errorf("runtime handler: event sink delivery failed type=%s err=%v", standardType, err)
 	}
+}
+
+var runtimeEventAliases = map[string]string{
+	"clicked":              "desktop.pet.clicked",
+	"double_clicked":       "desktop.pet.double_clicked",
+	"hovered":              "desktop.pet.hovered",
+	"dragged":              "desktop.pet.drag.ended",
+	"drag_started":         "desktop.pet.drag.started",
+	"drag_moved":           "desktop.pet.drag.moved",
+	"playback_completed":   "playback.action.completed",
+	"playback_interrupted": "playback.action.interrupted",
+	"action_switch":        "playback.action.started",
+}
+
+var runtimeStandardEventTypes = map[string]struct{}{
+	"desktop.pet.clicked":         {},
+	"desktop.pet.double_clicked":  {},
+	"desktop.pet.hovered":         {},
+	"desktop.pet.drag.started":    {},
+	"desktop.pet.drag.moved":      {},
+	"desktop.pet.drag.ended":      {},
+	"desktop.pet.fall.started":    {},
+	"desktop.pet.edge.reached":    {},
+	"desktop.pet.interacted":      {},
+	"playback.action.started":     {},
+	"playback.action.completed":   {},
+	"playback.action.interrupted": {},
+	"playback.action.failed":      {},
+}
+
+func normalizeRuntimeEventType(raw string) (string, bool) {
+	if raw == "" {
+		return "", false
+	}
+	if mapped, ok := runtimeEventAliases[raw]; ok {
+		return mapped, true
+	}
+	if _, ok := runtimeStandardEventTypes[raw]; ok {
+		return raw, true
+	}
+	return "", false
 }
 
 func (h *Handler) HandleHeartbeat(runtimeID, sessionID string, payload *contracts.HeartbeatPayload) {

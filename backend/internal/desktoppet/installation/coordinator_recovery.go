@@ -53,7 +53,7 @@ func (c *Coordinator) recoverStagingStage(op *InstallationOperation) error {
 	stagingDir := c.stagingDirForOp(op)
 	if stagingDir != "" {
 		if _, err := os.Stat(stagingDir); err == nil {
-			_ = os.RemoveAll(stagingDir)
+			_ = removeTree(stagingDir)
 		}
 	}
 	if op.InstallationID != "" {
@@ -80,15 +80,15 @@ func (c *Coordinator) recoverVerifyStage(op *InstallationOperation) error {
 	}
 	release, err := c.repo.GetRelease(releaseID)
 	if err != nil {
-		_ = os.RemoveAll(stagingDir)
+		_ = removeTree(stagingDir)
 		return c.failOp(op, ErrCodeInstallationNotFound, "关联 Release 不存在", nil)
 	}
 	if err := c.verifyIntegrity(stagingDir, release.ContentRootHash); err != nil {
-		_ = os.RemoveAll(stagingDir)
+		_ = removeTree(stagingDir)
 		return c.failOp(op, ErrCodePackageHashMismatch, "恢复验证失败", nil)
 	}
 	if err := c.storage.AtomicSwapInstall(stagingDir, op.InstallationID); err != nil {
-		_ = os.RemoveAll(stagingDir)
+		_ = removeTree(stagingDir)
 		return c.failOp(op, ErrCodeInstallationFailed, "恢复时原子交换失败", nil)
 	}
 	return c.recoverCommitDBStage(op)

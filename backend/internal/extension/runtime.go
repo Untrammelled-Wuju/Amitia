@@ -113,9 +113,6 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 		applog.Warn("workflow skill restore warning", applog.Fields{"error_code": asExtensionError(err).Code})
 	}
 	packages := NewPackageService(repository, registry, validator, workflowCompiler, workshop.installer, agentSkills)
-	if err := packages.Restore(ctx); err != nil {
-		return nil, err
-	}
 	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Packages: packages, Lifecycle: lifecycle}, nil
 }
 

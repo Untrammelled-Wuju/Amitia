@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -71,15 +72,15 @@ func (s *ReleaseStorage) EnsurePublishedDir(petID, releaseID string) error {
 }
 
 func (s *ReleaseStorage) RemoveStagingDir(releaseID string) error {
-	return os.RemoveAll(s.StagingDir(releaseID))
+	return removeTree(s.StagingDir(releaseID))
 }
 
 func (s *ReleaseStorage) RemovePublishedDir(petID, releaseID string) error {
-	return os.RemoveAll(s.PublishedDir(petID, releaseID))
+	return removeTree(s.PublishedDir(petID, releaseID))
 }
 
 func (s *ReleaseStorage) RemoveInstallDir(installationID string) error {
-	return os.RemoveAll(s.InstallDir(installationID))
+	return removeTree(s.InstallDir(installationID))
 }
 
 func (s *ReleaseStorage) MoveStagingToPublished(petID, releaseID string) error {
@@ -177,4 +178,40 @@ func copyFileContents(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, data, 0o644)
+}
+
+func (s *ReleaseStorage) ImportStagingDir() string {
+	return filepath.Join(s.BaseDir(), "import-staging")
+}
+
+func (s *ReleaseStorage) EnsureImportStagingDir() error {
+	return os.MkdirAll(s.ImportStagingDir(), 0o755)
+}
+
+func (s *ReleaseStorage) ResolveImportPackageDir(packageDir string) (string, error) {
+	if packageDir == "" {
+		return "", fmt.Errorf("package dir is empty")
+	}
+	if filepath.IsAbs(packageDir) {
+		return "", fmt.Errorf("absolute package dir is not allowed: %s", packageDir)
+	}
+	cleaned := filepath.Clean(packageDir)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path traversal is not allowed in package dir: %s", packageDir)
+	}
+	for _, part := range strings.Split(filepath.ToSlash(cleaned), "/") {
+		if part == ".." {
+			return "", fmt.Errorf("path traversal is not allowed in package dir: %s", packageDir)
+		}
+	}
+	root := s.ImportStagingDir()
+	abs := filepath.Clean(filepath.Join(root, cleaned))
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return "", fmt.Errorf("invalid package dir: %w", err)
+	}
+	if rel != "." && strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("package dir escapes import staging root: %s", packageDir)
+	}
+	return abs, nil
 }

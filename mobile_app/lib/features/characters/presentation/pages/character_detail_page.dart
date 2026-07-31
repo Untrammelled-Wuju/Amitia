@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../shared/models/models.dart';
 import '../../../../shared/mock_data/mock_data.dart';
@@ -51,7 +54,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         actions: [
           AmitiaIconButton(
             icon: Icons.more_horiz,
-            onPressed: () {},
+            onPressed: () => _showCharacterActionsSheet(context),
           ),
         ],
       ),
@@ -234,6 +237,8 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             ],
           ),
         ),
+        const SizedBox(height: AppSpacing.sm),
+        _buildManagementSection(context),
       ],
     );
   }
@@ -552,4 +557,239 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     }
     return '${time.month}/${time.day}';
   }
+
+  Widget _buildManagementSection(BuildContext context) {
+    final isDevMode = ref.watch(isDeveloperModeProvider);
+    final entries = <_ManageEntry>[
+      _ManageEntry(
+        title: '生活规则',
+        icon: Icons.rule_outlined,
+        route: AppRoutes.characterLifeRules(widget.characterId),
+      ),
+      _ManageEntry(
+        title: '语音与声音复刻',
+        icon: Icons.record_voice_over_outlined,
+        route: AppRoutes.characterVoice(widget.characterId),
+      ),
+      _ManageEntry(
+        title: '角色记忆',
+        icon: Icons.memory_outlined,
+        route: AppRoutes.characterMemory(widget.characterId),
+      ),
+      _ManageEntry(
+        title: '关系时间线',
+        icon: Icons.timeline_outlined,
+        route: AppRoutes.characterTimeline(widget.characterId),
+      ),
+      _ManageEntry(
+        title: '主动消息',
+        icon: Icons.send_outlined,
+        route: AppRoutes.characterProactive(widget.characterId),
+      ),
+      _ManageEntry(
+        title: '心理状态',
+        icon: Icons.psychology_outlined,
+        route: AppRoutes.characterPsyche(widget.characterId),
+      ),
+      if (isDevMode)
+        _ManageEntry(
+          title: '调试与诊断',
+          icon: Icons.bug_report_outlined,
+          route: AppRoutes.characterDebug(widget.characterId),
+        ),
+    ];
+
+    return AmitiaCard(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.cardPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: Text('角色管理', style: AppTypography.cardTitle(context)),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ...entries.map((e) => AmitiaListTile(
+                leading: _buildManagementIcon(context, e.icon),
+                title: e.title,
+                trailing: Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+                onTap: () => context.push(e.route),
+              )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManagementIcon(BuildContext context, IconData icon) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: context.accentSoft,
+        borderRadius: AppRadius.brSmall,
+      ),
+      child: Icon(icon, size: 20, color: context.accentPrimary),
+    );
+  }
+
+  void _showCharacterActionsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: context.borderPrimary,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text('角色操作', style: AppTypography.pageTitle(context)),
+                const SizedBox(height: 16),
+                AmitiaListTile(
+                  leading: _buildActionIcon(context, Icons.star_outline, context.accentPrimary),
+                  title: '设为当前角色',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _setAsCurrent();
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildActionIcon(context, Icons.copy_outlined, context.accentPrimary),
+                  title: '复制角色',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _copyCharacter();
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildActionIcon(context, Icons.file_download_outlined, context.accentPrimary),
+                  title: '导出角色包',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _exportCharacter();
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildActionIcon(context, Icons.archive_outlined, context.accentPrimary),
+                  title: '归档角色',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _archiveCharacter();
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildActionIcon(context, Icons.delete_outline, context.error),
+                  title: '删除角色',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showDeleteConfirm(context);
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionIcon(BuildContext context, IconData icon, Color color) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: AppRadius.brSmall,
+      ),
+      child: Icon(icon, size: 20, color: color),
+    );
+  }
+
+  void _setAsCurrent() {
+    ref.read(currentCharacterIdProvider.notifier).state = widget.characterId;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已将「${_character.name}」设为当前角色')),
+    );
+  }
+
+  void _copyCharacter() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已复制角色「${_character.name}」')),
+    );
+  }
+
+  void _exportCharacter() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('正在导出角色包：${_character.name}')),
+    );
+  }
+
+  void _archiveCharacter() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已归档角色「${_character.name}」')),
+    );
+  }
+
+  void _showDeleteConfirm(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+          title: Text('删除角色', style: AppTypography.cardTitle(dialogContext)),
+          content: Text(
+            '确定要删除角色「${_character.name}」吗？所有相关数据将被清除，此操作不可恢复。',
+            style: AppTypography.body(dialogContext),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('取消', style: TextStyle(color: dialogContext.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('已删除角色：${_character.name}'),
+                    backgroundColor: context.error,
+                  ),
+                );
+                Navigator.of(context).pop();
+              },
+              child: Text('删除', style: TextStyle(color: dialogContext.error)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ManageEntry {
+  final String title;
+  final IconData icon;
+  final String route;
+
+  _ManageEntry({
+    required this.title,
+    required this.icon,
+    required this.route,
+  });
 }
