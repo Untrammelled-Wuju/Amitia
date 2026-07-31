@@ -1,7 +1,8 @@
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const MANIFEST_SCHEMA_VERSION = 1;
+const SUPPORTED_SCHEMA_VERSIONS = [1, 2];
+const DEFAULT_SCHEMA_VERSION = 2;
 
 const DEFAULT_ACTION_NOT_FOUND_ERROR = "DEFAULT_ACTION_NOT_FOUND";
 const DEFAULT_ACTION_INVALID_ERROR = "DEFAULT_ACTION_INVALID";
@@ -9,7 +10,7 @@ const UNSUPPORTED_SCHEMA_VERSION_ERROR = "UNSUPPORTED_SCHEMA_VERSION";
 const MANIFEST_READ_FAILED_ERROR = "MANIFEST_READ_FAILED";
 const MANIFEST_PARSE_FAILED_ERROR = "MANIFEST_PARSE_FAILED";
 
-export type ActionLoopType = "loop" | "once" | "hold";
+export type ActionLoopType = "loop" | "once" | "hold" | "ping_pong";
 
 export interface ManifestAction {
   key: string;
@@ -23,6 +24,7 @@ export interface ManifestAction {
   anchor?: { x: number; y: number };
   interruptible: boolean;
   returnAction?: string;
+  config?: string;
 }
 
 export interface Manifest {
@@ -30,10 +32,15 @@ export interface Manifest {
   schemaVersion: number;
   name: string;
   characterId: string;
+  petId?: string;
+  releaseId?: string;
   canvas: { width: number; height: number };
   defaultAction: string;
   preview?: string;
   actions: ManifestAction[];
+  binding?: { installationId?: string; petId?: string };
+  compatibility?: { minRuntimeVersion?: string };
+  integrity?: { contentRootHash?: string; manifestHash?: string };
 }
 
 export interface RuntimeAction {
@@ -48,6 +55,7 @@ export interface RuntimeAction {
   anchor?: { x: number; y: number };
   interruptible: boolean;
   returnAction?: string;
+  config?: string;
   available: boolean;
   loadError?: string;
 }
@@ -75,10 +83,15 @@ interface ManifestFile {
   packageId?: string;
   name?: string;
   characterId?: string;
+  petId?: string;
+  releaseId?: string;
   canvas?: { width?: number; height?: number };
   defaultAction?: string;
   preview?: string;
   actions?: Array<{ key?: string; name?: string; config?: string }>;
+  binding?: { installationId?: string; petId?: string };
+  compatibility?: { minRuntimeVersion?: string };
+  integrity?: { contentRootHash?: string; manifestHash?: string };
 }
 
 interface ActionFileFrame {
@@ -120,7 +133,8 @@ export class ResourceLoader {
   ): Promise<LoadedInstallation> {
     const file = await this.readManifestFile(manifestPath);
 
-    if (file.schemaVersion !== MANIFEST_SCHEMA_VERSION) {
+    const schemaVersion = file.schemaVersion ?? 1;
+    if (!SUPPORTED_SCHEMA_VERSIONS.includes(schemaVersion)) {
       throw new Error(
         `${UNSUPPORTED_SCHEMA_VERSION_ERROR}: ${file.schemaVersion ?? "unknown"}`,
       );
@@ -140,6 +154,7 @@ export class ResourceLoader {
         installPath,
         actionKey,
         entry.name ?? actionKey,
+        entry.config,
       );
 
       if (result.manifestAction) {
@@ -150,10 +165,12 @@ export class ResourceLoader {
 
     const defaultAction = file.defaultAction ?? "";
     const manifest: Manifest = {
-      packageId: file.packageId ?? "",
-      schemaVersion: MANIFEST_SCHEMA_VERSION,
+      packageId: file.packageId ?? file.petId ?? "",
+      schemaVersion,
       name: file.name ?? "",
       characterId: file.characterId ?? "",
+      petId: file.petId,
+      releaseId: file.releaseId,
       canvas: {
         width: file.canvas?.width ?? 0,
         height: file.canvas?.height ?? 0,
@@ -161,6 +178,9 @@ export class ResourceLoader {
       defaultAction,
       preview: file.preview,
       actions: manifestActions,
+      binding: file.binding,
+      compatibility: file.compatibility,
+      integrity: file.integrity,
     };
 
     if (!defaultAction) {
@@ -222,6 +242,7 @@ export class ResourceLoader {
       loaded.installPath,
       actionKey,
       manifestAction?.name ?? cached?.name ?? actionKey,
+      manifestAction?.config,
     );
 
     if (result.manifestAction) {
@@ -300,13 +321,10 @@ export class ResourceLoader {
     installPath: string,
     actionKey: string,
     fallbackName: string,
+    configPath?: string,
   ): Promise<ActionLoadResult> {
-    const actionJsonPath = join(
-      installPath,
-      "actions",
-      actionKey,
-      "action.json",
-    );
+    const relativeConfigPath = configPath || join("actions", actionKey, "action.json");
+    const actionJsonPath = join(installPath, relativeConfigPath);
 
     const buildFailed = (error: string): ActionLoadResult => ({
       manifestAction: null,
@@ -358,6 +376,7 @@ export class ResourceLoader {
       anchor,
       interruptible,
       returnAction,
+      config: relativeConfigPath,
     };
 
     const absoluteFrames = relFrames.map((rel) => join(installPath, rel));
@@ -377,6 +396,7 @@ export class ResourceLoader {
           anchor,
           interruptible,
           returnAction,
+          config: relativeConfigPath,
           available: false,
           loadError: frameCheck.error,
         },
@@ -397,6 +417,7 @@ export class ResourceLoader {
         anchor,
         interruptible,
         returnAction,
+        config: relativeConfigPath,
         available: true,
       },
     };
@@ -439,7 +460,7 @@ export class ResourceLoader {
   }
 
   private normalizeLoopType(value: string | undefined): ActionLoopType {
-    if (value === "loop" || value === "once" || value === "hold") {
+    if (value === "loop" || value === "once" || value === "hold" || value === "ping_pong") {
       return value;
     }
     return "loop";

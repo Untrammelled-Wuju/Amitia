@@ -93,6 +93,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
       appBar: AmitiaAppBar(
         title: '创建角色 (${_currentStep + 1}/${_steps.length})',
         showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
       ),
       body: SafeArea(
         top: false,
@@ -197,7 +198,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
               ),
               child: Center(
                 child: Text(
-                  _nameController.text.isEmpty ? '?' : _nameController.characters.first,
+                  _nameController.text.isEmpty ? '?' : _nameController.text[0],
                   style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -260,7 +261,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                     child: Center(
                       child: Text(
-                        _nameController.text.isEmpty ? '?' : _nameController.characters.first,
+                        _nameController.text.isEmpty ? '?' : _nameController.text[0],
                         style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w600),
                       ),
                     ),

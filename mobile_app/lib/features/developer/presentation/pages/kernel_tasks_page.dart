@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -32,6 +33,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
       appBar: const AmitiaAppBar(
         title: '任务运行时',
         showBackButton: true,
+        fallbackRoute: AppRoutes.developer,
       ),
       body: SafeArea(
         top: false,

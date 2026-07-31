@@ -18,6 +18,7 @@ const (
 	ErrCodeGenerationTaskCreateFailed  = "GENERATION_TASK_CREATE_FAILED"
 	ErrCodeGenerationTaskNotFound      = "GENERATION_TASK_NOT_FOUND"
 	ErrCodeTaskStatusNotDeletable      = "TASK_STATUS_NOT_DELETABLE"
+	ErrCodeTaskNotOwned                = "TASK_NOT_OWNED"
 
 	ErrCodeImageModelUnavailable           = "IMAGE_MODEL_UNAVAILABLE"
 	ErrCodeImageModelCapabilityUnsupported = "IMAGE_MODEL_CAPABILITY_UNSUPPORTED"

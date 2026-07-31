@@ -146,7 +146,11 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 		if !errors.Is(currentErr, ErrPackageGenerationNotFound) {
 			return "", currentErr
 		}
-		state := PackageQuarantinedCurrent{Current: stable, Path: r.resolveQuarantineCurrentPath(ctx, operation)}
+		currentQuarantinePath, pathErr := r.resolveQuarantineCurrentPath(ctx, operation)
+		if pathErr != nil {
+			return "", pathErr
+		}
+		state := PackageQuarantinedCurrent{Current: stable, Path: currentQuarantinePath}
 		if err := r.container.PackageGenerationStore.RestoreQuarantinedGeneration(ctx, stable); err != nil {
 			return "", err
 		}
@@ -164,7 +168,10 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 	if !errors.Is(currentErr, ErrPackageGenerationNotFound) {
 		return "", currentErr
 	}
-	quarantinePath, currentQuarantinePath := r.resolveQuarantinePathsForCleanup(ctx, operation, stable)
+	quarantinePath, currentQuarantinePath, pathErr := r.resolveQuarantinePathsForCleanup(ctx, operation, stable)
+	if pathErr != nil {
+		return "", pathErr
+	}
 	if quarantinePath != "" {
 		if err := os.RemoveAll(quarantinePath); err != nil {
 			return "", err
@@ -178,28 +185,29 @@ func (r *Runtime) reconcileUninstallPackageGeneration(ctx context.Context, opera
 	return "completed", nil
 }
 
-func (r *Runtime) resolveQuarantineCurrentPath(ctx context.Context, operation PackageOperationRecord) string {
+func (r *Runtime) resolveQuarantineCurrentPath(ctx context.Context, operation PackageOperationRecord) (string, error) {
 	qm, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
-	if err == nil && qm.CurrentQuarantinePath != "" {
-		return qm.CurrentQuarantinePath
+	if err != nil {
+		return "", fmt.Errorf("kernel: quarantine metadata unavailable for current path resolution: %w", err)
 	}
-	return filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)
+	if qm.CurrentQuarantinePath == "" {
+		return "", errors.New("kernel: quarantine metadata missing current quarantine path")
+	}
+	return qm.CurrentQuarantinePath, nil
 }
 
-func (r *Runtime) resolveQuarantinePathsForCleanup(ctx context.Context, operation PackageOperationRecord, stable PackageGenerationCurrent) (string, string) {
+func (r *Runtime) resolveQuarantinePathsForCleanup(ctx context.Context, operation PackageOperationRecord, stable PackageGenerationCurrent) (string, string, error) {
 	qm, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
-	if err == nil && qm.GenerationQuarantinePath != "" {
-		currentQuarantine := qm.CurrentQuarantinePath
-		if currentQuarantine == "" {
-			currentQuarantine = filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)
-		}
-		return qm.GenerationQuarantinePath, currentQuarantine
+	if err != nil {
+		return "", "", fmt.Errorf("kernel: quarantine metadata unavailable for cleanup path resolution: %w", err)
 	}
-	quarantine, qErr := r.container.PackageGenerationStore.quarantinePath(stable)
-	if qErr != nil {
-		return "", ""
+	if qm.GenerationQuarantinePath == "" {
+		return "", "", errors.New("kernel: quarantine metadata missing generation quarantine path")
 	}
-	return quarantine, filepath.Join(r.container.ExtRoot, "quarantine", "current", safeDirectoryName(operation.ExtensionID), operation.OperationID)
+	if qm.CurrentQuarantinePath == "" {
+		return "", "", errors.New("kernel: quarantine metadata missing current quarantine path")
+	}
+	return qm.GenerationQuarantinePath, qm.CurrentQuarantinePath, nil
 }
 
 func completedPackageSteps(steps []PackageOperationStep) map[string]PackageOperationStep {
@@ -279,12 +287,15 @@ func (r *Runtime) reconcileInstalledPackageGeneration(ctx context.Context, opera
 		if err := r.compensatePackageGeneration(ctx, PackageGenerationCurrent{GenerationID: operation.StableGeneration}, prepared, true); err != nil {
 			return false, err
 		}
-	} else if err := r.container.PackageGenerationStore.VerifyGeneration(ctx, target); err == nil {
-		if _, err := r.container.PackageGenerationStore.QuarantineGeneration(ctx, target); err != nil {
-			return false, err
+	} else {
+		verifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, target)
+		if verifyErr == nil {
+			if _, err := r.container.PackageGenerationStore.QuarantineGeneration(ctx, target); err != nil {
+				return false, err
+			}
+		} else if !errors.Is(verifyErr, ErrPackageGenerationNotFound) {
+			return false, verifyErr
 		}
-	} else if !errors.Is(err, ErrPackageGenerationNotFound) {
-		return false, err
 	}
 	return true, nil
 }
@@ -297,12 +308,20 @@ type CommitGenerationStepResult struct {
 	ArtifactHash       string `json:"artifactHash"`
 }
 
+type CommitRepositoryResult struct {
+	InstallationID string `json:"installationId"`
+	VersionID      string `json:"versionId"`
+	ArtifactID     string `json:"artifactId"`
+	GenerationID   string `json:"generationId"`
+}
+
 func (r *Runtime) proveInstalledPackageOperation(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep) error {
 	commitTree, ok := completed[StepCommitInstalledTree]
 	if !ok {
 		return errors.New("installed tree commit step missing")
 	}
-	if _, ok := completed[StepCommitKernelRepositories]; !ok {
+	commitRepoStep, ok := completed[StepCommitKernelRepositories]
+	if !ok {
 		return errors.New("kernel repository commit step missing")
 	}
 	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
@@ -330,7 +349,11 @@ func (r *Runtime) proveInstalledPackageOperation(ctx context.Context, operation 
 	if err := json.Unmarshal([]byte(commitTree.ResultJSON), &commitResult); err != nil || filepath.Clean(commitResult.Path) != filepath.Clean(installedPath) {
 		return errors.New("installed path journal mismatch")
 	}
-	if err := r.proveInstalledTree(installedPath, installation, commitResult.ArtifactHash); err != nil {
+	var commitRepoResult CommitRepositoryResult
+	if err := json.Unmarshal([]byte(commitRepoStep.ResultJSON), &commitRepoResult); err != nil || commitRepoResult.InstallationID != installation.InstallationID || commitRepoResult.ArtifactID != operation.ArtifactID {
+		return errors.New("kernel repository commit result mismatch")
+	}
+	if err := r.proveInstalledTree(installedPath, installation, commitResult.TreeHash); err != nil {
 		return err
 	}
 	definition, err := r.container.DefinitionRepository.GetExtension(ctx, installation.ExtensionID, installation.InstalledVersion)
@@ -356,11 +379,12 @@ func (r *Runtime) proveInstalledPackageOperation(ctx context.Context, operation 
 }
 
 func (r *Runtime) proveUpdatedPackageOperation(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep) error {
-	commitTree, ok := completed[StepCommitInstalledTree]
+	commitTree, ok := completed[StepCommitTargetGeneration]
 	if !ok {
 		return errors.New("update tree commit step missing")
 	}
-	if _, ok := completed[StepCommitUpdateState]; !ok {
+	commitUpdateStateStep, ok := completed[StepCommitUpdateState]
+	if !ok {
 		return errors.New("update state commit step missing")
 	}
 	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
@@ -387,6 +411,10 @@ func (r *Runtime) proveUpdatedPackageOperation(ctx context.Context, operation Pa
 	var commitResult CommitGenerationStepResult
 	if err := json.Unmarshal([]byte(commitTree.ResultJSON), &commitResult); err != nil || filepath.Clean(commitResult.Path) != filepath.Clean(installedPath) {
 		return errors.New("update installed path journal mismatch")
+	}
+	var commitRepoResult CommitRepositoryResult
+	if err := json.Unmarshal([]byte(commitUpdateStateStep.ResultJSON), &commitRepoResult); err != nil || commitRepoResult.InstallationID != installation.InstallationID || commitRepoResult.ArtifactID != operation.ArtifactID {
+		return errors.New("update repository commit result mismatch")
 	}
 	if err := r.proveInstalledTree(installedPath, installation, commitResult.TreeHash); err != nil {
 		return err
@@ -468,15 +496,14 @@ func (r *Runtime) proveUninstalledPackageOperation(ctx context.Context, operatio
 		}
 	}
 	qm, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
-	if qmErr == nil && qm.GenerationQuarantinePath != "" {
-		if _, statErr := os.Stat(qm.GenerationQuarantinePath); statErr == nil || !os.IsNotExist(statErr) {
-			return errors.New("quarantine finalization could not be proven")
-		}
-	} else {
-		quarantinePath := filepath.Join(r.root, "quarantine", operation.OperationID)
-		if _, statErr := os.Stat(quarantinePath); statErr == nil || !os.IsNotExist(statErr) {
-			return errors.New("quarantine finalization could not be proven")
-		}
+	if qmErr != nil {
+		return fmt.Errorf("kernel: quarantine metadata unavailable for finalization proof: %w", qmErr)
+	}
+	if qm.GenerationQuarantinePath == "" {
+		return errors.New("kernel: quarantine metadata missing generation quarantine path")
+	}
+	if _, statErr := os.Stat(qm.GenerationQuarantinePath); statErr == nil || !os.IsNotExist(statErr) {
+		return errors.New("quarantine finalization could not be proven")
 	}
 	return nil
 }

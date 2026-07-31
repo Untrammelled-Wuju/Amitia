@@ -18,6 +18,7 @@ class KernelHomePage extends ConsumerWidget {
       appBar: const AmitiaAppBar(
         title: '扩展内核',
         showBackButton: true,
+        fallbackRoute: AppRoutes.developer,
       ),
       body: SafeArea(
         top: false,

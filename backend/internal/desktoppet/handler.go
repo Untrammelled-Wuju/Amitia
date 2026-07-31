@@ -68,6 +68,11 @@ func (h *Handler) CreateTask(c *gin.Context) {
 
 func (h *Handler) GetTask(c *gin.Context) {
 	taskID := c.Param("taskId")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	data, err := h.service.GetTask(taskID)
 	if err != nil {
 		writeServiceError(c, err)
@@ -77,11 +82,12 @@ func (h *Handler) GetTask(c *gin.Context) {
 }
 
 func (h *Handler) ListTasks(c *gin.Context) {
+	userID := ResolveUserID(c)
 	characterID := c.Query("characterId")
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	data, err := h.service.ListTasks(characterID, status, page, pageSize)
+	data, err := h.service.ListTasks(userID, characterID, status, page, pageSize)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -91,6 +97,11 @@ func (h *Handler) ListTasks(c *gin.Context) {
 
 func (h *Handler) DeleteTask(c *gin.Context) {
 	taskID := c.Param("taskId")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	if err := h.service.DeleteTask(taskID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -100,6 +111,11 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 
 func (h *Handler) ReferenceImage(c *gin.Context) {
 	taskID := c.Param("taskId")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	fullPath, mimeType, err := h.service.GetTaskSourceImage(taskID)
 	if err != nil {
 		writeServiceError(c, err)
@@ -117,6 +133,11 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 
 func (h *Handler) StartTask(c *gin.Context) {
 	taskID := c.Param("taskId")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	summary, err := h.service.StartTask(taskID)
 	if err != nil {
 		writeServiceError(c, err)
@@ -133,6 +154,11 @@ func (h *Handler) StartTask(c *gin.Context) {
 
 func (h *Handler) CancelTask(c *gin.Context) {
 	taskID := c.Param("taskId")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	if err := h.service.CancelTask(taskID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -146,6 +172,11 @@ func (h *Handler) CancelTask(c *gin.Context) {
 func (h *Handler) RetryAction(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actionKey := c.Param("actionKey")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	action, err := h.service.RetryAction(taskID, actionKey)
 	if err != nil {
 		writeServiceError(c, err)
@@ -162,6 +193,11 @@ func (h *Handler) RetryAction(c *gin.Context) {
 func (h *Handler) ActionFrameImage(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actionKey := c.Param("actionKey")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	frameIndex, err := strconv.Atoi(c.Param("frameIndex"))
 	if err != nil || frameIndex < 0 {
 		util.ErrorResponse(c, response.InvalidParams, "帧索引无效", nil)
@@ -184,6 +220,11 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 
 func (h *Handler) GetTaskTransitions(c *gin.Context) {
 	taskID := c.Param("taskId")
+	userID := ResolveUserID(c)
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 	records, err := h.service.GetTaskTransitions(taskID, limit)
 	if err != nil {

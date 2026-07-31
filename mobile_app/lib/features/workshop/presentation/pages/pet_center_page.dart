@@ -24,6 +24,7 @@ class PetCenterPage extends ConsumerWidget {
       appBar: AmitiaAppBar(
         title: '桌宠制作',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
       ),
       body: SafeArea(
         top: false,

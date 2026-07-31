@@ -61,6 +61,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       appBar: AmitiaAppBar(
         title: '记忆总览',
         showBackButton: true,
+        fallbackRoute: AppRoutes.memory,
         actions: [
           AmitiaIconButton(
             icon: _searchVisible ? Icons.close : Icons.search,

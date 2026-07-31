@@ -45,6 +45,7 @@ type ActionMetadata struct {
 type MeasurementDataProvider interface {
 	GetActionMetadata(ctx context.Context, processingActionID string) (*ActionMetadata, error)
 	ListFrameData(ctx context.Context, processingActionID string) ([]FrameData, error)
+	GetActiveActionRevisionID(ctx context.Context, processingActionID string) (string, error)
 }
 
 type ProcessingMeasurementAdapter struct {
@@ -67,6 +68,14 @@ func (a *ProcessingMeasurementAdapter) resolvePath(p string) string {
 }
 
 func (a *ProcessingMeasurementAdapter) LoadActionMeasurements(ctx context.Context, processingActionID string) (*ActionMeasurementSet, error) {
+	actionRevisionID, err := a.provider.GetActiveActionRevisionID(ctx, processingActionID)
+	if err != nil {
+		return nil, NewQualityError(ErrCodeRevisionNotFound, "failed to resolve action revision id", err)
+	}
+	if actionRevisionID == "" {
+		return nil, ErrRevisionNotFound
+	}
+
 	meta, err := a.provider.GetActionMetadata(ctx, processingActionID)
 	if err != nil {
 		return nil, NewQualityError(ErrCodeRevisionNotFound, "failed to get action metadata", err)
@@ -132,8 +141,7 @@ func (a *ProcessingMeasurementAdapter) LoadActionMeasurements(ctx context.Contex
 	}
 
 	return &ActionMeasurementSet{
-		// TODO: bridge 当前只能提供 ProcessingActionID，待 bridge 支持获取真实 ActionRevision ID 后替换
-		ActionRevisionID:  processingActionID,
+		ActionRevisionID:  actionRevisionID,
 		ActionKey:         meta.ActionKey,
 		CanvasWidth:       meta.CanvasWidth,
 		CanvasHeight:      meta.CanvasHeight,

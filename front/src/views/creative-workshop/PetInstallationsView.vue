@@ -365,7 +365,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
       <el-form label-width="100px">
         <el-form-item label="资源包">
           <el-select
-            v-model="installForm.packageId"
+            v-model="installForm.releaseId"
             placeholder="请选择资源包"
             style="width: 100%"
             filterable
@@ -374,7 +374,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
             <el-option
               v-for="pkg in availablePackages"
               :key="pkg.id"
-              :label="`${pkg.name} (v${pkg.version})`"
+              :label="`Release v${pkg.version}`"
               :value="pkg.id"
             />
           </el-select>
@@ -400,7 +400,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
         <el-button
           type="primary"
           :loading="installSubmitting"
-          :disabled="!installForm.packageId || !installForm.characterId"
+          :disabled="!installForm.releaseId || !installForm.characterId"
           @click="submitInstall"
           >安装</el-button
         >
@@ -433,11 +433,10 @@ interface CharacterOption {
 
 interface PackageOption {
   id: string;
-  name: string;
-  version: number;
-  characterId: string;
-  generationTaskId: string;
+  petId: string;
+  version: string;
   status: string;
+  sourceGenerationTask: string;
 }
 
 const router = useRouter();
@@ -495,7 +494,7 @@ const defaultActionForm = reactive({
 const installDialogVisible = ref(false);
 const installSubmitting = ref(false);
 const availablePackages = ref<PackageOption[]>([]);
-const installForm = reactive({ packageId: "", characterId: "" });
+const installForm = reactive({ petId: "", releaseId: "", characterId: "" });
 
 const statusMeta: Record<string, { label: string; type: string }> = {
   installing: { label: "安装中", type: "warning" },
@@ -917,7 +916,8 @@ function goToTasks() {
 }
 
 async function openInstallDialog() {
-  installForm.packageId = "";
+  installForm.petId = "";
+  installForm.releaseId = "";
   installForm.characterId = "";
   await loadCharacters();
   await loadAvailablePackages();
@@ -926,7 +926,7 @@ async function openInstallDialog() {
 
 async function loadAvailablePackages() {
   try {
-    const data = await get<{ items: PackageOption[] }>("/api/desktop-pets/packages", { pageSize: 100 });
+    const data = await get<{ items: PackageOption[]; total: number }>("/api/desktop-pets/releases");
     availablePackages.value = data?.items || [];
   } catch {
     availablePackages.value = [];
@@ -934,20 +934,20 @@ async function loadAvailablePackages() {
 }
 
 function onInstallPackageChange() {
-  const pkg = availablePackages.value.find((p) => p.id === installForm.packageId);
+  const pkg = availablePackages.value.find((p) => p.id === installForm.releaseId);
   if (pkg) {
-    installForm.characterId = String(pkg.characterId);
+    installForm.petId = pkg.petId;
   }
 }
 
 async function submitInstall() {
-  if (!installForm.packageId || !installForm.characterId) {
+  if (!installForm.petId || !installForm.releaseId || !installForm.characterId) {
     ElMessage.warning("请选择资源包和角色");
     return;
   }
   installSubmitting.value = true;
   try {
-    await install(installForm.packageId, installForm.characterId);
+    await install(installForm.petId, installForm.releaseId, installForm.characterId);
     installDialogVisible.value = false;
     await refresh();
   } catch (err: any) {

@@ -55,6 +55,10 @@ func retiredPackagePreviewEndpoint(c *gin.Context) {
 	c.JSON(http.StatusGone, gin.H{"error_code": "PACKAGE_PREVIEW_ENDPOINT_RETIRED", "replacement_endpoint": packageAPIReplacement})
 }
 
+func retiredLegacyPackageEndpoint(c *gin.Context) {
+	c.JSON(http.StatusGone, gin.H{"error_code": "LEGACY_PACKAGE_ENDPOINT_RETIRED", "replacement_endpoint": packageAPIReplacement})
+}
+
 func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 	if runtime == nil || runtime.Kernel == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "extension package service unavailable"})

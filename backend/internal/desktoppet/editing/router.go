@@ -50,6 +50,8 @@ func registerRoutes(r *gin.RouterGroup, svc Service) {
 		g.POST("/edit-sessions/:sessionId/regeneration-jobs", handler.CreateRegenerationJob)
 		g.GET("/edit-sessions/:sessionId/regeneration-jobs/:jobId", handler.GetRegenerationJob)
 		g.POST("/edit-sessions/:sessionId/regeneration-jobs/:jobId/cancel", handler.CancelRegenerationJob)
+		g.GET("/regeneration-jobs/:jobId", handler.GetRegenerationJobByID)
+		g.GET("/regeneration-jobs", handler.ListRegenerationJobs)
 		g.POST("/edit-sessions/:sessionId/candidates/:candidateId/accept", handler.AcceptCandidate)
 		g.POST("/edit-sessions/:sessionId/candidates/:candidateId/reject", handler.RejectCandidate)
 

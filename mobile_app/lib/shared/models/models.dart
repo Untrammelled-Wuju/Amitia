@@ -228,9 +228,17 @@ class SettingItem {
   final String title;
   final IconData icon;
   final String? value;
+  final String? subtitle;
   final String route;
 
-  SettingItem({required this.title, required this.icon, this.value, required this.route});
+  SettingItem({required this.title, required this.icon, this.value, this.subtitle, required this.route});
+}
+
+class SettingGroup {
+  final String title;
+  final List<SettingItem> items;
+
+  SettingGroup({required this.title, required this.items});
 }
 
 class ToolCallRecord {

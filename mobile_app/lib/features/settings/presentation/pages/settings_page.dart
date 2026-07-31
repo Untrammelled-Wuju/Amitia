@@ -14,21 +14,16 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = MockData.mainSettings;
-    final aiSettings = settings.sublist(0, 5);
-    final systemSettings = settings.sublist(5, 10);
-    final otherSettings = settings.sublist(10);
-
+    final groups = MockData.mainSettings;
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '设置', showBackButton: true),
+      appBar: AmitiaAppBar(title: '设置', navigation: AmitiaAppBarNavigation.drawer),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
-          _SettingGroup(title: 'AI 与个性化', items: aiSettings),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SettingGroup(title: '系统与运行时', items: systemSettings),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SettingGroup(title: '其他', items: otherSettings),
+          for (int i = 0; i < groups.length; i++) ...[
+            _SettingGroup(group: groups[i]),
+            if (i < groups.length - 1) const SizedBox(height: AppSpacing.sectionGap),
+          ],
           const SizedBox(height: AppSpacing.xl),
         ],
       ),
@@ -37,10 +32,9 @@ class SettingsPage extends ConsumerWidget {
 }
 
 class _SettingGroup extends StatelessWidget {
-  final String title;
-  final List<SettingItem> items;
+  final SettingGroup group;
 
-  const _SettingGroup({required this.title, required this.items});
+  const _SettingGroup({required this.group});
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +48,7 @@ class _SettingGroup extends StatelessWidget {
             AppSpacing.pagePadding,
             AppSpacing.sm,
           ),
-          child: Text(title, style: AppTypography.caption(context)),
+          child: Text(group.title, style: AppTypography.caption(context)),
         ),
         Container(
           margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
@@ -65,9 +59,9 @@ class _SettingGroup extends StatelessWidget {
           ),
           child: Column(
             children: [
-              for (int i = 0; i < items.length; i++) ...[
-                _SettingTile(item: items[i]),
-                if (i < items.length - 1)
+              for (int i = 0; i < group.items.length; i++) ...[
+                _SettingTile(item: group.items[i]),
+                if (i < group.items.length - 1)
                   Padding(
                     padding: const EdgeInsets.only(left: 56),
                     child: Divider(
@@ -113,7 +107,22 @@ class _SettingTile extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(item.title, style: AppTypography.body(context)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.title, style: AppTypography.body(context)),
+                  if (item.subtitle != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        item.subtitle!,
+                        style: AppTypography.caption(context),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
             ),
             if (item.value != null) ...[
               Text(

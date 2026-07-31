@@ -472,7 +472,7 @@ func TestListTasks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := svc.ListTasks("char_test", "", 1, 10)
+	resp, err := svc.ListTasks("", "char_test", "", 1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +489,7 @@ func TestListTasks(t *testing.T) {
 		t.Fatalf("characterName = %s, want 测试角色", resp.Items[0].CharacterName)
 	}
 
-	respPending, err := svc.ListTasks("char_test", "pending", 1, 10)
+	respPending, err := svc.ListTasks("", "char_test", "pending", 1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +505,7 @@ func TestListTasks(t *testing.T) {
 		}
 	}
 
-	respOther, err := svc.ListTasks("char_other", "", 1, 10)
+	respOther, err := svc.ListTasks("", "char_other", "", 1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +516,7 @@ func TestListTasks(t *testing.T) {
 		t.Fatalf("char_other characterName = %s, want empty", respOther.Items[0].CharacterName)
 	}
 
-	page1, err := svc.ListTasks("char_test", "", 1, 2)
+	page1, err := svc.ListTasks("", "char_test", "", 1, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,7 +527,7 @@ func TestListTasks(t *testing.T) {
 		t.Fatalf("page1 order = %s %s, want t3 t2", page1.Items[0].ID, page1.Items[1].ID)
 	}
 
-	page2, err := svc.ListTasks("char_test", "", 2, 2)
+	page2, err := svc.ListTasks("", "char_test", "", 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}

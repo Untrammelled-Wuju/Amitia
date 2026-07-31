@@ -163,6 +163,34 @@ func EnvelopeFromInteractionEvent(evt behavior.InteractionLifecycleEvent, now ti
 	return builder.Build(now)
 }
 
+func EnvelopeFromChatEvent(evt behavior.ChatLifecycleEvent, now time.Time) behavior.BehaviorEventEnvelope {
+	eventType := "chat." + evt.Phase
+	builder := NewEnvelope(eventType, behavior.OriginChat).
+		UserID(evt.UserID).
+		CharacterID(evt.CharacterID).
+		InteractionID(evt.InteractionID).
+		OccurredAt(evt.OccurredAt).
+		DedupKey(BuildDedupKey(evt.InteractionID, evt.MessageID, evt.Phase, fmt.Sprintf("v%d", evt.StatusVersion)))
+
+	if evt.ConversationID != "" {
+		builder.ConversationID(evt.ConversationID)
+	}
+	if evt.CorrelationID != "" {
+		builder.CorrelationID(evt.CorrelationID)
+	}
+	if evt.MessageID != "" {
+		builder.PayloadField("messageId", evt.MessageID)
+	}
+	if evt.Origin != "" {
+		builder.PayloadField("origin", evt.Origin)
+	}
+	if evt.StatusVersion > 0 {
+		builder.PayloadField("statusVersion", evt.StatusVersion)
+		builder.PayloadField("interactionStatusVersion", evt.StatusVersion)
+	}
+	return builder.Build(now)
+}
+
 func EnvelopeFromToolEvent(evt behavior.ToolLifecycleEvent, now time.Time) behavior.BehaviorEventEnvelope {
 	eventType := "agent.tool." + evt.Phase
 	builder := NewEnvelope(eventType, behavior.OriginTool).

@@ -44,7 +44,7 @@ class _SafetyPageState extends ConsumerState<SafetyPage> {
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '安全设置', showBackButton: true),
+      appBar: AmitiaAppBar(title: '安全设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [

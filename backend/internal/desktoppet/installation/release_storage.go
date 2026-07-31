@@ -215,3 +215,28 @@ func (s *ReleaseStorage) ResolveImportPackageDir(packageDir string) (string, err
 	}
 	return abs, nil
 }
+
+func (s *ReleaseStorage) ResolveImportStagingDir(stagingID string) (string, error) {
+	if stagingID == "" {
+		return "", fmt.Errorf("import staging ID is empty")
+	}
+	if filepath.IsAbs(stagingID) {
+		return "", fmt.Errorf("absolute path is not allowed in staging ID: %s", stagingID)
+	}
+	if strings.ContainsAny(stagingID, `/\`) {
+		return "", fmt.Errorf("path separator is not allowed in staging ID: %s", stagingID)
+	}
+	if strings.Contains(stagingID, "..") {
+		return "", fmt.Errorf("path traversal is not allowed in staging ID: %s", stagingID)
+	}
+	root := s.ImportStagingDir()
+	abs := filepath.Join(root, stagingID)
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return "", fmt.Errorf("invalid staging ID: %w", err)
+	}
+	if rel == "." || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("staging ID escapes import staging root: %s", stagingID)
+	}
+	return abs, nil
+}

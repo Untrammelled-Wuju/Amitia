@@ -38,15 +38,24 @@ function isPathSafe(basePath: string, targetPath: string): boolean {
   return !rel.startsWith("..") && !isAbsolute(rel);
 }
 
+function resolveSafePackagePath(basePath: string, relativePath: string): string {
+  const normalized = normalize(isAbsolute(relativePath) ? relativePath : join(basePath, relativePath));
+  const rel = relative(basePath, normalized);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`UNSAFE_PATH: ${relativePath}`);
+  }
+  return normalized;
+}
+
 function buildPackageSnapshot(
   installation: InstallationInfo,
   loaded: LoadedInstallation,
   packageRevision: number,
 ): PackagePlaybackSnapshot {
   const actions = loaded.manifest.actions.map((action) => {
-    const configUrl = pathToFileURL(
-      join(installation.installPath, "actions", action.key, "config.json"),
-    ).href;
+    const configRelative = action.config || join("actions", action.key, "action.json");
+    const configAbs = resolveSafePackagePath(installation.installPath, configRelative);
+    const configUrl = pathToFileURL(configAbs).href;
 
     return {
       actionKey: action.key,

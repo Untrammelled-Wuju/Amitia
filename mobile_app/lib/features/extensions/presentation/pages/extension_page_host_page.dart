@@ -20,6 +20,17 @@ class ExtensionPageHostPage extends ConsumerStatefulWidget {
 class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
   bool _isLoading = true;
   bool _hasPermission = false;
+  bool _recursiveScan = true;
+  bool _realtimeMonitor = false;
+  final _configNameController = TextEditingController(text: '默认配置');
+  final _scanPathController = TextEditingController(text: '/workspace/docs');
+
+  @override
+  void dispose() {
+    _configNameController.dispose();
+    _scanPathController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -184,11 +195,11 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
             children: [
               Text('配置项名称', style: AppTypography.caption(context)),
               const SizedBox(height: 6),
-              AmitiaTextField(hintText: '输入配置值'),
+              AmitiaTextField(hintText: '输入配置值', controller: _configNameController),
               const SizedBox(height: AppSpacing.md),
               Text('扫描范围', style: AppTypography.caption(context)),
               const SizedBox(height: 6),
-              AmitiaTextField(hintText: '选择目录路径', prefixIcon: Icon(Icons.folder_outlined, size: 20)),
+              AmitiaTextField(hintText: '选择目录路径', prefixIcon: Icon(Icons.folder_outlined, size: 20), controller: _scanPathController),
               const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
@@ -196,8 +207,12 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
                     child: AmitiaSwitchTile(
                       title: '递归扫描',
                       subtitle: '包含子目录',
-                      value: true,
-                      onChanged: (val) {},
+                      value: _recursiveScan,
+                      onChanged: (val) {
+                        setState(() {
+                          _recursiveScan = val;
+                        });
+                      },
                     ),
                   ),
                 ],
@@ -206,8 +221,12 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
               AmitiaSwitchTile(
                 title: '实时监控',
                 subtitle: '文件变更时自动更新',
-                value: false,
-                onChanged: (val) {},
+                value: _realtimeMonitor,
+                onChanged: (val) {
+                  setState(() {
+                    _realtimeMonitor = val;
+                  });
+                },
               ),
             ],
           ),
@@ -366,9 +385,7 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
             isSecondary: true,
             icon: Icons.save_outlined,
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: const Text('配置已保存'), backgroundColor: context.success),
-              );
+              amitiaSnackBar(context, '配置已保存');
             },
           ),
         ),
@@ -378,9 +395,7 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
             label: '执行操作',
             icon: Icons.play_arrow,
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: const Text('操作已触发'), backgroundColor: context.accentPrimary),
-              );
+              amitiaSnackBar(context, '操作已触发');
             },
           ),
         ),

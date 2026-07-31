@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -55,6 +56,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
       appBar: AmitiaAppBar(
         title: '动作编辑器',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
       ),
       body: SafeArea(
         top: false,

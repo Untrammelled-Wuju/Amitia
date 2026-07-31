@@ -45,6 +45,7 @@ class _CharacterTimelinePageState extends ConsumerState<CharacterTimelinePage> {
       appBar: AmitiaAppBar(
         title: '时间线',
         showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
         actions: [
           AmitiaIconButton(
             icon: Icons.memory,

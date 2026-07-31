@@ -156,7 +156,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
                     :icon="Download"
                     :loading="exportingId === row.id"
                     @click="exportPackage(row)"
-                    >导出桌宠</el-button
+                    >安装桌宠</el-button
                   >
                 </div>
 
@@ -403,6 +403,7 @@ import {
   isTerminalStatus,
 } from "../../composables/useGenerationTask";
 import { useProcessingTask } from "../../composables/useProcessingTask";
+import { useDesktopPetInstallations } from "../../composables/useDesktopPetInstallations";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 
 const router = useRouter();
@@ -509,9 +510,10 @@ const taskPackageMap = reactive<Record<string, PackageSummary[]>>({});
 
 interface PackageSummary {
   id: string;
-  name: string;
-  version: number;
+  petId: string;
+  version: string;
   status: string;
+  sourceGenerationTask: string;
 }
 
 const filter = reactive({
@@ -657,10 +659,13 @@ function hasPackageForTask(taskId: string | number): boolean {
 
 async function fetchTaskPackages(taskId: string | number) {
   try {
-    const data = await get<{ items: PackageSummary[] }>(
-      `/api/desktop-pets/packages?generationTaskId=${taskId}`,
+    const data = await get<{ items: PackageSummary[]; total: number }>(
+      `/api/desktop-pets/releases`,
     );
-    taskPackageMap[String(taskId)] = data?.items || [];
+    const all = data?.items || [];
+    taskPackageMap[String(taskId)] = all.filter(
+      (r) => String(r.sourceGenerationTask) === String(taskId),
+    );
   } catch {
     taskPackageMap[String(taskId)] = [];
   }
@@ -673,24 +678,16 @@ async function exportPackage(row: TaskItem) {
     return;
   }
   const pkg = packages[0];
+  if (!pkg.petId || !pkg.id) {
+    ElMessage.warning("资源包信息不完整");
+    return;
+  }
   exportingId.value = row.id;
   try {
-    const res = await apiClient.get(
-      `/api/desktop-pets/packages/${pkg.id}/download`,
-      { responseType: "blob" },
-    );
-    const blob = res.data as Blob;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${pkg.name}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    ElMessage.success("导出成功");
+    await installRelease(pkg.petId, pkg.id);
+    ElMessage.success("桌宠已安装");
   } catch (err: any) {
-    ElMessage.error(err?.message || "导出失败");
+    ElMessage.error(err?.message || "安装失败");
   } finally {
     exportingId.value = null;
   }
@@ -810,6 +807,7 @@ const { connected, start: startTracking, stop: stopTracking } =
 
 const { createProcessingTask: createProcessingTaskApi } =
   useProcessingTask();
+const { install: installRelease } = useDesktopPetInstallations();
 
 function openProcessDialog(row: TaskItem) {
   processForm.taskId = row.id;

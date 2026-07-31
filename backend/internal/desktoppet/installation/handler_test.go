@@ -255,10 +255,82 @@ func (s *stubHandlerService) GetRuntimeSettings(installationId string) (*Runtime
 	return &RuntimeSettings{ID: "rts_default", InstallationID: installationId, Scale: 1.0}, nil
 }
 
+func (s *stubHandlerService) CheckInstallationOwnership(installationID, userID string) error {
+	return nil
+}
+
 func newHandlerTestRouter(svc Service) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	RegisterRoutes(r.Group("/api"), svc)
+	return r
+}
+
+type stubReleaseService struct {
+	uninstallErr       error
+	uninstallCalls     []uninstallCall
+}
+
+type uninstallCall struct {
+	UserID         string
+	InstallationID string
+	IdempotencyKey string
+}
+
+func (s *stubReleaseService) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseResult, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) ImportPackage(req *ImportPackageRequest) (*ImportPackageResult, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) ListReleases(userID string) ([]*PackageRelease, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) ListReleasesByPet(petID string) ([]*PackageRelease, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) GetRelease(releaseID string) (*PackageRelease, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) GetReleaseFiles(releaseID string) ([]ReleaseFile, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) ListPetIdentities(userID string) ([]*PetIdentity, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) GetPetIdentity(petID string) (*PetIdentity, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) InstallRelease(userID, petID, releaseID, characterID, idempotencyKey string) (*Installation, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) UpgradeInstallation(userID, installationID, targetReleaseID, idempotencyKey string) (*Installation, error) {
+	return nil, nil
+}
+func (s *stubReleaseService) SwitchInstallation(userID, installationID, idempotencyKey string) error {
+	return nil
+}
+func (s *stubReleaseService) RepairInstallation(userID, installationID, idempotencyKey string) error {
+	return nil
+}
+func (s *stubReleaseService) UninstallInstallation(userID, installationID, idempotencyKey string) error {
+	s.uninstallCalls = append(s.uninstallCalls, uninstallCall{UserID: userID, InstallationID: installationID, IdempotencyKey: idempotencyKey})
+	return s.uninstallErr
+}
+func (s *stubReleaseService) RecoverPendingOperations() error {
+	return nil
+}
+func (s *stubReleaseService) CheckReleaseOwnership(releaseID, userID string) error {
+	return nil
+}
+func (s *stubReleaseService) CheckPetIdentityOwnership(petID, userID string) error {
+	return nil
+}
+
+func newReleaseHandlerTestRouter(svc ReleaseService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	RegisterReleaseRoutes(r.Group("/api"), svc)
 	return r
 }
 
@@ -875,38 +947,38 @@ func TestHandler_PlayAction_Success(t *testing.T) {
 }
 
 func TestHandler_Uninstall_NotFound(t *testing.T) {
-	svc := &stubHandlerService{
+	svc := &stubReleaseService{
 		uninstallErr: NewInstallationError(ErrCodeInstallationNotFound, "not found", ErrInstallationNotFound),
 	}
-	r := newHandlerTestRouter(svc)
+	r := newReleaseHandlerTestRouter(svc)
 
 	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/nonexistent", nil)
 	assertHTTPCode(t, w, response.NotFound, ErrCodeInstallationNotFound)
 }
 
 func TestHandler_Uninstall_Failed_InternalError(t *testing.T) {
-	svc := &stubHandlerService{
+	svc := &stubReleaseService{
 		uninstallErr: NewInstallationError(ErrCodeInstallationFailed, "uninstall failed", ErrInstallationFailed),
 	}
-	r := newHandlerTestRouter(svc)
+	r := newReleaseHandlerTestRouter(svc)
 
 	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/inst_1", nil)
 	assertHTTPCode(t, w, response.InternalError, ErrCodeInstallationFailed)
 }
 
 func TestHandler_Uninstall_Invalid_BusinessError(t *testing.T) {
-	svc := &stubHandlerService{
+	svc := &stubReleaseService{
 		uninstallErr: NewInstallationError(ErrCodeInstallationInvalid, "invalid", ErrInstallationInvalid),
 	}
-	r := newHandlerTestRouter(svc)
+	r := newReleaseHandlerTestRouter(svc)
 
 	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/inst_1", nil)
 	assertHTTPCode(t, w, response.BusinessError, ErrCodeInstallationInvalid)
 }
 
 func TestHandler_Uninstall_Success(t *testing.T) {
-	svc := &stubHandlerService{}
-	r := newHandlerTestRouter(svc)
+	svc := &stubReleaseService{}
+	r := newReleaseHandlerTestRouter(svc)
 
 	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/inst_1", nil)
 	assertHTTPCode(t, w, response.OK, "")

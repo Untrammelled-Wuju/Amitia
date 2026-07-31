@@ -58,13 +58,8 @@ interface ResolveResourceUrlResult {
 }
 
 const legacyPetApi = {
-  onFrameUpdate(callback: (payload: PetFrameUpdatePayload) => void): () => void {
-    const listener = (
-      _event: Electron.IpcRendererEvent,
-      payload: PetFrameUpdatePayload,
-    ) => callback(payload);
-    ipcRenderer.on("pet:frame-update", listener);
-    return () => ipcRenderer.removeListener("pet:frame-update", listener);
+  onFrameUpdate(_callback: (payload: PetFrameUpdatePayload) => void): () => void {
+    return () => {};
   },
   onActionSwitch(
     callback: (payload: PetActionSwitchPayload) => void,

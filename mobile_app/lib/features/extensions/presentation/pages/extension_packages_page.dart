@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -45,6 +46,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
       appBar: AmitiaAppBar(
         title: '扩展包',
         showBackButton: true,
+        fallbackRoute: AppRoutes.extensions,
         actions: [
           AmitiaIconButton(
             icon: Icons.download_outlined,

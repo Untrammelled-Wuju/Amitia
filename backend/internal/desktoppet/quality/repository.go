@@ -289,6 +289,12 @@ func (r *GormRepository) GetGateResult(ctx context.Context, processingTaskID str
 	return &record, nil
 }
 
+func (r *GormRepository) DeleteGateResult(ctx context.Context, processingTaskID string) error {
+	return r.db.WithContext(ctx).
+		Where("processing_task_id = ?", processingTaskID).
+		Delete(&QualityGateResultRecord{}).Error
+}
+
 func FindingsToRecords(findings []QualityFinding, evaluationID string) []QualityFindingRecord {
 	records := make([]QualityFindingRecord, 0, len(findings))
 	for i, f := range findings {

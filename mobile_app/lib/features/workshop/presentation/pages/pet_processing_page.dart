@@ -96,6 +96,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       appBar: AmitiaAppBar(
         title: '处理审核',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
       ),
       body: SafeArea(
         top: false,

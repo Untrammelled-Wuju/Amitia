@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -32,6 +33,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
       appBar: AmitiaAppBar(
         title: 'WASM Runtime',
         showBackButton: true,
+        fallbackRoute: AppRoutes.developer,
         actions: [
           AmitiaIconButton(
             icon: Icons.add,

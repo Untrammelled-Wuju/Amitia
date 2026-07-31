@@ -116,12 +116,14 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", session.ExtensionID, leaseErr)
 	}
 	leaseGuard := r.newPackageLeaseGuard(session.ExtensionID, operationID)
-	if startErr := leaseGuard.Start(ctx); startErr != nil {
+	sagaCtx, startErr := leaseGuard.Start(ctx)
+	if startErr != nil {
 		_ = r.releasePackageExtensionLease(context.Background(), session.ExtensionID, operationID)
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
 	}
-	defer leaseGuard.Stop(context.Background())
+	defer func() { _ = leaseGuard.Stop(context.Background()) }()
+	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
@@ -168,30 +170,30 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", name, "PACKAGE_INSTALL_FAILED", cause.Error(), true, guard)
 		return KernelInstallResult{}, cause
 	}
-	if err := step(1, "validate_preview_session", "completed", "{}", ""); err != nil {
-		return fail("validate_preview_session", err, "")
+	if err := step(1, StepValidatePreviewSession, "completed", "{}", ""); err != nil {
+		return fail(StepValidatePreviewSession, err, "")
 	}
-	if err := step(2, "reverify_artifact_hash", "completed", "{}", ""); err != nil {
-		return fail("reverify_artifact_hash", err, "")
+	if err := step(2, StepReverifyArtifactHash, "completed", "{}", ""); err != nil {
+		return fail(StepReverifyArtifactHash, err, "")
 	}
 	staging, err := r.container.PackageSecurity.ExtractFileToStaging(ctx, artifact.ArchivePath, operationID)
 	if err != nil {
-		return fail("extract_to_staging", err, "")
+		return fail(StepExtractToStaging, err, "")
 	}
 	defer r.container.PackageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
-	if err := step(3, "extract_to_staging", "completed", packageJSON(map[string]string{"stagingId": staging.ID, "path": staging.Path}), ""); err != nil {
-		return fail("extract_to_staging", err, "")
+	if err := step(3, StepExtractToStaging, "completed", packageJSON(map[string]string{"stagingId": staging.ID, "path": staging.Path}), ""); err != nil {
+		return fail(StepExtractToStaging, err, "")
 	}
-	artifactHash := package_security.ComputeDirHash(staging.Path, r.container.PackageSecurity.GetHasher())
-	if artifactHash == "" {
-		return fail("verify_staging_tree", fmt.Errorf("kernel: staging hash empty"), "")
+	stagingHash := package_security.ComputeDirHash(staging.Path, r.container.PackageSecurity.GetHasher())
+	if stagingHash == "" {
+		return fail("install.verify_staging_tree", fmt.Errorf("kernel: staging hash empty"), "")
 	}
 	definition, err := pkg.Manifest.ToExtensionDefinition()
 	if err != nil {
-		return fail("build_candidate_definitions", err, "")
+		return fail(StepBuildCandidateDefinitions, err, "")
 	}
-	if err := step(4, "build_candidate_definitions", "completed", "{}", ""); err != nil {
-		return fail("build_candidate_definitions", err, "")
+	if err := step(4, StepBuildCandidateDefinitions, "completed", "{}", ""); err != nil {
+		return fail(StepBuildCandidateDefinitions, err, "")
 	}
 	var previous *domain.ExtensionInstallation
 	var previousDefinition *domain.ExtensionDefinition
@@ -205,36 +207,37 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		previousModules, _ = r.container.ModuleRepository.ListModules(ctx, definition.ID)
 		previousContributions, _ = r.container.ContributionRepository.ListContributions(ctx, definition.ID)
 		if _, err := r.createPackageRollbackPoint(ctx, operationID, "active", installed, previousDefinition, previousModules, previousContributions); err != nil {
-			return fail("create_rollback_point", err, "")
+			return fail("install.create_rollback_point", err, "")
 		}
 	}
 	targetGeneration, stableGeneration, err = r.preparePackageGeneration(ctx, operationID, artifact, staging.Path, guard.FencingToken)
 	if err != nil {
-		return fail("commit_installed_tree", err, "")
+		return fail(StepCommitInstalledTree, err, "")
 	}
 	if previous == nil && stableGeneration.GenerationID != "" {
-		return fail("validate_current_pointer", fmt.Errorf("kernel: current pointer exists without installation read model"), targetGeneration.GenerationPath)
+		return fail("install.validate_current_pointer", fmt.Errorf("kernel: current pointer exists without installation read model"), targetGeneration.GenerationPath)
 	}
 	if previous != nil {
 		stableFromDB := packageGenerationFromInstallation(*previous)
 		if stableFromDB.GenerationID != "" && stableFromDB.GenerationID != stableGeneration.GenerationID {
-			return fail("validate_current_pointer", fmt.Errorf("kernel: current pointer and installation read model differ"), targetGeneration.GenerationPath)
+			return fail("install.validate_current_pointer", fmt.Errorf("kernel: current pointer and installation read model differ"), targetGeneration.GenerationPath)
 		}
 	}
 	targetPath := targetGeneration.GenerationPath
-	artifactHash = targetGeneration.Current.TreeHash
+	generationTreeHash := targetGeneration.Current.TreeHash
 	if err := r.container.PackageRepository.SetOperationGenerationEvidence(ctx, operationID, stableGeneration.GenerationID, targetGeneration.Current.GenerationID, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
-		return fail("persist_generation_evidence", err, targetPath)
+		return fail("install.persist_generation_evidence", err, targetPath)
 	}
-	if err := step(5, "commit_installed_tree", "completed", packageJSON(map[string]string{"path": targetPath, "treeHash": artifactHash, "stableGeneration": stableGeneration.GenerationID, "targetGeneration": targetGeneration.Current.GenerationID}), ""); err != nil {
-		return fail("commit_installed_tree", err, targetPath)
+	commitGenResult := CommitGenerationStepResult{Path: targetPath, TreeHash: generationTreeHash, StableGeneration: stableGeneration.GenerationID, TargetGeneration: targetGeneration.Current.GenerationID, ArtifactHash: artifact.ArtifactHash}
+	if err := step(5, StepCommitInstalledTree, "completed", packageJSON(commitGenResult), ""); err != nil {
+		return fail(StepCommitInstalledTree, err, targetPath)
 	}
 	if err := r.switchPackageGeneration(ctx, stableGeneration, targetGeneration); err != nil {
-		return fail("switch_current_pointer", err, targetPath)
+		return fail(StepInstallSwitchCurrentPointer, err, targetPath)
 	}
 	currentSwitched = true
-	if err := step(6, "switch_current_pointer", "completed", packageGenerationJSON(targetGeneration.Current), ""); err != nil {
-		return fail("switch_current_pointer", err, targetPath)
+	if err := step(6, StepInstallSwitchCurrentPointer, "completed", packageGenerationJSON(targetGeneration.Current), ""); err != nil {
+		return fail(StepInstallSwitchCurrentPointer, err, targetPath)
 	}
 	generation := int64(1)
 	installedAt := time.Now().UTC()
@@ -251,10 +254,13 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		Metadata: packageInstallationMetadata(map[string]any{"installedPath": targetPath, "artifactId": artifact.ArtifactID,
 			"archiveHash": artifact.ArchiveHash, "manifestHash": artifact.ManifestHash,
 			"contentTreeHash": artifact.ContentTreeHash, "artifactHash": artifact.ArtifactHash,
-			"installedTreeHash": artifactHash,
+			"installedTreeHash": generationTreeHash,
 			"devOnly":           preview.DevOnly,
 			"ownerUserId":       request.UserID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}, targetGeneration.Current, targetPath, operationID)}
 	err = r.container.TransactionManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := r.container.PackageRepository.VerifyFencingTokenInContext(txCtx, guard); err != nil {
+			return err
+		}
 		if err := r.container.ContributionRepository.DeleteContributions(txCtx, definition.ID); err != nil {
 			return err
 		}
@@ -277,24 +283,25 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		return r.container.InstallationRepository.PutInstallation(txCtx, installation)
 	})
 	if err != nil {
-		return fail("commit_kernel_repositories", err, targetPath)
+		return fail(StepCommitKernelRepositories, err, targetPath)
 	}
 	artifact.InstalledPath = targetPath
 	if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, artifact.ArtifactID, targetPath, guard); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "persist_artifact_metadata", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
-	if err := step(7, "commit_kernel_repositories", "completed", packageGenerationJSON(targetGeneration.Current), ""); err != nil {
+	commitRepoResult := CommitRepositoryResult{InstallationID: installationID, VersionID: session.Version, ArtifactID: artifact.ArtifactID, GenerationID: targetGeneration.Current.GenerationID}
+	if err := step(7, StepCommitKernelRepositories, "completed", packageJSON(commitRepoResult), ""); err != nil {
 		return KernelInstallResult{}, err
 	}
 	if err := r.container.PackageRepository.ConsumePreview(ctx, session.SessionID); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "consume_preview_session", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
-	if err := step(8, "mark_installation_disabled", "completed", "{}", ""); err != nil {
+	if err := step(8, StepMarkInstallationDisabled, "completed", "{}", ""); err != nil {
 		return KernelInstallResult{}, err
 	}
-	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, artifactHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
+	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, generationTreeHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "record_version", "PACKAGE_VERSION_HISTORY_CORRUPTED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
@@ -302,13 +309,17 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "final_gate", "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
-	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true, guard); err != nil {
+	if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", stopErr.Error(), false, guard)
+		return KernelInstallResult{}, stopErr
+	}
+	if err := r.container.PackageRepository.SetOperation(ctx, operationID, "completed", "completed", "", "", true, PackageWriteGuard{}); err != nil {
 		return KernelInstallResult{}, err
 	}
 	return KernelInstallResult{ExtensionID: session.ExtensionID, Version: session.Version,
 		InstallationID: installationID, PackageHash: artifact.ArchiveHash,
 		ContentTreeHash: artifact.ContentTreeHash, ArtifactPath: artifact.ArchivePath,
-		InstallPath: targetPath, DefinitionHash: artifactHash, InstalledAt: time.Now().UTC(),
+		InstallPath: targetPath, DefinitionHash: generationTreeHash, InstalledAt: time.Now().UTC(),
 		OperationID: operationID, TraceID: traceID, Operation: op.OperationType}, nil
 }
 

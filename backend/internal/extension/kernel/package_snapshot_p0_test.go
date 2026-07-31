@@ -97,7 +97,7 @@ func TestPackageForwardRecoveryRestoresRepositoryState(t *testing.T) {
 	if err := container.ModuleRepository.DeleteModules(ctx, installation.ExtensionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.failPackageRollbackWithForwardRecovery("missing-operation", point, "test_failure", errors.New("rollback target failed")); err == nil {
+	if err := runtime.failPackageRollbackWithForwardRecovery("missing-operation", point, "test_failure", errors.New("rollback target failed"), PackageWriteGuard{}); err == nil {
 		t.Fatal("rollback failure must be returned after forward compensation")
 	}
 	restored, err := container.ModuleRepository.ListModules(ctx, installation.ExtensionID)

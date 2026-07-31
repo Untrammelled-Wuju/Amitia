@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -50,6 +51,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       appBar: AmitiaAppBar(
         title: '生活规则',
         showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
         actions: [
           AmitiaIconButton(
             icon: Icons.visibility_outlined,

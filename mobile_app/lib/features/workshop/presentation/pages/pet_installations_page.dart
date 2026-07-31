@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -32,6 +33,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
       appBar: AmitiaAppBar(
         title: '安装管理',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.sm),

@@ -43,6 +43,7 @@ type AdapterManager struct {
 	publisher behavior.BehaviorEventPublisher
 
 	Interaction *InteractionAdapter
+	Chat        *ChatAdapter
 	Tool        *ToolAdapter
 	Voice       *VoiceAdapter
 	Affect      *AffectAdapter
@@ -62,6 +63,7 @@ func NewAdapterManager(publisher behavior.BehaviorEventPublisher, opts AdapterMa
 		publisher: publisher,
 	}
 	am.Interaction = NewInteractionAdapter(publisher, clock)
+	am.Chat = NewChatAdapter(publisher, clock)
 	am.Tool = NewToolAdapter(publisher, clock)
 	am.Voice = NewVoiceAdapter(publisher, clock)
 	am.Affect = NewAffectAdapter(publisher, clock, opts.OwnerResolver)
@@ -74,6 +76,10 @@ func NewAdapterManager(publisher behavior.BehaviorEventPublisher, opts AdapterMa
 
 func (am *AdapterManager) OnInteractionLifecycle(ctx context.Context, event behavior.InteractionLifecycleEvent) {
 	am.Interaction.OnInteractionLifecycle(ctx, event)
+}
+
+func (am *AdapterManager) OnChatLifecycle(ctx context.Context, event behavior.ChatLifecycleEvent) {
+	am.Chat.OnChatLifecycle(ctx, event)
 }
 
 func (am *AdapterManager) OnToolLifecycle(ctx context.Context, event behavior.ToolLifecycleEvent) {

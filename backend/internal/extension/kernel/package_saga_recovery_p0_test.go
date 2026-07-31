@@ -208,7 +208,7 @@ func TestPackageUninstallRestoreFailureRequiresRecovery(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(preview.InstalledPath, "conflict"), []byte("conflict"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err = runtime.failPackageUninstallAfterQuarantine(ctx, op, quarantinePath, preview, errors.New("injected database failure"))
+	err = runtime.failPackageUninstallAfterQuarantine(ctx, op, quarantinePath, preview, PackageWriteGuard{}, errors.New("injected database failure"))
 	if err == nil || !strings.Contains(err.Error(), "restore quarantined installation") {
 		t.Fatalf("restore failure must be returned: %v", err)
 	}

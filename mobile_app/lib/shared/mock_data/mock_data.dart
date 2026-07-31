@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/app_routes.dart';
 import '../models/models.dart';
 
 export 'mock_characters.dart';
@@ -560,23 +561,32 @@ class MockData {
     ),
   ];
 
-  static List<SettingItem> mainSettings = [
-    SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: 'GPT-4', route: '/settings/models'),
-    SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: '/settings/ai'),
-    SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: '亮色', route: '/settings/appearance'),
-    SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: '/settings/theme'),
-    SettingItem(title: '用户设置', icon: Icons.person_outline, route: '/settings/user'),
-    SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: '/settings/temporal'),
-    SettingItem(title: '存储管理', icon: Icons.storage_outlined, route: '/settings/storage'),
-    SettingItem(title: 'Runtime', icon: Icons.terminal, value: '运行中', route: '/settings/runtime'),
-    SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: '/settings/permissions'),
-    SettingItem(title: '安全设置', icon: Icons.security_outlined, route: '/settings/safety'),
-    SettingItem(title: '隐私扫描', icon: Icons.privacy_tip_outlined, route: '/settings/privacy-scan'),
-    SettingItem(title: '部署配置', icon: Icons.cloud_upload_outlined, route: '/settings/deployment'),
-    SettingItem(title: '系统设置', icon: Icons.settings_applications_outlined, route: '/settings/system'),
-    SettingItem(title: '维护工具', icon: Icons.build_circle_outlined, route: '/settings/maintenance'),
-    SettingItem(title: '备份与恢复', icon: Icons.backup_outlined, route: '/settings/backup'),
-    SettingItem(title: '关于 Amitia', icon: Icons.info_outline, value: 'v1.0.0', route: '/settings/about'),
+  static List<SettingGroup> mainSettings = [
+    SettingGroup(title: 'AI 与个性化', items: [
+      SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: 'GPT-4', route: AppRoutes.settingsModels),
+      SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),
+      SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: '亮色', route: AppRoutes.settingsAppearance),
+      SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
+      SettingItem(title: '用户设置', icon: Icons.person_outline, route: AppRoutes.settingsUser),
+      SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: AppRoutes.settingsTemporal),
+    ]),
+    SettingGroup(title: '系统与维护', items: [
+      SettingItem(title: 'Runtime', icon: Icons.terminal, value: '运行中', route: AppRoutes.settingsRuntime),
+      SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: AppRoutes.settingsPermissions),
+      SettingItem(title: '存储管理', icon: Icons.storage_outlined, route: AppRoutes.settingsStorage),
+      SettingItem(title: '安全设置', icon: Icons.security_outlined, route: AppRoutes.settingsSafety),
+      SettingItem(title: '维护工具', icon: Icons.build_circle_outlined, route: AppRoutes.settingsMaintenance),
+      SettingItem(title: '工具箱', icon: Icons.handyman_outlined, subtitle: '运行日志、状态诊断与开发辅助工具', value: '诊断工具', route: AppRoutes.settingsToolbox),
+    ]),
+    SettingGroup(title: '部署与隐私', items: [
+      SettingItem(title: '部署配置', icon: Icons.cloud_upload_outlined, route: AppRoutes.settingsDeployment),
+      SettingItem(title: '隐私扫描', icon: Icons.privacy_tip_outlined, route: AppRoutes.settingsPrivacyScan),
+      SettingItem(title: '系统设置', icon: Icons.settings_applications_outlined, route: AppRoutes.settingsSystem),
+    ]),
+    SettingGroup(title: '关于', items: [
+      SettingItem(title: '备份与恢复', icon: Icons.backup_outlined, route: AppRoutes.settingsBackup),
+      SettingItem(title: '关于 Amitia', icon: Icons.info_outline, value: 'v1.0.0', route: AppRoutes.settingsAbout),
+    ]),
   ];
 
   static List<String> gamePlugins = ['Minecraft 控制器', '星露谷助手', '原神计时器'];

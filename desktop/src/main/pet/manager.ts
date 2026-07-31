@@ -68,6 +68,7 @@ const HEALTH_CHECK_PATH = "/api/health";
 const DEFAULT_USER_ID = "default";
 const DEFAULT_ALPHA_THRESHOLD = 10;
 
+/** @deprecated 帧驱动已迁移到渲染进程 AnimationEngine，主进程不再发送此 channel。保留常量仅为兼容已有引用。 */
 const PET_FRAME_UPDATE_CHANNEL = "pet:frame-update";
 const PET_ACTION_SWITCH_CHANNEL = "pet:action-switch";
 const PET_LOAD_ERROR_CHANNEL = "pet:load-error";

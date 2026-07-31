@@ -95,14 +95,6 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 	for _, capability := range diagnostic.Capabilities {
 		permissions.GrantSystemPolicy(diagnostic.Metadata.ID, capability, DecisionAllowAlways)
 	}
-	pluginManager := NewPluginManager(pluginRegistry, registry, executor, permissions, repository, validator)
-	service.AttachPluginManager(pluginManager)
-	if !options.SkipPluginManagerStart {
-		kernelruntime.GlobalLegacyCallCounter().IncPluginStart()
-		if err := pluginManager.Start(ctx); err != nil {
-			return nil, err
-		}
-	}
 	workshopRepository := NewWorkshopRepository(db)
 	workflowCompiler := NewWorkflowCompiler(registry)
 	workflowHost := &WorkflowHostAdapter{}
@@ -113,6 +105,14 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 		applog.Warn("workflow skill restore warning", applog.Fields{"error_code": asExtensionError(err).Code})
 	}
 	packages := NewPackageService(repository, registry, validator, workflowCompiler, workshop.installer, agentSkills)
+	var pluginManager *PluginManager
+	if !options.SkipPluginManagerStart {
+		kernelruntime.GlobalLegacyCallCounter().IncPluginStart()
+		pluginManager = NewPluginManager(pluginRegistry, registry, executor, permissions, repository, validator)
+		if err := pluginManager.Start(ctx); err != nil {
+			return nil, fmt.Errorf("plugin manager start: %w", err)
+		}
+	}
 	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Packages: packages, Lifecycle: lifecycle}, nil
 }
 

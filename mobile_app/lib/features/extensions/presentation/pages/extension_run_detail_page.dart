@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -54,7 +55,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
     final run = _run;
     if (run == null) {
       return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: '执行详情', showBackButton: true),
+        appBar: AmitiaAppBar(title: '执行详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
         body: AmitiaErrorState(message: '未找到该执行记录', onRetry: () => Navigator.pop(context)),
       );
     }
@@ -63,6 +64,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
       appBar: AmitiaAppBar(
         title: run.name,
         showBackButton: true,
+        fallbackRoute: AppRoutes.extensions,
       ),
       body: SafeArea(
         top: false,

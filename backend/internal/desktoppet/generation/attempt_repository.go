@@ -23,6 +23,7 @@ var activeAttemptStatuses = []string{
 	string(AttemptStatusResultReceived),
 	string(AttemptStatusPersisting),
 	string(AttemptStatusUnknownSubmission),
+	string(AttemptStatusSucceeded),
 }
 
 type AttemptRepository interface {
@@ -87,7 +88,7 @@ func (r *attemptRepository) ListAttemptsByActionID(taskActionID string) ([]Actio
 func (r *attemptRepository) GetActiveAttempt(taskActionID string) (*ActionGenerationAttempt, error) {
 	var attempt ActionGenerationAttempt
 	err := r.db.Where("task_action_id = ? AND status IN ?", taskActionID, activeAttemptStatuses).
-		Order("attempt_number DESC").First(&attempt).Error
+		Order("CASE WHEN status = 'succeeded' THEN 0 ELSE 1 END, attempt_number DESC").First(&attempt).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil

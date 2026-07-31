@@ -65,6 +65,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
       appBar: AmitiaAppBar(
         title: '记忆时间线',
         showBackButton: true,
+        fallbackRoute: AppRoutes.memory,
       ),
       body: SafeArea(
         top: false,

@@ -98,6 +98,7 @@ type AppServices struct {
 	ReleaseService     installation.ReleaseService
 	DesktopPetRuntime  *runtime.Service
 	EditingService     editing.Service
+	RegenerationWorker *editing.RegenerationWorker
 	BehaviorService    *behavior.BehaviorService
 	Reconciliation      *mindruntime.ReconciliationEngine
 	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
@@ -558,6 +559,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Warn("editing session expiry warning: ", err)
 	}
 
+	regenerationWorker := editing.NewRegenerationWorker(editingRepo, editingGenAdapter, editingAssetStore, editingQualAdapter, editingProcAdapter)
+
 	processingWorker.SetRevisionPromoter(func(processingTaskID, actionKey, userID string) error {
 		_, err := editingSvc.ImportLegacyRevision(context.Background(), processingTaskID, actionKey, userID)
 		return err
@@ -612,6 +615,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		ReleaseService:      releaseService,
 		DesktopPetRuntime:   desktopPetRuntime,
 		EditingService:      editingSvc,
+		RegenerationWorker:  regenerationWorker,
 		BehaviorService:     behaviorSvc,
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/widgets/amitia_drawer.dart';
+import '../core/widgets/amitia_scaffold.dart';
+import '../app/app_routes.dart';
 import '../features/chat/presentation/pages/chat_page.dart';
 import '../features/conversations/presentation/pages/conversation_list_page.dart';
 import '../features/agent/presentation/pages/agent_page.dart';
@@ -105,12 +107,17 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawerEnableOpenDragGesture: true,
-      drawer: AmitiaDrawer(currentRoute: widget.currentRoute),
-      body: widget.child,
+    return ShellDrawerScope(
+      openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawerEnableOpenDragGesture: true,
+        drawer: AmitiaDrawer(currentRoute: widget.currentRoute),
+        body: widget.child,
+      ),
     );
   }
 }
@@ -141,6 +148,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     },
     errorBuilder: (context, state) => NotFoundPage(attemptedPath: state.uri.toString()),
     routes: [
+      GoRoute(path: '/', redirect: (context, state) => AppRoutes.chat),
       GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingPage()),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(path: '/privacy', builder: (context, state) => const PrivacyPage()),

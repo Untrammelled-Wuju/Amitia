@@ -58,16 +58,16 @@ func (h *ReleaseHandler) BuildRelease(c *gin.Context) {
 }
 
 type importPackagePayload struct {
-	CharacterID     string   `json:"characterId"`
-	PackageName     string   `json:"packageName"`
-	LegacyPackageID string   `json:"legacyPackageId"`
-	LegacyVersion   int      `json:"legacyVersion"`
-	PackageDir      string   `json:"packageDir"`
-	DefaultAction   string   `json:"defaultAction"`
-	CanvasWidth     int      `json:"canvasWidth"`
-	CanvasHeight    int      `json:"canvasHeight"`
-	IncludedActions []string `json:"includedActions"`
-	IdempotencyKey  string   `json:"idempotencyKey"`
+	CharacterID      string   `json:"characterId"`
+	PackageName      string   `json:"packageName"`
+	LegacyPackageID  string   `json:"legacyPackageId"`
+	LegacyVersion    int      `json:"legacyVersion"`
+	ImportStagingID  string   `json:"importStagingId"`
+	DefaultAction    string   `json:"defaultAction"`
+	CanvasWidth      int      `json:"canvasWidth"`
+	CanvasHeight     int      `json:"canvasHeight"`
+	IncludedActions  []string `json:"includedActions"`
+	IdempotencyKey   string   `json:"idempotencyKey"`
 }
 
 func (h *ReleaseHandler) ImportPackage(c *gin.Context) {
@@ -76,8 +76,8 @@ func (h *ReleaseHandler) ImportPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	if payload.PackageDir == "" {
-		util.ErrorResponse(c, response.InvalidParams, "包目录为空", gin.H{"errorCode": ErrCodeInstallationFailed})
+	if payload.ImportStagingID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "导入暂存 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
 	userID := desktoppet.ResolveUserID(c)
@@ -87,7 +87,7 @@ func (h *ReleaseHandler) ImportPackage(c *gin.Context) {
 		PackageName:     payload.PackageName,
 		LegacyPackageID: payload.LegacyPackageID,
 		LegacyVersion:   payload.LegacyVersion,
-		PackageDir:      payload.PackageDir,
+		ImportStagingID: payload.ImportStagingID,
 		DefaultAction:   payload.DefaultAction,
 		CanvasWidth:     payload.CanvasWidth,
 		CanvasHeight:    payload.CanvasHeight,
@@ -121,6 +121,11 @@ func (h *ReleaseHandler) GetRelease(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "Release ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.svc.CheckReleaseOwnership(releaseID, userID); err != nil {
+		writeInstallationError(c, err)
+		return
+	}
 	release, err := h.svc.GetRelease(releaseID)
 	if err != nil {
 		writeInstallationError(c, err)
@@ -134,6 +139,11 @@ func (h *ReleaseHandler) ListReleasesByPet(c *gin.Context) {
 	petID := c.Param("petId")
 	if petID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "宠物 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.svc.CheckPetIdentityOwnership(petID, userID); err != nil {
+		writeInstallationError(c, err)
 		return
 	}
 	releases, err := h.svc.ListReleasesByPet(petID)
@@ -164,6 +174,11 @@ func (h *ReleaseHandler) GetPet(c *gin.Context) {
 	petID := c.Param("petId")
 	if petID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "宠物 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.svc.CheckPetIdentityOwnership(petID, userID); err != nil {
+		writeInstallationError(c, err)
 		return
 	}
 	pet, err := h.svc.GetPetIdentity(petID)

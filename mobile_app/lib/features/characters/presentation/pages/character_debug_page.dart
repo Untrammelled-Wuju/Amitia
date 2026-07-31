@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -24,6 +25,7 @@ class _CharacterDebugPageState extends ConsumerState<CharacterDebugPage> {
       appBar: AmitiaAppBar(
         title: '调试模式',
         showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
         actions: [
           AmitiaIconButton(
             icon: Icons.warning_amber,

@@ -113,12 +113,17 @@ export interface CreatePackageParams {
   defaultAction: string;
   includedActions: string[];
   userDefaultAction?: string;
+  petId?: string;
+  version?: string;
 }
 
 export interface CreatePackageResponse {
-  packageId: string;
-  packageHash: string;
+  releaseId: string;
+  petId: string;
+  version: string;
   status: string;
+  packageHash: string;
+  packageId: string;
 }
 
 export interface ProcessingEventCallbacks {
@@ -412,10 +417,30 @@ export function useProcessingTask(options: UseProcessingTaskOptions = {}) {
   ): Promise<CreatePackageResponse> {
     submitting.value = true;
     try {
-      return await post<CreatePackageResponse>(
-        `/api/desktop-pets/processing-tasks/${processingTaskId}/package`,
-        params,
+      const idempotencyKey =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const data = await post<{ release: any; validation: any }>(
+        `/api/desktop-pets/releases/build`,
+        {
+          processingTaskId: String(processingTaskId),
+          petId: params.petId || "",
+          version: params.version || "",
+          defaultAction: params.defaultAction || "",
+          includedActions: params.includedActions || [],
+          idempotencyKey,
+        },
       );
+      const release = data?.release || {};
+      return {
+        releaseId: release.id || "",
+        petId: release.petId || "",
+        version: release.version || "",
+        status: release.status || "",
+        packageHash: release.contentRootHash || release.manifestHash || "",
+        packageId: release.id || "",
+      };
     } finally {
       submitting.value = false;
     }

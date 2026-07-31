@@ -183,11 +183,7 @@ func (a *RepoArtifactSourceAdapter) GetActiveAttemptInfo(taskActionID string) (*
 		Status string `gorm:"column:status"`
 	}
 	err := db.Table("desktop_pet_action_generation_attempts").
-		Where("task_action_id = ? AND status IN ?", taskActionID, []string{
-			"pending", "preparing_reference", "building_prompt", "waiting_rate_limit",
-			"submitting", "polling", "result_received", "persisting", "unknown_submission",
-			"succeeded",
-		}).
+		Where("task_action_id = ? AND status = ?", taskActionID, "succeeded").
 		Order("attempt_number DESC").
 		First(&attempt).Error
 	if err != nil {

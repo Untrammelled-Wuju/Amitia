@@ -115,5 +115,6 @@ func DefaultMigrations() []Migration {
 		DesktopPetEditingMigration(),
 		DesktopPetPackageReleaseMigration(),
 		DesktopPetBehaviorMigration(),
+		DesktopPetPhase8GatesMigration(),
 	}
 }

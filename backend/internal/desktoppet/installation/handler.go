@@ -28,6 +28,7 @@ type updateDefaultActionPayload struct {
 func (h *Handler) InstallPackage(c *gin.Context) {
 	c.Header("Deprecation", "true")
 	c.Header("Sunset", "2026-12-31")
+	c.Header("Link", `</api/desktop-pets/releases>; rel="successor-version"`)
 	packageID := c.Param("packageId")
 	if packageID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "资源包 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
@@ -70,6 +71,11 @@ func (h *Handler) GetInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckInstallationOwnership(installationID, userID); err != nil {
+		writeInstallationError(c, err)
+		return
+	}
 	inst, err := h.service.GetInstallation(installationID)
 	if err != nil {
 		writeInstallationError(c, err)
@@ -110,6 +116,11 @@ func (h *Handler) UpdateDefaultAction(c *gin.Context) {
 	installationID := c.Param("installationId")
 	if installationID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckInstallationOwnership(installationID, userID); err != nil {
+		writeInstallationError(c, err)
 		return
 	}
 	var payload updateDefaultActionPayload

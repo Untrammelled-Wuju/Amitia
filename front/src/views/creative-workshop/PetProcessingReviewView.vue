@@ -412,7 +412,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
       <div class="install-dialog-body">
         <el-form label-width="120px">
           <el-form-item label="资源包 ID">
-            <span class="install-package-id">{{ installForm.packageId }}</span>
+            <span class="install-package-id">{{ installForm.releaseId }}</span>
           </el-form-item>
           <el-form-item label="绑定角色">
             <el-select
@@ -578,12 +578,13 @@ const installSubmitting = ref(false);
 const installError = ref("");
 const installCharacters = ref<InstallCharacterOption[]>([]);
 const installForm = reactive({
-  packageId: "",
+  petId: "",
+  releaseId: "",
   characterId: "" as string | number,
 });
 
 const canInstallPackage = computed(
-  () => !!packageResult.value && packageResult.value.status === "ready",
+  () => !!packageResult.value && packageResult.value.status === "published",
 );
 
 const statusMeta: Record<string, { label: string; type: string }> = {
@@ -1132,11 +1133,12 @@ async function loadInstallCharacters() {
 }
 
 function openInstallDialog() {
-  if (!packageResult.value?.packageId) {
+  if (!packageResult.value?.releaseId) {
     ElMessage.warning("请先生成资源包");
     return;
   }
-  installForm.packageId = packageResult.value.packageId;
+  installForm.petId = packageResult.value.petId;
+  installForm.releaseId = packageResult.value.releaseId;
   installForm.characterId =
     generationTaskDetail.value?.characterId ||
     installCharacters.value[0]?.id ||
@@ -1147,8 +1149,8 @@ function openInstallDialog() {
 }
 
 async function submitInstall() {
-  if (!installForm.packageId) {
-    installError.value = "缺少资源包 ID";
+  if (!installForm.petId || !installForm.releaseId) {
+    installError.value = "缺少资源包信息";
     return;
   }
   if (!installForm.characterId) {
@@ -1159,7 +1161,8 @@ async function submitInstall() {
   installSubmitting.value = true;
   try {
     await installPet(
-      installForm.packageId,
+      installForm.petId,
+      installForm.releaseId,
       String(installForm.characterId),
     );
     installDialogVisible.value = false;

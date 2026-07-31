@@ -87,10 +87,10 @@ func (im *ReleaseImporter) ImportPackage(req *ImportPackageRequest) (*ImportPack
 		return nil, err
 	}
 
-	safePackageDir, err := im.storage.ResolveImportPackageDir(req.PackageDir)
+	safePackageDir, err := im.storage.ResolveImportStagingDir(req.ImportStagingID)
 	if err != nil {
 		im.storage.RemoveStagingDir(releaseID)
-		failPackageOperation(im.repo, op, OpStageStageFiles, "PACKAGE_DIR_INVALID", err.Error())
+		failPackageOperation(im.repo, op, OpStageStageFiles, "IMPORT_STAGING_INVALID", err.Error())
 		return nil, NewInstallationError(ErrCodePackagePathTraversal, err.Error(), ErrPackagePathTraversal)
 	}
 

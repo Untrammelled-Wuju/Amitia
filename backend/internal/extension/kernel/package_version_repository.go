@@ -3,8 +3,14 @@ package kernel
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"sort"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
 )
 
 type PackageVersionState string
@@ -277,4 +283,253 @@ func (r *PackageRepository) GetCurrentPackageVersion(ctx context.Context, extens
 	}
 	record.IsActive = record.VersionState == string(PackageVersionStateCurrent)
 	return record, nil
+}
+
+type PackageArtifactChange struct {
+	Path    string `json:"path"`
+	OldHash string `json:"oldHash,omitempty"`
+	NewHash string `json:"newHash,omitempty"`
+	Change  string `json:"change"`
+}
+
+type PackageManifestChange struct {
+	Field     string `json:"field"`
+	FromValue string `json:"fromValue,omitempty"`
+	ToValue   string `json:"toValue,omitempty"`
+	Changed   bool   `json:"changed"`
+}
+
+type PackageVersionComparison struct {
+	ExtensionID          string                  `json:"extensionId"`
+	FromVersion          string                  `json:"fromVersion"`
+	ToVersion            string                  `json:"toVersion"`
+	FromArtifactID       string                  `json:"fromArtifactId"`
+	ToArtifactID         string                  `json:"toArtifactId"`
+	FromArchiveHash      string                  `json:"fromArchiveHash"`
+	ToArchiveHash        string                  `json:"toArchiveHash"`
+	FromManifestHash     string                  `json:"fromManifestHash"`
+	ToManifestHash       string                  `json:"toManifestHash"`
+	FromContentTreeHash  string                  `json:"fromContentTreeHash"`
+	ToContentTreeHash    string                  `json:"toContentTreeHash"`
+	FromSignatureStatus  string                  `json:"fromSignatureStatus"`
+	ToSignatureStatus    string                  `json:"toSignatureStatus"`
+	ArtifactChanges      []PackageArtifactChange `json:"artifactChanges"`
+	ManifestChanges      []PackageManifestChange `json:"manifestChanges"`
+	FromManifest         manifest_v2.Manifest    `json:"-"`
+	ToManifest           manifest_v2.Manifest    `json:"-"`
+	FromFiles            []amitiax.FileEntry     `json:"-"`
+	ToFiles              []amitiax.FileEntry     `json:"-"`
+}
+
+func (r *PackageRepository) ComparePackageVersions(ctx context.Context, extensionID, fromVersion, toVersion string) (*PackageVersionComparison, error) {
+	fromRecord, err := r.GetPackageVersion(ctx, extensionID, fromVersion)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: from version record unavailable: %w", err)
+	}
+	toRecord, err := r.GetPackageVersion(ctx, extensionID, toVersion)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: to version record unavailable: %w", err)
+	}
+	fromArtifact, err := r.GetArtifact(ctx, fromRecord.ArtifactID)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: from artifact unavailable: %w", err)
+	}
+	toArtifact, err := r.GetArtifact(ctx, toRecord.ArtifactID)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: to artifact unavailable: %w", err)
+	}
+	fromPackage, err := amitiax.OpenArchive(fromArtifact.ArchivePath)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: from package archive parse failed: %w", err)
+	}
+	toPackage, err := amitiax.OpenArchive(toArtifact.ArchivePath)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: to package archive parse failed: %w", err)
+	}
+	comparison := &PackageVersionComparison{
+		ExtensionID:         extensionID,
+		FromVersion:         fromVersion,
+		ToVersion:           toVersion,
+		FromArtifactID:      fromRecord.ArtifactID,
+		ToArtifactID:        toRecord.ArtifactID,
+		FromArchiveHash:     fromArtifact.ArchiveHash,
+		ToArchiveHash:       toArtifact.ArchiveHash,
+		FromManifestHash:    fromArtifact.ManifestHash,
+		ToManifestHash:      toArtifact.ManifestHash,
+		FromContentTreeHash: fromArtifact.ContentTreeHash,
+		ToContentTreeHash:   toArtifact.ContentTreeHash,
+		FromSignatureStatus: fromArtifact.SignatureStatus,
+		ToSignatureStatus:   toArtifact.SignatureStatus,
+		FromManifest:        fromPackage.Manifest,
+		ToManifest:          toPackage.Manifest,
+		FromFiles:           fromPackage.Files,
+		ToFiles:             toPackage.Files,
+	}
+	comparison.ArtifactChanges = computePackageArtifactFileChanges(fromPackage.Files, toPackage.Files)
+	comparison.ManifestChanges = computePackageManifestFieldChanges(fromPackage.Manifest, toPackage.Manifest)
+	return comparison, nil
+}
+
+func computePackageArtifactFileChanges(fromFiles, toFiles []amitiax.FileEntry) []PackageArtifactChange {
+	fromMap := map[string]string{}
+	toMap := map[string]string{}
+	for _, file := range fromFiles {
+		if file.IsDir {
+			continue
+		}
+		fromMap[file.Path] = file.Hash
+	}
+	for _, file := range toFiles {
+		if file.IsDir {
+			continue
+		}
+		toMap[file.Path] = file.Hash
+	}
+	changes := make([]PackageArtifactChange, 0, len(fromMap)+len(toMap))
+	for path, newHash := range toMap {
+		oldHash, exists := fromMap[path]
+		if !exists {
+			changes = append(changes, PackageArtifactChange{Path: path, NewHash: newHash, Change: "added"})
+		} else if oldHash != newHash {
+			changes = append(changes, PackageArtifactChange{Path: path, OldHash: oldHash, NewHash: newHash, Change: "changed"})
+		}
+	}
+	for path, oldHash := range fromMap {
+		if _, exists := toMap[path]; !exists {
+			changes = append(changes, PackageArtifactChange{Path: path, OldHash: oldHash, Change: "removed"})
+		}
+	}
+	sort.Slice(changes, func(i, j int) bool {
+		if changes[i].Change != changes[j].Change {
+			return changes[i].Change < changes[j].Change
+		}
+		return changes[i].Path < changes[j].Path
+	})
+	return changes
+}
+
+func computePackageManifestFieldChanges(fromManifest, toManifest manifest_v2.Manifest) []PackageManifestChange {
+	fromRaw, _ := json.Marshal(fromManifest)
+	toRaw, _ := json.Marshal(toManifest)
+	var fromMap, toMap map[string]interface{}
+	if err := json.Unmarshal(fromRaw, &fromMap); err != nil {
+		fromMap = map[string]interface{}{}
+	}
+	if err := json.Unmarshal(toRaw, &toMap); err != nil {
+		toMap = map[string]interface{}{}
+	}
+	changes := make([]PackageManifestChange, 0, len(fromMap)+len(toMap))
+	fromCanonical := func(value interface{}) string {
+		raw, _ := json.Marshal(value)
+		return string(raw)
+	}
+	keys := map[string]bool{}
+	for key := range fromMap {
+		keys[key] = true
+	}
+	for key := range toMap {
+		keys[key] = true
+	}
+	sortedKeys := make([]string, 0, len(keys))
+	for key := range keys {
+		sortedKeys = append(sortedKeys, key)
+	}
+	sort.Strings(sortedKeys)
+	for _, key := range sortedKeys {
+		fromValue, fromOK := fromMap[key]
+		toValue, toOK := toMap[key]
+		fromCanonicalValue := fromCanonical(fromValue)
+		toCanonicalValue := fromCanonical(toValue)
+		if !fromOK && toOK {
+			changes = append(changes, PackageManifestChange{Field: key, ToValue: toCanonicalValue, Changed: true})
+		} else if fromOK && !toOK {
+			changes = append(changes, PackageManifestChange{Field: key, FromValue: fromCanonicalValue, Changed: true})
+		} else if fromCanonicalValue != toCanonicalValue {
+			changes = append(changes, PackageManifestChange{Field: key, FromValue: fromCanonicalValue, ToValue: toCanonicalValue, Changed: true})
+		}
+	}
+	return changes
+}
+
+func (r *PackageRepository) MarkPackageVersionRollbackAvailable(ctx context.Context, extensionID, version string) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE package_versions SET version_state = ? WHERE extension_id = ? AND version = ? AND version_state = ?`,
+		string(PackageVersionStateRollbackAvailable), extensionID, version, string(PackageVersionStateRetained))
+	if err != nil {
+		return fmt.Errorf("kernel: mark package version rollback available failed: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("kernel: mark package version rollback available inspect failed: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("kernel: package version %s not in retained state for rollback available", version)
+	}
+	return nil
+}
+
+func (r *PackageRepository) MarkPackageVersionRollbackAvailableTx(ctx context.Context, tx *sql.Tx, extensionID, version string) error {
+	if tx == nil {
+		return errors.New("kernel: mark package version rollback available requires transaction")
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE package_versions SET version_state = ? WHERE extension_id = ? AND version = ? AND version_state = ?`,
+		string(PackageVersionStateRollbackAvailable), extensionID, version, string(PackageVersionStateRetained))
+	if err != nil {
+		return fmt.Errorf("kernel: mark package version rollback available failed: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("kernel: mark package version rollback available inspect failed: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("kernel: package version %s not in retained state for rollback available", version)
+	}
+	return nil
+}
+
+func (r *PackageRepository) BlockPackageVersion(ctx context.Context, extensionID, version string, reason string) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE package_versions SET version_state = ? WHERE extension_id = ? AND version = ?`,
+		string(PackageVersionStateBlocked), extensionID, version)
+	if err != nil {
+		return fmt.Errorf("kernel: block package version failed: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("kernel: block package version inspect failed: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("kernel: package version %s not found for block: %s", version, reason)
+	}
+	return nil
+}
+
+func (r *PackageRepository) CorruptPackageVersion(ctx context.Context, extensionID, version string) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE package_versions SET version_state = ? WHERE extension_id = ? AND version = ?`,
+		string(PackageVersionStateCorrupted), extensionID, version)
+	if err != nil {
+		return fmt.Errorf("kernel: corrupt package version failed: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("kernel: corrupt package version inspect failed: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("kernel: package version %s not found for corrupt", version)
+	}
+	return nil
+}
+
+func (r *PackageRepository) RemovePackageVersion(ctx context.Context, extensionID, version string) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE package_versions SET version_state = ? WHERE extension_id = ? AND version = ?`,
+		string(PackageVersionStateRemoved), extensionID, version)
+	if err != nil {
+		return fmt.Errorf("kernel: remove package version failed: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("kernel: remove package version inspect failed: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("kernel: package version %s not found for remove", version)
+	}
+	return nil
 }

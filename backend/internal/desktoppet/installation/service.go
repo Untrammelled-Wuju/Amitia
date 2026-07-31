@@ -49,6 +49,7 @@ type Service interface {
 	Recenter(userId, installationId string) error
 	PlayAction(userId, installationId, actionKey string) error
 	ListInstallations(userId string) ([]*Installation, error)
+	CheckInstallationOwnership(installationID, userID string) error
 	GetInstallation(installationId string) (*Installation, error)
 	GetRuntimeSettings(installationId string) (*RuntimeSettings, error)
 }
@@ -102,6 +103,20 @@ func (s *service) InstallPackage(packageId, userId, characterId string) (*Instal
 
 func (s *service) Uninstall(userId, installationId string) error {
 	return s.uninstaller.Uninstall(userId, installationId)
+}
+
+func (s *service) CheckInstallationOwnership(installationID, userID string) error {
+	inst, err := s.repo.GetInstallation(installationID)
+	if err != nil {
+		if errors.Is(err, ErrInstallationNotFound) {
+			return NewInstallationError(ErrCodeInstallationNotFound, "安装记录不存在", err)
+		}
+		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
+	}
+	if inst.UserID != userID {
+		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
+	}
+	return nil
 }
 
 func (s *service) EnableInstallation(userId, installationId string) error {
@@ -490,10 +505,9 @@ func (s *service) Recenter(userId, installationId string) error {
 	}
 	if err := s.notifyRecenter(installationId); err != nil {
 		if isRuntimeOfflineError(err) {
-			log.Logger.Warnf("installation: NotifyRecenter 运行时离线 pending_sync installationId=%s", installationId)
-		} else {
-			return NewInstallationError(ErrCodeRuntimeDeliveryFailed, "运行时通知投递失败", err)
+			return NewInstallationError(ErrCodeRuntimeDeliveryFailed, "运行时离线，重置位置命令未送达", err)
 		}
+		return NewInstallationError(ErrCodeRuntimeDeliveryFailed, "运行时通知投递失败", err)
 	}
 	return nil
 }
@@ -525,10 +539,9 @@ func (s *service) PlayAction(userId, installationId, actionKey string) error {
 	}
 	if err := s.notifyActionPlayed(userId, installationId, actionKey); err != nil {
 		if isRuntimeOfflineError(err) {
-			log.Logger.Warnf("installation: NotifyActionPlayed 运行时离线 pending_sync installationId=%s", installationId)
-		} else {
-			return NewInstallationError(ErrCodeRuntimeDeliveryFailed, "运行时通知投递失败", err)
+			return NewInstallationError(ErrCodeRuntimeDeliveryFailed, "运行时离线，播放动作命令未送达", err)
 		}
+		return NewInstallationError(ErrCodeRuntimeDeliveryFailed, "运行时通知投递失败", err)
 	}
 	return nil
 }

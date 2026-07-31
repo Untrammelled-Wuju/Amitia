@@ -46,6 +46,7 @@ const (
 )
 
 type Service interface {
+	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error
 	ListRevisions(ctx context.Context, processingTaskID, actionKey string) ([]RevisionSummary, error)
 	GetRevision(ctx context.Context, revisionID string) (*RevisionDetail, error)
 	GetActiveRevision(ctx context.Context, processingTaskID, actionKey string) (*RevisionDetail, error)
@@ -67,6 +68,7 @@ type Service interface {
 
 	CreateRegenerationJob(ctx context.Context, sessionID, userID string, req CreateRegenerationJobRequest) (*CreateRegenerationJobResponse, error)
 	GetRegenerationJob(ctx context.Context, jobID string) (*RegenerationJob, error)
+	ListRegenerationJobs(ctx context.Context, limit, offset int) ([]RegenerationJob, error)
 	CancelRegenerationJob(ctx context.Context, jobID, userID string) error
 	AcceptCandidate(ctx context.Context, candidateID, userID string, req AcceptCandidateRequest) error
 	RejectCandidate(ctx context.Context, candidateID, userID string, req RejectCandidateRequest) error
@@ -727,8 +729,8 @@ func (s *service) buildManifestFromDraft(revID, parentRevID, processingTaskID, a
 			ReturnAction:  ds.ReturnAction,
 			Interruptible: ds.Interruptible,
 		},
-		Frames:  make([]ManifestFrame, 0, len(ds.Frames)),
-		Quality: ManifestQuality{},
+		Frames:    make([]ManifestFrame, 0, len(ds.Frames)),
+		Quality:   ManifestQuality{},
 		CreatedAt: nowUTC(),
 	}
 	assetCache := make(map[string]*FrameAsset)
@@ -848,6 +850,29 @@ func (s *service) applySessionOperation(ctx context.Context, sessionID, userID, 
 	}
 	_, err = s.repo.UpdateSessionVersion(sessionID, baseVersion)
 	return err
+}
+
+func (s *service) CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error {
+	var genTaskID string
+	err := s.db.Table("desktop_pet_processing_tasks").
+		Where("id = ?", processingTaskID).
+		Select("generation_task_id").
+		Row().Scan(&genTaskID)
+	if err != nil {
+		return ErrTaskNotFound
+	}
+	var ownerUserID string
+	err = s.db.Table("desktop_pet_generation_tasks").
+		Where("id = ?", genTaskID).
+		Select("user_id").
+		Row().Scan(&ownerUserID)
+	if err != nil {
+		return ErrTaskNotFound
+	}
+	if ownerUserID != userID {
+		return ErrPermissionDenied
+	}
+	return nil
 }
 
 func (s *service) ListRevisions(ctx context.Context, processingTaskID, actionKey string) ([]RevisionSummary, error) {
@@ -1709,6 +1734,21 @@ func (s *service) GetRegenerationJob(ctx context.Context, jobID string) (*Regene
 	return s.repo.GetRegenerationJob(jobID)
 }
 
+func (s *service) ListRegenerationJobs(ctx context.Context, limit, offset int) ([]RegenerationJob, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	db := s.repo.DB().Model(&RegenerationJob{}).Order("created_at DESC").Limit(limit).Offset(offset)
+	var jobs []RegenerationJob
+	if err := db.Find(&jobs).Error; err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
 func (s *service) CancelRegenerationJob(ctx context.Context, jobID, userID string) error {
 	job, err := s.repo.GetRegenerationJob(jobID)
 	if err != nil {
@@ -1955,26 +1995,26 @@ func (s *service) ImportLegacyRevision(ctx context.Context, processingTaskID, ac
 	}
 	totalDuration := frameDuration * len(importData.Frames)
 	newRev := &ActionRevision{
-		ID:                revID,
-		ProcessingTaskID:  processingTaskID,
-		GenerationTaskID:  "",
-		ActionKey:         actionKey,
-		ParentRevisionID:  "",
-		RootRevisionID:    revID,
-		RevisionNumber:    1,
-		RevisionType:      RevisionTypeLegacyImport,
-		Status:            RevisionStatusBuilding,
-		FrameCount:        len(importData.Frames),
-		DurationMS:        totalDuration,
-		DefaultFPS:        fps,
-		LoopType:          loopType,
-		ReturnAction:      "",
-		Interruptible:     1,
-		CreatedByUserID:   userID,
+		ID:                   revID,
+		ProcessingTaskID:     processingTaskID,
+		GenerationTaskID:     "",
+		ActionKey:            actionKey,
+		ParentRevisionID:     "",
+		RootRevisionID:       revID,
+		RevisionNumber:       1,
+		RevisionType:         RevisionTypeLegacyImport,
+		Status:               RevisionStatusBuilding,
+		FrameCount:           len(importData.Frames),
+		DurationMS:           totalDuration,
+		DefaultFPS:           fps,
+		LoopType:             loopType,
+		ReturnAction:         "",
+		Interruptible:        1,
+		CreatedByUserID:      userID,
 		CreatedFromSessionID: "",
-		ChangeSummary:     "从处理结果导入为基线 Revision",
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		ChangeSummary:        "从处理结果导入为基线 Revision",
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 	if err := s.repo.CreateActionRevision(newRev); err != nil {
 		return nil, err

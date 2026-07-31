@@ -65,6 +65,7 @@ type QualityRepository interface {
 	ListDimensionScores(ctx context.Context, evaluationID string) ([]QualityDimensionScoreRecord, error)
 	UpsertGateResult(ctx context.Context, gate *QualityGateResultRecord) error
 	GetGateResult(ctx context.Context, processingTaskID string) (*QualityGateResultRecord, error)
+	DeleteGateResult(ctx context.Context, processingTaskID string) error
 }
 
 type QualityEvent struct {

@@ -17,8 +17,10 @@ type ReleaseService interface {
 	ListReleasesByPet(petID string) ([]*PackageRelease, error)
 	GetRelease(releaseID string) (*PackageRelease, error)
 	GetReleaseFiles(releaseID string) ([]ReleaseFile, error)
+	CheckReleaseOwnership(releaseID, userID string) error
 	ListPetIdentities(userID string) ([]*PetIdentity, error)
 	GetPetIdentity(petID string) (*PetIdentity, error)
+	CheckPetIdentityOwnership(petID, userID string) error
 	InstallRelease(userID, petID, releaseID, characterID, idempotencyKey string) (*Installation, error)
 	UpgradeInstallation(userID, installationID, targetReleaseID, idempotencyKey string) (*Installation, error)
 	SwitchInstallation(userID, installationID, idempotencyKey string) error
@@ -76,8 +78,8 @@ func (s *releaseService) ImportPackage(req *ImportPackageRequest) (*ImportPackag
 	if req.UserID == "" {
 		return nil, NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 为空", ErrInstallationInvalid)
 	}
-	if req.PackageDir == "" {
-		return nil, NewInstallationError(ErrCodeInstallationInvalid, "包目录为空", ErrInstallationInvalid)
+	if req.ImportStagingID == "" {
+		return nil, NewInstallationError(ErrCodeInstallationInvalid, "导入暂存 ID 为空", ErrInstallationInvalid)
 	}
 	return s.importer.ImportPackage(req)
 }
@@ -140,6 +142,34 @@ func (s *releaseService) GetPetIdentity(petID string) (*PetIdentity, error) {
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "查询宠物身份失败", err)
 	}
 	return identity, nil
+}
+
+func (s *releaseService) CheckPetIdentityOwnership(petID, userID string) error {
+	identity, err := s.repo.GetPetIdentity(petID)
+	if err != nil {
+		if errors.Is(err, ErrInstallationNotFound) {
+			return NewInstallationError(ErrCodeInstallationNotFound, "宠物身份不存在", err)
+		}
+		return NewInstallationError(ErrCodeInstallationFailed, "查询宠物身份失败", err)
+	}
+	if identity.OwnerUserID != userID {
+		return NewInstallationError(ErrCodeInstallationInvalid, "宠物身份不属于当前用户", ErrInstallationInvalid)
+	}
+	return nil
+}
+
+func (s *releaseService) CheckReleaseOwnership(releaseID, userID string) error {
+	release, err := s.repo.GetRelease(releaseID)
+	if err != nil {
+		if errors.Is(err, ErrInstallationNotFound) {
+			return NewInstallationError(ErrCodeInstallationNotFound, "Release 不存在", err)
+		}
+		return NewInstallationError(ErrCodeInstallationFailed, "查询 Release 失败", err)
+	}
+	if release.OwnerUserID != userID {
+		return NewInstallationError(ErrCodeInstallationInvalid, "Release 不属于当前用户", ErrInstallationInvalid)
+	}
+	return nil
 }
 
 func (s *releaseService) InstallRelease(userID, petID, releaseID, characterID, idempotencyKey string) (*Installation, error) {

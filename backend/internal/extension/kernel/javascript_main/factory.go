@@ -41,6 +41,8 @@ type CreateHostRequest struct {
 	Generation           int
 	AllowedContributions []AllowedContribution
 	ResourceLimits       runtime.ResourceLimits
+	Env                  []string
+	NetworkDisabled      bool
 }
 
 func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*PluginHost, error) {
@@ -93,6 +95,8 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 		HostAPIVersion:       req.HostAPIVersion,
 		AllowedContributions: req.AllowedContributions,
 		HostAPI:              gateway,
+		Env:                  req.Env,
+		NetworkDisabled:      req.NetworkDisabled,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("javascript_main: create host failed: %w", err)

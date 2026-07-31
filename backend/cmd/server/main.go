@@ -188,6 +188,8 @@ func main() {
 	defer services.ProcessingWorker.Stop()
 	services.QualityWorker.Start(appCtx)
 	defer services.QualityWorker.Stop()
+	services.RegenerationWorker.Start(appCtx)
+	defer services.RegenerationWorker.Stop()
 	if services.BehaviorService != nil {
 		if err := services.BehaviorService.Start(appCtx); err != nil {
 			log.Error("failed to start behavior service: ", err)

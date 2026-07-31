@@ -1174,7 +1174,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_packages (
     failure_stage TEXT NOT NULL DEFAULT '',
     last_transition_at TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
-    error_message TEXT NOT NULL DEFAULT ''
+    error_message TEXT NOT NULL DEFAULT '',
+    migrated_release_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dppkg_user ON desktop_pet_packages(user_id);
@@ -1213,7 +1214,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installations (
     install_storage_key TEXT NOT NULL DEFAULT '',
     integrity_root TEXT NOT NULL DEFAULT '',
     last_error_code TEXT NOT NULL DEFAULT '',
-    last_error_message TEXT NOT NULL DEFAULT ''
+    last_error_message TEXT NOT NULL DEFAULT '',
+    legacy_package_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dpinst_user ON desktop_pet_installations(user_id);
@@ -1597,6 +1599,11 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revisions (
   cooldown_ms_override INTEGER,
   quality_evaluation_id TEXT NOT NULL DEFAULT '',
   quality_verdict TEXT NOT NULL DEFAULT '',
+  source_processing_revision_id TEXT NOT NULL DEFAULT '',
+  quality_overall_score REAL,
+  quality_ruleset_version TEXT NOT NULL DEFAULT '',
+  quality_source_content_hash TEXT NOT NULL DEFAULT '',
+  quality_evaluated_at TEXT NOT NULL DEFAULT '',
   created_by_user_id TEXT NOT NULL DEFAULT '',
   created_from_session_id TEXT NOT NULL DEFAULT '',
   change_summary TEXT NOT NULL DEFAULT '',
@@ -2005,6 +2012,10 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_results (
   failed_evaluation_count INTEGER NOT NULL DEFAULT 0,
   snapshot_json TEXT NOT NULL,
   snapshot_hash TEXT NOT NULL,
+  active_revision_set_hash TEXT NOT NULL DEFAULT '',
+  evaluation_set_hash TEXT NOT NULL DEFAULT '',
+  ruleset_version TEXT NOT NULL DEFAULT '',
+  invalidated_at TEXT NOT NULL DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -2044,6 +2055,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_generation_attempts (
     error_message TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
+    active_succeeded_attempt_id TEXT NOT NULL DEFAULT '',
+    active_primary_artifact_id TEXT NOT NULL DEFAULT '',
     UNIQUE(task_action_id, attempt_number)
 );
 

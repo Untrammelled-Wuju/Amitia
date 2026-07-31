@@ -41,7 +41,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '表情包管理',
-        showBackButton: true,
+        navigation: AmitiaAppBarNavigation.drawer,
         actions: [
           AmitiaIconButton(
             icon: _batchMode ? Icons.check : Icons.checklist,

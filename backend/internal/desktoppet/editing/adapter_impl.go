@@ -36,15 +36,15 @@ func (a *generationAdapter) GenerateSingleFrame(ctx context.Context, req SingleF
 	attemptID := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 	err = a.ctx.DB.Table("desktop_pet_action_generation_attempts").Create(map[string]interface{}{
-		"id":              attemptID,
-		"task_id":         req.GenerationTaskID,
-		"task_action_id":  taskAction.ID,
-		"attempt_number":  1,
-		"mode":            "single_frame",
-		"reason":          "editing_single_frame_regen",
-		"status":          "pending",
-		"created_at":      now,
-		"updated_at":      now,
+		"id":             attemptID,
+		"task_id":        req.GenerationTaskID,
+		"task_action_id": taskAction.ID,
+		"attempt_number": 1,
+		"mode":           "single_frame",
+		"reason":         "editing_single_frame_regen",
+		"status":         "pending",
+		"created_at":     now,
+		"updated_at":     now,
 	}).Error
 	if err != nil {
 		return nil, fmt.Errorf("create generation attempt: %w", err)
@@ -77,15 +77,15 @@ func (a *generationAdapter) GenerateFullAction(ctx context.Context, req FullActi
 	attemptID := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 	err = a.ctx.DB.Table("desktop_pet_action_generation_attempts").Create(map[string]interface{}{
-		"id":              attemptID,
-		"task_id":         req.GenerationTaskID,
-		"task_action_id":  taskAction.ID,
-		"attempt_number":  1,
-		"mode":            "sprite_sheet",
-		"reason":          "editing_full_action_regen",
-		"status":          "pending",
-		"created_at":      now,
-		"updated_at":      now,
+		"id":             attemptID,
+		"task_id":        req.GenerationTaskID,
+		"task_action_id": taskAction.ID,
+		"attempt_number": 1,
+		"mode":           "sprite_sheet",
+		"reason":         "editing_full_action_regen",
+		"status":         "pending",
+		"created_at":     now,
+		"updated_at":     now,
 	}).Error
 	if err != nil {
 		return nil, fmt.Errorf("create generation attempt: %w", err)
@@ -190,17 +190,17 @@ func (a *processingAdapter) GetProcessingAction(ctx context.Context, processingT
 	a.ctx.DB.Table("desktop_pet_processing_tasks").Where("id = ?", processingTaskID).Select("generation_task_id").Scan(&genTaskID)
 	_ = genTask
 	return &ProcessingActionInfo{
-		ProcessingActionID: action.ID,
-		ProcessingTaskID:   action.ProcessingTaskID,
-		GenerationTaskID:   genTaskID,
-		ActionKey:          action.ActionKey,
-		ActionNameSnapshot: action.ActionNameSnapshot,
+		ProcessingActionID:  action.ID,
+		ProcessingTaskID:    action.ProcessingTaskID,
+		GenerationTaskID:    genTaskID,
+		ActionKey:           action.ActionKey,
+		ActionNameSnapshot:  action.ActionNameSnapshot,
 		SourceAttemptNumber: action.SourceAttemptNumber,
-		Status:             action.Status,
-		LoopType:           action.LoopType,
-		FPS:                action.FPS,
-		FrameDurationMS:    action.FrameDurationMS,
-		Excluded:           action.Excluded != 0,
+		Status:              action.Status,
+		LoopType:            action.LoopType,
+		FPS:                 action.FPS,
+		FrameDurationMS:     action.FrameDurationMS,
+		Excluded:            action.Excluded != 0,
 	}, nil
 }
 
@@ -258,12 +258,12 @@ func (a *processingAdapter) GetProcessingRevisionFrames(ctx context.Context, rev
 	result := make([]ProcessedFrameInfo, len(artifacts))
 	for i, art := range artifacts {
 		result[i] = ProcessedFrameInfo{
-			FrameID:      fmt.Sprintf("frm-prev-%s-%d", revisionID, art.FrameIndex),
-			FrameIndex:   art.FrameIndex,
+			FrameID:       fmt.Sprintf("frm-prev-%s-%d", revisionID, art.FrameIndex),
+			FrameIndex:    art.FrameIndex,
 			ProcessedPath: art.RelativePath,
-			Width:        art.Width,
-			Height:       art.Height,
-			ContentHash:  art.ContentHash,
+			Width:         art.Width,
+			Height:        art.Height,
+			ContentHash:   art.ContentHash,
 		}
 	}
 	return result, nil
@@ -306,30 +306,46 @@ func (a *qualityAdapter) EvaluateRevision(ctx context.Context, revisionID string
 		return "", fmt.Errorf("find revision: %w", err)
 	}
 
+	if rev.Status != RevisionStatusReady {
+		return "", fmt.Errorf("revision %s status is %s, expected %s for quality evaluation", revisionID, rev.Status, RevisionStatusReady)
+	}
+
+	if rev.ManifestHash == "" {
+		return "", fmt.Errorf("revision %s manifest hash is empty, content not finalized", revisionID)
+	}
+
 	evaluationID := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	err = a.ctx.DB.Table("desktop_pet_quality_evaluations").Create(map[string]interface{}{
-		"id":                  evaluationID,
-		"processing_task_id":  rev.ProcessingTaskID,
+		"id":                   evaluationID,
+		"processing_task_id":   rev.ProcessingTaskID,
 		"processing_action_id": rev.ProcessingActionID,
-		"action_revision_id":  revisionID,
-		"action_key":          rev.ActionKey,
-		"execution_status":    "pending",
-		"quality_mode":        "standard",
-		"is_active":           1,
-		"created_at":          now,
-		"updated_at":          now,
+		"action_revision_id":   revisionID,
+		"action_key":           rev.ActionKey,
+		"execution_status":     "pending",
+		"quality_mode":         "standard",
+		"is_active":            1,
+		"created_at":           now,
+		"updated_at":           now,
 	}).Error
 	if err != nil {
 		return "", fmt.Errorf("create quality evaluation: %w", err)
 	}
 
-	a.ctx.DB.Table("desktop_pet_action_revisions").Where("id = ?", revisionID).Updates(map[string]interface{}{
-		"status":               RevisionStatusQualityPending,
-		"quality_evaluation_id": evaluationID,
-		"updated_at":           now,
-	})
+	result := a.ctx.DB.Table("desktop_pet_action_revisions").
+		Where("id = ? AND status = ? AND manifest_hash = ?", revisionID, RevisionStatusReady, rev.ManifestHash).
+		Updates(map[string]interface{}{
+			"status":                RevisionStatusQualityPending,
+			"quality_evaluation_id": evaluationID,
+			"updated_at":            now,
+		})
+	if result.Error != nil {
+		return "", fmt.Errorf("cas update action revision: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return "", fmt.Errorf("cas update failed: revision %s was modified by a newer edit", revisionID)
+	}
 
 	return evaluationID, nil
 }

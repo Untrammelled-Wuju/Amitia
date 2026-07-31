@@ -2,8 +2,6 @@ package adapters
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/events"
@@ -24,7 +22,7 @@ func (a *InteractionAdapter) OnInteractionLifecycle(ctx context.Context, evt beh
 		return
 	}
 	now := a.clock.Now()
-	envelope := buildInteractionEnvelope(evt, now)
+	envelope := events.EnvelopeFromInteractionEvent(evt, now, behavior.OriginInteraction)
 	if err := a.publisher.PublishBehaviorEvent(ctx, envelope); err != nil {
 		log.Warn("interaction adapter: publish failed", map[string]interface{}{
 			"error":       err.Error(),
@@ -32,27 +30,6 @@ func (a *InteractionAdapter) OnInteractionLifecycle(ctx context.Context, evt beh
 			"characterId": envelope.CharacterID,
 		})
 	}
-}
-
-func buildInteractionEnvelope(evt behavior.InteractionLifecycleEvent, now time.Time) behavior.BehaviorEventEnvelope {
-	builder := events.NewEnvelope(evt.Phase, behavior.OriginInteraction).
-		UserID(evt.UserID).
-		CharacterID(evt.CharacterID).
-		InteractionID(evt.InteractionID).
-		OccurredAt(evt.OccurredAt).
-		DedupKey(events.BuildDedupKey(evt.InteractionID, evt.Phase, fmt.Sprintf("v%d", evt.StatusVersion)))
-
-	if evt.ConversationID != "" {
-		builder.ConversationID(evt.ConversationID)
-	}
-	if evt.CorrelationID != "" {
-		builder.CorrelationID(evt.CorrelationID)
-	}
-	if evt.Origin != "" {
-		builder.PayloadField("origin", evt.Origin)
-	}
-	builder.PayloadField("statusVersion", evt.StatusVersion)
-	return builder.Build(now)
 }
 
 type NoopInteractionAdapter struct{}

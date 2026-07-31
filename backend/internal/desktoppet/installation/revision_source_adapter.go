@@ -3,6 +3,7 @@ package installation
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -161,6 +162,9 @@ func (a *revisionSourceAdapter) GetAssetPath(assetID string) (string, error) {
 func (a *revisionSourceAdapter) GetPackagePreviewPath(processingTaskID string, processingVersion int) (string, error) {
 	previewPath := filepath.Join(a.dataDir, "desktop-pets", "generation-tasks", processingTaskID, "processed",
 		fmt.Sprintf("version-%d", processingVersion), "package-preview.png")
+	if _, err := os.Stat(previewPath); err != nil {
+		return "", nil
+	}
 	return previewPath, nil
 }
 

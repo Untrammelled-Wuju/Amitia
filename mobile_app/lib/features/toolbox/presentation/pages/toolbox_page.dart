@@ -1,29 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
+import 'toolbox_log_page.dart';
+import 'toolbox_prompt_trace_page.dart';
+import 'toolbox_runtime_status_page.dart';
+import 'toolbox_database_status_page.dart';
+import 'toolbox_device_status_page.dart';
+import 'toolbox_file_browser_page.dart';
+import 'toolbox_workspace_page.dart';
+import 'toolbox_task_log_page.dart';
 
 class ToolboxPage extends ConsumerWidget {
   const ToolboxPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tools = <(IconData, String, String)>[
-      (Icons.folder_outlined, '文件浏览', '浏览设备文件系统'),
-      (Icons.work_outline, '工作区', '管理你的工作空间'),
-      (Icons.task_alt, '任务日志', '查看 Agent 任务记录'),
-      (Icons.terminal, '运行日志', '系统运行日志'),
-      (Icons.code, 'Prompt Trace', '提示词调用追踪'),
-      (Icons.storage, '数据库状态', '查看数据库健康状态'),
-      (Icons.devices, '设备状态', '设备信息与资源'),
-      (Icons.developer_mode, '开发者选项', '高级调试选项'),
+    final isDev = ref.watch(isDeveloperModeProvider);
+    final tools = <(IconData, String, String, VoidCallback)>[
+      (Icons.folder_outlined, '文件浏览', '浏览设备文件系统',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxFileBrowserPage()))),
+      (Icons.work_outline, '工作区', '管理你的工作空间',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxWorkspacePage()))),
+      (Icons.task_alt, '任务日志', '查看 Agent 任务记录',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxTaskLogPage()))),
+      (Icons.terminal, '运行日志', '系统运行日志',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxLogPage()))),
+      (Icons.code, 'Prompt Trace', '提示词调用追踪',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxPromptTracePage()))),
+      (Icons.memory, 'Runtime 状态', '运行时组件健康',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxRuntimeStatusPage()))),
+      (Icons.storage, '数据库状态', '查看数据库健康状态',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxDatabaseStatusPage()))),
+      (Icons.devices, '设备状态', '设备信息与资源',
+          () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolboxDeviceStatusPage()))),
+      if (isDev)
+        (Icons.developer_mode, '开发者选项', '高级调试选项', () => context.push(AppRoutes.developer)),
     ];
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '工具箱', showBackButton: true),
+      appBar: AmitiaAppBar(title: '工具箱', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         child: GridView.builder(
@@ -40,14 +62,7 @@ class ToolboxPage extends ConsumerWidget {
               icon: tool.$1,
               title: tool.$2,
               subtitle: tool.$3,
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${tool.$2} · 功能开发中'),
-                    duration: const Duration(seconds: 1),
-                  ),
-                );
-              },
+              onTap: tool.$4,
             );
           },
         ),

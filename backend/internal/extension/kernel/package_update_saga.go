@@ -88,12 +88,14 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", confirmed.session.ExtensionID, leaseErr)
 	}
 	leaseGuard := r.newPackageLeaseGuard(confirmed.session.ExtensionID, operationID)
-	if startErr := leaseGuard.Start(ctx); startErr != nil {
+	sagaCtx, startErr := leaseGuard.Start(ctx)
+	if startErr != nil {
 		_ = r.releasePackageExtensionLease(context.Background(), confirmed.session.ExtensionID, operationID)
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
 	}
-	defer leaseGuard.Stop(context.Background())
+	defer func() { _ = leaseGuard.Stop(context.Background()) }()
+	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
@@ -162,8 +164,8 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	diff := computePackageUpdateDiff(currentDefinition, currentModules, currentContributions, currentRequirements, currentResources, confirmed.preview.Manifest, confirmed.artifact)
 	diffJSON, _ := json.Marshal(diff)
-	if err := r.completePackageUpdateStep(ctx, operationID, 1, "validate_and_diff", string(diffJSON), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "validate_and_diff", err, nil, guard)
+	if err := r.completePackageUpdateStep(ctx, operationID, 1, StepValidateAndDiff, string(diffJSON), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, StepValidateAndDiff, err, nil, guard)
 	}
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID}
 	if renewErr := leaseGuard.AssertAlive(ctx); renewErr != nil {
@@ -171,52 +173,53 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	rollbackPoint, err := r.createPackageRollbackPoint(ctx, op.OperationID, "active", current, &currentDefinition, currentModules, currentContributions)
 	if err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "create_rollback_point", err, nil, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepCreateRollbackPoint, err, nil, guard)
 	}
-	if err := r.completePackageUpdateStep(ctx, op.OperationID, 2, "create_rollback_point", packageJSON(map[string]string{"rollbackPointId": rollbackPoint.RollbackPointID}), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "create_rollback_point", err, nil, guard)
+	if err := r.completePackageUpdateStep(ctx, op.OperationID, 2, StepCreateRollbackPoint, packageJSON(map[string]string{"rollbackPointId": rollbackPoint.RollbackPointID}), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepCreateRollbackPoint, err, nil, guard)
 	}
 	staging, err := r.container.PackageSecurity.ExtractFileToStaging(ctx, confirmed.artifact.ArchivePath, op.OperationID)
 	if err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "extract_to_staging", err, nil, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "update.extract_to_staging", err, nil, guard)
 	}
 	defer r.container.PackageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
 	if package_security.ComputeDirHash(staging.Path, r.container.PackageSecurity.GetHasher()) == "" {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "verify_staging_tree", fmt.Errorf("kernel: staging hash empty"), nil, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "update.verify_staging_tree", fmt.Errorf("kernel: staging hash empty"), nil, guard)
 	}
 	targetGeneration, stableGeneration, err := r.preparePackageGeneration(ctx, op.OperationID, confirmed.artifact, staging.Path, guard.FencingToken)
 	if err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "commit_target_generation", err, nil, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepCommitTargetGeneration, err, nil, guard)
 	}
 	compensation := &packageUpdateCompensation{runtime: r, operationID: op.OperationID, rollbackPoint: rollbackPoint, stable: stableGeneration, target: targetGeneration}
 	stableFromDB := packageGenerationFromInstallation(current)
 	if stableFromDB.GenerationID == "" || stableFromDB.GenerationID != stableGeneration.GenerationID {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "validate_current_pointer", ErrPackageGenerationCAS, compensation, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "update.validate_current_pointer", ErrPackageGenerationCAS, compensation, guard)
 	}
 	if err := r.container.PackageRepository.SetOperationGenerationEvidence(ctx, op.OperationID, stableGeneration.GenerationID, targetGeneration.Current.GenerationID, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "persist_generation_evidence", err, compensation, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "update.persist_generation_evidence", err, compensation, guard)
 	}
-	if err := r.completePackageGenerationStep(ctx, op.OperationID, "commit_target_generation", 3, stableGeneration, targetGeneration.Current, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "commit_target_generation", err, compensation, guard)
+	commitGenResult := CommitGenerationStepResult{Path: targetGeneration.GenerationPath, TreeHash: targetGeneration.Current.TreeHash, StableGeneration: stableGeneration.GenerationID, TargetGeneration: targetGeneration.Current.GenerationID, ArtifactHash: confirmed.artifact.ArtifactHash}
+	if err := r.completePackageGenerationStep(ctx, op.OperationID, StepCommitTargetGeneration, 3, stableGeneration, targetGeneration.Current, packageJSON(commitGenResult), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepCommitTargetGeneration, err, compensation, guard)
 	}
 	migrationExecution, err := r.executePackageUpdateMigrations(ctx, op.OperationID, migrationPreflight, rollbackPoint, confirmed.pkg, staging.Path)
 	compensation.migration = migrationExecution
 	if err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "execute_migrations", err, compensation, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepExecuteMigrations, err, compensation, guard)
 	}
 	migrationOperation := ""
 	if migrationExecution != nil {
 		migrationOperation = migrationExecution.request.OperationID
 	}
-	if err := r.completePackageUpdateStep(ctx, op.OperationID, 4, "execute_migrations", packageJSON(map[string]string{"migrationOperationId": migrationOperation, "migrationPlanHash": confirmed.preview.MigrationPlanHash}), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "execute_migrations", err, compensation, guard)
+	if err := r.completePackageUpdateStep(ctx, op.OperationID, 4, StepExecuteMigrations, packageJSON(map[string]string{"migrationOperationId": migrationOperation, "migrationPlanHash": confirmed.preview.MigrationPlanHash}), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepExecuteMigrations, err, compensation, guard)
 	}
 	if err := r.switchPackageGeneration(ctx, stableGeneration, targetGeneration); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "switch_current_pointer", err, compensation, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepUpdateSwitchCurrentPointer, err, compensation, guard)
 	}
 	compensation.switched = true
-	if err := r.completePackageGenerationStep(ctx, op.OperationID, "switch_current_pointer", 5, stableGeneration, targetGeneration.Current, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "switch_current_pointer", err, compensation, guard)
+	if err := r.completePackageGenerationStep(ctx, op.OperationID, StepUpdateSwitchCurrentPointer, 5, stableGeneration, targetGeneration.Current, packageGenerationJSON(targetGeneration.Current), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepUpdateSwitchCurrentPointer, err, compensation, guard)
 	}
 	targetRequirements := packageManifestRequirements(current.ExtensionID, confirmed.preview.Manifest.Permissions)
 	targetResources := packageManifestResources(current.ExtensionID, confirmed.preview.Manifest.Resources, targetGeneration.GenerationPath)
@@ -235,6 +238,9 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	metadata["devOnly"] = confirmed.preview.DevOnly
 	current.Metadata = packageInstallationMetadata(metadata, targetGeneration.Current, targetGeneration.GenerationPath, op.OperationID)
 	err = r.container.TransactionManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := r.container.PackageRepository.VerifyFencingTokenInContext(txCtx, guard); err != nil {
+			return err
+		}
 		if err := r.container.PermissionRepository.DeleteRequirements(txCtx, current.ExtensionID); err != nil {
 			return err
 		}
@@ -296,14 +302,15 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		return r.container.InstallationRepository.PutInstallation(txCtx, current)
 	})
 	if err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "commit_update_state", err, compensation, guard)
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepCommitUpdateState, err, compensation, guard)
 	}
 	compensation.repositoriesCommitted = true
 	if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "persist_artifact_metadata", err, compensation, guard)
 	}
-	if err := r.completePackageUpdateStep(ctx, op.OperationID, 6, "commit_update_state", packageGenerationJSON(targetGeneration.Current), guard); err != nil {
-		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "commit_update_state", err, compensation, guard)
+	commitRepoResult := CommitRepositoryResult{InstallationID: current.InstallationID, VersionID: confirmed.session.Version, ArtifactID: confirmed.artifact.ArtifactID, GenerationID: targetGeneration.Current.GenerationID}
+	if err := r.completePackageUpdateStep(ctx, op.OperationID, 6, StepCommitUpdateState, packageJSON(commitRepoResult), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepCommitUpdateState, err, compensation, guard)
 	}
 	if err := r.container.PackageRepository.ConsumePreview(ctx, confirmed.session.SessionID); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "consume_preview_session", err, compensation, guard)
@@ -314,7 +321,11 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.runPackageFinalGate(ctx, op.OperationID); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "final_gate", err, compensation, guard)
 	}
-	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, guard); err != nil {
+	if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", stopErr.Error(), false, guard)
+		return KernelInstallResult{}, stopErr
+	}
+	if err := r.container.PackageRepository.SetOperation(ctx, op.OperationID, "completed", "completed", "", "", true, PackageWriteGuard{}); err != nil {
 		return KernelInstallResult{}, err
 	}
 	return KernelInstallResult{OperationID: op.OperationID, TraceID: op.TraceID, Operation: "update", ExtensionID: confirmed.session.ExtensionID, Version: confirmed.session.Version, InstallationID: current.InstallationID, PackageHash: confirmed.artifact.ArchiveHash, ContentTreeHash: confirmed.artifact.ContentTreeHash, ArtifactPath: confirmed.artifact.ArchivePath, InstallPath: targetGeneration.GenerationPath, DefinitionHash: targetGeneration.Current.TreeHash, InstalledAt: current.UpdatedAt}, nil

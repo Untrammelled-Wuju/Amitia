@@ -5,7 +5,6 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../shared/models/models.dart';
 import '../../../../shared/mock_data/mock_data.dart';
@@ -24,25 +23,34 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   final Map<String, int> _testStates = {};
 
   static const _typeLabels = {
-    'llm': '文本模型',
-    'voice': '语音模型',
-    'embedding': '向量模型',
+    'text': '文本模型',
     'vision': '视觉模型',
-    'imagegen': '图像生成',
+    'voice': '语音模型',
+    'vector': '向量模型',
+    'image': '图像生成',
   };
 
   static const _typeIcons = {
-    'llm': Icons.chat_outlined,
-    'voice': Icons.record_voice_over_outlined,
-    'embedding': Icons.scatter_plot_outlined,
+    'text': Icons.chat_outlined,
     'vision': Icons.visibility_outlined,
-    'imagegen': Icons.image_outlined,
+    'voice': Icons.record_voice_over_outlined,
+    'vector': Icons.scatter_plot_outlined,
+    'image': Icons.image_outlined,
+  };
+
+  static const _typeMap = {
+    'text': ModelType.llm,
+    'vision': ModelType.vision,
+    'voice': ModelType.voice,
+    'vector': ModelType.embedding,
+    'image': ModelType.imagegen,
   };
 
   @override
   void initState() {
     super.initState();
-    _configs = MockSettings.modelConfigs.where((c) => c.type.name == widget.modelType).toList();
+    final targetType = _typeMap[widget.modelType] ?? ModelType.llm;
+    _configs = MockSettings.modelConfigs.where((c) => c.type == targetType).toList();
   }
 
   String get _typeName => _typeLabels[widget.modelType] ?? '模型配置';
@@ -261,7 +269,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                             _configs.add(ModelConfig(
                               id: 'mc${DateTime.now().millisecondsSinceEpoch}',
                               name: nameCtrl.text,
-                              type: existing?.type ?? ModelType.values.firstWhere((t) => t.name == widget.modelType),
+                              type: existing?.type ?? (_typeMap[widget.modelType] ?? ModelType.llm),
                               provider: providerCtrl.text,
                               baseUrl: baseUrlCtrl.text,
                               modelName: modelCtrl.text,

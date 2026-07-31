@@ -60,6 +60,8 @@ type PluginHost struct {
 	nodePath       string
 	pluginHostPath string
 	workDir        string
+	env            []string
+	networkDisabled bool
 	expectedNonce  string
 	cmd            *exec.Cmd
 	stdin          io.WriteCloser
@@ -92,6 +94,8 @@ type PluginHostConfig struct {
 	PluginHostPath       string
 	WorkingDirectory     string
 	HostAPI              host_api.Gateway
+	Env                  []string
+	NetworkDisabled      bool
 }
 
 type AllowedContribution struct {
@@ -123,6 +127,8 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 		nodePath:            cfg.NodePath,
 		pluginHostPath:      cfg.PluginHostPath,
 		workDir:             cfg.WorkingDirectory,
+		env:                 cfg.Env,
+		networkDisabled:     cfg.NetworkDisabled,
 		handlers:            NewHandlerRegistry(cfg.AllowedContributions),
 		dispatcher:          NewInvocationDispatcher(cfg.BootstrapSpec.ResourceLimits),
 		watchdog:            NewWatchdog(cfg.InstanceID),
@@ -295,6 +301,19 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 		"AMITIA_HOST_API_VERSION="+h.rpcVersion,
 		"AMITIA_DEFINITION_HASH="+h.definitionHash,
 	)
+	if h.networkDisabled {
+		cmd.Env = append(cmd.Env,
+			"AMITIA_NETWORK_DISABLED=1",
+			"HTTP_PROXY=",
+			"HTTPS_PROXY=",
+			"NO_PROXY=*",
+			"http_proxy=",
+			"https_proxy=",
+			"no_proxy=*",
+			"NODE_OPTIONS=--no-experimental-fetch --disable-network-imports",
+		)
+	}
+	cmd.Env = append(cmd.Env, h.env...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

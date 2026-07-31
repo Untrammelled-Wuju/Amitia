@@ -117,6 +117,16 @@ func (g *GateEvaluator) resolveGateStatus(required, accepted, warning, review, r
 	return GatePassed
 }
 
+func (g *GateEvaluator) InvalidateGate(ctx context.Context, processingTaskID string) error {
+	if processingTaskID == "" {
+		return nil
+	}
+	if err := g.repo.DeleteGateResult(ctx, processingTaskID); err != nil {
+		return NewQualityError(ErrCodeDatabaseCommitFailed, "failed to invalidate gate result", err)
+	}
+	return nil
+}
+
 func (g *GateEvaluator) GetGateStatus(ctx context.Context, processingTaskID string) (*QualityGateResult, error) {
 	record, err := g.repo.GetGateResult(ctx, processingTaskID)
 	if err != nil {

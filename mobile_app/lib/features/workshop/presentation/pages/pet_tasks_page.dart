@@ -64,6 +64,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
       appBar: AmitiaAppBar(
         title: '任务列表',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.sm),

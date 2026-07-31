@@ -30,6 +30,8 @@ const (
 	ErrCodeProcessingInvalidAttempt     = "PROCESSING_INVALID_ATTEMPT"
 	ErrCodeProcessingExcludedDefault    = "PROCESSING_EXCLUDED_DEFAULT_IDLE"
 	ErrCodeProcessingPackageFailed      = "PROCESSING_PACKAGE_FAILED"
+	ErrCodeProcessingTaskNotOwned       = "PROCESSING_TASK_NOT_OWNED"
+	ErrCodePackageNotOwned              = "PACKAGE_NOT_OWNED"
 )
 
 type ProcessingError struct {
@@ -57,6 +59,7 @@ func NewProcessingErrorWithErr(code, message string, err error) *ProcessingError
 
 type Service interface {
 	CreateProcessingTask(req *CreateProcessingTaskRequest) (*ProcessingTask, error)
+	CheckProcessingTaskOwnership(processingTaskID, userID string) error
 	GetProcessingTask(id string) (*GetProcessingTaskResponse, error)
 	CancelProcessingTask(id string) error
 	RetryProcessingAction(processingTaskID, actionKey string) error
@@ -69,6 +72,7 @@ type Service interface {
 	ListPackages(userID string, page, pageSize int) ([]Package, int64, error)
 	ListPackagesByGenerationTask(userID, generationTaskID string) ([]Package, error)
 	GetPackage(id string) (*Package, error)
+	CheckPackageOwnership(packageID, userID string) error
 	DownloadPackage(id string) (packageDir string, pkg *Package, err error)
 }
 
@@ -157,6 +161,32 @@ func wrapValidationError(err error) error {
 		return NewProcessingErrorWithErr(ve.Code, ve.Message, ve)
 	}
 	return err
+}
+
+func (s *service) CheckProcessingTaskOwnership(processingTaskID, userID string) error {
+	task, err := s.repo.GetProcessingTask(processingTaskID)
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingTaskNotFound, "处理任务不存在", err)
+	}
+	genTask, err := s.repo.GetGenerationTask(task.GenerationTaskID)
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingTaskNotFound, "关联生成任务不存在", err)
+	}
+	if genTask.UserID != userID {
+		return NewProcessingError(ErrCodeProcessingTaskNotOwned, "处理任务不属于当前用户")
+	}
+	return nil
+}
+
+func (s *service) CheckPackageOwnership(packageID, userID string) error {
+	pkg, err := s.repo.GetPackage(packageID)
+	if err != nil {
+		return NewProcessingErrorWithErr("PACKAGE_NOT_FOUND", "资源包不存在", err)
+	}
+	if pkg.UserID != userID {
+		return NewProcessingError(ErrCodePackageNotOwned, "资源包不属于当前用户")
+	}
+	return nil
 }
 
 func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*ProcessingTask, error) {

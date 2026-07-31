@@ -39,7 +39,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '概览', showBackButton: true),
+      appBar: AmitiaAppBar(title: '概览', navigation: AmitiaAppBarNavigation.drawer),
       body: Column(
         children: [
           Padding(

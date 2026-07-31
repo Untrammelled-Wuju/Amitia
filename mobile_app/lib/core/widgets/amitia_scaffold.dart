@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
@@ -9,6 +10,16 @@ enum AmitiaAppBarNavigation {
   drawer,
   back,
   none,
+}
+
+class ShellDrawerScope extends InheritedWidget {
+  final VoidCallback openDrawer;
+  const ShellDrawerScope({super.key, required this.openDrawer, required super.child});
+  static ShellDrawerScope? of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<ShellDrawerScope>();
+  }
+  @override
+  bool updateShouldNotify(ShellDrawerScope oldWidget) => openDrawer != oldWidget.openDrawer;
 }
 
 class AmitiaScaffold extends StatelessWidget {
@@ -54,6 +65,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final AmitiaAppBarNavigation navigation;
   final bool centerTitle;
   final double elevation;
+  final String fallbackRoute;
 
   const AmitiaAppBar({
     super.key,
@@ -65,6 +77,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.navigation = AmitiaAppBarNavigation.none,
     this.centerTitle = false,
     this.elevation = 0,
+    this.fallbackRoute = AppRoutes.chat,
   });
 
   @override
@@ -81,14 +94,21 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
             if (context.canPop()) {
               context.pop();
             } else {
-              context.go('/');
+              context.go(fallbackRoute);
             }
           },
         );
       } else if (navigation == AmitiaAppBarNavigation.drawer) {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.menu, size: 22),
-          onPressed: () => Scaffold.of(context).openDrawer(),
+          onPressed: () {
+            final scope = ShellDrawerScope.of(context);
+            if (scope != null) {
+              scope.openDrawer();
+            } else {
+              Scaffold.of(context).openDrawer();
+            }
+          },
         );
       }
     }

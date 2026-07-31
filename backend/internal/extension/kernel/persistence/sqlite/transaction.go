@@ -99,3 +99,11 @@ func getExecutor(ctx context.Context, db *sql.DB) Executor {
 	}
 	return db
 }
+
+func TxFromContext(ctx context.Context) (*sql.Tx, bool) {
+	tx, ok := ctx.Value(txKey{}).(*sql.Tx)
+	if !ok || tx == nil {
+		return nil, false
+	}
+	return tx, true
+}

@@ -17,6 +17,7 @@ class WorkshopHomePage extends ConsumerWidget {
       appBar: AmitiaAppBar(
         title: '创意工坊',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
       ),
       body: SafeArea(
         top: false,

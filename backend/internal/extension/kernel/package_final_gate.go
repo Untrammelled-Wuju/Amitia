@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,6 +86,37 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	result.Version = operation.TargetVersion
 
 	isUninstall := operation.OperationType == "uninstall"
+
+	checkIdentity := PackageFinalGateCheck{Name: "authoritative_identity"}
+	{
+		var missing []string
+		if operation.OperationID == "" {
+			missing = append(missing, "OperationID")
+		}
+		if operation.ExtensionID == "" {
+			missing = append(missing, "ExtensionID")
+		}
+		if operation.FencingToken == 0 {
+			missing = append(missing, "FencingToken")
+		}
+		if !isUninstall {
+			if operation.ArtifactID == "" {
+				missing = append(missing, "ArtifactID")
+			}
+			if operation.TargetGeneration == "" {
+				missing = append(missing, "GenerationID")
+			}
+			if operation.TargetVersion == "" {
+				missing = append(missing, "VersionID")
+			}
+		}
+		if len(missing) > 0 {
+			checkIdentity.Detail = "missing: " + strings.Join(missing, ", ")
+		} else {
+			checkIdentity.Passed = true
+		}
+	}
+	result.Checks = append(result.Checks, checkIdentity)
 
 	checkStatus := PackageFinalGateCheck{Name: "operation_status_completed"}
 	if operation.Status == string(PackageOperationCompleted) || operation.Status == string(PackageOperationInProgress) {
@@ -181,14 +213,23 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 			packageHash := artifactForTrust.ArchiveHash
 			publisherID := artifactForTrust.PublisherID
 			signerKeyID := artifactForTrust.SignerKeyID
+			blockVersion := func(reason string) {
+				if operation.TargetVersion != "" {
+					_ = r.container.PackageRepository.BlockPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion, reason)
+				}
+			}
 			if blocked := r.container.TrustService.Blocklist().Check(packageHash); blocked != nil {
 				checkTrust.Detail = fmt.Sprintf("package hash %s is blocklisted: %s", packageHash, blocked.Reason)
+				blockVersion("blocklisted: " + string(blocked.Reason))
 			} else if revokedKey := r.container.TrustService.RevocationList().CheckKey(publisherID, signerKeyID); revokedKey != nil {
 				checkTrust.Detail = fmt.Sprintf("signing key %s is revoked: %s", signerKeyID, revokedKey.Reason)
+				blockVersion("signing_key_revoked: " + string(revokedKey.Reason))
 			} else if revokedPkg := r.container.TrustService.RevocationList().CheckPackage(packageHash); revokedPkg != nil {
 				checkTrust.Detail = fmt.Sprintf("package hash %s is revoked: %s", packageHash, revokedPkg.Reason)
+				blockVersion("package_revoked: " + string(revokedPkg.Reason))
 			} else if revokedPub := r.container.TrustService.RevocationList().CheckPublisher(publisherID); revokedPub != nil {
 				checkTrust.Detail = fmt.Sprintf("publisher %s is revoked: %s", publisherID, revokedPub.Reason)
+				blockVersion("publisher_revoked: " + string(revokedPub.Reason))
 			} else {
 				checkTrust.Passed = true
 			}
@@ -275,20 +316,42 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	}
 	result.Checks = append(result.Checks, checkPerm)
 
-	checkLease := PackageFinalGateCheck{Name: "no_active_lease"}
+	checkLease := PackageFinalGateCheck{Name: "valid_lease"}
 	lease, leaseErr := r.container.PackageRepository.getExtensionLease(ctx, operation.ExtensionID)
-	if IsPackageOperationError(leaseErr, OperationErrNotFound) {
-		checkLease.Passed = true
-	} else if leaseErr == nil {
-		if lease.OperationID == operationID {
-			checkLease.Passed = true
-		} else {
-			checkLease.Detail = fmt.Sprintf("active lease held by operation %s", lease.OperationID)
-		}
+	if leaseErr != nil {
+		checkLease.Detail = fmt.Sprintf("no active lease: %v", leaseErr)
+	} else if lease.OperationID != operationID {
+		checkLease.Detail = fmt.Sprintf("lease held by different operation: %s", lease.OperationID)
+	} else if lease.FencingToken != operation.FencingToken {
+		checkLease.Detail = fmt.Sprintf("fencing token mismatch: lease=%d operation=%d", lease.FencingToken, operation.FencingToken)
 	} else {
-		checkLease.Detail = fmt.Sprintf("lease state unavailable: %v", leaseErr)
+		leaseExpired := false
+		if lease.LeaseExpiresAt != "" {
+			expiresAt, parseErr := time.Parse(time.RFC3339Nano, lease.LeaseExpiresAt)
+			if parseErr == nil && expiresAt.Before(time.Now().UTC()) {
+				leaseExpired = true
+			}
+		}
+		if leaseExpired {
+			checkLease.Detail = "lease has expired"
+		} else {
+			checkLease.Passed = true
+		}
 	}
 	result.Checks = append(result.Checks, checkLease)
+
+	checkQuarantine := PackageFinalGateCheck{Name: "quarantine_metadata_released"}
+	blockingQm, qmErr := r.container.PackageRepository.GetBlockingQuarantineMetadata(ctx, operation.ExtensionID)
+	if qmErr != nil {
+		if IsPackageOperationError(qmErr, OperationErrNotFound) {
+			checkQuarantine.Passed = true
+		} else {
+			checkQuarantine.Detail = fmt.Sprintf("quarantine metadata query failed: %v", qmErr)
+		}
+	} else {
+		checkQuarantine.Detail = fmt.Sprintf("blocking quarantine in state %s for operation %s", blockingQm.State, blockingQm.OperationID)
+	}
+	result.Checks = append(result.Checks, checkQuarantine)
 
 	steps, stepErr := r.container.PackageRepository.ListOperationSteps(ctx, operationID)
 
@@ -383,6 +446,37 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 		result.Checks = append(result.Checks, checkStoredPkg)
 	}
 
+	if !isUninstall && (operation.OperationType == "update" || operation.OperationType == "rollback") {
+		checkSnapshot := PackageFinalGateCheck{Name: "snapshot_integrity"}
+		if r.container.PackageRepository == nil {
+			checkSnapshot.Detail = "package repository unavailable for snapshot check"
+		} else {
+			rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
+			if rpErr != nil {
+				if operation.OperationType == "rollback" {
+					checkSnapshot.Passed = true
+				} else {
+					checkSnapshot.Detail = fmt.Sprintf("rollback point unavailable: %v", rpErr)
+				}
+			} else {
+				if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
+					checkSnapshot.Detail = fmt.Sprintf("snapshot validation failed: %v", validateErr)
+				} else {
+					configEmpty := rollbackPoint.ConfigSnapshotJSON == ""
+					resourceEmpty := rollbackPoint.ResourceSnapshotJSON == ""
+					migrationEmpty := rollbackPoint.MigrationStateSnapshotJSON == ""
+					userDataEmpty := rollbackPoint.UserDataMigrationStateJSON == ""
+					if configEmpty || resourceEmpty || migrationEmpty || userDataEmpty {
+						checkSnapshot.Detail = fmt.Sprintf("snapshot incomplete: config=%v resource=%v migration=%v userData=%v", !configEmpty, !resourceEmpty, !migrationEmpty, !userDataEmpty)
+					} else {
+						checkSnapshot.Passed = true
+					}
+				}
+			}
+		}
+		result.Checks = append(result.Checks, checkSnapshot)
+	}
+
 	checkVersion := PackageFinalGateCheck{Name: "version_record_consistent"}
 	if isUninstall {
 		checkVersion.Passed = true
@@ -400,8 +494,31 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 		} else if versionRecord.Version != operation.TargetVersion {
 			checkVersion.Passed = false
 			checkVersion.Detail = fmt.Sprintf("version record version mismatch: %s != %s", versionRecord.Version, operation.TargetVersion)
+		} else if versionRecord.VersionState != "current" {
+			checkVersion.Passed = false
+			checkVersion.Detail = fmt.Sprintf("version record state is %s, expected current", versionRecord.VersionState)
+		} else if versionRecord.GenerationID != "" && operation.TargetGeneration != "" && versionRecord.GenerationID != operation.TargetGeneration {
+			checkVersion.Passed = false
+			checkVersion.Detail = fmt.Sprintf("version record generation mismatch: %s != %s", versionRecord.GenerationID, operation.TargetGeneration)
 		} else {
-			checkVersion.Passed = true
+			allVersions, listErr := r.container.PackageRepository.ListPackageVersions(ctx, operation.ExtensionID)
+			if listErr != nil {
+				checkVersion.Passed = false
+				checkVersion.Detail = fmt.Sprintf("version list query failed: %v", listErr)
+			} else {
+				currentCount := 0
+				for _, v := range allVersions {
+					if v.VersionState == "current" {
+						currentCount++
+					}
+				}
+				if currentCount != 1 {
+					checkVersion.Passed = false
+					checkVersion.Detail = fmt.Sprintf("expected exactly 1 current version, found %d", currentCount)
+				} else {
+					checkVersion.Passed = true
+				}
+			}
 		}
 	}
 	result.Checks = append(result.Checks, checkVersion)
@@ -427,9 +544,7 @@ func (r *Runtime) VerifyPackageFinalGate(ctx context.Context, operationID string
 	result.Findings = findings
 
 	if persistErr := r.recordFinalGateResult(ctx, operationID, result); persistErr != nil {
-		if allPassed {
-			return result, fmt.Errorf("kernel: final gate finding persistence failed: %w", persistErr)
-		}
+		return result, fmt.Errorf("kernel: final gate finding persistence failed: %w", persistErr)
 	}
 
 	if !allPassed {

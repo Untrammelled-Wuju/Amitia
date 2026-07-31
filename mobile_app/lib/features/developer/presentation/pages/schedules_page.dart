@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -32,6 +33,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
       appBar: const AmitiaAppBar(
         title: '调度中心',
         showBackButton: true,
+        fallbackRoute: AppRoutes.developer,
       ),
       body: SafeArea(
         top: false,

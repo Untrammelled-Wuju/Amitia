@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -211,7 +212,7 @@ class _QqPageState extends ConsumerState<QqPage> {
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: 'QQ 连接', showBackButton: true),
+      appBar: AmitiaAppBar(title: 'QQ 连接', showBackButton: true, fallbackRoute: AppRoutes.channels),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         children: [

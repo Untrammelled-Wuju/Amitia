@@ -52,6 +52,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
       appBar: AmitiaAppBar(
         title: '创建桌宠',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
       ),
       body: SafeArea(
         top: false,

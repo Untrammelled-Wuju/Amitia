@@ -61,6 +61,21 @@ func (b *ProcessingBridge) GetActionMetadata(ctx context.Context, processingActi
 	}, nil
 }
 
+func (b *ProcessingBridge) GetActiveActionRevisionID(ctx context.Context, processingActionID string) (string, error) {
+	var revisionID string
+	err := b.db.WithContext(ctx).
+		Table("desktop_pet_action_revisions").
+		Where("processing_action_id = ? AND status IN ?", []string{"ready", "active"}).
+		Order("created_at DESC").
+		Limit(1).
+		Select("id").
+		Scan(&revisionID).Error
+	if err != nil {
+		return "", err
+	}
+	return revisionID, nil
+}
+
 func (b *ProcessingBridge) ListFrameData(ctx context.Context, processingActionID string) ([]quality.FrameData, error) {
 	var frames []processing.ProcessedFrame
 	err := b.db.WithContext(ctx).

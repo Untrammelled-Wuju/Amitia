@@ -88,6 +88,12 @@ func (h *Handler) GetProcessingTask(c *gin.Context) {
 		return
 	}
 
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+
 	resp, err := h.service.GetProcessingTask(processingTaskID)
 	if err != nil {
 		writeProcessingError(c, err)
@@ -101,6 +107,12 @@ func (h *Handler) CancelProcessingTask(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	if processingTaskID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "处理任务 ID 为空", gin.H{"errorCode": ErrCodeProcessingTaskNotFound})
+		return
+	}
+
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
 		return
 	}
 
@@ -128,6 +140,12 @@ func (h *Handler) RetryProcessingAction(c *gin.Context) {
 		return
 	}
 
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+
 	if err := h.service.RetryProcessingAction(processingTaskID, actionKey); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -142,6 +160,9 @@ func (h *Handler) RetryProcessingAction(c *gin.Context) {
 }
 
 func (h *Handler) CreatePackage(c *gin.Context) {
+	c.Header("Deprecation", "true")
+	c.Header("Sunset", "2026-12-31")
+	c.Header("Link", `</api/desktop-pets/releases/build>; rel="successor-version"`)
 	processingTaskID := c.Param("processingTaskId")
 	if processingTaskID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "处理任务 ID 为空", gin.H{"errorCode": ErrCodeProcessingTaskNotFound})
@@ -155,6 +176,11 @@ func (h *Handler) CreatePackage(c *gin.Context) {
 	}
 
 	userID := desktoppet.ResolveUserID(c)
+
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID:  processingTaskID,
@@ -202,6 +228,12 @@ func (h *Handler) SwitchAttempt(c *gin.Context) {
 		return
 	}
 
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+
 	if err := h.service.SwitchAttempt(processingTaskID, actionKey, payload.AttemptNumber); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -225,6 +257,12 @@ func (h *Handler) ExcludeAction(c *gin.Context) {
 	}
 	if actionKey == "" {
 		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeProcessingActionNotFound})
+		return
+	}
+
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
 		return
 	}
 
@@ -288,6 +326,12 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 		return
 	}
 
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+
 	fullPath, mimeType, err := h.service.GetProcessedFrameImage(processingTaskID, actionKey, frameIndex)
 	if err != nil {
 		writeProcessingError(c, err)
@@ -312,6 +356,12 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		return
 	}
 
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+
 	fullPath, mimeType, err := h.service.GetSourceFrameImage(processingTaskID, actionKey, frameIndex)
 	if err != nil {
 		writeProcessingError(c, err)
@@ -330,6 +380,12 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 func (h *Handler) ActionPreview(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
+
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
 
 	fullPath, mimeType, err := h.service.GetActionPreview(processingTaskID, actionKey)
 	if err != nil {
@@ -380,6 +436,9 @@ func mapProcessingErrorCode(code string) int {
 	case ErrCodeProcessingTaskNotFound,
 		ErrCodeProcessingActionNotFound:
 		return response.NotFound
+	case ErrCodeProcessingTaskNotOwned,
+		ErrCodePackageNotOwned:
+		return response.Forbidden
 	case ErrCodeProcessingStorageFailed:
 		return response.InternalError
 	case ErrCodeMigrationUnresolved:
@@ -433,6 +492,12 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 	packageID := c.Param("packageId")
 	if packageID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "包 ID 为空", nil)
+		return
+	}
+
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckPackageOwnership(packageID, userID); err != nil {
+		writeProcessingError(c, err)
 		return
 	}
 

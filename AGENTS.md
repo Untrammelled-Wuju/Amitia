@@ -2,6 +2,7 @@
 项目中不使用系统Node环境，必须使用nodeexe或Linux版本可直接运行的Node二进制文件。
 电脑中已经安装powershell7,必须使用powershell时优先使用powershell7。
 Go 安装路径：C:\Code\Go\bin\go.exe
+Git 安装路径：C:\Code\Git\Git\bin\git.exe
 必须中文回复。
 项目中不写注释。
 项目每次修改后必须重启完整服务(前端、后端)。

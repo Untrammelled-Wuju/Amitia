@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -74,6 +75,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       appBar: AmitiaAppBar(
         title: isNew ? '添加 MCP 服务' : '编辑 MCP 服务',
         showBackButton: true,
+        fallbackRoute: AppRoutes.extensions,
       ),
       body: SafeArea(
         top: false,

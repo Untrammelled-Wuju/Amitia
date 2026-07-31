@@ -196,7 +196,15 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 	w.updateStage(task.ID, executionID, StageValidatingSources, ProgressValidatingSources)
 	sourceVal, err := w.validator.ValidateSources(task.GenerationTaskID, userID)
 	if err != nil {
-		return err
+		log.Logger.Warnf("validate sources for task %s failed: %v, continuing with source resolver", task.GenerationTaskID, err)
+		genTask, gErr := w.repo.GetGenerationTask(task.GenerationTaskID)
+		if gErr != nil {
+			return fmt.Errorf("get generation task for fallback source val failed: %w", gErr)
+		}
+		sourceVal = &processing.SourceValidationResult{
+			Task:       genTask,
+			FramePaths: make(map[string][]processing.FrameSourceInfo),
+		}
 	}
 
 	actions, err := w.repo.ListProcessingActionsOrdered(task.ID)
@@ -244,11 +252,21 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 	w.updateStage(task.ID, executionID, StagePreview, ProgressPreview)
 
 	if w.revisionPromoter != nil && len(succeededActionKeys) > 0 {
+		promotedActionKeys := make([]string, 0, len(succeededActionKeys))
 		for _, actionKey := range succeededActionKeys {
 			if err := w.revisionPromoter(task.ID, actionKey, userID); err != nil {
 				log.Logger.Errorf("promote revision for action %s failed: %v", actionKey, err)
+				for j := range actions {
+					if actions[j].ActionKey == actionKey {
+						w.failAction(&actions[j], fmt.Errorf("promote revision failed: %w", err))
+						break
+					}
+				}
+				continue
 			}
+			promotedActionKeys = append(promotedActionKeys, actionKey)
 		}
+		succeededActionKeys = promotedActionKeys
 	}
 
 	w.updateStage(task.ID, executionID, StagePackaging, ProgressManifest)
@@ -311,9 +329,11 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 	w.updateActionProgress(action, StageWriteFrames, ProgressWriteFrames)
 	if err := w.persistRevision(task, action, result, attempt, executionID); err != nil {
 		log.Logger.Errorf("persist revision for action %s failed: %v", action.ActionKey, err)
+		return fmt.Errorf("persist revision failed: %w", err)
 	}
 	if err := w.persistProcessedFrames(task, action, sourceVal, result, attempt, executionID); err != nil {
 		log.Logger.Errorf("persist processed frames for action %s failed: %v", action.ActionKey, err)
+		return fmt.Errorf("persist processed frames failed: %w", err)
 	}
 
 	w.updateActionProgress(action, StageActionJSON, ProgressActionJSON)
@@ -332,6 +352,7 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 
 	if err := w.publishFramesToActionDir(task, action, result.RootRelativePath); err != nil {
 		log.Logger.Errorf("publish frames to action dir for %s failed: %v", action.ActionKey, err)
+		return fmt.Errorf("publish frames to action dir failed: %w", err)
 	}
 
 	w.revisionPaths[action.ActionKey] = result.RootRelativePath
@@ -419,93 +440,7 @@ func (w *Worker) loadRevisionFrames(rootRelPath string) ([]image.Image, error) {
 
 // Deprecated: 不再在生产流程中调用，Package 构建已由独立流程处理
 func (w *Worker) buildPackage(task *processing.ProcessingTask, sourceVal *processing.SourceValidationResult) error {
-	selector := processing.NewDefaultActionSelector("")
-	defaultAction, err := selector.SelectDefaultAction(sourceVal.SucceededActions)
-	if err != nil {
-		return fmt.Errorf("select default action failed: %w", err)
-	}
-
-	processingActions, err := w.repo.ListProcessingActions(task.ID)
-	if err != nil {
-		return fmt.Errorf("list processing actions failed: %w", err)
-	}
-
-	includedActions := make([]string, 0, len(processingActions))
-	for _, pa := range processingActions {
-		if pa.Status == "succeeded" && pa.Excluded == 0 {
-			includedActions = append(includedActions, pa.ActionKey)
-		}
-	}
-
-	if len(includedActions) == 0 {
-		return fmt.Errorf("no succeeded actions to package")
-	}
-
-	defaultIdleFrames, err := w.loadProcessedFrames(defaultAction)
-	if err != nil {
-		return fmt.Errorf("load default idle frames failed: %w", err)
-	}
-
-	if _, err := w.previewGenerator.GeneratePackagePreview(task.GenerationTaskID, task.ProcessingVersion, defaultIdleFrames); err != nil {
-		return fmt.Errorf("generate package preview failed: %w", err)
-	}
-
-	packager := processing.NewPackager(w.repo, w.dataDir)
-	req := &processing.PackageBuildRequest{
-		ProcessingTaskID:  task.ID,
-		UserID:            sourceVal.Task.UserID,
-		CharacterID:       sourceVal.Task.CharacterID,
-		GenerationTaskID:  task.GenerationTaskID,
-		PackageName:       sourceVal.Task.Name,
-		DefaultAction:     defaultAction,
-		IncludedActions:   includedActions,
-		CanvasWidth:       task.OutputWidth,
-		CanvasHeight:      task.OutputHeight,
-		ProcessingVersion: task.ProcessingVersion,
-		SucceededActions:  sourceVal.SucceededActions,
-	}
-
-	result, err := packager.BuildPackage(req)
-	if err != nil {
-		return fmt.Errorf("build package failed: %w", err)
-	}
-
-	_, err = w.stateEngine.Transition(context.Background(), taskstate.TransitionRequest{
-		EntityType: contracts.EntityPackage,
-		EntityID:   result.Package.ID,
-		From:       []contracts.LifecycleStatus{contracts.StatusPending},
-		To:         contracts.StatusProcessing,
-		Stage:      contracts.StageCommitting,
-		Reason:     contracts.ReasonPackageFinalizeSuccess,
-		ActorType:  contracts.ActorWorker,
-		ActorID:    processingWorkerID,
-	})
-	if err != nil {
-		log.Logger.Errorf("package %s transition to processing failed: %v", result.Package.ID, err)
-	}
-
-	_, err = w.stateEngine.Transition(context.Background(), taskstate.TransitionRequest{
-		EntityType: contracts.EntityPackage,
-		EntityID:   result.Package.ID,
-		From:       []contracts.LifecycleStatus{contracts.StatusProcessing},
-		To:         contracts.StatusSucceeded,
-		Stage:      contracts.StageCompleted,
-		Reason:     contracts.ReasonPackageFinalizeSuccess,
-		ActorType:  contracts.ActorWorker,
-		ActorID:    processingWorkerID,
-	})
-	if err != nil {
-		log.Logger.Errorf("package %s transition to succeeded failed: %v", result.Package.ID, err)
-	}
-
-	if err := w.repo.UpdatePackageStatus(result.Package.ID, map[string]interface{}{
-		"status":     "ready",
-		"updated_at": time.Now().Format(processingTimeFormat),
-	}); err != nil {
-		log.Logger.Errorf("update package %s status to ready failed: %v", result.Package.ID, err)
-	}
-
-	return nil
+	return fmt.Errorf("buildPackage 已废弃，Package 构建已由 Release Builder 处理")
 }
 
 func (w *Worker) loadProcessedFrames(actionKey string) ([]image.Image, error) {

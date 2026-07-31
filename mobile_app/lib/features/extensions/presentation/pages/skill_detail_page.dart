@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -20,7 +22,7 @@ class SkillDetailPage extends ConsumerWidget {
         MockData.recommendedExtensions.where((e) => e.id == skillId && e.type == ExtensionType.skill).firstOrNull;
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: skill?.name ?? '技能详情', showBackButton: true),
+      appBar: AmitiaAppBar(title: skill?.name ?? '技能详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
       body: SafeArea(
         top: false,
         child: ListView(

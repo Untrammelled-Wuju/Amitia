@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -46,6 +47,7 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
       appBar: AmitiaAppBar(
         title: '诊断控制台',
         showBackButton: true,
+        fallbackRoute: AppRoutes.developer,
         actions: [
           AmitiaIconButton(
             icon: _isPaused ? Icons.play_arrow : Icons.pause,

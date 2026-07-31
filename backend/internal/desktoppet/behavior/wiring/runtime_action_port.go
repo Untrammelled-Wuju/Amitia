@@ -55,6 +55,15 @@ func (a *RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd be
 	if err != nil {
 		log.Logger.Warnf("wiring/runtime_action_port: dispatch failed decisionId=%s actionKey=%s err=%v",
 			cmd.DecisionID, cmd.ActionKey, err)
+		if receipt.DeliveryStatus == "not_delivered" {
+			return &behavior.CommandReceipt{
+				CommandID:  receipt.CommandID,
+				Accepted:   false,
+				Status:     behavior.CmdOffline,
+				Error:      err.Error(),
+				ReceivedAt: time.Now(),
+			}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "runtime offline, play action not delivered")
+		}
 		return &behavior.CommandReceipt{
 			CommandID:  receipt.CommandID,
 			Accepted:   false,

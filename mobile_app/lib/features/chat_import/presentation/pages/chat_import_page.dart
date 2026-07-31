@@ -59,7 +59,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '导入聊天记录',
-        showBackButton: true,
+        navigation: AmitiaAppBarNavigation.drawer,
         actions: [
           AmitiaIconButton(
             icon: Icons.history,

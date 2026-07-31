@@ -84,9 +84,9 @@ func (r *Runtime) newPackageLeaseGuard(extensionID, operationID string) *Package
 	}
 }
 
-func (g *PackageLeaseGuard) Start(ctx context.Context) error {
+func (g *PackageLeaseGuard) Start(ctx context.Context) (context.Context, error) {
 	if g.runtime == nil || g.runtime.container == nil || g.runtime.container.PackageRepository == nil {
-		return fmt.Errorf("kernel: package repository unavailable for lease guard")
+		return nil, fmt.Errorf("kernel: package repository unavailable for lease guard")
 	}
 	sagaCtx, cancel := context.WithCancel(ctx)
 	g.cancel = cancel
@@ -115,7 +115,7 @@ func (g *PackageLeaseGuard) Start(ctx context.Context) error {
 			}
 		}
 	}()
-	return nil
+	return sagaCtx, nil
 }
 
 func (g *PackageLeaseGuard) AssertAlive(ctx context.Context) error {
@@ -151,7 +151,12 @@ func (g *PackageLeaseGuard) Stop(ctx context.Context) error {
 	if g.lastErr != nil {
 		return fmt.Errorf("kernel: lease lost before stop: %w", g.lastErr)
 	}
-	return releaseErr
+	if releaseErr != nil {
+		bgCtx := context.Background()
+		_ = g.runtime.container.PackageRepository.SetOperation(bgCtx, g.operationID, "finalizing", "lease_release", "PACKAGE_LEASE_RELEASE_FAILED", releaseErr.Error(), false, PackageWriteGuard{})
+		return releaseErr
+	}
+	return nil
 }
 
 func (r *Runtime) handleExistingPackageOperation(ctx context.Context, existing PackageOperationRecord) (KernelInstallResult, bool, error) {

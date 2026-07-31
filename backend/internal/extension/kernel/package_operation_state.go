@@ -18,6 +18,7 @@ const (
 	PackageOperationFailed           PackageOperationStatus = "failed"
 	PackageOperationCancelled        PackageOperationStatus = "cancelled"
 	PackageOperationRequiresRecovery PackageOperationStatus = "requires_recovery"
+	PackageOperationFinalizing       PackageOperationStatus = "finalizing"
 )
 
 const (
@@ -542,9 +543,12 @@ func validOperationTransition(expected []PackageOperationStatus, target PackageO
 		PackageOperationPending: {PackageOperationPending: true, PackageOperationInProgress: true,
 			PackageOperationFailed: true, PackageOperationCancelled: true},
 		PackageOperationInProgress: {PackageOperationInProgress: true, PackageOperationCompleted: true,
-			PackageOperationFailed: true, PackageOperationCancelled: true, PackageOperationRequiresRecovery: true},
+			PackageOperationFailed: true, PackageOperationCancelled: true, PackageOperationRequiresRecovery: true,
+			PackageOperationFinalizing: true},
 		PackageOperationRequiresRecovery: {PackageOperationRequiresRecovery: true, PackageOperationCompleted: true,
 			PackageOperationFailed: true, PackageOperationCancelled: true},
+		PackageOperationFinalizing: {PackageOperationFinalizing: true, PackageOperationCompleted: true,
+			PackageOperationFailed: true, PackageOperationCancelled: true, PackageOperationRequiresRecovery: true},
 	}
 	for _, source := range expected {
 		if allowed[source][target] {

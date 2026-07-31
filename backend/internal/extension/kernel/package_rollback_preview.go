@@ -39,7 +39,9 @@ func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, versi
 	if err != nil {
 		return result, fmt.Errorf("kernel: rollback point unavailable: %w", err)
 	}
-	if versionRecord, verErr := r.container.PackageRepository.GetPackageVersion(ctx, extensionID, version); verErr == nil {
+	if versionRecord, verErr := r.container.PackageRepository.GetPackageVersion(ctx, extensionID, version); verErr != nil {
+		return PackageRollbackPreviewResult{}, fmt.Errorf("kernel: version record unavailable, fail closed: %w", verErr)
+	} else {
 		switch versionRecord.VersionState {
 		case string(PackageVersionStateBlocked), string(PackageVersionStateCorrupted), string(PackageVersionStateRemoved):
 			return result, fmt.Errorf("kernel: rollback target version state %s not allowed", versionRecord.VersionState)

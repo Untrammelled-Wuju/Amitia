@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -39,6 +40,7 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
       appBar: AmitiaAppBar(
         title: '用户画像',
         showBackButton: true,
+        fallbackRoute: AppRoutes.memory,
         actions: [
           AmitiaIconButton(
             icon: Icons.add,

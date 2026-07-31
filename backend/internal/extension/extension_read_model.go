@@ -209,7 +209,7 @@ func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, exte
 		}
 		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
-	if container.DefinitionRepository == nil || container.PackageRepository == nil || s.proxy.kernel == nil {
+	if container.PackageRepository == nil {
 		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: version comparison dependencies not injected")
 	}
 	if versionRecords, versionErr := container.PackageRepository.ListPackageVersions(ctx, extensionID); versionErr == nil && len(versionRecords) > 0 {
@@ -221,39 +221,27 @@ func (s *ExtensionReadModelService) TryCompareVersions(ctx context.Context, exte
 			return PackageVersionDiff{}, false, nil
 		}
 	}
-	fromVer, err := domain.ParseVersion(fromVersion)
-	if err != nil {
+	if _, err := domain.ParseVersion(fromVersion); err != nil {
 		return PackageVersionDiff{}, false, err
 	}
-	toVer, err := domain.ParseVersion(toVersion)
-	if err != nil {
+	if _, err := domain.ParseVersion(toVersion); err != nil {
 		return PackageVersionDiff{}, false, err
 	}
-	fromDef, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), fromVer)
+	comparison, err := container.PackageRepository.ComparePackageVersions(ctx, extensionID, fromVersion, toVersion)
 	if err != nil {
-		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
+		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: package version comparison failed: %w", err)
 	}
-	toDef, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), toVer)
+	fromDef, err := comparison.FromManifest.ToExtensionDefinition()
 	if err != nil {
-		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: definition repository unavailable: %w", err)
+		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: from manifest definition unavailable: %w", err)
+	}
+	toDef, err := comparison.ToManifest.ToExtensionDefinition()
+	if err != nil {
+		return PackageVersionDiff{}, false, fmt.Errorf("readmodel: to manifest definition unavailable: %w", err)
 	}
 	diff := s.buildVersionDiff(extensionID, fromDef, toDef)
-	fromArtifact, err := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, fromVersion)
-	if err != nil {
-		return PackageVersionDiff{}, false, err
-	}
-	toArtifact, err := container.PackageRepository.GetArtifactByVersion(ctx, extensionID, toVersion)
-	if err != nil {
-		return PackageVersionDiff{}, false, err
-	}
-	fromPackage, err := s.proxy.kernel.VerifyStoredPackage(ctx, fromArtifact)
-	if err != nil {
-		return PackageVersionDiff{}, false, err
-	}
-	toPackage, err := s.proxy.kernel.VerifyStoredPackage(ctx, toArtifact)
-	if err != nil {
-		return PackageVersionDiff{}, false, err
-	}
+	fromPackage := &amitiax.Package{Manifest: comparison.FromManifest, Files: comparison.FromFiles}
+	toPackage := &amitiax.Package{Manifest: comparison.ToManifest, Files: comparison.ToFiles}
 	applyPackageFileDiff(&diff, fromPackage, toPackage)
 	return diff, true, nil
 }

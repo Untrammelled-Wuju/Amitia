@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -35,6 +36,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
       appBar: AmitiaAppBar(
         title: '主动消息',
         showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
         actions: [
           AmitiaIconButton(
             icon: Icons.refresh,

@@ -20,15 +20,26 @@ import (
 const packageConfigSnapshotSchemaVersion = "1.0.0"
 
 type packageConfigSnapshot struct {
-	Metadata      map[string]any `json:"metadata"`
-	SchemaVersion string         `json:"schemaVersion"`
-	CapturedAt    string         `json:"capturedAt"`
+	Metadata       map[string]any                       `json:"metadata"`
+	Contributions  []domain.ContributionDefinition      `json:"contributions"`
+	Permissions    packageConfigPermissionSnapshot      `json:"permissions"`
+	SchemaVersion  string                               `json:"schemaVersion"`
+	CapturedAt     string                               `json:"capturedAt"`
+}
+
+type packageConfigPermissionSnapshot struct {
+	Requirements []sqlite.PermissionRequirement `json:"requirements"`
+	Grants       []sqlite.PermissionGrant       `json:"grants"`
 }
 
 type packageResourceSnapshotEntry struct {
-	Resource        domain.ResourceOwnership `json:"resource"`
-	ResourceHash    string                   `json:"resourceHash"`
-	RestoreStrategy string                   `json:"restoreStrategy"`
+	Resource         domain.ResourceOwnership `json:"resource"`
+	ResourceHash     string                   `json:"resourceHash"`
+	RestoreStrategy  string                   `json:"restoreStrategy"`
+	LogicalPath      string                   `json:"logicalPath"`
+	ContentHash      string                   `json:"contentHash"`
+	Size             int64                    `json:"size"`
+	StorageReference string                   `json:"storageReference"`
 }
 
 type packageResourceSnapshot struct {
@@ -52,6 +63,7 @@ type packageUserDataMigrationState struct {
 	Completed      []string         `json:"completed,omitempty"`
 	AffectedTables []string         `json:"affectedTables,omitempty"`
 	RecordCounts   map[string]int64 `json:"recordCounts,omitempty"`
+	DataExports    map[string]string `json:"dataExports,omitempty"`
 }
 
 type packageSnapshotHashPayload struct {
@@ -75,7 +87,43 @@ type packageSnapshotHashPayload struct {
 
 func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed domain.ExtensionInstallation) (string, string, string, string, string, error) {
 	metadata, refs := sanitizePackageSnapshotMap(installed.Metadata)
-	configJSON, err := json.Marshal(packageConfigSnapshot{Metadata: metadata, SchemaVersion: packageConfigSnapshotSchemaVersion, CapturedAt: installed.UpdatedAt.UTC().Format(time.RFC3339Nano)})
+	if r.container == nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: container unavailable for rollback snapshot")
+	}
+	if r.container.ContributionRepository == nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: contribution repository unavailable for rollback snapshot")
+	}
+	if r.container.PermissionRepository == nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: permission repository unavailable for rollback snapshot")
+	}
+	contributions, err := r.container.ContributionRepository.ListContributions(ctx, installed.ExtensionID)
+	if err != nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: capture contributions for config snapshot: %w", err)
+	}
+	requirements, err := r.container.PermissionRepository.ListRequirements(ctx, installed.ExtensionID)
+	if err != nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: capture permission requirements for config snapshot: %w", err)
+	}
+	grants, err := r.container.PermissionRepository.ListGrants(ctx, installed.ExtensionID)
+	if err != nil {
+		return "", "", "", "", "", fmt.Errorf("kernel: capture permission grants for config snapshot: %w", err)
+	}
+	if len(contributions) == 0 && len(requirements) == 0 && len(grants) == 0 {
+		return "", "", "", "", "", fmt.Errorf("kernel: config snapshot integrity check failed: no contributions or permissions found for extension %s", installed.ExtensionID)
+	}
+	sort.Slice(contributions, func(i, j int) bool { return string(contributions[i].ID) < string(contributions[j].ID) })
+	sort.Slice(requirements, func(i, j int) bool { return requirements[i].PermissionName < requirements[j].PermissionName })
+	sort.Slice(grants, func(i, j int) bool { return grants[i].PermissionName < grants[j].PermissionName })
+	configJSON, err := json.Marshal(packageConfigSnapshot{
+		Metadata:      metadata,
+		Contributions: contributions,
+		Permissions: packageConfigPermissionSnapshot{
+			Requirements: requirements,
+			Grants:       grants,
+		},
+		SchemaVersion: packageConfigSnapshotSchemaVersion,
+		CapturedAt:    installed.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	})
 	if err != nil {
 		return "", "", "", "", "", err
 	}
@@ -86,6 +134,9 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 	if err != nil {
 		return "", "", "", "", "", fmt.Errorf("kernel: capture resources: %w", err)
 	}
+	if len(resources) == 0 {
+		return "", "", "", "", "", fmt.Errorf("kernel: resource snapshot integrity check failed: no resources found for extension %s", installed.ExtensionID)
+	}
 	sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
 	resourceSnapshot := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
 	for _, resource := range resources {
@@ -94,7 +145,22 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		if marshalErr != nil {
 			return "", "", "", "", "", marshalErr
 		}
-		resourceSnapshot.Entries = append(resourceSnapshot.Entries, packageResourceSnapshotEntry{Resource: resource, ResourceHash: packageSnapshotDigest(raw), RestoreStrategy: "repository_upsert"})
+		logicalPath := extractResourceStringField(resource, "logicalPath")
+		if logicalPath == "" {
+			logicalPath = resource.Reference
+		}
+		contentHash := extractResourceStringField(resource, "contentHash")
+		size := extractResourceInt64Field(resource, "size")
+		storageReference := resource.Reference
+		resourceSnapshot.Entries = append(resourceSnapshot.Entries, packageResourceSnapshotEntry{
+			Resource:         resource,
+			ResourceHash:     packageSnapshotDigest(raw),
+			RestoreStrategy:  "repository_upsert",
+			LogicalPath:      logicalPath,
+			ContentHash:      contentHash,
+			Size:             size,
+			StorageReference: storageReference,
+		})
 	}
 	resourceJSON, err := json.Marshal(resourceSnapshot)
 	if err != nil {
@@ -121,11 +187,12 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		migrationSnapshot.Definitions = definitions
 		userState.Mode = "repository"
 		userState.RecordCounts = make(map[string]int64)
+		userState.DataExports = make(map[string]string)
 	}
 	for _, definition := range definitions {
-		for _, domain := range definition.DataDomains {
-			if domain.Namespace != "" {
-				affectedTableSet[domain.Namespace] = struct{}{}
+		for _, dd := range definition.DataDomains {
+			if dd.Namespace != "" {
+				affectedTableSet[dd.Namespace] = struct{}{}
 			}
 		}
 	}
@@ -152,6 +219,26 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		userState.AffectedTables = append(userState.AffectedTables, table)
 	}
 	sort.Strings(userState.AffectedTables)
+	if userState.DataExports != nil {
+		db := r.container.Store.DB()
+		if db != nil {
+			for _, table := range userState.AffectedTables {
+				rows, queryErr := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", table))
+				if queryErr != nil {
+					continue
+				}
+				export, exportErr := exportRowsAsJSONL(rows)
+				_ = rows.Close()
+				if exportErr != nil {
+					continue
+				}
+				if export == "" {
+					return "", "", "", "", "", fmt.Errorf("kernel: user data snapshot integrity check failed: table %s export is empty", table)
+				}
+				userState.DataExports[table] = export
+			}
+		}
+	}
 	migrationJSON, err := json.Marshal(migrationSnapshot)
 	if err != nil {
 		return "", "", "", "", "", err
@@ -167,6 +254,43 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		return "", "", "", "", "", err
 	}
 	return string(configJSON), string(refsJSON), string(resourceJSON), string(migrationJSON), string(userStateJSON), nil
+}
+
+func extractResourceStringField(resource domain.ResourceOwnership, field string) string {
+	if resource.Metadata == nil {
+		return ""
+	}
+	val, ok := resource.Metadata[field]
+	if !ok {
+		return ""
+	}
+	if s, ok := val.(string); ok {
+		return s
+	}
+	return fmt.Sprint(val)
+}
+
+func extractResourceInt64Field(resource domain.ResourceOwnership, field string) int64 {
+	if resource.Metadata == nil {
+		return 0
+	}
+	val, ok := resource.Metadata[field]
+	if !ok {
+		return 0
+	}
+	switch v := val.(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return n
+	default:
+		return 0
+	}
 }
 
 func computePackageSnapshotHash(point PackageRollbackPoint) (string, error) {

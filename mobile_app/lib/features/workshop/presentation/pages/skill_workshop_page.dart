@@ -58,6 +58,7 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
       appBar: AmitiaAppBar(
         title: '技能制作',
         showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.sm),

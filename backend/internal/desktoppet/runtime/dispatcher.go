@@ -187,6 +187,14 @@ func (d *Dispatcher) dispatchDurable(ctx context.Context, req CommandRequest, co
 
 	conn, err := d.resolveConnection(effectiveRuntimeID, req.UserID)
 	if err != nil || conn == nil {
+		if req.Durability == contracts.DurabilityDurableImmediate {
+			return DispatchReceipt{
+				CommandID:      commandID,
+				RuntimeID:      effectiveRuntimeID,
+				DeliveryStatus: "not_delivered",
+				PendingReason:  "runtime_offline",
+			}, NewRuntimeError(ErrCodeRuntimeOffline, "runtime offline, immediate command not delivered", ErrRuntimeOffline)
+		}
 		return DispatchReceipt{
 			CommandID:      commandID,
 			RuntimeID:      effectiveRuntimeID,
@@ -196,6 +204,14 @@ func (d *Dispatcher) dispatchDurable(ctx context.Context, req CommandRequest, co
 	}
 
 	if conn.State() != SessionStateReady {
+		if req.Durability == contracts.DurabilityDurableImmediate {
+			return DispatchReceipt{
+				CommandID:      commandID,
+				RuntimeID:      effectiveRuntimeID,
+				DeliveryStatus: "not_delivered",
+				PendingReason:  "runtime_not_ready",
+			}, NewRuntimeError(ErrCodeRuntimeNotReady, "runtime not ready, immediate command not delivered", ErrRuntimeNotReady)
+		}
 		return DispatchReceipt{
 			CommandID:      commandID,
 			RuntimeID:      effectiveRuntimeID,

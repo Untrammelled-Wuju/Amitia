@@ -51,6 +51,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       appBar: AmitiaAppBar(
         title: _character.name,
         showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
         actions: [
           AmitiaIconButton(
             icon: Icons.more_horiz,

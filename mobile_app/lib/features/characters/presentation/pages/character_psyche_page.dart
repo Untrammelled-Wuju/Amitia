@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -36,6 +37,7 @@ class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
       appBar: AmitiaAppBar(
         title: '心理状态',
         showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
       ),
       body: SafeArea(
         top: false,

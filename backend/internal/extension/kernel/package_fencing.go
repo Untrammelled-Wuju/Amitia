@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
 type PackageWriteGuard struct {
@@ -72,6 +74,13 @@ func verifyFencingTokenDB(ctx context.Context, db *sql.DB, guard PackageWriteGua
 	return nil
 }
 
+func (r *PackageRepository) VerifyFencingTokenInContext(ctx context.Context, guard PackageWriteGuard) error {
+	if tx, ok := sqlite.TxFromContext(ctx); ok {
+		return verifyFencingTokenTx(ctx, tx, guard)
+	}
+	return verifyFencingTokenDB(ctx, r.db, guard)
+}
+
 func lookupExtensionIDByOperationTx(ctx context.Context, tx *sql.Tx, operationID string) (string, error) {
 	var extensionID string
 	err := tx.QueryRowContext(ctx,
@@ -101,7 +110,16 @@ type PackageQuarantineMetadata struct {
 	ReleasedAt              string
 }
 
+var validQuarantineStates = map[string]struct{}{
+	"active": {}, "restoring": {}, "restored": {}, "finalizing": {}, "finalized": {}, "released": {},
+}
+
 func (r *PackageRepository) PutQuarantineMetadata(ctx context.Context, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	if qm.State != "" {
+		if _, ok := validQuarantineStates[qm.State]; !ok {
+			return errors.New("kernel: invalid quarantine state: " + qm.State)
+		}
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return storageOperationError("begin quarantine metadata", err)
@@ -151,6 +169,22 @@ func (r *PackageRepository) GetQuarantineMetadata(ctx context.Context, extension
 	return qm, nil
 }
 
+func (r *PackageRepository) GetBlockingQuarantineMetadata(ctx context.Context, extensionID string) (PackageQuarantineMetadata, error) {
+	var qm PackageQuarantineMetadata
+	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
+		generation_quarantine_path, current_quarantine_path, original_generation_path,
+		original_current_path, tree_hash, artifact_id, state, created_at, released_at
+		FROM package_quarantine_metadata WHERE extension_id = ? AND state IN ('active', 'restoring', 'finalizing')
+		ORDER BY created_at DESC LIMIT 1`,
+		extensionID).Scan(&qm.QuarantineID, &qm.OperationID, &qm.ExtensionID,
+		&qm.GenerationQuarantinePath, &qm.CurrentQuarantinePath, &qm.OriginalGenerationPath,
+		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.CreatedAt, &qm.ReleasedAt)
+	if err != nil {
+		return PackageQuarantineMetadata{}, classifyOperationRead("read blocking quarantine metadata", err)
+	}
+	return qm, nil
+}
+
 func (r *PackageRepository) GetQuarantineMetadataByOperation(ctx context.Context, operationID string) (PackageQuarantineMetadata, error) {
 	var qm PackageQuarantineMetadata
 	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
@@ -175,7 +209,7 @@ func (r *PackageRepository) ReleaseQuarantineMetadata(ctx context.Context, quara
 	if err := verifyFencingTokenTx(ctx, tx, guard); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE package_quarantine_metadata SET state='released', released_at=? WHERE quarantine_id=? AND state='active'`,
+	_, err = tx.ExecContext(ctx, `UPDATE package_quarantine_metadata SET state='released', released_at=? WHERE quarantine_id=? AND state IN ('active', 'finalized')`,
 		time.Now().UTC().Format(time.RFC3339Nano), quarantineID)
 	if err != nil {
 		return storageOperationError("release quarantine metadata", err)

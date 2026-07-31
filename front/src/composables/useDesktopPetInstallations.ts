@@ -85,8 +85,9 @@ export interface InstallationDetail extends DesktopPetInstallation {
 }
 
 export interface InstallParams {
-  packageId: string;
-  characterId: string;
+  petId: string;
+  releaseId: string;
+  characterId?: string;
 }
 
 export interface UpdateSettingsParams {
@@ -129,14 +130,19 @@ export function useDesktopPetInstallations() {
   }
 
   async function install(
-    packageId: string,
-    characterId: string,
+    petId: string,
+    releaseId: string,
+    characterId?: string,
   ): Promise<DesktopPetInstallation> {
     submitting.value = true;
     try {
+      const idempotencyKey =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const data = await post<DesktopPetInstallation>(
-        `/api/desktop-pets/packages/${packageId}/install`,
-        { character_id: characterId },
+        `/api/desktop-pets/pets/${petId}/releases/${releaseId}/install`,
+        { characterId: characterId || "", idempotencyKey },
       );
       ElMessage.success("桌宠已安装");
       return data;

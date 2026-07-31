@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -37,6 +38,7 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
       appBar: const AmitiaAppBar(
         title: '桌面贡献中心',
         showBackButton: true,
+        fallbackRoute: AppRoutes.developer,
       ),
       body: SafeArea(
         top: false,

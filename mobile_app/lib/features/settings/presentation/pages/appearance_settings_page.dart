@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -38,7 +39,7 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
         : (themeMode == ThemeMode.system ? 2 : 0);
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '外观设置', showBackButton: true),
+      appBar: AmitiaAppBar(title: '外观设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [

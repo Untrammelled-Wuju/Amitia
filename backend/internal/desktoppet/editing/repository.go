@@ -60,6 +60,8 @@ type Repository interface {
 	UpdateJobStatus(id, status string) error
 	UpdateJobResult(id, providerAttemptID string, costActual any) error
 	UpdateJobError(id, errorCode, errorMessage string) error
+	UpdateJobHeartbeat(id string) error
+	ListStaleJobs(leaseDuration time.Duration) ([]RegenerationJob, error)
 	GetJobByIdempotencyKey(sessionID, key string) (*RegenerationJob, error)
 
 	CreateCandidate(candidate *EditCandidate) error
@@ -485,6 +487,18 @@ func (r *repository) GetJobByIdempotencyKey(sessionID, key string) (*Regeneratio
 		return nil, err
 	}
 	return &job, nil
+}
+
+func (r *repository) UpdateJobHeartbeat(id string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.Model(&RegenerationJob{}).Where("id = ?", id).Update("updated_at", now).Error
+}
+
+func (r *repository) ListStaleJobs(leaseDuration time.Duration) ([]RegenerationJob, error) {
+	cutoff := time.Now().UTC().Add(-leaseDuration).Format(time.RFC3339)
+	var jobs []RegenerationJob
+	err := r.db.Where("status IN ? AND updated_at < ?", []string{JobStatusRunning, JobStatusProviderSucceeded, JobStatusMaterializing}, cutoff).Find(&jobs).Error
+	return jobs, err
 }
 
 func (r *repository) CreateCandidate(candidate *EditCandidate) error {

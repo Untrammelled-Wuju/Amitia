@@ -81,7 +81,7 @@ type ImportPackageRequest struct {
 	PackageName     string
 	LegacyPackageID string
 	LegacyVersion   int
-	PackageDir      string
+	ImportStagingID string
 	DefaultAction   string
 	CanvasWidth     int
 	CanvasHeight    int

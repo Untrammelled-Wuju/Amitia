@@ -12,12 +12,16 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime"
 )
 
 var ErrPackageMigrationTypeUnsupported = errors.New("PACKAGE_MIGRATION_TYPE_UNSUPPORTED")
@@ -98,23 +102,19 @@ func (pmr *packageMigrationRuntime) readMigrationScript(def migration.MigrationD
 }
 
 func (pmr *packageMigrationRuntime) executeScript(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition) (json.RawMessage, error) {
+	switch def.RuntimeType {
+	case "config":
+		return pmr.executeConfigMigration(ctx, step, def, pmr.buildBaseEvidence(step, def, nil))
+	case "resource":
+		return pmr.executeResourceMigration(ctx, step, def, pmr.buildBaseEvidence(step, def, nil))
+	case "userdata":
+		return pmr.executeUserDataMigration(ctx, step, def, pmr.buildBaseEvidence(step, def, nil))
+	}
 	scriptContent, err := pmr.readMigrationScript(def)
 	if err != nil {
 		return nil, err
 	}
-	scriptSum := sha256.Sum256(scriptContent)
-	baseEvidence := map[string]any{
-		"migrationId":    step.MigrationID,
-		"direction":      step.Direction,
-		"definitionHash": def.DefinitionHash,
-		"entry":          def.Entry,
-		"executedAt":     time.Now().UTC().Format(time.RFC3339Nano),
-		"scriptSize":     len(scriptContent),
-		"scriptHash":     hex.EncodeToString(scriptSum[:]),
-		"runtimeType":    def.RuntimeType,
-		"extensionId":    pmr.extensionID,
-		"packageOpId":    pmr.packageOpID,
-	}
+	baseEvidence := pmr.buildBaseEvidence(step, def, scriptContent)
 	switch def.RuntimeType {
 	case "sql":
 		return pmr.executeSQLMigration(ctx, step, def, scriptContent, baseEvidence)
@@ -123,6 +123,25 @@ func (pmr *packageMigrationRuntime) executeScript(ctx context.Context, step migr
 	default:
 		return nil, fmt.Errorf("kernel: migration %s: runtime type %q: %w", def.MigrationID, def.RuntimeType, ErrPackageMigrationTypeUnsupported)
 	}
+}
+
+func (pmr *packageMigrationRuntime) buildBaseEvidence(step migration.ReversiblePlanStep, def migration.MigrationDefinition, scriptContent []byte) map[string]any {
+	evidence := map[string]any{
+		"migrationId":    step.MigrationID,
+		"direction":      step.Direction,
+		"definitionHash": def.DefinitionHash,
+		"entry":          def.Entry,
+		"executedAt":     time.Now().UTC().Format(time.RFC3339Nano),
+		"runtimeType":    def.RuntimeType,
+		"extensionId":    pmr.extensionID,
+		"packageOpId":    pmr.packageOpID,
+	}
+	if scriptContent != nil {
+		scriptSum := sha256.Sum256(scriptContent)
+		evidence["scriptSize"] = len(scriptContent)
+		evidence["scriptHash"] = hex.EncodeToString(scriptSum[:])
+	}
+	return evidence
 }
 
 func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, scriptContent []byte, baseEvidence map[string]any) (json.RawMessage, error) {
@@ -216,12 +235,29 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 	if pmr.runtime.container == nil || pmr.runtime.container.JSRuntimeFactory == nil {
 		return nil, fmt.Errorf("kernel: migration javascript runtime unavailable for %s", def.MigrationID)
 	}
-	host, createErr := pmr.runtime.container.JSRuntimeFactory.Create(ctx, javascript_main.CreateHostRequest{
-		ExtensionID:    pmr.extensionID,
-		ModuleID:       def.ModuleID,
-		Entry:          def.Entry,
-		DefinitionHash: def.DefinitionHash,
-	})
+	migrationResourceLimits := javascript_main.CreateHostRequest{
+		ExtensionID:          pmr.extensionID,
+		ModuleID:             def.ModuleID,
+		Entry:                def.Entry,
+		DefinitionHash:       def.DefinitionHash,
+		AllowedContributions: []javascript_main.AllowedContribution{},
+		ResourceLimits: runtime.ResourceLimits{
+			MaxMemoryMB:        128,
+			MaxConcurrentCalls: 1,
+			MaxQueueDepth:      1,
+			SingleCallTimeout:  "15s",
+			LogRatePerSecond:   10,
+			HostAPIRatePerSec:  5,
+			MaxOpenHandles:     16,
+			MaxMessageSizeKB:   256,
+		},
+		NetworkDisabled: true,
+		Env: []string{
+			"AMITIA_MIGRATION_SANDBOX=1",
+			"AMITIA_NETWORK_DISABLED=1",
+		},
+	}
+	host, createErr := pmr.runtime.container.JSRuntimeFactory.Create(ctx, migrationResourceLimits)
 	if createErr != nil {
 		return nil, fmt.Errorf("kernel: migration javascript create host %s: %w", def.MigrationID, createErr)
 	}
@@ -280,6 +316,433 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 		return nil, fmt.Errorf("kernel: migration javascript evidence marshal: %w", marshalErr)
 	}
 	return evidenceJSON, nil
+}
+
+type MigrationExecutor interface {
+	Prepare(ctx context.Context) error
+	Execute(ctx context.Context) error
+	Verify(ctx context.Context) error
+	Compensate(ctx context.Context) error
+}
+
+type migrationExecutorBase struct {
+	runtime     *Runtime
+	extensionID string
+	step        migration.ReversiblePlanStep
+	def         migration.MigrationDefinition
+}
+
+type ConfigMigrationExecutor struct {
+	migrationExecutorBase
+	snapshotContributions []domain.ContributionDefinition
+	snapshotRequirements  []sqlite.PermissionRequirement
+	snapshotGrants        []sqlite.PermissionGrant
+}
+
+func (e *ConfigMigrationExecutor) Prepare(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil {
+		return fmt.Errorf("kernel: config migration executor: container unavailable")
+	}
+	extID := domain.ExtensionID(e.extensionID)
+	contribs, err := e.runtime.container.ContributionRepository.ListContributions(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: config migration prepare: list contributions: %w", err)
+	}
+	e.snapshotContributions = contribs
+	reqs, err := e.runtime.container.PermissionRepository.ListRequirements(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: config migration prepare: list requirements: %w", err)
+	}
+	e.snapshotRequirements = reqs
+	grants, err := e.runtime.container.PermissionRepository.ListGrants(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: config migration prepare: list grants: %w", err)
+	}
+	e.snapshotGrants = grants
+	return nil
+}
+
+func (e *ConfigMigrationExecutor) Execute(ctx context.Context) error {
+	if e.step.Direction == migration.DirectionReverse {
+		return e.Compensate(ctx)
+	}
+	return nil
+}
+
+func (e *ConfigMigrationExecutor) Verify(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil {
+		return fmt.Errorf("kernel: config migration verify: container unavailable")
+	}
+	extID := domain.ExtensionID(e.extensionID)
+	contribs, err := e.runtime.container.ContributionRepository.ListContributions(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: config migration verify: list contributions: %w", err)
+	}
+	if len(contribs) == 0 && len(e.snapshotContributions) > 0 {
+		return fmt.Errorf("kernel: config migration verify: contributions missing after migration")
+	}
+	return nil
+}
+
+func (e *ConfigMigrationExecutor) Compensate(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil {
+		return fmt.Errorf("kernel: config migration compensate: container unavailable")
+	}
+	extID := domain.ExtensionID(e.extensionID)
+	if err := e.runtime.container.ContributionRepository.DeleteContributions(ctx, extID); err != nil {
+		return fmt.Errorf("kernel: config migration compensate: delete contributions: %w", err)
+	}
+	for _, contrib := range e.snapshotContributions {
+		if err := e.runtime.container.ContributionRepository.PutContribution(ctx, contrib); err != nil {
+			return fmt.Errorf("kernel: config migration compensate: restore contribution %s: %w", contrib.ID, err)
+		}
+	}
+	if err := e.runtime.container.PermissionRepository.DeleteRequirements(ctx, extID); err != nil {
+		return fmt.Errorf("kernel: config migration compensate: delete requirements: %w", err)
+	}
+	for _, req := range e.snapshotRequirements {
+		if err := e.runtime.container.PermissionRepository.PutRequirement(ctx, req); err != nil {
+			return fmt.Errorf("kernel: config migration compensate: restore requirement %s: %w", req.PermissionName, err)
+		}
+	}
+	currentGrants, err := e.runtime.container.PermissionRepository.ListGrants(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: config migration compensate: list grants: %w", err)
+	}
+	for _, grant := range currentGrants {
+		if err := e.runtime.container.PermissionRepository.DeleteGrant(ctx, extID, grant.PermissionName); err != nil {
+			return fmt.Errorf("kernel: config migration compensate: delete grant %s: %w", grant.PermissionName, err)
+		}
+	}
+	for _, grant := range e.snapshotGrants {
+		if err := e.runtime.container.PermissionRepository.PutGrant(ctx, grant); err != nil {
+			return fmt.Errorf("kernel: config migration compensate: restore grant %s: %w", grant.PermissionName, err)
+		}
+	}
+	return nil
+}
+
+type ResourceMigrationExecutor struct {
+	migrationExecutorBase
+	snapshotResources []domain.ResourceOwnership
+}
+
+func (e *ResourceMigrationExecutor) Prepare(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil || e.runtime.container.ResourceRepository == nil {
+		return fmt.Errorf("kernel: resource migration executor: resource repository unavailable")
+	}
+	resources, err := e.runtime.container.ResourceRepository.ListResources(ctx, domain.ExtensionID(e.extensionID))
+	if err != nil {
+		return fmt.Errorf("kernel: resource migration prepare: list resources: %w", err)
+	}
+	e.snapshotResources = resources
+	return nil
+}
+
+func (e *ResourceMigrationExecutor) Execute(ctx context.Context) error {
+	if e.step.Direction == migration.DirectionReverse {
+		return e.Compensate(ctx)
+	}
+	return nil
+}
+
+func (e *ResourceMigrationExecutor) Verify(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil || e.runtime.container.ResourceRepository == nil {
+		return fmt.Errorf("kernel: resource migration verify: resource repository unavailable")
+	}
+	resources, err := e.runtime.container.ResourceRepository.ListResources(ctx, domain.ExtensionID(e.extensionID))
+	if err != nil {
+		return fmt.Errorf("kernel: resource migration verify: list resources: %w", err)
+	}
+	if len(resources) == 0 && len(e.snapshotResources) > 0 {
+		return fmt.Errorf("kernel: resource migration verify: resources missing after migration")
+	}
+	return nil
+}
+
+func (e *ResourceMigrationExecutor) Compensate(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil || e.runtime.container.ResourceRepository == nil {
+		return fmt.Errorf("kernel: resource migration compensate: resource repository unavailable")
+	}
+	extID := domain.ExtensionID(e.extensionID)
+	current, err := e.runtime.container.ResourceRepository.ListResources(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: resource migration compensate: list current: %w", err)
+	}
+	for _, resource := range current {
+		if err := e.runtime.container.ResourceRepository.DeleteResource(ctx, resource.ResourceID); err != nil {
+			return fmt.Errorf("kernel: resource migration compensate: delete resource %s: %w", resource.ResourceID, err)
+		}
+	}
+	for _, resource := range e.snapshotResources {
+		if err := e.runtime.container.ResourceRepository.PutResource(ctx, resource); err != nil {
+			return fmt.Errorf("kernel: resource migration compensate: restore resource %s: %w", resource.ResourceID, err)
+		}
+	}
+	return nil
+}
+
+type UserDataMigrationExecutor struct {
+	migrationExecutorBase
+	jsonlExports map[string]string
+}
+
+func (e *UserDataMigrationExecutor) Prepare(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil || e.runtime.container.Store == nil {
+		return fmt.Errorf("kernel: userdata migration executor: store unavailable")
+	}
+	e.jsonlExports = make(map[string]string)
+	db := e.runtime.container.Store.DB()
+	if db == nil {
+		return fmt.Errorf("kernel: userdata migration prepare: database unavailable")
+	}
+	for _, dd := range e.def.DataDomains {
+		if dd.Namespace == "" {
+			continue
+		}
+		rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", dd.Namespace))
+		if err != nil {
+			continue
+		}
+		export, exportErr := exportRowsAsJSONL(rows)
+		_ = rows.Close()
+		if exportErr != nil {
+			continue
+		}
+		e.jsonlExports[dd.Namespace] = export
+	}
+	return nil
+}
+
+func (e *UserDataMigrationExecutor) Execute(ctx context.Context) error {
+	if e.step.Direction == migration.DirectionReverse {
+		return e.Compensate(ctx)
+	}
+	return nil
+}
+
+func (e *UserDataMigrationExecutor) Verify(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil || e.runtime.container.Store == nil {
+		return fmt.Errorf("kernel: userdata migration verify: store unavailable")
+	}
+	db := e.runtime.container.Store.DB()
+	if db == nil {
+		return fmt.Errorf("kernel: userdata migration verify: database unavailable")
+	}
+	for _, dd := range e.def.DataDomains {
+		if dd.Namespace == "" {
+			continue
+		}
+		var count int
+		if err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", dd.Namespace)).Scan(&count); err != nil {
+			return fmt.Errorf("kernel: userdata migration verify: count %s: %w", dd.Namespace, err)
+		}
+	}
+	return nil
+}
+
+func (e *UserDataMigrationExecutor) Compensate(ctx context.Context) error {
+	if e.runtime == nil || e.runtime.container == nil || e.runtime.container.Store == nil {
+		return fmt.Errorf("kernel: userdata migration compensate: store unavailable")
+	}
+	db := e.runtime.container.Store.DB()
+	if db == nil {
+		return fmt.Errorf("kernel: userdata migration compensate: database unavailable")
+	}
+	for table, jsonlData := range e.jsonlExports {
+		if jsonlData == "" {
+			continue
+		}
+		records, err := parseJSONL(jsonlData)
+		if err != nil {
+			continue
+		}
+		if len(records) == 0 {
+			continue
+		}
+		_, _ = db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s", table))
+		columns := extractColumnsFromRecords(records[0])
+		if len(columns) == 0 {
+			continue
+		}
+		placeholders := make([]string, len(columns))
+		for i := range columns {
+			placeholders[i] = "?"
+		}
+		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", table, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
+		for _, record := range records {
+			values := make([]interface{}, len(columns))
+			for i, col := range columns {
+				values[i] = record[col]
+			}
+			_, _ = db.ExecContext(ctx, query, values...)
+		}
+	}
+	return nil
+}
+
+func (pmr *packageMigrationRuntime) executeConfigMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any) (json.RawMessage, error) {
+	if pmr.runtime.container == nil || pmr.runtime.container.ContributionRepository == nil || pmr.runtime.container.PermissionRepository == nil {
+		return nil, fmt.Errorf("kernel: migration config repositories unavailable for %s", def.MigrationID)
+	}
+	executor := &ConfigMigrationExecutor{
+		migrationExecutorBase: migrationExecutorBase{
+			runtime:     pmr.runtime,
+			extensionID: pmr.extensionID,
+			step:        step,
+			def:         def,
+		},
+	}
+	if err := executor.Prepare(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: migration config prepare %s: %w", def.MigrationID, err)
+	}
+	if err := executor.Execute(ctx); err != nil {
+		_ = executor.Compensate(ctx)
+		return nil, fmt.Errorf("kernel: migration config execute %s: %w", def.MigrationID, err)
+	}
+	if err := executor.Verify(ctx); err != nil {
+		_ = executor.Compensate(ctx)
+		return nil, fmt.Errorf("kernel: migration config verify %s: %w", def.MigrationID, err)
+	}
+	baseEvidence["executionMode"] = "config_executed"
+	baseEvidence["executor_type"] = "config"
+	baseEvidence["snapshotContributions"] = len(executor.snapshotContributions)
+	baseEvidence["snapshotRequirements"] = len(executor.snapshotRequirements)
+	baseEvidence["snapshotGrants"] = len(executor.snapshotGrants)
+	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
+	if marshalErr != nil {
+		return nil, fmt.Errorf("kernel: migration config evidence marshal: %w", marshalErr)
+	}
+	return evidenceJSON, nil
+}
+
+func (pmr *packageMigrationRuntime) executeResourceMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any) (json.RawMessage, error) {
+	if pmr.runtime.container == nil || pmr.runtime.container.ResourceRepository == nil {
+		return nil, fmt.Errorf("kernel: migration resource repository unavailable for %s", def.MigrationID)
+	}
+	executor := &ResourceMigrationExecutor{
+		migrationExecutorBase: migrationExecutorBase{
+			runtime:     pmr.runtime,
+			extensionID: pmr.extensionID,
+			step:        step,
+			def:         def,
+		},
+	}
+	if err := executor.Prepare(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: migration resource prepare %s: %w", def.MigrationID, err)
+	}
+	if err := executor.Execute(ctx); err != nil {
+		_ = executor.Compensate(ctx)
+		return nil, fmt.Errorf("kernel: migration resource execute %s: %w", def.MigrationID, err)
+	}
+	if err := executor.Verify(ctx); err != nil {
+		_ = executor.Compensate(ctx)
+		return nil, fmt.Errorf("kernel: migration resource verify %s: %w", def.MigrationID, err)
+	}
+	baseEvidence["executionMode"] = "resource_executed"
+	baseEvidence["executor_type"] = "resource"
+	baseEvidence["snapshotResources"] = len(executor.snapshotResources)
+	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
+	if marshalErr != nil {
+		return nil, fmt.Errorf("kernel: migration resource evidence marshal: %w", marshalErr)
+	}
+	return evidenceJSON, nil
+}
+
+func (pmr *packageMigrationRuntime) executeUserDataMigration(ctx context.Context, step migration.ReversiblePlanStep, def migration.MigrationDefinition, baseEvidence map[string]any) (json.RawMessage, error) {
+	if pmr.runtime.container == nil || pmr.runtime.container.Store == nil {
+		return nil, fmt.Errorf("kernel: migration userdata store unavailable for %s", def.MigrationID)
+	}
+	executor := &UserDataMigrationExecutor{
+		migrationExecutorBase: migrationExecutorBase{
+			runtime:     pmr.runtime,
+			extensionID: pmr.extensionID,
+			step:        step,
+			def:         def,
+		},
+	}
+	if err := executor.Prepare(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: migration userdata prepare %s: %w", def.MigrationID, err)
+	}
+	if err := executor.Execute(ctx); err != nil {
+		_ = executor.Compensate(ctx)
+		return nil, fmt.Errorf("kernel: migration userdata execute %s: %w", def.MigrationID, err)
+	}
+	if err := executor.Verify(ctx); err != nil {
+		_ = executor.Compensate(ctx)
+		return nil, fmt.Errorf("kernel: migration userdata verify %s: %w", def.MigrationID, err)
+	}
+	baseEvidence["executionMode"] = "userdata_executed"
+	baseEvidence["executor_type"] = "userdata"
+	baseEvidence["jsonlExportTables"] = len(executor.jsonlExports)
+	evidenceJSON, marshalErr := json.Marshal(baseEvidence)
+	if marshalErr != nil {
+		return nil, fmt.Errorf("kernel: migration userdata evidence marshal: %w", marshalErr)
+	}
+	return evidenceJSON, nil
+}
+
+func exportRowsAsJSONL(rows *sql.Rows) (string, error) {
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+	var builder strings.Builder
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return "", err
+		}
+		record := make(map[string]interface{}, len(columns))
+		for i, col := range columns {
+			val := values[i]
+			b, ok := val.([]byte)
+			if ok {
+				record[col] = string(b)
+			} else {
+				record[col] = val
+			}
+		}
+		data, marshalErr := json.Marshal(record)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		builder.Write(data)
+		builder.WriteByte('\n')
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
+}
+
+func parseJSONL(data string) ([]map[string]interface{}, error) {
+	var records []map[string]interface{}
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var record map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			continue
+		}
+		records = append(records, record)
+	}
+	return records, nil
+}
+
+func extractColumnsFromRecords(record map[string]interface{}) []string {
+	columns := make([]string, 0, len(record))
+	for col := range record {
+		columns = append(columns, col)
+	}
+	sort.Strings(columns)
+	return columns
 }
 
 func (pmr *packageMigrationRuntime) writeMigrationJournal(ctx context.Context, conn *sql.Conn, step migration.ReversiblePlanStep, def migration.MigrationDefinition, evidence json.RawMessage) error {

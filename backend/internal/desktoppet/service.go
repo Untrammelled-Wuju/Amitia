@@ -37,8 +37,9 @@ func computeSHA256HexLocal(data string) string {
 type Service interface {
 	GetActionDefinitions() (*ActionDefinitionsResponse, error)
 	CreateTask(ctx context.Context, userID string, characterID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error)
+	CheckTaskOwnership(taskID, userID string) error
 	GetTask(taskID string) (*TaskDetailResponse, error)
-	ListTasks(characterID, status string, page, pageSize int) (*TaskListResponse, error)
+	ListTasks(userID, characterID, status string, page, pageSize int) (*TaskListResponse, error)
 	DeleteTask(taskID string) error
 	GetTaskSourceImage(taskID string) (fullPath string, mimeType string, err error)
 	StartTask(taskID string) (*TaskSummaryResponse, error)
@@ -333,6 +334,20 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	}, nil
 }
 
+func (s *service) CheckTaskOwnership(taskID, userID string) error {
+	task, err := s.repo.GetTaskByID(taskID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "任务不存在")
+		}
+		return err
+	}
+	if task.UserID != userID {
+		return NewBusinessError(response.Forbidden, ErrCodeTaskNotOwned, "任务不属于当前用户")
+	}
+	return nil
+}
+
 func (s *service) GetTask(taskID string) (*TaskDetailResponse, error) {
 	task, err := s.repo.GetTaskByID(taskID)
 	if err != nil {
@@ -460,14 +475,14 @@ func computeTaskDurationSeconds(startedAt, completedAt string) int64 {
 	return int64(end.Sub(start).Seconds())
 }
 
-func (s *service) ListTasks(characterID, status string, page, pageSize int) (*TaskListResponse, error) {
+func (s *service) ListTasks(userID, characterID, status string, page, pageSize int) (*TaskListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	tasks, total, err := s.repo.ListTasks(characterID, status, page, pageSize)
+	tasks, total, err := s.repo.ListTasks(userID, characterID, status, page, pageSize)
 	if err != nil {
 		return nil, err
 	}

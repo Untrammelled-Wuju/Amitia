@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -63,7 +64,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
   Widget build(BuildContext context) {
     final info = MockData.runtimeInfo;
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: 'Ubuntu Runtime', showBackButton: true),
+      appBar: AmitiaAppBar(title: 'Ubuntu Runtime', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         children: [

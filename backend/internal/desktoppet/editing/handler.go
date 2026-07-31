@@ -25,6 +25,11 @@ func (h *Handler) ListRevisions(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少处理任务ID或动作Key", nil)
 		return
 	}
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
+		writeEditError(c, err)
+		return
+	}
 	revs, err := h.service.ListRevisions(c.Request.Context(), processingTaskID, actionKey)
 	if err != nil {
 		writeEditError(c, err)
@@ -50,6 +55,11 @@ func (h *Handler) GetRevision(c *gin.Context) {
 func (h *Handler) GetActiveRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
+		writeEditError(c, err)
+		return
+	}
 	detail, err := h.service.GetActiveRevision(c.Request.Context(), processingTaskID, actionKey)
 	if err != nil {
 		writeEditError(c, err)
@@ -62,6 +72,10 @@ func (h *Handler) ActivateRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
 	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
+		writeEditError(c, err)
+		return
+	}
 	var req ActivateRevisionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -110,6 +124,11 @@ func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 func (h *Handler) GetActionEditSummary(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
+		writeEditError(c, err)
+		return
+	}
 	summary, err := h.service.GetActionEditSummary(c.Request.Context(), processingTaskID, actionKey)
 	if err != nil {
 		writeEditError(c, err)
@@ -122,6 +141,10 @@ func (h *Handler) CreateSession(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
 	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
+		writeEditError(c, err)
+		return
+	}
 	var req CreateSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -272,6 +295,34 @@ func (h *Handler) CancelRegenerationJob(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, gin.H{"ok": true})
+}
+
+func (h *Handler) GetRegenerationJobByID(c *gin.Context) {
+	jobID := c.Param("jobId")
+	if jobID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少Job ID", nil)
+		return
+	}
+	job, err := h.service.GetRegenerationJob(c.Request.Context(), jobID)
+	if err != nil {
+		writeEditError(c, err)
+		return
+	}
+	util.SuccessResponse(c, job)
+}
+
+func (h *Handler) ListRegenerationJobs(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	jobs, err := h.service.ListRegenerationJobs(c.Request.Context(), limit, offset)
+	if err != nil {
+		writeEditError(c, err)
+		return
+	}
+	if jobs == nil {
+		jobs = []RegenerationJob{}
+	}
+	util.SuccessResponse(c, jobs)
 }
 
 func (h *Handler) AcceptCandidate(c *gin.Context) {
@@ -442,6 +493,10 @@ func (h *Handler) ImportLegacyRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
 	userID := desktoppet.ResolveUserID(c)
+	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
+		writeEditError(c, err)
+		return
+	}
 	resp, err := h.service.ImportLegacyRevision(c.Request.Context(), processingTaskID, actionKey, userID)
 	if err != nil {
 		writeEditError(c, err)

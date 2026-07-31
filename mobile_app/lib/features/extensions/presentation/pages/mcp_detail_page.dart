@@ -94,7 +94,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     final server = _server;
     if (server == null) {
       return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: 'MCP 详情', showBackButton: true),
+        appBar: AmitiaAppBar(title: 'MCP 详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
         body: AmitiaErrorState(message: '未找到该 MCP 服务', onRetry: () => context.pop()),
       );
     }
@@ -103,6 +103,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
       appBar: AmitiaAppBar(
         title: server.name,
         showBackButton: true,
+        fallbackRoute: AppRoutes.extensions,
         actions: [
           AmitiaIconButton(
             icon: Icons.edit_outlined,

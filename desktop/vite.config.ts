@@ -33,17 +33,6 @@ function copyPetHtmlPlugin() {
     configureServer() {
       copyPetFiles()
     },
-    configurePreviewServer() {
-      const src = resolve(__dirname, "src/renderer/pet.html")
-      const destDir = resolve(__dirname, "dist/renderer")
-      const dest = resolve(destDir, "pet.html")
-      if (existsSync(src)) {
-        if (!existsSync(destDir)) {
-          mkdirSync(destDir, { recursive: true })
-        }
-        copyFileSync(src, dest)
-      }
-    },
   }
 }
 

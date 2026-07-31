@@ -40,12 +40,14 @@ class AmitiaDrawer extends ConsumerStatefulWidget {
 class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   late PageController _pageController;
   late DrawerRouteState _routeState;
+  DrawerPanel _currentPanel = DrawerPanel.main;
   bool _pageInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _routeState = resolveDrawerRouteState(widget.currentRoute);
+    _currentPanel = _routeState.initialPanel;
     _pageController = PageController(initialPage: _routeState.initialPanel == DrawerPanel.more ? 1 : 0);
     _pageInitialized = true;
   }
@@ -55,8 +57,12 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentRoute != widget.currentRoute) {
       _routeState = resolveDrawerRouteState(widget.currentRoute);
+      final targetPanel = _routeState.initialPanel;
+      if (_currentPanel != targetPanel) {
+        _currentPanel = targetPanel;
+      }
       if (_pageInitialized) {
-        final targetPage = _routeState.initialPanel == DrawerPanel.more ? 1 : 0;
+        final targetPage = targetPanel == DrawerPanel.more ? 1 : 0;
         if (_pageController.hasClients && (_pageController.page?.round() ?? 0) != targetPage) {
           _pageController.jumpToPage(targetPage);
         }
@@ -71,10 +77,14 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   }
 
   void _goToMorePanel() {
+    if (_currentPanel == DrawerPanel.more) return;
+    _currentPanel = DrawerPanel.more;
     _pageController.animateToPage(1, duration: const Duration(milliseconds: 260), curve: Curves.easeInOutCubic);
   }
 
   void _backToMainPanel() {
+    if (_currentPanel == DrawerPanel.main) return;
+    _currentPanel = DrawerPanel.main;
     _pageController.animateToPage(0, duration: const Duration(milliseconds: 260), curve: Curves.easeInOutCubic);
   }
 
@@ -106,9 +116,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     final character = _getCharacter(characterId);
 
     return PopScope(
-      canPop: _routeState.initialPanel == DrawerPanel.main,
+      canPop: _currentPanel == DrawerPanel.main,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _routeState.initialPanel == DrawerPanel.more) {
+        if (!didPop && _currentPanel == DrawerPanel.more) {
           _backToMainPanel();
         }
       },
@@ -123,6 +133,14 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                   child: PageView(
                     controller: _pageController,
                     physics: const NeverScrollableScrollPhysics(),
+                    onPageChanged: (index) {
+                      final nextPanel = index == 0 ? DrawerPanel.main : DrawerPanel.more;
+                      if (_currentPanel != nextPanel) {
+                        setState(() {
+                          _currentPanel = nextPanel;
+                        });
+                      }
+                    },
                     children: [
                       _DrawerMainPanel(
                         character: character,

@@ -9,6 +9,7 @@ type EventOrigin string
 
 const (
 	OriginInteraction EventOrigin = "interaction"
+	OriginChat        EventOrigin = "chat"
 	OriginVoice       EventOrigin = "voice"
 	OriginProactive   EventOrigin = "proactive"
 	OriginAffect      EventOrigin = "affect"
@@ -403,6 +404,19 @@ type InteractionLifecycleEvent struct {
 	ConversationID string    `json:"conversationId,omitempty"`
 	Phase          string    `json:"phase"`
 	StatusVersion  int64     `json:"statusVersion"`
+	Origin         string    `json:"origin,omitempty"`
+	CorrelationID  string    `json:"correlationId,omitempty"`
+	OccurredAt     time.Time `json:"occurredAt"`
+}
+
+type ChatLifecycleEvent struct {
+	InteractionID  string    `json:"interactionId,omitempty"`
+	MessageID      string    `json:"messageId,omitempty"`
+	CharacterID    string    `json:"characterId"`
+	UserID         string    `json:"userId"`
+	ConversationID string    `json:"conversationId,omitempty"`
+	Phase          string    `json:"phase"`
+	StatusVersion  int64     `json:"statusVersion,omitempty"`
 	Origin         string    `json:"origin,omitempty"`
 	CorrelationID  string    `json:"correlationId,omitempty"`
 	OccurredAt     time.Time `json:"occurredAt"`
