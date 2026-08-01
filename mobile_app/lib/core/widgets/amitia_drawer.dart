@@ -230,6 +230,12 @@ class _DrawerMainPanel extends StatelessWidget {
                 onTap: () => onNavigate(AppRoutes.memory),
               ),
               _MainMenuItem(
+                icon: Icons.devices_outlined,
+                label: '设备',
+                isSelected: routeState.mainItem == MainDrawerItem.devices,
+                onTap: () => onNavigate(AppRoutes.settingsDevices),
+              ),
+              _MainMenuItem(
                 icon: Icons.apps_outlined,
                 label: '更多',
                 isSelected: routeState.mainItem == MainDrawerItem.more,

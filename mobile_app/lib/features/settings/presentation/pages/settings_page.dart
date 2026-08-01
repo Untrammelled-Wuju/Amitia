@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -24,20 +25,122 @@ class SettingsPage extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: _DevModeToggle(
-              isDevMode: isDevMode,
-              onTap: () {
-                ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
-              },
-            ),
+            child: _UserInfoCard(onTap: () => context.push(AppRoutes.settingsUser)),
           ),
           const SizedBox(height: AppSpacing.md),
           for (int i = 0; i < groups.length; i++) ...[
-            _SettingGroup(group: groups[i]),
+            _SettingGroup(
+              group: groups[i],
+              leading: groups[i].title == '系统与维护'
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: _DevModeToggle(
+                        isDevMode: isDevMode,
+                        onTap: () {
+                          ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
+                        },
+                      ),
+                    )
+                  : null,
+            ),
             if (i < groups.length - 1) const SizedBox(height: AppSpacing.sectionGap),
           ],
           const SizedBox(height: AppSpacing.xl),
         ],
+      ),
+    );
+  }
+}
+
+class _UserInfoCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _UserInfoCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.surfacePrimary,
+          borderRadius: AppRadius.brMedium,
+          border: Border.all(color: context.borderPrimary, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    context.accentPrimary,
+                    context.accentSecondary,
+                  ],
+                ),
+              ),
+              child: const Center(
+                child: Text(
+                  '无',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '无拘',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: context.success,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '本地运行',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: context.textTertiary,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -105,14 +208,16 @@ class _DevModeToggle extends StatelessWidget {
 
 class _SettingGroup extends StatelessWidget {
   final SettingGroup group;
+  final Widget? leading;
 
-  const _SettingGroup({required this.group});
+  const _SettingGroup({required this.group, this.leading});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (leading != null) leading!,
         Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,

@@ -8,6 +8,7 @@ enum MainDrawerItem {
   tasks,
   characters,
   memory,
+  devices,
   more,
   none,
 }
@@ -60,6 +61,9 @@ DrawerRouteState resolveDrawerRouteState(String location) {
     mainItem = MainDrawerItem.characters;
   } else if (isRouteFamily(location, '/memory')) {
     mainItem = MainDrawerItem.memory;
+  } else if (isRouteFamily(location, '/settings/devices')) {
+    mainItem = MainDrawerItem.devices;
+    settingsSelected = true;
   } else if (isRouteFamily(location, '/settings')) {
     settingsSelected = true;
   } else {

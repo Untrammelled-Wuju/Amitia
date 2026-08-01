@@ -306,28 +306,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       appBar: AmitiaAppBar(
         centerTitle: true,
         navigation: AmitiaAppBarNavigation.drawer,
-        titleWidget: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(character.name, style: AppTypography.cardTitle(context)),
-            const SizedBox(height: 2),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: context.success,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text('在线 · 空闲中', style: AppTypography.label(context)),
-              ],
-            ),
-          ],
-        ),
         actions: [
           AmitiaIconButton(
             icon: Icons.search,

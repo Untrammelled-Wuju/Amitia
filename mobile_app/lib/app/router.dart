@@ -73,6 +73,7 @@ import '../features/settings/presentation/pages/maintenance_page.dart';
 import '../features/settings/presentation/pages/theme_settings_page.dart';
 import '../features/settings/presentation/pages/storage_page.dart';
 import '../features/settings/presentation/pages/user_settings_page.dart';
+import '../features/settings/presentation/pages/devices_page.dart';
 import '../features/settings/presentation/pages/privacy_scan_page.dart';
 import '../features/settings/presentation/pages/about_page_new.dart';
 import '../features/toolbox/presentation/pages/toolbox_page.dart';
@@ -227,6 +228,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/settings/theme', builder: (context, state) => const ThemeSettingsPage()),
           GoRoute(path: '/settings/storage', builder: (context, state) => const StoragePage()),
           GoRoute(path: '/settings/user', builder: (context, state) => const UserSettingsPage()),
+          GoRoute(path: '/settings/devices', builder: (context, state) => const DevicesPage()),
           GoRoute(path: '/settings/privacy-scan', builder: (context, state) => const PrivacyScanPage()),
           GoRoute(path: '/settings/about', builder: (context, state) => const AboutPageNew()),
           GoRoute(path: '/settings/toolbox', builder: (context, state) => const ToolboxPage()),

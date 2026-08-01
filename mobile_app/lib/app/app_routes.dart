@@ -47,6 +47,7 @@ abstract final class AppRoutes {
   static const settingsStorage = '/settings/storage';
   static const settingsTheme = '/settings/theme';
   static const settingsUser = '/settings/user';
+  static const settingsDevices = '/settings/devices';
   static const settingsPrivacyScan = '/settings/privacy-scan';
   static const settingsDeployment = '/settings/deployment';
   static const settingsAbout = '/settings/about';
