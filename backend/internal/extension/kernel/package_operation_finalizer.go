@@ -47,7 +47,7 @@ func (f *PackageRecoveryFinalizer) completeRecoveryStep(ctx context.Context, ope
 		CurrentPointerJSON: operation.CurrentPointerJSON,
 	}
 	if err := repo.PutStep(ctx, step, guard); err != nil {
-		if strings.Contains(err.Error(), "already") {
+		if IsRepositoryErrorKind(err, RepositoryErrorConflict) {
 			return nil
 		}
 		return fmt.Errorf("kernel: persist recovery step %s failed: %w", stepName, err)
@@ -247,7 +247,7 @@ func (f *PackageRecoveryFinalizer) consumePreviewForRecovery(ctx context.Context
 	}
 	repo := f.repo()
 	if err := repo.ConsumePreview(ctx, operation.PreviewSessionID); err != nil {
-		if !strings.Contains(err.Error(), "already consumed") {
+		if !IsRepositoryErrorKind(err, RepositoryErrorConflict) {
 			return fmt.Errorf("kernel: recovery consume preview failed: %w", err)
 		}
 	}

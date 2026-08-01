@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -304,5 +305,18 @@ func ClassifyRepositoryError(action string, err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return NewRepositoryError(RepositoryErrorNotFound, err)
 	}
+	if isSQLiteConstraintViolation(err) {
+		return NewRepositoryError(RepositoryErrorConflict, err)
+	}
 	return NewRepositoryError(RepositoryErrorUnavailable, err)
+}
+
+func isSQLiteConstraintViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "UNIQUE constraint failed") ||
+		strings.Contains(errStr, "constraint failed") ||
+		strings.Contains(errStr, "already")
 }
