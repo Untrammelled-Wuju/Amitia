@@ -30,10 +30,10 @@ func (s *PackageService) Export(ctx context.Context, request ExportPackageReques
 }
 
 func (s *PackageService) GetExport(ctx context.Context, userID, extensionID, exportID string) (ExportedPackage, error) {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return ExportedPackage{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	container := s.kernelProxy.ReadContainer()
+	container := s.kernel.Container()
 	ticket, err := container.PackageRepository.GetExport(ctx, exportID, userID, extensionID)
 	if err != nil {
 		return ExportedPackage{}, NewExtensionError(ErrPackageExportNotAllowed, "导出凭据不存在", exportID, false, err)
@@ -46,7 +46,7 @@ func (s *PackageService) GetExport(ctx context.Context, userID, extensionID, exp
 	if err != nil {
 		return ExportedPackage{}, err
 	}
-	if _, err := s.kernelProxy.kernel.VerifyStoredPackage(ctx, artifact); err != nil {
+	if _, err := s.kernel.VerifyStoredPackage(ctx, artifact); err != nil {
 		return ExportedPackage{}, NewExtensionError(ErrPackageArtifactInvalid, "导出前制品复验失败", artifact.ArtifactID, false, err)
 	}
 	return ExportedPackage{ExportID: exportID, FileName: ticket.FileName, MIME: ticket.MIMEType,
@@ -154,13 +154,13 @@ func stringSetDifference(left, right []string) []string {
 }
 
 func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageOperationResult, error) {
-	if s.kernelProxy == nil {
+	if s.kernel == nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
-	result, err := s.kernelProxy.kernel.ExecutePackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+	result, err := s.kernel.ExecutePackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRollbackFailed, "Extension Kernel 回滚失败", err.Error(), false, err)
 	}
@@ -185,10 +185,10 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageUninstallPreview{}, err
 	}
-	if s.kernelProxy == nil || s.kernelProxy.kernel == nil {
+	if s.kernel == nil {
 		return PackageUninstallPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	preview, err := s.kernelProxy.kernel.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	preview, err := s.kernel.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageUninstallPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "扩展内核读取失败", extensionID, true, err)
 	}
@@ -203,13 +203,13 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 }
 
 func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
-	if s.kernelProxy == nil {
+	if s.kernel == nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
-	op, err := s.kernelProxy.kernel.ExecutePackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	op, err := s.kernel.ExecutePackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 卸载失败", err.Error(), false, err)
 	}
@@ -240,10 +240,10 @@ func safePackageFileName(name string) string {
 }
 
 func (s *PackageService) ListOperations(ctx context.Context, userID string, limit int) ([]PackageOperationView, error) {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	records, err := s.kernelProxy.ReadContainer().PackageRepository.ListOperations(ctx, userID, limit)
+	records, err := s.kernel.Container().PackageRepository.ListOperations(ctx, userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -255,10 +255,10 @@ func (s *PackageService) ListOperations(ctx context.Context, userID string, limi
 }
 
 func (s *PackageService) GetOperation(ctx context.Context, userID, id string) (PackageOperationView, error) {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return PackageOperationView{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	record, steps, err := s.kernelProxy.ReadContainer().PackageRepository.GetOperation(ctx, userID, id)
+	record, steps, err := s.kernel.Container().PackageRepository.GetOperation(ctx, userID, id)
 	if err != nil {
 		return PackageOperationView{}, err
 	}
@@ -280,10 +280,10 @@ func kernelPackageOperationView(record kernelruntime.PackageOperationRecord, ste
 }
 
 func (s *PackageService) ListSigners(ctx context.Context) ([]PackageSignerView, error) {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return nil, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	records, err := s.kernelProxy.ReadContainer().PackageTrustRepository.List(ctx)
+	records, err := s.kernel.Container().PackageTrustRepository.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +303,7 @@ func (s *PackageService) TrustSigner(ctx context.Context, fingerprint string) er
 }
 
 func (s *PackageService) RegisterSigner(ctx context.Context, fingerprint, publisherID, keyID string, publicKey []byte) error {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	now := time.Now().UTC()
@@ -316,7 +316,7 @@ func (s *PackageService) RegisterSigner(ctx context.Context, fingerprint, publis
 		PublicKey: publicKey, PublisherID: publisherID, TrustSource: string(trust.TrustSourceUserDecision),
 		TrustLevel: string(trust.TrustLevelUnknown), KeyState: string(trust.KeyStateActive),
 		CreatedAt: now.Format(time.RFC3339Nano), UpdatedAt: now.Format(time.RFC3339Nano)}
-	container := s.kernelProxy.ReadContainer()
+	container := s.kernel.Container()
 	newValue, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -333,10 +333,10 @@ func (s *PackageService) UntrustSigner(ctx context.Context, fingerprint string) 
 }
 
 func (s *PackageService) setKernelSignerTrust(ctx context.Context, fingerprint string, trusted bool) error {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	container := s.kernelProxy.ReadContainer()
+	container := s.kernel.Container()
 	record, err := container.PackageTrustRepository.GetByFingerprint(ctx, fingerprint)
 	if err != nil {
 		return NewExtensionError(ErrPackageSignatureInvalid, "签名密钥不可用", fingerprint, false, err)
@@ -379,18 +379,18 @@ func (s *PackageService) setKernelSignerTrust(ctx context.Context, fingerprint s
 }
 
 func (s *PackageService) PreviewRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (kernelruntime.PackageRollbackPreviewResult, error) {
-	if s.kernelProxy == nil || s.kernelProxy.kernel == nil {
+	if s.kernel == nil {
 		return kernelruntime.PackageRollbackPreviewResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return kernelruntime.PackageRollbackPreviewResult{}, err
 	}
-	return s.kernelProxy.kernel.PreviewPackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+	return s.kernel.PreviewPackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
 }
 
 func (s *PackageService) VerifyOperationFinalGate(ctx context.Context, operationID string) (kernelruntime.PackageFinalGateResult, error) {
-	if s.kernelProxy == nil || s.kernelProxy.kernel == nil {
+	if s.kernel == nil {
 		return kernelruntime.PackageFinalGateResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
-	return s.kernelProxy.kernel.VerifyPackageFinalGate(ctx, operationID)
+	return s.kernel.VerifyPackageFinalGate(ctx, operationID)
 }

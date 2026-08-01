@@ -122,7 +122,7 @@ func newExportRepreviewFixture(t *testing.T, dependency bool) exportRepreviewFix
 	if err := container.InstallationRepository.PutInstallation(ctx, installation); err != nil {
 		t.Fatal(err)
 	}
-	service := NewExtensionReadModelService(NewKernelLifecycleProxy(runtime), nil)
+	service := NewExtensionReadModelService(runtime, nil)
 	return exportRepreviewFixture{service: service, runtime: runtime, container: container, installation: installation, artifact: artifact, workspaceID: workspaceID}
 }
 

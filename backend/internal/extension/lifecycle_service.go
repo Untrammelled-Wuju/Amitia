@@ -3,6 +3,8 @@ package extension
 import (
 	"context"
 	"sync"
+
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 )
 
 type ExtensionLifecycleService interface {
@@ -14,7 +16,7 @@ type extensionLifecycleService struct {
 	registry    SkillRegistry
 	repository  *Repository
 	agentSkills *AgentSkillService
-	kernelProxy *KernelLifecycleProxy
+	kernel      *kernelruntime.Runtime
 	mu          sync.Mutex
 }
 
@@ -22,8 +24,8 @@ func NewExtensionLifecycleService(registry SkillRegistry, repository *Repository
 	return &extensionLifecycleService{registry: registry, repository: repository, agentSkills: agentSkills}
 }
 
-func (s *extensionLifecycleService) AttachKernelProxy(proxy *KernelLifecycleProxy) {
-	s.kernelProxy = proxy
+func (s *extensionLifecycleService) AttachKernel(kernel *kernelruntime.Runtime) {
+	s.kernel = kernel
 }
 
 func (s *extensionLifecycleService) Enable(ctx context.Context, extensionID string, scope ExecutionScope) error {
@@ -35,7 +37,7 @@ func (s *extensionLifecycleService) Disable(ctx context.Context, extensionID str
 }
 
 func (s *extensionLifecycleService) setEnabled(ctx context.Context, extensionID string, scope ExecutionScope, enabled bool) error {
-	if s.kernelProxy == nil {
+	if s.kernel == nil {
 		return s.setLegacyEnabled(ctx, extensionID, scope, enabled)
 	}
 	s.mu.Lock()
@@ -44,9 +46,9 @@ func (s *extensionLifecycleService) setEnabled(ctx context.Context, extensionID 
 		return err
 	}
 	if enabled {
-		return s.kernelProxy.NotifyEnable(ctx, extensionID)
+		return s.kernel.Enable(ctx, extensionID)
 	}
-	return s.kernelProxy.NotifyDisable(ctx, extensionID)
+	return s.kernel.Disable(ctx, extensionID)
 }
 
 func (s *extensionLifecycleService) setLegacyEnabled(ctx context.Context, extensionID string, scope ExecutionScope, enabled bool) error {
@@ -72,27 +74,27 @@ func (s *extensionLifecycleService) setLegacyEnabled(ctx context.Context, extens
 			if err := s.agentSkills.Enable(ctx, scope, extensionID); err != nil {
 				return err
 			}
-			if s.kernelProxy != nil {
-				_ = s.kernelProxy.NotifyEnable(ctx, extensionID)
+			if s.kernel != nil {
+				_ = s.kernel.Enable(ctx, extensionID)
 			}
 			return nil
 		}
 		if err := s.agentSkills.Disable(ctx, scope, extensionID); err != nil {
 			return err
 		}
-		if s.kernelProxy != nil {
-			_ = s.kernelProxy.NotifyDisable(ctx, extensionID)
+		if s.kernel != nil {
+			_ = s.kernel.Disable(ctx, extensionID)
 		}
 		return nil
 	}
 	if err := s.registry.SetScopeEnabled(ctx, extensionID, scope, enabled); err != nil {
 		return err
 	}
-	if s.kernelProxy != nil {
+	if s.kernel != nil {
 		if enabled {
-			_ = s.kernelProxy.NotifyEnable(ctx, extensionID)
+			_ = s.kernel.Enable(ctx, extensionID)
 		} else {
-			_ = s.kernelProxy.NotifyDisable(ctx, extensionID)
+			_ = s.kernel.Disable(ctx, extensionID)
 		}
 	}
 	return nil

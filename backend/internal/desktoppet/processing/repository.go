@@ -453,6 +453,9 @@ func (r *repository) UpdateProcessedFrameNoTx(frameID string, updates map[string
 }
 
 func (r *repository) CreatePackage(pkg *Package) error {
+	if desktoppet.LegacyPackageWritesDisabled {
+		return fmt.Errorf("%s: 旧版 Package 写入已禁用，请使用新版 Release API", desktoppet.ErrCodeLegacyPackageWriteDisabled)
+	}
 	return r.db.Create(pkg).Error
 }
 
@@ -466,6 +469,9 @@ func (r *repository) GetPackage(id string) (*Package, error) {
 }
 
 func (r *repository) UpdatePackageStatus(id string, updates map[string]interface{}) error {
+	if desktoppet.LegacyPackageWritesDisabled {
+		return fmt.Errorf("%s: 旧版 Package 写入已禁用，请使用新版 Release API", desktoppet.ErrCodeLegacyPackageWriteDisabled)
+	}
 	return r.db.Model(&Package{}).Where("id = ?", id).Updates(updates).Error
 }
 

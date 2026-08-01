@@ -260,6 +260,43 @@ type QualityEvaluation struct {
 
 func (QualityEvaluation) TableName() string { return "desktop_pet_quality_evaluations" }
 
+type InboxStatus string
+
+const (
+	InboxStatusReceived       InboxStatus = "received"
+	InboxStatusValidating     InboxStatus = "validating"
+	InboxStatusSnapshotting   InboxStatus = "snapshotting"
+	InboxStatusEvalCreated    InboxStatus = "evaluation_created"
+	InboxStatusCompleted      InboxStatus = "completed"
+	InboxStatusFailedRetry    InboxStatus = "failed_retryable"
+	InboxStatusFailedTerminal InboxStatus = "failed_terminal"
+)
+
+type EvaluationRequestInboxRecord struct {
+	ID                string      `gorm:"column:id;primaryKey"`
+	EventID           string      `gorm:"column:event_id"`
+	ActionRevisionID  string      `gorm:"column:action_revision_id"`
+	ActionContentHash string      `gorm:"column:action_content_hash"`
+	ProfileID         string      `gorm:"column:profile_id"`
+	ProfileVersion    string      `gorm:"column:profile_version"`
+	RuleSetVersion    string      `gorm:"column:rule_set_version"`
+	IdempotencyKey    string      `gorm:"column:idempotency_key"`
+	PayloadHash       string      `gorm:"column:payload_hash"`
+	Status            InboxStatus `gorm:"column:status"`
+	AttemptCount      int         `gorm:"column:attempt_count"`
+	LeaseOwner        string      `gorm:"column:lease_owner"`
+	LeaseExpiresAt    string      `gorm:"column:lease_expires_at"`
+	LastError         string      `gorm:"column:last_error"`
+	ReceivedAt        string      `gorm:"column:received_at"`
+	ProcessedAt       string      `gorm:"column:processed_at"`
+	UpdatedAt         string      `gorm:"column:updated_at"`
+	CreatedAt         string      `gorm:"column:created_at"`
+}
+
+func (EvaluationRequestInboxRecord) TableName() string {
+	return "desktop_pet_quality_evaluation_request_inbox"
+}
+
 type QualityFindingRecord struct {
 	ID               string   `json:"id"`
 	EvaluationID     string   `json:"evaluationId"`

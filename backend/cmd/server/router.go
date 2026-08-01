@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/quality"
+	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding_config"
@@ -99,6 +100,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		quality.RegisterQualityRouter(apiGroup, services.QualityService)
 		installation.RegisterRoutes(apiGroup, services.InstallationService)
 		installation.RegisterReleaseRoutes(apiGroup, services.ReleaseService)
+		release.RegisterRoutes(apiGroup, services.NewReleaseService)
 		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)

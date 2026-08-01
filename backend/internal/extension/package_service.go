@@ -27,6 +27,7 @@ type PackageService struct {
 	limits            PackageLimits
 	locks             sync.Map
 	metrics           sync.Map
+	kernel            *kernelruntime.Runtime
 	kernelProxy       *KernelLifecycleProxy
 	readModel         *ExtensionReadModelService
 }
@@ -39,13 +40,13 @@ func NewPackageService(repository *Repository, registry *Registry, validator *Sc
 	return service
 }
 
-func (s *PackageService) AttachKernelProxy(proxy *KernelLifecycleProxy) error {
-	s.kernelProxy = proxy
-	if proxy != nil {
-		s.readModel = NewExtensionReadModelService(proxy, s.repository)
-		return proxy.kernel.RecoverPackageOperations(context.Background())
+func (s *PackageService) AttachKernel(kernel *kernelruntime.Runtime) error {
+	if kernel == nil {
+		return nil
 	}
-	return nil
+	s.kernel = kernel
+	s.readModel = NewExtensionReadModelService(kernel, s.repository)
+	return kernel.RecoverPackageOperations(context.Background())
 }
 
 func (s *PackageService) StartupCleanup(ctx context.Context) error {
@@ -487,9 +488,9 @@ func (s *PackageService) Metrics() map[string]uint64 {
 			result["package_blob_bytes"] = uint64(blobBytes)
 		}
 	}
-	if s.kernelProxy != nil && s.kernelProxy.ReadContainer() != nil {
+	if s.kernel != nil && s.kernel.Container() != nil {
 		report := &kernelruntime.FinalGateReport{Metrics: map[string]int64{}, Details: []kernelruntime.FinalGateIssue{}, Errors: []string{}}
-		kernelruntime.NewFinalGateProbe(s.kernelProxy.ReadContainer()).ProbePackageReleaseGate(context.Background(), report)
+		kernelruntime.NewFinalGateProbe(s.kernel.Container()).ProbePackageReleaseGate(context.Background(), report)
 		if len(report.Errors) == 0 {
 			result["package_operation_requires_recovery"] = uint64(report.Metrics["requires_recovery_operations"])
 			result["package_staging_orphans"] = uint64(report.Metrics["orphan_staging_directories"])

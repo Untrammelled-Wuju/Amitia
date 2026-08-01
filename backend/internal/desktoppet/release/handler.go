@@ -1,0 +1,209 @@
+package release
+
+import (
+	"context"
+	"errors"
+
+	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/pkg/comment/response"
+	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
+)
+
+type Handler struct {
+	svc ReleaseService
+}
+
+func NewHandler(svc ReleaseService) *Handler {
+	return &Handler{svc: svc}
+}
+
+type buildReleasePayload struct {
+	ProcessingTaskID string   `json:"processingTaskId"`
+	PetID            string   `json:"petId"`
+	CharacterID      string   `json:"characterId"`
+	DefaultAction    string   `json:"defaultAction"`
+	IncludedActions  []string `json:"includedActions"`
+	ProfileID        string   `json:"profileId"`
+	IdempotencyKey   string   `json:"idempotencyKey"`
+}
+
+func (h *Handler) BuildRelease(c *gin.Context) {
+	var payload buildReleasePayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": "INVALID_PARAMS"})
+		return
+	}
+	if payload.ProcessingTaskID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "处理任务 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
+		return
+	}
+	userID := desktoppet.ResolveUserID(c)
+	req := &BuildReleaseRequest{
+		UserID:             userID,
+		ProcessingTaskID:   payload.ProcessingTaskID,
+		PetID:              payload.PetID,
+		CharacterID:        payload.CharacterID,
+		DefaultAction:      payload.DefaultAction,
+		IncludedActionKeys: payload.IncludedActions,
+		BuildProfileID:     payload.ProfileID,
+		IdempotencyKey:     payload.IdempotencyKey,
+	}
+	result, err := h.svc.BuildRelease(c.Request.Context(), req)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "构建成功", gin.H{
+		"operation": result.Operation,
+		"release":   result.Release,
+		"snapshot":  result.Snapshot,
+	})
+}
+
+func (h *Handler) GetBuildOperation(c *gin.Context) {
+	operationID := c.Param("operationId")
+	if operationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "操作 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
+		return
+	}
+	userID := desktoppet.ResolveUserID(c)
+	op, err := h.svc.GetBuildOperation(c.Request.Context(), operationID, userID)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessResponse(c, op)
+}
+
+func (h *Handler) CancelBuildOperation(c *gin.Context) {
+	operationID := c.Param("operationId")
+	if operationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "操作 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
+		return
+	}
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.svc.CancelBuildOperation(c.Request.Context(), operationID, userID); err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "已取消", nil)
+}
+
+func (h *Handler) ListReleases(c *gin.Context) {
+	userID := desktoppet.ResolveUserID(c)
+	releases, err := h.svc.ListReleases(c.Request.Context(), userID)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"items": releases, "total": len(releases)})
+}
+
+func (h *Handler) ListReleasesForPet(c *gin.Context) {
+	petID := c.Param("petId")
+	userID := desktoppet.ResolveUserID(c)
+	releases, err := h.svc.ListReleasesForPet(c.Request.Context(), userID, petID)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"items": releases, "total": len(releases)})
+}
+
+func (h *Handler) GetRelease(c *gin.Context) {
+	releaseID := c.Param("releaseId")
+	userID := desktoppet.ResolveUserID(c)
+	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, userID)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessResponse(c, release)
+}
+
+func (h *Handler) GetReleaseFiles(c *gin.Context) {
+	releaseID := c.Param("releaseId")
+	userID := desktoppet.ResolveUserID(c)
+	files, err := h.svc.GetReleaseFiles(c.Request.Context(), releaseID, userID)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"items": files})
+}
+
+func (h *Handler) ArchiveRelease(c *gin.Context) {
+	releaseID := c.Param("releaseId")
+	userID := desktoppet.ResolveUserID(c)
+	if err := h.svc.ArchiveRelease(c.Request.Context(), releaseID, userID); err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "已归档", nil)
+}
+
+func (h *Handler) RevokeRelease(c *gin.Context) {
+	releaseID := c.Param("releaseId")
+	userID := desktoppet.ResolveUserID(c)
+	reason := c.Query("reason")
+	if err := h.svc.RevokeRelease(c.Request.Context(), releaseID, userID, reason); err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "已撤销", nil)
+}
+
+func (h *Handler) GetPetIdentity(c *gin.Context) {
+	userID := desktoppet.ResolveUserID(c)
+	petID := c.Query("petId")
+	if petID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "petId 不能为空", gin.H{"errorCode": "INVALID_PARAMS"})
+		return
+	}
+	identity, err := h.svc.GetPetIdentity(c.Request.Context(), userID, petID)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessResponse(c, identity)
+}
+
+func (h *Handler) DownloadRelease(c *gin.Context) {
+	releaseID := c.Param("releaseId")
+	userID := desktoppet.ResolveUserID(c)
+	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, userID)
+	if err != nil {
+		writeReleaseError(c, err)
+		return
+	}
+	util.SuccessResponse(c, gin.H{
+		"downloadUrl": "/api/v2/releases/" + releaseID + "/archive",
+		"release":     release,
+	})
+}
+
+func writeReleaseError(c *gin.Context, err error) {
+	var releaseErr *ReleaseError
+	if errors.As(err, &releaseErr) {
+		switch releaseErr.Code {
+		case "INVALID_REQUEST", "IDEMPOTENCY_CONFLICT", "QUALITY_GATE_READ_FAILED":
+			util.ErrorResponse(c, response.InvalidParams, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
+		case "OPERATION_NOT_FOUND", "RELEASE_NOT_FOUND", "PET_IDENTITY_NOT_FOUND":
+			util.ErrorResponse(c, response.NotFound, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
+		case "OPERATION_CONFLICT", "RELEASE_INTEGRITY_MISMATCH":
+			util.ErrorResponse(c, response.BusinessError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
+		case "LEGACY_PACKAGE_WRITE_DISABLED":
+			util.ErrorResponse(c, response.BusinessError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code, "successor": "/api/v2/releases/build"})
+		default:
+			util.ErrorResponse(c, response.InternalError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
+		}
+		return
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, gorm.ErrRecordNotFound) {
+		util.ErrorResponse(c, response.NotFound, err.Error(), gin.H{"errorCode": "NOT_FOUND"})
+		return
+	}
+	util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
+}

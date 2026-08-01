@@ -16,7 +16,7 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 		}
 		s.metric("package_install_total")
 	}()
-	if s.kernelProxy == nil {
+	if s.kernel == nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if request.ScopeType == string(ScopeCharacter) {
@@ -40,7 +40,7 @@ func (s *PackageService) Install(ctx context.Context, request InstallPackageRequ
 	confirmations["confirm.signer_change"] = confirmations["confirm.signer_change"] || request.ConfirmSignerChange
 	confirmations["confirm.config_migration"] = confirmations["confirm.config_migration"] || request.ConfirmConfigMigration
 	confirmations["confirm.permission_escalation"] = confirmations["confirm.permission_escalation"] || len(request.ConfirmedCapabilities) > 0
-	kernelResult, err := s.kernelProxy.InstallPreviewedPackage(ctx, kernelruntime.PackageInstallRequest{SessionID: request.SessionID,
+	kernelResult, err := s.kernel.ExecutePackageInstall(ctx, kernelruntime.PackageInstallRequest{SessionID: request.SessionID,
 		UserID: request.UserID, ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		Confirmations: confirmations, ExpectedExtensionID: request.ExpectedExtensionID})
 	if err != nil {

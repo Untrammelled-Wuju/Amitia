@@ -94,13 +94,15 @@ func (s *QualityWritebackService) WritebackQualitySnapshot(ctx context.Context, 
 }
 
 type Committer struct {
+	db            *gorm.DB
 	repo          quality.QualityRepository
 	writeback     *QualityWritebackService
 	activeBinding *ActiveBindingService
 }
 
-func NewCommitter(repo quality.QualityRepository, writeback *QualityWritebackService, activeBinding *ActiveBindingService) *Committer {
+func NewCommitter(db *gorm.DB, repo quality.QualityRepository, writeback *QualityWritebackService, activeBinding *ActiveBindingService) *Committer {
 	return &Committer{
+		db:            db,
 		repo:          repo,
 		writeback:     writeback,
 		activeBinding: activeBinding,
@@ -125,71 +127,75 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 	ev.ExecutionStatus = quality.EvalSucceeded
 	ev.CompletedAt = now
 
-	if err := c.repo.UpdateEvaluation(ctx, ev); err != nil {
-		return nil, quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to update evaluation", err)
-	}
+	var writebackApplied bool
+	var activeBindingSet bool
 
-	findingRecords := quality.FindingsToRecords(req.Findings, evaluationID)
-	if err := c.repo.CreateFindings(ctx, findingRecords); err != nil {
-		return nil, quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to create findings", err)
-	}
+	err := c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := quality.NewRepository(tx)
 
-	scoreRecords := quality.ScoresToRecords(req.Scores, evaluationID)
-	if err := c.repo.CreateDimensionScores(ctx, scoreRecords); err != nil {
-		return nil, quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to create dimension scores", err)
-	}
-
-	result := &quality.CommitEvaluationResult{
-		EvaluationID: evaluationID,
-	}
-
-	if req.ProcessingTaskID != "" && req.ActionKey != "" {
-		if err := c.repo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, evaluationID); err != nil {
-			log.Logger.Errorf("committer: failed to set active evaluation for %s: %v", evaluationID, err)
+		if err := txRepo.UpdateEvaluation(ctx, ev); err != nil {
+			return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to update evaluation", err)
 		}
-	}
 
-	writebackReq := quality.QualityWritebackRequest{
-		ActionRevisionID:  ev.ActionRevisionID,
-		ContentHash:       ev.ActionContentHash,
-		EvaluationID:      evaluationID,
-		ProfileID:         ev.ProfileID,
-		RuleSetVersion:    ev.RuleSetVersion,
-		Verdict:           string(req.Verdict),
-		Score:             &req.OverallScore,
-		SourceContentHash: ev.ActionContentHash,
-	}
-	if err := c.writeback.WritebackQualitySnapshot(ctx, writebackReq); err != nil {
-		log.Logger.Warnf("committer: writeback failed for evaluation %s: %v", evaluationID, err)
-	} else {
-		result.WritebackApplied = true
-	}
+		findingRecords := quality.FindingsToRecords(req.Findings, evaluationID)
+		if err := txRepo.CreateFindings(ctx, findingRecords); err != nil {
+			return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to create findings", err)
+		}
 
-	if ev.ActionRevisionID != "" && ev.ProfileID != "" {
-		if err := c.activeBinding.BindActiveEvaluation(ctx, ev.ActionRevisionID, ev.ProfileID, evaluationID); err != nil {
-			log.Logger.Errorf("committer: failed to bind active evaluation for %s: %v", evaluationID, err)
+		scoreRecords := quality.ScoresToRecords(req.Scores, evaluationID)
+		if err := txRepo.CreateDimensionScores(ctx, scoreRecords); err != nil {
+			return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to create dimension scores", err)
+		}
+
+		if req.ProcessingTaskID != "" && req.ActionKey != "" {
+			if err := txRepo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, evaluationID); err != nil {
+				return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to set active evaluation", err)
+			}
+		}
+
+		writebackReq := quality.QualityWritebackRequest{
+			ActionRevisionID:  ev.ActionRevisionID,
+			ContentHash:       ev.ActionContentHash,
+			EvaluationID:      evaluationID,
+			ProfileID:         ev.ProfileID,
+			RuleSetVersion:    ev.RuleSetVersion,
+			Verdict:           string(req.Verdict),
+			Score:             &req.OverallScore,
+			SourceContentHash: ev.ActionContentHash,
+		}
+		if err := c.writeback.WritebackQualitySnapshot(ctx, writebackReq); err != nil {
+			log.Logger.Warnf("committer: writeback failed for evaluation %s: %v", evaluationID, err)
 		} else {
-			result.ActiveBindingSet = true
+			writebackApplied = true
 		}
-	}
 
-	stepsCompleted := "evaluation_updated,findings_persisted,scores_persisted"
-	if result.WritebackApplied {
-		stepsCompleted += ",writeback_applied"
-	}
-	if result.ActiveBindingSet {
-		stepsCompleted += ",active_binding_set"
-	}
-	journal := &quality.QualityCommitJournalRecord{
-		EvaluationID:   evaluationID,
-		CommitHash:     uuid.NewString(),
-		Status:         string(quality.EvalSucceeded),
-		StepsCompleted: stepsCompleted,
-		CreatedAt:      now,
-		CompletedAt:    now,
-	}
-	if err := c.repo.CreateCommitJournal(ctx, journal); err != nil {
-		log.Logger.Errorf("committer: failed to create commit journal for %s: %v", evaluationID, err)
+		if ev.ActionRevisionID != "" && ev.ProfileID != "" {
+			if err := c.activeBinding.BindActiveEvaluation(ctx, ev.ActionRevisionID, ev.ProfileID, evaluationID); err != nil {
+				return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to bind active evaluation", err)
+			}
+			activeBindingSet = true
+		}
+
+		stepsCompleted := "evaluation_updated,findings_persisted,scores_persisted"
+		if writebackApplied {
+			stepsCompleted += ",writeback_applied"
+		}
+		if activeBindingSet {
+			stepsCompleted += ",active_binding_set"
+		}
+		journal := &quality.QualityCommitJournalRecord{
+			EvaluationID:   evaluationID,
+			CommitHash:     uuid.NewString(),
+			Status:         string(quality.EvalSucceeded),
+			StepsCompleted: stepsCompleted,
+			CreatedAt:      now,
+			CompletedAt:    now,
+		}
+		return txRepo.CreateCommitJournal(ctx, journal)
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	outboxEvent := quality.QualityOutboxEvent{
@@ -213,5 +219,9 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 		log.Logger.Errorf("committer: failed to create outbox event for %s: %v", evaluationID, err)
 	}
 
-	return result, nil
+	return &quality.CommitEvaluationResult{
+		EvaluationID:     evaluationID,
+		WritebackApplied: writebackApplied,
+		ActiveBindingSet: activeBindingSet,
+	}, nil
 }

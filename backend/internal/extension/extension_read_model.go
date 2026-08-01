@@ -22,28 +22,28 @@ import (
 )
 
 type ExtensionReadModelService struct {
-	proxy   *KernelLifecycleProxy
+	kernel  *kernelruntime.Runtime
 	repo    *Repository
 	counter *kernelruntime.LegacyReadCounter
 }
 
-func NewExtensionReadModelService(proxy *KernelLifecycleProxy, repo *Repository) *ExtensionReadModelService {
+func NewExtensionReadModelService(kernel *kernelruntime.Runtime, repo *Repository) *ExtensionReadModelService {
 	return &ExtensionReadModelService{
-		proxy:   proxy,
+		kernel:  kernel,
 		repo:    repo,
 		counter: kernelruntime.GlobalLegacyReadCounter(),
 	}
 }
 
 func (s *ExtensionReadModelService) available() bool {
-	return s.proxy != nil && s.proxy.ReadContainer() != nil
+	return s.kernel != nil && s.kernel.Container() != nil
 }
 
 func (s *ExtensionReadModelService) authoritativeContainer() (*kernelruntime.Container, error) {
 	if !s.available() {
 		return nil, fmt.Errorf("readmodel: extension kernel unavailable")
 	}
-	container := s.proxy.ReadContainer()
+	container := s.kernel.Container()
 	if container.InstallationRepository == nil {
 		return nil, fmt.Errorf("readmodel: installation repository not injected")
 	}
@@ -280,7 +280,7 @@ func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, 
 		}
 		return ExportedPackage{}, false, fmt.Errorf("readmodel: installation repository unavailable: %w", err)
 	}
-	if container.PackageRepository == nil || container.PackageArtifactStore == nil || container.PackageGenerationStore == nil || s.proxy.kernel == nil {
+	if container.PackageRepository == nil || container.PackageArtifactStore == nil || container.PackageGenerationStore == nil || s.kernel == nil {
 		return ExportedPackage{}, false, fmt.Errorf("readmodel: export dependencies not injected")
 	}
 	owner, _ := installation.Metadata["ownerUserId"].(string)
@@ -326,7 +326,7 @@ func (s *ExtensionReadModelService) TryExport(ctx context.Context, extensionID, 
 	if err := validateExportInstallationArtifact(installation, artifact); err != nil {
 		return ExportedPackage{}, false, err
 	}
-	pkg, err := s.proxy.kernel.VerifyStoredPackage(ctx, artifact)
+	pkg, err := s.kernel.VerifyStoredPackage(ctx, artifact)
 	if err != nil {
 		return ExportedPackage{}, false, err
 	}
@@ -413,14 +413,14 @@ func (s *ExtensionReadModelService) canonicalExportPreview(ctx context.Context, 
 	defer archive.Close()
 	devOnly, _ := installation.Metadata["devOnly"].(bool)
 	developerSessionID, _ := installation.Metadata["developerSessionId"].(string)
-	preview, err := s.proxy.kernel.PreviewPackage(ctx, kernelruntime.PackagePreviewRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: filepathBase(artifact.ArchivePath), AllowUnsignedDev: devOnly, DeveloperSessionID: developerSessionID}, archive)
+	preview, err := s.kernel.PreviewPackage(ctx, kernelruntime.PackagePreviewRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: filepathBase(artifact.ArchivePath), AllowUnsignedDev: devOnly, DeveloperSessionID: developerSessionID}, archive)
 	if err != nil {
 		return kernelruntime.InstallPreview{}, err
 	}
 	if preview.SessionID == "" {
 		return kernelruntime.InstallPreview{}, fmt.Errorf("readmodel: canonical export preview session missing")
 	}
-	cancelErr := s.proxy.ReadContainer().PackageRepository.CancelPreview(ctx, preview.SessionID, userID, scopeType, scopeID)
+	cancelErr := s.kernel.Container().PackageRepository.CancelPreview(ctx, preview.SessionID, userID, scopeType, scopeID)
 	if cancelErr != nil {
 		return kernelruntime.InstallPreview{}, fmt.Errorf("readmodel: release canonical export preview: %w", cancelErr)
 	}

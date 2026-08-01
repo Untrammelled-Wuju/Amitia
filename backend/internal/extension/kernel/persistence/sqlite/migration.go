@@ -2010,6 +2010,7 @@ var schemaMigrations = []string{
 type dbExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -2203,10 +2204,23 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_package_rollback_points", "forward_recovery_operation_id", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_package_rollback_points", "forward_recovery_hash", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_package_rollback_points", "migration_set_diff_json", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_resource_quarantine", "size", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_package_resource_quarantine", "namespace_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_user_data_restore_journal", "applied_count", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_package_user_data_restore_journal", "cursor", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_user_data_restore_journal", "batch_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_user_data_restore_journal", "namespace_hash", "TEXT NOT NULL DEFAULT ''"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {
 	for _, a := range schemaColumnAdditions {
+		tableExists, err := tableExists(ctx, db, a.table)
+		if err != nil {
+			return err
+		}
+		if !tableExists {
+			continue
+		}
 		exists, err := columnExists(ctx, db, a.table, a.column)
 		if err != nil {
 			return err
@@ -2216,10 +2230,27 @@ func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {
 		}
 		stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", a.table, a.column, a.def)
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			if isDuplicateColumnError(err) {
+				continue
+			}
 			return fmt.Errorf("add column %s.%s: %w", a.table, a.column, err)
 		}
 	}
 	return nil
+}
+
+func tableExists(ctx context.Context, db dbExecutor, table string) (bool, error) {
+	var name string
+	err := db.QueryRowContext(ctx,
+		`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table,
+	).Scan(&name)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return name == table, nil
 }
 
 func columnExists(ctx context.Context, db dbExecutor, table, column string) (bool, error) {

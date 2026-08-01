@@ -127,8 +127,9 @@ func DefaultMigrations() []Migration {
 		DesktopPetEditingV2Migration(),
 		DesktopPetRuntimeProtocolV2Migration(),
 		DesktopPetGenerationPlanTablesMigration(),
-	DesktopPetProcessingAtomicCommitMigration(),
-	DesktopPetQualityV2Migration(),
-	DesktopPetReleaseDomainV2Migration(),
+		DesktopPetProcessingAtomicCommitMigration(),
+		DesktopPetQualityV2Migration(),
+		DesktopPetReleaseDomainV2Migration(),
+		DesktopPetReleaseDomainV3Migration(),
 	}
 }

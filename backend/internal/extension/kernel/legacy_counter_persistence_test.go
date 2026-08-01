@@ -52,3 +52,41 @@ func TestLegacyCountersPersistAcrossReinitializationAndProveZeroWindow(t *testin
 		t.Fatalf("database failure must invalidate zero window proof: %+v err=%v", proof, err)
 	}
 }
+
+func TestDefaultBuildLegacyWriteCounterAlwaysZero(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	container, err := NewContainerBuilder().WithDBPath(filepath.Join(root, "kernel.db")).WithExtensionRoot(filepath.Join(root, "extensions")).Build(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer container.Close()
+	store := NewLegacyCounterStore(container.Store.DB())
+	reads := NewLegacyReadCounterWithStore(store)
+	writes := NewLegacyCallCounterWithStore(store)
+	if reads.PackageReadCallsFallbacks() != 0 {
+		t.Fatalf("default build legacy read counter must be 0, got %d", reads.PackageReadCallsFallbacks())
+	}
+	if writes.PackageWriteCalls() != 0 {
+		t.Fatalf("default build legacy write counter must be 0, got %d", writes.PackageWriteCalls())
+	}
+	if writes.Total() != 0 {
+		t.Fatalf("default build legacy call counter total must be 0, got %d", writes.Total())
+	}
+	restartedStore := NewLegacyCounterStore(container.Store.DB())
+	restartedReads := NewLegacyReadCounterWithStore(restartedStore)
+	restartedWrites := NewLegacyCallCounterWithStore(restartedStore)
+	if restartedReads.PackageReadCallsFallbacks() != 0 {
+		t.Fatalf("restarted build legacy read counter must remain 0, got %d", restartedReads.PackageReadCallsFallbacks())
+	}
+	if restartedWrites.PackageWriteCalls() != 0 {
+		t.Fatalf("restarted build legacy write counter must remain 0, got %d", restartedWrites.PackageWriteCalls())
+	}
+	if err := restartedReads.BeginZeroWindow(ctx); err != nil {
+		t.Fatal(err)
+	}
+	proof, err := restartedReads.ZeroWindowProof(ctx, 0)
+	if err != nil || !proof.Passed || !proof.ZeroRead || !proof.ZeroWrite {
+		t.Fatalf("default build zero window proof must pass: %+v err=%v", proof, err)
+	}
+}

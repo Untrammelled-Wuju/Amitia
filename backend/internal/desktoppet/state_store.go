@@ -77,6 +77,12 @@ func (s *StateStore) ApplyTransition(ctx context.Context, p taskstate.ApplyTrans
 	if tableName == "" {
 		return nil, fmt.Errorf("taskstate: unknown entity type %s", p.EntityType)
 	}
+	if LegacyPackageWritesDisabled && p.EntityType == contracts.EntityPackage {
+		return &taskstate.ApplyTransitionResult{
+			Applied:        false,
+			ConflictReason: ErrCodeLegacyPackageWriteDisabled,
+		}, nil
+	}
 	allowedCols := columnsForEntity(p.EntityType)
 
 	var current struct {

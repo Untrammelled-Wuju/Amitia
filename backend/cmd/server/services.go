@@ -38,7 +38,6 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/desktoppet/quality"
-	"github.com/u-ai/backend/internal/desktoppet/quality/bridge"
 	qualityworker "github.com/u-ai/backend/internal/desktoppet/quality/worker"
 	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
 	qualityinput "github.com/u-ai/backend/internal/desktoppet/quality/input"
@@ -46,6 +45,11 @@ import (
 	qualitywriteback "github.com/u-ai/backend/internal/desktoppet/quality/writeback"
 	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
 	qualityrecovery "github.com/u-ai/backend/internal/desktoppet/quality/recovery"
+	"github.com/u-ai/backend/internal/desktoppet/release"
+	releaserepo "github.com/u-ai/backend/internal/desktoppet/release/repository"
+	releasestorage "github.com/u-ai/backend/internal/desktoppet/release/storage"
+	releasebuild "github.com/u-ai/backend/internal/desktoppet/release/build"
+	releaseworker "github.com/u-ai/backend/internal/desktoppet/release/worker"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
@@ -84,51 +88,55 @@ import (
 )
 
 type AppServices struct {
-	DeliveryStore       *delivery.SQLiteDeliveryStore
-	ChatDeliveryAdapter chat.DeliveryStore
-	DeliveryWorker      *delivery.Worker
-	Graph               graph.Service
-	Memory              memory.Service
-	Profile             profile.Service
-	Episodic            episodic.Service
-	WorldBook           worldbook.Service
-	Vision              vision.Service
-	Companion           companion.Service
-	Chat                chat.Service
-	UnifiedEntry        *interaction.UnifiedEntry
-	DataLifecycle       *mindruntime.DataLifecycleCoordinator
-	RuntimeQueue        *queue.SQLiteRuntimeQueueStore
-	NewOutbox           *newoutbox.SQLiteOutboxStore
-	OutboxWorker        *newoutbox.Worker
-	DesktopPetWorker    *worker.Worker
-	ProcessingWorker    *processingworker.Worker
-	QualityService      quality.QualityService
-	QualityWorker       *qualityworker.Worker
-	InstallationService installation.Service
-	ReleaseService     installation.ReleaseService
-	DesktopPetRuntime  *runtime.Service
-	EditingService     editing.Service
-	RegenerationWorker *editing.RegenerationWorker
-	BridgeRecoveryWorker *revisioncommit.RecoveryWorker
-	BehaviorService    *behavior.BehaviorService
-	Reconciliation      *mindruntime.ReconciliationEngine
-	CircuitBreakers     *mindruntime.CircuitBreakerRegistry
-	VoiceEntry          *interaction.VoiceEntry
-	Extension           *extension.Runtime
-	KernelContainer     *kernel.Container
-	Emote               *emote.Service
-	Temporal            *temporal.Service
-	RelTimeCoordinator  *temporal.RelationshipTimeCoordinator
-	MCPRepository       *mcp.Repository
-	MCPConnections      *mcpmanager.Manager
-	MCPAuth             *mcpauth.Manager
-	MCPDiscovery        *mcpdiscovery.Service
-	MCPSkills           *mcpskill.Runtime
-	MCPSecrets          mcpauth.SecretStore
-	MCPFeatures         *mcpfeatures.Service
-	MCPHost             *mcphost.Service
-	MCPInteractions     *mcphost.Broker
-	MCPDependencies     *mcpdependency.Service
+	DeliveryStore         *delivery.SQLiteDeliveryStore
+	ChatDeliveryAdapter   chat.DeliveryStore
+	DeliveryWorker        *delivery.Worker
+	Graph                 graph.Service
+	Memory                memory.Service
+	Profile               profile.Service
+	Episodic              episodic.Service
+	WorldBook             worldbook.Service
+	Vision                vision.Service
+	Companion             companion.Service
+	Chat                  chat.Service
+	UnifiedEntry          *interaction.UnifiedEntry
+	DataLifecycle         *mindruntime.DataLifecycleCoordinator
+	RuntimeQueue          *queue.SQLiteRuntimeQueueStore
+	NewOutbox             *newoutbox.SQLiteOutboxStore
+	OutboxWorker          *newoutbox.Worker
+	DesktopPetWorker      *worker.Worker
+	ProcessingWorker      *processingworker.Worker
+	QualityService        quality.QualityService
+	QualityWorker         *qualityworker.Worker
+	InstallationService   installation.Service
+	ReleaseService        installation.ReleaseService
+	NewReleaseService     release.ReleaseService
+	ReleaseRecoveryWorker *release.ReleaseRecoveryWorker
+	ReleaseBuildWorker    *releaseworker.ReleaseBuildWorker
+	ReleaseEventPublisher *release.ReleaseEventPublisher
+	DesktopPetRuntime     *runtime.Service
+	EditingService        editing.Service
+	RegenerationWorker    *editing.RegenerationWorker
+	BridgeRecoveryWorker  *revisioncommit.RecoveryWorker
+	BehaviorService       *behavior.BehaviorService
+	Reconciliation        *mindruntime.ReconciliationEngine
+	CircuitBreakers       *mindruntime.CircuitBreakerRegistry
+	VoiceEntry            *interaction.VoiceEntry
+	Extension             *extension.Runtime
+	KernelContainer       *kernel.Container
+	Emote                 *emote.Service
+	Temporal              *temporal.Service
+	RelTimeCoordinator    *temporal.RelationshipTimeCoordinator
+	MCPRepository         *mcp.Repository
+	MCPConnections        *mcpmanager.Manager
+	MCPAuth               *mcpauth.Manager
+	MCPDiscovery          *mcpdiscovery.Service
+	MCPSkills             *mcpskill.Runtime
+	MCPSecrets            mcpauth.SecretStore
+	MCPFeatures           *mcpfeatures.Service
+	MCPHost               *mcphost.Service
+	MCPInteractions       *mcphost.Broker
+	MCPDependencies       *mcpdependency.Service
 }
 
 type defaultCharacterProvider struct {
@@ -269,24 +277,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 			panic("failed to start schedule service")
 		}
 	}
-	kernelProxy := extension.NewKernelLifecycleProxy(extensionRuntime.Kernel)
-	if err := extensionRuntime.Packages.AttachKernelProxy(kernelProxy); err != nil {
-		log.Error("extension package recovery failed: ", err)
-		panic("failed to recover extension package operations")
-	}
-	if err := extensionRuntime.Packages.StartupCleanup(context.Background()); err != nil {
-		log.Warn("extension package startup cleanup warning: ", err)
-	}
-	legacyReport, legacyErr := extensionRuntime.Packages.DetectLegacyPackages(context.Background())
-	if legacyErr != nil {
-		log.Warn("legacy extension package detection failed: ", legacyErr)
-	} else if legacyReport.PendingManual > 0 {
-		log.Warn(fmt.Sprintf("legacy extension packages migration_required: %d pending (total %d, completed %d), run explicit migration command", legacyReport.PendingManual, legacyReport.Total, legacyReport.Completed))
-		for _, extID := range legacyReport.PendingExtensions {
-			log.Warn(fmt.Sprintf("legacy extension migration_required: %s, run explicit migration command", extID))
-		}
-	} else {
-		log.Info(fmt.Sprintf("legacy extension migration status: %d completed (total %d)", legacyReport.Completed, legacyReport.Total))
+	if err := extensionRuntime.AttachKernelFacade(extensionRuntime.Kernel); err != nil {
+		log.Error("extension kernel facade attach failed: ", err)
+		panic("failed to attach extension kernel facade")
 	}
 	artifactMaintenance, err := kernel.NewPackageArtifactMaintenanceForStore(kernelContainer.PackageRepository, kernelContainer.PackageArtifactStore, kernel.DefaultPackageArtifactMaintenanceConfig())
 	if err != nil {
@@ -297,9 +290,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	if err := artifactMaintenance.Start(context.Background()); err != nil {
 		log.Error("failed to start package artifact maintenance: ", err)
 		panic("failed to start package artifact maintenance")
-	}
-	if extensionRuntime.Lifecycle != nil {
-		extensionRuntime.Lifecycle.AttachKernelProxy(kernelProxy)
 	}
 	toolFacade := kernel.NewToolFacade(
 		kernelContainer.ToolRegistry,
@@ -508,12 +498,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 
 	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir, processingPipeline, processingSourceResolver, processingCommitter)
 
-	qualityBridge := bridge.NewProcessingBridge(ctx.DB, processingDataDir)
 	qualityRepo := quality.NewRepository(ctx.DB)
 	qualityGateEvaluator := quality.NewGateEvaluator(qualityRepo)
 	qualityWritebackSvc := qualitywriteback.NewQualityWritebackService(ctx.DB)
 	qualityActiveBindingSvc := qualitywriteback.NewActiveBindingService(qualityRepo)
-	qualityCommitter := qualitywriteback.NewCommitter(qualityRepo, qualityWritebackSvc, qualityActiveBindingSvc)
+	qualityCommitter := qualitywriteback.NewCommitter(ctx.DB, qualityRepo, qualityWritebackSvc, qualityActiveBindingSvc)
 	qualityTaskGateSvc := qualitygate.NewTaskGateService(qualityRepo, qualityGateEvaluator)
 	qualityGateInvalidator := qualitygate.NewGateInvalidator(qualityRepo)
 	qualityReviewDecisionSvc := qualitygate.NewReviewDecisionService(qualityRepo)
@@ -524,7 +513,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	qualitySvc, err := quality.NewQualityService(quality.ServiceConfig{
 		DB:                ctx.DB,
 		DataDir:           processingDataDir,
-		MeasurementSrc:    quality.NewProcessingMeasurementAdapter(qualityBridge, processingDataDir),
 		Detectors:         detectors.NewDefaultDetectors(),
 		EventPublisher:    quality.NewLogEventPublisher(),
 		Repo:              qualityRepo,
@@ -541,28 +529,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Error("failed to create quality service: ", err)
 	}
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
-
-	processingWorker.SetOnActionProcessed(func(taskID, actionID, actionKey string) {
-		if qualitySvc == nil {
-			return
-		}
-		revisionID := ""
-		revision, revErr := processingRepo.GetActiveRevision(actionID)
-		if revErr != nil {
-			log.Error(fmt.Sprintf("get active revision for action %s failed: %v", actionKey, revErr))
-		} else if revision != nil {
-			revisionID = revision.ID
-		}
-		_, evalErr := qualitySvc.CreateEvaluation(context.Background(), quality.CreateEvaluationRequest{
-			ProcessingTaskID:   taskID,
-			ProcessingActionID: actionID,
-			ActionRevisionID:   revisionID,
-			ActionKey:          actionKey,
-		})
-		if evalErr != nil {
-			log.Error(fmt.Sprintf("create quality evaluation for action %s failed: %v", actionKey, evalErr))
-		}
-	})
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	installationInstaller := installation.NewInstaller(installationRepo, processingRepo, charRepo, processingDataDir)
@@ -674,6 +640,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Warn("installation coordinator recovery warning: ", err)
 	}
 
+	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
+	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
+	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
+	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
+	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
+
+	leaseManager := releasebuild.NewLeaseManager()
+	journalManager := releasebuild.NewPublishJournalManager(releaseRepo)
+	releaseRecoveryWorker := release.NewReleaseRecoveryWorker(releaseRepo, leaseManager, journalManager, releaseStoragePort, releaseEventPublisher)
+	releaseRecoveryWorker.Start(ctx.Context)
+	_ = newReleaseService
+	_ = journalManager
+
 	var behaviorSvc *behavior.BehaviorService
 	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
 		DB:              ctx.DB,
@@ -714,6 +693,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		QualityWorker:       qualityWorker,
 		InstallationService: installationService,
 		ReleaseService:      releaseService,
+		NewReleaseService:    newReleaseService,
+		ReleaseRecoveryWorker: releaseRecoveryWorker,
+		ReleaseEventPublisher: releaseEventPublisher,
 		DesktopPetRuntime:   desktopPetRuntime,
 		EditingService:      editingSvc,
 		RegenerationWorker:  regenerationWorker,

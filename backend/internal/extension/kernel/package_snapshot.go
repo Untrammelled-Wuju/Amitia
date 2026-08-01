@@ -443,8 +443,18 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 		if entry.RestoreStrategy != "repository_upsert" || entry.ResourceHash != packageSnapshotDigest(raw) {
 			return fmt.Errorf("kernel: resource snapshot integrity failed: %s", entry.Resource.ResourceID)
 		}
-		if entry.ContentHash != "" && !verifyResourceContentHash(entry, raw) {
-			return fmt.Errorf("kernel: resource content hash mismatch for %s", entry.Resource.ResourceID)
+	}
+	contentStore := NewResourceContentStore(r.container.ExtRoot)
+	for _, entry := range snapshot.Entries {
+		if entry.ContentHash != "" {
+			if err := contentStore.VerifyContent(entry.StorageReference, entry.ContentHash); err != nil {
+				return fmt.Errorf("kernel: resource content hash mismatch for %s: %w", entry.Resource.ResourceID, err)
+			}
+		}
+		if entry.LogicalPath != "" && entry.StorageReference != "" {
+			if err := contentStore.RestoreResourceFile(entry.LogicalPath, entry.StorageReference, entry.ContentHash); err != nil {
+				return err
+			}
 		}
 	}
 	current, err := r.container.ResourceRepository.ListResources(ctx, extensionID)
@@ -499,7 +509,7 @@ func (r *Runtime) restoreUserDataSnapshot(ctx context.Context, point PackageRoll
 		return nil
 	}
 	if r.container.UserDataSnapshotStore == nil {
-		return nil
+		return NewPackageError(PackageErrCodeUserDataSnapshotStoreUnavailable, 503, fmt.Errorf("kernel: user data snapshot required but user data snapshot store is unavailable for extension %s", point.ExtensionID))
 	}
 	operationID := point.SourceOperationID
 	if operationID == "" {

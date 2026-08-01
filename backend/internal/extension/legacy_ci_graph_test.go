@@ -124,8 +124,8 @@ func TestPackageServiceInstallRequiresKernelProxy(t *testing.T) {
 	if strings.Contains(source, "//go:build legacy_migration") {
 		t.Fatal("package_installer.go must not have legacy_migration build tag")
 	}
-	if !strings.Contains(source, "s.kernelProxy == nil") {
-		t.Fatal("package_installer.go must guard Install with kernelProxy nil check")
+	if !strings.Contains(source, "s.kernel == nil") {
+		t.Fatal("package_installer.go must guard Install with kernel nil check")
 	}
 }
 

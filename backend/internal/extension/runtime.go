@@ -28,9 +28,8 @@ type Runtime struct {
 	Workshop      *WorkshopService
 	WorkflowHost  *WorkflowHostAdapter
 	AgentSkills   *AgentSkillService
-	Packages      *PackageService
 	Kernel        *kernelruntime.Runtime
-	Lifecycle    *extensionLifecycleService
+	Lifecycle     *extensionLifecycleService
 }
 
 func (r *Runtime) AttachKernel(root string) error {
@@ -39,6 +38,19 @@ func (r *Runtime) AttachKernel(root string) error {
 		return err
 	}
 	r.Kernel = kernel
+	return nil
+}
+
+func (r *Runtime) AttachKernelFacade(kernel *kernelruntime.Runtime) error {
+	r.Kernel = kernel
+	if kernel != nil && kernel.Container() != nil {
+		if err := kernel.RecoverPackageOperations(context.Background()); err != nil {
+			return err
+		}
+	}
+	if r.Lifecycle != nil {
+		r.Lifecycle.AttachKernel(kernel)
+	}
 	return nil
 }
 
@@ -104,7 +116,6 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 	if err := workshop.Restore(ctx); err != nil {
 		applog.Warn("workflow skill restore warning", applog.Fields{"error_code": asExtensionError(err).Code})
 	}
-	packages := NewPackageService(repository, registry, validator, workflowCompiler, workshop.installer, agentSkills)
 	var pluginManager *PluginManager
 	if !options.SkipPluginManagerStart {
 		kernelruntime.GlobalLegacyCallCounter().IncPluginStart()
@@ -114,7 +125,7 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 		}
 	}
 	service.AttachPluginManager(pluginManager)
-	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Packages: packages, Lifecycle: lifecycle}, nil
+	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Lifecycle: lifecycle}, nil
 }
 
 func (r *Runtime) Close(ctx context.Context) error {
@@ -186,4 +197,31 @@ func (r *Runtime) ExecuteModelTool(ctx context.Context, modelName string, input 
 		result.VisibleText = executeErr.Error()
 	}
 	return result, true
+}
+
+func (r *Runtime) AttachPackageKernelProxy(proxy *KernelLifecycleProxy) error {
+	if proxy == nil {
+		return nil
+	}
+	return proxy.kernel.RecoverPackageOperations(context.Background())
+}
+
+func (r *Runtime) RunPackageStartupCleanup(ctx context.Context) error {
+	if r.Repository == nil || r.Repository.db == nil {
+		return nil
+	}
+	if !r.Repository.db.Migrator().HasTable("extension_package_import_sessions") {
+		return nil
+	}
+	if err := r.Repository.CleanupPackageSessions(ctx); err != nil {
+		return err
+	}
+	r.Repository.RetryOwnedResourceCleanup(ctx)
+	return nil
+}
+
+// Deprecated: Use read-only LegacyMigrationDetector instead.
+func (r *Runtime) DetectLegacyPackages(ctx context.Context) (LegacyMigrationReport, error) {
+	svc := NewPackageService(r.Repository, r.Registry, r.Validator, NewWorkflowCompiler(r.Registry), r.Workshop.installer, r.AgentSkills)
+	return svc.DetectLegacyPackages(ctx)
 }

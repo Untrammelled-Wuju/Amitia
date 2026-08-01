@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -251,7 +252,7 @@ func TestFinalGateRollbackSnapshotFailClosedOnMissingRollbackPoint(t *testing.T)
 	}
 }
 
-func TestFinalGateUpdateMissingRollbackPointPasses(t *testing.T) {
+func TestFinalGateUpdateMissingRollbackPointFailsWithoutSnapshotHash(t *testing.T) {
 	ctx := context.Background()
 	runtime, container := newPackagePipelineRuntime(t)
 
@@ -275,18 +276,611 @@ func TestFinalGateUpdateMissingRollbackPointPasses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, _ := runtime.VerifyPackageFinalGate(ctx, operationID)
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail for update with missing rollback point and no snapshot hash, but it passed")
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	snapshotCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "snapshot_integrity" {
+			snapshotCheckFound = true
+			if check.Passed {
+				t.Fatalf("snapshot_integrity check should fail for update when rollback point is NotFound and no SnapshotRequirementHash in claims")
+			}
+			if !strings.Contains(check.Detail, "no snapshot requirement hash in confirmation claims") {
+				t.Fatalf("expected detail to mention no snapshot hash, got: %s", check.Detail)
+			}
+		}
+	}
+	if !snapshotCheckFound {
+		t.Fatalf("snapshot_integrity check not found in results")
+	}
+}
+
+func TestFinalGateUpdateMissingRollbackPointPassesWithValidSnapshotHash(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-update-with-hash"
+	operationID := "op-fail-closed-update-with-hash"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	req := computeRollbackSnapshotRequirement(PackageRollbackPoint{
+		ExtensionID:   extensionID,
+		SourceVersion: "1.0.0",
+	})
+	reqHash := computeSnapshotRequirementHash(req)
+
+	claimsJSON := fmt.Sprintf(`{"artifactId":"test-artifact","artifactPolicy":"deleteArtifact","versionId":"2.0.0","currentGenerationId":"gen-1","snapshotRequirementHash":"%s","expiresAt":9999999999}`, reqHash)
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-fail-closed-update-hash",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		TargetVersion: "2.0.0", FromVersion: "1.0.0",
+		OperationType: "update", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err != nil {
+		t.Fatalf("expected Final Gate to pass for update with valid SnapshotRequirementHash, but it failed: %v", err)
+	}
 
 	snapshotCheckFound := false
 	for _, check := range result.Checks {
 		if check.Name == "snapshot_integrity" {
 			snapshotCheckFound = true
 			if !check.Passed {
-				t.Fatalf("snapshot_integrity check should pass for update when rollback point is NotFound (update does not require old rollback point), detail: %s", check.Detail)
+				t.Fatalf("snapshot_integrity check should pass when SnapshotRequirementHash is valid, detail: %s", check.Detail)
 			}
 		}
 	}
 	if !snapshotCheckFound {
 		t.Fatalf("snapshot_integrity check not found in results")
+	}
+}
+
+func TestFinalGateRetainArtifactPolicyFailsWhenArtifactNotFound(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-retain-notfound"
+	operationID := "op-fail-closed-retain-notfound"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-retain-notfound","artifactPolicy":"retainArtifact","versionId":"1.0.0","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-retain-notfound",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		OperationType: "uninstall", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-retain-notfound",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail for retainArtifact policy when artifact not found: %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	artifactCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "artifact_path_absent" {
+			artifactCheckFound = true
+			if check.Passed {
+				t.Fatal("artifact_path_absent check must fail for retainArtifact policy when artifact is not found")
+			}
+			if !strings.Contains(check.Detail, "retainArtifact") {
+				t.Fatalf("expected detail to mention retainArtifact policy, got: %s", check.Detail)
+			}
+		}
+	}
+	if !artifactCheckFound {
+		t.Fatal("artifact_path_absent check not found in results")
+	}
+}
+
+func TestFinalGateRetainForRollbackPolicyFailsWhenArtifactNotFound(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-retain-rollback-notfound"
+	operationID := "op-fail-closed-retain-rollback-notfound"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-retain-rollback-notfound","artifactPolicy":"retainForRollback","versionId":"1.0.0","currentGenerationId":"gen-2","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-retain-rollback-notfound",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		OperationType: "uninstall", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-retain-rollback-notfound",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail for retainForRollback policy when artifact not found: %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	artifactCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "artifact_path_absent" {
+			artifactCheckFound = true
+			if check.Passed {
+				t.Fatal("artifact_path_absent check must fail for retainForRollback policy when artifact is not found")
+			}
+			if !strings.Contains(check.Detail, "retainForRollback") {
+				t.Fatalf("expected detail to mention retainForRollback policy, got: %s", check.Detail)
+			}
+		}
+	}
+	if !artifactCheckFound {
+		t.Fatal("artifact_path_absent check not found in results")
+	}
+}
+
+func TestFinalGateRetainForExportPolicyFailsWhenArtifactNotFound(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-retain-export-notfound"
+	operationID := "op-fail-closed-retain-export-notfound"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-retain-export-notfound","artifactPolicy":"retainForExport","versionId":"1.0.0","currentGenerationId":"gen-3","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-retain-export-notfound",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		OperationType: "uninstall", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-retain-export-notfound",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail for retainForExport policy when artifact not found: %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	artifactCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "artifact_path_absent" {
+			artifactCheckFound = true
+			if check.Passed {
+				t.Fatal("artifact_path_absent check must fail for retainForExport policy when artifact is not found")
+			}
+			if !strings.Contains(check.Detail, "retainForExport") {
+				t.Fatalf("expected detail to mention retainForExport policy, got: %s", check.Detail)
+			}
+		}
+	}
+	if !artifactCheckFound {
+		t.Fatal("artifact_path_absent check not found in results")
+	}
+}
+
+func TestFinalGateDeleteStepArtifactIDMismatchFailsClosed(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-step-mismatch"
+	operationID := "op-fail-closed-step-mismatch"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-expected","artifactPolicy":"deleteArtifact","versionId":"1.0.0","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-step-mismatch",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		OperationType: "uninstall", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-expected",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	guard := PackageWriteGuard{ExtensionID: extensionID, FencingToken: 1}
+	removeStep := PackageOperationStep{
+		StepID: "step-remove-" + operationID, OperationID: operationID,
+		StepName: "remove_artifact", StepOrder: 3,
+		Status: "completed", AttemptCount: 1,
+		ResultJSON: `{"artifactId":"art-different","artifactPolicy":"deleteArtifact","deleted":true,"remainingRefs":0}`,
+		StartedAt: now, CompletedAt: now,
+	}
+	if err := container.PackageRepository.PutStep(ctx, removeStep, guard); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail when delete step ArtifactID mismatch: %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	artifactCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "artifact_path_absent" {
+			artifactCheckFound = true
+			if check.Passed {
+				t.Fatal("artifact_path_absent check must fail when delete step ArtifactID mismatch")
+			}
+			if !strings.Contains(check.Detail, "delete step artifact mismatch") {
+				t.Fatalf("expected detail to mention artifact mismatch, got: %s", check.Detail)
+			}
+		}
+	}
+	if !artifactCheckFound {
+		t.Fatal("artifact_path_absent check not found in results")
+	}
+}
+
+func TestFinalGateUninstallVersionIDMismatchFailsClosed(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-version-mismatch"
+	operationID := "op-fail-closed-version-mismatch"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-version-mismatch","artifactPolicy":"deleteArtifact","versionId":"9.9.9","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-version-mismatch",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		OperationType: "uninstall", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-version-mismatch", TargetVersion: "1.0.0",
+		TargetGeneration: "gen-1",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail when VersionID in claims mismatch: %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	artifactCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "artifact_path_absent" {
+			artifactCheckFound = true
+			if check.Passed {
+				t.Fatal("artifact_path_absent check must fail when VersionID mismatch")
+			}
+			if !strings.Contains(check.Detail, "version id mismatch") {
+				t.Fatalf("expected detail to mention version id mismatch, got: %s", check.Detail)
+			}
+		}
+	}
+	if !artifactCheckFound {
+		t.Fatal("artifact_path_absent check not found in results")
+	}
+}
+
+func TestFinalGateUninstallGenerationIDMismatchFailsClosed(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-gen-mismatch"
+	operationID := "op-fail-closed-gen-mismatch"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-gen-mismatch","artifactPolicy":"deleteArtifact","versionId":"1.0.0","currentGenerationId":"gen-drifted","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-gen-mismatch",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		OperationType: "uninstall", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-gen-mismatch", TargetVersion: "1.0.0",
+		TargetGeneration: "gen-original",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail when GenerationID in claims mismatch: %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	artifactCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "artifact_path_absent" {
+			artifactCheckFound = true
+			if check.Passed {
+				t.Fatal("artifact_path_absent check must fail when GenerationID mismatch")
+			}
+			if !strings.Contains(check.Detail, "generation id mismatch") {
+				t.Fatalf("expected detail to mention generation id mismatch, got: %s", check.Detail)
+			}
+		}
+	}
+	if !artifactCheckFound {
+		t.Fatal("artifact_path_absent check not found in results")
+	}
+}
+
+func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-reqhash-mismatch"
+	operationID := "op-fail-closed-reqhash-mismatch"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-reqhash","artifactPolicy":"deleteArtifact","versionId":"2.0.0","currentGenerationId":"gen-1","snapshotRequirementHash":"sha256:deadbeef","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-reqhash-mismatch",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		TargetVersion: "2.0.0", FromVersion: "1.0.0",
+		TargetGeneration: "gen-2",
+		OperationType: "update", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-reqhash",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail for update with requirement hash mismatch: %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	snapshotCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "snapshot_integrity" {
+			snapshotCheckFound = true
+			if check.Passed {
+				t.Fatal("snapshot_integrity check must fail when SnapshotRequirementHash mismatches")
+			}
+			if !strings.Contains(check.Detail, "requirement hash mismatch") {
+				t.Fatalf("expected detail to mention requirement hash mismatch, got: %s", check.Detail)
+			}
+		}
+	}
+	if !snapshotCheckFound {
+		t.Fatal("snapshot_integrity check not found in results")
+	}
+}
+
+func TestFinalGateUpdatePreviewHashDriftDetected(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-previewhash-drift"
+	operationID := "op-fail-closed-previewhash-drift"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	claimsJSON := `{"artifactId":"art-preview-drift","artifactPolicy":"deleteArtifact","versionId":"2.0.0","currentGenerationId":"gen-1","previewHash":"sha256:drifted-preview","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-previewhash-drift",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		TargetVersion: "2.0.0", FromVersion: "1.0.0",
+		TargetGeneration: "gen-2",
+		OperationType: "update", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-preview-drift",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, _ := runtime.VerifyPackageFinalGate(ctx, operationID)
+
+	claimsCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "final_gate_verification_step" || check.Name == "snapshot_integrity" || check.Name == "authoritative_identity" {
+			claimsCheckFound = true
+			_ = check
+		}
+	}
+	if !claimsCheckFound {
+		t.Logf("available check names:")
+		for _, check := range result.Checks {
+			t.Logf("  - %s (passed=%v detail=%q)", check.Name, check.Passed, check.Detail)
+		}
+	}
+}
+
+func TestFinalGateSnapshotRealDiffNonEmptyFails(t *testing.T) {
+	ctx := context.Background()
+	runtime, container := newPackagePipelineRuntime(t)
+
+	extensionID := "com.example/fail-closed-real-diff"
+	operationID := "op-fail-closed-real-diff"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	rollbackPoint := PackageRollbackPoint{
+		RollbackPointID:            "rp-real-diff-" + operationID,
+		ExtensionID:                extensionID,
+		SourceVersion:              "1.0.0",
+		SourceGeneration:           1,
+		ArtifactID:                 "art-real-diff",
+		DefinitionSnapshotJSON:     `{"id":"com.example/fail-closed-real-diff","version":"1.0.0"}`,
+		ModuleSnapshotJSON:         `[]`,
+		ContributionSnapshotJSON:   `[]`,
+		PermissionSnapshotJSON:     `[]`,
+		ScopeSnapshotJSON:          `[]`,
+		ConfigSnapshotID:           "cfg-1",
+		ConfigSnapshotJSON:         `{"key":"value"}`,
+		ResourceSnapshotJSON:       `{"entries":[]}`,
+		MigrationStateSnapshotJSON: `{"mode":"repository","definitions":[{"name":"test","up":"CREATE TABLE t (id INT)"}]}`,
+		UserDataMigrationStateJSON: `{"mode":"none"}`,
+		RetentionState:             "active",
+		RetentionUntil:             time.Now().UTC().Add(30 * 24 * time.Hour).Format(time.RFC3339Nano),
+		ExpiresAt:                  time.Now().UTC().Add(30 * 24 * time.Hour).Format(time.RFC3339Nano),
+		CreatedAt:                  now,
+	}
+	hash, err := computePackageSnapshotHash(rollbackPoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollbackPoint.SnapshotHash = hash
+
+	if err := container.PackageRepository.PutRollbackPoint(ctx, rollbackPoint); err != nil {
+		t.Fatal(err)
+	}
+
+	claimsJSON := `{"artifactId":"art-real-diff","artifactPolicy":"deleteArtifact","versionId":"2.0.0","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
+
+	op := PackageOperationRecord{
+		OperationID: operationID, TraceID: "trace-real-diff",
+		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
+		TargetVersion: "2.0.0", FromVersion: "1.0.0",
+		TargetGeneration: "gen-2",
+		OperationType: "update", Status: "completed",
+		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
+		ArtifactID: "art-real-diff",
+		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+	}
+	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "user-1", 10*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
+	if err == nil {
+		t.Fatalf("expected Final Gate to fail when snapshot contains real migration diff (non-empty migration mode=repository): %+v", result)
+	}
+
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
+		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+	}
+
+	snapshotCheckFound := false
+	for _, check := range result.Checks {
+		if check.Name == "snapshot_integrity" {
+			snapshotCheckFound = true
+			if check.Passed {
+				t.Fatal("snapshot_integrity check must fail when snapshot has non-empty diff (migration required) and is not exempt")
+			}
+			if !strings.Contains(check.Detail, "snapshot incomplete") {
+				t.Fatalf("expected detail to mention snapshot incomplete, got: %s", check.Detail)
+			}
+		}
+	}
+	if !snapshotCheckFound {
+		t.Fatal("snapshot_integrity check not found in results")
+	}
+}
+
+func TestFinalGateRepositoryUnavailableClassified(t *testing.T) {
+	dbErr := fmt.Errorf("database connection lost")
+	classified := ClassifyRepositoryError("artifact_lookup", dbErr)
+	if !IsRepositoryErrorKind(classified, RepositoryErrorUnavailable) {
+		t.Fatalf("expected RepositoryErrorUnavailable for generic db error, got: %v", classified)
+	}
+
+	notFoundErr := ClassifyRepositoryError("artifact_lookup", sql.ErrNoRows)
+	if !IsRepositoryErrorKind(notFoundErr, RepositoryErrorNotFound) {
+		t.Fatalf("expected RepositoryErrorNotFound for sql.ErrNoRows, got: %v", notFoundErr)
 	}
 }

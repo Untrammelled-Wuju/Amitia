@@ -121,7 +121,7 @@ func (o *ReleaseOrchestrator) Build(ctx context.Context, req *BuildReleaseReques
 	}
 
 	releaseID := uuid.NewString()
-	version := fmt.Sprintf("1.0.%d", releaseSeq)
+	version := generateVersion(releaseSeq)
 
 	op.ReleaseID = releaseID
 	op.State = release.BuildOpStateBuilding
@@ -308,7 +308,7 @@ func (o *ReleaseOrchestrator) loadExistingResult(op *release.ReleaseBuildOperati
 }
 
 func (o *ReleaseOrchestrator) failOperation(op *release.ReleaseBuildOperation, code string, err error) {
-	op.State = release.BuildOpStateFailedTerminal
+	op.State = classifyFailureState(code)
 	op.ErrorCode = code
 	if err != nil {
 		op.ErrorMessage = err.Error()
@@ -316,6 +316,18 @@ func (o *ReleaseOrchestrator) failOperation(op *release.ReleaseBuildOperation, c
 	op.UpdatedAt = formatTimestamp(time.Now())
 	o.leaseManager.ReleaseLease(op)
 	o.updateOperation(op)
+}
+
+func classifyFailureState(code string) string {
+	switch code {
+	case "validation_failed", "quality_gate_failed", "release_frame_set_incomplete",
+		"release_frame_asset_missing", "release_frame_hash_mismatch",
+		"release_default_action_invalid", "release_input_hash_mismatch",
+		"legacy_package_write_disabled":
+		return release.BuildOpStateFailedTerminal
+	default:
+		return release.BuildOpStateFailedRetryable
+	}
 }
 
 func (o *ReleaseOrchestrator) updateOperation(op *release.ReleaseBuildOperation) {
@@ -370,7 +382,6 @@ func (o *ReleaseOrchestrator) Revoke(releaseID, userID, reason string) error {
 		return NewBuildError(ErrCodeReleaseOwnershipDenied, "Release 不属于当前用户", nil)
 	}
 	releaseData.Lifecycle = string(release.ReleaseLifecycleRevoked)
-	releaseData.IntegrityStatus = string(release.ReleaseIntegrityFailed)
 	releaseData.UpdatedAt = formatTimestamp(time.Now())
 	if err := o.repo.UpdateRelease(releaseData); err != nil {
 		return err

@@ -11,13 +11,13 @@ import (
 )
 
 func (s *PackageService) GetImportSession(ctx context.Context, sessionID, userID, scopeType, scopeID string) (PackageImportPreview, error) {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return PackageImportPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if scopeType == "" {
 		scopeType = string(ScopeGlobal)
 	}
-	record, err := s.kernelProxy.ReadContainer().PackageRepository.GetPreview(ctx, sessionID, userID, scopeType, scopeID)
+	record, err := s.kernel.Container().PackageRepository.GetPreview(ctx, sessionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageImportPreview{}, NewExtensionError(ErrPackageImportSessionExpired, "预览会话不存在", sessionID, false, err)
 	}
@@ -29,13 +29,13 @@ func (s *PackageService) GetImportSession(ctx context.Context, sessionID, userID
 }
 
 func (s *PackageService) CancelImportSession(ctx context.Context, sessionID, userID, scopeType, scopeID string) error {
-	if s.kernelProxy == nil || s.kernelProxy.ReadContainer() == nil {
+	if s.kernel == nil || s.kernel.Container() == nil {
 		return NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if scopeType == "" {
 		scopeType = string(ScopeGlobal)
 	}
-	if err := s.kernelProxy.ReadContainer().PackageRepository.CancelPreview(ctx, sessionID, userID, scopeType, scopeID); err != nil {
+	if err := s.kernel.Container().PackageRepository.CancelPreview(ctx, sessionID, userID, scopeType, scopeID); err != nil {
 		return NewExtensionError(ErrPackageImportSessionConsumed, "预览会话不可取消", sessionID, false, err)
 	}
 	return nil
@@ -49,7 +49,7 @@ func (s *PackageService) PreviewImportStream(ctx context.Context, userID, scopeT
 		}
 		s.metric("package_preview_total")
 	}()
-	if s.kernelProxy == nil {
+	if s.kernel == nil {
 		return PackageImportPreview{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if strings.TrimSpace(userID) == "" {
@@ -66,7 +66,7 @@ func (s *PackageService) PreviewImportStream(ctx context.Context, userID, scopeT
 			return PackageImportPreview{}, err
 		}
 	}
-	preview, err := s.kernelProxy.PreviewPackage(ctx, kernelruntime.PackagePreviewRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: fileName}, reader)
+	preview, err := s.kernel.PreviewPackage(ctx, kernelruntime.PackagePreviewRequest{UserID: userID, ScopeType: scopeType, ScopeID: scopeID, FileName: fileName}, reader)
 	if err != nil {
 		return PackageImportPreview{}, NewExtensionError(ErrPackageManifestInvalid, "扩展包 Preview 失败", err.Error(), false, err)
 	}
@@ -105,7 +105,7 @@ func (s *PackageService) translateKernelPackagePreview(ctx context.Context, prev
 	if preview.Installable {
 		result.AvailableActions = []string{"install"}
 	}
-	if container := s.kernelProxy.ReadContainer(); container != nil {
+	if container := s.kernel.Container(); container != nil {
 		if current, currentErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(preview.ExtensionID)); currentErr == nil {
 			result.CurrentVersion = current.InstalledVersion.String()
 			result.Conflict = PackageConflictUpgrade

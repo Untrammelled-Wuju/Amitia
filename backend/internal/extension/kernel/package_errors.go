@@ -108,6 +108,8 @@ const (
 	PackageErrCodeMigrationSQLUnparseable         = "PACKAGE_MIGRATION_SQL_UNPARSEABLE"
 	PackageErrCodeMigrationNamespaceViolation     = "PACKAGE_MIGRATION_NAMESPACE_VIOLATION"
 	PackageErrCodeLegacyRuntimeEnabled            = "PACKAGE_LEGACY_RUNTIME_ENABLED"
+	PackageErrCodeUserDataSnapshotInvalid         = "PACKAGE_USER_DATA_SNAPSHOT_INVALID"
+	PackageErrCodeUserDataSnapshotStoreUnavailable = "PACKAGE_USER_DATA_SNAPSHOT_STORE_UNAVAILABLE"
 )
 
 type PackageError struct {

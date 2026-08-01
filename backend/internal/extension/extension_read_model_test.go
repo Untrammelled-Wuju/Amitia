@@ -120,8 +120,7 @@ func buildTestReadModel(t *testing.T, container *kernelruntime.Container) *Exten
 		t.Fatal(err)
 	}
 	runtime.SetContainer(container)
-	proxy := NewKernelLifecycleProxy(runtime)
-	return NewExtensionReadModelService(proxy, nil)
+	return NewExtensionReadModelService(runtime, nil)
 }
 
 func validTestInstallation() domain.ExtensionInstallation {

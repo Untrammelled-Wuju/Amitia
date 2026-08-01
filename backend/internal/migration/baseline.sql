@@ -1550,18 +1550,33 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_build_snapshots (
     character_id TEXT NOT NULL DEFAULT '',
     processing_task_id TEXT NOT NULL DEFAULT '',
     active_revision_set_hash TEXT NOT NULL DEFAULT '',
+    active_revision_set_json TEXT NOT NULL DEFAULT '',
+    active_revision_set_id TEXT NOT NULL DEFAULT '',
     quality_gate_id TEXT NOT NULL DEFAULT '',
     quality_gate_hash TEXT NOT NULL DEFAULT '',
+    quality_gate_json TEXT NOT NULL DEFAULT '',
     default_action_key TEXT NOT NULL DEFAULT '',
     included_actions_json TEXT NOT NULL DEFAULT '[]',
+    required_actions_json TEXT NOT NULL DEFAULT '[]',
+    excluded_actions_json TEXT NOT NULL DEFAULT '[]',
+    action_snapshots_json TEXT NOT NULL DEFAULT '[]',
+    preview_snapshot_json TEXT NOT NULL DEFAULT '',
     package_schema_version INTEGER NOT NULL DEFAULT 2,
+    package_contract_hash TEXT NOT NULL DEFAULT '',
     runtime_contract_version TEXT NOT NULL DEFAULT '',
     build_config_hash TEXT NOT NULL DEFAULT '',
+    build_profile_id TEXT NOT NULL DEFAULT '',
+    build_profile_version TEXT NOT NULL DEFAULT '',
+    build_config_json TEXT NOT NULL DEFAULT '',
+    input_hash TEXT NOT NULL DEFAULT '',
+    snapshot_hash TEXT NOT NULL DEFAULT '',
+    evaluation_set_hash TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_drbs_pet ON desktop_pet_release_build_snapshots(pet_id);
 CREATE INDEX IF NOT EXISTS idx_drbs_task ON desktop_pet_release_build_snapshots(processing_task_id);
-CREATE INDEX IF NOT EXISTS idx_drbs_input_hash ON desktop_pet_release_build_snapshots(build_config_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_drbs_input_hash ON desktop_pet_release_build_snapshots(input_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_drbs_snapshot_hash ON desktop_pet_release_build_snapshots(snapshot_hash);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_release_build_operations (
     id TEXT PRIMARY KEY,
@@ -1570,6 +1585,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_build_operations (
     snapshot_id TEXT NOT NULL DEFAULT '',
     release_id TEXT NOT NULL DEFAULT '',
     idempotency_key TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
     input_hash TEXT NOT NULL DEFAULT '',
     state TEXT NOT NULL DEFAULT 'created',
     stage TEXT NOT NULL DEFAULT '',
@@ -1602,6 +1618,17 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_publish_journals (
     staging_path TEXT NOT NULL DEFAULT '',
     published_path TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
+    snapshot_id TEXT NOT NULL DEFAULT '',
+    snapshot_hash TEXT NOT NULL DEFAULT '',
+    workspace_storage_key TEXT NOT NULL DEFAULT '',
+    staging_storage_key TEXT NOT NULL DEFAULT '',
+    published_storage_key TEXT NOT NULL DEFAULT '',
+    archive_storage_key TEXT NOT NULL DEFAULT '',
+    archive_hash TEXT NOT NULL DEFAULT '',
+    file_count INTEGER NOT NULL DEFAULT 0,
+    total_bytes INTEGER NOT NULL DEFAULT 0,
+    archive_bytes INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -1616,12 +1643,16 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_mappings (
     migrated_release_id TEXT NOT NULL DEFAULT '',
     migration_status TEXT NOT NULL DEFAULT 'pending',
     source_content_hash TEXT NOT NULL DEFAULT '',
+    owner_user_id TEXT NOT NULL DEFAULT '',
+    source_manifest_hash TEXT NOT NULL DEFAULT '',
+    migration_operation_id TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(legacy_package_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dlpm_status ON desktop_pet_legacy_package_mappings(migration_status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dlpm_owner_legacy ON desktop_pet_legacy_package_mappings(owner_user_id, legacy_package_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_migration_operations (
     id TEXT PRIMARY KEY,
@@ -2964,7 +2995,8 @@ manifest_json TEXT NOT NULL DEFAULT '{}',
 normalized_manifest_json TEXT NOT NULL DEFAULT '{}',
 created_at TEXT NOT NULL DEFAULT '',
 updated_at TEXT NOT NULL DEFAULT '',
-archived_at TEXT NOT NULL DEFAULT '',
+archived_at TEXT NOT NULL DEFAULT ''
+,
     owner_user_id TEXT NOT NULL DEFAULT '',
     scope_type TEXT NOT NULL DEFAULT 'global',
     scope_id TEXT NOT NULL DEFAULT '',

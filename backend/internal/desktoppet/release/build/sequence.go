@@ -2,6 +2,8 @@ package build
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -55,6 +57,12 @@ func formatTimestamp(t time.Time) string {
 	return t.Format("2006-01-02 15:04:05")
 }
 
+func generateVersion(seq int) string {
+	return fmt.Sprintf("1.0.%d", seq)
+}
+
 func computeInputHash(userID, petID, activeRevisionSetHash, qualityGateID, buildConfigHash string) string {
-	return fmt.Sprintf("%s|%s|%s|%s|%s", userID, petID, activeRevisionSetHash, qualityGateID, buildConfigHash)
+	data := fmt.Sprintf("%s|%s|%s|%s|%s", userID, petID, activeRevisionSetHash, qualityGateID, buildConfigHash)
+	h := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(h[:])
 }

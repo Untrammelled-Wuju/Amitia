@@ -74,7 +74,10 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 	if err != nil {
 		return nil, NewBuildError("QUALITY_GATE_READ_FAILED", "读取质量门禁失败", err)
 	}
-	if gateResult == nil || !gateResult.GateStatus.IsAllowed() {
+	if gateResult == nil {
+		return nil, NewBuildError("quality_gate_missing", "质量门禁结果为空", nil)
+	}
+	if !gateResult.GateStatus.IsAllowed() {
 		return nil, NewBuildError(gateResult.GateStatus.ErrorCode(),
 			fmt.Sprintf("质量门禁未通过: %s", gateResult.GateStatus), nil)
 	}
@@ -118,9 +121,9 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 		PackageSchemaVersion:  2,
 		RuntimeContractVersion: "1.0.0",
 		BuildConfigHash:       buildConfigHash,
+		InputHash:             inputHash,
 		CreatedAt:             formatTimestamp(time.Now()),
 	}
-	_ = inputHash
 
 	if err := sc.repo.CreateBuildSnapshot(snapshot); err != nil {
 		return nil, NewBuildError("SNAPSHOT_PERSIST_FAILED", "快照持久化失败", err)
@@ -277,10 +280,7 @@ func (sc *SnapshotCreator) buildActionSnapshots(processingTaskID string, actionK
 		}
 
 		frameSetHash := hashStrings(frameHashes)
-		contentHash := frameSetHash
-		if len(detail.Frames) > 0 && detail.Frames[0].ContentHash != "" {
-			contentHash = detail.Frames[0].ContentHash
-		}
+		contentHash := hashActionContent(detail.RevisionID, detail.FrameCount, detail.LoopType, detail.Interruptible, frameHashes)
 
 		snapshots = append(snapshots, release.ReleaseActionSnapshot{
 			ActionKey:           actionKey,
@@ -371,6 +371,23 @@ func hashStrings(items []string) string {
 	h := sha256.New()
 	for _, s := range sorted {
 		h.Write([]byte(s))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func hashActionContent(revisionID string, frameCount int, loopType string, interruptible bool, frameHashes []string) string {
+	h := sha256.New()
+	h.Write([]byte(revisionID))
+	h.Write([]byte{0})
+	h.Write([]byte(fmt.Sprintf("%d", frameCount)))
+	h.Write([]byte{0})
+	h.Write([]byte(loopType))
+	h.Write([]byte{0})
+	h.Write([]byte(fmt.Sprintf("%t", interruptible)))
+	h.Write([]byte{0})
+	for _, fh := range frameHashes {
+		h.Write([]byte(fh))
 		h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))

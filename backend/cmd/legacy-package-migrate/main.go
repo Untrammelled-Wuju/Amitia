@@ -147,11 +147,11 @@ func main() {
 	}
 
 	kernelProxy := extension.NewKernelLifecycleProxy(extRuntime.Kernel)
-	if err := extRuntime.Packages.AttachKernelProxy(kernelProxy); err != nil {
+	if err := extRuntime.AttachPackageKernelProxy(kernelProxy); err != nil {
 		fmt.Fprintf(os.Stderr, "kernel proxy attach failed: %v\n", err)
 		os.Exit(1)
 	}
-	if err := extRuntime.Packages.StartupCleanup(rootCtx); err != nil {
+	if err := extRuntime.RunPackageStartupCleanup(rootCtx); err != nil {
 		log.Warn("package startup cleanup warning: ", err)
 	}
 
@@ -194,7 +194,7 @@ func applyMigrations(db *gorm.DB) error {
 }
 
 func runDetect(ctx context.Context, extRuntime *extension.Runtime) {
-	report, err := extRuntime.Packages.DetectLegacyPackages(ctx)
+	report, err := extRuntime.DetectLegacyPackages(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "legacy package detection failed: %v\n", err)
 		os.Exit(1)
@@ -217,7 +217,7 @@ func runDetect(ctx context.Context, extRuntime *extension.Runtime) {
 }
 
 func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm bool) {
-	report, err := extRuntime.Packages.DetectLegacyPackages(ctx)
+	report, err := extRuntime.DetectLegacyPackages(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pre-migration detection failed: %v\n", err)
 		os.Exit(1)
@@ -249,12 +249,12 @@ func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm 
 	}
 	fmt.Printf("\nStarting migration at %s...\n", time.Now().Format(time.RFC3339))
 	startTime := time.Now()
-	if err := extRuntime.Packages.MigrateLegacyPackages(ctx); err != nil {
+	if err := extRuntime.MigrateLegacyPackages(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "migration execution failed: %v\n", err)
 		os.Exit(1)
 	}
 	elapsed := time.Since(startTime)
-	finalReport, _ := extRuntime.Packages.DetectLegacyPackages(ctx)
+	finalReport, _ := extRuntime.DetectLegacyPackages(ctx)
 	fmt.Printf("\nMigration completed in %s\n", elapsed)
 	fmt.Printf("Completed: %d / %d\n", finalReport.Completed, finalReport.Total)
 	fmt.Printf("Pending:   %d\n", finalReport.PendingManual)
@@ -265,7 +265,7 @@ func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm 
 }
 
 func runStatus(ctx context.Context, extRuntime *extension.Runtime) {
-	metrics := extRuntime.Packages.Metrics()
+	metrics := extRuntime.LegacyPackageMetrics()
 	fmt.Printf("Legacy Migration Status\n")
 	fmt.Printf("=======================\n\n")
 	fmt.Printf("Metrics:\n")
@@ -273,7 +273,7 @@ func runStatus(ctx context.Context, extRuntime *extension.Runtime) {
 		fmt.Printf("  %-35s %d\n", key+":", value)
 	}
 	fmt.Printf("\nDetection:\n")
-	report, err := extRuntime.Packages.DetectLegacyPackages(ctx)
+	report, err := extRuntime.DetectLegacyPackages(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "detection failed: %v\n", err)
 		os.Exit(1)

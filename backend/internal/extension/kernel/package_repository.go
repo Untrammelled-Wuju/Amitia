@@ -95,6 +95,7 @@ type PackageOperationRecord struct {
 	AttemptCount       int
 	FencingToken       int64
 	OwnerInstanceID    string
+	SnapshotRequirementHash string
 }
 
 type PackageOperationStep struct {
@@ -524,7 +525,7 @@ func (r *PackageRepository) ListIncompleteOperations(ctx context.Context) ([]Pac
 	rows, err := r.db.QueryContext(ctx, `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
 		extension_id, target_version, operation_type, status, current_step, artifact_id,
 		preview_session_id, confirmations_json, error_code, error_detail, started_at, updated_at,
-		completed_at, stable_generation, target_generation, current_pointer_json FROM extension_package_operations WHERE status NOT IN ('completed','failed','cancelled') ORDER BY started_at`)
+		completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash FROM extension_package_operations WHERE status NOT IN ('completed','failed','cancelled') ORDER BY started_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +537,7 @@ func (r *PackageRepository) ListIncompleteOperations(ctx context.Context) ([]Pac
 			&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
 			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode,
 			&op.ErrorDetail, &op.StartedAt, &op.UpdatedAt, &op.CompletedAt,
-			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON); err != nil {
+			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON, &op.SnapshotRequirementHash); err != nil {
 			return nil, err
 		}
 		result = append(result, op)
@@ -551,7 +552,7 @@ func (r *PackageRepository) ListOperations(ctx context.Context, userID string, l
 	rows, err := r.db.QueryContext(ctx, `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
 		extension_id, target_version, operation_type, status, current_step, artifact_id,
 		preview_session_id, confirmations_json, error_code, error_detail, started_at, updated_at,
-		completed_at, stable_generation, target_generation, current_pointer_json FROM extension_package_operations WHERE user_id = ? ORDER BY started_at DESC LIMIT ?`, userID, limit)
+		completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash FROM extension_package_operations WHERE user_id = ? ORDER BY started_at DESC LIMIT ?`, userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +565,7 @@ func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationI
 	err := r.db.QueryRowContext(ctx, `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
 		extension_id, target_version, operation_type, status, current_step, artifact_id,
 		preview_session_id, confirmations_json, error_code, error_detail, started_at, updated_at,
-		completed_at, stable_generation, target_generation, current_pointer_json FROM extension_package_operations WHERE user_id = ? AND operation_id = ?`, userID, operationID).
+		completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash FROM extension_package_operations WHERE user_id = ? AND operation_id = ?`, userID, operationID).
 		Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
 			&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
 			&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode, &op.ErrorDetail,
@@ -614,7 +615,7 @@ func scanPackageOperations(rows *sql.Rows) ([]PackageOperationRecord, error) {
 			&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
 			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode,
 			&op.ErrorDetail, &op.StartedAt, &op.UpdatedAt, &op.CompletedAt,
-			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON); err != nil {
+			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON, &op.SnapshotRequirementHash); err != nil {
 			return nil, err
 		}
 		result = append(result, op)
