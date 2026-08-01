@@ -358,6 +358,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   showAvatar: _shouldShowAvatar(index),
                   avatarInitial: character.avatarInitial,
                   avatarColor: character.avatarColor,
+                  characterName: character.name,
                   onRetry: message.status == MessageStatus.error ? () => _retryMessage(index) : null,
                   onAgentTaskTap: isAgentTask ? () => context.push(AppRoutes.agentTask('t1')) : null,
                   onPauseAgentTask: isAgentTask ? () => _pauseAgentTask(index) : null,

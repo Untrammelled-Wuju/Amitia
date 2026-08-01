@@ -110,7 +110,6 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final isDark = themeMode == ThemeMode.dark;
-    final isDevMode = ref.watch(isDeveloperModeProvider);
     final characterId = ref.watch(currentCharacterIdProvider);
     final character = _getCharacter(characterId);
 
@@ -151,25 +150,16 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                         onSearchTap: () => _navigateTo(AppRoutes.conversations),
                         onMoreTap: _goToMorePanel,
                         onNavigate: _navigateTo,
+                        onSettingsTap: () => _navigateTo(AppRoutes.settings),
                       ),
                       _DrawerMorePanel(
                         routeState: _routeState,
-                        isDevMode: isDevMode,
-                        onToggleDevMode: () {
-                          ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
-                        },
                         onNavigate: _navigateTo,
+                        onBack: _backToMainPanel,
                       ),
                     ],
                   ),
                 ),
-                if (_currentPanel == DrawerPanel.more)
-                  _DrawerMoreBottomArea(onBack: _backToMainPanel)
-                else
-                  _DrawerBottomArea(
-                    onSettingsTap: () => _navigateTo(AppRoutes.settings),
-                    settingsSelected: _routeState.settingsSelected,
-                  ),
               ],
             ),
           ),
@@ -187,6 +177,7 @@ class _DrawerMainPanel extends StatelessWidget {
   final VoidCallback onSearchTap;
   final VoidCallback onMoreTap;
   final ValueChanged<String> onNavigate;
+  final VoidCallback onSettingsTap;
 
   const _DrawerMainPanel({
     required this.character,
@@ -196,50 +187,63 @@ class _DrawerMainPanel extends StatelessWidget {
     required this.onSearchTap,
     required this.onMoreTap,
     required this.onNavigate,
+    required this.onSettingsTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: EdgeInsets.zero,
+    return Column(
       children: [
-        _DrawerHeader(
-          name: character.name,
-          isDark: isDark,
-          onToggleTheme: onToggleTheme,
-          onSearchTap: onSearchTap,
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _DrawerHeader(
+                name: character.name,
+                isDark: isDark,
+                onToggleTheme: onToggleTheme,
+                onSearchTap: onSearchTap,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _MainMenuItem(
+                icon: Icons.chat_bubble_outline,
+                label: '对话',
+                isSelected: routeState.mainItem == MainDrawerItem.chat,
+                onTap: () => onNavigate(AppRoutes.chat),
+              ),
+              _MainMenuItem(
+                icon: Icons.auto_awesome,
+                label: '任务',
+                isSelected: routeState.mainItem == MainDrawerItem.tasks,
+                onTap: () => onNavigate(AppRoutes.agent),
+              ),
+              _MainMenuItem(
+                icon: Icons.people_outline,
+                label: '角色',
+                isSelected: routeState.mainItem == MainDrawerItem.characters,
+                onTap: () => onNavigate(AppRoutes.characters),
+              ),
+              _MainMenuItem(
+                icon: Icons.memory,
+                label: '记忆',
+                isSelected: routeState.mainItem == MainDrawerItem.memory,
+                onTap: () => onNavigate(AppRoutes.memory),
+              ),
+              _MainMenuItem(
+                icon: Icons.apps_outlined,
+                label: '更多',
+                isSelected: routeState.mainItem == MainDrawerItem.more,
+                showArrow: true,
+                onTap: onMoreTap,
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: AppSpacing.sm),
-        _MainMenuItem(
-          icon: Icons.chat_bubble_outline,
-          label: '对话',
-          isSelected: routeState.mainItem == MainDrawerItem.chat,
-          onTap: () => onNavigate(AppRoutes.chat),
-        ),
-        _MainMenuItem(
-          icon: Icons.auto_awesome,
-          label: '任务',
-          isSelected: routeState.mainItem == MainDrawerItem.tasks,
-          onTap: () => onNavigate(AppRoutes.agent),
-        ),
-        _MainMenuItem(
-          icon: Icons.people_outline,
-          label: '角色',
-          isSelected: routeState.mainItem == MainDrawerItem.characters,
-          onTap: () => onNavigate(AppRoutes.characters),
-        ),
-        _MainMenuItem(
-          icon: Icons.memory,
-          label: '记忆',
-          isSelected: routeState.mainItem == MainDrawerItem.memory,
-          onTap: () => onNavigate(AppRoutes.memory),
-        ),
-        _MainMenuItem(
-          icon: Icons.apps_outlined,
-          label: '更多',
-          isSelected: routeState.mainItem == MainDrawerItem.more,
-          showArrow: true,
-          onTap: onMoreTap,
+        _DrawerBottomArea(
+          onSettingsTap: onSettingsTap,
+          settingsSelected: routeState.settingsSelected,
+          userName: character.name,
+          userInitial: character.avatarInitial,
         ),
       ],
     );
@@ -248,15 +252,13 @@ class _DrawerMainPanel extends StatelessWidget {
 
 class _DrawerMorePanel extends StatelessWidget {
   final DrawerRouteState routeState;
-  final bool isDevMode;
-  final VoidCallback onToggleDevMode;
   final ValueChanged<String> onNavigate;
+  final VoidCallback onBack;
 
   const _DrawerMorePanel({
     required this.routeState,
-    required this.isDevMode,
-    required this.onToggleDevMode,
     required this.onNavigate,
+    required this.onBack,
   });
 
   @override
@@ -292,43 +294,10 @@ class _DrawerMorePanel extends StatelessWidget {
                 _MoreItemData(icon: Icons.file_download_outlined, label: '聊天记录导入', route: AppRoutes.chatImport, item: MoreDrawerItem.chatImport),
                 _MoreItemData(icon: Icons.emoji_emotions_outlined, label: '表情包', route: AppRoutes.emotes, item: MoreDrawerItem.emotes),
               ]),
-              if (isDevMode)
-                _MoreGroup(label: '开发与诊断', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
-                  _MoreItemData(icon: Icons.developer_mode, label: '开发者工具', route: AppRoutes.developer, item: MoreDrawerItem.developer),
-                ]),
-              const SizedBox(height: AppSpacing.sm),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: onToggleDevMode,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isDevMode ? context.accentPrimary.withValues(alpha: 0.12) : context.surfaceSecondary,
-                          borderRadius: AppRadius.brTag,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.developer_mode, size: 18, color: isDevMode ? context.accentPrimary : context.textTertiary),
-                            const SizedBox(width: 6),
-                            Text('开发者模式', style: TextStyle(fontSize: 13, color: isDevMode ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
-                            const SizedBox(width: 8),
-                            Text(isDevMode ? '开' : '关', style: TextStyle(fontSize: 12, color: isDevMode ? context.accentPrimary : context.textTertiary)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
+        _DrawerBackBottomArea(onBack: onBack),
       ],
     );
   }
@@ -374,66 +343,122 @@ class _MoreItemData {
 class _DrawerBottomArea extends StatelessWidget {
   final VoidCallback onSettingsTap;
   final bool settingsSelected;
+  final String userName;
+  final String userInitial;
 
   const _DrawerBottomArea({
     required this.onSettingsTap,
     required this.settingsSelected,
+    this.userName = '无拘',
+    this.userInitial = '无',
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Divider(height: 1),
+        Divider(height: 1, color: context.borderPrimary),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: onSettingsTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: settingsSelected ? context.accentSoft : context.surfaceSecondary,
-                    borderRadius: AppRadius.brTag,
+          padding: const EdgeInsets.fromLTRB(11, 8, 11, 12),
+          child: GestureDetector(
+            onTap: onSettingsTap,
+            child: Container(
+              padding: const EdgeInsets.all(11),
+              decoration: BoxDecoration(
+                color: context.surfacePrimary,
+                borderRadius: BorderRadius.circular(19),
+                border: Border.all(color: context.borderPrimary, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: context.scrim.withValues(alpha: 0.05),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.settings_outlined, size: 18, color: settingsSelected ? context.accentPrimary : context.textTertiary),
-                      const SizedBox(width: 6),
-                      Text('设置', style: TextStyle(fontSize: 13, color: settingsSelected ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DrawerMoreBottomArea extends StatelessWidget {
-  final VoidCallback onBack;
-
-  const _DrawerMoreBottomArea({required this.onBack});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: SizedBox(
-            width: double.infinity,
-            child: _MainMenuItem(
-              icon: Icons.arrow_back_ios_new,
-              label: '返回主菜单',
-              isSelected: false,
-              onTap: onBack,
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          context.accentPrimary,
+                          context.accentSecondary,
+                        ],
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        userInitial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          userName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4F9B6B),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF4F9B6B).withValues(alpha: 0.2),
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '本地运行',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: context.textTertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.settings_outlined,
+                    size: 17,
+                    color: context.textTertiary,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -441,6 +466,51 @@ class _DrawerMoreBottomArea extends StatelessWidget {
     );
   }
 }
+
+class _DrawerBackBottomArea extends StatelessWidget {
+  final VoidCallback onBack;
+
+  const _DrawerBackBottomArea({required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Divider(height: 1, color: context.borderPrimary),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(11, 8, 11, 12),
+          child: GestureDetector(
+            onTap: onBack,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: context.surfacePrimary,
+                borderRadius: BorderRadius.circular(19),
+                border: Border.all(color: context.borderPrimary, width: 1),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.arrow_back_ios_new, size: 17, color: context.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(
+                    '返回主菜单',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: context.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 
 class _DrawerHeader extends StatelessWidget {
   final String name;

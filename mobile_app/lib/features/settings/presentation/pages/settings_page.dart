@@ -6,6 +6,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../shared/models/models.dart';
 import '../../../../shared/mock_data/mock_data.dart';
 
@@ -15,17 +16,88 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groups = MockData.mainSettings;
+    final isDevMode = ref.watch(isDeveloperModeProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '设置', navigation: AmitiaAppBarNavigation.drawer),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: _DevModeToggle(
+              isDevMode: isDevMode,
+              onTap: () {
+                ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
+              },
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
           for (int i = 0; i < groups.length; i++) ...[
             _SettingGroup(group: groups[i]),
             if (i < groups.length - 1) const SizedBox(height: AppSpacing.sectionGap),
           ],
           const SizedBox(height: AppSpacing.xl),
         ],
+      ),
+    );
+  }
+}
+
+class _DevModeToggle extends StatelessWidget {
+  final bool isDevMode;
+  final VoidCallback onTap;
+
+  const _DevModeToggle({required this.isDevMode, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDevMode ? context.accentPrimary.withValues(alpha: 0.12) : context.surfacePrimary,
+          borderRadius: AppRadius.brMedium,
+          border: Border.all(color: context.borderPrimary, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.developer_mode, size: 20, color: isDevMode ? context.accentPrimary : context.textTertiary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '开发者模式',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: isDevMode ? context.accentPrimary : context.textPrimary,
+                ),
+              ),
+            ),
+            Container(
+              width: 36,
+              height: 20,
+              decoration: BoxDecoration(
+                color: isDevMode ? context.accentPrimary : context.borderPrimary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                alignment: isDevMode ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

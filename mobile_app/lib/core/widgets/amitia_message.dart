@@ -63,6 +63,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   final bool showAvatar;
   final String? avatarInitial;
   final String? avatarColor;
+  final String? characterName;
   final VoidCallback? onRetry;
   final VoidCallback? onAgentTaskTap;
   final VoidCallback? onPauseAgentTask;
@@ -75,6 +76,7 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.showAvatar = false,
     this.avatarInitial,
     this.avatarColor,
+    this.characterName,
     this.onRetry,
     this.onAgentTaskTap,
     this.onPauseAgentTask,
