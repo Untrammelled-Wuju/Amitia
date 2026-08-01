@@ -1,0 +1,16 @@
+{
+  "messageType": "runtime_event",
+  "messageName": "runtime.state.desired_applied",
+  "messageId": "evt_01JXYZ8888888888",
+  "sequence": 601,
+  "payloadHash": "sha256:desiredapplied123hash",
+  "payload": {
+    "desiredRevision": 45,
+    "desiredHash": "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+    "settingsRevision": 12,
+    "installationId": "install_01JXYZ",
+    "releaseId": "release_01JXYZ",
+    "actualStateHash": "sha256:actualstate123hash",
+    "appliedAt": "2026-08-02T10:00:05.000Z"
+  }
+}

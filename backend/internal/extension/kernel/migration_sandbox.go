@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -90,11 +91,15 @@ func createMigrationSQLExecuteHandler(db *sql.DB) host_api.Handler {
 
 		parsedStmts, validateErr := migration.ValidateRawStatements(p.SQL, extID)
 		if validateErr != nil {
+			violationCode := PackageErrCodeMigrationNamespaceViolation
+			if errors.Is(validateErr, migration.ErrSQLUnparseable) {
+				violationCode = PackageErrCodeMigrationSQLUnparseable
+			}
 			return host_api.CallResult{
 				Status: host_api.StatusFailed,
 				Error: &host_api.Error{
-					Code:    PackageErrCodeMigrationSandboxViolation,
-					Message: fmt.Sprintf("migration sandbox violation: %v", validateErr),
+					Code:    violationCode,
+					Message: fmt.Sprintf("migration validation failed: %v", validateErr),
 				},
 			}, nil
 		}
@@ -162,12 +167,12 @@ func createMigrationSQLExecuteHandler(db *sql.DB) host_api.Handler {
 		committed = true
 
 		output, _ := json.Marshal(map[string]any{
-			"ok":                  true,
-			"statementsExecuted":  statementsExecuted,
-			"rowsAffected":        totalRowsAffected,
-			"beforeSchemaHash":    beforeHash,
-			"afterSchemaHash":     afterHash,
-			"extensionId":         extID,
+			"ok":                 true,
+			"statementsExecuted": statementsExecuted,
+			"rowsAffected":       totalRowsAffected,
+			"beforeSchemaHash":   beforeHash,
+			"afterSchemaHash":    afterHash,
+			"extensionId":        extID,
 		})
 		return host_api.CallResult{
 			Status: host_api.StatusSuccess,
@@ -190,8 +195,8 @@ func createMigrationSQLQueryHandler(db *sql.DB) host_api.Handler {
 		}
 
 		var p struct {
-			SQL    string `json:"sql"`
-			Limit  int    `json:"limit"`
+			SQL   string `json:"sql"`
+			Limit int    `json:"limit"`
 		}
 		if err := json.Unmarshal(req.Input, &p); err != nil {
 			return host_api.CallResult{
@@ -222,11 +227,15 @@ func createMigrationSQLQueryHandler(db *sql.DB) host_api.Handler {
 
 		parsedStmts, validateErr := migration.ValidateRawStatements(p.SQL, extID)
 		if validateErr != nil {
+			violationCode := PackageErrCodeMigrationNamespaceViolation
+			if errors.Is(validateErr, migration.ErrSQLUnparseable) {
+				violationCode = PackageErrCodeMigrationSQLUnparseable
+			}
 			return host_api.CallResult{
 				Status: host_api.StatusFailed,
 				Error: &host_api.Error{
-					Code:    PackageErrCodeMigrationSandboxViolation,
-					Message: fmt.Sprintf("migration sandbox violation: %v", validateErr),
+					Code:    violationCode,
+					Message: fmt.Sprintf("migration validation failed: %v", validateErr),
 				},
 			}, nil
 		}
@@ -293,9 +302,9 @@ func createMigrationSQLQueryHandler(db *sql.DB) host_api.Handler {
 		}
 
 		output, _ := json.Marshal(map[string]any{
-			"rows":   results,
-			"total":  len(results),
-			"limit":  p.Limit,
+			"rows":    results,
+			"total":   len(results),
+			"limit":   p.Limit,
 			"columns": columns,
 		})
 		return host_api.CallResult{

@@ -7,6 +7,27 @@ import (
 	"strings"
 )
 
+type BehaviorBindingModel struct {
+	ID              string `gorm:"column:id;primaryKey"`
+	UserID          string `gorm:"column:user_id"`
+	CharacterID     string `gorm:"column:character_id"`
+	InstallationID  string `gorm:"column:installation_id"`
+	EventType       string `gorm:"column:event_type"`
+	ConditionsJSON  string `gorm:"column:conditions_json"`
+	Semantic        string `gorm:"column:semantic"`
+	PreferredAction string `gorm:"column:preferred_action"`
+	PriorityOffset  int    `gorm:"column:priority_offset"`
+	CooldownMS      int64  `gorm:"column:cooldown_ms"`
+	Enabled         bool   `gorm:"column:enabled"`
+	Version         int    `gorm:"column:version"`
+	CreatedAt       string `gorm:"column:created_at"`
+	UpdatedAt       string `gorm:"column:updated_at"`
+}
+
+func (BehaviorBindingModel) TableName() string {
+	return "desktop_pet_behavior_bindings"
+}
+
 type ConditionNode interface {
 	Eval(ctx EvalContext) bool
 }

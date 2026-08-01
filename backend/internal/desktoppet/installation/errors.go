@@ -55,6 +55,17 @@ var (
 	ErrActionNotFound              = errors.New("action not found in manifest")
 	ErrRevisionConflict            = errors.New("settings revision conflict")
 	ErrPackageQualityGateBlocked   = errors.New("package quality gate blocked")
+
+	ErrBindingNotFound             = errors.New("binding: not found for device")
+	ErrDesiredStateRevisionConflict = errors.New("desired state revision conflict")
+	ErrDesiredStateRevisionNotFound = errors.New("desired state revision counter not found")
+	ErrOperationNotFound           = errors.New("operation not found")
+	ErrOperationLeaseLost          = errors.New("operation lease lost")
+	ErrOperationLeaseNotAvailable  = errors.New("operation lease not available")
+	ErrJournalNotFound             = errors.New("journal not found")
+	ErrJournalStageConflict        = errors.New("journal stage conflict")
+	ErrProjectionNotFound          = errors.New("runtime projection not found")
+	ErrSettingsRevisionConflict    = errors.New("settings revision conflict")
 )
 
 type InstallationError struct {

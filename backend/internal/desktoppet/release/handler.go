@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
@@ -39,7 +39,13 @@ func (h *Handler) BuildRelease(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "处理任务 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	req := &BuildReleaseRequest{
 		UserID:             userID,
 		ProcessingTaskID:   payload.ProcessingTaskID,
@@ -68,7 +74,13 @@ func (h *Handler) GetBuildOperation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "操作 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	op, err := h.svc.GetBuildOperation(c.Request.Context(), operationID, userID)
 	if err != nil {
 		writeReleaseError(c, err)
@@ -83,7 +95,13 @@ func (h *Handler) CancelBuildOperation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "操作 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	if err := h.svc.CancelBuildOperation(c.Request.Context(), operationID, userID); err != nil {
 		writeReleaseError(c, err)
 		return
@@ -92,7 +110,13 @@ func (h *Handler) CancelBuildOperation(c *gin.Context) {
 }
 
 func (h *Handler) ListReleases(c *gin.Context) {
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	releases, err := h.svc.ListReleases(c.Request.Context(), userID)
 	if err != nil {
 		writeReleaseError(c, err)
@@ -103,7 +127,13 @@ func (h *Handler) ListReleases(c *gin.Context) {
 
 func (h *Handler) ListReleasesForPet(c *gin.Context) {
 	petID := c.Param("petId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	releases, err := h.svc.ListReleasesForPet(c.Request.Context(), userID, petID)
 	if err != nil {
 		writeReleaseError(c, err)
@@ -114,7 +144,13 @@ func (h *Handler) ListReleasesForPet(c *gin.Context) {
 
 func (h *Handler) GetRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, userID)
 	if err != nil {
 		writeReleaseError(c, err)
@@ -125,7 +161,13 @@ func (h *Handler) GetRelease(c *gin.Context) {
 
 func (h *Handler) GetReleaseFiles(c *gin.Context) {
 	releaseID := c.Param("releaseId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	files, err := h.svc.GetReleaseFiles(c.Request.Context(), releaseID, userID)
 	if err != nil {
 		writeReleaseError(c, err)
@@ -136,7 +178,13 @@ func (h *Handler) GetReleaseFiles(c *gin.Context) {
 
 func (h *Handler) ArchiveRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	if err := h.svc.ArchiveRelease(c.Request.Context(), releaseID, userID); err != nil {
 		writeReleaseError(c, err)
 		return
@@ -146,7 +194,13 @@ func (h *Handler) ArchiveRelease(c *gin.Context) {
 
 func (h *Handler) RevokeRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	reason := c.Query("reason")
 	if err := h.svc.RevokeRelease(c.Request.Context(), releaseID, userID, reason); err != nil {
 		writeReleaseError(c, err)
@@ -156,7 +210,13 @@ func (h *Handler) RevokeRelease(c *gin.Context) {
 }
 
 func (h *Handler) GetPetIdentity(c *gin.Context) {
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	petID := c.Query("petId")
 	if petID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "petId 不能为空", gin.H{"errorCode": "INVALID_PARAMS"})
@@ -172,7 +232,13 @@ func (h *Handler) GetPetIdentity(c *gin.Context) {
 
 func (h *Handler) DownloadRelease(c *gin.Context) {
 	releaseID := c.Param("releaseId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+
 	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, userID)
 	if err != nil {
 		writeReleaseError(c, err)

@@ -259,6 +259,10 @@ func (s *stubHandlerService) CheckInstallationOwnership(installationID, userID s
 	return nil
 }
 
+func (s *stubHandlerService) GetCoordinator() V2Coordinator {
+	return nil
+}
+
 func newHandlerTestRouter(svc Service) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

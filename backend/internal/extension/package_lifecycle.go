@@ -209,7 +209,7 @@ func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, sco
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
-	op, err := s.kernel.ExecutePackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
+	op, err := s.kernel.ExecutePackageUninstall(ctx, kernelruntime.ExecutePackageUninstallRequest{ExtensionID: extensionID, UserID: userID, ScopeType: scopeType, ScopeID: scopeID})
 	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 卸载失败", err.Error(), false, err)
 	}

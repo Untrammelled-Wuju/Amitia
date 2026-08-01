@@ -194,7 +194,7 @@ func applyMigrations(db *gorm.DB) error {
 }
 
 func runDetect(ctx context.Context, extRuntime *extension.Runtime) {
-	report, err := extRuntime.DetectLegacyPackages(ctx)
+	report, err := extRuntime.DetectLegacyPackagesReadOnly(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "legacy package detection failed: %v\n", err)
 		os.Exit(1)
@@ -217,7 +217,7 @@ func runDetect(ctx context.Context, extRuntime *extension.Runtime) {
 }
 
 func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm bool) {
-	report, err := extRuntime.DetectLegacyPackages(ctx)
+	report, err := extRuntime.DetectLegacyPackagesReadOnly(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pre-migration detection failed: %v\n", err)
 		os.Exit(1)
@@ -254,7 +254,7 @@ func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm 
 		os.Exit(1)
 	}
 	elapsed := time.Since(startTime)
-	finalReport, _ := extRuntime.DetectLegacyPackages(ctx)
+	finalReport, _ := extRuntime.DetectLegacyPackagesReadOnly(ctx)
 	fmt.Printf("\nMigration completed in %s\n", elapsed)
 	fmt.Printf("Completed: %d / %d\n", finalReport.Completed, finalReport.Total)
 	fmt.Printf("Pending:   %d\n", finalReport.PendingManual)
@@ -273,7 +273,7 @@ func runStatus(ctx context.Context, extRuntime *extension.Runtime) {
 		fmt.Printf("  %-35s %d\n", key+":", value)
 	}
 	fmt.Printf("\nDetection:\n")
-	report, err := extRuntime.DetectLegacyPackages(ctx)
+	report, err := extRuntime.DetectLegacyPackagesReadOnly(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "detection failed: %v\n", err)
 		os.Exit(1)

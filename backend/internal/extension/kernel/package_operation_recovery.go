@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -30,20 +31,6 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 		}
 	}
 	return errors.Join(failures...)
-}
-
-func (r *Runtime) finalizePackageOperation(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard, completionNote string) error {
-	if err := r.runPackageFinalGate(ctx, operation.OperationID, guard); err != nil {
-		setErr := r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, StatusRequiresRecovery, completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, guard)
-		if setErr != nil {
-			setErr = r.container.PackageRepository.SetOperation(context.Background(), operation.OperationID, StatusRequiresRecovery, completionNote, "PACKAGE_FINAL_GATE_FAILED", err.Error(), false, PackageWriteGuard{})
-		}
-		if setErr != nil {
-			return errors.Join(err, fmt.Errorf("persist recovery state after final gate failure: %w", setErr))
-		}
-		return err
-	}
-	return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, StatusCompleted, completionNote, "", "", true, guard)
 }
 
 func (r *Runtime) recoverPackageOperation(ctx context.Context, operation PackageOperationRecord) error {
@@ -158,28 +145,8 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 		leaseGuard.MarkLeaseReleased()
 		return nil
 	case "uninstall":
-		outcome, reconcileErr := r.reconcileUninstallPackageGeneration(ctx, operation)
-		if reconcileErr != nil {
-			return r.requirePackageRecovery(ctx, operation, "uninstall generation reconciliation failed", reconcileErr, guard)
-		}
-		if outcome == "compensated" {
-			if err := r.reconcileUninstallCompensatedState(ctx, operation, guard); err != nil {
-				return r.requirePackageRecovery(ctx, operation, "uninstall compensated state reconciliation failed", err, guard)
-			}
-			return r.container.PackageRepository.SetOperation(ctx, operation.OperationID, "failed", "recovered_compensated", "PACKAGE_UNINSTALL_FAILED", "uninstall quarantine restored during recovery", true, guard)
-		}
-		if err := r.reconcileUninstallCompletedState(ctx, operation, guard); err != nil {
-			return r.requirePackageRecovery(ctx, operation, "uninstall completed state reconciliation failed", err, guard)
-		}
-		err = r.proveUninstalledPackageOperation(ctx, operation, completed)
-		if err != nil {
-			return r.requirePackageRecovery(ctx, operation, "uninstall consistency could not be proven", err, guard)
-		}
-		if err := r.newPackageRecoveryFinalizer().FinalizeUninstallRecovery(ctx, operation, completed, guard); err != nil {
-			return r.requirePackageRecovery(ctx, operation, "uninstall recovery finalizer failed", err, guard)
-		}
-		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken); err != nil {
-			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
+		if err := r.executeUninstallRecoveryChain(ctx, operation, completed, guard); err != nil {
+			return err
 		}
 		leaseGuard.MarkLeaseReleased()
 		return nil
@@ -468,7 +435,7 @@ func (r *Runtime) reconcileUninstallCompletedState(ctx context.Context, operatio
 	}
 	if operation.TargetVersion != "" && operation.ExtensionID != "" {
 		if err := r.container.PackageRepository.RemovePackageVersion(ctx, operation.ExtensionID, operation.TargetVersion); err != nil {
-			if !strings.Contains(err.Error(), "not found for remove") {
+			if !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
 				return fmt.Errorf("kernel: remove package version state failed: %w", err)
 			}
 		}
@@ -892,6 +859,260 @@ func (r *Runtime) proveInstalledTree(installedPath string, installation domain.E
 	return nil
 }
 
+
+func (r *Runtime) validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation PackageOperationRecord) error {
+	if qm.QuarantineID == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("quarantine_id is empty"))
+	}
+	if qm.OperationID != operation.OperationID {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("operation_id mismatch: expected %s got %s", operation.OperationID, qm.OperationID))
+	}
+	if qm.ExtensionID != operation.ExtensionID {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("extension_id mismatch: expected %s got %s", operation.ExtensionID, qm.ExtensionID))
+	}
+	if qm.ArtifactID == "" || qm.ArtifactID != operation.ArtifactID {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("artifact_id mismatch: expected %s got %s", operation.ArtifactID, qm.ArtifactID))
+	}
+	if qm.FencingToken <= 0 {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("fencing_token is zero or missing"))
+	}
+	if qm.GenerationQuarantinePath == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("generation_quarantine_path is empty"))
+	}
+	if qm.CurrentQuarantinePath == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("current_quarantine_path is empty"))
+	}
+	if qm.OriginalGenerationPath == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("original_generation_path is empty"))
+	}
+	if qm.OriginalCurrentPath == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("original_current_path is empty"))
+	}
+	if qm.TreeHash == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("tree_hash is empty"))
+	}
+	if qm.State != "active" && qm.State != "finalized" && qm.State != "restored" && qm.State != "released" {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("invalid state: %s", qm.State))
+	}
+	absGenQuarantine, err := filepath.Abs(qm.GenerationQuarantinePath)
+	if err != nil {
+		return fmt.Errorf("kernel: generation quarantine path abs failed: %w", err)
+	}
+	absCurQuarantine, err := filepath.Abs(qm.CurrentQuarantinePath)
+	if err != nil {
+		return fmt.Errorf("kernel: current quarantine path abs failed: %w", err)
+	}
+	absOrigGen, err := filepath.Abs(qm.OriginalGenerationPath)
+	if err != nil {
+		return fmt.Errorf("kernel: original generation path abs failed: %w", err)
+	}
+	absOrigCur, err := filepath.Abs(qm.OriginalCurrentPath)
+	if err != nil {
+		return fmt.Errorf("kernel: original current path abs failed: %w", err)
+	}
+	genRoot := filepath.Clean(r.container.ExtRoot)
+	quarantineRoot := filepath.Join(genRoot, "quarantine")
+	relGenQ, err := filepath.Rel(genRoot, absGenQuarantine)
+	if err != nil || strings.HasPrefix(relGenQ, "..") {
+		return fmt.Errorf("kernel: generation quarantine path outside generation root: %s", qm.GenerationQuarantinePath)
+	}
+	relCurQ, err := filepath.Rel(quarantineRoot, absCurQuarantine)
+	if err != nil || strings.HasPrefix(relCurQ, "..") {
+		return fmt.Errorf("kernel: current quarantine path outside quarantine root: %s", qm.CurrentQuarantinePath)
+	}
+	relOrigGen, err := filepath.Rel(genRoot, absOrigGen)
+	if err != nil || strings.HasPrefix(relOrigGen, "..") {
+		return fmt.Errorf("kernel: original generation path outside generation root: %s", qm.OriginalGenerationPath)
+	}
+	relOrigCur, err := filepath.Rel(quarantineRoot, absOrigCur)
+	if err != nil || strings.HasPrefix(relOrigCur, "..") {
+		return fmt.Errorf("kernel: original current path outside quarantine root: %s", qm.OriginalCurrentPath)
+	}
+	return nil
+}
+
+func (r *Runtime) runUninstallRecoveryStep(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, stepName string, order int, guard PackageWriteGuard, action func() (string, error)) error {
+	if existing, ok := completed[stepName]; ok {
+		if existing.ResultJSON != "" {
+			actualHash := fmt.Sprintf("%x", sha256.Sum256([]byte(existing.ResultJSON)))
+			if actualHash != existing.ResultHash {
+				return NewPackageErrorWithRecovery(PackageErrCodeRecoveryStepPersistFailed, 409, false, true, "Reload and re-verify step", fmt.Errorf("step %s result_hash mismatch", stepName))
+			}
+		}
+		return nil
+	}
+	resultJSON, actionErr := action()
+	if actionErr != nil {
+		return actionErr
+	}
+	resultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(resultJSON)))
+	step := PackageOperationStep{
+		OperationID:  operation.OperationID,
+		StepName:     stepName,
+		StepOrder:    order,
+		Status:       StatusCompleted,
+		ResultJSON:   resultJSON,
+		ResultHash:   resultHash,
+		AttemptCount: 1,
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		CompletedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if err := r.container.PackageRepository.PutStep(ctx, step, guard); err != nil {
+		return NewPackageErrorWithRecovery(PackageErrCodeRecoveryStepPersistFailed, 500, false, true, "Retry recovery", fmt.Errorf("put step %s: %w", stepName, err))
+	}
+	completed[stepName] = step
+	return nil
+}
+
+func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, guard PackageWriteGuard) error {
+	order := 1
+	var cachedQM PackageQuarantineMetadata
+	var cachedQMErr error
+
+	err := r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryLoadQuarantineMetadata, order, guard, func() (string, error) {
+		order++
+		cachedQM, cachedQMErr = r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+		if cachedQMErr != nil {
+			return "", fmt.Errorf("load quarantine metadata: %w", cachedQMErr)
+		}
+		result := map[string]string{"quarantine_id": cachedQM.QuarantineID, "state": cachedQM.State}
+		resultBytes, _ := json.Marshal(result)
+		return string(resultBytes), nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery load_quarantine_metadata failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryVerifyQuarantineMetadata, order, guard, func() (string, error) {
+		order++
+		if err := r.validateQuarantineMetadataIntegrity(cachedQM, operation); err != nil {
+			return "", err
+		}
+		return `{"verified":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery verify_quarantine_metadata failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryRestoreGeneration, order, guard, func() (string, error) {
+		order++
+		if err := r.restoreQuarantinedGeneration(ctx, operation, cachedQM, guard); err != nil {
+			return "", err
+		}
+		return `{"generation_restored":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery restore_generation failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryRestoreCurrent, order, guard, func() (string, error) {
+		order++
+		if err := r.restoreQuarantinedCurrent(ctx, operation, cachedQM, guard); err != nil {
+			return "", err
+		}
+		return `{"current_restored":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery restore_current failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryRestoreInstallation, order, guard, func() (string, error) {
+		order++
+		if err := r.restoreQuarantinedInstallation(ctx, operation, cachedQM, guard); err != nil {
+			return "", err
+		}
+		return `{"installation_restored":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery restore_installation failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryRestoreVersionState, order, guard, func() (string, error) {
+		order++
+		if err := r.restoreVersionStateToCurrent(ctx, operation, cachedQM, guard); err != nil {
+			return "", err
+		}
+		return `{"version_state_restored":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery restore_version_state failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryRestoreArtifactPath, order, guard, func() (string, error) {
+		order++
+		if err := r.restoreArtifactInstalledPath(ctx, operation, cachedQM, guard); err != nil {
+			return "", err
+		}
+		return `{"artifact_path_restored":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery restore_artifact_path failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryRestoreArtifactReference, order, guard, func() (string, error) {
+		order++
+		if err := r.restoreArtifactInstallationReference(ctx, operation, cachedQM, guard); err != nil {
+			return "", err
+		}
+		return `{"artifact_reference_restored":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery restore_artifact_reference failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryVerifyRestoredState, order, guard, func() (string, error) {
+		order++
+		if err := r.verifyUninstallRestoredState(ctx, operation, cachedQM, guard); err != nil {
+			return "", err
+		}
+		return `{"restored_state_verified":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery verify_restored_state failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryReleaseQuarantineMetadata, order, guard, func() (string, error) {
+		order++
+		if err := r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, cachedQM.QuarantineID, guard); err != nil {
+			return "", err
+		}
+		releasedQM, reReadErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+		if reReadErr != nil {
+			return "", fmt.Errorf("re-read quarantine metadata after release: %w", reReadErr)
+		}
+		if releasedQM.State != "released" {
+			return "", fmt.Errorf("quarantine metadata state is not released after release: %s", releasedQM.State)
+		}
+		return `{"quarantine_released":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery release_quarantine_metadata failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryFinalGate, order, guard, func() (string, error) {
+		order++
+		if err := r.newPackageRecoveryFinalizer().runRecoveryFinalGate(ctx, operation, guard, completed); err != nil {
+			return "", err
+		}
+		return `{"final_gate_passed":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery final_gate failed", err, guard)
+	}
+
+	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryFinalize, order, guard, func() (string, error) {
+		order++
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken); err != nil {
+			return "", err
+		}
+		return `{"finalized":true}`, nil
+	})
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery finalize failed", err, guard)
+	}
+
+	return nil
+}
 func (r *Runtime) requirePackageRecovery(ctx context.Context, operation PackageOperationRecord, detail string, cause error, guard PackageWriteGuard) error {
 	if cause != nil {
 		detail = detail + ": " + cause.Error()

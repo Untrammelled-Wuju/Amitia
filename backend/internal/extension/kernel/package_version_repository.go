@@ -669,14 +669,14 @@ func (r *PackageRepository) RemovePackageVersion(ctx context.Context, extensionI
 	result, err := r.db.ExecContext(ctx, `UPDATE package_versions SET version_state = ? WHERE extension_id = ? AND version = ?`,
 		string(PackageVersionStateRemoved), extensionID, version)
 	if err != nil {
-		return fmt.Errorf("kernel: remove package version failed: %w", err)
+		return ClassifyRepositoryError("remove package version", err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("kernel: remove package version inspect failed: %w", err)
+		return ClassifyRepositoryError("inspect remove package version", err)
 	}
 	if affected == 0 {
-		return fmt.Errorf("kernel: package version %s not found for remove", version)
+		return NewRepositoryError(RepositoryErrorNotFound, fmt.Errorf("kernel: package version %s not found for remove", version))
 	}
 	return nil
 }

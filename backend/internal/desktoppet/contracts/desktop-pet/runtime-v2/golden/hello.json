@@ -1,0 +1,28 @@
+{
+  "messageType": "hello",
+  "runtimeVersion": "1.2.0",
+  "runtimeContractVersion": "2.0.0",
+  "deviceId": "device_01JXYZ",
+  "runtimeId": "runtime_01JXYZ",
+  "capabilities": [
+    "runtime.sync_desired_v2",
+    "runtime.play_action_v2",
+    "runtime.stop_action_v2",
+    "runtime.pause_resume_v2",
+    "runtime.release_switch_v2",
+    "runtime.alpha_hit_mask_v1",
+    "playback.loop",
+    "playback.once",
+    "playback.hold",
+    "playback.ping_pong",
+    "event.command_accepted",
+    "event.playback_started",
+    "event.playback_completed",
+    "event.playback_interrupted",
+    "event.playback_failed"
+  ],
+  "lastAppliedDesiredRevision": 42,
+  "lastProcessedCommandSequence": 120,
+  "lastEventSequence": 300,
+  "actualStateHash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -34,13 +37,15 @@ type packageConfigPermissionSnapshot struct {
 }
 
 type packageResourceSnapshotEntry struct {
-	Resource         domain.ResourceOwnership `json:"resource"`
-	ResourceHash     string                   `json:"resourceHash"`
-	RestoreStrategy  string                   `json:"restoreStrategy"`
-	LogicalPath      string                   `json:"logicalPath"`
-	ContentHash      string                   `json:"contentHash"`
-	Size             int64                    `json:"size"`
-	StorageReference string                   `json:"storageReference"`
+	Resource                domain.ResourceOwnership `json:"resource"`
+	ResourceHash            string                   `json:"resourceHash"`
+	RestoreStrategy         string                   `json:"restoreStrategy"`
+	LogicalPath             string                   `json:"logicalPath"`
+	OriginalPath            string                   `json:"originalPath"`
+	ContentHash             string                   `json:"contentHash"`
+	Size                    int64                    `json:"size"`
+	StorageReference        string                   `json:"storageReference"`
+	ContentStorageReference string                   `json:"contentStorageReference"`
 }
 
 type packageResourceSnapshot struct {
@@ -158,6 +163,11 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 	} else {
 		sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
 		resourceSnapshot := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
+		absExtRoot, absErr := filepath.Abs(r.container.ExtRoot)
+		if absErr != nil {
+			return "", "", "", "", "", fmt.Errorf("kernel: resolve ext root: %w", absErr)
+		}
+		contentStore := NewResourceContentStore(absExtRoot)
 		for _, resource := range resources {
 			resource.Metadata, _ = sanitizePackageSnapshotMap(resource.Metadata)
 			raw, marshalErr := json.Marshal(resource)
@@ -168,23 +178,37 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 			if logicalPath == "" {
 				logicalPath = resource.Reference
 			}
-			contentHash := extractResourceStringField(resource, "contentHash")
-			if contentHash == "" {
-				contentHash = packageSnapshotDigest(raw)
+			originalPath := resource.Reference
+
+			var contentHash string
+			var size int64
+			var contentStorageRef string
+			if originalPath != "" {
+				absOriginal, absErr := filepath.Abs(originalPath)
+				if absErr != nil {
+					return "", "", "", "", "", fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, absErr)
+				}
+				if strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
+					if _, statErr := os.Stat(absOriginal); statErr == nil {
+						if storedRef, hash, sz, storeErr := contentStore.StoreContent(absOriginal); storeErr == nil {
+							contentStorageRef = storedRef
+							contentHash = hash
+							size = sz
+						}
+					}
+				}
 			}
-			size := extractResourceInt64Field(resource, "size")
-			storageReference := resource.Reference
-			if storageReference == "" {
-				storageReference = resource.ResourceID
-			}
+
 			resourceSnapshot.Entries = append(resourceSnapshot.Entries, packageResourceSnapshotEntry{
-				Resource:         resource,
-				ResourceHash:     packageSnapshotDigest(raw),
-				RestoreStrategy:  "repository_upsert",
-				LogicalPath:      logicalPath,
-				ContentHash:      contentHash,
-				Size:             size,
-				StorageReference: storageReference,
+				Resource:                resource,
+				ResourceHash:            packageSnapshotDigest(raw),
+				RestoreStrategy:         "repository_upsert",
+				LogicalPath:             logicalPath,
+				OriginalPath:            originalPath,
+				ContentHash:             contentHash,
+				Size:                    size,
+				StorageReference:        originalPath,
+				ContentStorageReference: contentStorageRef,
 			})
 		}
 		resourceJSON, err = json.Marshal(resourceSnapshot)
@@ -246,21 +270,13 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		db := r.container.Store.DB()
 		if db != nil {
 			for _, table := range userState.AffectedTables {
-				rows, queryErr := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", table))
-				if queryErr != nil {
-					continue
-				}
-				export, exportErr := exportRowsAsJSONL(rows)
-				_ = rows.Close()
+				exported, exportErr := captureUserDataTableSnapshot(ctx, db, table)
 				if exportErr != nil {
-					continue
+					return "", "", "", "", "", fmt.Errorf("kernel: user data snapshot for table %s: %w", table, exportErr)
 				}
-				if export == "" {
-					return "", "", "", "", "", fmt.Errorf("kernel: user data snapshot integrity check failed: table %s export is empty", table)
-				}
-				userState.DataExports[table] = export
+				userState.DataExports[table] = exported.jsonl
 				if userState.RecordCounts != nil {
-					userState.RecordCounts[table] = int64(strings.Count(export, "\n"))
+					userState.RecordCounts[table] = exported.count
 				}
 			}
 		}
@@ -280,6 +296,54 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		return "", "", "", "", "", err
 	}
 	return string(configJSON), string(refsJSON), string(resourceJSON), string(migrationJSON), string(userStateJSON), nil
+}
+
+type tableSnapshotResult struct {
+	jsonl string
+	count int64
+}
+
+func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, table string) (tableSnapshotResult, error) {
+	result := tableSnapshotResult{}
+	rows, queryErr := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", table))
+	if queryErr != nil {
+		return result, fmt.Errorf("kernel: query table %s for snapshot: %w", table, queryErr)
+	}
+	defer rows.Close()
+
+	var lines []string
+	for rows.Next() {
+		columns, colErr := rows.Columns()
+		if colErr != nil {
+			return result, fmt.Errorf("kernel: get columns for %s: %w", table, colErr)
+		}
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+		if scanErr := rows.Scan(valuePtrs...); scanErr != nil {
+			return result, fmt.Errorf("kernel: scan row for %s: %w", table, scanErr)
+		}
+		record := make(map[string]interface{}, len(columns))
+		for i, col := range columns {
+			record[col] = normalizeSQLValue(values[i])
+		}
+		jsonBytes, marshalErr := json.Marshal(record)
+		if marshalErr != nil {
+			return result, fmt.Errorf("kernel: marshal row for %s: %w", table, marshalErr)
+		}
+		lines = append(lines, string(jsonBytes))
+		result.count++
+	}
+	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("kernel: iterate rows for %s: %w", table, err)
+	}
+	if result.count == 0 {
+		return result, fmt.Errorf("kernel: user data snapshot integrity check failed: table %s export is empty", table)
+	}
+	result.jsonl = strings.Join(lines, "\n")
+	return result, nil
 }
 
 func extractResourceStringField(resource domain.ResourceOwnership, field string) string {
@@ -444,17 +508,70 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 			return fmt.Errorf("kernel: resource snapshot integrity failed: %s", entry.Resource.ResourceID)
 		}
 	}
-	contentStore := NewResourceContentStore(r.container.ExtRoot)
+	absExtRoot, absErr := filepath.Abs(r.container.ExtRoot)
+	if absErr != nil {
+		return fmt.Errorf("kernel: resolve ext root: %w", absErr)
+	}
+	contentStore := NewResourceContentStore(absExtRoot)
 	for _, entry := range snapshot.Entries {
-		if entry.ContentHash != "" {
-			if err := contentStore.VerifyContent(entry.StorageReference, entry.ContentHash); err != nil {
-				return fmt.Errorf("kernel: resource content hash mismatch for %s: %w", entry.Resource.ResourceID, err)
-			}
+		if entry.ContentHash == "" {
+			continue
 		}
-		if entry.LogicalPath != "" && entry.StorageReference != "" {
-			if err := contentStore.RestoreResourceFile(entry.LogicalPath, entry.StorageReference, entry.ContentHash); err != nil {
-				return err
-			}
+		if entry.ContentStorageReference == "" {
+			return fmt.Errorf("kernel: resource %s content storage reference missing", entry.Resource.ResourceID)
+		}
+		if err := contentStore.VerifyContent(entry.ContentStorageReference, entry.ContentHash); err != nil {
+			return fmt.Errorf("kernel: resource content hash mismatch for %s: %w", entry.Resource.ResourceID, err)
+		}
+		originalPath := entry.OriginalPath
+		if originalPath == "" {
+			originalPath = entry.StorageReference
+		}
+		if originalPath == "" {
+			originalPath = entry.LogicalPath
+		}
+		if originalPath == "" {
+			continue
+		}
+		absOriginal, absErr := filepath.Abs(originalPath)
+		if absErr != nil {
+			return fmt.Errorf("kernel: resolve restore path for %s: %w", entry.Resource.ResourceID, absErr)
+		}
+		if !strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
+			return fmt.Errorf("kernel: restore path %s for resource %s escapes ext root", absOriginal, entry.Resource.ResourceID)
+		}
+		data, readErr := contentStore.ReadContent(entry.ContentStorageReference)
+		if readErr != nil {
+			return fmt.Errorf("kernel: read content for resource %s: %w", entry.Resource.ResourceID, readErr)
+		}
+		if mkErr := os.MkdirAll(filepath.Dir(absOriginal), 0o700); mkErr != nil {
+			return fmt.Errorf("kernel: create directory for restored resource %s: %w", entry.Resource.ResourceID, mkErr)
+		}
+		tmp, tmpErr := os.CreateTemp(filepath.Dir(absOriginal), ".restore-*.tmp")
+		if tmpErr != nil {
+			return fmt.Errorf("kernel: create temp file for restored resource %s: %w", entry.Resource.ResourceID, tmpErr)
+		}
+		tmpPath := tmp.Name()
+		if _, writeErr := tmp.Write(data); writeErr != nil {
+			tmp.Close()
+			os.Remove(tmpPath)
+			return fmt.Errorf("kernel: write restored resource %s: %w", entry.Resource.ResourceID, writeErr)
+		}
+		if syncErr := tmp.Sync(); syncErr != nil {
+			tmp.Close()
+			os.Remove(tmpPath)
+			return fmt.Errorf("kernel: sync restored resource %s: %w", entry.Resource.ResourceID, syncErr)
+		}
+		if closeErr := tmp.Close(); closeErr != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("kernel: close restored resource %s: %w", entry.Resource.ResourceID, closeErr)
+		}
+		if renameErr := os.Rename(tmpPath, absOriginal); renameErr != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("kernel: rename restored resource %s: %w", entry.Resource.ResourceID, renameErr)
+		}
+		if dirSyncErr := syncDir(filepath.Dir(absOriginal)); dirSyncErr != nil {
+			return fmt.Errorf("kernel: sync directory after restore %s: %w", entry.Resource.ResourceID, dirSyncErr)
 		}
 	}
 	current, err := r.container.ResourceRepository.ListResources(ctx, extensionID)
@@ -738,4 +855,76 @@ func packageSecretReference(value any) string {
 func packageSnapshotDigest(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func computeVerifiedResourceTreeHash(resources []domain.ResourceOwnership, absExtRoot string) (string, error) {
+	if len(resources) == 0 {
+		return "", nil
+	}
+	type treeEntry struct {
+		normalizedPath string
+		size           int64
+		contentHash    string
+	}
+	var entries []treeEntry
+	for _, resource := range resources {
+		originalPath := extractResourceStringField(resource, "originalPath")
+		if originalPath == "" {
+			originalPath = resource.Reference
+		}
+		if originalPath == "" {
+			continue
+		}
+		absPath, absErr := filepath.Abs(originalPath)
+		if absErr != nil {
+			return "", fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, absErr)
+		}
+		if !strings.HasPrefix(absPath, absExtRoot+string(filepath.Separator)) {
+			return "", fmt.Errorf("kernel: resource %s path %s escapes ext root", resource.ResourceID, absPath)
+		}
+		relPath, relErr := filepath.Rel(absExtRoot, absPath)
+		if relErr != nil {
+			return "", fmt.Errorf("kernel: compute relative path for %s: %w", resource.ResourceID, relErr)
+		}
+		normalizedPath := filepath.ToSlash(strings.ToLower(relPath))
+
+		info, statErr := os.Stat(absPath)
+		if statErr != nil {
+			return "", fmt.Errorf("kernel: resource %s file not found: %w", resource.ResourceID, statErr)
+		}
+
+		file, openErr := os.Open(absPath)
+		if openErr != nil {
+			return "", fmt.Errorf("kernel: open resource file %s: %w", resource.ResourceID, openErr)
+		}
+		hasher := sha256.New()
+		if _, copyErr := io.Copy(hasher, file); copyErr != nil {
+			file.Close()
+			return "", fmt.Errorf("kernel: hash resource file %s: %w", resource.ResourceID, copyErr)
+		}
+		file.Close()
+		contentHash := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+
+		entries = append(entries, treeEntry{
+			normalizedPath: normalizedPath,
+			size:           info.Size(),
+			contentHash:    contentHash,
+		})
+	}
+	if len(entries) != len(resources) {
+		return "", fmt.Errorf("kernel: some resources missing or unreadable for tree hash")
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].normalizedPath < entries[j].normalizedPath
+	})
+	hasher := sha256.New()
+	for _, entry := range entries {
+		hasher.Write([]byte(entry.normalizedPath))
+		hasher.Write([]byte{0})
+		hasher.Write([]byte(fmt.Sprintf("%d", entry.size)))
+		hasher.Write([]byte{0})
+		hasher.Write([]byte(entry.contentHash))
+		hasher.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }

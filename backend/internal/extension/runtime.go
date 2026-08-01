@@ -220,8 +220,10 @@ func (r *Runtime) RunPackageStartupCleanup(ctx context.Context) error {
 	return nil
 }
 
-// Deprecated: Use read-only LegacyMigrationDetector instead.
-func (r *Runtime) DetectLegacyPackages(ctx context.Context) (LegacyMigrationReport, error) {
-	svc := NewPackageService(r.Repository, r.Registry, r.Validator, NewWorkflowCompiler(r.Registry), r.Workshop.installer, r.AgentSkills)
-	return svc.DetectLegacyPackages(ctx)
+func (r *Runtime) DetectLegacyPackagesReadOnly(ctx context.Context) (LegacyMigrationReport, error) {
+	if r.Kernel == nil {
+		return LegacyMigrationReport{}, fmt.Errorf("extension kernel unavailable")
+	}
+	detector := NewLegacyMigrationDetector(r.Kernel, r.Repository.db)
+	return detector.Detect(ctx)
 }

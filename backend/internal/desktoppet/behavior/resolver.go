@@ -4,6 +4,15 @@ import (
 	"time"
 )
 
+type bindingCandidate interface {
+	GetID() string
+	GetSemantic() string
+	GetPreferredAction() string
+	GetPriorityOffset() int
+	GetCooldownMS() int64
+	IsEnabled() bool
+}
+
 type Resolver struct {
 	clock      Clock
 	fallback   *FallbackGraph
@@ -11,7 +20,7 @@ type Resolver struct {
 }
 
 type BindingResolver struct {
-	evaluate func(eventType string, origin EventOrigin, payload map[string]interface{}) []BehaviorBinding
+	evaluate func(scope interface{}, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}
 }
 
 func NewResolver(clock Clock, fallback *FallbackGraph) *Resolver {
@@ -24,7 +33,7 @@ func NewResolver(clock Clock, fallback *FallbackGraph) *Resolver {
 	return &Resolver{clock: clock, fallback: fallback}
 }
 
-func (r *Resolver) SetBindingEvaluator(fn func(eventType string, origin EventOrigin, payload map[string]interface{}) []BehaviorBinding) {
+func (r *Resolver) SetBindingEvaluator(fn func(scope interface{}, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}) {
 	r.bindings = &BindingResolver{evaluate: fn}
 }
 
@@ -122,8 +131,7 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 		case "response_ready":
 			candidates = append(candidates, makeCandidate("dialogue_speaking", []string{"speaking"}, event.EventID, "transient", 800, now, withExpires(30*time.Second)))
 		case "completed":
-			if ctx.Foreground.Semantic == "dialogue_speaking" {
-			} else {
+			if ctx.Foreground.Semantic != "dialogue_speaking" {
 				candidates = append(candidates, makeCandidate("calm_idle", []string{"idle_breathing"}, event.EventID, "transient", 250, now))
 			}
 		case "failed":
@@ -158,28 +166,32 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 
 	if r.bindings != nil && r.bindings.evaluate != nil {
 		payload := parsePayload(event.Payload)
-		matchedBindings := r.bindings.evaluate(event.EventType, event.Origin, payload)
-		for _, b := range matchedBindings {
-			if !b.Enabled {
+		rawMatched := r.bindings.evaluate(nil, event.EventType, event.Origin, payload)
+		for _, rb := range rawMatched {
+			b, ok := rb.(bindingCandidate)
+			if !ok {
 				continue
 			}
-			keys := []string{b.PreferredAction}
-			priority := 300 + b.PriorityOffset
+			if !b.IsEnabled() {
+				continue
+			}
+			keys := []string{b.GetPreferredAction()}
+			priority := 300 + b.GetPriorityOffset()
 			if priority > 900 {
 				priority = 900
 			}
-			cooldown := time.Duration(b.CooldownMS) * time.Millisecond
+			cooldown := time.Duration(b.GetCooldownMS()) * time.Millisecond
 			if cooldown < 500*time.Millisecond {
 				cooldown = 500 * time.Millisecond
 			}
 			candidates = append(candidates, CandidateAction{
-				Semantic:      b.Semantic,
+				Semantic:      b.GetSemantic(),
 				PreferredKeys: keys,
 				SourceEventID: event.EventID,
 				SourceLayer:   "binding",
 				Priority:      priority,
 				CreatedAt:     now,
-				CooldownKey:   b.ID,
+				CooldownKey:   b.GetID(),
 				Cooldown:      cooldown,
 			})
 		}
@@ -201,56 +213,108 @@ func (r *Resolver) resolveEmotionCandidate(ctx *BehaviorContextSnapshot, event B
 		return &CandidateAction{
 			Semantic: "emotion_happy", PreferredKeys: []string{"happy", "excited", "wave"},
 			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 420,
-			CreatedAt: now, CooldownKey: "semantic:emotion", Cooldown: 30 * time.Second,
+			CreatedAt: now, CooldownKey: "semantic:emotion", Cooldown: 10 * time.Second,
 		}
-	case isNegativeLowArousal(label):
+	case isNegativeHighTension(label):
 		return &CandidateAction{
-			Semantic: "emotion_sad", PreferredKeys: []string{"sad", "tired"},
-			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 420,
-			CreatedAt: now, CooldownKey: "semantic:emotion", Cooldown: 30 * time.Second,
+			Semantic: "emotion_stressed", PreferredKeys: []string{"stressed", "worried", "thinking"},
+			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 610,
+			CreatedAt: now, CooldownKey: "semantic:emotion", Cooldown: 10 * time.Second,
 		}
-	case isNegativeHighArousal(label):
+	case isNeutral(label):
 		return &CandidateAction{
-			Semantic: "emotion_angry", PreferredKeys: []string{"angry", "disagreeing", "shake_head"},
-			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 650,
-			CreatedAt: now, CooldownKey: "semantic:emotion", Cooldown: 30 * time.Second,
+			Semantic: "calm_idle", PreferredKeys: []string{"idle_breathing", "idle_normal"},
+			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 300,
+			CreatedAt: now, CooldownKey: "semantic:emotion", Cooldown: 10 * time.Second,
 		}
 	}
 	return nil
 }
 
 func (r *Resolver) resolveActivityCandidate(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, now time.Time) *CandidateAction {
-	key := ctx.Stable.ActivityKey
-	mapping := map[string][]string{
-		"sleep": {"sleep", "sleep_on_desktop", "sit"},
-		"rest":  {"sit", "sleep_on_desktop"},
-		"eat":   {"eat"},
-		"drink": {"drink"},
-		"read":  {"read"},
-		"write": {"write"},
-		"phone": {"use_phone"},
-		"work":  {"work"},
-		"study": {"study", "read", "work"},
+	activity := ctx.Stable.ActivityKey
+	switch activity {
+	case "work":
+		return &CandidateAction{
+			Semantic: "working", PreferredKeys: []string{"work", "study", "thinking"},
+			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 480,
+			CreatedAt: now, CooldownKey: "semantic:activity", Cooldown: 30 * time.Second,
+		}
+	case "study":
+		return &CandidateAction{
+			Semantic: "studying", PreferredKeys: []string{"study", "work", "thinking"},
+			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 460,
+			CreatedAt: now, CooldownKey: "semantic:activity", Cooldown: 30 * time.Second,
+		}
+	case "entertainment":
+		return &CandidateAction{
+			Semantic: "relaxing", PreferredKeys: []string{"relax", "happy", "wave"},
+			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 400,
+			CreatedAt: now, CooldownKey: "semantic:activity", Cooldown: 30 * time.Second,
+		}
+	case "sleep":
+		return &CandidateAction{
+			Semantic: "sleeping", PreferredKeys: []string{"sleep", "idle_sleep"},
+			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 520,
+			CreatedAt: now, CooldownKey: "semantic:activity", Cooldown: 30 * time.Second,
+		}
+	case "exercise":
+		return &CandidateAction{
+			Semantic: "exercising", PreferredKeys: []string{"exercise", "wave", "happy"},
+			SourceEventID: event.EventID, SourceLayer: "stable", Priority: 440,
+			CreatedAt: now, CooldownKey: "semantic:activity", Cooldown: 30 * time.Second,
+		}
 	}
-	keys, ok := mapping[key]
-	if !ok {
-		return nil
+	return nil
+}
+
+func (r *Resolver) resolveToolCandidate(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, now time.Time) *CandidateAction {
+	for _, tool := range ctx.ActiveTools {
+		if tool.DisplayClass == "research" || tool.DisplayClass == "work" {
+			return &CandidateAction{
+				Semantic: "working", PreferredKeys: []string{"work", "study", "thinking"},
+				SourceEventID: event.EventID, SourceLayer: "tool", Priority: 680,
+				CreatedAt: now, CooldownKey: "semantic:tool", Cooldown: 5 * time.Second,
+			}
+		}
 	}
-	semantic := "activity_" + key
-	priority := 500
-	if key == "work" {
-		priority = 680
-	}
-	return &CandidateAction{
+	return nil
+}
+
+func makeCandidate(semantic string, keys []string, eventID string, layer string, priority int, now time.Time, opts ...func(*CandidateAction)) CandidateAction {
+	c := CandidateAction{
 		Semantic:      semantic,
 		PreferredKeys: keys,
-		SourceEventID: event.EventID,
-		SourceLayer:   "stable",
+		SourceEventID: eventID,
+		SourceLayer:   layer,
 		Priority:      priority,
 		CreatedAt:     now,
-		Durable:       true,
+		CooldownKey:   "semantic:" + semantic,
+		Cooldown:      5 * time.Second,
 	}
+	for _, opt := range opts {
+		opt(&c)
+	}
+	return c
 }
+
+func withCooldown(d time.Duration) func(*CandidateAction) {
+	return func(c *CandidateAction) { c.Cooldown = d }
+}
+
+func withMin(ms time.Duration) func(*CandidateAction) {
+	return func(c *CandidateAction) { c.MinPlay = ms }
+}
+
+func withExpires(d time.Duration) func(*CandidateAction) {
+	return func(c *CandidateAction) { c.ExpiresAt = timePtr(time.Now().Add(d)) }
+}
+
+func withUninterruptible(v bool) func(*CandidateAction) {
+	return func(c *CandidateAction) { c.InterruptPolicy = map[bool]string{true: "uninterruptible", false: "queue"}[v] }
+}
+
+func timePtr(t time.Time) *time.Time { return &t }
 
 func isPositiveHighArousal(label string) bool {
 	switch label {
@@ -268,61 +332,19 @@ func isPositiveModerate(label string) bool {
 	return false
 }
 
-func isNegativeLowArousal(label string) bool {
+func isNegativeHighTension(label string) bool {
 	switch label {
-	case "sad", "unpleasant_calm", "depressed", "tired", "bored":
+	case "angry", "unpleasant_aroused", "frustrated", "irritated", "rage",
+		"stressed", "worried", "anxious":
 		return true
 	}
 	return false
 }
 
-func isNegativeHighArousal(label string) bool {
+func isNeutral(label string) bool {
 	switch label {
-	case "angry", "unpleasant_aroused", "frustrated", "irritated", "rage":
+	case "calm", "neutral", "idle":
 		return true
 	}
 	return false
-}
-
-type candidateOption func(*CandidateAction)
-
-func withCooldown(d time.Duration) candidateOption {
-	return func(c *CandidateAction) { c.Cooldown = d; c.CooldownKey = "semantic:" + c.Semantic }
-}
-
-func withMin(d time.Duration) candidateOption {
-	return func(c *CandidateAction) { c.MinPlay = d }
-}
-
-func withExpires(d time.Duration) candidateOption {
-	return func(c *CandidateAction) {
-		t := time.Now().Add(d)
-		c.ExpiresAt = &t
-	}
-}
-
-func withUninterruptible(v bool) candidateOption {
-	return func(c *CandidateAction) {
-		if !v {
-			c.InterruptPolicy = "interruptible"
-		} else {
-			c.InterruptPolicy = "uninterruptible"
-		}
-	}
-}
-
-func makeCandidate(semantic string, keys []string, eventID, layer string, priority int, now time.Time, opts ...candidateOption) CandidateAction {
-	c := CandidateAction{
-		Semantic:      semantic,
-		PreferredKeys: keys,
-		SourceEventID: eventID,
-		SourceLayer:   layer,
-		Priority:      priority,
-		CreatedAt:     now,
-		InterruptPolicy: "interruptible",
-	}
-	for _, opt := range opts {
-		opt(&c)
-	}
-	return c
 }

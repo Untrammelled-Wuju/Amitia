@@ -110,7 +110,7 @@ func (g *PackageLeaseGuard) Start(ctx context.Context) (context.Context, error) 
 					g.mu.Unlock()
 					cancel()
 					bgCtx := context.Background()
-					_ = g.runtime.container.PackageRepository.SetOperation(bgCtx, g.operationID, "requires_recovery", "lease_lost", "PACKAGE_LEASE_LOST", err.Error(), false, PackageWriteGuard{})
+					if setErr := g.runtime.container.PackageRepository.SetOperation(bgCtx, g.operationID, "requires_recovery", "lease_lost", "PACKAGE_LEASE_LOST", err.Error(), false, PackageWriteGuard{}); setErr != nil { fmt.Printf("kernel: persist lease lost for %s: %v\n", g.operationID, setErr) }
 					return
 				}
 			}
@@ -167,7 +167,7 @@ func (g *PackageLeaseGuard) Stop(ctx context.Context) error {
 		if IsPackageOperationError(releaseErr, OperationErrLeaseConflict) {
 			return nil
 		}
-		_ = g.runtime.container.PackageRepository.PutConsistencyFinding(context.Background(),
+		if putErr := g.runtime.container.PackageRepository.PutConsistencyFinding(context.Background(),
 			PackageConsistencyFinding{
 				FindingID:         "stale-lease-" + g.operationID,
 				Metric:            "stale_extension_leases",
@@ -175,7 +175,9 @@ func (g *PackageLeaseGuard) Stop(ctx context.Context) error {
 				ResourceIDsJSON:   `["` + g.operationID + `"]`,
 				ErrorDetail:       releaseErr.Error(),
 				RecommendedAction: "manual_lease_cleanup",
-			})
+			}); putErr != nil {
+		fmt.Printf("kernel: persist stale lease finding for %s: %v\n", g.operationID, putErr)
+	}
 		return releaseErr
 	}
 	return nil

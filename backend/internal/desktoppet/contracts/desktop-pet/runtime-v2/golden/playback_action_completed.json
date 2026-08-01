@@ -1,0 +1,19 @@
+{
+  "messageType": "runtime_event",
+  "messageName": "runtime.playback.action_completed",
+  "messageId": "evt_01JXYZ9999999999",
+  "correlationId": "cmd_01JXYZ1234567890",
+  "sequence": 304,
+  "payloadHash": "sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  "payload": {
+    "commandId": "cmd_01JXYZ1234567890",
+    "playbackInstanceId": "pb_01JXYZ1234567890",
+    "actionKey": "wave",
+    "completionReason": "natural_end",
+    "cycleCount": 1,
+    "returnTarget": "idle",
+    "completedAt": "2026-08-02T10:00:02.500Z",
+    "playedMs": 2500,
+    "triggerSource": "runtime_command"
+  }
+}

@@ -279,7 +279,7 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 	if scopeType == "" {
 		scopeType = "global"
 	}
-	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), extID, kernelAPIUser(c), scopeType, scopeID)
+	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: extID, UserID: kernelAPIUser(c), ScopeType: scopeType, ScopeID: scopeID})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})

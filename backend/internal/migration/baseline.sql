@@ -1359,7 +1359,12 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_contexts (
     transient_state_json TEXT NOT NULL DEFAULT '{}',
     active_tools_json TEXT NOT NULL DEFAULT '{}',
     voice_state_json TEXT NOT NULL DEFAULT '{}',
+    desktop_gesture_json TEXT NOT NULL DEFAULT '{}',
+    foreground_json TEXT NOT NULL DEFAULT '{}',
+    cooldowns_json TEXT NOT NULL DEFAULT '{}',
+    recent_semantics_json TEXT NOT NULL DEFAULT '[]',
     desired_state_json TEXT NOT NULL DEFAULT '{}',
+    last_source_revisions_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT '',
     PRIMARY KEY(user_id, character_id)
 );
@@ -1371,16 +1376,30 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
     schema_version INTEGER NOT NULL DEFAULT 0,
     user_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    interaction_id TEXT NOT NULL DEFAULT '',
+    session_id TEXT NOT NULL DEFAULT '',
+    tool_operation_id TEXT NOT NULL DEFAULT '',
+    installation_id TEXT NOT NULL DEFAULT '',
+    pet_instance_id TEXT NOT NULL DEFAULT '',
+    release_id TEXT NOT NULL DEFAULT '',
     occurred_at TEXT NOT NULL DEFAULT '',
     received_at TEXT NOT NULL DEFAULT '',
     expires_at TEXT NOT NULL DEFAULT '',
     origin TEXT NOT NULL DEFAULT '',
     correlation_id TEXT NOT NULL DEFAULT '',
     causation_id TEXT NOT NULL DEFAULT '',
+    event_envelope_json TEXT NOT NULL DEFAULT '{}',
     payload_json TEXT NOT NULL DEFAULT '{}',
+    payload_hash TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'pending',
     attempt_count INTEGER NOT NULL DEFAULT 0,
+    lease_owner TEXT NOT NULL DEFAULT '',
+    lease_expires_at TEXT NOT NULL DEFAULT '',
+    heartbeat_at TEXT NOT NULL DEFAULT '',
+    available_at TEXT NOT NULL DEFAULT '',
     last_error_code TEXT NOT NULL DEFAULT '',
+    last_error_message TEXT NOT NULL DEFAULT '',
     processed_at TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT (datetime('now'))
 );
@@ -1396,6 +1415,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
     installation_id TEXT NOT NULL DEFAULT '',
     context_revision INTEGER NOT NULL DEFAULT 0,
     ruleset_version INTEGER NOT NULL DEFAULT 0,
+    interrupt_policy TEXT NOT NULL DEFAULT '',
+    minimum_play_ms INTEGER NOT NULL DEFAULT 0,
+    maximum_play_ms INTEGER NOT NULL DEFAULT 0,
     semantic TEXT NOT NULL DEFAULT '',
     action_key TEXT NOT NULL DEFAULT '',
     priority INTEGER NOT NULL DEFAULT 0,
@@ -1984,7 +2006,22 @@ CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_jobs (
   base_binding_revision INTEGER NOT NULL DEFAULT 0,
   reject_reason TEXT NOT NULL DEFAULT '',
   rejected_by TEXT NOT NULL DEFAULT '',
-  rejected_at TEXT NOT NULL DEFAULT ''
+  rejected_at TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
+  action_stream_id TEXT NOT NULL DEFAULT '',
+  draft_snapshot_id TEXT NOT NULL DEFAULT '',
+  draft_snapshot_hash TEXT NOT NULL DEFAULT '',
+  stage TEXT NOT NULL DEFAULT '',
+  generation_attempt_id TEXT NOT NULL DEFAULT '',
+  generation_artifact_id TEXT NOT NULL DEFAULT '',
+  processing_attempt_id TEXT NOT NULL DEFAULT '',
+  execution_id TEXT NOT NULL DEFAULT '',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  instance_id TEXT NOT NULL DEFAULT '',
+  cancel_requested_at TEXT NOT NULL DEFAULT '',
+  completed_at TEXT NOT NULL DEFAULT '',
+  supersedes_job_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_drj_session ON desktop_pet_regeneration_jobs(session_id);
@@ -1992,6 +2029,9 @@ CREATE INDEX IF NOT EXISTS idx_drj_status ON desktop_pet_regeneration_jobs(statu
 CREATE UNIQUE INDEX IF NOT EXISTS uq_drj_idempotency ON desktop_pet_regeneration_jobs(session_id, idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_drj_lease ON desktop_pet_regeneration_jobs(lease_owner, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_drj_candidate ON desktop_pet_regeneration_jobs(candidate_revision_id);
+CREATE INDEX IF NOT EXISTS idx_drj_user ON desktop_pet_regeneration_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_drj_execution ON desktop_pet_regeneration_jobs(execution_id);
+CREATE INDEX IF NOT EXISTS idx_drj_stage ON desktop_pet_regeneration_jobs(stage);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_edit_candidates (
   id TEXT PRIMARY KEY,
@@ -2016,7 +2056,16 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_candidates (
   action_config_hash TEXT NOT NULL DEFAULT '',
   accepted_at TEXT NOT NULL DEFAULT '',
   rejected_at TEXT NOT NULL DEFAULT '',
-  reject_reason TEXT NOT NULL DEFAULT ''
+  reject_reason TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
+  action_stream_id TEXT NOT NULL DEFAULT '',
+  candidate_version INTEGER NOT NULL DEFAULT 0,
+  draft_snapshot_id TEXT NOT NULL DEFAULT '',
+  draft_snapshot_hash TEXT NOT NULL DEFAULT '',
+  parent_content_hash TEXT NOT NULL DEFAULT '',
+  effective_verdict TEXT NOT NULL DEFAULT '',
+  activation_policy TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dec_session_job ON desktop_pet_edit_candidates(session_id, job_id);
@@ -2058,6 +2107,91 @@ CREATE TABLE IF NOT EXISTS desktop_pet_candidate_revision_metadata (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dcrm_candidate ON desktop_pet_candidate_revision_metadata(candidate_revision_id);
 CREATE INDEX IF NOT EXISTS idx_dcrm_job ON desktop_pet_candidate_revision_metadata(regeneration_job_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_edit_draft_snapshots (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  session_version INTEGER NOT NULL DEFAULT 0,
+  user_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
+  action_stream_id TEXT NOT NULL DEFAULT '',
+  action_key TEXT NOT NULL DEFAULT '',
+  base_revision_id TEXT NOT NULL DEFAULT '',
+  base_content_hash TEXT NOT NULL DEFAULT '',
+  base_binding_revision INTEGER NOT NULL DEFAULT 0,
+  action_config_snapshot_json TEXT NOT NULL DEFAULT '{}',
+  action_config_hash TEXT NOT NULL DEFAULT '',
+  frames_json TEXT NOT NULL DEFAULT '[]',
+  frame_set_hash TEXT NOT NULL DEFAULT '',
+  snapshot_hash TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deds_session ON desktop_pet_edit_draft_snapshots(session_id);
+CREATE INDEX IF NOT EXISTS idx_deds_hash ON desktop_pet_edit_draft_snapshots(snapshot_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_deds_session_version ON desktop_pet_edit_draft_snapshots(session_id, session_version);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_job_input_snapshots (
+  job_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL DEFAULT '',
+  draft_snapshot_id TEXT NOT NULL DEFAULT '',
+  draft_snapshot_hash TEXT NOT NULL DEFAULT '',
+  request_json TEXT NOT NULL DEFAULT '{}',
+  request_hash TEXT NOT NULL DEFAULT '',
+  base_revision_id TEXT NOT NULL DEFAULT '',
+  base_content_hash TEXT NOT NULL DEFAULT '',
+  base_binding_revision INTEGER NOT NULL DEFAULT 0,
+  target_frame_id TEXT NOT NULL DEFAULT '',
+  target_frame_content_hash TEXT NOT NULL DEFAULT '',
+  generation_profile_id TEXT NOT NULL DEFAULT '',
+  processing_profile_id TEXT NOT NULL DEFAULT '',
+  quality_profile_id TEXT NOT NULL DEFAULT '',
+  cost_estimate_json TEXT NOT NULL DEFAULT '{}',
+  cost_estimate_hash TEXT NOT NULL DEFAULT '',
+  cost_confirmation_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_dris_session ON desktop_pet_regeneration_job_input_snapshots(session_id);
+CREATE INDEX IF NOT EXISTS idx_dris_draft ON desktop_pet_regeneration_job_input_snapshots(draft_snapshot_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_candidate_acceptance_operations (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL DEFAULT '',
+  session_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT '',
+  completed_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dcao_candidate_idem ON desktop_pet_candidate_acceptance_operations(candidate_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_dcao_session ON desktop_pet_candidate_acceptance_operations(session_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_editing_event_outbox (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL DEFAULT '',
+  event_type TEXT NOT NULL DEFAULT '',
+  aggregate_type TEXT NOT NULL DEFAULT 'editing_job',
+  aggregate_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  payload_hash TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  published_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_deeo_event ON desktop_pet_editing_event_outbox(event_id);
+CREATE INDEX IF NOT EXISTS idx_deeo_status ON desktop_pet_editing_event_outbox(status, available_at);
+CREATE INDEX IF NOT EXISTS idx_deeo_user ON desktop_pet_editing_event_outbox(user_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_edit_audit_logs (
   id TEXT PRIMARY KEY,
@@ -4225,15 +4359,25 @@ CREATE INDEX IF NOT EXISTS idx_dpqoe_status ON desktop_pet_quality_outbox_events
 
 --- 来源: desktop_pet_runtime_protocol_v2.go
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
+  id TEXT DEFAULT '',
   runtime_instance_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL DEFAULT '',
   device_id TEXT NOT NULL DEFAULT '',
+  runtime_id TEXT NOT NULL DEFAULT '',
   protocol_version TEXT NOT NULL DEFAULT '',
   client_version TEXT NOT NULL DEFAULT '',
+  connection_generation INTEGER NOT NULL DEFAULT 0,
+  runtime_version TEXT NOT NULL DEFAULT '',
+  runtime_contract_version TEXT NOT NULL DEFAULT '',
   capabilities_json TEXT NOT NULL DEFAULT '{}',
+  capabilities_hash TEXT NOT NULL DEFAULT '',
+  last_applied_desired_revision INTEGER NOT NULL DEFAULT 0,
+  last_processed_command_sequence INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT '',
   connected_at TEXT NOT NULL DEFAULT '',
+  last_heartbeat_at TEXT NOT NULL DEFAULT '',
   disconnected_at TEXT NOT NULL DEFAULT '',
+  superseded_at TEXT NOT NULL DEFAULT '',
   superseded_by TEXT NOT NULL DEFAULT '',
   last_command_sequence INTEGER NOT NULL DEFAULT 0,
   last_event_sequence INTEGER NOT NULL DEFAULT 0
@@ -4897,3 +5041,346 @@ CREATE TABLE IF NOT EXISTS desktop_pet_import_package_snapshots (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dips_staging ON desktop_pet_import_package_snapshots(import_staging_id);
 CREATE INDEX IF NOT EXISTS idx_dips_release ON desktop_pet_import_package_snapshots(release_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_device_active_installation_bindings (
+    user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    installation_id TEXT NOT NULL DEFAULT '',
+    pet_id TEXT NOT NULL DEFAULT '',
+    release_id TEXT NOT NULL DEFAULT '',
+    binding_revision INTEGER NOT NULL DEFAULT 0,
+    bound_reason TEXT NOT NULL DEFAULT 'install_bound',
+    bound_at TEXT NOT NULL DEFAULT '',
+    bound_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY(user_id, device_id)
+);
+CREATE INDEX IF NOT EXISTS idx_dpdainst_installation ON desktop_pet_device_active_installation_bindings(installation_id);
+CREATE INDEX IF NOT EXISTS idx_dpdainst_pet ON desktop_pet_device_active_installation_bindings(pet_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_device_installation_binding_history (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    previous_installation_id TEXT NOT NULL DEFAULT '',
+    new_installation_id TEXT NOT NULL DEFAULT '',
+    binding_revision INTEGER NOT NULL DEFAULT 0,
+    reason TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL DEFAULT '',
+    operation_id TEXT NOT NULL DEFAULT '',
+    occurred_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_dpbih_user_device ON desktop_pet_device_installation_binding_history(user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_dpbih_operation ON desktop_pet_device_installation_binding_history(operation_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_device_desired_revision_counters (
+    user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    current_revision INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY(user_id, device_id)
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_installation_runtime_projections (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    runtime_id TEXT NOT NULL DEFAULT '',
+    installation_id TEXT NOT NULL DEFAULT '',
+    pet_id TEXT NOT NULL DEFAULT '',
+    applied_desired_revision INTEGER NOT NULL DEFAULT 0,
+    applied_settings_revision INTEGER NOT NULL DEFAULT 0,
+    actual_release_id TEXT NOT NULL DEFAULT '',
+    actual_visible INTEGER NOT NULL DEFAULT 0,
+    actual_action_key TEXT NOT NULL DEFAULT '',
+    actual_health TEXT NOT NULL DEFAULT 'unknown',
+    runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
+    last_applied_at TEXT NOT NULL DEFAULT '',
+    last_heartbeat_at TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_drirp_user_device ON desktop_pet_installation_runtime_projections(user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_drirp_installation ON desktop_pet_installation_runtime_projections(installation_id);
+CREATE INDEX IF NOT EXISTS idx_drirp_runtime ON desktop_pet_installation_runtime_projections(runtime_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_state_outbox (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL DEFAULT 'desired_state_changed',
+    user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    runtime_id TEXT NOT NULL DEFAULT '',
+    installation_id TEXT NOT NULL DEFAULT '',
+    desired_revision INTEGER NOT NULL DEFAULT 0,
+    desired_hash TEXT NOT NULL DEFAULT '',
+    operation_id TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    available_at TEXT NOT NULL DEFAULT '',
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    published_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_drdso_user_device_status ON desktop_pet_runtime_desired_state_outbox(user_id, device_id, status);
+CREATE INDEX IF NOT EXISTS idx_drdso_available ON desktop_pet_runtime_desired_state_outbox(status, available_at);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT '',
+  device_id TEXT NOT NULL DEFAULT '',
+  runtime_id TEXT NOT NULL DEFAULT '',
+  connection_generation INTEGER NOT NULL DEFAULT 0,
+  runtime_version TEXT NOT NULL DEFAULT '',
+  runtime_contract_version TEXT NOT NULL DEFAULT '',
+  capabilities_json TEXT NOT NULL DEFAULT '{}',
+  capabilities_hash TEXT NOT NULL DEFAULT '',
+  last_applied_desired_revision INTEGER NOT NULL DEFAULT 0,
+  last_processed_command_sequence INTEGER NOT NULL DEFAULT 0,
+  last_event_sequence INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT '',
+  connected_at TEXT NOT NULL DEFAULT '',
+  last_heartbeat_at TEXT NOT NULL DEFAULT '',
+  disconnected_at TEXT NOT NULL DEFAULT '',
+  superseded_at TEXT NOT NULL DEFAULT '',
+  superseded_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device ON desktop_pet_runtime_sessions(user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device_runtime_status ON desktop_pet_runtime_sessions(user_id, device_id, runtime_id, status);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands_v2 (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT '',
+  device_id TEXT NOT NULL DEFAULT '',
+  runtime_id TEXT NOT NULL DEFAULT '',
+  runtime_session_id TEXT NOT NULL DEFAULT '',
+  command_type TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '',
+  revision INTEGER NOT NULL DEFAULT 0,
+  device_sequence INTEGER NOT NULL DEFAULT 0,
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  runtime_correlation_id TEXT NOT NULL DEFAULT '',
+  runtime_playback_id TEXT NOT NULL DEFAULT '',
+  payload TEXT NOT NULL DEFAULT '{}',
+  payload_hash TEXT NOT NULL DEFAULT '',
+  hash_code INTEGER NOT NULL DEFAULT 0,
+  attempt INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  dispatch_at TEXT NOT NULL DEFAULT '',
+  transport_dispatched_at TEXT NOT NULL DEFAULT '',
+  runtime_received_at TEXT NOT NULL DEFAULT '',
+  runtime_accepted_at TEXT NOT NULL DEFAULT '',
+  renderer_accepted_at TEXT NOT NULL DEFAULT '',
+  playback_started_at TEXT NOT NULL DEFAULT '',
+  completed_at TEXT NOT NULL DEFAULT '',
+  superseded_at TEXT NOT NULL DEFAULT '',
+  superseded_by TEXT NOT NULL DEFAULT '',
+  UNIQUE(user_id, device_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_type ON desktop_pet_runtime_commands_v2(user_id, device_id, command_type);
+CREATE INDEX IF NOT EXISTS idx_rtcv2_status ON desktop_pet_runtime_commands_v2(status, inserted_at);
+CREATE INDEX IF NOT EXISTS idx_rtcv2_device_seq ON desktop_pet_runtime_commands_v2(user_id, device_id, device_sequence);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (
+  attempt_id TEXT PRIMARY KEY,
+  command_id TEXT NOT NULL DEFAULT '',
+  runtime_session_id TEXT NOT NULL DEFAULT '',
+  connection_generation INTEGER NOT NULL DEFAULT 0,
+  dispatched_at TEXT NOT NULL DEFAULT '',
+  runtime_received_at TEXT NOT NULL DEFAULT '',
+  runtime_accepted_at TEXT NOT NULL DEFAULT '',
+  renderer_accepted_at TEXT NOT NULL DEFAULT '',
+  playback_started_at TEXT NOT NULL DEFAULT '',
+  finished_at TEXT NOT NULL DEFAULT '',
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rtca_command ON desktop_pet_runtime_command_attempts(command_id);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_results (
+  id TEXT PRIMARY KEY,
+  command_id TEXT NOT NULL DEFAULT '',
+  runtime_id TEXT NOT NULL DEFAULT '',
+  attempt_id TEXT NOT NULL DEFAULT '',
+  result_type TEXT NOT NULL DEFAULT '',
+  result_json TEXT NOT NULL DEFAULT '{}',
+  result_hash TEXT NOT NULL DEFAULT '',
+  runtime_session_id TEXT NOT NULL DEFAULT '',
+  connection_generation INTEGER NOT NULL DEFAULT 0,
+  event_sequence INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(command_id, runtime_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rtcr_command ON desktop_pet_runtime_command_results(command_id);
+CREATE INDEX IF NOT EXISTS idx_rtcr_runtime ON desktop_pet_runtime_command_results(runtime_id);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_device_command_sequences (
+  user_id TEXT NOT NULL DEFAULT '',
+  device_id TEXT NOT NULL DEFAULT '',
+  sequence INTEGER NOT NULL DEFAULT 0,
+  last_reserved_at TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY(user_id, device_id)
+);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_event_records (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL DEFAULT '',
+  payload TEXT NOT NULL DEFAULT '{}',
+  payload_hash TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT '',
+  runtime_session_id TEXT NOT NULL DEFAULT '',
+  command_id TEXT NOT NULL DEFAULT '',
+  sequence INTEGER NOT NULL DEFAULT 0,
+  occurred_at TEXT NOT NULL DEFAULT '',
+  delivered INTEGER NOT NULL DEFAULT 0,
+  delivered_at TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(runtime_session_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_rter_session_seq ON desktop_pet_runtime_event_records(runtime_session_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_rter_session_delivered ON desktop_pet_runtime_event_records(runtime_session_id, delivered, sequence);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states_v2 (
+  user_id TEXT NOT NULL DEFAULT '',
+  device_id TEXT NOT NULL DEFAULT '',
+  runtime_id TEXT NOT NULL DEFAULT '',
+  runtime_session_id TEXT NOT NULL DEFAULT '',
+  connection_generation INTEGER NOT NULL DEFAULT 0,
+  last_event_sequence INTEGER NOT NULL DEFAULT 0,
+  applied_desired_revision INTEGER NOT NULL DEFAULT 0,
+  applied_desired_hash TEXT NOT NULL DEFAULT '',
+  applied_settings_revision INTEGER NOT NULL DEFAULT 0,
+  installation_id TEXT NOT NULL DEFAULT '',
+  pet_id TEXT NOT NULL DEFAULT '',
+  release_id TEXT NOT NULL DEFAULT '',
+  instance_status TEXT NOT NULL DEFAULT '',
+  window_status TEXT NOT NULL DEFAULT '',
+  renderer_status TEXT NOT NULL DEFAULT '',
+  playback_status TEXT NOT NULL DEFAULT '',
+  visible INTEGER NOT NULL DEFAULT 0,
+  stable_action_key TEXT NOT NULL DEFAULT '',
+  current_action_key TEXT NOT NULL DEFAULT '',
+  playback_instance_id TEXT NOT NULL DEFAULT '',
+  current_command_id TEXT NOT NULL DEFAULT '',
+  actual_state_hash TEXT NOT NULL DEFAULT '',
+  health_status TEXT NOT NULL DEFAULT '',
+  last_error_code TEXT NOT NULL DEFAULT '',
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY(user_id, device_id, runtime_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rtasv2_user_device ON desktop_pet_runtime_actual_states_v2(user_id, device_id);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_domain_event_outbox (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL DEFAULT '',
+  aggregate_id TEXT NOT NULL DEFAULT '',
+  payload TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt INTEGER NOT NULL DEFAULT 0,
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  claim_expires_at TEXT NOT NULL DEFAULT '',
+  last_error TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  published_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_dteo_status ON desktop_pet_runtime_domain_event_outbox(status, inserted_at);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_dedup (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT '',
+  device_id TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  nak_count INTEGER NOT NULL DEFAULT 0,
+  last_nak_at TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rtcdd_user_device_idem ON desktop_pet_runtime_command_dedup(user_id, device_id, idempotency_key);
+
+--- 来源: desktop_pet_runtime_v2_tables.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_reconcile_leases (
+  reconciler_id TEXT PRIMARY KEY,
+  last_heartbeat_at TEXT NOT NULL DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_installation_trash_entries (
+    id TEXT PRIMARY KEY,
+    operation_id TEXT NOT NULL,
+    installation_id TEXT NOT NULL,
+    storage_key TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    content_hash TEXT NOT NULL DEFAULT '',
+    retain_until TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT DEFAULT (datetime('now')),
+    purged_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_dptein_installation ON desktop_pet_installation_trash_entries(installation_id);
+CREATE INDEX IF NOT EXISTS idx_dptein_retain ON desktop_pet_installation_trash_entries(retain_until);
+
+--- 来源: resource_snapshot_store.go ---
+CREATE TABLE IF NOT EXISTS extension_package_resource_quarantine (
+    quarantine_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    extension_id TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    logical_path TEXT NOT NULL DEFAULT '',
+    original_path TEXT NOT NULL DEFAULT '',
+    content_hash TEXT NOT NULL DEFAULT '',
+    storage_reference TEXT NOT NULL DEFAULT '',
+    content_storage_reference TEXT NOT NULL DEFAULT '',
+    namespace_hash TEXT NOT NULL DEFAULT '',
+    size INTEGER NOT NULL DEFAULT 0,
+    quarantine_path TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT 'preparing',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (quarantine_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ext_pkg_resource_quarantine_ns_hash ON extension_package_resource_quarantine(extension_id, namespace_hash, state);
+
+--- 来源: user_data_snapshot_store.go ---
+CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
+    journal_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    extension_id TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    total_rows INTEGER NOT NULL DEFAULT 0,
+    imported_rows INTEGER NOT NULL DEFAULT 0,
+    applied_count INTEGER NOT NULL DEFAULT 0,
+    cursor TEXT NOT NULL DEFAULT '',
+    batch_hash TEXT NOT NULL DEFAULT '',
+    namespace_hash TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT 'pending',
+    started_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    error_detail TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (operation_id, table_name)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_user_device_pet ON desktop_pet_installations(user_id, device_id, pet_id);

@@ -1,0 +1,24 @@
+{
+  "envelopeVersion": 2,
+  "protocol": "amitia.desktop-pet.runtime",
+  "messageType": "command",
+  "messageName": "runtime.command.play_action",
+  "messageId": "msg_01JXYZ1234567890",
+  "correlationId": "cmd_01JXYZ1234567890",
+  "causationId": "decision_01JXYZ1234567890",
+  "userId": "user_01JXYZ",
+  "deviceId": "device_01JXYZ",
+  "runtimeId": "runtime_01JXYZ",
+  "runtimeSessionId": "session_01JXYZ",
+  "connectionGeneration": 12,
+  "sequence": 123,
+  "payloadSchemaVersion": 1,
+  "payloadHash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "occurredAt": "2026-08-02T10:00:00.000Z",
+  "sentAt": "2026-08-02T10:00:00.100Z",
+  "payload": {
+    "actionKey": "wave",
+    "playbackMode": "once",
+    "priority": 50
+  }
+}

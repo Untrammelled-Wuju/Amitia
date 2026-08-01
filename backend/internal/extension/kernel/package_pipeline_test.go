@@ -308,7 +308,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil || !uninstallPreview.Installable {
 		t.Fatalf("uninstall preflight failed: %+v %v", uninstallPreview, err)
 	}
-	uninstallOperation, err := runtime.ExecutePackageUninstall(ctx, preview.ExtensionID, "user-1", "global", "")
+	uninstallOperation, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: preview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: ""})
 	if err != nil {
 		t.Fatal(err)
 	}

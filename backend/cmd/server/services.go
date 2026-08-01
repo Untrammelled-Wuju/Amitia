@@ -23,6 +23,7 @@ import (
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
+	"github.com/u-ai/backend/internal/desktoppet/behavior/adapters"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/events"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
@@ -119,6 +120,7 @@ type AppServices struct {
 	RegenerationWorker    *editing.RegenerationWorker
 	BridgeRecoveryWorker  *revisioncommit.RecoveryWorker
 	BehaviorService       *behavior.BehaviorService
+	AdapterManager        *adapters.AdapterManager
 	Reconciliation        *mindruntime.ReconciliationEngine
 	CircuitBreakers       *mindruntime.CircuitBreakerRegistry
 	VoiceEntry            *interaction.VoiceEntry
@@ -670,6 +672,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		runtimeSinkHolder.Set(NewBehaviorRuntimeEventSink(installationRepo, behaviorAssembled.Engine))
 	}
 
+	var adapterManager *adapters.AdapterManager
+	if behaviorAssembled != nil && behaviorAssembled.Engine != nil {
+		adapterManager = adapters.NewAdapterManager(
+			adapters.NewEnginePublisher(behaviorAssembled.Engine),
+			adapters.AdapterManagerOptions{
+				Clock: behavior.NewRealClock(),
+			},
+		)
+		if behaviorSvc != nil {
+			behaviorSvc.SetAdapterManager(adapterManager)
+		}
+	}
+
 	return &AppServices{
 		Graph:               graphSvc,
 		ChatDeliveryAdapter: deliveryAdapter,
@@ -701,6 +716,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		RegenerationWorker:  regenerationWorker,
 		BridgeRecoveryWorker: bridgeRecoveryWorker,
 		BehaviorService:     behaviorSvc,
+		AdapterManager:      adapterManager,
 		Reconciliation:      reconciliationEngine,
 		CircuitBreakers:     cbRegistry,
 		VoiceEntry:          voiceEntry,
@@ -738,6 +754,35 @@ func mcpDataDirectory(ctx *app.AppContext) string {
 		}
 	}
 	return filepath.Join(".", "data")
+}
+
+type characterOwnerPort struct {
+	installRepo installation.Repository
+}
+
+func (p *characterOwnerPort) ResolveUserID(ctx context.Context, characterID string) string {
+	if p.installRepo == nil {
+		return ""
+	}
+	insts, err := p.installRepo.ListInstallationsByCharacter(characterID)
+	if err != nil || len(insts) == 0 {
+		return ""
+	}
+	return insts[0].UserID
+}
+
+type petInfoPort struct {
+	installRepo installation.Repository
+}
+
+func (p *petInfoPort) ResolvePetInfo(ctx context.Context, petInstanceID string) (string, string) {
+	if p.installRepo == nil {
+		return "", ""
+	}
+	if inst, err := p.installRepo.GetInstallation(petInstanceID); err == nil && inst != nil {
+		return inst.UserID, inst.CharacterID
+	}
+	return "", ""
 }
 
 func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, memSvc memory.Service, deliveryStore *delivery.SQLiteDeliveryStore, hostEmitter event.HostEventEmitter) {
@@ -1011,47 +1056,80 @@ func (s *BehaviorRuntimeEventSink) OnRuntimeEvent(ctx context.Context, event run
 	now := time.Now()
 
 	switch event.EventType {
-	case "clicked", "dragged":
-		builder := events.NewEnvelope("desktop.pet."+event.EventType, behavior.OriginDesktop).
+	case "clicked":
+		builder := events.NewEnvelope("runtime.pointer.clicked", behavior.OriginDesktop).
 			UserID(event.UserID).
 			CharacterID(characterID).
 			PetInstanceID(petInstanceID).
+			InstallationID(event.InstallationID).
 			OccurredAt(event.Timestamp).
-			DedupKey(events.BuildDedupKey(petInstanceID, event.EventType, fmt.Sprintf("t%d", event.Timestamp.UnixNano())))
+			DedupKey(events.BuildDedupKey(petInstanceID, event.EventType, event.Timestamp.Format(time.RFC3339Nano)))
 		if len(event.Payload) > 0 {
 			builder.PayloadRaw(event.Payload)
 		}
 		return s.engine.SubmitEvent(ctx, builder.Build(now))
 
-	case "playback_completed", "playback_interrupted":
-		phase := behavior.PlaybackCompleted
-		if event.EventType == "playback_interrupted" {
-			phase = behavior.PlaybackInterrupted
-		}
-		builder := events.NewEnvelope("playback.action."+string(phase), behavior.OriginPlayback).
+	case "dragged":
+		builder := events.NewEnvelope("runtime.drag.completed", behavior.OriginDesktop).
 			UserID(event.UserID).
 			CharacterID(characterID).
 			PetInstanceID(petInstanceID).
+			InstallationID(event.InstallationID).
 			OccurredAt(event.Timestamp).
-			DedupKey(events.BuildDedupKey(event.InstallationID, string(phase), fmt.Sprintf("t%d", event.Timestamp.UnixNano())))
+			DedupKey(events.BuildDedupKey(petInstanceID, "drag_completed", event.Timestamp.Format(time.RFC3339Nano)))
 		if len(event.Payload) > 0 {
-			var payload map[string]interface{}
-			if json.Unmarshal(event.Payload, &payload) == nil {
-				if v, ok := payload["commandId"].(string); ok && v != "" {
-					builder.PayloadField("commandId", v)
-				}
-				if v, ok := payload["decisionId"].(string); ok && v != "" {
-					builder.PayloadField("decisionId", v)
-				}
-				if v, ok := payload["actionKey"].(string); ok && v != "" {
-					builder.PayloadField("actionKey", v)
-				}
-			}
+			builder.PayloadRaw(event.Payload)
 		}
 		return s.engine.SubmitEvent(ctx, builder.Build(now))
+
+	case "playback_completed":
+		return s.submitPlaybackEvent(ctx, event, characterID, petInstanceID, "runtime.playback.action_completed", now)
+
+	case "playback_interrupted":
+		return s.submitPlaybackEvent(ctx, event, characterID, petInstanceID, "runtime.playback.action_interrupted", now)
 	}
 
 	return nil
+}
+
+func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, event runtime.RuntimeDomainEvent, characterID, petInstanceID, eventType string, now time.Time) error {
+	commandID := ""
+	decisionID := ""
+	actionKey := ""
+	if len(event.Payload) > 0 {
+		var payload map[string]interface{}
+		if json.Unmarshal(event.Payload, &payload) == nil {
+			if v, ok := payload["commandId"].(string); ok {
+				commandID = v
+			}
+			if v, ok := payload["decisionId"].(string); ok {
+				decisionID = v
+			}
+			if v, ok := payload["actionKey"].(string); ok {
+				actionKey = v
+			}
+		}
+	}
+
+	builder := events.NewEnvelope(eventType, behavior.OriginPlayback).
+		UserID(event.UserID).
+		CharacterID(characterID).
+		PetInstanceID(petInstanceID).
+		InstallationID(event.InstallationID).
+		OccurredAt(event.Timestamp).
+		DedupKey(events.BuildDedupKey(commandID, eventType))
+
+	if commandID != "" {
+		builder.PayloadField("commandId", commandID)
+	}
+	if decisionID != "" {
+		builder.PayloadField("decisionId", decisionID)
+	}
+	if actionKey != "" {
+		builder.PayloadField("actionKey", actionKey)
+	}
+
+	return s.engine.SubmitEvent(ctx, builder.Build(now))
 }
 
 func (s *BehaviorRuntimeEventSink) resolveCharacterAndPet(event runtime.RuntimeDomainEvent) (string, string) {

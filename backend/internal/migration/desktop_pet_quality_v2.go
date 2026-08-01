@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetQualityV2Migration() Migration {
 	return Migration{
-		Version: "202607310016",
-		Name:    "add_desktop_pet_quality_v2_tables",
+		Version:           "202607310016",
+		Name:              "add_desktop_pet_quality_v2_tables",
+		AcceptedChecksums: []string{"c63a39b7fd6da59ce5d1aba589c1ee708f91993bb531e20110c1a711b5ac2c4a", "57eeb72aaa9dbbafb8eff2cf883475e76be10f17ad99c0817a59bf49da6cdfef"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluation_request_inbox (
   id TEXT PRIMARY KEY,

@@ -1,0 +1,32 @@
+{
+  "desiredRevision": 45,
+  "desiredHash": "sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+  "ensureAbsent": false,
+  "installationId": "install_01JXYZ",
+  "petId": "pet_01JXYZ",
+  "characterId": "char_01JXYZ",
+  "releaseId": "release_01JXYZ",
+  "releaseVersion": "1.2.3",
+  "contentRootHash": "sha256:content123hash",
+  "manifestHash": "sha256:manifest123hash",
+  "runtimeContractVersion": "2.0.0",
+  "defaultActionKey": "idle",
+  "settingsRevision": 12,
+  "settingsSnapshot": {
+    "alwaysOnTop": true,
+    "scale": 1.0,
+    "positionMode": "absolute",
+    "positionX": 0,
+    "positionY": 0,
+    "screenId": "",
+    "clickThroughMode": "alpha",
+    "soundEnabled": false
+  },
+  "resourceSnapshot": {
+    "installationId": "install_01JXYZ",
+    "releaseId": "release_01JXYZ",
+    "installRootHandle": "handle_xxx",
+    "manifestStorageKey": "key_xxx",
+    "resourceProtocolBase": "amitia-pet://installation/install_01JXYZ"
+  }
+}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -178,6 +177,14 @@ func TestResourceSnapshotEntriesVerifyStorageReference(t *testing.T) {
 		{ResourceID: "r-verify-ref", Reference: sourceFile, Metadata: map[string]any{"logicalPath": "verify-ref.txt"}},
 	}
 
+	verified, err := store.ComputeVerifiedResourceTreeHash(ctx, resources)
+	if err != nil {
+		t.Fatalf("unexpected error computing verified tree hash before quarantine: %v", err)
+	}
+	if verified == "" {
+		t.Fatal("expected non-empty verified tree hash before quarantine")
+	}
+
 	entries, err := store.QuarantineNewResources(ctx, "ext1", "op-verify-ref", nil, resources)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -193,21 +200,25 @@ func TestResourceSnapshotEntriesVerifyStorageReference(t *testing.T) {
 	if entry.ContentHash == "" {
 		t.Fatal("expected non-empty content hash")
 	}
-
-	snapshotJSON := `{"entries":[{"resource":{"resourceId":"r-verify-ref","reference":"verify-ref.txt"},"resourceHash":"","restoreStrategy":"repository_upsert","logicalPath":"verify-ref.txt","contentHash":"` + entry.ContentHash + `","size":` + strings.ReplaceAll(string(rune(len(content))), "", "") + `,"storageReference":"` + entry.StorageRef + `"}]}`
-	_ = snapshotJSON
-
-	verified := store.ComputeResourceTreeHash(ctx, "ext1", resources)
-	if verified == "" {
-		t.Fatal("expected non-empty tree hash before quarantine")
+	if entry.ContentStorageReference == "" {
+		t.Fatal("expected non-empty content storage reference")
+	}
+	if entry.OriginalPath == "" {
+		t.Fatal("expected non-empty original path")
+	}
+	if entry.State != ResourceQuarantined {
+		t.Fatalf("expected quarantined state after restore, got %s", entry.State)
 	}
 
 	resourcesAfter := []domain.ResourceOwnership{
-		{ResourceID: "r-verify-ref", Reference: entry.StorageRef, Metadata: map[string]any{"contentHash": entry.ContentHash}},
+		{ResourceID: "r-verify-ref", Reference: sourceFile, Metadata: map[string]any{"contentHash": entry.ContentHash, "originalPath": entry.OriginalPath}},
 	}
-	verifiedAfter := store.ComputeResourceTreeHash(ctx, "ext1", resourcesAfter)
+	verifiedAfter, err := store.ComputeResourceTreeHash(ctx, "ext1", resourcesAfter)
+	if err != nil {
+		t.Fatalf("unexpected error computing reference tree hash: %v", err)
+	}
 	if verifiedAfter == "" {
-		t.Fatal("expected non-empty tree hash from storage reference")
+		t.Fatal("expected non-empty tree hash with content hash metadata")
 	}
 }
 

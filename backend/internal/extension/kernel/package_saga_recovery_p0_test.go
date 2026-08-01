@@ -157,7 +157,7 @@ func TestPackageUninstallRechecksPreflightInsideLock(t *testing.T) {
 	lock.Lock()
 	result := make(chan error, 1)
 	go func() {
-		_, err := runtime.ExecutePackageUninstall(ctx, installed.ExtensionID, "user-1", "global", "")
+		_, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: installed.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: ""})
 		result <- err
 	}()
 	time.Sleep(200 * time.Millisecond)

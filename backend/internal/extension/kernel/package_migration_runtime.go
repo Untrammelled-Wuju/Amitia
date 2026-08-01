@@ -168,6 +168,9 @@ func (pmr *packageMigrationRuntime) executeSQLMigration(ctx context.Context, ste
 	}
 	parsedStmts, validateErr := migration.ValidateRawStatements(string(scriptContent), pmr.extensionID)
 	if validateErr != nil {
+		if typedErr := ToPackageMigrationError(validateErr); typedErr != nil {
+			return nil, typedErr
+		}
 		return nil, fmt.Errorf("kernel: migration sql validation failed in %s: %w", def.Entry, validateErr)
 	}
 	statements := make([]string, len(parsedStmts))
@@ -387,6 +390,9 @@ func (e *migrationExecutorBase) executeScriptSQL(ctx context.Context) (int, erro
 	}
 	parsedStmts, validateErr := migration.ValidateRawStatements(string(e.scriptContent), e.extensionID)
 	if validateErr != nil {
+		if typedErr := ToPackageMigrationError(validateErr); typedErr != nil {
+			return 0, typedErr
+		}
 		return 0, fmt.Errorf("kernel: migration executor: sql validation failed: %w", validateErr)
 	}
 	statements := make([]string, len(parsedStmts))

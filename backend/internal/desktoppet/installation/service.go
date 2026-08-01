@@ -3,6 +3,7 @@
 package installation
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -52,6 +53,18 @@ type Service interface {
 	CheckInstallationOwnership(installationID, userID string) error
 	GetInstallation(installationId string) (*Installation, error)
 	GetRuntimeSettings(installationId string) (*RuntimeSettings, error)
+	GetCoordinator() V2Coordinator
+}
+
+type V2Coordinator interface {
+	Install(ctx context.Context, req interface{}) (interface{}, error)
+	Upgrade(ctx context.Context, req interface{}) (interface{}, error)
+	Switch(ctx context.Context, req interface{}) (interface{}, error)
+	Repair(ctx context.Context, req interface{}) (interface{}, error)
+	Uninstall(ctx context.Context, req interface{}) (interface{}, error)
+	UpdateSettings(ctx context.Context, req interface{}) (interface{}, error)
+	ChangeDefaultAction(ctx context.Context, req interface{}) (interface{}, error)
+	Recenter(ctx context.Context, req interface{}) (interface{}, error)
 }
 
 type service struct {
@@ -62,6 +75,7 @@ type service struct {
 	charRepo    character.Repository
 	dataDir     string
 	notifier    RuntimeNotifier
+	v2Coordinator V2Coordinator
 }
 
 type ServiceOption func(*service)
@@ -69,6 +83,12 @@ type ServiceOption func(*service)
 func WithRuntimeNotifier(notifier RuntimeNotifier) ServiceOption {
 	return func(s *service) {
 		s.notifier = notifier
+	}
+}
+
+func WithV2Coordinator(coordinator V2Coordinator) ServiceOption {
+	return func(s *service) {
+		s.v2Coordinator = coordinator
 	}
 }
 
@@ -85,6 +105,10 @@ func NewService(repo Repository, installer Installer, uninstaller Uninstaller, p
 		opt(s)
 	}
 	return s
+}
+
+func (s *service) GetCoordinator() V2Coordinator {
+	return s.v2Coordinator
 }
 
 // Deprecated: 使用 WithRuntimeNotifier 选项通过 NewService 注入。

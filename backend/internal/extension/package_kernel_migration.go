@@ -74,9 +74,3 @@ func (d *LegacyMigrationDetector) Detect(ctx context.Context) (LegacyMigrationRe
 	}
 	return report, nil
 }
-
-// Deprecated: Use LegacyMigrationDetector instead.
-func (s *PackageService) DetectLegacyPackages(ctx context.Context) (LegacyMigrationReport, error) {
-	detector := NewLegacyMigrationDetector(s.kernel, s.repository.db)
-	return detector.Detect(ctx)
-}

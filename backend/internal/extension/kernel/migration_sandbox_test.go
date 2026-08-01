@@ -141,8 +141,8 @@ func TestMigrationSQLExecuteHandler_RejectHostTable(t *testing.T) {
 	if result.Status != host_api.StatusFailed {
 		t.Fatal("expected failure for host table access")
 	}
-	if result.Error.Code != PackageErrCodeMigrationSandboxViolation {
-		t.Errorf("expected error code %s, got %s", PackageErrCodeMigrationSandboxViolation, result.Error.Code)
+	if result.Error.Code != PackageErrCodeMigrationNamespaceViolation {
+		t.Errorf("expected error code %s, got %s", PackageErrCodeMigrationNamespaceViolation, result.Error.Code)
 	}
 }
 
@@ -166,8 +166,8 @@ func TestMigrationSQLExecuteHandler_RejectOtherExtensionTable(t *testing.T) {
 	if result.Status != host_api.StatusFailed {
 		t.Fatal("expected failure for cross-extension access")
 	}
-	if result.Error.Code != PackageErrCodeMigrationSandboxViolation {
-		t.Errorf("expected sandbox violation, got %s", result.Error.Code)
+	if result.Error.Code != PackageErrCodeMigrationNamespaceViolation {
+		t.Errorf("expected namespace violation, got %s", result.Error.Code)
 	}
 }
 
@@ -191,8 +191,8 @@ func TestMigrationSQLExecuteHandler_RejectSystemTable(t *testing.T) {
 		if result.Status != host_api.StatusFailed {
 			t.Errorf("expected failure for %q", sqlStmt)
 		}
-		if result.Error.Code != PackageErrCodeMigrationSandboxViolation {
-			t.Errorf("expected sandbox violation for %q, got %s", sqlStmt, result.Error.Code)
+		if result.Error.Code != PackageErrCodeMigrationNamespaceViolation {
+			t.Errorf("expected namespace violation for %q, got %s", sqlStmt, result.Error.Code)
 		}
 	}
 }
@@ -218,8 +218,8 @@ func TestMigrationSQLExecuteHandler_RejectForbiddenCommands(t *testing.T) {
 		if result.Status != host_api.StatusFailed {
 			t.Errorf("expected failure for %q", sqlStmt)
 		}
-		if result.Error.Code != PackageErrCodeMigrationSandboxViolation {
-			t.Errorf("expected sandbox violation for %q, got %s: %s", sqlStmt, result.Error.Code, result.Error.Message)
+		if result.Error.Code != PackageErrCodeMigrationNamespaceViolation {
+			t.Errorf("expected namespace violation for %q, got %s: %s", sqlStmt, result.Error.Code, result.Error.Message)
 		}
 	}
 }
@@ -560,8 +560,8 @@ func TestMigrationSQLQueryHandler_RejectHostTable(t *testing.T) {
 	if result.Status != host_api.StatusFailed {
 		t.Fatal("expected failure for host table access")
 	}
-	if result.Error.Code != PackageErrCodeMigrationSandboxViolation {
-		t.Errorf("expected sandbox violation, got %s", result.Error.Code)
+	if result.Error.Code != PackageErrCodeMigrationNamespaceViolation {
+		t.Errorf("expected namespace violation, got %s", result.Error.Code)
 	}
 }
 
@@ -835,8 +835,8 @@ func TestMigrationSQLExecuteHandler_CreateView(t *testing.T) {
 	if result.Status != host_api.StatusFailed {
 		t.Fatal("expected failure for CREATE VIEW")
 	}
-	if result.Error.Code != PackageErrCodeMigrationSandboxViolation {
-		t.Errorf("expected sandbox violation, got %s: %s", result.Error.Code, result.Error.Message)
+	if result.Error.Code != PackageErrCodeMigrationNamespaceViolation {
+		t.Errorf("expected namespace violation, got %s: %s", result.Error.Code, result.Error.Message)
 	}
 }
 
@@ -857,8 +857,8 @@ func TestMigrationSQLExecuteHandler_CreateTrigger(t *testing.T) {
 	if result.Status != host_api.StatusFailed {
 		t.Fatal("expected failure for CREATE TRIGGER")
 	}
-	if result.Error.Code != PackageErrCodeMigrationSandboxViolation {
-		t.Errorf("expected sandbox violation, got %s: %s", result.Error.Code, result.Error.Message)
+	if result.Error.Code != PackageErrCodeMigrationNamespaceViolation {
+		t.Errorf("expected namespace violation, got %s: %s", result.Error.Code, result.Error.Message)
 	}
 }
 

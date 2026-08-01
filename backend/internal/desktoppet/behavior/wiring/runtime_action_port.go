@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
@@ -29,14 +28,20 @@ func (a *RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd be
 		expiresAt = *cmd.ExpiresAt
 	}
 
+	durability := contracts.DurabilityEphemeral
+	if cmd.Durable {
+		durability = contracts.DurabilityDurableImmediate
+	}
+
 	payload := contracts.PlayActionPayload{
-		ActionKey: cmd.ActionKey,
-		ExpiresAt: expiresAt,
+		ActionKey:        cmd.ActionKey,
+		PriorityOverride: cmd.Priority,
+		ExpiresAt:        expiresAt,
 	}
 
 	idempotencyKey := cmd.IdempotencyKey
 	if idempotencyKey == "" {
-		idempotencyKey = "behavior_" + cmd.DecisionID + "_" + uuid.NewString()
+		idempotencyKey = "behavior_" + cmd.DecisionID
 	}
 
 	req := runtime.CommandRequest{
@@ -45,7 +50,7 @@ func (a *RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd be
 		InstallationID:  cmd.InstallationID,
 		PetInstanceID:   cmd.PetInstanceID,
 		Payload:         payload,
-		Durability:      contracts.DurabilityDurableImmediate,
+		Durability:      durability,
 		IdempotencyKey:  idempotencyKey,
 		DesiredRevision: cmd.InstallationRevision,
 		Deadline:        15 * time.Second,
@@ -73,12 +78,15 @@ func (a *RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd be
 		}, nil
 	}
 
-	status := behavior.CmdAccepted
+	status := behavior.CmdRejected
 	accepted := false
 	switch receipt.DeliveryStatus {
-	case "applied", "sent":
+	case "applied":
 		accepted = true
 		status = behavior.CmdAccepted
+	case "sent":
+		accepted = false
+		status = behavior.CmdRejected
 	case "pending":
 		status = behavior.CmdOffline
 	default:

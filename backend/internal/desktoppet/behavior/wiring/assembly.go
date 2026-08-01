@@ -100,7 +100,7 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 		behavior.WithCompileFunc(func(conditionsJSON json.RawMessage) (interface{}, error) {
 			return bindings.Compile(conditionsJSON)
 		}),
-		behavior.WithValidateBindingFunc(func(b behavior.BehaviorBinding, condition interface{}) error {
+		behavior.WithValidateBindingFunc(func(b bindings.BehaviorBinding, condition interface{}) error {
 			node, ok := condition.(bindings.ConditionNode)
 			if !ok {
 				return fmt.Errorf("invalid condition type")
@@ -133,16 +133,21 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 					log.Logger.Warnf("wiring/assembly: skip binding %s compile error: %v", b.ID, err)
 					continue
 				}
-				newEvaluator.AddBinding(b, cond)
+				scope := bindings.EvaluatorScope{
+					UserID:        userID,
+					CharacterID:   characterID,
+					InstallationID: b.InstallationID,
+				}
+				newEvaluator.AddBinding(scope, b, cond)
 			}
-			eng.SetBindingEvaluator(func(eventType string, origin behavior.EventOrigin, payload map[string]interface{}) []behavior.BehaviorBinding {
+			eng.SetBindingEvaluator(func(scope interface{}, eventType string, origin behavior.EventOrigin, payload map[string]interface{}) []interface{} {
 				evalCtx := bindings.EvalContext{
 					Event:   map[string]interface{}{"eventType": eventType},
 					Origin:  string(origin),
 					Payload: payload,
 				}
-				matched := newEvaluator.Evaluate(eventType, evalCtx)
-				result := make([]behavior.BehaviorBinding, 0, len(matched))
+				matched := newEvaluator.Evaluate(scope.(bindings.EvaluatorScope), eventType, evalCtx)
+				result := make([]interface{}, 0, len(matched))
 				for _, m := range matched {
 					result = append(result, m.Binding)
 				}

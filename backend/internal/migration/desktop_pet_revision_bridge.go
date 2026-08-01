@@ -2,7 +2,7 @@ package migration
 
 func DesktopPetRevisionBridgeMigration() Migration {
 	return Migration{
-		Version: "202607310016",
+		Version: "202608020002",
 		Name:    "add_desktop_pet_revision_bridge_tables",
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_action_streams (

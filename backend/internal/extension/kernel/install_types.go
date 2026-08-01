@@ -171,6 +171,7 @@ type packageConfirmationClaims struct {
 	UserID                  string          `json:"userId"`
 	ScopeType               string          `json:"scopeType"`
 	ScopeID                 string          `json:"scopeId"`
+	ExtensionID             string          `json:"extensionId"`
 	PolicyVersion           string          `json:"policyVersion"`
 	SecurityPolicyHash      string          `json:"securityPolicyHash,omitempty"`
 	KeyID                   string          `json:"kid,omitempty"`
@@ -241,6 +242,14 @@ func verifyPackageConfirmation(token string) (packageConfirmationClaims, error) 
 		return claims, fmt.Errorf("kernel: confirmation token expired")
 	}
 	return claims, nil
+}
+
+type ExecutePackageUninstallRequest struct {
+	ExtensionID       string `json:"extensionId"`
+	UserID            string `json:"userId"`
+	ScopeType         string `json:"scopeType"`
+	ScopeID           string `json:"scopeId"`
+	ConfirmationToken string `json:"confirmationToken"`
 }
 
 type KernelInstallResult struct {

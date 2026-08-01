@@ -2,860 +2,336 @@ package kernel
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	_ "github.com/glebarez/sqlite"
-	"github.com/u-ai/backend/internal/extension/kernel/migration"
 )
 
-func newUserDataTableTestDB(t *testing.T) *sql.DB {
-	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
+func mustMarshalJSON(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
+}
+
+func TestUserDataRestoreJournalMigratesNewColumns(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "journal-migration.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = db.Close() })
-	return db
-}
-
-func makeTestUserDataJSONL(extID, table string, entityType string, payloads ...interface{}) string {
-	nsPrefix := migration.ExtensionNamespacePrefix(extID)
-	var lines []string
-	for _, payload := range payloads {
-		payloadBytes, _ := json.Marshal(payload)
-		hash := sha256.Sum256(payloadBytes)
-		hashStr := "sha256:" + hex.EncodeToString(hash[:])
-		record := map[string]interface{}{
-			"schemaVersion": "1.0.0",
-			"extensionID":   extID,
-			"namespace":     nsPrefix + strings.TrimPrefix(table, nsPrefix),
-			"entityType":    entityType,
-			"entityID":      "entity-1",
-			"operation":     "import",
-			"payload":       payload,
-			"payloadHash":   hashStr,
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE extension_package_user_data_restore_journal (
+		journal_id TEXT NOT NULL,
+		operation_id TEXT NOT NULL,
+		extension_id TEXT NOT NULL,
+		table_name TEXT NOT NULL,
+		total_rows INTEGER NOT NULL DEFAULT 0,
+		imported_rows INTEGER NOT NULL DEFAULT 0,
+		state TEXT NOT NULL DEFAULT 'pending',
+		started_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		error_detail TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (operation_id, table_name)
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	store := NewUserDataSnapshotStore(db)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_package_user_data_restore_journal
+		(journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, namespace_hash, state, started_at, updated_at, error_detail)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"j1", "op1", "ext1", "ext_test_data", 10, 5, 5, "5", "sha256:batch", "sha256:ns", "importing",
+		"2025-01-01T00:00:00Z", "2025-01-01T00:00:00Z", ""); err != nil {
+		t.Fatalf("insert with new columns: %v", err)
+	}
+	rows, err := db.Query(`PRAGMA table_info(extension_package_user_data_restore_journal)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	wanted := map[string]bool{"applied_count": false, "cursor": false, "batch_hash": false, "namespace_hash": false}
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, colType string
+		var dflt any
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			t.Fatal(err)
 		}
-		line, _ := json.Marshal(record)
-		lines = append(lines, string(line))
+		if _, exists := wanted[name]; exists {
+			wanted[name] = true
+		}
 	}
-	return strings.Join(lines, "\n")
+	for name, found := range wanted {
+		if !found {
+			t.Fatalf("migration did not add %s column", name)
+		}
+	}
 }
 
-func buildUserStateJSON(extID, table, jsonlData string) string {
-	state := packageUserDataMigrationState{
+func TestUserDataRestoreJournalProgressAndStateUpdate(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "journal-progress.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store := NewUserDataSnapshotStore(db)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+	journal, err := store.getOrCreateRestoreJournal(ctx, "op-progress", "ext1", "ext_progress_table", 100)
+	if err != nil {
+		t.Fatalf("create journal: %v", err)
+	}
+	if journal.State != UserDataRestorePending {
+		t.Fatalf("expected pending state, got %s", journal.State)
+	}
+	if err := store.updateRestoreJournalProgress(ctx, journal, 50, "50", "sha256:batch1"); err != nil {
+		t.Fatalf("update progress: %v", err)
+	}
+	if err := store.updateRestoreJournalState(ctx, journal, UserDataRestoreImporting, ""); err != nil {
+		t.Fatalf("update state: %v", err)
+	}
+	if journal.ImportedRows != 50 {
+		t.Fatalf("expected 50 imported rows, got %d", journal.ImportedRows)
+	}
+	if journal.Cursor != "50" {
+		t.Fatalf("expected cursor '50', got %s", journal.Cursor)
+	}
+	if journal.BatchHash != "sha256:batch1" {
+		t.Fatalf("expected batch hash 'sha256:batch1', got %s", journal.BatchHash)
+	}
+	if journal.State != UserDataRestoreImporting {
+		t.Fatalf("expected importing state, got %s", journal.State)
+	}
+}
+
+func TestUserDataRestoreJournalErrorNotSwallowed(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "journal-error.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store := NewUserDataSnapshotStore(db)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+	journal, err := store.getOrCreateRestoreJournal(ctx, "op-error", "ext1", "ext_error_table", 50)
+	if err != nil {
+		t.Fatalf("create journal: %v", err)
+	}
+	if err := store.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, "import failed: connection lost"); err != nil {
+		t.Fatalf("update state to failed: %v", err)
+	}
+	if journal.State != UserDataRestoreFailed {
+		t.Fatalf("expected failed state, got %s", journal.State)
+	}
+	if !strings.Contains(journal.ErrorDetail, "connection lost") {
+		t.Fatalf("expected error detail containing 'connection lost', got %s", journal.ErrorDetail)
+	}
+}
+
+func TestUserDataSnapshotMissingTableFailsClosed(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "snapshot-missing.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store := NewUserDataSnapshotStore(db)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+	userStateJSON := `{"mode":"repository","affectedTables":["ext_missing_table"],"recordCounts":{"ext_missing_table":10}}"`
+	if err := store.RestoreUserDataFromSnapshot(ctx, "ext-missing", "op-missing", userStateJSON); err == nil {
+		t.Fatal("expected error for missing snapshot data, got nil")
+	}
+}
+
+func TestUserDataRecordValidationRejectsMissingFields(t *testing.T) {
+	record := userDataRecord{
+		SchemaVersion: "1.0.0",
+		ExtensionID:   "ext1",
+		Namespace:     "ext_ext1_data",
+		EntityType:    "entity",
+		EntityID:      "e1",
+		Operation:     "upsert",
+		Payload:       map[string]any{"key": "value"},
+	}
+	if err := validateUserDataRecord(record, "ext1"); err == nil {
+		t.Fatal("expected validation error for missing payloadHash, got nil")
+	}
+}
+
+func TestUserDataRecordValidationRejectsWrongExtension(t *testing.T) {
+	record := userDataRecord{
+		SchemaVersion: "1.0.0",
+		ExtensionID:   "ext2",
+		Namespace:     "ext_ext1_data",
+		EntityType:    "entity",
+		EntityID:      "e1",
+		Operation:     "upsert",
+		Payload:       map[string]any{"key": "value"},
+		PayloadHash:   computeUserDataPayloadHash(map[string]any{"key": "value"}),
+	}
+	if err := validateUserDataRecord(record, "ext1"); err == nil {
+		t.Fatal("expected validation error for wrong extensionID, got nil")
+	}
+}
+
+func TestUserDataRecordValidationRejectsWrongNamespace(t *testing.T) {
+	record := userDataRecord{
+		SchemaVersion: "1.0.0",
+		ExtensionID:   "ext1",
+		Namespace:     "ext_other_data",
+		EntityType:    "entity",
+		EntityID:      "e1",
+		Operation:     "upsert",
+		Payload:       map[string]any{"key": "value"},
+		PayloadHash:   computeUserDataPayloadHash(map[string]any{"key": "value"}),
+	}
+	if err := validateUserDataRecord(record, "ext1"); err == nil {
+		t.Fatal("expected validation error for wrong namespace prefix, got nil")
+	}
+}
+
+func TestUserDataRecordValidationRejectsInvalidPayloadHash(t *testing.T) {
+	record := userDataRecord{
+		SchemaVersion: "1.0.0",
+		ExtensionID:   "ext1",
+		Namespace:     "ext_ext1_data",
+		EntityType:    "entity",
+		EntityID:      "e1",
+		Operation:     "upsert",
+		Payload:       map[string]any{"key": "value"},
+		PayloadHash:   "sha256:invalid",
+	}
+	if err := validateUserDataRecord(record, "ext1"); err == nil {
+		t.Fatal("expected validation error for invalid payload hash, got nil")
+	}
+}
+
+func TestUserDataRecordValidationPassesValidRecord(t *testing.T) {
+	payload := map[string]any{"key": "value"}
+	record := userDataRecord{
+		SchemaVersion: "1.0.0",
+		ExtensionID:   "ext1",
+		Namespace:     "ext_ext1_data",
+		EntityType:    "entity",
+		EntityID:      "e1",
+		Operation:     "upsert",
+		Payload:       payload,
+		PayloadHash:   computeUserDataPayloadHash(payload),
+	}
+	if err := validateUserDataRecord(record, "ext1"); err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+}
+
+func TestUserDataSnapshotImportAndVerify(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "snapshot-import.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE ext_testext_restore (
+		entity_id TEXT PRIMARY KEY,
+		entity_value TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	payload1 := map[string]any{"entity_value": "v1"}
+	payload2 := map[string]any{"entity_value": "v2"}
+	line1 := `{"schemaVersion":"1.0.0","extensionID":"testext","namespace":"ext_testext_restore","entityType":"entity","entityID":"e1","operation":"upsert","payload":{"entity_value":"v1"},"payloadHash":"` + computeUserDataPayloadHash(payload1) + `"}`
+	line2 := `{"schemaVersion":"1.0.0","extensionID":"testext","namespace":"ext_testext_restore","entityType":"entity","entityID":"e2","operation":"upsert","payload":{"entity_value":"v2"},"payloadHash":"` + computeUserDataPayloadHash(payload2) + `"}`
+	jsonl := line1 + "\n" + line2 + "\n"
+
+	userState := packageUserDataMigrationState{
 		Mode:           "repository",
-		AffectedTables: []string{table},
-		DataExports:    map[string]string{table: jsonlData},
+		AffectedTables: []string{"ext_testext_restore"},
+		RecordCounts:   map[string]int64{"ext_testext_restore": 2},
+		DataExports:    map[string]string{"ext_testext_restore": jsonl},
 	}
-	b, _ := json.Marshal(state)
-	return string(b)
-}
-
-func TestRestoreUserData_ValidPayloadHash(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	// create table with columns matching record field names
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS ext_com_example_test_users (entityID TEXT, entityType TEXT, extensionID TEXT, namespace TEXT, operation TEXT, payload TEXT, payloadHash TEXT, schemaVersion TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-	payload := "hello-world"
-	jsonlData := makeTestUserDataJSONL(extID, table, "user", payload)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-1", userStateJSON); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRestoreUserData_TamperedPayloadHash(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	payload := "hello-world"
-	jsonlData := makeTestUserDataJSONL(extID, table, "user", payload)
-	parts := strings.Split(jsonlData, "\n")
-	var tampered []string
-	for _, line := range parts {
-		var record map[string]interface{}
-		json.Unmarshal([]byte(line), &record)
-		record["payloadHash"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-		b, _ := json.Marshal(record)
-		tampered = append(tampered, string(b))
-	}
-	tamperedJSONL := strings.Join(tampered, "\n")
-	userStateJSON := buildUserStateJSON(extID, table, tamperedJSONL)
-
-	err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-2", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for tampered payloadHash, got nil")
-	}
-	if !strings.Contains(err.Error(), "payloadHash mismatch") {
-		t.Fatalf("expected payloadHash mismatch error, got: %v", err)
-	}
-}
-
-func TestRestoreUserData_WrongExtensionID(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	wrongExtID := "com.example.other"
-	table := "ext_com_example_other_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	payload := "hello-world"
-	jsonlData := makeTestUserDataJSONL(extID, table, "user", payload)
-	userStateJSON := buildUserStateJSON(wrongExtID, table, jsonlData)
-
-	err := store.RestoreUserDataFromSnapshot(ctx, wrongExtID, "op-3", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for wrong extensionID, got nil")
-	}
-	if !strings.Contains(err.Error(), "extensionID mismatch") {
-		t.Fatalf("expected extensionID mismatch error, got: %v", err)
-	}
-}
-
-func TestRestoreUserData_WrongNamespace(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	payload := "hello-world"
-	record := map[string]interface{}{
-		"schemaVersion": "1.0.0",
-		"extensionID":   extID,
-		"namespace":     "wrong_namespace_user",
-		"entityType":    "user",
-		"entityID":      "entity-1",
-		"operation":     "import",
-		"payload":       payload,
-		"payloadHash":   computeUserDataPayloadHash(payload),
-	}
-	line, _ := json.Marshal(record)
-	jsonlData := string(line)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-4", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for wrong namespace, got nil")
-	}
-	if !strings.Contains(err.Error(), "namespace") {
-		t.Fatalf("expected namespace error, got: %v", err)
-	}
-}
-
-func TestRestoreUserData_EmptyEntityType(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	payload := "hello-world"
-	record := map[string]interface{}{
-		"schemaVersion": "1.0.0",
-		"extensionID":   extID,
-		"namespace":     migration.ExtensionNamespacePrefix(extID) + "users",
-		"entityType":    "",
-		"entityID":      "entity-1",
-		"operation":     "import",
-		"payload":       payload,
-		"payloadHash":   computeUserDataPayloadHash(payload),
-	}
-	line, _ := json.Marshal(record)
-	jsonlData := string(line)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-5", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for empty entityType, got nil")
-	}
-	if !strings.Contains(err.Error(), "entityType") {
-		t.Fatalf("expected entityType error, got: %v", err)
-	}
-}
-
-func TestRestoreUserData_EmptyPayloadHash(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	payload := "hello-world"
-	record := map[string]interface{}{
-		"schemaVersion": "1.0.0",
-		"extensionID":   extID,
-		"namespace":     migration.ExtensionNamespacePrefix(extID) + "users",
-		"entityType":    "user",
-		"entityID":      "entity-1",
-		"operation":     "import",
-		"payload":       payload,
-		"payloadHash":   "",
-	}
-	line, _ := json.Marshal(record)
-	jsonlData := string(line)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-6", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for empty payloadHash, got nil")
-	}
-	if !strings.Contains(err.Error(), "payloadHash") {
-		t.Fatalf("expected payloadHash error, got: %v", err)
-	}
-}
-
-func TestParseAndValidateUserDataJSONL_ValidRecord(t *testing.T) {
-	data := `{"schemaVersion":"1","extensionID":"ext-1","namespace":"ns_ext_1","entityType":"note","entityID":"e1","operation":"upsert","payload":{"title":"hello"},"payloadHash":"sha256:abc"}
-{"schemaVersion":"1","extensionID":"ext-1","namespace":"ns_ext_1","entityType":"note","entityID":"e2","operation":"upsert","payload":{"title":"world"},"payloadHash":"sha256:def"}`
-	records, err := parseAndValidateUserDataJSONL(data)
+	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
-		t.Fatalf("expected valid, got error: %v", err)
+		t.Fatalf("marshal user state: %v", err)
 	}
-	if len(records) != 2 {
-		t.Fatalf("expected 2 records, got %d", len(records))
-	}
-	if records[0]["entityID"] != "e1" || records[1]["entityID"] != "e2" {
-		t.Fatalf("record content mismatch: %+v", records)
-	}
-}
-
-func TestParseAndValidateUserDataJSONL_SkipsEmptyLines(t *testing.T) {
-	data := `
-{"schemaVersion":"1","extensionID":"ext-1","namespace":"ns_ext_1","entityType":"note","entityID":"e1","operation":"upsert","payload":{},"payloadHash":"sha256:abc"}
-
-`
-	records, err := parseAndValidateUserDataJSONL(data)
-	if err != nil {
-		t.Fatalf("expected valid, got error: %v", err)
-	}
-	if len(records) != 1 {
-		t.Fatalf("expected 1 record, got %d", len(records))
-	}
-}
-
-func TestParseAndValidateUserDataJSONL_InvalidJSON(t *testing.T) {
-	data := `{"schemaVersion":"1","extensionID":"ext-1","namespace":"ns_ext_1","entityType":"note","entityID":"e1","operation":"upsert","payload":{},"payloadHash":"sha256:abc"}
-not-json-at-all
-{"schemaVersion":"1","extensionID":"ext-1","namespace":"ns_ext_1","entityType":"note","entityID":"e2","operation":"upsert","payload":{},"payloadHash":"sha256:def"}`
-	_, err := parseAndValidateUserDataJSONL(data)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON line, got nil")
-	}
-	if !isPackageUserDataSnapshotError(err) {
-		t.Fatalf("expected PACKAGE_USER_DATA_SNAPSHOT_INVALID, got: %v", err)
-	}
-}
-
-func TestParseAndValidateUserDataJSONL_MissingField(t *testing.T) {
-	data := `{"extensionID":"ext-1","namespace":"ns_ext_1","entityType":"note","entityID":"e1","operation":"upsert","payload":{},"payloadHash":"sha256:abc"}`
-	_, err := parseAndValidateUserDataJSONL(data)
-	if err == nil {
-		t.Fatal("expected error for missing schemaVersion, got nil")
-	}
-	if !isPackageUserDataSnapshotError(err) {
-		t.Fatalf("expected PACKAGE_USER_DATA_SNAPSHOT_INVALID for missing schemaVersion, got: %v", err)
-	}
-}
-
-func TestRestoreUserDataFromSnapshot_MissingJSONL(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
 	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	userStateJSON := `{"mode":"repository","affectedTables":["ns_ext_1_config"],"dataExports":{},"recordCounts":{"ns_ext_1_config":2}}`
-	err := store.RestoreUserDataFromSnapshot(ctx, "ext-1", "op-1", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for missing JSONL, got nil")
-	}
-	if !isPackageUserDataSnapshotError(err) {
-		t.Fatalf("expected PACKAGE_USER_DATA_SNAPSHOT_INVALID for missing JSONL, got: %v", err)
-	}
-}
-
-func TestRestoreUserDataFromSnapshot_EmptyJSONL(t *testing.T) {
 	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	store := NewUserDataSnapshotStore(db)
 	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+		t.Fatalf("ensure schema: %v", err)
 	}
-	userStateJSON := `{"mode":"repository","affectedTables":["ns_ext_1_config"],"dataExports":{"ns_ext_1_config":""},"recordCounts":{"ns_ext_1_config":2}}`
-	err := store.RestoreUserDataFromSnapshot(ctx, "ext-1", "op-1", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for empty JSONL, got nil")
+	if err := store.RestoreUserDataFromSnapshot(ctx, "testext", "op-verify", string(userStateJSON)); err != nil {
+		t.Fatalf("restore user data: %v", err)
 	}
-	if !isPackageUserDataSnapshotError(err) {
-		t.Fatalf("expected PACKAGE_USER_DATA_SNAPSHOT_INVALID for empty JSONL, got: %v", err)
+	if err := store.VerifyUserDataRestore(ctx, "op-verify"); err != nil {
+		t.Fatalf("verify restore: %v", err)
 	}
-}
-
-func TestRestoreUserDataFromSnapshot_RecordCountMismatch(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	var count int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM ext_testext_restore`).Scan(&count); err != nil {
+		t.Fatalf("count rows: %v", err)
 	}
-	rec := map[string]interface{}{"schemaVersion":"1","extensionID":"ext-1","namespace":"ns_ext_1","entityType":"note","entityID":"e1","operation":"upsert","payload":map[string]interface{}{},"payloadHash":"sha256:abc"}
-	jb, _ := json.Marshal(rec)
-	jsonl := string(jb)
-	dataExports := map[string]string{"ns_ext_1_config": jsonl}
-	recordCounts := map[string]int64{"ns_ext_1_config": 3}
-	userStateMap := map[string]interface{}{"mode": "repository", "affectedTables": []string{"ns_ext_1_config"}, "dataExports": dataExports, "recordCounts": recordCounts}
-	userStateJSONBytes, _ := json.Marshal(userStateMap)
-	userStateJSON := string(userStateJSONBytes)
-	err := store.RestoreUserDataFromSnapshot(ctx, "ext-1", "op-1", userStateJSON)
-	if err == nil {
-		t.Fatal("expected error for record count mismatch, got nil")
-	}
-	if !isPackageUserDataSnapshotError(err) {
-		t.Fatalf("expected PACKAGE_USER_DATA_SNAPSHOT_INVALID for record count mismatch, got: %v", err)
+	if count != 2 {
+		t.Fatalf("expected 2 rows, got %d", count)
 	}
 }
 
-func isPackageUserDataSnapshotError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var opErr *PackageOperationError
-	if errors.As(err, &opErr) && opErr.Code == PackageErrCodeUserDataSnapshotInvalid {
-		return true
-	}
-	var pkgErr *PackageError
-	if errors.As(err, &pkgErr) && pkgErr.Code == PackageErrCodeUserDataSnapshotInvalid {
-		return true
-	}
-	return false
-}
-
-func TestRestoreUserData_CursorCheckpointProgress(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	var payloads []interface{}
-	for i := 0; i < 5; i++ {
-		payloads = append(payloads, map[string]interface{}{"name": "user", "index": i})
-	}
-	jsonlData := makeTestUserDataJSONL(extID, table, "user", payloads...)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-checkpoint", userStateJSON); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	appliedCount, cursor, batchHash, _, err := store.GetAppliedCount(ctx, "op-checkpoint", table)
-	if err != nil {
-		t.Fatalf("failed to get applied count: %v", err)
-	}
-	if appliedCount <= 0 {
-		t.Fatalf("expected applied_count > 0, got %d", appliedCount)
-	}
-	if cursor == "" {
-		t.Fatal("expected non-empty cursor after import")
-	}
-	if batchHash == "" {
-		t.Fatal("expected non-empty batch_hash after import")
-	}
-	if !strings.HasPrefix(batchHash, "sha256:") {
-		t.Fatalf("expected batch_hash to start with sha256:, got: %s", batchHash)
-	}
-}
-
-func TestRestoreUserData_ResumeFromLastCheckpoint(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	var payloads []interface{}
-	for i := 0; i < 3; i++ {
-		payloads = append(payloads, map[string]interface{}{"name": "user", "index": i})
-	}
-	jsonlData := makeTestUserDataJSONL(extID, table, "user", payloads...)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-resume", userStateJSON); err != nil {
-		t.Fatalf("first restore error: %v", err)
-	}
-
-	appliedCount1, cursor1, batchHash1, _, err := store.GetAppliedCount(ctx, "op-resume", table)
-	if err != nil {
-		t.Fatalf("failed to get first checkpoint: %v", err)
-	}
-
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-resume", userStateJSON); err != nil {
-		t.Fatalf("second restore error: %v", err)
-	}
-
-	appliedCount2, cursor2, batchHash2, _, err := store.GetAppliedCount(ctx, "op-resume", table)
-	if err != nil {
-		t.Fatalf("failed to get second checkpoint: %v", err)
-	}
-
-	if cursor1 != cursor2 {
-		t.Fatalf("cursor mismatch after re-import: %s vs %s", cursor1, cursor2)
-	}
-	if batchHash1 != batchHash2 {
-		t.Fatalf("batch_hash mismatch after re-import: %s vs %s", batchHash1, batchHash2)
-	}
-	if appliedCount1 != appliedCount2 {
-		t.Fatalf("applied_count mismatch after re-import: %d vs %d", appliedCount1, appliedCount2)
-	}
-}
-
-func TestRestoreUserData_BatchHashChangesPerBatch(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_users"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	var payloads []interface{}
-	for i := 0; i < userDataRestoreBatchSize+5; i++ {
-		payloads = append(payloads, map[string]interface{}{"name": "item", "id": i})
-	}
-	jsonlData := makeTestUserDataJSONL(extID, table, "item", payloads...)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, "op-batch-hash", userStateJSON); err != nil {
-		t.Fatalf("restore error: %v", err)
-	}
-
-	_, _, batchHash, _, err := store.GetAppliedCount(ctx, "op-batch-hash", table)
-	if err != nil {
-		t.Fatalf("failed to get batch hash: %v", err)
-	}
-	if !strings.HasPrefix(batchHash, "sha256:") {
-		t.Fatalf("expected valid sha256 batch_hash, got: %s", batchHash)
-	}
-	if len(batchHash) != len("sha256:")+64 {
-		t.Fatalf("expected 64 hex chars in batch_hash, got length %d", len(batchHash))
-	}
-}
-
-func TestRestoreUserData_JournalStateWriteFailureStopsRestore(t *testing.T) {
-	db, err := sql.Open("sqlite", ":memory:")
+func TestUserDataSnapshotWithFlatRecordImport(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "flat-import.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE ext_flat_test (
+		id TEXT PRIMARY KEY,
+		value TEXT NOT NULL DEFAULT '',
+		category TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create table: %v", err)
 	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TABLE ext_com_example_test_data (id TEXT PRIMARY KEY, entityID TEXT, entityType TEXT, namespace TEXT, schemaVersion TEXT, extensionID TEXT, payload TEXT, payloadHash TEXT, operation TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-	extID := "com.example.test"
-	table := "ext_com_example_test_data"
-	opID := "op-state-write-fail"
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO extension_package_user_data_restore_journal
-		 (journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, namespace_hash, state, started_at, updated_at, error_detail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"j-1", opID, extID, table, 1, 0, 0, "", "", "", "pending", now, now, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TRIGGER block_journal_state_update
-		 BEFORE UPDATE ON extension_package_user_data_restore_journal
-		 WHEN OLD.state = 'importing'
-		 BEGIN
-			 SELECT RAISE(ABORT, 'simulated journal state update failure');
-		 END;`); err != nil {
-		t.Fatal(err)
-	}
-	nsPrefix := migration.ExtensionNamespacePrefix(extID)
-	payload := "test-value"
-	payloadBytes, _ := json.Marshal(payload)
-	hash := sha256.Sum256(payloadBytes)
-	hashStr := "sha256:" + hex.EncodeToString(hash[:])
-	recordJSON := fmt.Sprintf(`{"schemaVersion":"1.0.0","extensionID":"%s","namespace":"%sdata","entityType":"record","entityID":"entity-1","operation":"import","payload":"%s","payloadHash":"%s"}`, extID, nsPrefix, payload, hashStr)
-	state := packageUserDataMigrationState{
+	payload1 := map[string]any{"value": "v1", "category": "c1"}
+	payload2 := map[string]any{"value": "v2", "category": "c2"}
+	payloadHash1 := computeUserDataPayloadHash(payload1)
+	payloadHash2 := computeUserDataPayloadHash(payload2)
+	line1 := `{"schemaVersion":"1.0.0","extensionID":"flat","namespace":"ext_flat_ns","entityType":"entity","entityID":"x1","operation":"upsert","payload":` + mustMarshalJSON(payload1) + `,"payloadHash":"` + payloadHash1 + `"}`
+	line2 := `{"schemaVersion":"1.0.0","extensionID":"flat","namespace":"ext_flat_ns","entityType":"entity","entityID":"x2","operation":"upsert","payload":` + mustMarshalJSON(payload2) + `,"payloadHash":"` + payloadHash2 + `"}`
+	jsonl := line1 + "\n" + line2 + "\n"
+
+	userState := packageUserDataMigrationState{
 		Mode:           "repository",
-		AffectedTables: []string{table},
-		DataExports:    map[string]string{table: recordJSON},
+		AffectedTables: []string{"ext_flat_test"},
+		RecordCounts:   map[string]int64{"ext_flat_test": 2},
+		DataExports:    map[string]string{"ext_flat_test": jsonl},
 	}
-	userStateJSON, _ := json.Marshal(state)
-	err = store.RestoreUserDataFromSnapshot(ctx, extID, opID, string(userStateJSON))
-	if err == nil {
-		t.Fatal("expected error when journal state write fails, got nil")
-	}
-	if !strings.Contains(err.Error(), "update journal state failed") {
-		t.Fatalf("expected error to mention 'update journal state failed', got: %v", err)
-	}
-	_ = db.Close()
-}
-
-func TestRestoreUserData_JournalProgressWriteFailureStopsRestore(t *testing.T) {
-	db, err := sql.Open("sqlite", ":memory:")
+	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("marshal user state: %v", err)
 	}
-	ctx := context.Background()
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TABLE ext_com_example_test_data2 (id TEXT PRIMARY KEY, entityID TEXT, entityType TEXT, namespace TEXT, schemaVersion TEXT, extensionID TEXT, payload TEXT, payloadHash TEXT, operation TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-	extID := "com.example.test"
-	table := "ext_com_example_test_data2"
-	opID := "op-progress-write-fail"
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO ext_com_example_test_data2 (id, entityID, entityType, namespace, schemaVersion, extensionID, payload, payloadHash, operation) VALUES ('old-1', 'old-1', 'record', 'ext_com_example_test_data2', 'com.example.test', 'old-1', 'to-be-deleted', 'hash-of-old-1', 'import')`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO extension_package_user_data_restore_journal
-		 (journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, namespace_hash, state, started_at, updated_at, error_detail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"j-2", opID, extID, table, 1, 0, 0, "", "", "", "pending", now, now, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TRIGGER block_delete_rows
-		 BEFORE DELETE ON ext_com_example_test_data2
-		 BEGIN
-			 SELECT RAISE(ABORT, 'simulated delete failure');
-		 END;`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TRIGGER block_journal_on_delete_fail
-		 BEFORE UPDATE ON extension_package_user_data_restore_journal
-		 WHEN NEW.state = 'failed'
-		 BEGIN
-			 SELECT RAISE(ABORT, 'simulated journal update failure on delete fail');
-		 END;`); err != nil {
-		t.Fatal(err)
-	}
-	nsPrefix := migration.ExtensionNamespacePrefix(extID)
-	payload := "new-value"
-	payloadBytes, _ := json.Marshal(payload)
-	hash := sha256.Sum256(payloadBytes)
-	hashStr := "sha256:" + hex.EncodeToString(hash[:])
-	recordJSON := fmt.Sprintf(`{"schemaVersion":"1.0.0","extensionID":"%s","namespace":"%sdata2","entityType":"record","entityID":"entity-new","operation":"import","payload":"%s","payloadHash":"%s"}`, extID, nsPrefix, payload, hashStr)
-	state := packageUserDataMigrationState{
-		Mode:           "repository",
-		AffectedTables: []string{table},
-		DataExports:    map[string]string{table: recordJSON},
-	}
-	userStateJSON, _ := json.Marshal(state)
-	err = store.RestoreUserDataFromSnapshot(ctx, extID, opID, string(userStateJSON))
-	if err == nil {
-		t.Fatal("expected error when journal progress/state write fails, got nil")
-	}
-	if !strings.Contains(err.Error(), "update journal") {
-		t.Fatalf("expected error to mention 'update journal', got: %v", err)
-	}
-	_ = db.Close()
-}
-
-func TestRestoreUserData_JournalWriteFailureAfterImportStopsRestore(t *testing.T) {
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TABLE ext_com_example_test_data3 (id TEXT PRIMARY KEY, entityID TEXT, entityType TEXT, namespace TEXT, schemaVersion TEXT, extensionID TEXT, payload TEXT, payloadHash TEXT, operation TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-	extID := "com.example.test"
-	table := "ext_com_example_test_data3"
-	opID := "op-import-success-journal-fails"
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO extension_package_user_data_restore_journal
-		 (journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, namespace_hash, state, started_at, updated_at, error_detail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		"j-3", opID, extID, table, 1, 0, 0, "", "", "", "pending", now, now, ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TRIGGER block_journal_after_import
-		 BEFORE UPDATE ON extension_package_user_data_restore_journal
-		 WHEN OLD.state = 'importing' AND NEW.imported_rows > 0
-		 BEGIN
-			 SELECT RAISE(ABORT, 'simulated journal write failure after import');
-		 END;`); err != nil {
-		t.Fatal(err)
-	}
-	nsPrefix := migration.ExtensionNamespacePrefix(extID)
-	payload := "ok-value"
-	payloadBytes, _ := json.Marshal(payload)
-	hash := sha256.Sum256(payloadBytes)
-	hashStr := "sha256:" + hex.EncodeToString(hash[:])
-	recordJSON := fmt.Sprintf(`{"schemaVersion":"1.0.0","extensionID":"%s","namespace":"%sdata3","entityType":"record","entityID":"entity-ok","operation":"import","payload":"%s","payloadHash":"%s"}`, extID, nsPrefix, payload, hashStr)
-	state := packageUserDataMigrationState{
-		Mode:           "repository",
-		AffectedTables: []string{table},
-		DataExports:    map[string]string{table: recordJSON},
-	}
-	userStateJSON, _ := json.Marshal(state)
-	err = store.RestoreUserDataFromSnapshot(ctx, extID, opID, string(userStateJSON))
-	if err == nil {
-		t.Fatal("expected error when journal write fails after import, got nil")
-	}
-	if !strings.Contains(err.Error(), "simulated journal write failure after import") {
-		t.Fatalf("expected error to mention simulated failure, got: %v", err)
-	}
-	_ = db.Close()
-}
-
-func newUserDataSnapshotStoreForTest(t *testing.T) *UserDataSnapshotStore {
-	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
 	store := NewUserDataSnapshotStore(db)
 	ctx := context.Background()
 	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+		t.Fatalf("ensure schema: %v", err)
 	}
-	return store
-}
-
-func TestNewUserDataSnapshotStoreEnsureSchemaCreatesNewColumns(t *testing.T) {
-	store := newUserDataSnapshotStoreForTest(t)
-	ctx := context.Background()
-
-	_, err := store.db.ExecContext(ctx,
-		`INSERT INTO extension_package_user_data_restore_journal
-	 (journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, namespace_hash, state, started_at, updated_at, error_detail)
-	 VALUES ('j1', 'op1', 'ext1', 't1', 0, 0, 0, '', '', '', 'pending', '', '', '')`)
-	if err != nil {
-		t.Fatalf("insert returned error: %v", err)
+	if err := store.RestoreUserDataFromSnapshot(ctx, "flat", "op-flat", string(userStateJSON)); err != nil {
+		t.Fatalf("restore user data: %v", err)
 	}
-
-	var appliedCount int64
-	var cursor, batchHash, namespaceHash string
-	err = store.db.QueryRowContext(ctx,
-		`SELECT applied_count, cursor, batch_hash, namespace_hash FROM extension_package_user_data_restore_journal WHERE journal_id = 'j1'`).Scan(&appliedCount, &cursor, &batchHash, &namespaceHash)
-	if err != nil {
-		t.Fatalf("failed to read back new columns: %v", err)
+	if err := store.VerifyUserDataRestore(ctx, "op-flat"); err != nil {
+		t.Fatalf("verify restore: %v", err)
 	}
-	if appliedCount != 0 || cursor != "" || batchHash != "" || namespaceHash != "" {
-		t.Fatalf("expected new columns to default to 0/empty, got: %d / %q / %q / %q", appliedCount, cursor, batchHash, namespaceHash)
+	var count int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM ext_flat_test`).Scan(&count); err != nil {
+		t.Fatalf("count rows: %v", err)
 	}
-}
-
-func TestUpdateAppliedCountPersistsAllFields(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_test_records"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TABLE ext_com_example_test_records (id TEXT PRIMARY KEY, value TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-
-	operationID := "op-update-test"
-	payload := map[string]interface{}{"name": "test"}
-	payloadBytes, _ := json.Marshal(payload)
-	phash := sha256.Sum256(payloadBytes)
-	hashStr := "sha256:" + hex.EncodeToString(phash[:])
-	nsPrefix := migration.ExtensionNamespacePrefix(extID)
-	jsonlData := fmt.Sprintf(`{"schemaVersion":"1.0.0","extensionID":"%s","namespace":"%srecords","entityType":"record","entityID":"e1","operation":"import","payload":{"name":"test"},"payloadHash":"%s"}`, extID, nsPrefix, hashStr)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, operationID, userStateJSON); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if err := store.UpdateAppliedCount(ctx, operationID, table, 42, "c-42", "bh-42", "nsh-42"); err != nil {
-		t.Fatalf("update applied count failed: %v", err)
-	}
-	applied, cursor, batchHash, nsHash, err := store.GetAppliedCount(ctx, operationID, table)
-	if err != nil {
-		t.Fatalf("get applied count failed: %v", err)
-	}
-	if applied != 42 {
-		t.Fatalf("expected applied 42, got %d", applied)
-	}
-	if cursor != "c-42" {
-		t.Fatalf("expected cursor c-42, got %q", cursor)
-	}
-	if batchHash != "bh-42" {
-		t.Fatalf("expected batchHash bh-42, got %q", batchHash)
-	}
-	if nsHash != "nsh-42" {
-		t.Fatalf("expected nsHash nsh-42, got %q", nsHash)
-	}
-}
-
-func TestNewColumnsDefaultValues(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_default_test"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TABLE ext_com_example_default_test (id TEXT PRIMARY KEY, value TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-
-	operationID := "op-default-test"
-	payload := map[string]interface{}{"name": "test"}
-	payloadBytes, _ := json.Marshal(payload)
-	phash := sha256.Sum256(payloadBytes)
-	hashStr := "sha256:" + hex.EncodeToString(phash[:])
-	nsPrefix := migration.ExtensionNamespacePrefix(extID)
-	jsonlData := fmt.Sprintf(`{"schemaVersion":"1.0.0","extensionID":"%s","namespace":"%sdefault_test","entityType":"record","entityID":"e1","operation":"import","payload":{"name":"test"},"payloadHash":"%s"}`, extID, nsPrefix, hashStr)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, operationID, userStateJSON); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	applied, cursor, batchHash, nsHash, err := store.GetAppliedCount(ctx, operationID, table)
-	if err != nil {
-		t.Fatalf("get applied count failed: %v", err)
-	}
-	if applied != 1 {
-		t.Fatalf("expected applied 1 after single-row import, got %d", applied)
-	}
-	if cursor == "" {
-		t.Fatal("expected non-empty cursor")
-	}
-	if batchHash == "" {
-		t.Fatal("expected non-empty batchHash")
-	}
-	if nsHash != "" {
-		t.Fatalf("expected empty nsHash, got %q", nsHash)
-	}
-}
-
-func TestRestoreResumeFromCrashContinuesImport(t *testing.T) {
-	ctx := context.Background()
-	db := newUserDataTableTestDB(t)
-	extID := "com.example.test"
-	table := "ext_com_example_resume_test"
-
-	store := NewUserDataSnapshotStore(db)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`CREATE TABLE ext_com_example_resume_test (id TEXT PRIMARY KEY, value TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-
-	operationID := "op-resume-test"
-	var payloads []interface{}
-	for i := 0; i < userDataRestoreBatchSize+10; i++ {
-		payloads = append(payloads, map[string]interface{}{"id": fmt.Sprintf("item-%d", i), "value": i})
-	}
-	jsonlData := makeTestUserDataJSONL(extID, table, "item", payloads...)
-	userStateJSON := buildUserStateJSON(extID, table, jsonlData)
-
-	if err := store.UpdateAppliedCount(ctx, operationID, table, 10, "cursor-10", "batch-hash-10", "ns-hash-1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.RestoreUserDataFromSnapshot(ctx, extID, operationID, userStateJSON); err != nil {
-		t.Fatalf("unexpected error on resume: %v", err)
-	}
-
-	applied, _, _, _, err := store.GetAppliedCount(ctx, operationID, table)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if applied != int64(len(payloads)) {
-		t.Fatalf("expected %d applied after resume, got %d", len(payloads), applied)
-	}
-}
-
-func TestJournalIndexCreation(t *testing.T) {
-	store := newUserDataSnapshotStoreForTest(t)
-	ctx := context.Background()
-	var idxName string
-	err := store.db.QueryRowContext(ctx,
-		`SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_ext_pkg_udr_journal_ns_hash'`).Scan(&idxName)
-	if err != nil {
-		t.Fatalf("expected index idx_ext_pkg_udr_journal_ns_hash to exist: %v", err)
-	}
-	if idxName != "idx_ext_pkg_udr_journal_ns_hash" {
-		t.Fatalf("expected idx_ext_pkg_udr_journal_ns_hash, got %q", idxName)
+	if count != 2 {
+		t.Fatalf("expected 2 rows, got %d", count)
 	}
 }

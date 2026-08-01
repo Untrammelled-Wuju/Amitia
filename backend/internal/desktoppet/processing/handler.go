@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -51,7 +52,12 @@ func (h *Handler) CreateProcessingTask(c *gin.Context) {
 	outputFormat := c.PostForm("outputFormat")
 	defaultFPS, _ := strconv.Atoi(c.PostForm("defaultFps"))
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID:           taskID,
@@ -88,7 +94,12 @@ func (h *Handler) GetProcessingTask(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -110,7 +121,12 @@ func (h *Handler) CancelProcessingTask(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -140,7 +156,12 @@ func (h *Handler) RetryProcessingAction(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -175,7 +196,12 @@ func (h *Handler) CreatePackage(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
@@ -228,7 +254,12 @@ func (h *Handler) SwitchAttempt(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -260,7 +291,12 @@ func (h *Handler) ExcludeAction(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -326,7 +362,12 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -344,7 +385,7 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath)
+	c.File(fullPath) // audit:ok:path_origin=internal_service
 }
 
 func (h *Handler) SourceFrameImage(c *gin.Context) {
@@ -356,7 +397,12 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -374,14 +420,19 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath)
+	c.File(fullPath) // audit:ok:path_origin=internal_service
 }
 
 func (h *Handler) ActionPreview(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
 		writeProcessingError(c, err)
 		return
@@ -399,7 +450,7 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath)
+	c.File(fullPath) // audit:ok:path_origin=internal_service
 }
 
 func writeProcessingError(c *gin.Context, err error) {
@@ -463,7 +514,12 @@ func mapProcessingErrorCode(code string) int {
 }
 
 func (h *Handler) ListPackages(c *gin.Context) {
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	generationTaskID := c.Query("generationTaskId")
 	if generationTaskID != "" {
 		packages, err := h.service.ListPackagesByGenerationTask(userID, generationTaskID)
@@ -495,7 +551,12 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 		return
 	}
 
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckPackageOwnership(packageID, userID); err != nil {
 		writeProcessingError(c, err)
 		return

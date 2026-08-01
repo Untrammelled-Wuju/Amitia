@@ -2,9 +2,16 @@ package bindings
 
 import (
 	"fmt"
-
-	"github.com/u-ai/backend/internal/desktoppet/behavior"
 )
+
+const (
+	ErrCodeBindingInvalid      = "binding_invalid"
+	ErrCodeBindingActionMissing = "binding_action_missing"
+)
+
+func NewBindingError(code, msg string) error {
+	return fmt.Errorf("%s: %s", code, msg)
+}
 
 const (
 	MaxUserPriority       = 900
@@ -44,23 +51,19 @@ func (v *Validator) registerDefaults() {
 		"character.time_period.changed",
 		"proactive.message.started", "proactive.message.completed",
 		"proactive.message.suppressed",
-		"desktop.pet.clicked", "desktop.pet.double_clicked",
-		"desktop.pet.hovered", "desktop.pet.drag.started",
-		"desktop.pet.drag.moved", "desktop.pet.drag.ended",
-		"desktop.pet.fall.started", "desktop.pet.edge.reached",
-		"desktop.pet.interacted",
-		"playback.action.started", "playback.action.completed",
-		"playback.action.interrupted", "playback.action.failed",
+		"runtime.pointer.clicked", "runtime.pointer.double_clicked",
+		"runtime.pointer.hovered", "runtime.drag.started",
+		"runtime.drag.moved", "runtime.drag.completed",
+		"runtime.pet.fall.started", "runtime.pet.edge.reached",
+		"runtime.pet.interacted",
+		"runtime.playback.action_started", "runtime.playback.action_completed",
+		"runtime.playback.action_interrupted", "runtime.playback.action_failed",
 		"runtime.connected", "runtime.disconnected",
 		"installation.active.changed", "manual.action.requested",
 	}
 	for _, et := range defaultEventTypes {
-		if def, ok := behavior.GetSchema(et); ok {
-			fields := make(map[string]string, len(def.AllowedFields))
-			for k, val := range def.AllowedFields {
-				fields[k] = val
-			}
-			v.allowedFields[et] = fields
+		v.allowedFields[et] = map[string]string{
+			"any": "any",
 		}
 	}
 }
@@ -69,33 +72,33 @@ func (v *Validator) RegisterEventFields(eventType string, fields map[string]stri
 	v.allowedFields[eventType] = fields
 }
 
-func (v *Validator) Validate(binding behavior.BehaviorBinding, condition ConditionNode) error {
+func (v *Validator) Validate(binding BehaviorBinding, condition ConditionNode) error {
 	if binding.EventType == "" {
-		return behavior.NewBehaviorError(behavior.ErrCodeBindingInvalid, "eventType is required")
+		return NewBindingError(ErrCodeBindingInvalid, "eventType is required")
 	}
 	if _, ok := v.allowedFields[binding.EventType]; !ok {
-		return behavior.NewBehaviorError(behavior.ErrCodeBindingInvalid,
+		return NewBindingError(ErrCodeBindingInvalid,
 			fmt.Sprintf("eventType %q is not registered in schema", binding.EventType))
 	}
 	if binding.Semantic == "" {
-		return behavior.NewBehaviorError(behavior.ErrCodeBindingInvalid, "semantic is required")
+		return NewBindingError(ErrCodeBindingInvalid, "semantic is required")
 	}
 	if binding.PriorityOffset < MinPriorityOffset || binding.PriorityOffset > MaxPriorityOffset {
-		return behavior.NewBehaviorError(behavior.ErrCodeBindingInvalid,
+		return NewBindingError(ErrCodeBindingInvalid,
 			fmt.Sprintf("priorityOffset must be between %d and %d", MinPriorityOffset, MaxPriorityOffset))
 	}
 	if binding.PriorityOffset > MaxUserPriority {
-		return behavior.NewBehaviorError(behavior.ErrCodeBindingInvalid,
+		return NewBindingError(ErrCodeBindingInvalid,
 			fmt.Sprintf("priorityOffset must not exceed system safety band of %d", MaxUserPriority))
 	}
 	if binding.CooldownMS < MinCooldownMS {
-		return behavior.NewBehaviorError(behavior.ErrCodeBindingInvalid,
+		return NewBindingError(ErrCodeBindingInvalid,
 			fmt.Sprintf("cooldownMs must be at least %d", MinCooldownMS))
 	}
 	if condition != nil {
 		allowedFields := v.allowedFields[binding.EventType]
 		if err := validateConditionFields(condition, allowedFields); err != nil {
-			return behavior.NewBehaviorError(behavior.ErrCodeBindingInvalid, err.Error())
+			return NewBindingError(ErrCodeBindingInvalid, err.Error())
 		}
 	}
 	return nil
@@ -110,7 +113,7 @@ func (v *Validator) ValidateActionAvailable(preferredAction string, availableAct
 			return nil
 		}
 	}
-	return behavior.NewBehaviorError(behavior.ErrCodeBindingActionMissing,
+	return NewBindingError(ErrCodeBindingActionMissing,
 		fmt.Sprintf("preferred action %q is not in available actions", preferredAction))
 }
 

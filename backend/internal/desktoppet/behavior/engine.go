@@ -186,6 +186,11 @@ func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnv
 		return NewBehaviorError(ErrCodeEventSchemaInvalid, "event missing characterId")
 	}
 
+	if event.UserID == "" {
+		e.metrics.IncIgnored()
+		return NewBehaviorError(ErrCodeEventSchemaInvalid, "event missing userId")
+	}
+
 	validatedPayload, err := ValidatePayload(event.EventType, event.Payload)
 	if err != nil {
 		e.metrics.IncIgnored()
@@ -217,10 +222,18 @@ func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnv
 			e.metrics.IncDeduped()
 			return nil
 		}
-		return e.coordinator.Enqueue(event.UserID, event.CharacterID, event)
+		return nil
 
 	case ReliabilityRecoverable:
-		return e.coordinator.Enqueue(event.UserID, event.CharacterID, event)
+		inserted, err := e.repo.InsertInboxIfAbsent(ctx, event)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			e.metrics.IncDeduped()
+			return nil
+		}
+		return nil
 
 	case ReliabilityEphemeral:
 		if e.coordinator.TryEnqueue(event.UserID, event.CharacterID, event) {
@@ -241,7 +254,7 @@ func (e *BehaviorEngine) HandlePlaybackFeedback(ctx context.Context, feedback Pl
 		"errorClass": feedback.ErrorClass,
 	})
 
-	eventType := "playback.action." + string(feedback.Phase)
+	eventType := "runtime.playback.action_" + string(feedback.Phase)
 	event := BehaviorEventEnvelope{
 		EventID:       "pb_" + feedback.CommandID + "_" + string(feedback.Phase),
 		EventType:     eventType,
@@ -329,7 +342,7 @@ func (e *BehaviorEngine) SetRuntimeCommandEnabled(enabled bool) {
 	e.config.RuntimeCommandEnabled = enabled
 }
 
-func (e *BehaviorEngine) SetBindingEvaluator(fn func(eventType string, origin EventOrigin, payload map[string]interface{}) []BehaviorBinding) {
+func (e *BehaviorEngine) SetBindingEvaluator(fn func(scope interface{}, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}) {
 	e.resolver.SetBindingEvaluator(fn)
 }
 
@@ -425,7 +438,13 @@ func (e *BehaviorEngine) processEvent(ctx context.Context, event BehaviorEventEn
 		BehaviorDecision: *decision,
 		ContextHash:      hashContext(&nextCtx),
 	}
-	_ = e.repo.AppendDecision(ctx, audit)
+	if err := e.repo.AppendDecision(ctx, audit); err != nil {
+		log.Error("behavior engine: failed to append decision audit", map[string]interface{}{
+			"error":      err.Error(),
+			"decisionId": decision.DecisionID,
+		})
+		return
+	}
 
 	if !e.config.ShadowMode && e.config.RuntimeCommandEnabled && decision.Status == DecisionStatusSelected {
 		e.submitRuntimeCommand(ctx, decision, activePet, &nextCtx)
@@ -447,7 +466,11 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 		ContextRevision:      ctxSnapshot.Revision,
 		ActionKey:            decision.ActionKey,
 		Priority:             decision.Priority,
+		InterruptPolicy:      decision.InterruptPolicy,
 		ReasonCode:           decision.ReasonCode,
+		MinimumPlayMS:        decision.MinimumPlayMS,
+		MaximumPlayMS:        decision.MaximumPlayMS,
+		Durable:              decision.ReturnPolicy != "",
 	}
 
 	receipt, err := e.runtimePort.SubmitBehaviorCommand(ctx, cmd)
@@ -458,6 +481,8 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 			"actionKey":  decision.ActionKey,
 			"decisionId": decision.DecisionID,
 		})
+		decision.Status = DecisionStatusFailed
+		decision.ReasonCode = ErrCodeRuntimeOffline
 		return
 	}
 
@@ -465,20 +490,14 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 
 	if receipt != nil && receipt.Accepted {
 		decision.Status = DecisionStatusCommandSubmitted
-		decision.RuntimeCommandID = cmd.CommandID
-		now := e.clock.Now()
-		ctxSnapshot.Foreground = ForegroundActionState{
-			DecisionID:      decision.DecisionID,
-			CommandID:       cmd.CommandID,
-			Semantic:        decision.Semantic,
-			ActionKey:       decision.ActionKey,
-			Interruptible:   true,
-			InstallationRev: activePet.StateRevision,
+		if receipt.CommandID != "" {
+			decision.RuntimeCommandID = receipt.CommandID
+		} else {
+			decision.RuntimeCommandID = cmd.CommandID
 		}
-		if decision.ReturnPolicy != "" {
-		}
-		_ = now
-		e.saveContextCAS(ctx, ctxSnapshot.Revision-1, *ctxSnapshot)
+	} else if receipt != nil {
+		decision.Status = DecisionStatusFailed
+		decision.ReasonCode = receipt.PendingReason
 	}
 }
 
@@ -535,8 +554,14 @@ func (e *BehaviorEngine) processInboxBatch(ctx context.Context) {
 			DedupKey:      record.DedupKey,
 		}
 
-		e.coordinator.Enqueue(record.UserID, record.CharacterID, env)
-		_ = e.repo.MarkInboxStatus(ctx, record.EventID, InboxProcessed, "")
+		e.processEvent(ctx, env)
+
+		if err := e.repo.MarkInboxStatus(ctx, record.EventID, InboxProcessed, ""); err != nil {
+			log.Warn("behavior engine: failed to mark inbox processed", map[string]interface{}{
+				"eventId": record.EventID,
+				"error":   err.Error(),
+			})
+		}
 	}
 }
 

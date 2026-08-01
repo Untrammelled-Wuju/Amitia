@@ -77,6 +77,7 @@ type PackageOperationRecord struct {
 	ArtifactID         string
 	PreviewSessionID   string
 	ConfirmationsJSON  string
+	ConfirmationClaimsJSON string
 	ErrorCode          string
 	ErrorDetail        string
 	StartedAt          string
@@ -118,6 +119,7 @@ type PackageOperationStep struct {
 	CompensationStatus string
 	SideEffectEvidence string
 	UpdatedAt          string
+	ResultHash         string
 	CASVersion         int64
 }
 
@@ -368,7 +370,7 @@ func (r *PackageRepository) ConsumePreview(ctx context.Context, id string) error
 		return err
 	}
 	if count != 1 {
-		return errors.New("package preview session already consumed")
+		return NewRepositoryError(RepositoryErrorConflict, errors.New("package preview session already consumed"))
 	}
 	if _, err := acquireArtifactReferenceTx(ctx, tx, artifactID, ArtifactReferenceInstallation, extensionID, time.Time{}); err != nil {
 		return err
@@ -504,7 +506,7 @@ func (r *PackageRepository) PutStep(ctx context.Context, step PackageOperationSt
 	if _, err := r.db.ExecContext(ctx, `UPDATE extension_package_operation_steps SET stable_generation=?,
 		target_generation=?, current_pointer_json=? WHERE operation_id=? AND step_name=? AND input_hash=?`,
 		step.StableGeneration, step.TargetGeneration, step.CurrentPointerJSON, step.OperationID, step.StepName, inputHash); err != nil {
-		return err
+		return ClassifyRepositoryError("update operation step metadata", err)
 	}
 	evidence := step.SideEffectEvidence
 	if evidence == "" {
@@ -535,7 +537,7 @@ func (r *PackageRepository) ListIncompleteOperations(ctx context.Context) ([]Pac
 		var op PackageOperationRecord
 		if err := rows.Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID,
 			&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
-			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode,
+			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode,
 			&op.ErrorDetail, &op.StartedAt, &op.UpdatedAt, &op.CompletedAt,
 			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON, &op.SnapshotRequirementHash); err != nil {
 			return nil, err
@@ -568,8 +570,9 @@ func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationI
 		completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash FROM extension_package_operations WHERE user_id = ? AND operation_id = ?`, userID, operationID).
 		Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
 			&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
-			&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode, &op.ErrorDetail,
-			&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON)
+			&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
+			&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
+			&op.CurrentPointerJSON, &op.SnapshotRequirementHash)
 	if err != nil {
 		return op, nil, err
 	}
@@ -602,7 +605,7 @@ func (r *PackageRepository) GetCompletedOperationByPreview(ctx context.Context, 
 		AND status = 'completed' ORDER BY completed_at DESC LIMIT 1`, userID, sessionID).
 		Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
 			&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
-			&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode, &op.ErrorDetail,
+			&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
 			&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON)
 	return op, err
 }
@@ -613,7 +616,7 @@ func scanPackageOperations(rows *sql.Rows) ([]PackageOperationRecord, error) {
 		var op PackageOperationRecord
 		if err := rows.Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID,
 			&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
-			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ErrorCode,
+			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode,
 			&op.ErrorDetail, &op.StartedAt, &op.UpdatedAt, &op.CompletedAt,
 			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON, &op.SnapshotRequirementHash); err != nil {
 			return nil, err

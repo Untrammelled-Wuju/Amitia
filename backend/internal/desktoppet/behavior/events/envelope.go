@@ -122,6 +122,14 @@ func (b *EnvelopeBuilder) Build(now time.Time) behavior.BehaviorEventEnvelope {
 		raw, _ := json.Marshal(b.payload)
 		b.env.Payload = raw
 	}
+	if def, ok := behavior.GetSchema(b.env.EventType); ok {
+		b.env.SchemaVersion = def.SchemaVersion
+		if len(b.env.Payload) > 0 {
+			if filtered, err := behavior.ValidatePayload(b.env.EventType, b.env.Payload); err == nil {
+				b.env.Payload = filtered
+			}
+		}
+	}
 	return b.env
 }
 

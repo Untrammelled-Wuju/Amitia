@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
@@ -27,10 +29,14 @@ type setModeRequest struct {
 }
 
 func (h *Handler) GetBehaviorState(c *gin.Context) {
-	userID := c.Param("userId")
+	userID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
 	characterID := c.Param("characterId")
-	if userID == "" || characterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "userId 和 characterId 不能为空", nil)
+	if characterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "characterId 不能为空", nil)
 		return
 	}
 	snapshot, err := h.service.GetBehaviorState(c.Request.Context(), userID, characterID)
@@ -98,25 +104,25 @@ func (h *Handler) SetRuntimeCommand(c *gin.Context) {
 }
 
 func (h *Handler) ListBindings(c *gin.Context) {
-	userID := c.Query("userId")
-	characterID := c.Query("characterId")
-	if userID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "userId 不能为空", nil)
+	userID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	bindings, err := h.service.ListBindings(c.Request.Context(), userID, characterID)
+	characterID := c.Query("characterId")
+	items, err := h.service.ListBindings(c.Request.Context(), userID, characterID)
 	if err != nil {
 		writeBehaviorError(c, err)
 		return
 	}
-	if bindings == nil {
-		bindings = []BehaviorBinding{}
+	if items == nil {
+		items = []bindings.BehaviorBinding{}
 	}
-	util.SuccessResponse(c, gin.H{"items": bindings, "total": len(bindings)})
+	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
 }
 
 func (h *Handler) CreateBinding(c *gin.Context) {
-	var binding BehaviorBinding
+	var binding bindings.BehaviorBinding
 	if err := c.ShouldBindJSON(&binding); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
 		return

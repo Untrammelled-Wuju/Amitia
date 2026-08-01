@@ -180,43 +180,21 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 				}
 			}
 		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorNotFound) {
-			policy, policyReason := r.computeUninstallArtifactPolicy(ctx, operation.ArtifactID, operation.ExtensionID)
-			if policy != ArtifactPolicyDeleteArtifact {
-				checkArtifact.Detail = fmt.Sprintf("artifact not found but policy is %s (%s), fail closed", policy, policyReason)
+			claims, claimsErr := parseOperationConfirmationClaims(operation)
+			if claimsErr != nil {
+				checkArtifact.Detail = fmt.Sprintf("artifact not found and confirmation claims unavailable: %v", claimsErr)
+			} else if claims.ArtifactPolicy != ArtifactPolicyDeleteArtifact {
+				checkArtifact.Detail = fmt.Sprintf("artifact not found but claims policy is %s, fail closed", claims.ArtifactPolicy)
+			} else if !validateUninstallArtifactDeletion(ctx, r.container.PackageRepository, operationID, operation.ArtifactID) {
+				checkArtifact.Detail = "artifact not found but remove_artifact step evidence incomplete"
 			} else {
-				hasDeleteEvidence := false
-				deleteStepArtifactID := ""
-				if delSteps, delStepErr := r.container.PackageRepository.ListOperationSteps(ctx, operationID); delStepErr == nil {
-					for _, step := range delSteps {
-						if step.Status == "completed" && (step.StepName == "cleanup_kernel_repositories" || step.StepName == "remove_artifact" || step.StepName == "remove_files" || step.StepName == "remove_repositories") {
-							hasDeleteEvidence = true
-							if step.ResultJSON != "" && step.ResultJSON != "{}" {
-								var stepResult RemoveArtifactStepResult
-								if json.Unmarshal([]byte(step.ResultJSON), &stepResult) == nil && stepResult.ArtifactID != "" {
-									deleteStepArtifactID = stepResult.ArtifactID
-								}
-							}
-							break
-						}
-					}
-				}
-				if !hasDeleteEvidence {
-					checkArtifact.Detail = "artifact not found but no deletion evidence in operation steps"
-				} else if deleteStepArtifactID != "" && deleteStepArtifactID != operation.ArtifactID {
-					checkArtifact.Detail = fmt.Sprintf("delete step artifact mismatch: %s != %s", deleteStepArtifactID, operation.ArtifactID)
+				refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferences(ctx, operation.ArtifactID)
+				if refErr != nil {
+					checkArtifact.Detail = fmt.Sprintf("artifact reference check failed (repository unavailable): %v", refErr)
+				} else if refCount > 0 {
+					checkArtifact.Detail = fmt.Sprintf("artifact not found but still has %d active references", refCount)
 				} else {
-					refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferences(ctx, operation.ArtifactID)
-					if refErr != nil {
-						if IsRepositoryErrorKind(refErr, RepositoryErrorNotFound) {
-							checkArtifact.Passed = true
-						} else {
-							checkArtifact.Detail = fmt.Sprintf("artifact reference check failed (repository unavailable): %v", refErr)
-						}
-					} else if refCount > 0 {
-						checkArtifact.Detail = fmt.Sprintf("artifact not found but still has %d active references", refCount)
-					} else {
-						checkArtifact.Passed = true
-					}
+					checkArtifact.Passed = true
 				}
 			}
 		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorUnavailable) {
@@ -533,11 +511,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 			rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
 			if rpErr != nil {
 				if IsRepositoryErrorKind(rpErr, RepositoryErrorNotFound) {
-					if operation.OperationType == "rollback" {
-						checkSnapshot.Detail = "rollback point not found for rollback operation"
-					} else {
-						checkSnapshot.Passed = true
-					}
+					checkSnapshot.Detail = "rollback point not found, fail closed"
 				} else {
 					checkSnapshot.Detail = fmt.Sprintf("rollback point query failed: %v", rpErr)
 				}
@@ -551,7 +525,8 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 					userDataEmpty := rollbackPoint.UserDataMigrationStateJSON == ""
 					snapshotHashEmpty := rollbackPoint.SnapshotHash == ""
 					if configEmpty || resourceEmpty || migrationEmpty || userDataEmpty || snapshotHashEmpty {
-						if isRollbackSnapshotExempt(rollbackPoint) {
+						req := computeRollbackSnapshotRequirement(rollbackPoint)
+					if req.NoDataChange {
 							checkSnapshot.Passed = true
 						} else {
 							checkSnapshot.Detail = fmt.Sprintf("snapshot incomplete: config=%v resource=%v migration=%v userData=%v hash=%v", !configEmpty, !resourceEmpty, !migrationEmpty, !userDataEmpty, !snapshotHashEmpty)
@@ -763,7 +738,63 @@ func computeSnapshotRequirementHash(req RollbackSnapshotRequirement) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
-func isRollbackSnapshotExempt(point PackageRollbackPoint) bool {
+func isRollbackSnapshotExempt(point PackageRollbackPoint, claims packageConfirmationClaims) bool {
 	req := computeRollbackSnapshotRequirement(point)
-	return req.NoDataChange
+	if !req.NoDataChange {
+		return false
+	}
+	if claims.SnapshotRequirementHash == "" || claims.SnapshotRequirementHash != req.RequirementHash {
+		return false
+	}
+	return true
+}
+
+func parseOperationConfirmationClaims(operation PackageOperationRecord) (packageConfirmationClaims, error) {
+	if operation.ConfirmationClaimsJSON == "" || operation.ConfirmationClaimsJSON == "{}" {
+		return packageConfirmationClaims{}, fmt.Errorf("kernel: confirmation claims missing from operation")
+	}
+	var claims packageConfirmationClaims
+	if err := json.Unmarshal([]byte(operation.ConfirmationClaimsJSON), &claims); err != nil {
+		return packageConfirmationClaims{}, fmt.Errorf("kernel: confirmation claims corrupt: %w", err)
+	}
+	if claims.ArtifactID == "" || claims.PreviewHash == "" {
+		return packageConfirmationClaims{}, fmt.Errorf("kernel: confirmation claims incomplete")
+	}
+	return claims, nil
+}
+
+func validateUninstallArtifactDeletion(ctx context.Context, repo *PackageRepository, operationID, artifactID string) bool {
+	if artifactID == "" {
+		return false
+	}
+	steps, err := repo.ListOperationSteps(ctx, operationID)
+	if err != nil {
+		return false
+	}
+	for _, step := range steps {
+		if step.Status != "completed" || step.StepName != "remove_artifact" {
+			continue
+		}
+		if step.ResultJSON == "" || step.ResultJSON == "{}" {
+			return false
+		}
+		var stepResult RemoveArtifactStepResult
+		if json.Unmarshal([]byte(step.ResultJSON), &stepResult) != nil {
+			return false
+		}
+		if stepResult.ArtifactID != artifactID {
+			return false
+		}
+		if stepResult.ArtifactPolicy != ArtifactPolicyDeleteArtifact {
+			return false
+		}
+		if !stepResult.Deleted {
+			return false
+		}
+		if stepResult.RemainingRefs != 0 {
+			return false
+		}
+		return true
+	}
+	return false
 }

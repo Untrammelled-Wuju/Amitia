@@ -98,14 +98,14 @@ func (r *PackageRepository) CreateOrGetOperation(ctx context.Context, op Package
 		error_code, error_detail, started_at, updated_at, completed_at, stable_generation,
 		target_generation, current_pointer_json, idempotency_key, request_hash, from_version,
 		recovery_required, cancel_requested_at, lease_owner, lease_expires_at, attempt_count,
-		fencing_token, owner_instance_id
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		fencing_token, owner_instance_id, confirmation_claims_json, snapshot_requirement_hash
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		op.OperationID, op.TraceID, op.UserID, op.ScopeType, op.ScopeID, op.ExtensionID, op.TargetVersion,
 		op.OperationType, op.Status, op.CurrentStep, op.ArtifactID, op.PreviewSessionID,
 		op.ConfirmationsJSON, op.ErrorCode, op.ErrorDetail, op.StartedAt, op.UpdatedAt, op.CompletedAt,
 		op.StableGeneration, op.TargetGeneration, op.CurrentPointerJSON, op.IdempotencyKey,
 		op.RequestHash, op.FromVersion, boolInteger(op.RecoveryRequired), op.CancelRequestedAt,
-		op.LeaseOwner, op.LeaseExpiresAt, op.AttemptCount, op.FencingToken, op.OwnerInstanceID)
+		op.LeaseOwner, op.LeaseExpiresAt, op.AttemptCount, op.FencingToken, op.OwnerInstanceID, op.ConfirmationClaimsJSON, op.SnapshotRequirementHash)
 	if err != nil {
 		return PackageOperationRecord{}, false, storageOperationError("insert operation", err)
 	}
@@ -498,7 +498,7 @@ const authoritativeOperationSelect = `SELECT operation_id, trace_id, user_id, sc
 	confirmations_json, error_code, error_detail, started_at, updated_at, completed_at,
 	stable_generation, target_generation, current_pointer_json, idempotency_key, request_hash,
 	from_version, recovery_required, cancel_requested_at, lease_owner, lease_expires_at, attempt_count,
-	fencing_token, owner_instance_id
+	fencing_token, owner_instance_id, confirmation_claims_json, snapshot_requirement_hash
 	FROM extension_package_operations`
 
 type operationRow interface {
@@ -513,7 +513,7 @@ func scanAuthoritativeOperation(row operationRow) (PackageOperationRecord, error
 		&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
 		&op.CurrentPointerJSON, &op.IdempotencyKey, &op.RequestHash, &op.FromVersion,
 		&op.RecoveryRequired, &op.CancelRequestedAt, &op.LeaseOwner, &op.LeaseExpiresAt, &op.AttemptCount,
-		&op.FencingToken, &op.OwnerInstanceID)
+		&op.FencingToken, &op.OwnerInstanceID, &op.ConfirmationClaimsJSON, &op.SnapshotRequirementHash)
 	if err != nil {
 		return PackageOperationRecord{}, classifyOperationRead("read operation", err)
 	}

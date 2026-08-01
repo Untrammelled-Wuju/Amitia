@@ -46,6 +46,8 @@ func (b *SnapshotBuilder) BuildForRuntime(ctx context.Context, runtimeID, userID
 		return contracts.DesiredRuntimeSnapshot{}, fmt.Errorf("active installation %s is not enabled (status=%s)", inst.ID, inst.Status)
 	}
 
+	desiredRevision := b.generateRevision()
+
 	installRootAbs := filepath.Join(b.dataDir, filepath.FromSlash(inst.InstallPath))
 	if _, err := os.Stat(installRootAbs); err != nil {
 		if os.IsNotExist(err) {
@@ -66,8 +68,6 @@ func (b *SnapshotBuilder) BuildForRuntime(ctx context.Context, runtimeID, userID
 	if err != nil {
 		return contracts.DesiredRuntimeSnapshot{}, fmt.Errorf("failed to get runtime settings: %w", err)
 	}
-
-	desiredRevision := b.generateRevision()
 
 	instSnapshot, err := b.buildInstallationSnapshot(inst)
 	if err != nil {

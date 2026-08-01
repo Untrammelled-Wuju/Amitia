@@ -79,7 +79,7 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			if err != nil || current.GenerationID != packageGenerationFromInstallation(installation).GenerationID || container.PackageGenerationStore.VerifyGeneration(ctx, current) != nil {
 				t.Fatalf("rollback generation mismatch: current=%+v installation=%+v err=%v", current, installation, err)
 			}
-			uninstall, err := runtimeInstance.ExecutePackageUninstall(ctx, firstPreview.ExtensionID, "user-1", "global", "")
+			uninstall, err := runtimeInstance.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: firstPreview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: ""})
 			if err != nil {
 				t.Fatalf("uninstall failed: operation=%+v err=%v", uninstall, err)
 			}

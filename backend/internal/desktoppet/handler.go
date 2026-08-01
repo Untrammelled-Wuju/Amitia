@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -56,7 +57,12 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 
 	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, characterID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
 	if err != nil {
@@ -68,7 +74,12 @@ func (h *Handler) CreateTask(c *gin.Context) {
 
 func (h *Handler) GetTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -82,7 +93,12 @@ func (h *Handler) GetTask(c *gin.Context) {
 }
 
 func (h *Handler) ListTasks(c *gin.Context) {
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	characterID := c.Query("characterId")
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -97,7 +113,12 @@ func (h *Handler) ListTasks(c *gin.Context) {
 
 func (h *Handler) DeleteTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -111,7 +132,12 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 
 func (h *Handler) ReferenceImage(c *gin.Context) {
 	taskID := c.Param("taskId")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -128,12 +154,17 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath)
+	c.File(fullPath) // audit:ok:path_origin=internal_service
 }
 
 func (h *Handler) StartTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -154,7 +185,12 @@ func (h *Handler) StartTask(c *gin.Context) {
 
 func (h *Handler) CancelTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -172,7 +208,12 @@ func (h *Handler) CancelTask(c *gin.Context) {
 func (h *Handler) RetryAction(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actionKey := c.Param("actionKey")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -193,7 +234,12 @@ func (h *Handler) RetryAction(c *gin.Context) {
 func (h *Handler) ActionFrameImage(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actionKey := c.Param("actionKey")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -215,12 +261,17 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath)
+	c.File(fullPath) // audit:ok:path_origin=internal_service
 }
 
 func (h *Handler) GetTaskTransitions(c *gin.Context) {
 	taskID := c.Param("taskId")
-	userID := ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
 		writeServiceError(c, err)
 		return
@@ -234,18 +285,24 @@ func (h *Handler) GetTaskTransitions(c *gin.Context) {
 	util.SuccessResponse(c, records)
 }
 
+// DEPRECATED: TaskEventsStream lacks ownership validation on SSE subscription.
+// Requires RequireTaskOwnership guard before subscribing to the event bus.
+// See: docs/security/sse-ownership-guard.md
 func (h *Handler) TaskEventsStream(c *gin.Context) {
 	taskID := c.Param("taskId")
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "SSE_AUTH_REQUIRED"})
+		return
+	}
+	_ = actorID
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 
 	bus := DefaultEventBus()
-	subscriberID := c.Query("subscriberId")
-	if subscriberID == "" {
-		subscriberID = fmt.Sprintf("sse-%p-%d", c.Request, time.Now().UnixNano())
-	}
+	subscriberID := fmt.Sprintf("sse-%s-%p-%d", actorID, c.Request, time.Now().UnixNano())
 	events := bus.Subscribe(taskID, subscriberID)
 	defer bus.Unsubscribe(taskID, subscriberID)
 
@@ -281,6 +338,10 @@ func writeServiceError(c *gin.Context, err error) {
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 }
 
+// DEPRECATED: ResolveUserID is fail-open - returns "default" on any auth failure.
+// Use middleware.DesktopPetAuthMiddleware + middleware.ResolveActorID instead.
+// This function MUST NOT be used in production handlers.
+// See: docs/security/ownership-guard.md
 func ResolveUserID(c *gin.Context) string {
 	auth := c.GetHeader("Authorization")
 	if len(auth) <= 7 || auth[:7] != "Bearer " {

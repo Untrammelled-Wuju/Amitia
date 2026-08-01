@@ -1,8 +1,11 @@
 package behavior
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -11,17 +14,46 @@ type EventSchemaDef struct {
 	Reliability   EventReliability
 	DefaultTTL    time.Duration
 	AllowedFields map[string]string
+	SchemaVersion int
 }
 
 var schemaRegistry = map[string]*EventSchemaDef{}
+var registryFrozen bool
 
-func RegisterSchema(def *EventSchemaDef) {
+func RegisterSchema(def *EventSchemaDef) error {
+	if def == nil {
+		return fmt.Errorf("schema def is nil")
+	}
+	if def.EventType == "" {
+		return fmt.Errorf("schema def missing eventType")
+	}
+	if _, exists := schemaRegistry[def.EventType]; exists {
+		return fmt.Errorf("duplicate schema registration: %s", def.EventType)
+	}
+	if def.SchemaVersion == 0 {
+		def.SchemaVersion = 1
+	}
 	schemaRegistry[def.EventType] = def
+	return nil
 }
 
 func GetSchema(eventType string) (*EventSchemaDef, bool) {
 	def, ok := schemaRegistry[eventType]
 	return def, ok
+}
+
+func IsSchemaRegistered(eventType string) bool {
+	_, ok := schemaRegistry[eventType]
+	return ok
+}
+
+func ListRegisteredEventTypes() []string {
+	types := make([]string, 0, len(schemaRegistry))
+	for t := range schemaRegistry {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+	return types
 }
 
 func ValidatePayload(eventType string, payload json.RawMessage) (json.RawMessage, error) {
@@ -96,6 +128,36 @@ func GetReliability(eventType string) EventReliability {
 	return def.Reliability
 }
 
+func ComputeSchemaHash(eventType string) string {
+	def, ok := schemaRegistry[eventType]
+	if !ok {
+		return ""
+	}
+	buf, _ := json.Marshal(def)
+	sum := sha256.Sum256(buf)
+	return hex.EncodeToString(sum[:])
+}
+
+func ComputeRegistryHash() string {
+	keys := make([]string, 0, len(schemaRegistry))
+	for k := range schemaRegistry {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	h := sha256.New()
+	for _, k := range keys {
+		def := schemaRegistry[k]
+		buf, _ := json.Marshal(def)
+		h.Write(buf)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func FreezeRegistry() {
+	registryFrozen = true
+}
+
 func init() {
 	registerInteractionSchemas()
 	registerVoiceSchemas()
@@ -107,6 +169,7 @@ func init() {
 	registerPlaybackSchemas()
 	registerRuntimeSchemas()
 	registerDeliverySchemas()
+	FreezeRegistry()
 }
 
 func registerInteractionSchemas() {
@@ -149,6 +212,7 @@ func registerInteractionSchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }
@@ -179,6 +243,7 @@ func registerDeliverySchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }
@@ -224,6 +289,7 @@ func registerVoiceSchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }
@@ -258,6 +324,7 @@ func registerToolSchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }
@@ -273,6 +340,7 @@ func registerAffectSchemas() {
 			"label": "string", "confidence": "float64",
 			"prevLabel": "string", "deltaMagnitude": "float64",
 		},
+		SchemaVersion: 1,
 	})
 }
 
@@ -285,6 +353,7 @@ func registerActivitySchemas() {
 			"activityKey": "string", "source": "string", "confidence": "float64",
 			"version": "string",
 		},
+		SchemaVersion: 1,
 	})
 	RegisterSchema(&EventSchemaDef{
 		EventType:   "character.time_period.changed",
@@ -293,6 +362,7 @@ func registerActivitySchemas() {
 		AllowedFields: map[string]string{
 			"timePeriod": "string", "effectiveLocalDate": "string", "timezone": "string",
 		},
+		SchemaVersion: 1,
 	})
 }
 
@@ -319,6 +389,7 @@ func registerProactiveSchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }
@@ -330,31 +401,31 @@ func registerDesktopSchemas() {
 		ttl         time.Duration
 		fields      map[string]string
 	}{
-		{"desktop.pet.clicked", ReliabilityEphemeral, 2 * time.Second, map[string]string{
+		{"runtime.pointer.clicked", ReliabilityEphemeral, 2 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
-		{"desktop.pet.double_clicked", ReliabilityEphemeral, 2 * time.Second, map[string]string{
+		{"runtime.pointer.double_clicked", ReliabilityEphemeral, 2 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
-		{"desktop.pet.hovered", ReliabilityEphemeral, 1 * time.Second, map[string]string{
+		{"runtime.pointer.hovered", ReliabilityEphemeral, 1 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
-		{"desktop.pet.drag.started", ReliabilityEphemeral, 2 * time.Second, map[string]string{
+		{"runtime.drag.started", ReliabilityEphemeral, 2 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
-		{"desktop.pet.drag.moved", ReliabilityEphemeral, 500 * time.Millisecond, map[string]string{
+		{"runtime.drag.moved", ReliabilityEphemeral, 500 * time.Millisecond, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
-		{"desktop.pet.drag.ended", ReliabilityEphemeral, 3 * time.Second, map[string]string{
+		{"runtime.drag.completed", ReliabilityEphemeral, 3 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
-		{"desktop.pet.fall.started", ReliabilityEphemeral, 3 * time.Second, map[string]string{
+		{"runtime.pet.fall.started", ReliabilityEphemeral, 3 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
-		{"desktop.pet.edge.reached", ReliabilityEphemeral, 3 * time.Second, map[string]string{
+		{"runtime.pet.edge.reached", ReliabilityEphemeral, 3 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64", "edge": "string",
 		}},
-		{"desktop.pet.interacted", ReliabilityEphemeral, 5 * time.Second, map[string]string{
+		{"runtime.pet.interacted", ReliabilityEphemeral, 5 * time.Second, map[string]string{
 			"gestureId": "string", "interactionType": "string",
 		}},
 	}
@@ -364,6 +435,7 @@ func registerDesktopSchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }
@@ -375,16 +447,16 @@ func registerPlaybackSchemas() {
 		ttl         time.Duration
 		fields      map[string]string
 	}{
-		{"playback.action.started", ReliabilityRecoverable, 30 * time.Second, map[string]string{
+		{"runtime.playback.action_started", ReliabilityRecoverable, 30 * time.Second, map[string]string{
 			"commandId": "string", "decisionId": "string", "actionKey": "string",
 		}},
-		{"playback.action.completed", ReliabilityRecoverable, 60 * time.Second, map[string]string{
+		{"runtime.playback.action_completed", ReliabilityRecoverable, 60 * time.Second, map[string]string{
 			"commandId": "string", "decisionId": "string", "actionKey": "string",
 		}},
-		{"playback.action.interrupted", ReliabilityRecoverable, 60 * time.Second, map[string]string{
+		{"runtime.playback.action_interrupted", ReliabilityRecoverable, 60 * time.Second, map[string]string{
 			"commandId": "string", "decisionId": "string",
 		}},
-		{"playback.action.failed", ReliabilityRecoverable, 60 * time.Second, map[string]string{
+		{"runtime.playback.action_failed", ReliabilityRecoverable, 60 * time.Second, map[string]string{
 			"commandId": "string", "decisionId": "string", "errorClass": "string",
 		}},
 	}
@@ -394,6 +466,7 @@ func registerPlaybackSchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }
@@ -424,6 +497,7 @@ func registerRuntimeSchemas() {
 			Reliability:   s.reliability,
 			DefaultTTL:    s.ttl,
 			AllowedFields: s.fields,
+			SchemaVersion: 1,
 		})
 	}
 }

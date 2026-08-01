@@ -44,6 +44,8 @@ type BehaviorEventEnvelope struct {
 	SessionID      string          `json:"sessionId,omitempty"`
 	InstallationID string          `json:"installationId,omitempty"`
 	PetInstanceID  string          `json:"petInstanceId,omitempty"`
+	ToolOperationID string         `json:"toolOperationId,omitempty"`
+	ReleaseID      string          `json:"releaseId,omitempty"`
 	Origin         EventOrigin     `json:"origin"`
 	CorrelationID  string          `json:"correlationId,omitempty"`
 	CausationID    string          `json:"causationId,omitempty"`
@@ -123,19 +125,20 @@ type RecentSemanticRecord struct {
 }
 
 type BehaviorContextSnapshot struct {
-	UserID          string                    `json:"userId"`
-	CharacterID     string                    `json:"characterId"`
-	Revision        int64                     `json:"revision"`
-	Stable          StableBehaviorState       `json:"stable"`
-	Transient       TransientBehaviorState    `json:"transient"`
-	ActiveTools     map[string]ToolOperationState `json:"activeTools"`
-	Voice           VoiceBehaviorState        `json:"voice"`
-	DesktopGesture  DesktopGestureState       `json:"desktopGesture"`
-	Foreground      ForegroundActionState     `json:"foreground"`
-	Cooldowns       map[string]time.Time      `json:"cooldowns"`
-	RecentSemantics []RecentSemanticRecord    `json:"recentSemantics"`
-	Desired         DesiredBehaviorState      `json:"desired"`
-	UpdatedAt       time.Time                 `json:"updatedAt"`
+	UserID              string                    `json:"userId"`
+	CharacterID         string                    `json:"characterId"`
+	Revision            int64                     `json:"revision"`
+	Stable              StableBehaviorState       `json:"stable"`
+	Transient           TransientBehaviorState    `json:"transient"`
+	ActiveTools         map[string]ToolOperationState `json:"activeTools"`
+	Voice               VoiceBehaviorState        `json:"voice"`
+	DesktopGesture      DesktopGestureState       `json:"desktopGesture"`
+	Foreground          ForegroundActionState     `json:"foreground"`
+	Cooldowns           map[string]time.Time      `json:"cooldowns"`
+	RecentSemantics     []RecentSemanticRecord    `json:"recentSemantics"`
+	Desired             DesiredBehaviorState      `json:"desired"`
+	LastSourceRevisions map[string]int64          `json:"lastSourceRevisions"`
+	UpdatedAt           time.Time                 `json:"updatedAt"`
 }
 
 type ReduceResult struct {
@@ -217,6 +220,9 @@ type BehaviorDecision struct {
 	Semantic           string            `json:"semantic,omitempty"`
 	ActionKey          string            `json:"actionKey,omitempty"`
 	Priority           int               `json:"priority,omitempty"`
+	InterruptPolicy    string            `json:"interruptPolicy,omitempty"`
+	MinimumPlayMS      int64             `json:"minimumPlayMs,omitempty"`
+	MaximumPlayMS      int64             `json:"maximumPlayMs,omitempty"`
 	Status             DecisionStatus    `json:"status"`
 	ReasonCode         string            `json:"reasonCode"`
 	RejectedCandidates []RejectedCandidate `json:"rejectedCandidates,omitempty"`
@@ -236,7 +242,7 @@ type BehaviorDecisionAudit struct {
 type BehaviorRuntimeCommand struct {
 	CommandID            string     `json:"commandId"`
 	DecisionID           string     `json:"decisionId"`
-	IdempotencyKey       string     `json:"idempotencyKey"`
+	IdempotencyKey       string     `json:"idempotencyKey,omitempty"`
 	RuntimeID            string     `json:"runtimeId,omitempty"`
 	PetInstanceID        string     `json:"petInstanceId,omitempty"`
 	InstallationID       string     `json:"installationId,omitempty"`
@@ -250,14 +256,16 @@ type BehaviorRuntimeCommand struct {
 	ReturnPolicy         string     `json:"returnPolicy,omitempty"`
 	ExpiresAt            *time.Time `json:"expiresAt,omitempty"`
 	ReasonCode           string     `json:"reasonCode,omitempty"`
+	Durable              bool       `json:"durable"`
 }
 
 type CommandReceipt struct {
-	CommandID   string         `json:"commandId"`
-	Accepted    bool           `json:"accepted"`
-	Status      CommandStatus  `json:"status"`
-	Error       string         `json:"error,omitempty"`
-	ReceivedAt  time.Time      `json:"receivedAt"`
+	CommandID     string         `json:"commandId"`
+	Accepted      bool           `json:"accepted"`
+	Status        CommandStatus  `json:"status"`
+	PendingReason string         `json:"pendingReason,omitempty"`
+	Error         string         `json:"error,omitempty"`
+	ReceivedAt    time.Time      `json:"receivedAt"`
 }
 
 type CommandStatus string
@@ -360,41 +368,37 @@ const (
 )
 
 type InboxRecord struct {
-	EventID       string        `json:"eventId"`
-	DedupKey      string        `json:"dedupKey"`
-	EventType     string        `json:"eventType"`
-	SchemaVersion int           `json:"schemaVersion"`
-	UserID        string        `json:"userId"`
-	CharacterID   string        `json:"characterId"`
-	OccurredAt    time.Time     `json:"occurredAt"`
-	ReceivedAt    time.Time     `json:"receivedAt"`
-	ExpiresAt     *time.Time    `json:"expiresAt,omitempty"`
-	Origin        EventOrigin   `json:"origin"`
-	CorrelationID string        `json:"correlationId,omitempty"`
-	CausationID   string        `json:"causationId,omitempty"`
-	Payload       json.RawMessage `json:"payload,omitempty"`
-	Status        InboxStatus   `json:"status"`
-	AttemptCount  int           `json:"attemptCount"`
-	LastErrorcode string        `json:"lastErrorCode,omitempty"`
-	ProcessedAt   *time.Time    `json:"processedAt,omitempty"`
-	CreatedAt     time.Time     `json:"createdAt"`
-}
-
-type BehaviorBinding struct {
-	ID              string          `json:"id"`
-	UserID          string          `json:"userId"`
-	CharacterID     string          `json:"characterId,omitempty"`
-	InstallationID  string          `json:"installationId,omitempty"`
-	EventType       string          `json:"eventType"`
-	ConditionsJSON  json.RawMessage `json:"conditions"`
-	Semantic        string          `json:"semantic"`
-	PreferredAction string          `json:"preferredAction,omitempty"`
-	PriorityOffset  int             `json:"priorityOffset"`
-	CooldownMS      int64           `json:"cooldownMs"`
-	Enabled         bool            `json:"enabled"`
-	Version         int             `json:"version"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
+	EventID        string          `json:"eventId"`
+	DedupKey       string          `json:"dedupKey"`
+	EventType      string          `json:"eventType"`
+	SchemaVersion  int             `json:"schemaVersion"`
+	UserID         string          `json:"userId"`
+	CharacterID    string          `json:"characterId"`
+	ConversationID string          `json:"conversationId,omitempty"`
+	InteractionID  string          `json:"interactionId,omitempty"`
+	SessionID      string          `json:"sessionId,omitempty"`
+	ToolOperationID string         `json:"toolOperationId,omitempty"`
+	InstallationID string          `json:"installationId,omitempty"`
+	PetInstanceID  string          `json:"petInstanceId,omitempty"`
+	ReleaseID      string          `json:"releaseId,omitempty"`
+	OccurredAt     time.Time       `json:"occurredAt"`
+	ReceivedAt     time.Time       `json:"receivedAt"`
+	ExpiresAt      *time.Time      `json:"expiresAt,omitempty"`
+	Origin         EventOrigin     `json:"origin"`
+	CorrelationID  string          `json:"correlationId,omitempty"`
+	CausationID    string          `json:"causationId,omitempty"`
+	Sequence       int64           `json:"sequence,omitempty"`
+	Payload        json.RawMessage `json:"payload,omitempty"`
+	Status         InboxStatus     `json:"status"`
+	AttemptCount   int             `json:"attemptCount"`
+	LeaseOwner     string          `json:"leaseOwner,omitempty"`
+	LeaseExpiresAt *time.Time      `json:"leaseExpiresAt,omitempty"`
+	HeartbeatAt    *time.Time      `json:"heartbeatAt,omitempty"`
+	AvailableAt    *time.Time      `json:"availableAt,omitempty"`
+	LastErrorCode  string          `json:"lastErrorCode,omitempty"`
+	LastErrorMessage string        `json:"lastErrorMessage,omitempty"`
+	ProcessedAt    *time.Time      `json:"processedAt,omitempty"`
+	CreatedAt      time.Time       `json:"createdAt"`
 }
 
 type InteractionLifecycleEvent struct {

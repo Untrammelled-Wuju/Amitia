@@ -1,3 +1,5 @@
 service:
   http_port: 19178
   grpc_port: 19179
+storage:
+  storage_path: D:\桌面\跟进项目\U-Ai\backend\cmd\server\qdrant\data

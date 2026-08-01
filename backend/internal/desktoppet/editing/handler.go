@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -25,7 +25,12 @@ func (h *Handler) ListRevisions(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少处理任务ID或动作Key", nil)
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
 		writeEditError(c, err)
 		return
@@ -55,7 +60,12 @@ func (h *Handler) GetRevision(c *gin.Context) {
 func (h *Handler) GetActiveRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
 		writeEditError(c, err)
 		return
@@ -71,7 +81,12 @@ func (h *Handler) GetActiveRevision(c *gin.Context) {
 func (h *Handler) ActivateRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
 		writeEditError(c, err)
 		return
@@ -81,7 +96,7 @@ func (h *Handler) ActivateRevision(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
 		return
 	}
-	err := h.service.ActivateRevision(c.Request.Context(), processingTaskID, actionKey, req.RevisionID, req.ExpectedBindingVersion, req.Reason, userID)
+	err = h.service.ActivateRevision(c.Request.Context(), processingTaskID, actionKey, req.RevisionID, req.ExpectedBindingVersion, req.Reason, userID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -124,7 +139,12 @@ func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 func (h *Handler) GetActionEditSummary(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
 		writeEditError(c, err)
 		return
@@ -140,7 +160,12 @@ func (h *Handler) GetActionEditSummary(c *gin.Context) {
 func (h *Handler) CreateSession(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
 		writeEditError(c, err)
 		return
@@ -170,7 +195,12 @@ func (h *Handler) GetSession(c *gin.Context) {
 
 func (h *Handler) ApplyOperation(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req ApplyOperationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -186,7 +216,12 @@ func (h *Handler) ApplyOperation(c *gin.Context) {
 
 func (h *Handler) Undo(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	baseVersion, _ := strconv.ParseInt(c.Query("baseSessionVersion"), 10, 64)
 	resp, err := h.service.Undo(c.Request.Context(), sessionID, userID, baseVersion)
 	if err != nil {
@@ -198,7 +233,12 @@ func (h *Handler) Undo(c *gin.Context) {
 
 func (h *Handler) Redo(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	baseVersion, _ := strconv.ParseInt(c.Query("baseSessionVersion"), 10, 64)
 	resp, err := h.service.Redo(c.Request.Context(), sessionID, userID, baseVersion)
 	if err != nil {
@@ -220,7 +260,12 @@ func (h *Handler) CreateCheckpoint(c *gin.Context) {
 
 func (h *Handler) CommitSession(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req CommitSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -236,8 +281,13 @@ func (h *Handler) CommitSession(c *gin.Context) {
 
 func (h *Handler) AbandonSession(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
-	err := h.service.AbandonSession(c.Request.Context(), sessionID, userID)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+	err = h.service.AbandonSession(c.Request.Context(), sessionID, userID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -260,7 +310,12 @@ func (h *Handler) SessionEvents(c *gin.Context) {
 
 func (h *Handler) CreateRegenerationJob(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req CreateRegenerationJobRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -288,8 +343,13 @@ func (h *Handler) GetRegenerationJob(c *gin.Context) {
 
 func (h *Handler) CancelRegenerationJob(c *gin.Context) {
 	jobID := c.Param("jobId")
-	userID := desktoppet.ResolveUserID(c)
-	err := h.service.CancelRegenerationJob(c.Request.Context(), jobID, userID)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+	err = h.service.CancelRegenerationJob(c.Request.Context(), jobID, userID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -327,12 +387,17 @@ func (h *Handler) ListRegenerationJobs(c *gin.Context) {
 
 func (h *Handler) AcceptCandidate(c *gin.Context) {
 	candidateID := c.Param("candidateId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req AcceptCandidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = AcceptCandidateRequest{}
 	}
-	err := h.service.AcceptCandidate(c.Request.Context(), candidateID, userID, req)
+	err = h.service.AcceptCandidate(c.Request.Context(), candidateID, userID, req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -342,12 +407,17 @@ func (h *Handler) AcceptCandidate(c *gin.Context) {
 
 func (h *Handler) RejectCandidate(c *gin.Context) {
 	candidateID := c.Param("candidateId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req RejectCandidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = RejectCandidateRequest{}
 	}
-	err := h.service.RejectCandidate(c.Request.Context(), candidateID, userID, req)
+	err = h.service.RejectCandidate(c.Request.Context(), candidateID, userID, req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -357,7 +427,12 @@ func (h *Handler) RejectCandidate(c *gin.Context) {
 
 func (h *Handler) UploadCandidate(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	targetFrameID := c.PostForm("targetFrameId")
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -378,7 +453,12 @@ func (h *Handler) UploadCandidate(c *gin.Context) {
 		return
 	}
 	defer src.Close()
-	data := make([]byte, file.Size)
+	const maxFileBytes = 100 * 1024 * 1024
+	if file.Size > maxFileBytes {
+		util.ErrorResponse(c, response.InvalidParams, "文件超过最大允许大小", gin.H{"errorCode": ErrCodeEditUploadTooLarge})
+		return
+	}
+	data := make([]byte, file.Size) // audit:ok:size_validated
 	_, err = src.Read(data)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "读取文件失败", nil)
@@ -395,14 +475,19 @@ func (h *Handler) UploadCandidate(c *gin.Context) {
 func (h *Handler) ApplyBackgroundPatch(c *gin.Context) {
 	sessionID := c.Param("sessionId")
 	frameID := c.Param("frameId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req BackgroundApplyPatchPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
 		return
 	}
 	req.FrameID = frameID
-	err := h.service.ApplyBackgroundPatch(c.Request.Context(), sessionID, frameID, userID, req)
+	err = h.service.ApplyBackgroundPatch(c.Request.Context(), sessionID, frameID, userID, req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -413,8 +498,13 @@ func (h *Handler) ApplyBackgroundPatch(c *gin.Context) {
 func (h *Handler) ResetBackgroundPatch(c *gin.Context) {
 	sessionID := c.Param("sessionId")
 	frameID := c.Param("frameId")
-	userID := desktoppet.ResolveUserID(c)
-	err := h.service.ResetBackgroundPatch(c.Request.Context(), sessionID, frameID, userID)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+	err = h.service.ResetBackgroundPatch(c.Request.Context(), sessionID, frameID, userID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -424,13 +514,18 @@ func (h *Handler) ResetBackgroundPatch(c *gin.Context) {
 
 func (h *Handler) SetFrameAnchor(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req AnchorSetFramePayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
 		return
 	}
-	err := h.service.SetFrameAnchor(c.Request.Context(), sessionID, userID, req)
+	err = h.service.SetFrameAnchor(c.Request.Context(), sessionID, userID, req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -440,13 +535,18 @@ func (h *Handler) SetFrameAnchor(c *gin.Context) {
 
 func (h *Handler) BatchOffsetAnchors(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req AnchorBatchOffsetPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
 		return
 	}
-	err := h.service.BatchOffsetAnchors(c.Request.Context(), sessionID, userID, req)
+	err = h.service.BatchOffsetAnchors(c.Request.Context(), sessionID, userID, req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -456,12 +556,17 @@ func (h *Handler) BatchOffsetAnchors(c *gin.Context) {
 
 func (h *Handler) ResetAnchors(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	var req AnchorResetPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = AnchorResetPayload{}
 	}
-	err := h.service.ResetAnchors(c.Request.Context(), sessionID, userID, req)
+	err = h.service.ResetAnchors(c.Request.Context(), sessionID, userID, req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -492,7 +597,12 @@ func (h *Handler) GetLatestQualityEvaluation(c *gin.Context) {
 func (h *Handler) ImportLegacyRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
 		writeEditError(c, err)
 		return
@@ -517,7 +627,7 @@ func serveImageFile(c *gin.Context, path, mimeType string) {
 	c.Header("Content-Type", mimeType)
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Cache-Control", "private, max-age=300")
-	c.File(path)
+	c.File(path) // audit:ok:path_origin=internal_service
 }
 
 func writeEditError(c *gin.Context, err error) {
@@ -566,7 +676,12 @@ func mapEditErrorCode(code string) int {
 }
 
 func (h *Handler) ListActionStreams(c *gin.Context) {
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	streams, err := h.service.ListActionStreams(c.Request.Context(), userID)
 	if err != nil {
 		writeEditError(c, err)

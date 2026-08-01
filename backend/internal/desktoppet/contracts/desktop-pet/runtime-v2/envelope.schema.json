@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RuntimeProtocolV2 Envelope",
+  "description": "唯一 Runtime Protocol V2 信封格式",
+  "type": "object",
+  "required": [
+    "envelopeVersion",
+    "protocol",
+    "messageType",
+    "messageName",
+    "messageId",
+    "userId",
+    "deviceId",
+    "runtimeId",
+    "runtimeSessionId",
+    "connectionGeneration",
+    "sequence",
+    "payloadSchemaVersion",
+    "payloadHash"
+  ],
+  "properties": {
+    "envelopeVersion": {
+      "type": "integer",
+      "const": 2,
+      "description": "Envelope 版本，固定为 2"
+    },
+    "protocol": {
+      "type": "string",
+      "const": "amitia.desktop-pet.runtime",
+      "description": "协议标识"
+    },
+    "messageType": {
+      "type": "string",
+      "enum": [
+        "hello",
+        "hello_ack",
+        "command",
+        "command_ack",
+        "runtime_event",
+        "state_snapshot",
+        "error",
+        "ping",
+        "pong"
+      ],
+      "description": "消息类型"
+    },
+    "messageName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "消息名称，如 runtime.command.play_action"
+    },
+    "messageId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "消息唯一 ID"
+    },
+    "correlationId": {
+      "type": "string",
+      "description": "关联 ID（回复时引用请求 ID）"
+    },
+    "causationId": {
+      "type": "string",
+      "description": "因果 ID（标识触发源头）"
+    },
+    "userId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "用户 ID（来自连接上下文）"
+    },
+    "deviceId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "设备 ID（来自连接上下文）"
+    },
+    "runtimeId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Runtime ID（来自连接上下文）"
+    },
+    "runtimeSessionId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Runtime Session ID（来自连接上下文）"
+    },
+    "connectionGeneration": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "连接世代，新连接时递增"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "会话内单调递增序列号"
+    },
+    "payloadSchemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Payload Schema 版本"
+    },
+    "payloadHash": {
+      "type": "string",
+      "pattern": "^sha256:[a-fA-F0-9]{64}$",
+      "description": "Payload SHA-256 哈希"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "事件发生时间（客户端时间，仅做记录）"
+    },
+    "sentAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "消息发送时间（客户端时间）"
+    },
+    "payload": {
+      "description": "消息有效载荷"
+    }
+  },
+  "additionalProperties": false
+}

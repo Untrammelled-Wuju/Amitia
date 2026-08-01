@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/u-ai/backend/internal/desktoppet/behavior"
 )
+
+const maxBindingASTDepth = 8
 
 type astNode struct {
 	Op       string            `json:"op"`
@@ -57,8 +57,8 @@ func compileWithFields(conditionsJSON json.RawMessage, allowedFields map[string]
 }
 
 func compileNode(raw json.RawMessage, depth int, allowedFields map[string]string) (ConditionNode, error) {
-	if depth > behavior.MaxBindingASTDepth {
-		return nil, fmt.Errorf("AST depth %d exceeds maximum of %d", depth, behavior.MaxBindingASTDepth)
+	if depth > maxBindingASTDepth {
+		return nil, fmt.Errorf("AST depth %d exceeds maximum of %d", depth, maxBindingASTDepth)
 	}
 	var node astNode
 	if err := json.Unmarshal(raw, &node); err != nil {

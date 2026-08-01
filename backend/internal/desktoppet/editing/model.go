@@ -207,6 +207,10 @@ type RegenerationJob struct {
 	ProcessingRevisionID  string `gorm:"column:processing_revision_id" json:"processingRevisionId"`
 	CandidateRevisionID   string `gorm:"column:candidate_revision_id" json:"candidateRevisionId"`
 	QualityEvaluationID   string `gorm:"column:quality_evaluation_id" json:"qualityEvaluationId"`
+	ExecutionID           string `gorm:"column:execution_id" json:"executionId"`
+	AttemptCount          int    `gorm:"column:attempt_count" json:"attemptCount"`
+	InstanceID            string `gorm:"column:instance_id" json:"instanceId"`
+	Stage                 string `gorm:"column:stage" json:"stage"`
 	RequestSnapshotJSON   string `gorm:"column:request_snapshot_json" json:"requestSnapshotJson"`
 	CostEstimateJSON      string `gorm:"column:cost_estimate_json" json:"costEstimateJson"`
 	CostActualJSON        string `gorm:"column:cost_actual_json" json:"costActualJson"`
@@ -221,6 +225,7 @@ type RegenerationJob struct {
 	RejectReason          string `gorm:"column:reject_reason" json:"rejectReason"`
 	RejectedBy            string `gorm:"column:rejected_by" json:"rejectedBy"`
 	RejectedAt            string `gorm:"column:rejected_at" json:"rejectedAt"`
+	CancelRequestedAt     string `gorm:"column:cancel_requested_at" json:"cancelRequestedAt"`
 	CreatedAt             string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt             string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -497,3 +502,82 @@ type LegacyBindingMapping struct {
 func (LegacyBindingMapping) TableName() string {
 	return "desktop_pet_legacy_binding_mappings"
 }
+
+type EditDraftSnapshot struct {
+	ID                     string `gorm:"column:id;primaryKey" json:"id"`
+	SessionID              string `gorm:"column:session_id" json:"sessionId"`
+	SessionVersion         int64  `gorm:"column:session_version" json:"sessionVersion"`
+	UserID                 string `gorm:"column:user_id" json:"userId"`
+	CharacterID            string `gorm:"column:character_id" json:"characterId"`
+	ActionStreamID         string `gorm:"column:action_stream_id" json:"actionStreamId"`
+	ActionKey              string `gorm:"column:action_key" json:"actionKey"`
+	BaseRevisionID         string `gorm:"column:base_revision_id" json:"baseRevisionId"`
+	BaseContentHash        string `gorm:"column:base_content_hash" json:"baseContentHash"`
+	BaseBindingRevision    int64  `gorm:"column:base_binding_revision" json:"baseBindingRevision"`
+	ActionConfigSnapshotJSON string `gorm:"column:action_config_snapshot_json" json:"actionConfigSnapshotJson"`
+	ActionConfigHash       string `gorm:"column:action_config_hash" json:"actionConfigHash"`
+	FramesJSON             string `gorm:"column:frames_json" json:"framesJson"`
+	FrameSetHash           string `gorm:"column:frame_set_hash" json:"frameSetHash"`
+	SnapshotHash           string `gorm:"column:snapshot_hash" json:"snapshotHash"`
+	CreatedAt              string `gorm:"column:created_at" json:"createdAt"`
+}
+
+func (EditDraftSnapshot) TableName() string { return "desktop_pet_edit_draft_snapshots" }
+
+type RegenerationJobInputSnapshot struct {
+	JobID                  string `gorm:"column:job_id;primaryKey" json:"jobId"`
+	SessionID              string `gorm:"column:session_id" json:"sessionId"`
+	DraftSnapshotID        string `gorm:"column:draft_snapshot_id" json:"draftSnapshotId"`
+	DraftSnapshotHash      string `gorm:"column:draft_snapshot_hash" json:"draftSnapshotHash"`
+	RequestJSON            string `gorm:"column:request_json" json:"requestJson"`
+	RequestHash            string `gorm:"column:request_hash" json:"requestHash"`
+	BaseRevisionID         string `gorm:"column:base_revision_id" json:"baseRevisionId"`
+	BaseContentHash        string `gorm:"column:base_content_hash" json:"baseContentHash"`
+	BaseBindingRevision    int64  `gorm:"column:base_binding_revision" json:"baseBindingRevision"`
+	TargetFrameID          string `gorm:"column:target_frame_id" json:"targetFrameId"`
+	TargetFrameContentHash string `gorm:"column:target_frame_content_hash" json:"targetFrameContentHash"`
+	GenerationProfileID    string `gorm:"column:generation_profile_id" json:"generationProfileId"`
+	ProcessingProfileID    string `gorm:"column:processing_profile_id" json:"processingProfileId"`
+	QualityProfileID       string `gorm:"column:quality_profile_id" json:"qualityProfileId"`
+	CostEstimateJSON       string `gorm:"column:cost_estimate_json" json:"costEstimateJson"`
+	CostEstimateHash       string `gorm:"column:cost_estimate_hash" json:"costEstimateHash"`
+	CostConfirmationID     string `gorm:"column:cost_confirmation_id" json:"costConfirmationId"`
+	CreatedAt              string `gorm:"column:created_at" json:"createdAt"`
+}
+
+func (RegenerationJobInputSnapshot) TableName() string { return "desktop_pet_regeneration_job_input_snapshots" }
+
+type CandidateAcceptanceOperation struct {
+	ID               string `gorm:"column:id;primaryKey" json:"id"`
+	CandidateID      string `gorm:"column:candidate_id" json:"candidateId"`
+	SessionID        string `gorm:"column:session_id" json:"sessionId"`
+	UserID           string `gorm:"column:user_id" json:"userId"`
+	Action           string `gorm:"column:action" json:"action"`
+	IdempotencyKey   string `gorm:"column:idempotency_key" json:"idempotencyKey"`
+	Status           string `gorm:"column:status" json:"status"`
+	ErrorMessage     string `gorm:"column:error_message" json:"errorMessage"`
+	CreatedAt        string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt        string `gorm:"column:updated_at;default:''" json:"updatedAt"`
+	CompletedAt      string `gorm:"column:completed_at;default:''" json:"completedAt"`
+}
+
+func (CandidateAcceptanceOperation) TableName() string { return "desktop_pet_candidate_acceptance_operations" }
+
+type EditingEventOutboxRecord struct {
+	ID                string `gorm:"column:id;primaryKey" json:"id"`
+	EventID           string `gorm:"column:event_id" json:"eventId"`
+	EventType         string `gorm:"column:event_type" json:"eventType"`
+	AggregateType     string `gorm:"column:aggregate_type" json:"aggregateType"`
+	AggregateID       string `gorm:"column:aggregate_id" json:"aggregateId"`
+	UserID            string `gorm:"column:user_id" json:"userId"`
+	PayloadJSON       string `gorm:"column:payload_json" json:"payloadJson"`
+	PayloadHash       string `gorm:"column:payload_hash" json:"payloadHash"`
+	Status            string `gorm:"column:status" json:"status"`
+	AttemptCount      int    `gorm:"column:attempt_count" json:"attemptCount"`
+	AvailableAt       string `gorm:"column:available_at" json:"availableAt"`
+	LastError         string `gorm:"column:last_error" json:"lastError"`
+	CreatedAt         string `gorm:"column:created_at" json:"createdAt"`
+	PublishedAt       string `gorm:"column:published_at;default:''" json:"publishedAt"`
+}
+
+func (EditingEventOutboxRecord) TableName() string { return "desktop_pet_editing_event_outbox" }

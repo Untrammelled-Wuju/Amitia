@@ -107,8 +107,11 @@ type PackageQuarantineMetadata struct {
 	TreeHash                 string
 	ArtifactID               string
 	State                    string
+	FencingToken             int64
 	CreatedAt                string
 	ReleasedAt               string
+	ReleaseState             string
+	ReleaseError             string
 }
 
 var validQuarantineStates = map[string]struct{}{
@@ -138,17 +141,20 @@ func (r *PackageRepository) PutQuarantineMetadata(ctx context.Context, qm Packag
 	_, err = tx.ExecContext(ctx, `INSERT INTO package_quarantine_metadata (
 		quarantine_id, operation_id, extension_id, generation_quarantine_path,
 		current_quarantine_path, original_generation_path, original_current_path,
-		tree_hash, artifact_id, state, created_at, released_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		tree_hash, artifact_id, state, fencing_token, release_state, release_error, created_at, released_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(quarantine_id) DO UPDATE SET generation_quarantine_path=excluded.generation_quarantine_path,
 		current_quarantine_path=excluded.current_quarantine_path,
 		original_generation_path=excluded.original_generation_path,
 		original_current_path=excluded.original_current_path,
 		tree_hash=excluded.tree_hash, state=excluded.state,
+		fencing_token=excluded.fencing_token,
+		release_state=excluded.release_state,
+		release_error=excluded.release_error,
 		released_at=excluded.released_at`,
 		qm.QuarantineID, qm.OperationID, qm.ExtensionID, qm.GenerationQuarantinePath,
 		qm.CurrentQuarantinePath, qm.OriginalGenerationPath, qm.OriginalCurrentPath,
-		qm.TreeHash, qm.ArtifactID, qm.State, qm.CreatedAt, qm.ReleasedAt)
+		qm.TreeHash, qm.ArtifactID, qm.State, qm.FencingToken, qm.ReleaseState, qm.ReleaseError, qm.CreatedAt, qm.ReleasedAt)
 	if err != nil {
 		return storageOperationError("insert quarantine metadata", err)
 	}
@@ -159,11 +165,11 @@ func (r *PackageRepository) GetQuarantineMetadata(ctx context.Context, extension
 	var qm PackageQuarantineMetadata
 	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
 		generation_quarantine_path, current_quarantine_path, original_generation_path,
-		original_current_path, tree_hash, artifact_id, state, created_at, released_at
+		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error
 		FROM package_quarantine_metadata WHERE extension_id = ? AND state = 'active' ORDER BY created_at DESC LIMIT 1`,
 		extensionID).Scan(&qm.QuarantineID, &qm.OperationID, &qm.ExtensionID,
 		&qm.GenerationQuarantinePath, &qm.CurrentQuarantinePath, &qm.OriginalGenerationPath,
-		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.CreatedAt, &qm.ReleasedAt)
+		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError)
 	if err != nil {
 		return PackageQuarantineMetadata{}, classifyOperationRead("read quarantine metadata", err)
 	}
@@ -174,12 +180,12 @@ func (r *PackageRepository) GetBlockingQuarantineMetadata(ctx context.Context, e
 	var qm PackageQuarantineMetadata
 	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
 		generation_quarantine_path, current_quarantine_path, original_generation_path,
-		original_current_path, tree_hash, artifact_id, state, created_at, released_at
+		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error
 		FROM package_quarantine_metadata WHERE extension_id = ? AND state IN ('active', 'restoring', 'finalizing')
 		ORDER BY created_at DESC LIMIT 1`,
 		extensionID).Scan(&qm.QuarantineID, &qm.OperationID, &qm.ExtensionID,
 		&qm.GenerationQuarantinePath, &qm.CurrentQuarantinePath, &qm.OriginalGenerationPath,
-		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.CreatedAt, &qm.ReleasedAt)
+		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError)
 	if err != nil {
 		return PackageQuarantineMetadata{}, classifyOperationRead("read blocking quarantine metadata", err)
 	}
@@ -190,11 +196,11 @@ func (r *PackageRepository) GetQuarantineMetadataByOperation(ctx context.Context
 	var qm PackageQuarantineMetadata
 	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
 		generation_quarantine_path, current_quarantine_path, original_generation_path,
-		original_current_path, tree_hash, artifact_id, state, created_at, released_at
+		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error
 		FROM package_quarantine_metadata WHERE operation_id = ? ORDER BY created_at DESC LIMIT 1`,
 		operationID).Scan(&qm.QuarantineID, &qm.OperationID, &qm.ExtensionID,
 		&qm.GenerationQuarantinePath, &qm.CurrentQuarantinePath, &qm.OriginalGenerationPath,
-		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.CreatedAt, &qm.ReleasedAt)
+		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError)
 	if err != nil {
 		return PackageQuarantineMetadata{}, classifyOperationRead("read quarantine metadata by operation", err)
 	}

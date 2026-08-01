@@ -6,9 +6,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-
-	"github.com/u-ai/backend/internal/desktoppet/behavior"
-	"github.com/u-ai/backend/internal/desktoppet/behavior/persistence"
 )
 
 type Repository struct {
@@ -19,7 +16,7 @@ func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Create(ctx context.Context, binding behavior.BehaviorBinding) error {
+func (r *Repository) Create(ctx context.Context, binding BehaviorBinding) error {
 	model := bindingToModel(binding)
 	return r.db.WithContext(ctx).Create(model).Error
 }
@@ -30,7 +27,7 @@ func (r *Repository) Update(ctx context.Context, id string, updates map[string]i
 	}
 	updates["updated_at"] = time.Now().Format(time.RFC3339)
 	result := r.db.WithContext(ctx).
-		Model(&persistence.BehaviorBindingModel{}).
+		Model(&BehaviorBindingModel{}).
 		Where("id = ?", id).
 		Updates(updates)
 	if result.Error != nil {
@@ -45,7 +42,7 @@ func (r *Repository) Update(ctx context.Context, id string, updates map[string]i
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	result := r.db.WithContext(ctx).
 		Where("id = ?", id).
-		Delete(&persistence.BehaviorBindingModel{})
+		Delete(&BehaviorBindingModel{})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -55,8 +52,8 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *Repository) GetByID(ctx context.Context, id string) (*behavior.BehaviorBinding, error) {
-	var model persistence.BehaviorBindingModel
+func (r *Repository) GetByID(ctx context.Context, id string) (*BehaviorBinding, error) {
+	var model BehaviorBindingModel
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&model).Error; err != nil {
 		return nil, err
 	}
@@ -64,8 +61,8 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*behavior.Behavior
 	return &b, nil
 }
 
-func (r *Repository) ListByUserCharacter(ctx context.Context, userID, characterID string) ([]behavior.BehaviorBinding, error) {
-	var models []persistence.BehaviorBindingModel
+func (r *Repository) ListByUserCharacter(ctx context.Context, userID, characterID string) ([]BehaviorBinding, error) {
+	var models []BehaviorBindingModel
 	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
 	if characterID != "" {
 		query = query.Where("character_id = ?", characterID)
@@ -73,15 +70,15 @@ func (r *Repository) ListByUserCharacter(ctx context.Context, userID, characterI
 	if err := query.Order("created_at DESC").Find(&models).Error; err != nil {
 		return nil, err
 	}
-	result := make([]behavior.BehaviorBinding, 0, len(models))
+	result := make([]BehaviorBinding, 0, len(models))
 	for _, m := range models {
 		result = append(result, modelToBinding(m))
 	}
 	return result, nil
 }
 
-func (r *Repository) ListByEventType(ctx context.Context, userID, characterID, eventType string) ([]behavior.BehaviorBinding, error) {
-	var models []persistence.BehaviorBindingModel
+func (r *Repository) ListByEventType(ctx context.Context, userID, characterID, eventType string) ([]BehaviorBinding, error) {
+	var models []BehaviorBindingModel
 	query := r.db.WithContext(ctx).Where("user_id = ? AND event_type = ?", userID, eventType)
 	if characterID != "" {
 		query = query.Where("character_id = ?", characterID)
@@ -89,15 +86,19 @@ func (r *Repository) ListByEventType(ctx context.Context, userID, characterID, e
 	if err := query.Order("priority_offset DESC, created_at DESC").Find(&models).Error; err != nil {
 		return nil, err
 	}
-	result := make([]behavior.BehaviorBinding, 0, len(models))
+	result := make([]BehaviorBinding, 0, len(models))
 	for _, m := range models {
 		result = append(result, modelToBinding(m))
 	}
 	return result, nil
 }
 
-func bindingToModel(b behavior.BehaviorBinding) *persistence.BehaviorBindingModel {
-	return &persistence.BehaviorBindingModel{
+func (r *Repository) GetByIDTyped(ctx context.Context, id string) (*BehaviorBinding, error) {
+	return r.GetByID(ctx, id)
+}
+
+func bindingToModel(b BehaviorBinding) *BehaviorBindingModel {
+	return &BehaviorBindingModel{
 		ID:              b.ID,
 		UserID:          b.UserID,
 		CharacterID:     b.CharacterID,
@@ -115,12 +116,12 @@ func bindingToModel(b behavior.BehaviorBinding) *persistence.BehaviorBindingMode
 	}
 }
 
-func modelToBinding(m persistence.BehaviorBindingModel) behavior.BehaviorBinding {
+func modelToBinding(m BehaviorBindingModel) BehaviorBinding {
 	var conditions json.RawMessage
 	if m.ConditionsJSON != "" {
 		conditions = json.RawMessage(m.ConditionsJSON)
 	}
-	b := behavior.BehaviorBinding{
+	b := BehaviorBinding{
 		ID:              m.ID,
 		UserID:          m.UserID,
 		CharacterID:     m.CharacterID,

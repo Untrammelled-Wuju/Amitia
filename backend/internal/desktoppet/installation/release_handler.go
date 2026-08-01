@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -36,7 +36,12 @@ func (h *ReleaseHandler) BuildRelease(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "处理任务 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	req := &BuildReleaseRequest{
 		ProcessingTaskID: payload.ProcessingTaskID,
 		UserID:           userID,
@@ -80,7 +85,12 @@ func (h *ReleaseHandler) ImportPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "导入暂存 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	req := &ImportPackageRequest{
 		UserID:          userID,
 		CharacterID:     payload.CharacterID,
@@ -103,7 +113,12 @@ func (h *ReleaseHandler) ImportPackage(c *gin.Context) {
 }
 
 func (h *ReleaseHandler) ListReleases(c *gin.Context) {
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	releases, err := h.svc.ListReleases(userID)
 	if err != nil {
 		writeInstallationError(c, err)
@@ -121,7 +136,12 @@ func (h *ReleaseHandler) GetRelease(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "Release ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.svc.CheckReleaseOwnership(releaseID, userID); err != nil {
 		writeInstallationError(c, err)
 		return
@@ -141,7 +161,12 @@ func (h *ReleaseHandler) ListReleasesByPet(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "宠物 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.svc.CheckPetIdentityOwnership(petID, userID); err != nil {
 		writeInstallationError(c, err)
 		return
@@ -158,7 +183,12 @@ func (h *ReleaseHandler) ListReleasesByPet(c *gin.Context) {
 }
 
 func (h *ReleaseHandler) ListPets(c *gin.Context) {
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	pets, err := h.svc.ListPetIdentities(userID)
 	if err != nil {
 		writeInstallationError(c, err)
@@ -176,7 +206,12 @@ func (h *ReleaseHandler) GetPet(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "宠物 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.svc.CheckPetIdentityOwnership(petID, userID); err != nil {
 		writeInstallationError(c, err)
 		return
@@ -203,7 +238,12 @@ func (h *ReleaseHandler) InstallRelease(c *gin.Context) {
 	}
 	var payload installReleasePayload
 	_ = c.ShouldBindJSON(&payload)
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	inst, err := h.svc.InstallRelease(userID, petID, releaseID, payload.CharacterID, payload.IdempotencyKey)
 	if err != nil {
 		writeInstallationError(c, err)
@@ -232,7 +272,12 @@ func (h *ReleaseHandler) UpgradeInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "目标 Release ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	inst, err := h.svc.UpgradeInstallation(userID, installationID, payload.TargetReleaseID, payload.IdempotencyKey)
 	if err != nil {
 		writeInstallationError(c, err)
@@ -253,7 +298,12 @@ func (h *ReleaseHandler) SwitchInstallation(c *gin.Context) {
 	}
 	var payload idempotencyPayload
 	_ = c.ShouldBindJSON(&payload)
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.svc.SwitchInstallation(userID, installationID, payload.IdempotencyKey); err != nil {
 		writeInstallationError(c, err)
 		return
@@ -269,7 +319,12 @@ func (h *ReleaseHandler) RepairInstallation(c *gin.Context) {
 	}
 	var payload idempotencyPayload
 	_ = c.ShouldBindJSON(&payload)
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.svc.RepairInstallation(userID, installationID, payload.IdempotencyKey); err != nil {
 		writeInstallationError(c, err)
 		return
@@ -285,7 +340,12 @@ func (h *ReleaseHandler) UninstallInstallation(c *gin.Context) {
 	}
 	var payload idempotencyPayload
 	_ = c.ShouldBindJSON(&payload)
-	userID := desktoppet.ResolveUserID(c)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
 	if err := h.svc.UninstallInstallation(userID, installationID, payload.IdempotencyKey); err != nil {
 		writeInstallationError(c, err)
 		return

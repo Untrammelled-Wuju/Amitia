@@ -1,0 +1,156 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package security
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+)
+
+type StagingStatus string
+
+const (
+	StagingStatusUploading   StagingStatus = "uploading"
+	StagingStatusQuarantined StagingStatus = "quarantined"
+	StagingStatusInspecting  StagingStatus = "inspecting"
+	StagingStatusReady       StagingStatus = "ready"
+	StagingStatusConsuming   StagingStatus = "consuming"
+	StagingStatusConsumed    StagingStatus = "consumed"
+	StagingStatusRejected    StagingStatus = "rejected"
+	StagingStatusExpired     StagingStatus = "expired"
+)
+
+type ImportStaging struct {
+	ID                string        `json:"id"`
+	OwnerUserID       string        `json:"ownerUserId"`
+	SourceFilename    string        `json:"sourceFilename"`
+	SourceType        string        `json:"sourceType"`
+	SourceContentHash string        `json:"sourceContentHash"`
+	SourceBytes       int64         `json:"sourceBytes"`
+	StorageKey        string        `json:"storageKey"`
+	Status            StagingStatus `json:"status"`
+	InventoryHash     string        `json:"inventoryHash"`
+	CreatedAt         string        `json:"createdAt"`
+	ExpiresAt         string        `json:"expiresAt"`
+	ConsumedAt        string        `json:"consumedAt,omitempty"`
+	CorrelationID     string        `json:"correlationId,omitempty"`
+}
+
+func NewImportStaging(ownerUserID, sourceFilename, sourceType string) (*ImportStaging, error) {
+	id, err := generateStagingID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate staging ID: %w", err)
+	}
+	now := time.Now().UTC()
+	expires := now.Add(2 * time.Hour)
+	return &ImportStaging{
+		ID:             id,
+		OwnerUserID:    ownerUserID,
+		SourceFilename: sourceFilename,
+		SourceType:     sourceType,
+		Status:         StagingStatusUploading,
+		CreatedAt:      now.Format(time.RFC3339Nano),
+		ExpiresAt:      expires.Format(time.RFC3339Nano),
+	}, nil
+}
+
+func generateStagingID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "stg_" + hex.EncodeToString(b), nil
+}
+
+func (s *ImportStaging) MarkQuarantined(storageKey string) error {
+	if s.Status != StagingStatusUploading {
+		return fmt.Errorf("invalid status transition from %s to %s", s.Status, StagingStatusQuarantined)
+	}
+	s.Status = StagingStatusQuarantined
+	s.StorageKey = storageKey
+	return nil
+}
+
+func (s *ImportStaging) MarkInspecting() error {
+	if s.Status != StagingStatusQuarantined {
+		return fmt.Errorf("invalid status transition from %s to %s", s.Status, StagingStatusInspecting)
+	}
+	s.Status = StagingStatusInspecting
+	return nil
+}
+
+func (s *ImportStaging) MarkReady(inventoryHash string) error {
+	if s.Status != StagingStatusInspecting {
+		return fmt.Errorf("invalid status transition from %s to %s", s.Status, StagingStatusReady)
+	}
+	s.Status = StagingStatusReady
+	s.InventoryHash = inventoryHash
+	return nil
+}
+
+func (s *ImportStaging) BeginConsumption() error {
+	if s.Status != StagingStatusReady {
+		return fmt.Errorf("invalid status transition from %s to %s", s.Status, StagingStatusConsuming)
+	}
+	if s.IsExpired() {
+		s.Status = StagingStatusExpired
+		return ErrStagingExpired
+	}
+	s.Status = StagingStatusConsuming
+	s.ConsumedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	return nil
+}
+
+func (s *ImportStaging) CompleteConsumption() error {
+	if s.Status != StagingStatusConsuming {
+		return fmt.Errorf("invalid status transition from %s to %s", s.Status, StagingStatusConsumed)
+	}
+	s.Status = StagingStatusConsumed
+	return nil
+}
+
+func (s *ImportStaging) MarkRejected() {
+	s.Status = StagingStatusRejected
+}
+
+func (s *ImportStaging) IsExpired() bool {
+	if s.ExpiresAt == "" {
+		return false
+	}
+	expires, err := time.Parse(time.RFC3339Nano, s.ExpiresAt)
+	if err != nil {
+		return false
+	}
+	return time.Now().UTC().After(expires)
+}
+
+func (s *ImportStaging) CanAccess(userID string) error {
+	if s.OwnerUserID != userID {
+		return ErrStagingCrossUser
+	}
+	if s.Status == StagingStatusConsumed {
+		return ErrStagingConsumed
+	}
+	if s.IsExpired() {
+		return ErrStagingExpired
+	}
+	return nil
+}
+
+func SanitizeUploadName(name string) (string, error) {
+	if name == "" {
+		return "", errors.New("empty upload name")
+	}
+	if len(name) > 255 {
+		return "", errors.New("upload name too long")
+	}
+	for _, c := range name {
+		if c == '/' || c == '\\' || c == '\x00' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' {
+			return "", fmt.Errorf("invalid character in upload name: %U", c)
+		}
+	}
+	return name, nil
+}

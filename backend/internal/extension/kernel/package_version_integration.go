@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -79,27 +80,49 @@ func (r *Runtime) runPackageFinalGate(ctx context.Context, operationID string, g
 	return err
 }
 
+func persistFinalizationFailureState(
+	ctx context.Context,
+	repo *PackageRepository,
+	operationID string,
+	targetState PackageOperationStatus,
+	step string,
+	errorCode string,
+	errorDetail string,
+	completed bool,
+	guard PackageWriteGuard,
+	cause error,
+) error {
+	persistErr := repo.SetOperation(ctx, operationID, string(targetState), step, errorCode, errorDetail, completed, guard)
+	if persistErr != nil {
+		persistErr = repo.SetOperation(ctx, operationID, string(targetState), step, errorCode, errorDetail, completed, PackageWriteGuard{})
+	}
+	if persistErr != nil {
+		return errors.Join(cause, persistErr)
+	}
+	return cause
+}
+
 func (r *Runtime) FinalizePackageOperation(ctx context.Context, operationID, extensionID string, leaseGuard *PackageLeaseGuard, guard PackageWriteGuard) error {
 	if leaseGuard != nil {
 		if err := leaseGuard.AssertAlive(ctx); err != nil {
-			_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationRequiresRecovery), "finalize_assert_lease", PackageErrCodeLeaseLost, err.Error(), false, guard)
-			return fmt.Errorf("kernel: lease assert failed during finalization: %w", err)
+			cause := fmt.Errorf("kernel: lease assert failed during finalization: %w", err)
+			return persistFinalizationFailureState(context.Background(), r.container.PackageRepository, operationID, PackageOperationRequiresRecovery, "finalize_assert_lease", PackageErrCodeLeaseLost, err.Error(), false, guard, cause)
 		}
 	}
 	if err := r.container.PackageRepository.SetOperation(ctx, operationID, string(PackageOperationFinalizing), "finalizing", "", "", false, guard); err != nil {
 		return fmt.Errorf("kernel: failed to transition operation to finalizing: %w", err)
 	}
 	if err := r.runPackageFinalGate(ctx, operationID, guard); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationRequiresRecovery), "final_gate", PackageErrCodeFinalGateFailed, err.Error(), false, guard)
-		return fmt.Errorf("kernel: final gate failed during finalization: %w", err)
+		cause := fmt.Errorf("kernel: final gate failed during finalization: %s: %w", PackageErrCodeFinalGateFailed, err)
+		return persistFinalizationFailureState(context.Background(), r.container.PackageRepository, operationID, PackageOperationRequiresRecovery, "final_gate", PackageErrCodeFinalGateFailed, err.Error(), false, guard, cause)
 	}
 	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operationID, extensionID, guard.FencingToken); err != nil {
 		if IsPackageOperationError(err, PackageErrCodeLeaseFenced) || IsPackageOperationError(err, OperationErrTransitionConflict) {
-			_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationRequiresRecovery), "finalize_lease_release", PackageErrCodeLeaseFenced, err.Error(), false, guard)
-			return fmt.Errorf("kernel: lease conflict during finalization: %w", err)
+			cause := fmt.Errorf("kernel: lease conflict during finalization: %w", err)
+			return persistFinalizationFailureState(context.Background(), r.container.PackageRepository, operationID, PackageOperationRequiresRecovery, "finalize_lease_release", PackageErrCodeLeaseFenced, err.Error(), false, guard, cause)
 		}
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, string(PackageOperationReleasePending), "finalize_lease_release", "PACKAGE_LEASE_RELEASE_FAILED", err.Error(), false, guard)
-		return fmt.Errorf("kernel: lease release failed during finalization: %w", err)
+		cause := fmt.Errorf("kernel: lease release failed during finalization: %s: %w", "PACKAGE_LEASE_RELEASE_FAILED", err)
+		return persistFinalizationFailureState(context.Background(), r.container.PackageRepository, operationID, PackageOperationReleasePending, "finalize_lease_release", "PACKAGE_LEASE_RELEASE_FAILED", err.Error(), false, guard, cause)
 	}
 	if leaseGuard != nil {
 		leaseGuard.MarkLeaseReleased()

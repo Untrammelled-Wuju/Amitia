@@ -107,6 +107,25 @@ type Repository interface {
 	GetCandidateByRevisionID(revisionID string) (*EditCandidate, error)
 
 	DB() *gorm.DB
+
+	ClaimNextJob(workerID, executionID string, leaseDuration time.Duration) (*RegenerationJob, error)
+	UpdateJobHeartbeatWithLease(jobID, executionID, leaseOwner string, expectedStatus string, leaseDuration time.Duration) (bool, error)
+	UpdateJobLease(jobID, leaseOwner, executionID string, leaseExpiresAt string) (bool, error)
+
+	CreateDraftSnapshot(snapshot *EditDraftSnapshot) error
+	GetDraftSnapshot(id string) (*EditDraftSnapshot, error)
+	GetDraftSnapshotBySession(sessionID string, sessionVersion int64) (*EditDraftSnapshot, error)
+
+	CreateJobInputSnapshot(snapshot *RegenerationJobInputSnapshot) error
+	GetJobInputSnapshot(jobID string) (*RegenerationJobInputSnapshot, error)
+
+	CreateCandidateAcceptanceOperation(op *CandidateAcceptanceOperation) error
+	UpdateCandidateAcceptanceOperation(id, status, errorMsg string) error
+	GetCandidateAcceptanceOperation(candidateID, idempotencyKey string) (*CandidateAcceptanceOperation, error)
+
+	CreateEditingEventOutboxRecord(record *EditingEventOutboxRecord) error
+	ListPendingEditingOutboxRecords(limit int) ([]EditingEventOutboxRecord, error)
+	MarkEditingEventOutboxPublished(id string) error
 }
 
 type repository struct {
@@ -829,4 +848,170 @@ func (r *repository) ListAllActionStreams(userID string) ([]ActionStream, error)
 	err := r.db.Where("user_id = ?", userID).
 		Order("created_at DESC").Find(&streams).Error
 	return streams, err
+}
+
+func (r *repository) ClaimNextJob(workerID, executionID string, leaseDuration time.Duration) (*RegenerationJob, error) {
+	now := time.Now().UTC()
+	leaseExpires := now.Add(leaseDuration).Format(time.RFC3339)
+	nowStr := now.Format(time.RFC3339)
+
+	var job RegenerationJob
+	err := r.db.Raw(`
+		UPDATE desktop_pet_regeneration_jobs
+		SET lease_owner = ?, execution_id = ?, lease_expires_at = ?, heartbeat_at = ?,
+		    attempt_count = attempt_count + 1, status = ?, updated_at = ?
+		WHERE id = (
+			SELECT id FROM desktop_pet_regeneration_jobs
+			WHERE status IN (?, ?, ?)
+			  AND (lease_expires_at = '' OR lease_expires_at < ?)
+			ORDER BY created_at ASC
+			LIMIT 1
+		)
+		RETURNING *`,
+		workerID, executionID, leaseExpires, nowStr, JobStatusPreparing, nowStr,
+		JobStatusCreated, JobStatusQueued, JobStatusFailedRetryable, nowStr,
+	).Scan(&job).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if job.ID == "" {
+		return nil, nil
+	}
+	return &job, nil
+}
+
+func (r *repository) UpdateJobHeartbeatWithLease(jobID, executionID, leaseOwner string, expectedStatus string, leaseDuration time.Duration) (bool, error) {
+	now := time.Now().UTC()
+	leaseExpires := now.Add(leaseDuration).Format(time.RFC3339)
+	nowStr := now.Format(time.RFC3339)
+
+	result := r.db.Model(&RegenerationJob{}).
+		Where("id = ? AND execution_id = ? AND lease_owner = ? AND status = ?",
+			jobID, executionID, leaseOwner, expectedStatus).
+		Updates(map[string]any{
+			"heartbeat_at":     nowStr,
+			"lease_expires_at": leaseExpires,
+			"updated_at":       nowStr,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) UpdateJobLease(jobID, leaseOwner, executionID string, leaseExpiresAt string) (bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	result := r.db.Model(&RegenerationJob{}).
+		Where("id = ? AND execution_id = ?", jobID, executionID).
+		Updates(map[string]any{
+			"lease_owner":      leaseOwner,
+			"execution_id":     executionID,
+			"lease_expires_at": leaseExpiresAt,
+			"updated_at":       now,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) CreateDraftSnapshot(snapshot *EditDraftSnapshot) error {
+	return r.db.Create(snapshot).Error
+}
+
+func (r *repository) GetDraftSnapshot(id string) (*EditDraftSnapshot, error) {
+	var snap EditDraftSnapshot
+	err := r.db.Where("id = ?", id).First(&snap).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &snap, nil
+}
+
+func (r *repository) GetDraftSnapshotBySession(sessionID string, sessionVersion int64) (*EditDraftSnapshot, error) {
+	var snap EditDraftSnapshot
+	err := r.db.Where("session_id = ? AND session_version = ?", sessionID, sessionVersion).
+		Order("created_at DESC").First(&snap).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &snap, nil
+}
+
+func (r *repository) CreateJobInputSnapshot(snapshot *RegenerationJobInputSnapshot) error {
+	return r.db.Create(snapshot).Error
+}
+
+func (r *repository) GetJobInputSnapshot(jobID string) (*RegenerationJobInputSnapshot, error) {
+	var snap RegenerationJobInputSnapshot
+	err := r.db.Where("job_id = ?", jobID).First(&snap).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &snap, nil
+}
+
+func (r *repository) CreateCandidateAcceptanceOperation(op *CandidateAcceptanceOperation) error {
+	return r.db.Create(op).Error
+}
+
+func (r *repository) UpdateCandidateAcceptanceOperation(id, status, errorMsg string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	updates := map[string]any{
+		"status":     status,
+		"updated_at": now,
+	}
+	if errorMsg != "" {
+		updates["error_message"] = errorMsg
+	}
+	if status == "completed" || status == "failed" {
+		updates["completed_at"] = now
+	}
+	return r.db.Model(&CandidateAcceptanceOperation{}).Where("id = ?", id).Updates(updates).Error
+}
+
+func (r *repository) GetCandidateAcceptanceOperation(candidateID, idempotencyKey string) (*CandidateAcceptanceOperation, error) {
+	var op CandidateAcceptanceOperation
+	err := r.db.Where("candidate_id = ? AND idempotency_key = ?", candidateID, idempotencyKey).First(&op).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &op, nil
+}
+
+func (r *repository) CreateEditingEventOutboxRecord(record *EditingEventOutboxRecord) error {
+	return r.db.Create(record).Error
+}
+
+func (r *repository) ListPendingEditingOutboxRecords(limit int) ([]EditingEventOutboxRecord, error) {
+	var records []EditingEventOutboxRecord
+	err := r.db.Where("status = ? AND available_at <= ?",
+		"pending", time.Now().UTC().Format(time.RFC3339)).
+		Order("available_at ASC").Limit(limit).Find(&records).Error
+	return records, err
+}
+
+func (r *repository) MarkEditingEventOutboxPublished(id string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.Model(&EditingEventOutboxRecord{}).Where("id = ?", id).Updates(map[string]any{
+		"status":       "published",
+		"published_at": now,
+		"updated_at":   now,
+	}).Error
 }

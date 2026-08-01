@@ -86,6 +86,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		TargetVersion: version, FromVersion: current.InstalledVersion.String(),
 		OperationType: "rollback", Status: "created", CurrentStep: "created",
 		ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}",
+		
 		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "rollback", ExtensionID: extensionID, TargetVersion: version,
 			ArtifactID: artifact.ArtifactID, ScopeType: scopeType, ScopeID: scopeID,
@@ -99,7 +100,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 			return result, handleErr
 		}
 	}
-	lease, leaseErr := r.acquirePackageExtensionLease(ctx, extensionID, operationID)
+		lease, leaseErr := r.acquirePackageExtensionLease(ctx, extensionID, operationID)
 	if leaseErr != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "acquire_lease", "PACKAGE_OPERATION_LEASE_CONFLICT", leaseErr.Error(), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("kernel: extension %s has an active operation: %w", extensionID, leaseErr)
@@ -469,7 +470,8 @@ func computeUninstallPreviewHash(preview PackageUninstallPreviewResult) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
-func (r *Runtime) ExecutePackageUninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationRecord, error) {
+func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackageUninstallRequest) (PackageOperationRecord, error) {
+	extensionID, userID, scopeType, scopeID := req.ExtensionID, req.UserID, req.ScopeType, req.ScopeID
 	initialPreview, err := r.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageOperationRecord{}, err
@@ -487,10 +489,12 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, extensionID, user
 		UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: initialPreview.CurrentVersion, OperationType: "uninstall", Status: "created", CurrentStep: "created",
 		ArtifactID: initialPreview.ArtifactID, ConfirmationsJSON: "{}",
+		
 		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "uninstall", ExtensionID: extensionID, TargetVersion: initialPreview.CurrentVersion,
 			ArtifactID: initialPreview.ArtifactID, ScopeType: scopeType, ScopeID: scopeID,
-		}), StartedAt: now, UpdatedAt: now}
+		}), StartedAt: now, UpdatedAt: now,
+		}
 	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperation(ctx, uninstallOp)
 	if createErr != nil {
 		return PackageOperationRecord{}, createErr
@@ -856,8 +860,193 @@ func (r *Runtime) beginSimplePackageOperation(ctx context.Context, userID, scope
 	op := PackageOperationRecord{OperationID: "package-operation-" + uuid.NewString(), TraceID: "package-trace-" + uuid.NewString(),
 		UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: version, OperationType: operationType, Status: "created", CurrentStep: "created",
-		ArtifactID: artifactID, ConfirmationsJSON: "{}", StartedAt: now, UpdatedAt: now}
+		ArtifactID: artifactID, ConfirmationsJSON: "{}",
+		 StartedAt: now, UpdatedAt: now}
 	return op, r.container.PackageRepository.CreateOperation(ctx, op)
+}
+
+
+func (r *Runtime) restoreQuarantinedGeneration(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	if qm.GenerationQuarantinePath == "" || qm.OriginalGenerationPath == "" {
+		return fmt.Errorf("kernel: quarantine metadata missing generation paths")
+	}
+	if _, err := os.Stat(qm.OriginalGenerationPath); err == nil {
+		actualHash := package_security.ComputeDirHash(qm.OriginalGenerationPath, r.container.PackageSecurity.GetHasher())
+		if actualHash == qm.TreeHash {
+			return nil
+		}
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation already exists at original path with different hash"))
+	}
+	if _, err := os.Stat(qm.GenerationQuarantinePath); err != nil {
+		if os.IsNotExist(err) {
+			return NewRepositoryError(RepositoryErrorNotFound, fmt.Errorf("kernel: generation quarantine path does not exist"))
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: cannot stat generation quarantine path: %w", err))
+	}
+	if err := copyDirContents(qm.GenerationQuarantinePath, qm.OriginalGenerationPath); err != nil {
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: failed to restore generation: %w", err))
+	}
+	restoredHash := package_security.ComputeDirHash(qm.OriginalGenerationPath, r.container.PackageSecurity.GetHasher())
+	if restoredHash != qm.TreeHash {
+		os.RemoveAll(qm.OriginalGenerationPath)
+		return NewRepositoryError(RepositoryErrorCorrupt, fmt.Errorf("kernel: restored generation hash mismatch: expected %s got %s", qm.TreeHash, restoredHash))
+	}
+	return nil
+}
+
+func (r *Runtime) restoreQuarantinedCurrent(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	if qm.CurrentQuarantinePath == "" || qm.OriginalCurrentPath == "" {
+		return fmt.Errorf("kernel: quarantine metadata missing current paths")
+	}
+	if _, err := os.Stat(qm.OriginalCurrentPath); err == nil {
+		return nil
+	}
+	if _, err := os.Stat(qm.CurrentQuarantinePath); err != nil {
+		if os.IsNotExist(err) {
+			return NewRepositoryError(RepositoryErrorNotFound, fmt.Errorf("kernel: current quarantine path does not exist"))
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: cannot stat current quarantine path: %w", err))
+	}
+	if err := copyFile(qm.CurrentQuarantinePath, qm.OriginalCurrentPath); err != nil {
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: failed to restore current.json: %w", err))
+	}
+	return nil
+}
+
+func (r *Runtime) restoreQuarantinedInstallation(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
+	if err == nil {
+		if version, ok := installation.Metadata["installedVersion"]; ok && version == operation.TargetVersion {
+			if genID, ok := installation.Metadata["generationId"]; ok && genID != "" {
+				return nil
+			}
+		}
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: installation already exists with different state"))
+	}
+	if !errors.Is(err, domain.ErrInvalidExtensionID) {
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: cannot check installation state: %w", err))
+	}
+	artifact, artErr := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+	if artErr != nil {
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact unavailable for installation restore: %w", artErr))
+	}
+	if artifact.InstalledPath == "" || artifact.InstalledPath != qm.OriginalGenerationPath {
+		return fmt.Errorf("kernel: artifact installed path does not match quarantine metadata")
+	}
+	return nil
+}
+
+func (r *Runtime) restoreVersionStateToCurrent(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	existing, err := r.container.PackageRepository.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion)
+	if err != nil {
+		kind := RepositoryErrorKindOf(err)
+		if kind == RepositoryErrorNotFound {
+			return nil
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: version lookup failed: %w", err))
+	}
+	expectedState := string(PackageVersionStateCurrent)
+	if existing.VersionState == expectedState && existing.VersionID != "" {
+		return nil
+	}
+	if existing.VersionState == string(PackageVersionStateRemoved) || existing.VersionState == string(PackageVersionStateRemoved) {
+		db := r.container.PackageRepository.DB()
+		if db == nil {
+			return fmt.Errorf("kernel: package version database unavailable")
+		}
+		result, err := db.ExecContext(ctx, `UPDATE package_versions SET version_state=? WHERE extension_id=? AND version=? AND version_state IN (?, ?)`,
+			expectedState, operation.ExtensionID, operation.TargetVersion, string(PackageVersionStateRemoved), string(PackageVersionStateRemoved))
+		if err != nil {
+			return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: restore version state update failed: %w", err))
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: restore version state rows affected failed: %w", err))
+		}
+		if affected != 1 {
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: version state restore affected %d rows, expected 1", affected))
+		}
+		return nil
+	}
+	if existing.VersionState == expectedState && existing.VersionID != operation.TargetVersion {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: version state is current but version_id does not match"))
+	}
+	return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: unexpected version state: %s", existing.VersionState))
+}
+
+func (r *Runtime) restoreArtifactInstalledPath(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	artifact, err := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+	if err != nil {
+		kind := RepositoryErrorKindOf(err)
+		if kind == RepositoryErrorNotFound {
+			return fmt.Errorf("kernel: artifact not found for path restore")
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact unavailable for path restore: %w", err))
+	}
+	if artifact.InstalledPath == "" {
+		if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, operation.ArtifactID, qm.OriginalGenerationPath, guard); err != nil {
+			return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: set artifact installed path failed: %w", err))
+		}
+		return nil
+	}
+	if filepath.Clean(artifact.InstalledPath) == filepath.Clean(qm.OriginalGenerationPath) {
+		return nil
+	}
+	return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: artifact installed path conflict: existing %s, expected %s", artifact.InstalledPath, qm.OriginalGenerationPath))
+}
+
+func (r *Runtime) restoreArtifactInstallationReference(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	_, err := r.container.PackageRepository.AcquireArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID, time.Time{})
+	if err != nil {
+		if isSQLiteConstraintViolation(err) {
+			return nil
+		}
+		if IsRepositoryErrorKind(err, RepositoryErrorConflict) {
+			return nil
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact reference restore failed: %w", err))
+	}
+	return nil
+}
+
+func (r *Runtime) verifyUninstallRestoredState(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
+	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
+	if err != nil {
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: installation missing after restore: %w", err))
+	}
+	if genID, ok := installation.Metadata["generationId"]; !ok || genID == "" {
+		return errors.New("kernel: installation generation id missing after restore")
+	}
+	artifact, err := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+	if err != nil {
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact unavailable after restore: %w", err))
+	}
+	if filepath.Clean(artifact.InstalledPath) != filepath.Clean(qm.OriginalGenerationPath) {
+		return errors.New("kernel: artifact installed path mismatch after restore")
+	}
+	version, err := r.container.PackageRepository.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion)
+	if err != nil {
+		kind := RepositoryErrorKindOf(err)
+		if kind == RepositoryErrorNotFound {
+			return errors.New("kernel: version state missing after restore")
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: version state unavailable after restore: %w", err))
+	}
+	if version.VersionState != string(PackageVersionStateCurrent) {
+		return errors.New("kernel: version state is not current after restore")
+	}
+	qmAfter, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+	if err != nil {
+		kind := RepositoryErrorKindOf(err)
+		if kind == RepositoryErrorNotFound {
+			return nil
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: quarantine metadata unavailable after restore: %w", err))
+	}
+	if qmAfter.State != "active" && qmAfter.State != "restored" {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: quarantine metadata in unexpected state after restore: %s", qmAfter.State))
+	}
+	return nil
 }
 
 func (r *Runtime) completeSimplePackageStep(ctx context.Context, operationID, name string, order int, guard PackageWriteGuard) error {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel/migration"
 )
 
 var (
@@ -69,47 +71,53 @@ var (
 	ErrPackageMigrationSQLUnparseable         = errors.New("kernel: migration sql statement unparseable")
 	ErrPackageMigrationNamespaceViolation     = errors.New("kernel: migration namespace violation")
 	ErrPackageLegacyRuntimeEnabled            = errors.New("kernel: legacy runtime enabled in production")
+	ErrPackageConfirmationStale               = errors.New("kernel: confirmation token stale, re-preview required")
+	ErrPackageRollbackRequirementChanged      = errors.New("kernel: rollback snapshot requirement changed after confirmation")
 )
 
 const (
-	PackageErrCodeIdempotencyKeyRequired          = "PACKAGE_IDEMPOTENCY_KEY_REQUIRED"
-	PackageErrCodeIdempotencyKeyReused            = "PACKAGE_IDEMPOTENCY_KEY_REUSED"
-	PackageErrCodeOperationConflict               = "PACKAGE_OPERATION_CONFLICT"
-	PackageErrCodeLeaseAcquireFailed              = "PACKAGE_LEASE_ACQUIRE_FAILED"
-	PackageErrCodeLeaseLost                       = "PACKAGE_LEASE_LOST"
-	PackageErrCodeLeaseFenced                     = "PACKAGE_LEASE_FENCED"
-	PackageErrCodeMigrationFailed                 = "PACKAGE_MIGRATION_FAILED"
-	PackageErrCodeMigrationIrreversible           = "PACKAGE_MIGRATION_IRREVERSIBLE"
-	PackageErrCodeRecoveryAmbiguous               = "PACKAGE_RECOVERY_AMBIGUOUS"
-	PackageErrCodeArtifactMetadataMismatch        = "PACKAGE_ARTIFACT_METADATA_MISMATCH"
-	PackageErrCodeQuarantineRestoreFailed         = "PACKAGE_QUARANTINE_RESTORE_FAILED"
-	PackageErrCodeSnapshotIncomplete              = "PACKAGE_SNAPSHOT_INCOMPLETE"
-	PackageErrCodeRollbackSnapshotIncomplete      = "PACKAGE_ROLLBACK_SNAPSHOT_INCOMPLETE"
-	PackageErrCodeVersionHistoryCorrupted         = "PACKAGE_VERSION_HISTORY_CORRUPTED"
-	PackageErrCodeFinalGateFailed                 = "PACKAGE_FINAL_GATE_FAILED"
-	PackageErrCodeVersionActivateTargetNotFound   = "PACKAGE_VERSION_ACTIVATE_TARGET_NOT_FOUND"
-	PackageErrCodeInstallationNotFound            = "PACKAGE_INSTALLATION_NOT_FOUND"
-	PackageErrCodeVersionRepositoryUnavailable    = "PACKAGE_VERSION_REPOSITORY_UNAVAILABLE"
-	PackageErrCodeInstallationGenerationIDMissing = "PACKAGE_INSTALLATION_GENERATION_ID_MISSING"
-	PackageErrCodeVersionDeactivateTargetNotFound = "PACKAGE_VERSION_DEACTIVATE_TARGET_NOT_FOUND"
-	PackageErrCodeCompensationFailed              = "PACKAGE_COMPENSATION_FAILED"
-	PackageErrCodeMigrationSandboxViolation       = "PACKAGE_MIGRATION_SANDBOX_VIOLATION"
-	PackageErrCodeMigrationCompensationFailed     = "PACKAGE_MIGRATION_COMPENSATION_FAILED"
-	PackageErrCodeQuarantineMetadataUnavailable   = "PACKAGE_QUARANTINE_METADATA_UNAVAILABLE"
-	PackageErrCodeQuarantineMetadataMissing       = "PACKAGE_QUARANTINE_METADATA_MISSING"
-	PackageErrCodeQuarantineMetadataIncomplete    = "PACKAGE_QUARANTINE_METADATA_INCOMPLETE"
-	PackageErrCodeQuarantineReleaseFailed         = "PACKAGE_QUARANTINE_RELEASE_FAILED"
-	PackageErrCodeQuarantineStatePersistFailed    = "PACKAGE_QUARANTINE_STATE_PERSIST_FAILED"
-	PackageErrCodeRecoveryStepPersistFailed       = "PACKAGE_RECOVERY_STEP_PERSIST_FAILED"
-	PackageErrCodeRollbackSnapshotCorrupted       = "PACKAGE_ROLLBACK_SNAPSHOT_CORRUPTED"
-	PackageErrCodeUninstallArtifactPolicyUnproven = "PACKAGE_UNINSTALL_ARTIFACT_POLICY_UNPROVEN"
-	PackageErrCodeUninstallArtifactMissing        = "PACKAGE_UNINSTALL_ARTIFACT_UNEXPECTEDLY_MISSING"
-	PackageErrCodeUninstallArtifactReferenced     = "PACKAGE_UNINSTALL_ARTIFACT_STILL_REFERENCED"
-	PackageErrCodeMigrationSQLUnparseable         = "PACKAGE_MIGRATION_SQL_UNPARSEABLE"
-	PackageErrCodeMigrationNamespaceViolation     = "PACKAGE_MIGRATION_NAMESPACE_VIOLATION"
-	PackageErrCodeLegacyRuntimeEnabled            = "PACKAGE_LEGACY_RUNTIME_ENABLED"
-	PackageErrCodeUserDataSnapshotInvalid         = "PACKAGE_USER_DATA_SNAPSHOT_INVALID"
+	PackageErrCodeIdempotencyKeyRequired           = "PACKAGE_IDEMPOTENCY_KEY_REQUIRED"
+	PackageErrCodeIdempotencyKeyReused             = "PACKAGE_IDEMPOTENCY_KEY_REUSED"
+	PackageErrCodeOperationConflict                = "PACKAGE_OPERATION_CONFLICT"
+	PackageErrCodeLeaseAcquireFailed               = "PACKAGE_LEASE_ACQUIRE_FAILED"
+	PackageErrCodeLeaseLost                        = "PACKAGE_LEASE_LOST"
+	PackageErrCodeLeaseFenced                      = "PACKAGE_LEASE_FENCED"
+	PackageErrCodeMigrationFailed                  = "PACKAGE_MIGRATION_FAILED"
+	PackageErrCodeMigrationIrreversible            = "PACKAGE_MIGRATION_IRREVERSIBLE"
+	PackageErrCodeRecoveryAmbiguous                = "PACKAGE_RECOVERY_AMBIGUOUS"
+	PackageErrCodeArtifactMetadataMismatch         = "PACKAGE_ARTIFACT_METADATA_MISMATCH"
+	PackageErrCodeQuarantineRestoreFailed          = "PACKAGE_QUARANTINE_RESTORE_FAILED"
+	PackageErrCodeSnapshotIncomplete               = "PACKAGE_SNAPSHOT_INCOMPLETE"
+	PackageErrCodeRollbackSnapshotIncomplete       = "PACKAGE_ROLLBACK_SNAPSHOT_INCOMPLETE"
+	PackageErrCodeVersionHistoryCorrupted          = "PACKAGE_VERSION_HISTORY_CORRUPTED"
+	PackageErrCodeFinalGateFailed                  = "PACKAGE_FINAL_GATE_FAILED"
+	PackageErrCodeVersionActivateTargetNotFound    = "PACKAGE_VERSION_ACTIVATE_TARGET_NOT_FOUND"
+	PackageErrCodeInstallationNotFound             = "PACKAGE_INSTALLATION_NOT_FOUND"
+	PackageErrCodeVersionRepositoryUnavailable     = "PACKAGE_VERSION_REPOSITORY_UNAVAILABLE"
+	PackageErrCodeInstallationGenerationIDMissing  = "PACKAGE_INSTALLATION_GENERATION_ID_MISSING"
+	PackageErrCodeVersionDeactivateTargetNotFound  = "PACKAGE_VERSION_DEACTIVATE_TARGET_NOT_FOUND"
+	PackageErrCodeCompensationFailed               = "PACKAGE_COMPENSATION_FAILED"
+	PackageErrCodeMigrationSandboxViolation        = "PACKAGE_MIGRATION_SANDBOX_VIOLATION"
+	PackageErrCodeMigrationCompensationFailed      = "PACKAGE_MIGRATION_COMPENSATION_FAILED"
+	PackageErrCodeQuarantineMetadataUnavailable    = "PACKAGE_QUARANTINE_METADATA_UNAVAILABLE"
+	PackageErrCodeQuarantineMetadataMissing        = "PACKAGE_QUARANTINE_METADATA_MISSING"
+	PackageErrCodeQuarantineMetadataIncomplete     = "PACKAGE_QUARANTINE_METADATA_INCOMPLETE"
+	PackageErrCodeQuarantineReleaseFailed          = "PACKAGE_QUARANTINE_RELEASE_FAILED"
+	PackageErrCodeQuarantineStatePersistFailed     = "PACKAGE_QUARANTINE_STATE_PERSIST_FAILED"
+	PackageErrCodeRecoveryStepPersistFailed        = "PACKAGE_RECOVERY_STEP_PERSIST_FAILED"
+	PackageErrCodeRollbackSnapshotCorrupted        = "PACKAGE_ROLLBACK_SNAPSHOT_CORRUPTED"
+	PackageErrCodeUninstallArtifactPolicyUnproven  = "PACKAGE_UNINSTALL_ARTIFACT_POLICY_UNPROVEN"
+	PackageErrCodeUninstallArtifactMissing         = "PACKAGE_UNINSTALL_ARTIFACT_UNEXPECTEDLY_MISSING"
+	PackageErrCodeUninstallArtifactReferenced      = "PACKAGE_UNINSTALL_ARTIFACT_STILL_REFERENCED"
+	PackageErrCodeMigrationSQLUnparseable          = "PACKAGE_MIGRATION_SQL_UNPARSEABLE"
+	PackageErrCodeMigrationNamespaceViolation      = "PACKAGE_MIGRATION_NAMESPACE_VIOLATION"
+	PackageErrCodeLegacyRuntimeEnabled             = "PACKAGE_LEGACY_RUNTIME_ENABLED"
+	PackageErrCodeUserDataSnapshotInvalid          = "PACKAGE_USER_DATA_SNAPSHOT_INVALID"
 	PackageErrCodeUserDataSnapshotStoreUnavailable = "PACKAGE_USER_DATA_SNAPSHOT_STORE_UNAVAILABLE"
+	PackageErrCodeConfirmationTokenInvalid         = "PACKAGE_CONFIRMATION_TOKEN_INVALID"
+	PackageErrCodeConfirmationBindingMismatch      = "PACKAGE_CONFIRMATION_BINDING_MISMATCH"
+	PackageErrCodeConfirmationStale                = "PACKAGE_CONFIRMATION_STALE"
+	PackageErrCodeRollbackRequirementChanged       = "PACKAGE_ROLLBACK_REQUIREMENT_CHANGED"
 )
 
 type PackageError struct {
@@ -149,6 +157,16 @@ func NewPackageErrorWithRecovery(code string, httpStatus int, retryable, recover
 	}
 }
 
+func ToPackageMigrationError(err error) *PackageError {
+	if errors.Is(err, migration.ErrSQLUnparseable) {
+		return NewPackageError(PackageErrCodeMigrationSQLUnparseable, PackageErrorHTTPStatus(PackageErrCodeMigrationSQLUnparseable), err)
+	}
+	if errors.Is(err, migration.ErrNamespaceViolation) {
+		return NewPackageError(PackageErrCodeMigrationNamespaceViolation, PackageErrorHTTPStatus(PackageErrCodeMigrationNamespaceViolation), err)
+	}
+	return nil
+}
+
 var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeIdempotencyKeyRequired:          400,
 	PackageErrCodeIdempotencyKeyReused:            409,
@@ -186,6 +204,10 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeMigrationSQLUnparseable:         422,
 	PackageErrCodeMigrationNamespaceViolation:     403,
 	PackageErrCodeLegacyRuntimeEnabled:            403,
+	PackageErrCodeConfirmationTokenInvalid:        403,
+	PackageErrCodeConfirmationBindingMismatch:     403,
+	PackageErrCodeConfirmationStale:               409,
+	PackageErrCodeRollbackRequirementChanged:      409,
 }
 
 func PackageErrorHTTPStatus(code string) int {
@@ -271,8 +293,7 @@ func NewRepositoryError(kind RepositoryErrorKind, cause error) *RepositoryError 
 }
 
 func IsRepositoryErrorKind(err error, kind RepositoryErrorKind) bool {
-	var repoErr *RepositoryError
-	return errors.As(err, &repoErr) && repoErr.Kind == kind
+	return RepositoryErrorKindOf(err) == kind
 }
 
 func IsRepositoryError(err error) bool {
@@ -293,6 +314,13 @@ func RepositoryErrorKindOf(err error) RepositoryErrorKind {
 	}
 	if IsPackageOperationError(err, OperationErrStorageFailure) {
 		return RepositoryErrorUnavailable
+	}
+	if IsPackageOperationError(err, OperationErrTransitionConflict) ||
+		IsPackageOperationError(err, OperationErrStepInputConflict) ||
+		IsPackageOperationError(err, OperationErrSideEffectConflict) ||
+		IsPackageOperationError(err, OperationErrIdempotencyConflict) ||
+		IsPackageOperationError(err, OperationErrLeaseConflict) {
+		return RepositoryErrorConflict
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return RepositoryErrorNotFound
@@ -319,6 +347,5 @@ func isSQLiteConstraintViolation(err error) bool {
 	}
 	errStr := err.Error()
 	return strings.Contains(errStr, "UNIQUE constraint failed") ||
-		strings.Contains(errStr, "constraint failed") ||
-		strings.Contains(errStr, "already")
+		strings.Contains(errStr, "constraint failed")
 }

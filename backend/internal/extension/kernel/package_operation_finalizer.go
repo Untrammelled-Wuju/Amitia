@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -444,7 +443,7 @@ func (f *PackageRecoveryFinalizer) FinalizeUninstallRecovery(ctx context.Context
 		if existing, vErr := repo.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion); vErr == nil {
 			if existing.VersionState != string(PackageVersionStateRemoved) {
 				if err := repo.RemovePackageVersion(ctx, operation.ExtensionID, operation.TargetVersion); err != nil {
-					if !strings.Contains(err.Error(), "not found for remove") {
+					if !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
 						return f.requireManualRecovery(ctx, operation, "uninstall version remove failed", err, guard)
 					}
 				}

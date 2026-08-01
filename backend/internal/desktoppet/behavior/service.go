@@ -4,20 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
 )
 
+type AdapterManagerTarget interface {
+}
+
 type BindingRepository interface {
-	Create(ctx context.Context, binding BehaviorBinding) error
+	Create(ctx context.Context, binding bindings.BehaviorBinding) error
 	Update(ctx context.Context, id string, updates map[string]interface{}) error
 	Delete(ctx context.Context, id string) error
-	GetByID(ctx context.Context, id string) (*BehaviorBinding, error)
-	ListByUserCharacter(ctx context.Context, userID, characterID string) ([]BehaviorBinding, error)
-	ListByEventType(ctx context.Context, userID, characterID, eventType string) ([]BehaviorBinding, error)
+	GetByID(ctx context.Context, id string) (*bindings.BehaviorBinding, error)
+	ListByUserCharacter(ctx context.Context, userID, characterID string) ([]bindings.BehaviorBinding, error)
+	ListByEventType(ctx context.Context, userID, characterID, eventType string) ([]bindings.BehaviorBinding, error)
 }
 
 type CompileFunc func(conditionsJSON json.RawMessage) (interface{}, error)
 
-type ValidateBindingFunc func(binding BehaviorBinding, condition interface{}) error
+type ValidateBindingFunc func(binding bindings.BehaviorBinding, condition interface{}) error
 
 type ValidateActionFunc func(preferredAction string, availableActions []string) error
 
@@ -26,10 +31,15 @@ type ReloadEvaluatorFunc func(ctx context.Context, engine *BehaviorEngine, repo 
 type BehaviorService struct {
 	engine          *BehaviorEngine
 	repo            BindingRepository
+	adapterManager  any
 	compile         CompileFunc
 	validateBinding ValidateBindingFunc
 	validateAction  ValidateActionFunc
 	reloadEvaluator ReloadEvaluatorFunc
+}
+
+func (s *BehaviorService) SetAdapterManager(am any) {
+	s.adapterManager = am
 }
 
 type ServiceOption func(*BehaviorService)
@@ -97,7 +107,7 @@ func (s *BehaviorService) SetRuntimeCommandEnabled(enabled bool) {
 	s.engine.SetRuntimeCommandEnabled(enabled)
 }
 
-func (s *BehaviorService) CreateBinding(ctx context.Context, binding BehaviorBinding) error {
+func (s *BehaviorService) CreateBinding(ctx context.Context, binding bindings.BehaviorBinding) error {
 	if s.compile != nil && s.validateBinding != nil {
 		condition, err := s.compile(binding.ConditionsJSON)
 		if err != nil {
@@ -180,11 +190,11 @@ func (s *BehaviorService) DeleteBinding(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *BehaviorService) ListBindings(ctx context.Context, userID, characterID string) ([]BehaviorBinding, error) {
+func (s *BehaviorService) ListBindings(ctx context.Context, userID, characterID string) ([]bindings.BehaviorBinding, error) {
 	return s.repo.ListByUserCharacter(ctx, userID, characterID)
 }
 
-func (s *BehaviorService) GetBinding(ctx context.Context, id string) (*BehaviorBinding, error) {
+func (s *BehaviorService) GetBinding(ctx context.Context, id string) (*bindings.BehaviorBinding, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
