@@ -136,3 +136,9 @@ state-machine-refactor-acceptance/
 # Backend test/legacy binaries
 backend/kernel.test.exe
 backend/legacy-package-migrate.exe
+
+# Temp build artifacts
+backend/server_*.exe
+backend/tmp/
+temp_*.go
+temp_*.txt
