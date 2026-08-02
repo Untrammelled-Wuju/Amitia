@@ -998,9 +998,11 @@ func TestFIV_CrashAfterFirstBatchCommits(t *testing.T) {
 		t.Fatalf("expected 250 rows, got %d", fullCount)
 	}
 
+	recordsFi2, parsedFi2, _ := parseAndValidateJSONL(jsonl, extFi2)
+	h0fi2 := computeContentBoundBatchHash(recordsFi2[0:100], extFi2, 0, userBatchGenesisHash(), 1, parsedFi2[0].SchemaVersion, "ext_fi2_data", "op-fi2")
 	_, err = db.ExecContext(ctx,
-		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=batch_hash, batch_hash='' WHERE operation_id=? AND table_name=?`,
-		"op-fi2", "ext_fi2_data")
+		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=?, batch_hash=? WHERE operation_id=? AND table_name=?`,
+		userBatchGenesisHash(), h0fi2, "op-fi2", "ext_fi2_data")
 	if err != nil {
 		t.Fatalf("set partial progress: %v", err)
 	}
@@ -1157,11 +1159,17 @@ func TestFIV_RestartExecutesOnlyRemainingBatches(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi5, "op-fi5", string(userStateJSON)); err != nil {
 		t.Fatalf("first restore: %v", err)
 	}
+	records5, parsed5, _ := parseAndValidateJSONL(jsonl, extFi5)
+	h0fi5 := computeContentBoundBatchHash(records5[0:100], extFi5, 0, userBatchGenesisHash(), 1, parsed5[0].SchemaVersion, "ext_fi5_data", "op-fi5")
 	_, err = db.ExecContext(ctx,
-		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=150, applied_count=150, cursor='150', batch_index=1, prev_batch_hash=batch_hash, batch_hash='' WHERE operation_id=? AND table_name=?`,
-		"op-fi5", "ext_fi5_data")
+		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=?, batch_hash=? WHERE operation_id=? AND table_name=?`,
+		userBatchGenesisHash(), h0fi5, "op-fi5", "ext_fi5_data")
 	if err != nil {
 		t.Fatalf("set mid-batch progress: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		"DELETE FROM ext_fi5_data WHERE entity_id IN (SELECT entity_id FROM ext_fi5_data ORDER BY entity_id LIMIT 200 OFFSET 100)"); err != nil {
+		t.Fatalf("simulate data loss: %v", err)
 	}
 
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi5, "op-fi5", string(userStateJSON)); err != nil {

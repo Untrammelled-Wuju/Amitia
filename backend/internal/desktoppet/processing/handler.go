@@ -331,10 +331,7 @@ func (h *Handler) ProcessingEventsStream(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	bus := desktoppet.DefaultEventBus()
-	subscriberID := c.Query("subscriberId")
-	if subscriberID == "" {
-		subscriberID = fmt.Sprintf("sse-%p-%d", c.Request, time.Now().UnixNano())
-	}
+	subscriberID := fmt.Sprintf("sse_%d_%d", time.Now().UnixNano(), c.Writer)
 	events := bus.Subscribe(processingTaskID, subscriberID)
 	defer bus.Unsubscribe(processingTaskID, subscriberID)
 

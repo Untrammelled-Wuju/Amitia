@@ -493,7 +493,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		return fmt.Errorf("kernel: update journal to importing: %w", err)
 	}
 	appliedCount := journal.AppliedCount
-	prevBatchHash := journal.PrevBatchHash
+	prevBatchHash := journal.BatchHash
 	if prevBatchHash == "" {
 		prevBatchHash = userBatchGenesisHash()
 	}

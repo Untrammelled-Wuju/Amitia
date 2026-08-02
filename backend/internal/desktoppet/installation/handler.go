@@ -108,13 +108,16 @@ func (h *Handler) EnableInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.EnableInstallation(userID, installationID); err != nil {
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	if err := h.service.EnableInstallation(actor.UserID, installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -127,13 +130,16 @@ func (h *Handler) DisableInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.DisableInstallation(userID, installationID); err != nil {
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	if err := h.service.DisableInstallation(actor.UserID, installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -182,13 +188,16 @@ func (h *Handler) UpdateRuntimeSettings(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	settings, err := h.service.UpdateRuntimeSettings(userID, installationID, &payload)
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	settings, err := h.service.UpdateRuntimeSettings(actor.UserID, installationID, &payload)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -202,13 +211,16 @@ func (h *Handler) Recenter(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.Recenter(userID, installationID); err != nil {
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	if err := h.service.Recenter(actor.UserID, installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -226,13 +238,16 @@ func (h *Handler) PlayAction(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.PlayAction(userID, installationID, actionKey); err != nil {
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	if err := h.service.PlayAction(actor.UserID, installationID, actionKey); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -245,13 +260,16 @@ func (h *Handler) Uninstall(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.Uninstall(userID, installationID); err != nil {
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	if err := h.service.Uninstall(actor.UserID, installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}

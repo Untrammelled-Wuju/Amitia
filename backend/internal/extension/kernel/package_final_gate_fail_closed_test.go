@@ -1631,8 +1631,8 @@ func TestFinalGateUserDataRestoreAggregateMismatchBlocksRollback(t *testing.T) {
 		t.Fatal("expected VerifyUserDataRestore to fail after aggregate_hash tampering, got nil")
 	}
 	var pkgErr *PackageError
-	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeUserDataSnapshotInvalid {
-		t.Fatalf("expected PackageErrCodeUserDataSnapshotInvalid, got: %v", err)
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeUserDataAggregateHashMismatch {
+		t.Fatalf("expected PackageErrCodeUserDataAggregateHashMismatch, got: %v", err)
 	}
 	if !strings.Contains(err.Error(), "aggregate hash mismatch") {
 		t.Fatalf("expected aggregate hash mismatch detail, got: %v", err)

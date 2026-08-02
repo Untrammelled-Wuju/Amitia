@@ -7,13 +7,13 @@ storage:
   dataDir: "data"
 
 jwt:
-  secret: "u-ai-secret-key-change-me"
+  secret: ""
   expireDays: 7
 
 security:
   mode: "local_single_user"
   allowRemoteAccess: false
-  localToken: "dev-local-token"
+  localToken: ""
   allowedOrigins:
     - "app://amitia"
     - "http://127.0.0.1"

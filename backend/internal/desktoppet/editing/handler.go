@@ -52,6 +52,15 @@ func (h *Handler) GetRevision(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少Revision ID", nil)
 		return
 	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	detail, err := h.service.GetRevision(c.Request.Context(), revisionID)
 	if err != nil {
 		writeEditError(c, err)
@@ -107,6 +116,15 @@ func (h *Handler) ActivateRevision(c *gin.Context) {
 
 func (h *Handler) GetPreviewManifest(c *gin.Context) {
 	revisionID := c.Param("revisionId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	manifest, err := h.service.GetPreviewManifest(c.Request.Context(), revisionID)
 	if err != nil {
 		writeEditError(c, err)
@@ -118,6 +136,15 @@ func (h *Handler) GetPreviewManifest(c *gin.Context) {
 func (h *Handler) GetFrameImage(c *gin.Context) {
 	revisionID := c.Param("revisionId")
 	frameID := c.Param("frameId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	path, mimeType, err := h.service.GetFrameImage(c.Request.Context(), revisionID, frameID)
 	if err != nil {
 		writeEditError(c, err)
@@ -129,6 +156,15 @@ func (h *Handler) GetFrameImage(c *gin.Context) {
 func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 	revisionID := c.Param("revisionId")
 	frameID := c.Param("frameId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	path, mimeType, err := h.service.GetFrameThumbnail(c.Request.Context(), revisionID, frameID)
 	if err != nil {
 		writeEditError(c, err)
@@ -184,6 +220,15 @@ func (h *Handler) CreateSession(c *gin.Context) {
 
 func (h *Handler) GetSession(c *gin.Context) {
 	sessionID := c.Param("sessionId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	session, err := h.service.GetSession(c.Request.Context(), sessionID)
 	if err != nil {
 		writeEditError(c, err)
@@ -194,12 +239,16 @@ func (h *Handler) GetSession(c *gin.Context) {
 
 func (h *Handler) ApplyOperation(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req ApplyOperationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -215,12 +264,16 @@ func (h *Handler) ApplyOperation(c *gin.Context) {
 
 func (h *Handler) Undo(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	baseVersion, _ := strconv.ParseInt(c.Query("baseSessionVersion"), 10, 64)
 	resp, err := h.service.Undo(c.Request.Context(), sessionID, userID, baseVersion)
 	if err != nil {
@@ -232,12 +285,16 @@ func (h *Handler) Undo(c *gin.Context) {
 
 func (h *Handler) Redo(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	baseVersion, _ := strconv.ParseInt(c.Query("baseSessionVersion"), 10, 64)
 	resp, err := h.service.Redo(c.Request.Context(), sessionID, userID, baseVersion)
 	if err != nil {
@@ -249,7 +306,16 @@ func (h *Handler) Redo(c *gin.Context) {
 
 func (h *Handler) CreateCheckpoint(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	err := h.service.CreateCheckpoint(c.Request.Context(), sessionID)
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	err = h.service.CreateCheckpoint(c.Request.Context(), sessionID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -259,12 +325,16 @@ func (h *Handler) CreateCheckpoint(c *gin.Context) {
 
 func (h *Handler) CommitSession(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req CommitSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -280,12 +350,16 @@ func (h *Handler) CommitSession(c *gin.Context) {
 
 func (h *Handler) AbandonSession(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	err = h.service.AbandonSession(c.Request.Context(), sessionID, userID)
 	if err != nil {
 		writeEditError(c, err)
@@ -296,6 +370,15 @@ func (h *Handler) AbandonSession(c *gin.Context) {
 
 func (h *Handler) SessionEvents(c *gin.Context) {
 	sessionID := c.Param("sessionId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	events, err := h.service.GetSessionEvents(c.Request.Context(), sessionID)
 	if err != nil {
 		writeEditError(c, err)
@@ -332,6 +415,15 @@ func (h *Handler) GetRegenerationJob(c *gin.Context) {
 	sessionID := c.Param("sessionId")
 	jobID := c.Param("jobId")
 	_ = sessionID
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireRegenerationJob(c.Request.Context(), actor, jobID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	job, err := h.service.GetRegenerationJob(c.Request.Context(), jobID)
 	if err != nil {
 		writeEditError(c, err)
@@ -342,12 +434,16 @@ func (h *Handler) GetRegenerationJob(c *gin.Context) {
 
 func (h *Handler) CancelRegenerationJob(c *gin.Context) {
 	jobID := c.Param("jobId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireRegenerationJob(c.Request.Context(), actor, jobID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	err = h.service.CancelRegenerationJob(c.Request.Context(), jobID, userID)
 	if err != nil {
 		writeEditError(c, err)
@@ -362,6 +458,15 @@ func (h *Handler) GetRegenerationJobByID(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少Job ID", nil)
 		return
 	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireRegenerationJob(c.Request.Context(), actor, jobID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	job, err := h.service.GetRegenerationJob(c.Request.Context(), jobID)
 	if err != nil {
 		writeEditError(c, err)
@@ -373,6 +478,11 @@ func (h *Handler) GetRegenerationJobByID(c *gin.Context) {
 func (h *Handler) ListRegenerationJobs(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	_, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
 	jobs, err := h.service.ListRegenerationJobs(c.Request.Context(), limit, offset)
 	if err != nil {
 		writeEditError(c, err)
@@ -386,12 +496,16 @@ func (h *Handler) ListRegenerationJobs(c *gin.Context) {
 
 func (h *Handler) AcceptCandidate(c *gin.Context) {
 	candidateID := c.Param("candidateId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireCandidate(c.Request.Context(), actor, candidateID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req AcceptCandidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = AcceptCandidateRequest{}
@@ -406,12 +520,16 @@ func (h *Handler) AcceptCandidate(c *gin.Context) {
 
 func (h *Handler) RejectCandidate(c *gin.Context) {
 	candidateID := c.Param("candidateId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireCandidate(c.Request.Context(), actor, candidateID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req RejectCandidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = RejectCandidateRequest{}
@@ -426,12 +544,16 @@ func (h *Handler) RejectCandidate(c *gin.Context) {
 
 func (h *Handler) UploadCandidate(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	targetFrameID := c.PostForm("targetFrameId")
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -474,12 +596,16 @@ func (h *Handler) UploadCandidate(c *gin.Context) {
 func (h *Handler) ApplyBackgroundPatch(c *gin.Context) {
 	sessionID := c.Param("sessionId")
 	frameID := c.Param("frameId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req BackgroundApplyPatchPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -497,12 +623,16 @@ func (h *Handler) ApplyBackgroundPatch(c *gin.Context) {
 func (h *Handler) ResetBackgroundPatch(c *gin.Context) {
 	sessionID := c.Param("sessionId")
 	frameID := c.Param("frameId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	err = h.service.ResetBackgroundPatch(c.Request.Context(), sessionID, frameID, userID)
 	if err != nil {
 		writeEditError(c, err)
@@ -513,12 +643,16 @@ func (h *Handler) ResetBackgroundPatch(c *gin.Context) {
 
 func (h *Handler) SetFrameAnchor(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req AnchorSetFramePayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -534,12 +668,16 @@ func (h *Handler) SetFrameAnchor(c *gin.Context) {
 
 func (h *Handler) BatchOffsetAnchors(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req AnchorBatchOffsetPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
@@ -555,12 +693,16 @@ func (h *Handler) BatchOffsetAnchors(c *gin.Context) {
 
 func (h *Handler) ResetAnchors(c *gin.Context) {
 	sessionID := c.Param("sessionId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	userID := actor.UserID
 	var req AnchorResetPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = AnchorResetPayload{}
@@ -575,6 +717,15 @@ func (h *Handler) ResetAnchors(c *gin.Context) {
 
 func (h *Handler) TriggerQualityEvaluation(c *gin.Context) {
 	revisionID := c.Param("revisionId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	jobID, err := h.service.TriggerQualityEvaluation(c.Request.Context(), revisionID)
 	if err != nil {
 		writeEditError(c, err)
@@ -585,6 +736,15 @@ func (h *Handler) TriggerQualityEvaluation(c *gin.Context) {
 
 func (h *Handler) GetLatestQualityEvaluation(c *gin.Context) {
 	revisionID := c.Param("revisionId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	info, err := h.service.GetLatestQualityEvaluation(c.Request.Context(), revisionID)
 	if err != nil {
 		writeEditError(c, err)
@@ -698,6 +858,15 @@ func (h *Handler) ListRevisionsByStream(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少Stream ID", nil)
 		return
 	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, streamID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
 	revs, err := h.service.ListRevisionsByStream(c.Request.Context(), streamID)
 	if err != nil {
 		writeEditError(c, err)
@@ -710,6 +879,15 @@ func (h *Handler) GetActiveRevisionByStream(c *gin.Context) {
 	streamID := c.Param("streamId")
 	if streamID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "缺少Stream ID", nil)
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, streamID); err != nil {
+		writeEditOwnershipError(c, err)
 		return
 	}
 	detail, err := h.service.GetActiveRevisionByStream(c.Request.Context(), streamID)
