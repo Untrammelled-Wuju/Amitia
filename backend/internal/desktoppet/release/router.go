@@ -2,10 +2,11 @@ package release
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
-func RegisterRoutes(r *gin.RouterGroup, svc ReleaseService) {
-	handler := NewHandler(svc)
+func RegisterRoutes(r *gin.RouterGroup, svc ReleaseService, guard security.OwnershipGuard) {
+	handler := NewHandler(svc, guard)
 	g := r.Group("/releases")
 	{
 		g.POST("/build", handler.BuildRelease)

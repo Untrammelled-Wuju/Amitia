@@ -1,3 +1,5 @@
+//go:build legacy_migration
+
 package extension
 
 import (
@@ -117,15 +119,3 @@ func (s *PackageService) translateKernelPackagePreview(ctx context.Context, prev
 	return result
 }
 
-func kernelSignatureStatus(status string) PackageSignatureStatus {
-	switch status {
-	case "valid":
-		return PackageSignatureTrusted
-	case "unsigned":
-		return PackageSignatureUnsigned
-	case "unknown_key", "legacy_signature":
-		return PackageSignatureUntrusted
-	default:
-		return PackageSignatureInvalid
-	}
-}

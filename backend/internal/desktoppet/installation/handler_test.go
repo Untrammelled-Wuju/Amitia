@@ -4,6 +4,7 @@ package installation
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/pkg/comment/response"
 )
 
@@ -266,8 +269,56 @@ func (s *stubHandlerService) GetCoordinator() V2Coordinator {
 func newHandlerTestRouter(svc Service) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterRoutes(r.Group("/api"), svc, nil)
+	r.Use(func(c *gin.Context) {
+		c.Set("actorContext", &desktoppetAuth.ActorContext{
+			ActorType:   desktoppetAuth.ActorTypeUser,
+			UserID:      "test-user-1",
+			Roles:       []string{"user"},
+			Permissions: desktoppetAuth.DefaultUserPermissions(),
+		})
+		c.Next()
+	})
+	RegisterRoutes(r.Group("/api"), svc, &stubInstallGuard{})
 	return r
+}
+
+type stubInstallGuard struct{}
+
+func (s *stubInstallGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*security.CharacterScope, error) {
+	return &security.CharacterScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.GenerationTaskScope, error) {
+	return &security.GenerationTaskScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.ProcessingTaskScope, error) {
+	return &security.ProcessingTaskScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*security.ActionRevisionScope, error) {
+	return &security.ActionRevisionScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*security.QualityScope, error) {
+	return &security.QualityScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*security.ReleaseScope, error) {
+	return &security.ReleaseScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
+	return &security.InstallationScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*security.EditSessionScope, error) {
+	return &security.EditSessionScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireRegenerationJob(ctx context.Context, actor *desktoppetAuth.ActorContext, jobID string) (*security.RegenerationJobScope, error) {
+	return &security.RegenerationJobScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireCandidate(ctx context.Context, actor *desktoppetAuth.ActorContext, candidateID string) (*security.CandidateScope, error) {
+	return &security.CandidateScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireRuntimeCommand(ctx context.Context, actor *desktoppetAuth.ActorContext, commandID string) (*security.RuntimeCommandScope, error) {
+	return &security.RuntimeCommandScope{UserID: actor.UserID}, nil
+}
+func (s *stubInstallGuard) RequireBehaviorBinding(ctx context.Context, actor *desktoppetAuth.ActorContext, bindingID string) (*security.BehaviorBindingScope, error) {
+	return &security.BehaviorBindingScope{UserID: actor.UserID}, nil
 }
 
 func doRequest(t *testing.T, r *gin.Engine, method, path string, body interface{}) *httptest.ResponseRecorder {

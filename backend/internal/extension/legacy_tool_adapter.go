@@ -2,6 +2,8 @@
 // Do not add new capabilities. This implementation is retained only for
 // compatibility, maintenance, testing, and migration to Extension Kernel.
 
+//go:build legacy_migration
+
 package extension
 
 import (

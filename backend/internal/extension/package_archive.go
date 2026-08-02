@@ -1,3 +1,5 @@
+//go:build legacy_migration
+
 package extension
 
 import (
@@ -20,25 +22,6 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 )
-
-type parsedExtensionPackage struct {
-	Format       PackageFormat
-	Source       string
-	Files        map[string][]byte
-	Raw          []byte
-	PackageHash  string
-	Manifest     Manifest
-	ManifestRaw  json.RawMessage
-	Signature    PackageSignatureView
-	AgentSkill   *parsedAgentSkill
-	Workflow     *WorkflowDefinition
-	WorkflowRaw  json.RawMessage
-	Schemas      map[string]json.RawMessage
-	Tests        json.RawMessage
-	Warnings     []string
-	FileViews    []PackageFileView
-	SignedDigest string
-}
 
 type packageSignatureDocument struct {
 	Algorithm    string `json:"algorithm"`

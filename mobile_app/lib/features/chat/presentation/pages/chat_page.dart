@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -352,12 +351,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       appBar: AmitiaAppBar(
         centerTitle: true,
         navigation: AmitiaAppBarNavigation.drawer,
-        titleWidget: _ChatModelSelector(
-          isAgentMode: isAgentMode,
-          onAgentModeChanged: (value) {
-            ref.read(isAgentModeProvider.notifier).state = value;
-          },
-        ),
         actions: [
           AmitiaIconButton(
             icon: Icons.edit_square,
@@ -465,148 +458,6 @@ class _ChatScrollFade extends StatelessWidget {
               end: end,
               colors: [color, color.withValues(alpha: 0)],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ChatModelSelector extends StatelessWidget {
-  final bool isAgentMode;
-  final ValueChanged<bool> onAgentModeChanged;
-
-  const _ChatModelSelector({
-    required this.isAgentMode,
-    required this.onAgentModeChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: '选择聊天模式',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            showModalBottomSheet(
-              context: context,
-              backgroundColor: context.surfacePrimary,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              builder: (sheetContext) => SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: context.borderPrimary,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _ChatModeOption(
-                        icon: Icons.auto_awesome_outlined,
-                        title: 'Amitia',
-                        subtitle: '快速对话与日常协助',
-                        selected: !isAgentMode,
-                        onTap: () {
-                          onAgentModeChanged(false);
-                          Navigator.pop(sheetContext);
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _ChatModeOption(
-                        icon: Icons.hub_outlined,
-                        title: 'Agent',
-                        subtitle: '可规划并执行多步任务',
-                        selected: isAgentMode,
-                        onTap: () {
-                          onAgentModeChanged(true);
-                          Navigator.pop(sheetContext);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  isAgentMode ? 'Agent' : 'Amitia',
-                  style: AppTypography.cardTitle(
-                    context,
-                  ).copyWith(fontSize: 17),
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 20,
-                  color: context.textPrimary,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ChatModeOption extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ChatModeOption({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? context.surfaceSecondary : Colors.transparent,
-      borderRadius: AppRadius.brMedium,
-      child: InkWell(
-        borderRadius: AppRadius.brMedium,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Icon(icon, size: 22, color: context.textPrimary),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: AppTypography.cardTitle(context)),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: AppTypography.caption(context)),
-                  ],
-                ),
-              ),
-              if (selected)
-                Icon(Icons.check, color: context.textPrimary, size: 20),
-            ],
           ),
         ),
       ),

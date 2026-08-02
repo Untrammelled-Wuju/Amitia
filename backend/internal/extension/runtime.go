@@ -29,7 +29,6 @@ type Runtime struct {
 	WorkflowHost  *WorkflowHostAdapter
 	AgentSkills   *AgentSkillService
 	Kernel        *kernelruntime.Runtime
-	Lifecycle     *extensionLifecycleService
 }
 
 func (r *Runtime) AttachKernel(root string) error {

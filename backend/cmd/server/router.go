@@ -126,7 +126,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	editing.RegisterEditingRouterWithService(apiGroup, services.EditingService, services.OwnershipGuard)
 	quality.RegisterQualityRouter(apiGroup, services.QualityService, services.OwnershipGuard)
 	installation.RegisterRoutes(apiGroup, services.InstallationService, services.OwnershipGuard)
-		release.RegisterRoutes(apiGroup, services.NewReleaseService)
+		release.RegisterRoutes(apiGroup, services.NewReleaseService, services.OwnershipGuard)
 		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)

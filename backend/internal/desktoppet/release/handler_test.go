@@ -12,7 +12,48 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 )
+
+type stubOwnershipGuard struct{}
+
+func (s *stubOwnershipGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*security.CharacterScope, error) {
+	return &security.CharacterScope{UserID: actor.UserID, CharacterID: characterID}, nil
+}
+func (s *stubOwnershipGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.GenerationTaskScope, error) {
+	return &security.GenerationTaskScope{UserID: actor.UserID, TaskID: taskID}, nil
+}
+func (s *stubOwnershipGuard) RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.ProcessingTaskScope, error) {
+	return &security.ProcessingTaskScope{UserID: actor.UserID, TaskID: taskID}, nil
+}
+func (s *stubOwnershipGuard) RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*security.ActionRevisionScope, error) {
+	return &security.ActionRevisionScope{UserID: actor.UserID, RevisionID: revisionID}, nil
+}
+func (s *stubOwnershipGuard) RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*security.QualityScope, error) {
+	return &security.QualityScope{UserID: actor.UserID, EvaluationID: evaluationID}, nil
+}
+func (s *stubOwnershipGuard) RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*security.ReleaseScope, error) {
+	return &security.ReleaseScope{UserID: actor.UserID, ReleaseID: releaseID}, nil
+}
+func (s *stubOwnershipGuard) RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
+	return &security.InstallationScope{UserID: actor.UserID, InstallationID: installationID}, nil
+}
+func (s *stubOwnershipGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*security.EditSessionScope, error) {
+	return &security.EditSessionScope{UserID: actor.UserID, SessionID: sessionID}, nil
+}
+func (s *stubOwnershipGuard) RequireRegenerationJob(ctx context.Context, actor *desktoppetAuth.ActorContext, jobID string) (*security.RegenerationJobScope, error) {
+	return &security.RegenerationJobScope{UserID: actor.UserID, JobID: jobID}, nil
+}
+func (s *stubOwnershipGuard) RequireCandidate(ctx context.Context, actor *desktoppetAuth.ActorContext, candidateID string) (*security.CandidateScope, error) {
+	return &security.CandidateScope{UserID: actor.UserID, CandidateID: candidateID}, nil
+}
+func (s *stubOwnershipGuard) RequireRuntimeCommand(ctx context.Context, actor *desktoppetAuth.ActorContext, commandID string) (*security.RuntimeCommandScope, error) {
+	return &security.RuntimeCommandScope{UserID: actor.UserID, CommandID: commandID}, nil
+}
+func (s *stubOwnershipGuard) RequireBehaviorBinding(ctx context.Context, actor *desktoppetAuth.ActorContext, bindingID string) (*security.BehaviorBindingScope, error) {
+	return &security.BehaviorBindingScope{UserID: actor.UserID, BindingID: bindingID}, nil
+}
 
 type stubReleaseService struct {
 	buildReleaseResult *BuildReleaseResult
@@ -85,7 +126,16 @@ func (s *stubReleaseService) GetPetIdentity(ctx context.Context, userID, petID s
 func newTestRouter(svc ReleaseService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterRoutes(r.Group("/api/v2"), svc)
+	r.Use(func(c *gin.Context) {
+		c.Set("actorContext", &desktoppetAuth.ActorContext{
+			ActorType:   desktoppetAuth.ActorTypeUser,
+			UserID:      "test-user-1",
+			Roles:       []string{"user"},
+			Permissions: desktoppetAuth.DefaultUserPermissions(),
+		})
+		c.Next()
+	})
+	RegisterRoutes(r.Group("/api/v2"), svc, &stubOwnershipGuard{})
 	return r
 }
 

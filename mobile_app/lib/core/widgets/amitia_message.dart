@@ -960,10 +960,24 @@ class AmitiaChatInput extends StatefulWidget {
 
 class _AmitiaChatInputState extends State<AmitiaChatInput> {
   final _controller = TextEditingController();
+  final _inputFocusNode = FocusNode();
   bool _hasText = false;
+  bool _isInputFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _inputFocusNode.addListener(_syncInputFocus);
+  }
+
+  void _syncInputFocus() {
+    setState(() => _isInputFocused = _inputFocusNode.hasFocus);
+  }
 
   @override
   void dispose() {
+    _inputFocusNode.removeListener(_syncInputFocus);
+    _inputFocusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -1363,12 +1377,19 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
           constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
           decoration: BoxDecoration(
             color: context.surfaceSecondary,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: context.borderPrimary, width: 0.8),
+            border: Border.all(
+              color: _isInputFocused
+                  ? context.accentPrimary
+                  : context.borderPrimary,
+              width: _isInputFocused ? 1.2 : 0.8,
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1376,6 +1397,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
             children: [
               TextField(
                 controller: _controller,
+                focusNode: _inputFocusNode,
                 minLines: 1,
                 maxLines: 4,
                 textCapitalization: TextCapitalization.sentences,
@@ -1392,6 +1414,14 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   isDense: true,
                   contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  fillColor: Colors.transparent,
+                  focusColor: Colors.transparent,
+                  hoverColor: Colors.transparent,
                 ),
               ),
               Padding(
@@ -1416,7 +1446,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                         ),
                       ),
                     ),
-                    _ClaudeStyleToolChip(onTap: _showComposerTools),
+                    _ClaudeStyleAgentChip(
+                      isEnabled: widget.isAgentMode,
+                      onTap: () =>
+                          widget.onAgentModeChanged?.call(!widget.isAgentMode),
+                    ),
                     const Spacer(),
                     IconButton(
                       tooltip: '开始语音输入',
@@ -1460,10 +1494,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
   }
 }
 
-class _ClaudeStyleToolChip extends StatelessWidget {
+class _ClaudeStyleAgentChip extends StatelessWidget {
+  final bool isEnabled;
   final VoidCallback onTap;
 
-  const _ClaudeStyleToolChip({required this.onTap});
+  const _ClaudeStyleAgentChip({required this.isEnabled, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1476,20 +1511,31 @@ class _ClaudeStyleToolChip extends StatelessWidget {
           height: 32,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: context.backgroundPrimary,
+            color: isEnabled ? context.accentSoft : context.backgroundPrimary,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: context.borderPrimary),
+            border: Border.all(
+              color: isEnabled ? context.accentPrimary : context.borderPrimary,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.tune_rounded, size: 15, color: context.textSecondary),
+              Icon(
+                Icons.hub_outlined,
+                size: 15,
+                color: isEnabled
+                    ? context.accentPrimary
+                    : context.textSecondary,
+              ),
               const SizedBox(width: 5),
               Text(
-                '工具',
-                style: AppTypography.label(
-                  context,
-                ).copyWith(color: context.textSecondary),
+                'Agent',
+                style: AppTypography.label(context).copyWith(
+                  color: isEnabled
+                      ? context.accentPrimary
+                      : context.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),

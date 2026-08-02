@@ -49,15 +49,10 @@ type ExtensionService struct {
 	repository *Repository
 	validator  *SchemaValidator
 	plugins    *PluginManager
-	lifecycle  ExtensionLifecycleService
 }
 
 func (s *ExtensionService) AttachPluginManager(manager *PluginManager) {
 	s.plugins = manager
-}
-
-func (s *ExtensionService) AttachLifecycleService(lifecycle ExtensionLifecycleService) {
-	s.lifecycle = lifecycle
 }
 
 func NewService(registry SkillRegistry, executor SkillExecutor, repository *Repository, validator *SchemaValidator) *ExtensionService {
