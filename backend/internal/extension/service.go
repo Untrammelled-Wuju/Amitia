@@ -148,18 +148,8 @@ func (s *ExtensionService) setSkillEnabled(ctx context.Context, scope ExecutionS
 	}
 	changed := item.Definition.Enabled != enabled
 	if changed {
-		var changeErr error
-		if s.lifecycle != nil {
-			if enabled {
-				changeErr = s.lifecycle.Enable(ctx, skillID, scope)
-			} else {
-				changeErr = s.lifecycle.Disable(ctx, skillID, scope)
-			}
-		} else {
-			changeErr = s.registry.SetScopeEnabled(ctx, skillID, scope, enabled)
-		}
-		if changeErr != nil {
-			return changeErr
+		if err := s.registry.SetScopeEnabled(ctx, skillID, scope, enabled); err != nil {
+			return err
 		}
 	}
 	var session workshopSessionRecord
@@ -204,15 +194,7 @@ func (s *ExtensionService) setSkillEnabled(ctx context.Context, scope ExecutionS
 }
 
 func (s *ExtensionService) restoreSkillEnabled(ctx context.Context, scope ExecutionScope, skillID string, enabled bool) {
-	if s.lifecycle == nil {
-		_ = s.registry.SetScopeEnabled(ctx, skillID, scope, enabled)
-		return
-	}
-	if enabled {
-		_ = s.lifecycle.Enable(ctx, skillID, scope)
-	} else {
-		_ = s.lifecycle.Disable(ctx, skillID, scope)
-	}
+	_ = s.registry.SetScopeEnabled(ctx, skillID, scope, enabled)
 }
 
 func (s *ExtensionService) GetSkillConfig(ctx context.Context, scope ExecutionScope, skillID string) (json.RawMessage, error) {

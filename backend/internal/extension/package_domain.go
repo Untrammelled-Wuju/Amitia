@@ -34,6 +34,25 @@ type parsedExtensionPackage struct {
 	SignedDigest string
 }
 
+type packageImportSessionRecord struct {
+	ID          string `gorm:"column:id;primaryKey"`
+	UserID      string `gorm:"column:user_id"`
+	ScopeType   string `gorm:"column:scope_type"`
+	ScopeID     string `gorm:"column:scope_id"`
+	Format      string `gorm:"column:format"`
+	PackageHash string `gorm:"column:package_hash"`
+	Status      string `gorm:"column:status"`
+	PreviewJSON string `gorm:"column:preview_json"`
+	PackageBlob []byte `gorm:"column:package_blob"`
+	FileName    string `gorm:"column:file_name"`
+	ExpiresAt   string `gorm:"column:expires_at"`
+	ConsumedAt  string `gorm:"column:consumed_at"`
+	CreatedAt   string `gorm:"column:created_at"`
+	UpdatedAt   string `gorm:"column:updated_at"`
+}
+
+func (packageImportSessionRecord) TableName() string { return "extension_package_import_sessions" }
+
 type packageVersionRecord struct {
 	ID                  string `gorm:"column:id;primaryKey"`
 	ExtensionID         string `gorm:"column:extension_id"`
@@ -60,6 +79,8 @@ type packageVersionRecord struct {
 	CreatedAt           string `gorm:"column:created_at"`
 }
 
+func (packageVersionRecord) TableName() string { return "extension_versions" }
+
 type packageArtifactRecord struct {
 	ID                   string `gorm:"column:id;primaryKey"`
 	ArtifactID           string `gorm:"column:artifact_id"`
@@ -72,6 +93,7 @@ type packageArtifactRecord struct {
 	WorkflowJSON         string `gorm:"column:workflow_json"`
 	SchemasJSON          string `gorm:"column:schemas_json"`
 	CompiledWorkflowJSON string `gorm:"column:compiled_workflow_json"`
+	TestsJSON            string `gorm:"column:tests_json"`
 	ReadmeText           string `gorm:"column:readme_text"`
 	Checksum             string `gorm:"column:checksum"`
 	SizeBytes            int64  `gorm:"column:size_bytes"`
@@ -83,3 +105,5 @@ type packageArtifactRecord struct {
 	ArtifactStatus       string `gorm:"column:artifact_status"`
 	OperationID          string `gorm:"column:operation_id"`
 }
+
+func (packageArtifactRecord) TableName() string { return "extension_artifacts" }

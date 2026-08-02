@@ -47,9 +47,6 @@ func (r *Runtime) AttachKernelFacade(kernel *kernelruntime.Runtime) error {
 			return err
 		}
 	}
-	if r.Lifecycle != nil {
-		r.Lifecycle.AttachKernel(kernel)
-	}
 	return nil
 }
 
@@ -90,8 +87,6 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 	executor := NewExecutor(registry, validator, permissions, repository)
 	service := NewService(registry, executor, repository, validator)
 	agentSkills := NewAgentSkillService(repository, registry, validator)
-	lifecycle := NewExtensionLifecycleService(registry, repository, agentSkills)
-	service.AttachLifecycleService(lifecycle)
 	if err := agentSkills.Restore(ctx); err != nil {
 		return nil, err
 	}
@@ -124,7 +119,7 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 		}
 	}
 	service.AttachPluginManager(pluginManager)
-	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills, Lifecycle: lifecycle}, nil
+	return &Runtime{Registry: registry, Executor: executor, Permissions: permissions, Repository: repository, Service: service, Validator: validator, Plugins: pluginRegistry, PluginManager: pluginManager, Workshop: workshop, WorkflowHost: workflowHost, AgentSkills: agentSkills}, nil
 }
 
 func (r *Runtime) Close(ctx context.Context) error {
@@ -212,7 +207,8 @@ func (r *Runtime) RunPackageStartupCleanup(ctx context.Context) error {
 	if !r.Repository.db.Migrator().HasTable("extension_package_import_sessions") {
 		return nil
 	}
-	if err := r.Repository.CleanupPackageSessions(ctx); err != nil {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := r.Repository.db.WithContext(ctx).Model(&packageImportSessionRecord{}).Where("expires_at < ? AND status NOT IN ?", now, []string{"installed", "expired"}).Updates(map[string]interface{}{"status": "expired", "package_blob": []byte{}, "updated_at": now}).Error; err != nil {
 		return err
 	}
 	r.Repository.RetryOwnedResourceCleanup(ctx)

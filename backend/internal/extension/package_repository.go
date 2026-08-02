@@ -13,24 +13,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-type packageImportSessionRecord struct {
-	ID          string `gorm:"column:id;primaryKey"`
-	UserID      string `gorm:"column:user_id"`
-	ScopeType   string `gorm:"column:scope_type"`
-	ScopeID     string `gorm:"column:scope_id"`
-	Format      string `gorm:"column:format"`
-	PackageHash string `gorm:"column:package_hash"`
-	Status      string `gorm:"column:status"`
-	PreviewJSON string `gorm:"column:preview_json"`
-	PackageBlob []byte `gorm:"column:package_blob"`
-	FileName    string `gorm:"column:file_name"`
-	ExpiresAt   string `gorm:"column:expires_at"`
-	ConsumedAt  string `gorm:"column:consumed_at"`
-	CreatedAt   string `gorm:"column:created_at"`
-	UpdatedAt   string `gorm:"column:updated_at"`
-}
-
-func (packageImportSessionRecord) TableName() string { return "extension_package_import_sessions" }
 
 type packageOperationRecord struct {
 	ID                string `gorm:"column:id;primaryKey"`
@@ -80,10 +62,6 @@ type packageDependencyRecord struct {
 }
 
 func (packageDependencyRecord) TableName() string { return "extension_version_dependencies" }
-
-func (packageVersionRecord) TableName() string { return "extension_versions" }
-
-func (packageArtifactRecord) TableName() string { return "extension_artifacts" }
 
 func (record packageArtifactRecord) base() extensionArtifactRecord {
 	return extensionArtifactRecord{ID: record.ID, ArtifactID: record.ArtifactID, ExtensionID: record.ExtensionID, ExtensionVersion: record.ExtensionVersion, Source: record.Source, SessionID: record.SessionID, Revision: record.Revision, ManifestJSON: record.ManifestJSON, WorkflowJSON: record.WorkflowJSON, SchemasJSON: record.SchemasJSON, CompiledWorkflowJSON: record.CompiledWorkflowJSON, TestsJSON: record.TestsJSON, ReadmeText: record.ReadmeText, Checksum: record.Checksum, SizeBytes: record.SizeBytes, CreatedAt: record.CreatedAt, ArchivedAt: record.ArchivedAt}

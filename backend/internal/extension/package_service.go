@@ -2,9 +2,7 @@ package extension
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 
