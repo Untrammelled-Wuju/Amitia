@@ -62,8 +62,8 @@ type publicUninstallConfirmRequest struct {
 }
 
 type publicUninstallConfirmResponse struct {
-	ConfirmationToken string `json:"confirmationToken"`
-	ExpiresAt         string `json:"expiresAt"`
+	ConfirmationToken string    `json:"confirmationToken"`
+	ExpiresAt         time.Time `json:"expiresAt"`
 }
 
 type publicUninstallRequest struct {
@@ -362,62 +362,19 @@ func (api *KernelAPI) confirmUninstall(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	kr := api.runtime.Kernel
-	preview, err := kr.PreviewPackageUninstall(ctx, req.ExtensionID, kernelAPIUser(c), scopeType, req.ScopeID)
+	result, err := kr.ConfirmPackageUninstall(ctx, kernelruntime.ConfirmPackageUninstallRequest{
+		ExtensionID:   req.ExtensionID,
+		UserID:        kernelAPIUser(c),
+		ScopeType:     scopeType,
+		ScopeID:       req.ScopeID,
+		Confirmations: req.Confirmations,
+	})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
-	if !preview.Installable {
-		c.JSON(http.StatusConflict, gin.H{"error": "extension not ready for uninstall", "code": "PACKAGE_UNINSTALL_NOT_READY"})
-		return
-	}
-	requiredConfirmations := []string{}
-	switch preview.ArtifactPolicy {
-	case kernelruntime.ArtifactPolicyDeleteArtifact:
-		requiredConfirmations = []string{"confirm.uninstall.delete"}
-	case kernelruntime.ArtifactPolicyRetainArtifact:
-		requiredConfirmations = []string{"confirm.uninstall.retain"}
-	case kernelruntime.ArtifactPolicyRetainForRollback:
-		requiredConfirmations = []string{"confirm.uninstall.retain_for_rollback"}
-	case kernelruntime.ArtifactPolicyRetainForExport:
-		requiredConfirmations = []string{"confirm.uninstall.retain_for_export"}
-	default:
-		requiredConfirmations = []string{"confirm.uninstall.delete"}
-	}
-	confirmed := make(map[string]bool)
-	for _, required := range requiredConfirmations {
-		if !req.Confirmations[required] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "confirmation required: " + required, "code": "PACKAGE_CONFIRMATION_REQUIRED"})
-			return
-		}
-		confirmed[required] = true
-	}
-	claims := kernelruntime.PackageUninstallConfirmationClaims{
-		ExtensionID:             preview.ExtensionID,
-		CurrentVersion:          preview.CurrentVersion,
-		CurrentVersionID:        preview.CurrentVersionID,
-		CurrentGenerationID:     preview.CurrentGenerationID,
-		ArtifactID:              preview.ArtifactID,
-		ArtifactPolicy:          string(preview.ArtifactPolicy),
-		PreviewHash:             preview.PreviewHash,
-		SecurityPolicyHash:      preview.SecurityPolicyHash,
-		SnapshotRequirementHash: preview.SnapshotRequirementHash,
-		InstalledPath:           preview.InstalledPath,
-		InstalledTreeHash:       preview.InstalledHash,
-		UserID:                  kernelAPIUser(c),
-		ScopeType:               scopeType,
-		ScopeID:                 req.ScopeID,
-		Confirmations:           confirmed,
-		PolicyVersion:           kr.PolicyVersion(),
-		ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
-	}
-	token, err := kr.SignUninstallConfirmation(claims)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, publicUninstallConfirmResponse{ConfirmationToken: token, ExpiresAt: claims.ExpiresAtString()})
+	c.JSON(http.StatusOK, publicUninstallConfirmResponse{ConfirmationToken: result.Token, ExpiresAt: result.ExpiresAt})
 }
 
 func (api *KernelAPI) uninstall(c *gin.Context) {
