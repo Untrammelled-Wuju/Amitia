@@ -58,6 +58,14 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if request.IdempotencyKey == "" {
 		return KernelInstallResult{}, NewPackageError(PackageErrCodeIdempotencyKeyRequired, 400, ErrPackageIdempotencyKeyRequired)
 	}
+	current, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(confirmed.session.ExtensionID))
+	if err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), "package-operation-"+uuid.NewString(), "failed", "check_installed", "PACKAGE_NOT_INSTALLED", fmt.Sprintf("extension %s is not installed", confirmed.session.ExtensionID), true, PackageWriteGuard{})
+		return KernelInstallResult{}, fmt.Errorf("PACKAGE_NOT_INSTALLED: extension %s is not installed", confirmed.session.ExtensionID)
+	}
+	if err := validatePackageOwner(current, request.UserID, request.ScopeType, request.ScopeID); err != nil {
+		return KernelInstallResult{}, err
+	}
 	idempotencyKey := request.IdempotencyKey
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
@@ -151,15 +159,6 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if lockedSession.Status != "ready" && lockedSession.Status != "awaiting_confirmation" {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_STATUS", fmt.Sprintf("status %s", lockedSession.Status), true, guard)
 		return KernelInstallResult{}, fmt.Errorf("kernel: preview session status %s", lockedSession.Status)
-	}
-	current, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(confirmed.session.ExtensionID))
-	if err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "check_installed", "PACKAGE_NOT_INSTALLED", fmt.Sprintf("extension %s is not installed", confirmed.session.ExtensionID), true, guard)
-		return KernelInstallResult{}, fmt.Errorf("PACKAGE_NOT_INSTALLED: extension %s is not installed", confirmed.session.ExtensionID)
-	}
-	if err := validatePackageOwner(current, request.UserID, request.ScopeType, request.ScopeID); err != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_owner", "PACKAGE_OWNER_MISMATCH", err.Error(), true, guard)
-		return KernelInstallResult{}, err
 	}
 	if request.ExpectedExtensionID == "" || request.ExpectedExtensionID != string(current.ExtensionID) {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_extension_id", "PACKAGE_UPDATE_ID_MISMATCH", "expected extension id must match installed extension", true, guard)
