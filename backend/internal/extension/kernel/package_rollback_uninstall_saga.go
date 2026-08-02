@@ -519,6 +519,113 @@ func computeUninstallPreviewHash(preview PackageUninstallPreviewResult) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
+func requiredUninstallConfirmations(preview PackageUninstallPreviewResult) []string {
+	items := []string{"confirm.uninstall"}
+
+	switch preview.ArtifactPolicy {
+	case ArtifactPolicyDeleteArtifact:
+		items = append(items, "confirm.uninstall.delete")
+	case ArtifactPolicyRetainArtifact:
+		items = append(items, "confirm.uninstall.retain")
+	case ArtifactPolicyRetainForRollback:
+		items = append(items, "confirm.uninstall.retain_for_rollback")
+	case ArtifactPolicyRetainForExport:
+		items = append(items, "confirm.uninstall.retain_for_export")
+	default:
+		items = append(items, "confirm.uninstall.delete")
+	}
+
+	if len(preview.Dependents) > 0 {
+		items = append(items, "confirm.uninstall.dependents_affected")
+	}
+
+	if preview.SnapshotRequirementHash != "" {
+		items = append(items, "confirm.uninstall.data_change")
+	}
+
+	return items
+}
+
+func buildUninstallPreviewIdentity(preview PackageUninstallPreviewResult, policyVersion string) PackageUninstallPreviewIdentity {
+	sort.Strings(preview.Dependents)
+	dependentsJSON, _ := json.Marshal(preview.Dependents)
+	dependentsHash := sha256.Sum256(dependentsJSON)
+	return PackageUninstallPreviewIdentity{
+		ExtensionID:             preview.ExtensionID,
+		ArtifactID:              preview.ArtifactID,
+		ArtifactPolicy:          preview.ArtifactPolicy,
+		PolicyReason:            preview.PolicyReason,
+		CurrentVersionID:        preview.CurrentVersionID,
+		CurrentGenerationID:     preview.CurrentGenerationID,
+		CurrentVersion:          preview.CurrentVersion,
+		InstalledPath:           preview.InstalledPath,
+		InstalledTreeHash:       preview.InstalledHash,
+		DependentsHash:          "sha256:" + hex.EncodeToString(dependentsHash[:]),
+		SecurityPolicyHash:      preview.SecurityPolicyHash,
+		SnapshotRequirementHash: preview.SnapshotRequirementHash,
+		UserID:                  preview.UserID,
+		ScopeType:               preview.ScopeType,
+		ScopeID:                 preview.ScopeID,
+		PolicyVersion:           policyVersion,
+		PreviewHash:             preview.PreviewHash,
+	}
+}
+
+func compareUninstallPreviewIdentity(left, right PackageUninstallPreviewIdentity) (bool, string) {
+	if left.ExtensionID != right.ExtensionID {
+		return false, "extension_changed"
+	}
+	if left.ArtifactID != right.ArtifactID {
+		return false, "artifact_changed"
+	}
+	if left.ArtifactPolicy != right.ArtifactPolicy {
+		return false, "artifact_policy_changed"
+	}
+	if left.PolicyReason != right.PolicyReason {
+		return false, "policy_reason_changed"
+	}
+	if left.CurrentVersionID != right.CurrentVersionID {
+		return false, "version_changed"
+	}
+	if left.CurrentGenerationID != right.CurrentGenerationID {
+		return false, "generation_changed"
+	}
+	if left.CurrentVersion != right.CurrentVersion {
+		return false, "version_label_changed"
+	}
+	if left.InstalledPath != right.InstalledPath {
+		return false, "installed_path_changed"
+	}
+	if left.InstalledTreeHash != right.InstalledTreeHash {
+		return false, "installed_tree_hash_changed"
+	}
+	if left.DependentsHash != right.DependentsHash {
+		return false, "dependents_changed"
+	}
+	if left.SecurityPolicyHash != right.SecurityPolicyHash {
+		return false, "security_policy_changed"
+	}
+	if left.SnapshotRequirementHash != right.SnapshotRequirementHash {
+		return false, "snapshot_requirement_changed"
+	}
+	if left.UserID != right.UserID {
+		return false, "user_changed"
+	}
+	if left.ScopeType != right.ScopeType {
+		return false, "scope_type_changed"
+	}
+	if left.ScopeID != right.ScopeID {
+		return false, "scope_id_changed"
+	}
+	if left.PolicyVersion != right.PolicyVersion {
+		return false, "policy_version_changed"
+	}
+	if left.PreviewHash != right.PreviewHash {
+		return false, "preview_hash_changed"
+	}
+	return true, ""
+}
+
 func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackageUninstallRequest) (PackageOperationRecord, error) {
 	extensionID, userID, scopeType, scopeID := req.ExtensionID, req.UserID, req.ScopeType, req.ScopeID
 
@@ -533,6 +640,13 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationBindingMismatch, 400, ErrPackageConfirmationBindingMismatch)
 	}
 
+	if claims.PolicyVersion == "" {
+		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationPolicyVersionStale, 403, ErrPackageConfirmationPolicyVersionStale)
+	}
+	if claims.PolicyVersion != r.PolicyVersion() {
+		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationPolicyVersionStale, 409, ErrPackageConfirmationPolicyVersionStale)
+	}
+
 	initialPreview, err := r.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
 	if err != nil {
 		return PackageOperationRecord{}, err
@@ -545,6 +659,14 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		initialPreview.SecurityPolicyHash != claims.SecurityPolicyHash || initialPreview.SnapshotRequirementHash != claims.SnapshotRequirementHash ||
 		claims.ArtifactID != initialPreview.ArtifactID || claims.CurrentVersionID != initialPreview.CurrentVersionID || claims.CurrentGenerationID != initialPreview.CurrentGenerationID {
 		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationStale, 409, ErrPackageConfirmationStale)
+	}
+
+	required := requiredUninstallConfirmations(initialPreview)
+	if err := validateRequiredConfirmations(claims.ConfirmedItems, required); err != nil {
+		return PackageOperationRecord{}, err
+	}
+	if !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
+		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
 	}
 
 	releaseInProcessLock := r.acquirePackageInProcessLock(extensionID)
@@ -611,9 +733,12 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", "PACKAGE_UNINSTALL_PREFLIGHT_FAILED", err.Error(), true, uninstallGuard)
 		return PackageOperationRecord{}, errors.Join(err, persistErr)
 	}
-	if !preview.Installable || !samePackageUninstallPreview(initialPreview, preview) {
-		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", "PACKAGE_UNINSTALL_PREFLIGHT_CHANGED", "uninstall preflight changed after acquiring lease", true, uninstallGuard)
-		return PackageOperationRecord{}, errors.Join(fmt.Errorf("kernel: uninstall preflight changed"), persistErr)
+	initialIdentity := buildUninstallPreviewIdentity(initialPreview, claims.PolicyVersion)
+	leaseIdentity := buildUninstallPreviewIdentity(preview, r.PolicyVersion())
+	same, driftCategory := compareUninstallPreviewIdentity(initialIdentity, leaseIdentity)
+	if !preview.Installable || !same {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", "PACKAGE_UNINSTALL_PREFLIGHT_CHANGED", "uninstall preflight changed after acquiring lease: " + driftCategory, true, uninstallGuard)
+		return PackageOperationRecord{}, errors.Join(fmt.Errorf("kernel: uninstall preflight changed: %s", driftCategory), persistErr)
 	}
 	if string(preview.ArtifactPolicy) != claims.ArtifactPolicy {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", PackageErrCodeConfirmationStale, "artifact policy changed after confirmation", true, uninstallGuard)
@@ -1339,15 +1464,26 @@ func (r *Runtime) executeRemoveArtifactStep(ctx context.Context, op PackageOpera
 }
 
 func (r *Runtime) recordRemoveArtifactStep(ctx context.Context, op PackageOperationRecord, policy ArtifactPolicy, deleted bool, remainingRefs int, deletedAt time.Time, evidenceBefore, evidenceAfter string, guard PackageWriteGuard) error {
+	retained := !deleted && policy != ArtifactPolicyDeleteArtifact
+	retentionState := "active"
+	if deleted {
+		retentionState = "deleted"
+	} else if policy == ArtifactPolicyRetainForRollback || policy == ArtifactPolicyRetainForExport {
+		retentionState = "retained"
+	}
 	result := RemoveArtifactStepResult{
 		ArtifactID:         op.ArtifactID,
+		ExtensionID:        op.ExtensionID,
 		ArtifactPolicy:     policy,
 		Deleted:            deleted,
+		Retained:           retained,
+		RetentionState:     retentionState,
 		RemainingRefs:      remainingRefs,
 		DeletedAt:          deletedAt,
 		EvidenceHashBefore: evidenceBefore,
 		EvidenceHashAfter:  evidenceAfter,
 	}
+	result.EvidenceHash = computeArtifactStepEvidenceHash(result)
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("failed to marshal RemoveArtifactStepResult: %w", err)
@@ -1363,4 +1499,13 @@ func (r *Runtime) recordRemoveArtifactStep(ctx context.Context, op PackageOperat
 		StartedAt:   now,
 		CompletedAt: now,
 	}, guard)
+}
+
+func computeArtifactStepEvidenceHash(result RemoveArtifactStepResult) string {
+	canonical := fmt.Sprintf("artifact:%s:ext:%s:policy:%s:deleted:%v:retained:%v:state:%s:refs:%d:deletedAt:%v:before:%s:after:%s",
+		result.ArtifactID, result.ExtensionID, string(result.ArtifactPolicy),
+		result.Deleted, result.Retained, result.RetentionState, result.RemainingRefs,
+		result.DeletedAt.Unix(), result.EvidenceHashBefore, result.EvidenceHashAfter)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
 }

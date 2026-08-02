@@ -46,6 +46,7 @@ type PackageUninstallConfirmationClaims struct {
 	ScopeType              string         `json:"scopeType"`
 	ScopeID                string         `json:"scopeId"`
 	Confirmations          map[string]bool `json:"confirmations"`
+	ConfirmedItems         []string       `json:"confirmedItems"`
 	PolicyVersion          string         `json:"policyVersion"`
 	ExpiresAt              int64          `json:"expiresAt"`
 }
@@ -90,6 +91,80 @@ func (r *Runtime) VerifyUninstallConfirmation(token string) (PackageUninstallCon
 		return claims, fmt.Errorf("kernel: confirmation token expired")
 	}
 	return claims, nil
+}
+
+type ConfirmPackageUninstallRequest struct {
+	ExtensionID   string
+	UserID        string
+	ScopeType     string
+	ScopeID       string
+	Confirmations map[string]bool
+}
+
+type ConfirmPackageUninstallResult struct {
+	Token             string
+	ExpiresAt         time.Time
+	RequiredConfirmations []string
+}
+
+func (r *Runtime) ConfirmPackageUninstall(ctx context.Context, req ConfirmPackageUninstallRequest) (ConfirmPackageUninstallResult, error) {
+	preview, err := r.PreviewPackageUninstall(ctx, req.ExtensionID, req.UserID, req.ScopeType, req.ScopeID)
+	if err != nil {
+		return ConfirmPackageUninstallResult{}, err
+	}
+	if !preview.Installable {
+		return ConfirmPackageUninstallResult{}, fmt.Errorf("kernel: uninstall preflight failed")
+	}
+
+	required := requiredUninstallConfirmations(preview)
+
+	confirmed := make(map[string]bool)
+	for _, item := range required {
+		if !req.Confirmations[item] {
+			return ConfirmPackageUninstallResult{}, NewPackageError(PackageErrCodeConfirmationRequired, 403,
+				fmt.Errorf("%w: %s", ErrPackageConfirmationRequired, item))
+		}
+		confirmed[item] = true
+	}
+
+	confirmedItems := confirmedItemsFromMap(confirmed)
+	if !validateConfirmedItemsConsistency(confirmedItems, confirmed) {
+		return ConfirmPackageUninstallResult{}, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403,
+			ErrPackageConfirmationItemsMismatch)
+	}
+
+	now := time.Now().UTC()
+	claims := PackageUninstallConfirmationClaims{
+		ExtensionID:             preview.ExtensionID,
+		CurrentVersion:          preview.CurrentVersion,
+		CurrentVersionID:        preview.CurrentVersionID,
+		CurrentGenerationID:     preview.CurrentGenerationID,
+		ArtifactID:              preview.ArtifactID,
+		ArtifactPolicy:          string(preview.ArtifactPolicy),
+		PreviewHash:             preview.PreviewHash,
+		SecurityPolicyHash:      preview.SecurityPolicyHash,
+		SnapshotRequirementHash: preview.SnapshotRequirementHash,
+		InstalledPath:           preview.InstalledPath,
+		InstalledTreeHash:       preview.InstalledHash,
+		UserID:                  req.UserID,
+		ScopeType:               req.ScopeType,
+		ScopeID:                 req.ScopeID,
+		Confirmations:           confirmed,
+		ConfirmedItems:          confirmedItems,
+		PolicyVersion:           r.PolicyVersion(),
+		ExpiresAt:               now.Add(10 * time.Minute).Unix(),
+	}
+
+	token, err := r.SignUninstallConfirmation(claims)
+	if err != nil {
+		return ConfirmPackageUninstallResult{}, err
+	}
+
+	return ConfirmPackageUninstallResult{
+		Token:                 token,
+		ExpiresAt:             time.Unix(claims.ExpiresAt, 0).UTC(),
+		RequiredConfirmations: required,
+	}, nil
 }
 
 type Runtime struct {

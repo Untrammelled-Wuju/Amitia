@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -90,15 +89,15 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 		if err != nil {
 			return r.requirePackageRecovery(ctx, operation, "installed package consistency could not be proven", err, guard)
 		}
-	if err := r.newPackageRecoveryFinalizer().FinalizeInstallRecovery(ctx, operation, completed, guard); err != nil {
-		return r.requirePackageRecovery(ctx, operation, "install recovery finalizer failed", err, guard)
-	}
-	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, RecoveryStepFinalizeOperation); err != nil {
-		return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
-	}
-	leaseGuard.MarkLeaseReleased()
-	return nil
-case "update":
+		if err := r.newPackageRecoveryFinalizer().FinalizeInstallRecovery(ctx, operation, completed, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "install recovery finalizer failed", err, guard)
+		}
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, RecoveryStepFinalizeOperation); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
+		}
+		leaseGuard.MarkLeaseReleased()
+		return nil
+	case "update":
 		compensated, reconcileErr := r.reconcileInstalledPackageGeneration(ctx, operation)
 		if reconcileErr != nil {
 			return r.requirePackageRecovery(ctx, operation, "update generation reconciliation failed", reconcileErr, guard)
@@ -110,10 +109,10 @@ case "update":
 		if err != nil {
 			return r.requirePackageRecovery(ctx, operation, "updated package consistency could not be proven", err, guard)
 		}
-	if err := r.newPackageRecoveryFinalizer().FinalizeUpdateRecovery(ctx, operation, completed, guard); err != nil {
-		return r.requirePackageRecovery(ctx, operation, "update recovery finalizer failed", err, guard)
-	}
-	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, RecoveryStepFinalizeOperation); err != nil {
+		if err := r.newPackageRecoveryFinalizer().FinalizeUpdateRecovery(ctx, operation, completed, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "update recovery finalizer failed", err, guard)
+		}
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, RecoveryStepFinalizeOperation); err != nil {
 			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
 		}
 		leaseGuard.MarkLeaseReleased()
@@ -136,10 +135,10 @@ case "update":
 		if err != nil {
 			return r.requirePackageRecovery(ctx, operation, "rollback consistency could not be proven", err, guard)
 		}
-	if err := r.newPackageRecoveryFinalizer().FinalizeRollbackRecovery(ctx, operation, completed, guard); err != nil {
-		return r.requirePackageRecovery(ctx, operation, "rollback recovery finalizer failed", err, guard)
-	}
-	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, RecoveryStepFinalizeOperation); err != nil {
+		if err := r.newPackageRecoveryFinalizer().FinalizeRollbackRecovery(ctx, operation, completed, guard); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "rollback recovery finalizer failed", err, guard)
+		}
+		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, RecoveryStepFinalizeOperation); err != nil {
 			return r.requirePackageRecovery(ctx, operation, "recovery lease release failed", err, guard)
 		}
 		leaseGuard.MarkLeaseReleased()
@@ -370,7 +369,6 @@ func validateQuarantineMetadataFence(qm PackageQuarantineMetadata, operation Pac
 	}
 	return nil
 }
-
 
 func (r *Runtime) reconcileUninstallCompletedState(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) error {
 	if err := r.reconcileUninstallArtifactPath(ctx, operation, guard); err != nil {
@@ -745,6 +743,12 @@ func (r *Runtime) proveUninstalledPackageOperation(ctx context.Context, operatio
 	if _, ok := completed[StepCleanupKernelRepositories]; !ok {
 		return errors.New("repository cleanup step missing")
 	}
+	if _, ok := completed[StepUninstallRecoveryFinalGate]; !ok {
+		return errors.New("final gate step missing")
+	}
+	if _, ok := completed[StepUninstallRecoveryFinalize]; !ok {
+		return errors.New("finalize step missing")
+	}
 	_, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
 	if err == nil {
 		return errors.New("installation still exists")
@@ -841,51 +845,55 @@ func (r *Runtime) validateQuarantineMetadataIntegrity(qm PackageQuarantineMetada
 	if qm.State != "active" && qm.State != "finalized" && qm.State != "restored" && qm.State != "released" {
 		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("invalid state: %s", qm.State))
 	}
-	absGenQuarantine, err := filepath.Abs(qm.GenerationQuarantinePath)
+	expected, err := r.container.PackageGenerationStore.ExpectedUninstallRecoveryPaths(operation.ExtensionID, qm.ExpectedGenerationID, operation.OperationID)
 	if err != nil {
-		return fmt.Errorf("kernel: generation quarantine path abs failed: %w", err)
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataCorrupt, 409, false, true, "Reload quarantine metadata", fmt.Errorf("resolve expected recovery paths: %w", err))
 	}
-	absCurQuarantine, err := filepath.Abs(qm.CurrentQuarantinePath)
-	if err != nil {
-		return fmt.Errorf("kernel: current quarantine path abs failed: %w", err)
+	if !r.pathsMatchExactly(qm.OriginalCurrentPath, expected.OriginalCurrentPath) {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantinePathMismatch, 409, false, true, "Reload quarantine metadata",
+			fmt.Errorf("original_current_path mismatch: metadata=%s expected=%s", qm.OriginalCurrentPath, expected.OriginalCurrentPath))
 	}
-	absOrigGen, err := filepath.Abs(qm.OriginalGenerationPath)
-	if err != nil {
-		return fmt.Errorf("kernel: original generation path abs failed: %w", err)
+	if !r.pathsMatchExactly(qm.OriginalGenerationPath, expected.OriginalGenerationPath) {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantinePathMismatch, 409, false, true, "Reload quarantine metadata",
+			fmt.Errorf("original_generation_path mismatch: metadata=%s expected=%s", qm.OriginalGenerationPath, expected.OriginalGenerationPath))
 	}
-	absOrigCur, err := filepath.Abs(qm.OriginalCurrentPath)
-	if err != nil {
-		return fmt.Errorf("kernel: original current path abs failed: %w", err)
+	if !r.pathsMatchExactly(qm.CurrentQuarantinePath, expected.CurrentQuarantinePath) {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantinePathMismatch, 409, false, true, "Reload quarantine metadata",
+			fmt.Errorf("current_quarantine_path mismatch: metadata=%s expected=%s", qm.CurrentQuarantinePath, expected.CurrentQuarantinePath))
 	}
-	genRoot := filepath.Clean(r.container.ExtRoot)
-	quarantineRoot := filepath.Join(genRoot, "quarantine")
-	relGenQ, err := filepath.Rel(genRoot, absGenQuarantine)
-	if err != nil || strings.HasPrefix(relGenQ, "..") {
-		return fmt.Errorf("kernel: generation quarantine path outside generation root: %s", qm.GenerationQuarantinePath)
-	}
-	relCurQ, err := filepath.Rel(quarantineRoot, absCurQuarantine)
-	if err != nil || strings.HasPrefix(relCurQ, "..") {
-		return fmt.Errorf("kernel: current quarantine path outside quarantine root: %s", qm.CurrentQuarantinePath)
-	}
-	extensionInstallRoot := filepath.Join(genRoot, "installations", safeDirectoryName(operation.ExtensionID))
-	generationRoot := filepath.Join(extensionInstallRoot, "generations")
-	expectedCurrentPath := filepath.Join(extensionInstallRoot, "current.json")
-	absExpectedCurrent, err := filepath.Abs(expectedCurrentPath)
-	if err != nil {
-		return fmt.Errorf("kernel: resolve expected current path: %w", err)
-	}
-	if absOrigCur != absExpectedCurrent {
-		return fmt.Errorf("kernel: original current path %s does not match expected %s", qm.OriginalCurrentPath, expectedCurrentPath)
-	}
-	absGenRoot, err := filepath.Abs(generationRoot)
-	if err != nil {
-		return fmt.Errorf("kernel: resolve generation root: %w", err)
-	}
-	relOrigGen, err := filepath.Rel(absGenRoot, absOrigGen)
-	if err != nil || strings.HasPrefix(relOrigGen, "..") {
-		return fmt.Errorf("kernel: original generation path %s outside generation root %s", qm.OriginalGenerationPath, generationRoot)
+	if !r.pathsMatchExactly(qm.GenerationQuarantinePath, expected.GenerationQuarantinePath) {
+		return NewPackageErrorWithRecovery(PackageErrCodeQuarantinePathMismatch, 409, false, true, "Reload quarantine metadata",
+			fmt.Errorf("generation_quarantine_path mismatch: metadata=%s expected=%s", qm.GenerationQuarantinePath, expected.GenerationQuarantinePath))
 	}
 	return nil
+}
+
+func (r *Runtime) pathsMatchExactly(metadataPath, expectedPath string) bool {
+	if metadataPath == "" || expectedPath == "" {
+		return false
+	}
+	absMeta, err := filepath.Abs(metadataPath)
+	if err != nil {
+		return false
+	}
+	absExpected, err := filepath.Abs(expectedPath)
+	if err != nil {
+		return false
+	}
+	cleanMeta := filepath.Clean(absMeta)
+	cleanExpected := filepath.Clean(absExpected)
+	if cleanMeta != cleanExpected {
+		return false
+	}
+	if info, statErr := os.Stat(cleanMeta); statErr == nil {
+		if evalPath, evalErr := filepath.EvalSymlinks(cleanMeta); evalErr == nil {
+			if evalExpected, evalErr2 := filepath.EvalSymlinks(cleanExpected); evalErr2 == nil {
+				return evalPath == evalExpected
+			}
+		}
+		_ = info
+	}
+	return true
 }
 
 func (r *Runtime) runUninstallRecoveryStep(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, stepName string, order int, guard PackageWriteGuard, action func() (string, error)) error {
@@ -1155,18 +1163,73 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 		return r.requirePackageRecovery(ctx, operation, "uninstall recovery final_gate failed", err, guard)
 	}
 
-	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryFinalize, order, guard, func() (string, error) {
-		order++
-		if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, StepUninstallRecoveryFinalize); err != nil {
-			return "", err
-		}
-		rc.guard = PackageWriteGuard{}
-		return `{"finalized":true}`, nil
-	})
-	if err != nil {
-		return r.requirePackageRecovery(ctx, operation, "uninstall recovery finalize failed", err, guard)
+	if err := r.finalizeUninstallRecovery(ctx, operation, completed, guard); err != nil {
+		return err
 	}
 
+	return nil
+}
+
+func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, guard PackageWriteGuard) error {
+	if existing, ok := completed[StepUninstallRecoveryFinalize]; ok && existing.Status == StatusCompleted {
+		if err := r.verifyUninstallFinalizedState(ctx, operation); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "finalize verification failed", err, guard)
+		}
+		return nil
+	}
+	gateStep, hasGate := completed[StepUninstallRecoveryFinalGate]
+	if !hasGate || gateStep.Status != StatusCompleted || gateStep.ResultJSON == "" {
+		return r.requirePackageRecovery(ctx, operation, "finalize blocked: final gate step missing or incomplete", nil, guard)
+	}
+	finalGateResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(gateStep.ResultJSON)))
+	finalizeResultJSON := fmt.Sprintf(`{"finalized":true,"atomic":true,"operationId":%q,"extensionId":%q,"fencingToken":%d,"finalGateStep":%q,"finalGateResultHash":%q}`,
+		operation.OperationID, operation.ExtensionID, guard.FencingToken, StepUninstallRecoveryFinalGate, finalGateResultHash)
+	finalizeResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(finalizeResultJSON)))
+	finalizeStep := PackageOperationStep{
+		OperationID:  operation.OperationID,
+		StepName:     StepUninstallRecoveryFinalize,
+		StepOrder:    9999,
+		Status:       StatusCompleted,
+		ResultJSON:   finalizeResultJSON,
+		ResultHash:   finalizeResultHash,
+		AttemptCount: 1,
+		InputHash:    finalGateResultHash,
+		StartedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		CompletedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTxWithStep(ctx, operation.OperationID, operation.ExtensionID, guard.FencingToken, StepUninstallRecoveryFinalize, finalizeStep); err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery finalize failed", err, guard)
+	}
+	completed[StepUninstallRecoveryFinalize] = finalizeStep
+	return nil
+}
+
+func (r *Runtime) verifyUninstallFinalizedState(ctx context.Context, operation PackageOperationRecord) error {
+	op, _, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	if err != nil {
+		return fmt.Errorf("verify finalized operation: %w", err)
+	}
+	if string(op.Status) != string(PackageOperationCompleted) {
+		return fmt.Errorf("operation not completed after finalize: status=%s", op.Status)
+	}
+	steps, listErr := r.container.PackageRepository.ListOperationSteps(ctx, operation.OperationID)
+	if listErr != nil {
+		return fmt.Errorf("list steps for finalize verification: %w", listErr)
+	}
+	hasFinalizeStep := false
+	for _, step := range steps {
+		if step.StepName == StepUninstallRecoveryFinalize && step.Status == StatusCompleted && step.ResultJSON != "" {
+			expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(step.ResultJSON)))
+			if expectedHash != step.ResultHash {
+				return fmt.Errorf("finalize step result_hash mismatch after completion")
+			}
+			hasFinalizeStep = true
+			break
+		}
+	}
+	if !hasFinalizeStep {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation", fmt.Errorf("operation %s completed but finalize step missing or invalid", operation.OperationID))
+	}
 	return nil
 }
 func (r *Runtime) requirePackageRecovery(ctx context.Context, operation PackageOperationRecord, detail string, cause error, guard PackageWriteGuard) error {

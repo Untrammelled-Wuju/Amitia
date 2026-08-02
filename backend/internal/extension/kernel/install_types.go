@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -182,12 +183,16 @@ type ResourceSetDiff struct {
 
 type RemoveArtifactStepResult struct {
 	ArtifactID         string         `json:"artifactId"`
+	ExtensionID        string         `json:"extensionId,omitempty"`
 	ArtifactPolicy     ArtifactPolicy `json:"artifactPolicy"`
 	Deleted            bool           `json:"deleted"`
+	Retained           bool           `json:"retained,omitempty"`
+	RetentionState     string         `json:"retentionState,omitempty"`
 	RemainingRefs      int            `json:"remainingRefs"`
 	DeletedAt          time.Time      `json:"deletedAt"`
 	EvidenceHashBefore string         `json:"evidenceHashBefore,omitempty"`
 	EvidenceHashAfter  string         `json:"evidenceHashAfter,omitempty"`
+	EvidenceHash       string         `json:"evidenceHash,omitempty"`
 }
 
 type packageConfirmationClaims struct {
@@ -295,4 +300,196 @@ type KernelInstallResult struct {
 	InstallPath     string    `json:"installPath"`
 	DefinitionHash  string    `json:"definitionHash"`
 	InstalledAt     time.Time `json:"installedAt"`
+}
+
+const PackageConfirmationClaimsSchemaVersion = 1
+
+type PackageOperationType string
+
+const (
+	PackageOperationTypeInstall   PackageOperationType = "install"
+	PackageOperationTypeUpdate    PackageOperationType = "update"
+	PackageOperationTypeRollback  PackageOperationType = "rollback"
+	PackageOperationTypeUninstall PackageOperationType = "uninstall"
+)
+
+type PackageConfirmationClaims struct {
+	SchemaVersion           int                `json:"schemaVersion"`
+	OperationType           string             `json:"operationType"`
+	ExtensionID             string             `json:"extensionId"`
+	ArtifactID              string             `json:"artifactId"`
+	ArtifactPolicy          ArtifactPolicy     `json:"artifactPolicy,omitempty"`
+	PolicyReason            string             `json:"policyReason,omitempty"`
+	PreviewSessionID        string             `json:"previewSessionId,omitempty"`
+	PreviewHash             string             `json:"previewHash,omitempty"`
+	CurrentVersionID        string             `json:"currentVersionId,omitempty"`
+	CurrentGenerationID     string             `json:"currentGenerationId,omitempty"`
+	SecurityPolicyHash      string             `json:"securityPolicyHash,omitempty"`
+	SnapshotRequirementHash string             `json:"snapshotRequirementHash,omitempty"`
+	PolicyVersion           string             `json:"policyVersion"`
+	UserID                  string             `json:"userId"`
+	ScopeType               string             `json:"scopeType"`
+	ScopeID                 string             `json:"scopeId"`
+	ConfirmedItems          []string           `json:"confirmedItems"`
+	Confirmations           map[string]bool    `json:"confirmations"`
+	IssuedAt                int64              `json:"issuedAt"`
+	ExpiresAt               int64              `json:"expiresAt"`
+	Nonce                   string             `json:"nonce"`
+	ArchiveHash             string             `json:"archiveHash,omitempty"`
+	ManifestHash            string             `json:"manifestHash,omitempty"`
+	ContentTreeHash         string             `json:"contentTreeHash,omitempty"`
+	KeyID                   string             `json:"kid,omitempty"`
+	DeveloperSessionID      string             `json:"developerSessionId,omitempty"`
+	MigrationPlanHash       string             `json:"migrationPlanHash,omitempty"`
+	InstalledPath           string             `json:"installedPath,omitempty"`
+	InstalledTreeHash       string             `json:"installedTreeHash,omitempty"`
+	SourceVersionID         string             `json:"sourceVersionId,omitempty"`
+	SourceGenerationID      string             `json:"sourceGenerationId,omitempty"`
+	TargetVersionID         string             `json:"targetVersionId,omitempty"`
+	TargetGenerationID      string             `json:"targetGenerationId,omitempty"`
+	RollbackPointID         string             `json:"rollbackPointId,omitempty"`
+	CurrentVersion          string             `json:"currentVersion,omitempty"`
+	TargetVersion           string             `json:"targetVersion,omitempty"`
+}
+
+func (c PackageConfirmationClaims) ExpiresAtTime() time.Time {
+	return time.Unix(c.ExpiresAt, 0).UTC()
+}
+
+func (c PackageConfirmationClaims) IssuedAtTime() time.Time {
+	return time.Unix(c.IssuedAt, 0).UTC()
+}
+
+func confirmedItemsFromMap(m map[string]bool) []string {
+	items := make([]string, 0, len(m))
+	for k, v := range m {
+		if v {
+			items = append(items, k)
+		}
+	}
+	return normalizeConfirmedItems(items)
+}
+
+func confirmedItemsToMap(items []string) map[string]bool {
+	m := make(map[string]bool, len(items))
+	for _, item := range items {
+		m[item] = true
+	}
+	return m
+}
+
+func normalizeConfirmedItems(items []string) []string {
+	seen := make(map[string]bool, len(items))
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		result = append(result, item)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func validateConfirmedItemsConsistency(items []string, m map[string]bool) bool {
+	if len(items) != len(m) {
+		return false
+	}
+	for _, item := range items {
+		if !m[item] {
+			return false
+		}
+	}
+	return true
+}
+
+func validateRequiredConfirmations(confirmed []string, required []string) error {
+	if len(required) == 0 {
+		return nil
+	}
+	if len(confirmed) == 0 {
+		return NewPackageError(PackageErrCodeConfirmationRequired, 403, ErrPackageConfirmationRequired)
+	}
+	confirmedSet := make(map[string]bool, len(confirmed))
+	for _, item := range confirmed {
+		confirmedSet[item] = true
+	}
+	missing := make([]string, 0)
+	for _, req := range required {
+		if !confirmedSet[req] {
+			missing = append(missing, req)
+		}
+	}
+	if len(missing) > 0 {
+		return NewPackageError(PackageErrCodeConfirmationItemsMissing, 403,
+			fmt.Errorf("%w: %s", ErrPackageConfirmationItemsMissing, strings.Join(missing, ", ")))
+	}
+	return nil
+}
+
+type PackageUninstallPreviewIdentity struct {
+	ExtensionID             string
+	ArtifactID              string
+	ArtifactPolicy          ArtifactPolicy
+	PolicyReason            string
+	CurrentVersionID        string
+	CurrentGenerationID     string
+	CurrentVersion          string
+	InstalledPath           string
+	InstalledTreeHash       string
+	DependentsHash          string
+	SecurityPolicyHash      string
+	SnapshotRequirementHash string
+	UserID                  string
+	ScopeType               string
+	ScopeID                 string
+	PolicyVersion           string
+	PreviewHash             string
+}
+
+type ArtifactPolicyStepResult struct {
+	ArtifactID      string         `json:"artifactId"`
+	ExtensionID     string         `json:"extensionId"`
+	ArtifactPolicy  ArtifactPolicy `json:"artifactPolicy"`
+	Deleted         bool           `json:"deleted"`
+	Retained        bool           `json:"retained"`
+	RetentionState  string         `json:"retentionState"`
+	DeletedAt       *time.Time     `json:"deletedAt,omitempty"`
+	RemainingRefs   int64          `json:"remainingRefs"`
+	ReferenceHash   string         `json:"referenceHash,omitempty"`
+	BeforeStateHash string         `json:"beforeStateHash,omitempty"`
+	AfterStateHash  string         `json:"afterStateHash,omitempty"`
+	EvidenceHash    string         `json:"evidenceHash,omitempty"`
+}
+
+type PackageFinalGateResultV2 struct {
+	OperationID                 string                    `json:"operationId"`
+	OperationType               string                    `json:"operationType"`
+	ExtensionID                 string                    `json:"extensionId"`
+	ClaimsVerified              bool                      `json:"claimsVerified"`
+	PolicyVersionVerified       bool                      `json:"policyVersionVerified"`
+	ConfirmedItemsVerified      bool                      `json:"confirmedItemsVerified"`
+	PreviewIdentityVerified     bool                      `json:"previewIdentityVerified"`
+	ArtifactPolicyVerified      bool                      `json:"artifactPolicyVerified"`
+	SnapshotRequirementVerified bool                      `json:"snapshotRequirementVerified"`
+	SnapshotVerified            bool                      `json:"snapshotVerified"`
+	SnapshotExemptionVerified   bool                      `json:"snapshotExemptionVerified"`
+	VersionStateVerified        bool                      `json:"versionStateVerified"`
+	GenerationStateVerified     bool                      `json:"generationStateVerified"`
+	InstallationStateVerified   bool                      `json:"installationStateVerified"`
+	EvidenceHash                string                    `json:"evidenceHash,omitempty"`
+	Checks                      []PackageFinalGateCheck   `json:"checks"`
+	Findings                    []PackageFinalGateFinding `json:"findings,omitempty"`
+	Passed                      bool                      `json:"passed"`
+	VerifiedAt                  string                    `json:"verifiedAt"`
+}
+
+type PackageFinalGateCheckV2 struct {
+	Name             string `json:"name"`
+	Passed           bool   `json:"passed"`
+	ErrorCode        string `json:"errorCode,omitempty"`
+	ExpectedHash     string `json:"expectedHash,omitempty"`
+	ActualHash       string `json:"actualHash,omitempty"`
+	EvidenceReference string `json:"evidenceReference,omitempty"`
 }

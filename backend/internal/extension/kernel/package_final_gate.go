@@ -46,7 +46,7 @@ type PackageFinalGateFinding struct {
 func (r *PackageRepository) ListOperationSteps(ctx context.Context, operationID string) ([]PackageOperationStep, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT step_id, operation_id, step_name, step_order, status,
 		attempt_count, result_json, error_code, started_at, completed_at, stable_generation,
-		target_generation, current_pointer_json
+		target_generation, current_pointer_json, input_hash, result_hash, updated_at, cas_version
 		FROM extension_package_operation_steps WHERE operation_id = ? ORDER BY step_order`, operationID)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,8 @@ func (r *PackageRepository) ListOperationSteps(ctx context.Context, operationID 
 		var step PackageOperationStep
 		if err := rows.Scan(&step.StepID, &step.OperationID, &step.StepName, &step.StepOrder, &step.Status,
 			&step.AttemptCount, &step.ResultJSON, &step.ErrorCode, &step.StartedAt, &step.CompletedAt,
-			&step.StableGeneration, &step.TargetGeneration, &step.CurrentPointerJSON); err != nil {
+			&step.StableGeneration, &step.TargetGeneration, &step.CurrentPointerJSON,
+			&step.InputHash, &step.ResultHash, &step.UpdatedAt, &step.CASVersion); err != nil {
 			return nil, err
 		}
 		steps = append(steps, step)
@@ -166,41 +167,76 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 
 	if isUninstall {
 		checkArtifact := PackageFinalGateCheck{Name: "artifact_path_absent"}
-		artifact, artifactErr := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
-		if artifactErr == nil {
-			if artifact.InstalledPath == "" {
-				checkArtifact.Passed = true
-			} else {
-				if _, statErr := os.Stat(artifact.InstalledPath); statErr == nil || !os.IsNotExist(statErr) {
-					checkArtifact.Detail = "installed path still exists after uninstall"
-				} else {
-					checkArtifact.Passed = true
-				}
-			}
-		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorNotFound) {
+		if operation.ArtifactID == "" {
+			checkArtifact.Passed = true
+		} else {
 			claims, claimsErr := parseOperationConfirmationClaims(operation)
 			if claimsErr != nil {
-				checkArtifact.Detail = fmt.Sprintf("artifact not found and confirmation claims unavailable: %v", claimsErr)
-			} else if claims.ArtifactPolicy != ArtifactPolicyDeleteArtifact {
-				checkArtifact.Detail = fmt.Sprintf("artifact not found but claims policy is %s, fail closed", claims.ArtifactPolicy)
-			} else if !validateUninstallArtifactDeletion(ctx, r.container.PackageRepository, operationID, operation.ArtifactID) {
-				checkArtifact.Detail = "artifact not found but remove_artifact step evidence incomplete"
+				checkArtifact.Detail = fmt.Sprintf("confirmation claims unavailable for artifact verification: %v", claimsErr)
 			} else {
-				refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferences(ctx, operation.ArtifactID)
-				if refErr != nil {
-					checkArtifact.Detail = fmt.Sprintf("artifact reference check failed (repository unavailable): %v", refErr)
-				} else if refCount > 0 {
-					checkArtifact.Detail = fmt.Sprintf("artifact not found but still has %d active references", refCount)
-				} else {
-					checkArtifact.Passed = true
+				expectedPolicy := claims.ArtifactPolicy
+				artifact, artifactErr := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+				switch expectedPolicy {
+				case ArtifactPolicyDeleteArtifact:
+					if artifactErr == nil {
+						if artifact.RetentionState != "deleted" {
+							checkArtifact.Detail = fmt.Sprintf("delete policy: retention state is %s, expected deleted", artifact.RetentionState)
+						} else if artifact.DeletedAt == "" {
+							checkArtifact.Detail = "delete policy: deleted_at is empty"
+						} else if artifact.InstalledPath != "" {
+							if _, statErr := os.Stat(artifact.InstalledPath); statErr == nil || !os.IsNotExist(statErr) {
+								checkArtifact.Detail = "delete policy: installed path still exists"
+							} else if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
+								checkArtifact.Detail = "delete policy: remove_artifact step evidence incomplete"
+							} else {
+								refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferences(ctx, operation.ArtifactID)
+								if refErr != nil {
+									checkArtifact.Detail = fmt.Sprintf("delete policy: reference check failed: %v", refErr)
+								} else if refCount > 0 {
+									checkArtifact.Detail = fmt.Sprintf("delete policy: artifact still has %d active references", refCount)
+								} else {
+									checkArtifact.Passed = true
+								}
+							}
+						} else if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
+							checkArtifact.Detail = "delete policy: remove_artifact step evidence incomplete"
+						} else {
+							refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferences(ctx, operation.ArtifactID)
+							if refErr != nil {
+								checkArtifact.Detail = fmt.Sprintf("delete policy: reference check failed: %v", refErr)
+							} else if refCount > 0 {
+								checkArtifact.Detail = fmt.Sprintf("delete policy: artifact still has %d active references", refCount)
+							} else {
+								checkArtifact.Passed = true
+							}
+						}
+					} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorNotFound) {
+						if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
+							checkArtifact.Detail = "delete policy: artifact not found and remove_artifact step evidence incomplete"
+						} else {
+							checkArtifact.Passed = true
+						}
+					} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorUnavailable) {
+						checkArtifact.Detail = fmt.Sprintf("delete policy: artifact repository unavailable, fail closed: %v", artifactErr)
+					} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorCorrupt) {
+						checkArtifact.Detail = fmt.Sprintf("delete policy: artifact repository corrupt, fail closed: %v", artifactErr)
+					} else {
+						checkArtifact.Detail = fmt.Sprintf("delete policy: artifact query failed, fail closed: %v", artifactErr)
+					}
+				case ArtifactPolicyRetainArtifact, ArtifactPolicyRetainForRollback, ArtifactPolicyRetainForExport:
+					if artifactErr != nil {
+						checkArtifact.Detail = fmt.Sprintf("retain policy: artifact unavailable: %v", artifactErr)
+					} else if artifact.RetentionState == "deleted" || artifact.DeletedAt != "" {
+						checkArtifact.Detail = "retain policy: artifact is in deleted state"
+					} else if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
+						checkArtifact.Detail = "retain policy: remove_artifact step evidence incomplete"
+					} else {
+						checkArtifact.Passed = true
+					}
+				default:
+					checkArtifact.Detail = fmt.Sprintf("unknown artifact policy in claims: %s", expectedPolicy)
 				}
 			}
-		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorUnavailable) {
-			checkArtifact.Detail = fmt.Sprintf("artifact repository unavailable, fail closed: %v", artifactErr)
-		} else if IsRepositoryErrorKind(artifactErr, RepositoryErrorCorrupt) {
-			checkArtifact.Detail = fmt.Sprintf("artifact repository corrupt, fail closed: %v", artifactErr)
-		} else {
-			checkArtifact.Detail = fmt.Sprintf("artifact query failed (unknown error), fail closed: %v", artifactErr)
 		}
 		result.Checks = append(result.Checks, checkArtifact)
 	} else {
@@ -502,7 +538,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 	}
 
 	if !isUninstall && (operation.OperationType == "update" || operation.OperationType == "rollback") {
-	checkSnapshot := PackageFinalGateCheck{Name: "snapshot_integrity"}
+		checkSnapshot := PackageFinalGateCheck{Name: "snapshot_integrity"}
 		if r.container.PackageRepository == nil {
 			checkSnapshot.Detail = "package repository unavailable for snapshot check"
 		} else {

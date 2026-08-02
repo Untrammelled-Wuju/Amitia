@@ -804,6 +804,51 @@ func (s *PackageGenerationStore) quarantinePath(current PackageGenerationCurrent
 	return path, nil
 }
 
+type PackageExpectedRecoveryPaths struct {
+	OriginalCurrentPath      string
+	OriginalGenerationPath   string
+	CurrentQuarantinePath    string
+	GenerationQuarantinePath string
+}
+
+func (s *PackageGenerationStore) ExpectedUninstallRecoveryPaths(extensionID, generationID, operationID string) (PackageExpectedRecoveryPaths, error) {
+	if err := s.validateRoot(); err != nil {
+		return PackageExpectedRecoveryPaths{}, err
+	}
+	if err := validatePathSegment("extension ID", extensionID, true); err != nil {
+		return PackageExpectedRecoveryPaths{}, err
+	}
+	if err := validatePathSegment("generation ID", generationID, false); err != nil {
+		return PackageExpectedRecoveryPaths{}, err
+	}
+	if err := validatePathSegment("operation ID", operationID, false); err != nil {
+		return PackageExpectedRecoveryPaths{}, err
+	}
+	safeExt := safeDirectoryName(extensionID)
+	originalCurrentPath := filepath.Join(s.root, "installations", safeExt, "current.json")
+	originalGenerationPath := filepath.Join(s.root, "installations", safeExt, "generations", generationID)
+	currentQuarantinePath := filepath.Join(s.root, "quarantine", "current", safeExt, operationID)
+	generationQuarantinePath := filepath.Join(s.root, "quarantine", "generations", safeExt, generationID+"-"+operationID)
+	if !pathWithin(originalCurrentPath, filepath.Join(s.root, "installations")) {
+		return PackageExpectedRecoveryPaths{}, ErrPackageGenerationUnsafe
+	}
+	if !pathWithin(originalGenerationPath, filepath.Join(s.root, "installations")) {
+		return PackageExpectedRecoveryPaths{}, ErrPackageGenerationUnsafe
+	}
+	if !pathWithin(currentQuarantinePath, filepath.Join(s.root, "quarantine")) {
+		return PackageExpectedRecoveryPaths{}, ErrPackageGenerationUnsafe
+	}
+	if !pathWithin(generationQuarantinePath, filepath.Join(s.root, "quarantine")) {
+		return PackageExpectedRecoveryPaths{}, ErrPackageGenerationUnsafe
+	}
+	return PackageExpectedRecoveryPaths{
+		OriginalCurrentPath:      originalCurrentPath,
+		OriginalGenerationPath:   originalGenerationPath,
+		CurrentQuarantinePath:    currentQuarantinePath,
+		GenerationQuarantinePath: generationQuarantinePath,
+	}, nil
+}
+
 func (s *PackageGenerationStore) validateRoot() error {
 	if strings.TrimSpace(s.root) == "" {
 		return fmt.Errorf("%w: generation store root empty", ErrPackageGenerationUnsafe)

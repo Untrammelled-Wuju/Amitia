@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -449,10 +450,14 @@ func (r *PackageRepository) finishStep(ctx context.Context, operationID, stepNam
 		return PackageOperationStep{}, operationStateError(OperationErrTransitionConflict, "step is not in progress", nil)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	resultHash := ""
+	if resultJSON != "" {
+		resultHash = fmt.Sprintf("%x", sha256.Sum256([]byte(resultJSON)))
+	}
 	result, err := r.db.ExecContext(ctx, `UPDATE extension_package_operation_steps SET status=?, result_json=?,
-		error_code=?, error_detail=?, side_effect_evidence=?, completed_at=?, updated_at=?, cas_version=cas_version+1
+		result_hash=?, error_code=?, error_detail=?, side_effect_evidence=?, completed_at=?, updated_at=?, cas_version=cas_version+1
 		WHERE operation_id=? AND step_name=? AND input_hash=? AND status='in_progress' AND cas_version=?`,
-		status, resultJSON, errorCode, errorDetail, evidence, now, now, operationID, stepName, inputHash, step.CASVersion)
+		status, resultJSON, resultHash, errorCode, errorDetail, evidence, now, now, operationID, stepName, inputHash, step.CASVersion)
 	if err != nil {
 		return PackageOperationStep{}, storageOperationError("finish operation step", err)
 	}
@@ -475,13 +480,13 @@ func (r *PackageRepository) getOperationStep(ctx context.Context, operationID, s
 	err := r.db.QueryRowContext(ctx, `SELECT step_id, operation_id, step_name, step_order, status,
 		attempt_count, result_json, error_code, started_at, completed_at, stable_generation,
 		target_generation, current_pointer_json, input_hash, error_detail, compensation_name,
-		compensation_status, side_effect_evidence, updated_at, cas_version
+		compensation_status, side_effect_evidence, updated_at, result_hash, cas_version
 		FROM extension_package_operation_steps WHERE operation_id=? AND step_name=?`, operationID, stepName).
 		Scan(&step.StepID, &step.OperationID, &step.StepName, &step.StepOrder, &step.Status,
 			&step.AttemptCount, &step.ResultJSON, &step.ErrorCode, &step.StartedAt, &step.CompletedAt,
 			&step.StableGeneration, &step.TargetGeneration, &step.CurrentPointerJSON, &step.InputHash,
 			&step.ErrorDetail, &step.CompensationName, &step.CompensationStatus,
-			&step.SideEffectEvidence, &step.UpdatedAt, &step.CASVersion)
+			&step.SideEffectEvidence, &step.UpdatedAt, &step.ResultHash, &step.CASVersion)
 	if err != nil {
 		return PackageOperationStep{}, classifyOperationRead("read operation step", err)
 	}

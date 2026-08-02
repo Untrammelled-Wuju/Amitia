@@ -169,6 +169,63 @@ func NewPackageRepository(db *sql.DB) *PackageRepository {
 	return &PackageRepository{db: db}
 }
 
+const packageOperationSelectColumns = `operation_id, trace_id, user_id, scope_type, scope_id,
+	extension_id, target_version, operation_type, status, current_step, artifact_id,
+	preview_session_id, confirmations_json, confirmation_claims_json, error_code, error_detail, started_at, updated_at,
+	completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash`
+
+type sqlScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanPackageOperation(scanner sqlScanner) (*PackageOperationRecord, error) {
+	var op PackageOperationRecord
+	if err := scanner.Scan(
+		&op.OperationID,
+		&op.TraceID,
+		&op.UserID,
+		&op.ScopeType,
+		&op.ScopeID,
+		&op.ExtensionID,
+		&op.TargetVersion,
+		&op.OperationType,
+		&op.Status,
+		&op.CurrentStep,
+		&op.ArtifactID,
+		&op.PreviewSessionID,
+		&op.ConfirmationsJSON,
+		&op.ConfirmationClaimsJSON,
+		&op.ErrorCode,
+		&op.ErrorDetail,
+		&op.StartedAt,
+		&op.UpdatedAt,
+		&op.CompletedAt,
+		&op.StableGeneration,
+		&op.TargetGeneration,
+		&op.CurrentPointerJSON,
+		&op.SnapshotRequirementHash,
+	); err != nil {
+		return nil, err
+	}
+	return &op, nil
+}
+
+func scanPackageOperations(rows *sql.Rows) ([]PackageOperationRecord, error) {
+	defer rows.Close()
+	operations := make([]PackageOperationRecord, 0)
+	for rows.Next() {
+		operation, err := scanPackageOperation(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan package operation: %w", err)
+		}
+		operations = append(operations, *operation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate package operations: %w", err)
+	}
+	return operations, nil
+}
+
 func (r *PackageRepository) PutArtifact(ctx context.Context, a PackageArtifact) error {
 	if a.RetentionState == "" {
 		a.RetentionState = "active"
@@ -525,55 +582,56 @@ func (r *PackageRepository) PutStep(ctx context.Context, step PackageOperationSt
 }
 
 func (r *PackageRepository) ListIncompleteOperations(ctx context.Context) ([]PackageOperationRecord, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
-		extension_id, target_version, operation_type, status, current_step, artifact_id,
-		preview_session_id, confirmations_json, error_code, error_detail, started_at, updated_at,
-		completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash FROM extension_package_operations WHERE status NOT IN ('completed','failed','cancelled') ORDER BY started_at`)
+	query := `
+		SELECT ` + packageOperationSelectColumns + `
+		FROM extension_package_operations
+		WHERE status NOT IN ('completed','failed','cancelled')
+		ORDER BY started_at`
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var result []PackageOperationRecord
-	for rows.Next() {
-		var op PackageOperationRecord
-		if err := rows.Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID,
-			&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
-			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode,
-			&op.ErrorDetail, &op.StartedAt, &op.UpdatedAt, &op.CompletedAt,
-			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON, &op.SnapshotRequirementHash); err != nil {
-			return nil, err
-		}
-		result = append(result, op)
+	operations, err := scanPackageOperations(rows)
+	if err != nil {
+		return nil, err
 	}
-	return result, rows.Err()
+	return operations, nil
 }
 
 func (r *PackageRepository) ListOperations(ctx context.Context, userID string, limit int) ([]PackageOperationRecord, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
-		extension_id, target_version, operation_type, status, current_step, artifact_id,
-		preview_session_id, confirmations_json, error_code, error_detail, started_at, updated_at,
-		completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash FROM extension_package_operations WHERE user_id = ? ORDER BY started_at DESC LIMIT ?`, userID, limit)
+	query := `
+		SELECT ` + packageOperationSelectColumns + `
+		FROM extension_package_operations
+		WHERE user_id = ?
+		ORDER BY started_at DESC
+		LIMIT ?`
+	rows, err := r.db.QueryContext(ctx, query, userID, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanPackageOperations(rows)
+	operations, err := scanPackageOperations(rows)
+	if err != nil {
+		return nil, err
+	}
+	return operations, nil
 }
 
 func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationID string) (PackageOperationRecord, []PackageOperationStep, error) {
 	var op PackageOperationRecord
-	err := r.db.QueryRowContext(ctx, `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
-		extension_id, target_version, operation_type, status, current_step, artifact_id,
-		preview_session_id, confirmations_json, error_code, error_detail, started_at, updated_at,
-		completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash FROM extension_package_operations WHERE user_id = ? AND operation_id = ?`, userID, operationID).
-		Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
-			&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
-			&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
-			&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
-			&op.CurrentPointerJSON, &op.SnapshotRequirementHash)
+	query := `
+		SELECT ` + packageOperationSelectColumns + `
+		FROM extension_package_operations
+		WHERE user_id = ? AND operation_id = ?`
+	err := r.db.QueryRowContext(ctx, query, userID, operationID).Scan(
+		&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
+		&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
+		&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
+		&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
+		&op.CurrentPointerJSON, &op.SnapshotRequirementHash,
+	)
 	if err != nil {
 		return op, nil, err
 	}
@@ -598,33 +656,19 @@ func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationI
 }
 
 func (r *PackageRepository) GetCompletedOperationByPreview(ctx context.Context, userID, sessionID string) (PackageOperationRecord, error) {
-	var op PackageOperationRecord
-	err := r.db.QueryRowContext(ctx, `SELECT operation_id, trace_id, user_id, scope_type, scope_id,
-		extension_id, target_version, operation_type, status, current_step, artifact_id,
-		preview_session_id, confirmations_json, error_code, error_detail, started_at, updated_at,
-		completed_at, stable_generation, target_generation, current_pointer_json FROM extension_package_operations WHERE user_id = ? AND preview_session_id = ?
-		AND status = 'completed' ORDER BY completed_at DESC LIMIT 1`, userID, sessionID).
-		Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID, &op.ExtensionID,
-			&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
-			&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
-			&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON)
-	return op, err
-}
-
-func scanPackageOperations(rows *sql.Rows) ([]PackageOperationRecord, error) {
-	var result []PackageOperationRecord
-	for rows.Next() {
-		var op PackageOperationRecord
-		if err := rows.Scan(&op.OperationID, &op.TraceID, &op.UserID, &op.ScopeType, &op.ScopeID,
-			&op.ExtensionID, &op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep,
-			&op.ArtifactID, &op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode,
-			&op.ErrorDetail, &op.StartedAt, &op.UpdatedAt, &op.CompletedAt,
-			&op.StableGeneration, &op.TargetGeneration, &op.CurrentPointerJSON, &op.SnapshotRequirementHash); err != nil {
-			return nil, err
-		}
-		result = append(result, op)
+	query := `
+		SELECT ` + packageOperationSelectColumns + `
+		FROM extension_package_operations
+		WHERE user_id = ? AND preview_session_id = ?
+			AND status = 'completed'
+		ORDER BY completed_at DESC
+		LIMIT 1`
+	row := r.db.QueryRowContext(ctx, query, userID, sessionID)
+	operation, err := scanPackageOperation(row)
+	if err != nil {
+		return PackageOperationRecord{}, err
 	}
-	return result, rows.Err()
+	return *operation, nil
 }
 
 func (r *PackageRepository) PutRollbackPoint(ctx context.Context, p PackageRollbackPoint) error {
@@ -715,6 +759,140 @@ func (r *PackageRepository) PutExport(ctx context.Context, ticket PackageExportT
 	return tx.Commit()
 }
 
+func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTxWithStep(ctx context.Context, operationID, extensionID string, fencingToken int64, finalizeStep string, step PackageOperationStep) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return storageOperationError("begin finalize operation and release lease with step", err)
+	}
+	defer tx.Rollback()
+	var currentStatus string
+	var artifactID string
+	if err := tx.QueryRowContext(ctx, `SELECT status, artifact_id FROM extension_package_operations WHERE operation_id=?`,
+		operationID).Scan(&currentStatus, &artifactID); err != nil {
+		return classifyOperationRead("read operation for finalize with step", err)
+	}
+	if currentStatus != string(PackageOperationFinalizing) {
+		return operationStateError(OperationErrTransitionConflict,
+			"operation is not in finalizing state, current: "+currentStatus, nil)
+	}
+	var leaseOpID string
+	var leaseFencingToken int64
+	leaseErr := tx.QueryRowContext(ctx,
+		`SELECT operation_id, fencing_token FROM extension_package_operation_leases WHERE extension_id=?`,
+		extensionID).Scan(&leaseOpID, &leaseFencingToken)
+	if leaseErr == nil {
+		if leaseOpID != operationID {
+			return operationStateError(PackageErrCodeLeaseFenced,
+				"lease taken over by another operation: "+leaseOpID, nil)
+		}
+		if leaseFencingToken != fencingToken {
+			return operationStateError(PackageErrCodeLeaseFenced,
+				"fencing token mismatch during finalization", nil)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=?`,
+			extensionID, operationID); err != nil {
+			return storageOperationError("delete lease during finalization with step", err)
+		}
+	} else if !errors.Is(leaseErr, sql.ErrNoRows) {
+		return storageOperationError("read lease during finalization with step", leaseErr)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	stepID := step.StepID
+	if stepID == "" {
+		stepID = operationID + ":" + finalizeStep
+	}
+	resultJSON := step.ResultJSON
+	if resultJSON == "" {
+		resultJSON = `{"finalized":true,"atomic":true}`
+	}
+	errorCode := step.ErrorCode
+	startedAt := step.StartedAt
+	if startedAt == "" {
+		startedAt = now
+	}
+	completedAt := step.CompletedAt
+	if completedAt == "" {
+		completedAt = now
+	}
+	attemptCount := step.AttemptCount
+	if attemptCount < 1 {
+		attemptCount = 1
+	}
+	stepOrder := step.StepOrder
+	if stepOrder == 0 {
+		stepOrder = 9999
+	}
+	resultHash := step.ResultHash
+	if resultHash == "" && resultJSON != "" {
+		resultHash = fmt.Sprintf("%x", sha256.Sum256([]byte(resultJSON)))
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO extension_package_operation_steps (
+		step_id, operation_id, step_name, step_order, status, attempt_count, result_json, error_code,
+		started_at, completed_at, stable_generation, target_generation, current_pointer_json, input_hash, result_hash, updated_at, cas_version
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+		stepID, operationID, finalizeStep, stepOrder, step.Status, attemptCount, resultJSON, errorCode,
+		startedAt, completedAt, step.StableGeneration, step.TargetGeneration, step.CurrentPointerJSON, step.InputHash, resultHash, now); err != nil {
+		if isSQLiteConstraintViolation(err) {
+			if _, updErr := tx.ExecContext(ctx, `UPDATE extension_package_operation_steps SET status=?,
+				result_json=?, result_hash=?, completed_at=?, stable_generation=?, target_generation=?, current_pointer_json=?,
+				updated_at=?, cas_version=cas_version+1
+				WHERE operation_id=? AND step_name=? AND status!='completed'`,
+				step.Status, resultJSON, resultHash, completedAt, step.StableGeneration, step.TargetGeneration,
+				step.CurrentPointerJSON, now, operationID, finalizeStep); updErr != nil {
+				return storageOperationError("upsert finalize step during finalization with step", updErr)
+			}
+		} else {
+			return storageOperationError("record finalize step during finalization with step", err)
+		}
+	}
+	result, err := tx.ExecContext(ctx,
+		`UPDATE extension_package_operations SET status=?, current_step=?, error_code='', error_detail='',
+		recovery_required=0, updated_at=?, completed_at=?, lease_owner='', lease_expires_at=''
+		WHERE operation_id=? AND status=?`,
+		string(PackageOperationCompleted), "completed", now, now, operationID, string(PackageOperationFinalizing))
+	if err != nil {
+		return storageOperationError("finalize operation to completed with step", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("inspect finalize operation with step", err)
+	}
+	if rows != 1 {
+		return operationStateError(OperationErrTransitionConflict,
+			"operation status changed during finalization", nil)
+	}
+	if artifactID != "" {
+		if err := releaseArtifactReferenceTx(ctx, tx, artifactID, ArtifactReferenceOperation, operationID); err != nil {
+			return storageOperationError("release terminal operation artifact during finalization with step", err)
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *PackageRepository) ListSteps(ctx context.Context, operationID string) ([]PackageOperationStep, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT step_id, operation_id, step_name, step_order, status,
+		attempt_count, result_json, error_code, started_at, completed_at, stable_generation, target_generation,
+		current_pointer_json, input_hash, updated_at, result_hash, cas_version
+		FROM extension_package_operation_steps WHERE operation_id = ? ORDER BY step_order`, operationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var steps []PackageOperationStep
+	for rows.Next() {
+		var step PackageOperationStep
+		if err := rows.Scan(&step.StepID, &step.OperationID, &step.StepName, &step.StepOrder,
+			&step.Status, &step.AttemptCount, &step.ResultJSON, &step.ErrorCode,
+			&step.StartedAt, &step.CompletedAt, &step.StableGeneration, &step.TargetGeneration,
+			&step.CurrentPointerJSON, &step.InputHash, &step.UpdatedAt, &step.ResultHash, &step.CASVersion); err != nil {
+			return nil, err
+		}
+		steps = append(steps, step)
+	}
+	return steps, rows.Err()
+}
+
 func (r *PackageRepository) GetExport(ctx context.Context, exportID, userID, extensionID string) (PackageExportTicket, error) {
 	var ticket PackageExportTicket
 	err := r.db.QueryRowContext(ctx, `SELECT export_id, user_id, extension_id, artifact_id,
@@ -770,16 +948,18 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Conte
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	stepID := operationID + ":" + finalizeStep
 	inputHash := "sha256:" + fmt.Sprintf("%x", sha256.Sum256([]byte(stepID)))
+	resultJSON := `{"finalized":true,"atomic":true}`
+	resultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(resultJSON)))
 	if _, err := tx.ExecContext(ctx, `INSERT INTO extension_package_operation_steps (
 		step_id, operation_id, step_name, step_order, status, attempt_count, result_json, error_code,
-		started_at, completed_at, input_hash, updated_at, cas_version
-	) VALUES (?, ?, ?, ?, 'completed', 1, ?, '', ?, ?, ?, ?, 1)`,
-		stepID, operationID, finalizeStep, 9999, `{"finalized":true,"atomic":true}`, now, now, inputHash, now); err != nil {
+		started_at, completed_at, input_hash, result_hash, updated_at, cas_version
+	) VALUES (?, ?, ?, ?, 'completed', 1, ?, '', ?, ?, ?, ?, ?, 1)`,
+		stepID, operationID, finalizeStep, 9999, resultJSON, now, now, inputHash, resultHash, now); err != nil {
 		if isSQLiteConstraintViolation(err) {
 			if _, updErr := tx.ExecContext(ctx, `UPDATE extension_package_operation_steps SET status='completed',
-				result_json=?, completed_at=?, updated_at=?, cas_version=cas_version+1
+				result_json=?, result_hash=?, completed_at=?, updated_at=?, cas_version=cas_version+1
 				WHERE operation_id=? AND step_name=? AND status!='completed'`,
-				`{"finalized":true,"atomic":true}`, now, now, operationID, finalizeStep); updErr != nil {
+				resultJSON, resultHash, now, now, operationID, finalizeStep); updErr != nil {
 				return storageOperationError("upsert finalize step during finalization", updErr)
 			}
 		} else {
