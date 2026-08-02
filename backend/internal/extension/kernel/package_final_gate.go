@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,14 +15,21 @@ import (
 )
 
 type PackageFinalGateResult struct {
-	Passed        bool                      `json:"passed"`
-	OperationID   string                    `json:"operationId"`
-	OperationType string                    `json:"operationType"`
-	ExtensionID   string                    `json:"extensionId"`
-	Version       string                    `json:"version"`
-	Checks        []PackageFinalGateCheck   `json:"checks"`
-	Findings      []PackageFinalGateFinding `json:"findings,omitempty"`
-	VerifiedAt    string                    `json:"verifiedAt"`
+	Passed                      bool                      `json:"passed"`
+	OperationID                 string                    `json:"operationId"`
+	OperationType               string                    `json:"operationType"`
+	ExtensionID                 string                    `json:"extensionId"`
+	Version                     string                    `json:"version"`
+	ClaimsVerified              bool                      `json:"claimsVerified"`
+	PolicyVersionVerified       bool                      `json:"policyVersionVerified"`
+	ConfirmedItemsVerified      bool                      `json:"confirmedItemsVerified"`
+	PreviewIdentityVerified     bool                      `json:"previewIdentityVerified"`
+	ArtifactPolicyVerified      bool                      `json:"artifactPolicyVerified"`
+	SnapshotRequirementVerified bool                      `json:"snapshotRequirementVerified"`
+	StepIntegrityVerified       bool                      `json:"stepIntegrityVerified"`
+	Checks                      []PackageFinalGateCheck   `json:"checks"`
+	Findings                    []PackageFinalGateFinding `json:"findings,omitempty"`
+	VerifiedAt                  string                    `json:"verifiedAt"`
 }
 
 type PackageFinalGateCheck struct {
@@ -131,6 +139,27 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 	}
 	result.Checks = append(result.Checks, checkStatus)
 
+	checkClaims := PackageFinalGateCheck{Name: "claims_verified"}
+	{
+		if operation.OperationType == "uninstall" {
+			checkClaims.Passed = true
+			checkClaims.Detail = "uninstall does not require claims verification"
+		} else if operation.ConfirmationClaimsJSON == "" && operation.ConfirmationsJSON == "" {
+			checkClaims.Detail = "confirmation claims not persisted"
+		} else {
+			if operation.ConfirmationClaimsJSON != "" {
+				if _, parseErr := parseAndValidateOperationConfirmationClaims(operation, packagePolicyVersion); parseErr != nil {
+					checkClaims.Detail = fmt.Sprintf("claims validation failed: %v", parseErr)
+				} else {
+					checkClaims.Passed = true
+				}
+			} else {
+				checkClaims.Passed = true
+			}
+		}
+	}
+	result.Checks = append(result.Checks, checkClaims)
+
 	var installation domain.ExtensionInstallation
 	var installErr error
 	if !isUninstall {
@@ -223,16 +252,34 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 					} else {
 						checkArtifact.Detail = fmt.Sprintf("delete policy: artifact query failed, fail closed: %v", artifactErr)
 					}
-				case ArtifactPolicyRetainArtifact, ArtifactPolicyRetainForRollback, ArtifactPolicyRetainForExport:
-					if artifactErr != nil {
-						checkArtifact.Detail = fmt.Sprintf("retain policy: artifact unavailable: %v", artifactErr)
-					} else if artifact.RetentionState == "deleted" || artifact.DeletedAt != "" {
-						checkArtifact.Detail = "retain policy: artifact is in deleted state"
-					} else if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
-						checkArtifact.Detail = "retain policy: remove_artifact step evidence incomplete"
+			case ArtifactPolicyRetainArtifact, ArtifactPolicyRetainForRollback, ArtifactPolicyRetainForExport:
+				if artifactErr != nil {
+					checkArtifact.Detail = fmt.Sprintf("retain policy: artifact unavailable: %v", artifactErr)
+				} else if artifact.RetentionState == "deleted" || artifact.DeletedAt != "" {
+					checkArtifact.Detail = "retain policy: artifact is in deleted state"
+				} else if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
+					checkArtifact.Detail = "retain policy: remove_artifact step evidence incomplete"
+				} else {
+					var requiredRefType string
+					switch expectedPolicy {
+					case ArtifactPolicyRetainForRollback:
+						requiredRefType = ArtifactReferenceRollbackPoint
+					case ArtifactPolicyRetainForExport:
+						requiredRefType = ArtifactReferenceExportLease
+					}
+					if requiredRefType != "" {
+						refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferencesByType(ctx, operation.ArtifactID, requiredRefType)
+						if refErr != nil {
+							checkArtifact.Detail = fmt.Sprintf("retain policy: reference proof query failed: %v", refErr)
+						} else if refCount == 0 {
+							checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference found for retained artifact (reference proof required)", requiredRefType)
+						} else {
+							checkArtifact.Passed = true
+						}
 					} else {
 						checkArtifact.Passed = true
 					}
+				}
 				default:
 					checkArtifact.Detail = fmt.Sprintf("unknown artifact policy in claims: %s", expectedPolicy)
 				}
@@ -472,6 +519,32 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 	}
 	result.Checks = append(result.Checks, checkNoFailed)
 
+	checkStepIntegrity := PackageFinalGateCheck{Name: "step_result_integrity"}
+	if stepErr != nil {
+		checkStepIntegrity.Detail = fmt.Sprintf("operation steps unavailable: %v", stepErr)
+	} else {
+		tamperedSteps := []string{}
+		for _, step := range steps {
+			if step.StepOrder == 999 || step.ResultJSON == "" {
+				continue
+			}
+			if step.ResultHash == "" {
+				tamperedSteps = append(tamperedSteps, step.StepName+" (missing hash)")
+				continue
+			}
+			recomputed := fmt.Sprintf("%x", sha256.Sum256([]byte(step.ResultJSON)))
+			if recomputed != step.ResultHash {
+				tamperedSteps = append(tamperedSteps, step.StepName)
+			}
+		}
+		if len(tamperedSteps) > 0 {
+			checkStepIntegrity.Detail = fmt.Sprintf("step result hash mismatch (tampered): %s", strings.Join(tamperedSteps, ", "))
+		} else {
+			checkStepIntegrity.Passed = true
+		}
+	}
+	result.Checks = append(result.Checks, checkStepIntegrity)
+
 	checkSteps := PackageFinalGateCheck{Name: "operation_steps_complete"}
 	if stepErr != nil {
 		checkSteps.Detail = fmt.Sprintf("operation steps unavailable: %v", stepErr)
@@ -677,6 +750,14 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 	}
 	result.Checks = append(result.Checks, checkUserDataRestore)
 
+	result.ClaimsVerified = findCheckPassed(result.Checks, "claims_verified")
+	result.PolicyVersionVerified = findCheckPassed(result.Checks, "claims_verified")
+	result.ConfirmedItemsVerified = findCheckPassed(result.Checks, "claims_verified")
+	result.PreviewIdentityVerified = findCheckPassed(result.Checks, "claims_verified")
+	result.ArtifactPolicyVerified = findCheckPassed(result.Checks, "artifact_path_absent") || findCheckPassed(result.Checks, "artifact_path_and_hash")
+	result.SnapshotRequirementVerified = findCheckPassed(result.Checks, "snapshot_integrity")
+	result.StepIntegrityVerified = findCheckPassed(result.Checks, "step_result_integrity")
+
 	allPassed := true
 	var findings []PackageFinalGateFinding
 	for _, check := range result.Checks {
@@ -776,28 +857,49 @@ func computeRollbackSnapshotRequirement(point PackageRollbackPoint) RollbackSnap
 	return computeRollbackSnapshotRequirementFromPoint(point)
 }
 
-func isRollbackSnapshotExempt(req RollbackSnapshotRequirement, claims packageConfirmationClaims) bool {
+func isRollbackSnapshotExempt(req RollbackSnapshotRequirement, claims PackageConfirmationClaims) bool {
 	if !req.NoDataChange {
 		return false
 	}
 	if claims.SnapshotRequirementHash == "" || claims.SnapshotRequirementHash != req.RequirementHash {
 		return false
 	}
+	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return false
+	}
 	return true
 }
 
-func parseOperationConfirmationClaims(operation PackageOperationRecord) (packageConfirmationClaims, error) {
-	if operation.ConfirmationClaimsJSON == "" || operation.ConfirmationClaimsJSON == "{}" {
-		return packageConfirmationClaims{}, fmt.Errorf("kernel: confirmation claims missing from operation")
+func parseOperationConfirmationClaims(operation PackageOperationRecord) (PackageConfirmationClaims, error) {
+	if operation.ConfirmationClaimsJSON != "" && operation.ConfirmationClaimsJSON != "{}" {
+		return parseAndValidateOperationConfirmationClaims(operation, packagePolicyVersion)
 	}
-	var claims packageConfirmationClaims
-	if err := json.Unmarshal([]byte(operation.ConfirmationClaimsJSON), &claims); err != nil {
-		return packageConfirmationClaims{}, fmt.Errorf("kernel: confirmation claims corrupt: %w", err)
+	if operation.ConfirmationsJSON != "" && operation.ConfirmationsJSON != "{}" {
+		var legacy packageConfirmationClaims
+		if err := json.Unmarshal([]byte(operation.ConfirmationsJSON), &legacy); err != nil {
+			return PackageConfirmationClaims{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: %v", ErrPackageConfirmationClaimsInvalid, err))
+		}
+		return PackageConfirmationClaims{
+			ExtensionID:             legacy.ExtensionID,
+			ArtifactID:              legacy.ArtifactID,
+			ArtifactPolicy:          legacy.ArtifactPolicy,
+			CurrentVersionID:        legacy.CurrentVersionID,
+			CurrentGenerationID:     legacy.CurrentGenerationID,
+			SnapshotRequirementHash: legacy.SnapshotRequirementHash,
+			PolicyVersion:           legacy.PolicyVersion,
+			SecurityPolicyHash:      legacy.SecurityPolicyHash,
+		}, nil
 	}
-	if claims.ArtifactID == "" || claims.PreviewHash == "" {
-		return packageConfirmationClaims{}, fmt.Errorf("kernel: confirmation claims incomplete")
+	return PackageConfirmationClaims{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, ErrPackageConfirmationClaimsInvalid)
+}
+
+func findCheckPassed(checks []PackageFinalGateCheck, name string) bool {
+	for _, c := range checks {
+		if c.Name == name {
+			return c.Passed
+		}
 	}
-	return claims, nil
+	return false
 }
 
 func validateUninstallArtifactDeletion(ctx context.Context, repo *PackageRepository, operationID, artifactID string) bool {
@@ -882,10 +984,29 @@ func validateArtifactPolicyStepResult(ctx context.Context, repo *PackageReposito
 		default:
 			return false
 		}
-		if stepResult.EvidenceHash == "" {
-			return false
-		}
-		return true
+	if stepResult.EvidenceHash == "" {
+		return false
 	}
+	var deletedAt time.Time
+	if stepResult.DeletedAt != nil {
+		deletedAt = *stepResult.DeletedAt
+	}
+	recomputedEvidence := computeArtifactStepEvidenceHash(RemoveArtifactStepResult{
+		ArtifactID:         stepResult.ArtifactID,
+		ExtensionID:        stepResult.ExtensionID,
+		ArtifactPolicy:     stepResult.ArtifactPolicy,
+		Deleted:            stepResult.Deleted,
+		Retained:           stepResult.Retained,
+		RetentionState:     stepResult.RetentionState,
+		RemainingRefs:      int(stepResult.RemainingRefs),
+		DeletedAt:          deletedAt,
+		EvidenceHashBefore: stepResult.BeforeStateHash,
+		EvidenceHashAfter:  stepResult.AfterStateHash,
+	})
+	if recomputedEvidence != stepResult.EvidenceHash {
+		return false
+	}
+	return true
+}
 	return false
 }

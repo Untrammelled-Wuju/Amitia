@@ -25,6 +25,33 @@ func userBatchGenesisHash() string {
 	return hex.EncodeToString(h[:])
 }
 
+func userBatchEmptySetHash() string {
+	h := sha256.Sum256([]byte("amitia-userdata-restore-emptyset-v1"))
+	return hex.EncodeToString(h[:])
+}
+
+type UserDataBatchIdentity struct {
+	ExtensionID    string
+	TableName      string
+	Namespace      string
+	EntityType     string
+	SchemaVersion  string
+	RecordCount    int64
+	BatchAlgorithm string
+}
+
+func computeUserDataBatchHashFromIdentity(identity UserDataBatchIdentity, operationID string) string {
+	if identity.RecordCount == 0 || identity.ExtensionID == "" {
+		return ""
+	}
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("v:%s:op:%s:ext:%s:tbl:%s:schema:%s:records:%d:entity:%s:ns:%s",
+		userDataBatchHashAlgorithmVersion, operationID, identity.ExtensionID,
+		identity.TableName, identity.SchemaVersion, identity.RecordCount,
+		identity.EntityType, identity.Namespace)))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 const (
 	PackageErrCodeUserDataNamespaceViolation  = "PACKAGE_USER_DATA_NAMESPACE_VIOLATION"
 	PackageErrCodeUserDataJournalHashMismatch = "PACKAGE_USER_DATA_JOURNAL_HASH_MISMATCH"
@@ -329,6 +356,14 @@ func validateUserDataRecord(record userDataRecord, extensionID string) error {
 		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
 			fmt.Errorf("kernel: user data record entityType is empty"))
 	}
+	if !isValidEntityType(record.EntityType) {
+		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
+			fmt.Errorf("kernel: user data record entityType %q is not a valid entity type", record.EntityType))
+	}
+	if record.EntityType != resolver.LogicalEntityType {
+		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
+			fmt.Errorf("kernel: user data record entityType %q does not match namespace logical entity type %q", record.EntityType, resolver.LogicalEntityType))
+	}
 	if !isValidOperation(record.Operation) {
 		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
 			fmt.Errorf("kernel: user data record operation %q not in allowed set", record.Operation))
@@ -379,10 +414,6 @@ func (s *UserDataSnapshotStore) RestoreUserDataFromSnapshot(ctx context.Context,
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: user data snapshot missing for affected table %s", table))
 		}
-		if strings.TrimSpace(jsonlData) == "" {
-			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-				fmt.Errorf("kernel: user data snapshot export empty for affected table %s", table))
-		}
 		_, parsedRecords, parseErr := parseAndValidateJSONL(jsonlData, extensionID)
 		if parseErr != nil {
 			return parseErr
@@ -393,24 +424,27 @@ func (s *UserDataSnapshotStore) RestoreUserDataFromSnapshot(ctx context.Context,
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: user data snapshot record count mismatch for table %s: expected %d, got %d", table, expectedCount, actualCount))
 		}
-		if err := s.restoreTable(ctx, extensionID, operationID, table, jsonlData); err != nil {
+		if err := s.restoreTable(ctx, extensionID, operationID, table, parsedRecords); err != nil {
 			return fmt.Errorf("kernel: restore user data table %s: %w", table, err)
 		}
 	}
 	return nil
 }
 
-func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, operationID, table, jsonlData string) error {
+func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, operationID, table string, parsedRecords []userDataRecord) error {
 	if !migration.IsExtensionNamespaceTable(table, extensionID) {
 		return fmt.Errorf("kernel: user data table %q does not belong to extension namespace", table)
 	}
-	records, parsedRecords, err := parseAndValidateJSONL(jsonlData, extensionID)
-	if err != nil {
-		return err
-	}
-	if len(parsedRecords) == 0 {
-		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-			fmt.Errorf("kernel: no valid records found for restore"))
+	var records []map[string]interface{}
+	for _, pr := range parsedRecords {
+		recordMap := map[string]interface{}{}
+		if pr.EntityID != "" {
+			recordMap["entity_id"] = pr.EntityID
+		}
+		for k, v := range pr.Payload {
+			recordMap[k] = v
+		}
+		records = append(records, recordMap)
 	}
 	entityTypeSet := make(map[string]struct{})
 	var schemaVersion, namespace string
@@ -434,6 +468,15 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 	for et := range entityTypeSet {
 		entityTypes = append(entityTypes, et)
 	}
+	if namespace == "" {
+		resolver, resolverErr := ResolveExtensionUserDataNamespace(extensionID, table)
+		if resolverErr != nil {
+			return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+				fmt.Errorf("kernel: resolve namespace for table %s: %w", table, resolverErr))
+		}
+		namespace = resolver.CanonicalTable
+		schemaVersion = "1.0.0"
+	}
 	expectedNamespaceHash := computeNamespaceHash(extensionID, table, namespace, entityTypes, schemaVersion, "v1")
 	journal, err := s.getOrCreateRestoreJournal(ctx, operationID, extensionID, table, namespace, int64(len(records)), expectedNamespaceHash)
 	if err != nil {
@@ -455,6 +498,30 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 	if journal.AppliedCount != startCursor {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: journal applied_count %d does not match cursor %d", journal.AppliedCount, startCursor))
+	}
+	if len(parsedRecords) == 0 {
+		if err := s.fullTableReplace(ctx, table, records); err != nil {
+			failErr := fmt.Errorf("kernel: empty restore failed to clear table %s: %w", table, err)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+			}
+			return failErr
+		}
+		aggHashFromDB, aggErr := s.computeAggregateHashFromDB(ctx, table)
+		if aggErr != nil {
+			failErr := fmt.Errorf("kernel: compute aggregate hash for empty table %s: %w", table, aggErr)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+			}
+			return failErr
+		}
+		if err := s.updateRestoreJournalHashes(ctx, journal, expectedNamespaceHash, aggHashFromDB); err != nil {
+			return fmt.Errorf("kernel: update journal hashes for empty table: %w", err)
+		}
+		if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreCompleted, ""); err != nil {
+			return fmt.Errorf("kernel: update journal to completed for empty table: %w", err)
+		}
+		return nil
 	}
 	if startCursor == int64(len(records)) {
 		if startCursor > 0 {
@@ -1128,6 +1195,10 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 				return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 					fmt.Errorf("kernel: re-parsed record count mismatch for table %s: expected %d got %d", table, totalRows, len(parsedRecords)))
 			}
+			if len(parsedRecords) == 0 {
+				return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+					fmt.Errorf("kernel: snapshot for table %s has zero records but totalRows=%d", table, totalRows))
+			}
 			effectiveBatchSize := batchSize
 			if effectiveBatchSize <= 0 {
 				effectiveBatchSize = userDataRestoreBatchSize
@@ -1210,7 +1281,7 @@ func computeContentBoundBatchHash(batch []map[string]interface{}, extensionID st
 
 func recalculateBatchHashChain(records []map[string]interface{}, extensionID, schemaVersion, canonicalTable, operationID string, batchSize int64) (string, int64, error) {
 	if len(records) == 0 {
-		return "", 0, nil
+		return userBatchGenesisHash(), 0, nil
 	}
 	if extensionID == "" || schemaVersion == "" || canonicalTable == "" || operationID == "" {
 		return "", 0, fmt.Errorf("kernel: missing required fields for batch hash chain recalculation")
@@ -1393,10 +1464,6 @@ func parseAndValidateJSONL(jsonlData, extensionID string) ([]map[string]interfac
 		recordMap["_raw"] = line
 		records = append(records, recordMap)
 		parsedRecords = append(parsedRecords, record)
-	}
-	if len(records) == 0 {
-		return nil, nil, NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-			fmt.Errorf("kernel: user data snapshot has no valid records"))
 	}
 	return records, parsedRecords, nil
 }

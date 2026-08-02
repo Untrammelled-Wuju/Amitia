@@ -769,75 +769,149 @@ func ValidateResourcePath(resourcePath, extRoot string) error {
 			fmt.Errorf("kernel: resource path %s escapes ext root (rel: %s)", resourcePath, cleanRel))
 	}
 
-	parentDir := filepath.Dir(absResourcePath)
-	for parentDir != absExtRoot && len(parentDir) > len(absExtRoot) {
-		parentInfo, parentErr := os.Lstat(parentDir)
-		if parentErr != nil {
-			break
-		}
-		if parentInfo.Mode()&os.ModeSymlink != 0 {
-			return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
-				fmt.Errorf("kernel: parent directory %s is a symlink, symlinks are not allowed", parentDir))
-		}
-		parentDir = filepath.Dir(parentDir)
+	if err := validatePathComponentsNoSymlink(absExtRoot, absResourcePath); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func ValidateRestoreTargetPath(targetPath, extRoot string) error {
-	absExtRoot, err := filepath.Abs(extRoot)
-	if err != nil {
-		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: resolve ext root: %w", err))
-	}
-
+func validatePathComponentsNoSymlink(absExtRoot, targetPath string) error {
 	realExtRoot, err := filepath.EvalSymlinks(absExtRoot)
 	if err != nil {
 		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
 			fmt.Errorf("kernel: eval symlinks for ext root: %w", err))
 	}
 
+	current := targetPath
+	for {
+		if len(current) < len(realExtRoot) {
+			break
+		}
+		if current == realExtRoot || current == absExtRoot {
+			break
+		}
+		info, err := os.Lstat(current)
+		if err != nil {
+			break
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+				fmt.Errorf("kernel: path component %s is a symlink, symlinks are not allowed in snapshot paths", current))
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+	return nil
+}
+
+type validatedRestorePath struct {
+	AbsTargetPath string
+	AbsParentDir  string
+}
+
+func validateRestoreTargetPathPure(targetPath, extRoot string) (*validatedRestorePath, error) {
+	absExtRoot, err := filepath.Abs(extRoot)
+	if err != nil {
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: resolve ext root: %w", err))
+	}
+
+	realExtRoot, err := filepath.EvalSymlinks(absExtRoot)
+	if err != nil {
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: eval symlinks for ext root: %w", err))
+	}
+
 	absTargetPath, err := filepath.Abs(targetPath)
 	if err != nil {
-		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
 			fmt.Errorf("kernel: resolve target path: %w", err))
 	}
 
-	parentDir := filepath.Dir(absTargetPath)
-	if mkErr := os.MkdirAll(parentDir, 0o700); mkErr != nil {
-		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: create parent directory for %s: %w", targetPath, mkErr))
+	absParentDir := filepath.Dir(absTargetPath)
+	absParentDir, err = filepath.Abs(absParentDir)
+	if err != nil {
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: resolve parent directory: %w", err))
 	}
 
-	realParentDir, err := filepath.EvalSymlinks(parentDir)
+	if err := validatePathComponentsNoSymlink(absExtRoot, absParentDir); err != nil {
+		return nil, err
+	}
+
+	realParentDir, err := filepath.EvalSymlinks(absParentDir)
 	if err != nil {
-		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
 			fmt.Errorf("kernel: eval symlinks for parent dir: %w", err))
-	}
-
-	parentInfo, err := os.Lstat(parentDir)
-	if err != nil {
-		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: lstat parent dir: %w", err))
-	}
-
-	if parentInfo.Mode()&os.ModeSymlink != 0 {
-		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
-			fmt.Errorf("kernel: parent directory %s is a symlink, symlinks are not allowed for restore targets", parentDir))
 	}
 
 	relPath, err := filepath.Rel(realExtRoot, realParentDir)
 	if err != nil {
-		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
 			fmt.Errorf("kernel: compute relative path for parent: %w", err))
 	}
 
 	cleanRel := filepath.Clean(relPath)
 	if cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanRel) {
-		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
-			fmt.Errorf("kernel: restore target parent %s escapes ext root (rel: %s)", parentDir, cleanRel))
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: restore target parent %s escapes ext root (rel: %s)", absParentDir, cleanRel))
 	}
 
+	return &validatedRestorePath{
+		AbsTargetPath: absTargetPath,
+		AbsParentDir:  absParentDir,
+	}, nil
+}
+
+func createRestoreDirectoriesSafely(absParentDir string) error {
+	if absParentDir == "" {
+		return nil
+	}
+	info, err := os.Lstat(absParentDir)
+	if err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("kernel: %s exists but is not a directory", absParentDir)
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("kernel: stat %s: %w", absParentDir, err)
+	}
+
+	parent := filepath.Dir(absParentDir)
+	if parent != absParentDir {
+		if err := createRestoreDirectoriesSafely(parent); err != nil {
+			return err
+		}
+	}
+
+	if info, err := os.Lstat(absParentDir); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+				fmt.Errorf("kernel: parent directory %s is a symlink, symlinks are not allowed for restore targets", absParentDir))
+		}
+	}
+
+	if mkErr := os.Mkdir(absParentDir, 0o700); mkErr != nil {
+		if !os.IsExist(mkErr) {
+			return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+				fmt.Errorf("kernel: create directory %s: %w", absParentDir, mkErr))
+		}
+	}
+	return nil
+}
+
+func ValidateRestoreTargetPath(targetPath, extRoot string) error {
+	validated, err := validateRestoreTargetPathPure(targetPath, extRoot)
+	if err != nil {
+		return err
+	}
+	if err := createRestoreDirectoriesSafely(validated.AbsParentDir); err != nil {
+		return err
+	}
 	return nil
 }

@@ -416,14 +416,13 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 	if err := rows.Err(); err != nil {
 		return result, fmt.Errorf("kernel: iterate rows for %s: %w", table, err)
 	}
-	if result.count == 0 {
-		return result, fmt.Errorf("kernel: user data snapshot integrity check failed: table %s export is empty", table)
-	}
 	result.jsonl = strings.Join(lines, "\n")
 
-	if _, _, selfErr := parseAndValidateJSONL(result.jsonl, extensionID); selfErr != nil {
-		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
-			fmt.Errorf("kernel: table %s capture self-validation failed: %w", table, selfErr))
+	if result.count > 0 {
+		if _, _, selfErr := parseAndValidateJSONL(result.jsonl, extensionID); selfErr != nil {
+			return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+				fmt.Errorf("kernel: table %s capture self-validation failed: %w", table, selfErr))
+		}
 	}
 
 	return result, nil
@@ -1203,7 +1202,7 @@ func computeUninstallSnapshotRequirementInput(installedPath, installedTreeHash, 
 	}
 }
 
-func computeUninstallSnapshotRequirementFromClaims(claims packageConfirmationClaims, fromVersion string) RollbackSnapshotRequirement {
+func computeUninstallSnapshotRequirementFromClaims(claims PackageConfirmationClaims, fromVersion string) RollbackSnapshotRequirement {
 	input := UninstallSnapshotRequirementInput{
 		InstalledPath:     claims.InstalledPath,
 		InstalledTreeHash:  claims.InstalledTreeHash,

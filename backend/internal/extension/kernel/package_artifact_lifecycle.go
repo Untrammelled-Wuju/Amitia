@@ -226,6 +226,12 @@ func (r *PackageRepository) CountActiveArtifactReferences(ctx context.Context, a
 	return count, err
 }
 
+func (r *PackageRepository) CountActiveArtifactReferencesByType(ctx context.Context, artifactID, referenceType string) (int64, error) {
+	var count int64
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_package_artifact_references WHERE artifact_id=? AND reference_type=? AND released_at=''`, artifactID, referenceType).Scan(&count)
+	return count, err
+}
+
 func (r *PackageRepository) ExpirePackagePreviews(ctx context.Context, now time.Time) (int64, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

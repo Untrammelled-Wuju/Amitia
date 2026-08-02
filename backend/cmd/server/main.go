@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -53,12 +54,19 @@ func main() {
 	}
 	config.InitConfig(configPath)
 
+	resolvedToken := config.AppCfg.Security.LocalToken
+	if resolvedToken == "" && config.AppCfg.Security.LocalTokenFile != "" {
+		if data, rerr := os.ReadFile(config.AppCfg.Security.LocalTokenFile); rerr == nil {
+			resolvedToken = strings.TrimSpace(string(data))
+		}
+	}
+
 	secCfg := &security.SecurityConfig{
 		Mode:              security.SecurityMode(config.AppCfg.Security.Mode),
 		AllowRemoteAccess: config.AppCfg.Security.AllowRemoteAccess,
 		ListenAddress:     config.AppCfg.Server.Addr(),
 		JWTSecret:         config.AppCfg.JWT.Secret,
-		LocalToken:        config.AppCfg.Security.LocalToken,
+		LocalToken:        resolvedToken,
 		AllowedOrigins:    config.AppCfg.Security.AllowedOrigins,
 	}
 	if err := secCfg.Validate(); err != nil {

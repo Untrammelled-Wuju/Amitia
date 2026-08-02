@@ -160,7 +160,7 @@ func TestIsRollbackSnapshotExempt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := computeRollbackSnapshotRequirement(tt.point)
-			result := isRollbackSnapshotExempt(req, packageConfirmationClaims{SnapshotRequirementHash: computeSnapshotRequirementHash(req)})
+			result := isRollbackSnapshotExempt(req, PackageConfirmationClaims{SnapshotRequirementHash: computeSnapshotRequirementHash(req), SecurityPolicyHash: computeSecurityPolicyHash()})
 			if result != tt.exempt {
 				t.Fatalf("expected exempt=%v, got %v", tt.exempt, result)
 			}
