@@ -142,6 +142,44 @@ func (r *PackageRepository) FindArtifactReference(ctx context.Context, artifactI
 	return &ref, nil
 }
 
+func (r *PackageRepository) EnsureArtifactReference(ctx context.Context, expectedArtifactID, expectedReferenceType, expectedOwnerID string, expiresAt time.Time) error {
+	existing, err := r.FindArtifactReference(ctx, expectedArtifactID, expectedReferenceType, expectedOwnerID)
+	if err != nil && !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("artifact reference ensure lookup failed: %w", err))
+	}
+	if existing != nil {
+		if existing.ArtifactID != expectedArtifactID || existing.ReferenceType != expectedReferenceType || existing.ReferenceOwnerID != expectedOwnerID {
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("artifact reference identity mismatch: existing artifact=%s type=%s owner=%s, expected artifact=%s type=%s owner=%s",
+				existing.ArtifactID, existing.ReferenceType, existing.ReferenceOwnerID, expectedArtifactID, expectedReferenceType, expectedOwnerID))
+		}
+		if existing.ReleasedAt == "" {
+			return nil
+		}
+	}
+	_, acquireErr := r.AcquireArtifactReference(ctx, expectedArtifactID, expectedReferenceType, expectedOwnerID, expiresAt)
+	if acquireErr != nil {
+		if isSQLiteConstraintViolation(acquireErr) {
+			ref, retryErr := r.FindArtifactReference(ctx, expectedArtifactID, expectedReferenceType, expectedOwnerID)
+			if retryErr != nil {
+				return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("artifact reference ensure retry failed: %w", retryErr))
+			}
+			if ref.ArtifactID != expectedArtifactID || ref.ReferenceType != expectedReferenceType || ref.ReferenceOwnerID != expectedOwnerID {
+				return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("artifact reference ensure identity mismatch after conflict"))
+			}
+			return nil
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("artifact reference ensure acquire failed: %w", acquireErr))
+	}
+	verified, verifyErr := r.FindArtifactReference(ctx, expectedArtifactID, expectedReferenceType, expectedOwnerID)
+	if verifyErr != nil {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("artifact reference ensure verify failed: %w", verifyErr))
+	}
+	if verified.ArtifactID != expectedArtifactID || verified.ReferenceType != expectedReferenceType || verified.ReferenceOwnerID != expectedOwnerID {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("artifact reference ensure post-acquire identity mismatch"))
+	}
+	return nil
+}
+
 func (r *PackageRepository) ReleaseArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

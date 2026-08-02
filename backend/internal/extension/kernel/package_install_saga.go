@@ -122,7 +122,20 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
 	}
-	defer func() { _ = leaseGuard.Stop(context.Background()) }()
+	defer func() {
+		if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
+			if putErr := r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
+				FindingID:         "stale-lease-" + operationID,
+				Metric:            "stale_extension_leases",
+				Count:             1,
+				ResourceIDsJSON:   fmt.Sprintf(`["%s"]`, operationID),
+				ErrorDetail:       stopErr.Error(),
+				RecommendedAction: "manual_lease_cleanup",
+			}); putErr != nil {
+				fmt.Printf("kernel: failed to persist stale lease finding for %s: %v\n", operationID, errors.Join(stopErr, putErr))
+			}
+		}
+	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)

@@ -789,3 +789,57 @@ func validateUninstallArtifactDeletion(ctx context.Context, repo *PackageReposit
 	}
 	return false
 }
+
+func validateArtifactPolicyStepResult(ctx context.Context, repo *PackageRepository, operationID, artifactID string, expectedPolicy ArtifactPolicy) bool {
+	if artifactID == "" || operationID == "" {
+		return false
+	}
+	steps, err := repo.ListOperationSteps(ctx, operationID)
+	if err != nil {
+		return false
+	}
+	for _, step := range steps {
+		if step.Status != "completed" || step.StepName != "remove_artifact" {
+			continue
+		}
+		if step.ResultJSON == "" || step.ResultJSON == "{}" {
+			return false
+		}
+		var stepResult ArtifactPolicyStepResult
+		if json.Unmarshal([]byte(step.ResultJSON), &stepResult) != nil {
+			return false
+		}
+		if stepResult.ArtifactID != artifactID {
+			return false
+		}
+		if stepResult.ArtifactPolicy != expectedPolicy {
+			return false
+		}
+		switch expectedPolicy {
+		case ArtifactPolicyDeleteArtifact:
+			if !stepResult.Deleted {
+				return false
+			}
+			if stepResult.RetentionState != "deleted" {
+				return false
+			}
+			if stepResult.RemainingRefs != 0 {
+				return false
+			}
+		case ArtifactPolicyRetainArtifact, ArtifactPolicyRetainForRollback, ArtifactPolicyRetainForExport:
+			if !stepResult.Retained {
+				return false
+			}
+			if stepResult.RetentionState == "deleted" {
+				return false
+			}
+		default:
+			return false
+		}
+		if stepResult.EvidenceHash == "" {
+			return false
+		}
+		return true
+	}
+	return false
+}

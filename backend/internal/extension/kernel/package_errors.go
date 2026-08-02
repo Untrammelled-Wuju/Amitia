@@ -165,6 +165,19 @@ const (
 	PackageErrCodeSnapshotExemptionInvalid             = "PACKAGE_SNAPSHOT_EXEMPTION_INVALID"
 	PackageErrCodeSnapshotEvidenceMissing              = "PACKAGE_SNAPSHOT_EVIDENCE_MISSING"
 	PackageErrCodeFinalGateEvidenceMissing             = "PACKAGE_FINAL_GATE_EVIDENCE_MISSING"
+	PackageErrCodeUserDataEntityIDMissing              = "PACKAGE_USER_DATA_ENTITY_ID_MISSING"
+	PackageErrCodeUserDataRecordInvalid                = "PACKAGE_USER_DATA_RECORD_INVALID"
+	PackageErrCodeUserDataBatchHashMismatch            = "PACKAGE_USER_DATA_BATCH_HASH_MISMATCH"
+	PackageErrCodeUserDataAggregateHashMismatch        = "PACKAGE_USER_DATA_AGGREGATE_HASH_MISMATCH"
+	PackageErrCodeUserDataRestoreJournalConflict       = "PACKAGE_USER_DATA_RESTORE_JOURNAL_CONFLICT"
+	PackageErrCodeResourceSnapshotPathInvalid          = "PACKAGE_RESOURCE_SNAPSHOT_PATH_INVALID"
+	PackageErrCodeResourceSnapshotSymlinkForbidden     = "PACKAGE_RESOURCE_SNAPSHOT_SYMLINK_FORBIDDEN"
+	PackageErrCodeResourceSnapshotHashComputeFailed    = "PACKAGE_RESOURCE_SNAPSHOT_HASH_COMPUTE_FAILED"
+	PackageErrCodeResourceSnapshotHashMismatch         = "PACKAGE_RESOURCE_SNAPSHOT_HASH_MISMATCH"
+	PackageErrCodeResourceSnapshotContentMissing       = "PACKAGE_RESOURCE_SNAPSHOT_CONTENT_MISSING"
+	PackageErrCodeResourceRestoreIncomplete            = "PACKAGE_RESOURCE_RESTORE_INCOMPLETE"
+	PackageErrCodeSnapshotSchemaUnsupported            = "PACKAGE_SNAPSHOT_SCHEMA_UNSUPPORTED"
+	PackageErrCodeSnapshotIntegrityFailed              = "PACKAGE_SNAPSHOT_INTEGRITY_FAILED"
 )
 
 type PackageError struct {
@@ -281,6 +294,19 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeSnapshotExemptionInvalid:             409,
 	PackageErrCodeSnapshotEvidenceMissing:              409,
 	PackageErrCodeFinalGateEvidenceMissing:             409,
+	PackageErrCodeUserDataEntityIDMissing:              422,
+	PackageErrCodeUserDataRecordInvalid:                422,
+	PackageErrCodeUserDataBatchHashMismatch:            409,
+	PackageErrCodeUserDataAggregateHashMismatch:        409,
+	PackageErrCodeUserDataRestoreJournalConflict:       409,
+	PackageErrCodeResourceSnapshotPathInvalid:          400,
+	PackageErrCodeResourceSnapshotSymlinkForbidden:     400,
+	PackageErrCodeResourceSnapshotHashComputeFailed:    500,
+	PackageErrCodeResourceSnapshotHashMismatch:         409,
+	PackageErrCodeResourceSnapshotContentMissing:       409,
+	PackageErrCodeResourceRestoreIncomplete:            409,
+	PackageErrCodeSnapshotSchemaUnsupported:            422,
+	PackageErrCodeSnapshotIntegrityFailed:              409,
 }
 
 func PackageErrorHTTPStatus(code string) int {

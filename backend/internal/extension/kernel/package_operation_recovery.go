@@ -728,7 +728,7 @@ func (r *Runtime) proveRollbackPackageOperation(ctx context.Context, operation P
 			if restoreOperationID == "" {
 				restoreOperationID = "restore-" + point.RollbackPointID
 			}
-			if err := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID); err != nil {
+			if err := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID, point.UserDataMigrationStateJSON); err != nil {
 				return fmt.Errorf("rollback user data restore verification failed: %w", err)
 			}
 		}
@@ -1186,6 +1186,7 @@ func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation Packa
 		operation.OperationID, operation.ExtensionID, guard.FencingToken, StepUninstallRecoveryFinalGate, finalGateResultHash)
 	finalizeResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(finalizeResultJSON)))
 	finalizeStep := PackageOperationStep{
+		StepID:       operation.OperationID + ":" + StepUninstallRecoveryFinalize,
 		OperationID:  operation.OperationID,
 		StepName:     StepUninstallRecoveryFinalize,
 		StepOrder:    9999,

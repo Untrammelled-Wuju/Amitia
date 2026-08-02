@@ -118,7 +118,20 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
 		return KernelInstallResult{}, fmt.Errorf("kernel: lease guard start failed: %w", startErr)
 	}
-	defer func() { _ = leaseGuard.Stop(context.Background()) }()
+	defer func() {
+		if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
+			if putErr := r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
+				FindingID:         "stale-lease-" + operationID,
+				Metric:            "stale_extension_leases",
+				Count:             1,
+				ResourceIDsJSON:   fmt.Sprintf(`["%s"]`, operationID),
+				ErrorDetail:       stopErr.Error(),
+				RecommendedAction: "manual_lease_cleanup",
+			}); putErr != nil {
+				fmt.Printf("kernel: failed to persist stale lease finding for %s: %v\n", operationID, errors.Join(stopErr, putErr))
+			}
+		}
+	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID}
@@ -725,7 +738,20 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "start_lease_guard", "PACKAGE_OPERATION_LEASE_CONFLICT", startErr.Error(), true, PackageWriteGuard{})
 		return PackageOperationRecord{}, errors.Join(fmt.Errorf("kernel: lease guard start failed: %w", startErr), releaseErr, persistErr)
 	}
-	defer func() { _ = leaseGuard.Stop(context.Background()) }()
+	defer func() {
+		if stopErr := leaseGuard.Stop(context.Background()); stopErr != nil {
+			if putErr := r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
+				FindingID:         "stale-lease-" + operationID,
+				Metric:            "stale_extension_leases",
+				Count:             1,
+				ResourceIDsJSON:   fmt.Sprintf(`["%s"]`, operationID),
+				ErrorDetail:       stopErr.Error(),
+				RecommendedAction: "manual_lease_cleanup",
+			}); putErr != nil {
+				fmt.Printf("kernel: failed to persist stale lease finding for %s: %v\n", operationID, errors.Join(stopErr, putErr))
+			}
+		}
+	}()
 	ctx = sagaCtx
 	uninstallGuard := packageWriteGuard(lease)
 	preview, err := r.PreviewPackageUninstall(ctx, extensionID, userID, scopeType, scopeID)
@@ -1254,18 +1280,12 @@ func (r *Runtime) restoreArtifactInstalledPath(ctx context.Context, operation Pa
 }
 
 func (r *Runtime) restoreArtifactInstallationReference(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
-	existing, err := r.container.PackageRepository.FindArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID)
-	if err != nil && !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
-		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact reference lookup failed: %w", err))
-	}
-	if existing != nil && existing.ReferenceType == ArtifactReferenceInstallation && existing.ReferenceOwnerID == operation.ExtensionID {
-		return nil
-	}
-	if existing != nil && existing.ReferenceOwnerID != operation.ExtensionID {
-		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: artifact %s installation reference already bound to %s, expected %s", operation.ArtifactID, existing.ReferenceOwnerID, operation.ExtensionID))
-	}
-	if _, err := r.container.PackageRepository.AcquireArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID, time.Time{}); err != nil {
-		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact reference restore failed: %w", err))
+	if err := r.container.PackageRepository.EnsureArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID, time.Time{}); err != nil {
+		kind := RepositoryErrorKindOf(err)
+		if kind == RepositoryErrorConflict {
+			return NewPackageErrorWithRecovery(PackageErrCodeArtifactReferenceConflict, 409, false, true, "Inspect artifact reference", fmt.Errorf("kernel: artifact reference ensure conflict: %w", err))
+		}
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact reference ensure failed: %w", err))
 	}
 	return nil
 }
@@ -1308,12 +1328,19 @@ func (r *Runtime) verifyUninstallRestoredState(ctx context.Context, operation Pa
 	if qm.ExpectedGenerationID != "" && version.GenerationID != qm.ExpectedGenerationID {
 		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: restored generation_id mismatch: expected %s, got %s", qm.ExpectedGenerationID, version.GenerationID))
 	}
-	hasInstallRef, refErr := r.container.PackageRepository.HasArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID)
+	installRef, refErr := r.container.PackageRepository.FindArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID)
 	if refErr != nil {
+		kind := RepositoryErrorKindOf(refErr)
+		if kind == RepositoryErrorNotFound {
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: installation artifact reference missing after restore"))
+		}
 		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact reference verification failed: %w", refErr))
 	}
-	if !hasInstallRef {
-		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: installation artifact reference missing after restore"))
+	if installRef.ArtifactID != operation.ArtifactID || installRef.ReferenceType != ArtifactReferenceInstallation || installRef.ReferenceOwnerID != operation.ExtensionID {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: installation artifact reference identity mismatch after restore"))
+	}
+	if installRef.ReleasedAt != "" {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: installation artifact reference is released after restore"))
 	}
 	if r.container.PackageGenerationStore != nil {
 		current, curErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
@@ -1341,7 +1368,7 @@ func (r *Runtime) verifyUninstallRestoredState(ctx context.Context, operation Pa
 	if err != nil {
 		kind := RepositoryErrorKindOf(err)
 		if kind == RepositoryErrorNotFound {
-			return nil
+			return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataMissing, 409, false, true, "Inspect persisted quarantine metadata", fmt.Errorf("quarantine metadata missing after restore completion"))
 		}
 		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: quarantine metadata unavailable after restore: %w", err))
 	}
