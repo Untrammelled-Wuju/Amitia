@@ -338,6 +338,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
+  void _openDrawer(BuildContext context) {
+    final scope = ShellDrawerScope.of(context);
+    if (scope != null) {
+      scope.openDrawer();
+      return;
+    }
+    Scaffold.of(context).openDrawer();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
@@ -348,19 +357,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        centerTitle: true,
-        navigation: AmitiaAppBarNavigation.drawer,
-        actions: [
-          AmitiaIconButton(
-            icon: Icons.edit_square,
-            onPressed: () => context.go(AppRoutes.chat),
-          ),
-          AmitiaIconButton(
-            icon: Icons.more_horiz,
-            onPressed: () => _showChatActionsSheet(context),
-          ),
-        ],
+      appBar: _ChatTopBar(
+        onOpenDrawer: () => _openDrawer(context),
+        onNewConversation: () => context.go(AppRoutes.chat),
+        onMore: () => _showChatActionsSheet(context),
       ),
       body: Column(
         children: [
@@ -457,6 +457,143 @@ class _ChatScrollFade extends StatelessWidget {
               begin: begin,
               end: end,
               colors: [color, color.withValues(alpha: 0)],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
+  final VoidCallback onOpenDrawer;
+  final VoidCallback onNewConversation;
+  final VoidCallback onMore;
+
+  const _ChatTopBar({
+    required this.onOpenDrawer,
+    required this.onNewConversation,
+    required this.onMore,
+  });
+
+  @override
+  Size get preferredSize => const Size.fromHeight(88);
+
+  @override
+  Widget build(BuildContext context) {
+    final surfaceColor = context.surfaceSecondary;
+    final borderColor = context.borderPrimary;
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          children: [
+            _ChatTopPillButton(
+              tooltip: '打开菜单',
+              onTap: onOpenDrawer,
+              isCircular: true,
+              surfaceColor: surfaceColor,
+              borderColor: borderColor,
+              child: Icon(
+                Icons.menu_rounded,
+                size: 24,
+                color: context.textPrimary,
+              ),
+            ),
+            const Spacer(),
+            Material(
+              color: surfaceColor,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: borderColor),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: SizedBox(
+                height: 48,
+                child: Row(
+                  children: [
+                    Tooltip(
+                      message: '新建聊天',
+                      child: InkWell(
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(24),
+                        ),
+                        onTap: onNewConversation,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 10, 0),
+                          child: Icon(
+                            Icons.edit_square,
+                            size: 24,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Tooltip(
+                      message: '聊天操作',
+                      child: InkWell(
+                        borderRadius: const BorderRadius.horizontal(
+                          right: Radius.circular(24),
+                        ),
+                        onTap: onMore,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+                          child: Icon(
+                            Icons.more_vert,
+                            size: 25,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatTopPillButton extends StatelessWidget {
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool isCircular;
+  final Color surfaceColor;
+  final Color borderColor;
+  final Widget child;
+
+  const _ChatTopPillButton({
+    required this.tooltip,
+    required this.onTap,
+    required this.surfaceColor,
+    required this.borderColor,
+    required this.child,
+    this.isCircular = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(24);
+    return Material(
+      color: surfaceColor,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: borderColor),
+        borderRadius: radius,
+      ),
+      child: InkWell(
+        borderRadius: radius,
+        onTap: onTap,
+        child: Tooltip(
+          message: tooltip,
+          child: SizedBox(
+            width: isCircular ? 48 : null,
+            height: 48,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: isCircular ? 0 : 14),
+              child: Center(child: child),
             ),
           ),
         ),

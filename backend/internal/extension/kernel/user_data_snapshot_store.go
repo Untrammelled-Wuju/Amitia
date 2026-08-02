@@ -414,7 +414,7 @@ func (s *UserDataSnapshotStore) RestoreUserDataFromSnapshot(ctx context.Context,
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: user data snapshot missing for affected table %s", table))
 		}
-		_, parsedRecords, parseErr := parseAndValidateJSONL(jsonlData, extensionID)
+		rawRecords, parsedRecords, parseErr := parseAndValidateJSONL(jsonlData, extensionID)
 		if parseErr != nil {
 			return parseErr
 		}
@@ -424,28 +424,18 @@ func (s *UserDataSnapshotStore) RestoreUserDataFromSnapshot(ctx context.Context,
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: user data snapshot record count mismatch for table %s: expected %d, got %d", table, expectedCount, actualCount))
 		}
-		if err := s.restoreTable(ctx, extensionID, operationID, table, parsedRecords); err != nil {
+		if err := s.restoreTable(ctx, extensionID, operationID, table, parsedRecords, rawRecords); err != nil {
 			return fmt.Errorf("kernel: restore user data table %s: %w", table, err)
 		}
 	}
 	return nil
 }
 
-func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, operationID, table string, parsedRecords []userDataRecord) error {
+func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, operationID, table string, parsedRecords []userDataRecord, rawRecords []map[string]interface{}) error {
 	if !migration.IsExtensionNamespaceTable(table, extensionID) {
 		return fmt.Errorf("kernel: user data table %q does not belong to extension namespace", table)
 	}
-	var records []map[string]interface{}
-	for _, pr := range parsedRecords {
-		recordMap := map[string]interface{}{}
-		if pr.EntityID != "" {
-			recordMap["entity_id"] = pr.EntityID
-		}
-		for k, v := range pr.Payload {
-			recordMap[k] = v
-		}
-		records = append(records, recordMap)
-	}
+	records := rawRecords
 	entityTypeSet := make(map[string]struct{})
 	var schemaVersion, namespace string
 	for i, pr := range parsedRecords {
