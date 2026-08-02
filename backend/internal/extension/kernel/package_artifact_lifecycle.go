@@ -124,6 +124,24 @@ func (r *PackageRepository) HasArtifactReference(ctx context.Context, artifactID
 	return count > 0, nil
 }
 
+func (r *PackageRepository) FindArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) (*PackageArtifactReference, error) {
+	var ref PackageArtifactReference
+	err := r.db.QueryRowContext(ctx,
+		`SELECT reference_id, artifact_id, reference_type, reference_owner_id, expires_at, created_at, released_at
+		FROM extension_package_artifact_references
+		WHERE artifact_id=? AND reference_type=? AND reference_owner_id=? AND released_at=''`,
+		artifactID, referenceType, ownerID).Scan(
+		&ref.ReferenceID, &ref.ArtifactID, &ref.ReferenceType, &ref.ReferenceOwnerID,
+		&ref.ExpiresAt, &ref.CreatedAt, &ref.ReleasedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, NewRepositoryError(RepositoryErrorNotFound, err)
+		}
+		return nil, err
+	}
+	return &ref, nil
+}
+
 func (r *PackageRepository) ReleaseArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

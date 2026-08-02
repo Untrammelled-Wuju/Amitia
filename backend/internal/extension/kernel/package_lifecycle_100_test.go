@@ -79,7 +79,31 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			if err != nil || current.GenerationID != packageGenerationFromInstallation(installation).GenerationID || container.PackageGenerationStore.VerifyGeneration(ctx, current) != nil {
 				t.Fatalf("rollback generation mismatch: current=%+v installation=%+v err=%v", current, installation, err)
 			}
-			uninstall, err := runtimeInstance.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: firstPreview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: ""})
+			uninstallPreview, err := runtimeInstance.PreviewPackageUninstall(ctx, firstPreview.ExtensionID, "user-1", "global", "")
+			if err != nil || !uninstallPreview.Installable {
+				t.Fatalf("uninstall preflight failed: %+v %v", uninstallPreview, err)
+			}
+			uninstallClaims := PackageUninstallConfirmationClaims{
+				ExtensionID:             firstPreview.ExtensionID,
+				CurrentVersion:          uninstallPreview.CurrentVersion,
+				CurrentVersionID:        uninstallPreview.CurrentVersionID,
+				CurrentGenerationID:     uninstallPreview.CurrentGenerationID,
+				ArtifactID:              uninstallPreview.ArtifactID,
+				ArtifactPolicy:          string(uninstallPreview.ArtifactPolicy),
+				PreviewHash:             uninstallPreview.PreviewHash,
+				SecurityPolicyHash:      uninstallPreview.SecurityPolicyHash,
+				SnapshotRequirementHash: uninstallPreview.SnapshotRequirementHash,
+				UserID:                  "user-1",
+				ScopeType:               "global",
+				ScopeID:                 "",
+				Confirmations:           map[string]bool{"confirm.uninstall.delete": true},
+				ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
+			}
+			uninstallToken, err := runtimeInstance.SignUninstallConfirmation(uninstallClaims)
+			if err != nil {
+				t.Fatalf("sign uninstall confirmation failed: %v", err)
+			}
+			uninstall, err := runtimeInstance.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: firstPreview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
 			if err != nil {
 				t.Fatalf("uninstall failed: operation=%+v err=%v", uninstall, err)
 			}

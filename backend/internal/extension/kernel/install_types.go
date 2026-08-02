@@ -97,6 +97,8 @@ type InstallPreview struct {
 	MigrationSnapshotRequired bool                                    `json:"migrationSnapshotRequired"`
 	MigrationManualRequired   bool                                    `json:"migrationManualRequired"`
 	MigrationIrreversible     bool                                    `json:"migrationIrreversible"`
+	InstalledPath             string                                  `json:"installedPath,omitempty"`
+	InstalledTreeHash         string                                  `json:"installedTreeHash,omitempty"`
 }
 
 type PackagePreviewRequest struct {
@@ -208,6 +210,8 @@ type packageConfirmationClaims struct {
 	CurrentVersionID        string          `json:"currentVersionId,omitempty"`
 	CurrentGenerationID     string          `json:"currentGenerationId,omitempty"`
 	SnapshotRequirementHash string          `json:"snapshotRequirementHash,omitempty"`
+	InstalledPath           string          `json:"installedPath,omitempty"`
+	InstalledTreeHash       string          `json:"installedTreeHash,omitempty"`
 	Confirmations           map[string]bool `json:"confirmations"`
 	ExpiresAt               int64           `json:"expiresAt"`
 }

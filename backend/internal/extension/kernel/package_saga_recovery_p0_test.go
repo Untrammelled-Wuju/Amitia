@@ -152,12 +152,36 @@ func TestPackageUninstallRechecksPreflightInsideLock(t *testing.T) {
 	ctx := context.Background()
 	runtime, container := newPackagePipelineRuntime(t)
 	installed := installPackagePipelineVersion(t, runtime, "1.0.0")
+	uninstallPreview, err := runtime.PreviewPackageUninstall(ctx, installed.ExtensionID, "user-1", "global", "")
+	if err != nil || !uninstallPreview.Installable {
+		t.Fatalf("uninstall preflight failed: %+v %v", uninstallPreview, err)
+	}
+	uninstallClaims := PackageUninstallConfirmationClaims{
+		ExtensionID:             installed.ExtensionID,
+		CurrentVersion:          uninstallPreview.CurrentVersion,
+		CurrentVersionID:        uninstallPreview.CurrentVersionID,
+		CurrentGenerationID:     uninstallPreview.CurrentGenerationID,
+		ArtifactID:              uninstallPreview.ArtifactID,
+		ArtifactPolicy:          string(uninstallPreview.ArtifactPolicy),
+		PreviewHash:             uninstallPreview.PreviewHash,
+		SecurityPolicyHash:      uninstallPreview.SecurityPolicyHash,
+		SnapshotRequirementHash: uninstallPreview.SnapshotRequirementHash,
+		UserID:                  "user-1",
+		ScopeType:               "global",
+		ScopeID:                 "",
+		Confirmations:           map[string]bool{"confirm.uninstall.delete": true},
+		ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
+	}
+	uninstallToken, err := runtime.SignUninstallConfirmation(uninstallClaims)
+	if err != nil {
+		t.Fatalf("sign uninstall confirmation failed: %v", err)
+	}
 	lockValue, _ := runtime.packageLocks.LoadOrStore(installed.ExtensionID, &sync.Mutex{})
 	lock := lockValue.(*sync.Mutex)
 	lock.Lock()
 	result := make(chan error, 1)
 	go func() {
-		_, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: installed.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: ""})
+		_, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: installed.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
 		result <- err
 	}()
 	time.Sleep(200 * time.Millisecond)

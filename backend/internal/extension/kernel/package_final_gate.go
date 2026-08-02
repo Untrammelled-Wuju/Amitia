@@ -502,7 +502,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 	}
 
 	if !isUninstall && (operation.OperationType == "update" || operation.OperationType == "rollback") {
-		checkSnapshot := PackageFinalGateCheck{Name: "snapshot_integrity"}
+	checkSnapshot := PackageFinalGateCheck{Name: "snapshot_integrity"}
 		if r.container.PackageRepository == nil {
 			checkSnapshot.Detail = "package repository unavailable for snapshot check"
 		} else {
@@ -510,39 +510,38 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 			if rpErr != nil {
 				if !IsRepositoryErrorKind(rpErr, RepositoryErrorNotFound) {
 					checkSnapshot.Detail = fmt.Sprintf("rollback point query failed (repository unavailable): %v", rpErr)
-		} else {
-				claims, claimsErr := parseOperationConfirmationClaims(operation)
-				if claimsErr != nil {
-					checkSnapshot.Detail = fmt.Sprintf("rollback point not found and no valid snapshot exemption claims (fail-closed): %v", claimsErr)
 				} else {
-					emptyPoint := PackageRollbackPoint{ExtensionID: operation.ExtensionID, SourceVersion: operation.FromVersion}
-					currentReq := computeRollbackSnapshotRequirementFromPoint(emptyPoint)
-					if isRollbackSnapshotExempt(currentReq, claims) {
-						checkSnapshot.Passed = true
-						checkSnapshot.Detail = fmt.Sprintf("exempt: rollback point absent, claims hash=%s current hash=%s no-data-change confirmed", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+					claims, claimsErr := parseOperationConfirmationClaims(operation)
+					if claimsErr != nil {
+						checkSnapshot.Detail = fmt.Sprintf("rollback point not found and no valid snapshot exemption claims (fail-closed): %v", claimsErr)
 					} else {
-						checkSnapshot.Detail = fmt.Sprintf("rollback point not found and snapshot exemption claims invalid (fail-closed): claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+						currentReq := computeUninstallSnapshotRequirementFromClaims(claims, operation.FromVersion)
+						if isRollbackSnapshotExempt(currentReq, claims) {
+							checkSnapshot.Passed = true
+							checkSnapshot.Detail = fmt.Sprintf("exempt: rollback point absent, claims hash=%s current hash=%s no-data-change confirmed", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+						} else {
+							checkSnapshot.Detail = fmt.Sprintf("rollback point not found and snapshot exemption claims invalid (fail-closed): claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+						}
 					}
 				}
-			}
-		} else {
-			if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
-				checkSnapshot.Detail = fmt.Sprintf("snapshot validation failed: %v", validateErr)
 			} else {
-				claims, claimsErr := parseOperationConfirmationClaims(operation)
-				if claimsErr != nil {
-					checkSnapshot.Detail = fmt.Sprintf("snapshot present but no valid snapshot exemption claims (fail-closed): %v", claimsErr)
+				if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
+					checkSnapshot.Detail = fmt.Sprintf("snapshot validation failed: %v", validateErr)
 				} else {
-					currentReq := computeRollbackSnapshotRequirementFromPoint(rollbackPoint)
-					if isRollbackSnapshotExempt(currentReq, claims) {
-						checkSnapshot.Passed = true
-						checkSnapshot.Detail = fmt.Sprintf("exempt: snapshot integrity confirmed via claims, claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+					claims, claimsErr := parseOperationConfirmationClaims(operation)
+					if claimsErr != nil {
+						checkSnapshot.Detail = fmt.Sprintf("snapshot present but no valid snapshot exemption claims (fail-closed): %v", claimsErr)
 					} else {
-						checkSnapshot.Detail = fmt.Sprintf("snapshot exemption claims mismatch (fail-closed): claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+						currentReq := computeRollbackSnapshotRequirementFromPoint(rollbackPoint)
+						if isRollbackSnapshotExempt(currentReq, claims) {
+							checkSnapshot.Passed = true
+							checkSnapshot.Detail = fmt.Sprintf("exempt: snapshot integrity confirmed via claims, claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+						} else {
+							checkSnapshot.Detail = fmt.Sprintf("snapshot exemption claims mismatch (fail-closed): claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+						}
 					}
 				}
 			}
-		}
 		}
 		result.Checks = append(result.Checks, checkSnapshot)
 	}

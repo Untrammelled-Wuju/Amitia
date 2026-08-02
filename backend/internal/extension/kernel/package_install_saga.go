@@ -353,14 +353,21 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 			return PackagePreviewConfirmation{}, fmt.Errorf("kernel: developer session no longer valid: %w", err)
 		}
 	}
+	artifact, err := r.container.PackageRepository.GetArtifact(ctx, session.ArtifactID)
+	if err != nil {
+		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: artifact unavailable: %w", err)
+	}
 	tokenExpiry := time.Now().UTC().Add(10 * time.Minute)
 	if expiresAt.Before(tokenExpiry) {
 		tokenExpiry = expiresAt
 	}
+	installReq := ComputeInstallSnapshotRequirement(computeInstallSnapshotRequirementInput(preview.InstalledPath, preview.InstalledTreeHash, artifact.ArtifactID, session.ExtensionID))
 	token, err := signPackageConfirmation(packageConfirmationClaims{SessionID: session.SessionID, ArtifactID: session.ArtifactID,
 		ArchiveHash: session.ArchiveHash, ManifestHash: session.ManifestHash, ContentTreeHash: session.ContentTreeHash,
 		UserID: session.UserID, ScopeType: session.ScopeType, ScopeID: session.ScopeID, PolicyVersion: session.PolicyVersion,
-		SecurityPolicyHash: computeSecurityPolicyHash(), DeveloperSessionID: preview.DeveloperSessionID, MigrationPlanHash: preview.MigrationPlanHash, Confirmations: confirmed, ExpiresAt: tokenExpiry.Unix()})
+		SecurityPolicyHash: computeSecurityPolicyHash(), DeveloperSessionID: preview.DeveloperSessionID, MigrationPlanHash: preview.MigrationPlanHash,
+		SnapshotRequirementHash: installReq.RequirementHash, InstalledPath: preview.InstalledPath, InstalledTreeHash: preview.InstalledTreeHash,
+		Confirmations: confirmed, ExpiresAt: tokenExpiry.Unix()})
 	if err != nil {
 		return PackagePreviewConfirmation{}, err
 	}

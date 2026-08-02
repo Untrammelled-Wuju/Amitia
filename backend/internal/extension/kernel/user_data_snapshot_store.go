@@ -280,7 +280,7 @@ func (s *UserDataSnapshotStore) RestoreUserDataFromSnapshot(ctx context.Context,
 	}
 	var userState packageUserDataMigrationState
 	if err := json.Unmarshal([]byte(userStateJSON), &userState); err != nil {
-		return fmt.Errorf("kernel: user data snapshot corrupt: %w", err)
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422, fmt.Errorf("kernel: user data snapshot corrupt: %w", err))
 	}
 	if userState.Mode == "none" || len(userState.AffectedTables) == 0 {
 		return nil
@@ -295,8 +295,12 @@ func (s *UserDataSnapshotStore) RestoreUserDataFromSnapshot(ctx context.Context,
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: user data snapshot export empty for affected table %s", table))
 		}
+		_, parsedRecords, parseErr := parseAndValidateJSONL(jsonlData, extensionID)
+		if parseErr != nil {
+			return parseErr
+		}
+		actualCount := int64(len(parsedRecords))
 		expectedCount, hasCount := userState.RecordCounts[table]
-		actualCount := int64(strings.Count(jsonlData, "\n"))
 		if hasCount && expectedCount != actualCount {
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: user data snapshot record count mismatch for table %s: expected %d, got %d", table, expectedCount, actualCount))
@@ -367,18 +371,26 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 	if startCursor == int64(len(records)) {
 		if startCursor > 0 {
 			if err := s.deleteDifferingRows(ctx, table, records, extensionID); err != nil {
-				s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error())
-				return fmt.Errorf("kernel: delete differing rows for %s: %w", table, err)
+				failErr := fmt.Errorf("kernel: delete differing rows for %s: %w", table, err)
+				if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+					return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+				}
+				return failErr
 			}
 			recomputedAggHash, recomputeErr := s.computeAggregateHashFromDB(ctx, table)
 			if recomputeErr != nil {
-				s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, recomputeErr.Error())
-				return fmt.Errorf("kernel: recompute aggregate hash on recovery for table %s: %w", table, recomputeErr)
+				failErr := fmt.Errorf("kernel: recompute aggregate hash on recovery for table %s: %w", table, recomputeErr)
+				if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+					return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+				}
+				return failErr
 			}
 			if journal.AggregateHash != recomputedAggHash {
-				err := fmt.Errorf("kernel: aggregate hash mismatch on recovery for table %s", table)
-				s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error())
-				return err
+				failErr := fmt.Errorf("kernel: aggregate hash mismatch on recovery for table %s", table)
+				if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+					return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+				}
+				return failErr
 			}
 			if err := s.updateRestoreJournalHashes(ctx, journal, expectedNamespaceHash, recomputedAggHash); err != nil {
 				return fmt.Errorf("kernel: update journal hashes on recovery: %w", err)
@@ -408,7 +420,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		}
 		batch := remaining[i:end]
 		batchIdx++
-		batchHash := computeContentBoundBatchHash(batch, extensionID, startCursor+int64(i))
+		batchHash := computeContentBoundBatchHash(batch, extensionID, startCursor+int64(i), journal.BatchHash)
 		if batchHash == "" {
 			if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed,
 				fmt.Sprintf("batch content hash computation failed at cursor %d", startCursor+int64(i))); failErr != nil {
@@ -416,7 +428,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 			}
 			return fmt.Errorf("kernel: batch content hash computation failed at cursor %d", startCursor+int64(i))
 		}
-		batchApplied, _, err := s.importBatchAtomic(ctx, journal, table, batch, startCursor+int64(i), appliedCount, batchIdx)
+		batchApplied, _, err := s.importBatchAtomic(ctx, journal, table, batch, startCursor+int64(i), appliedCount, batchIdx, batchHash)
 		if err != nil {
 			if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error()); failErr != nil {
 				return errors.Join(err, fmt.Errorf("kernel: update journal to failed: %w", failErr))
@@ -581,7 +593,7 @@ func (s *UserDataSnapshotStore) updateRestoreJournalProgress(ctx context.Context
 	return err
 }
 
-func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *UserDataRestoreJournal, table string, batch []map[string]interface{}, cursorBefore int64, appliedCountBefore int64, batchIdx int) (int64, string, error) {
+func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *UserDataRestoreJournal, table string, batch []map[string]interface{}, cursorBefore int64, appliedCountBefore int64, batchIdx int, batchHash string) (int64, string, error) {
 	if len(batch) == 0 {
 		return 0, "", nil
 	}
@@ -595,7 +607,7 @@ func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *
 	}
 	columns = filteredColumns
 	if len(columns) == 0 {
-		return 0, "", fmt.Errorf("no columns detected for table %s", table)
+		return 0, "", NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422, fmt.Errorf("no columns detected for table %s", table))
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -644,7 +656,6 @@ func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *
 	}
 	newCursor := cursorBefore + imported
 	newAppliedCount := appliedCountBefore + imported
-	batchHash := computeAtomicBatchHash(journal.OperationID, journal.TableName, batchIdx, cursorBefore, imported, journal.BatchHash)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	res, err := tx.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal
@@ -655,9 +666,12 @@ func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *
 	if err != nil {
 		return 0, "", fmt.Errorf("update journal in batch transaction: %w", err)
 	}
-	rowsAff, _ := res.RowsAffected()
-	if rowsAff == 0 {
-		return 0, "", fmt.Errorf("kernel: journal update affected 0 rows, expected importing state (op=%s table=%s)", journal.OperationID, journal.TableName)
+	rowsAff, rowsErr := res.RowsAffected()
+	if rowsErr != nil {
+		return 0, "", fmt.Errorf("query rows affected for journal update: %w", rowsErr)
+	}
+	if rowsAff != 1 {
+		return 0, "", NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 409, fmt.Errorf("kernel: journal update affected %d rows, expected exactly 1 (op=%s table=%s)", rowsAff, journal.OperationID, journal.TableName))
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, "", fmt.Errorf("commit atomic batch for %s: %w", table, err)
@@ -1033,12 +1047,15 @@ func computeUserDataPayloadHash(payload interface{}) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func computeContentBoundBatchHash(batch []map[string]interface{}, extensionID string, cursor int64) string {
+func computeContentBoundBatchHash(batch []map[string]interface{}, extensionID string, cursor int64, prevBatchHash string) string {
 	if len(batch) == 0 || extensionID == "" {
 		return ""
 	}
 	h := sha256.New()
 	h.Write([]byte("ext:" + extensionID + ":cursor:" + strconv.FormatInt(cursor, 10) + ":"))
+	if prevBatchHash != "" {
+		h.Write([]byte("prev:" + prevBatchHash + ":"))
+	}
 	for idx, record := range batch {
 		raw, exists := record["_raw"]
 		if !exists {

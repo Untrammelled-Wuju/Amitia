@@ -121,6 +121,49 @@ func (s *ResourceContentStore) VerifyContent(storageRef, expectedHash string) er
 	return nil
 }
 
+func (s *ResourceContentStore) ValidateContentRef(contentStorageRef string) error {
+	if contentStorageRef == "" {
+		return fmt.Errorf("kernel: content storage reference empty")
+	}
+	if filepath.IsAbs(contentStorageRef) {
+		return fmt.Errorf("kernel: content storage reference must be relative: %s", contentStorageRef)
+	}
+	cleanRef := filepath.Clean(contentStorageRef)
+	if strings.HasPrefix(cleanRef, "..") {
+		return fmt.Errorf("kernel: content storage reference escapes root: %s", contentStorageRef)
+	}
+	resolvedPath := filepath.Join(s.root, cleanRef)
+	absResolved, err := filepath.Abs(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("kernel: resolve content ref path: %w", err)
+	}
+	absRoot, err := filepath.Abs(s.root)
+	if err != nil {
+		return fmt.Errorf("kernel: resolve content root: %w", err)
+	}
+	if !strings.HasPrefix(absResolved, absRoot+string(filepath.Separator)) {
+		return fmt.Errorf("kernel: content storage reference %s escapes content store root", contentStorageRef)
+	}
+	return nil
+}
+
+func (s *ResourceContentStore) VerifyContentRef(contentStorageRef, expectedHash string, expectedSize int64) error {
+	if err := s.ValidateContentRef(contentStorageRef); err != nil {
+		return err
+	}
+	if err := s.VerifyContent(contentStorageRef, expectedHash); err != nil {
+		return err
+	}
+	data, err := s.ReadContent(contentStorageRef)
+	if err != nil {
+		return err
+	}
+	if int64(len(data)) != expectedSize {
+		return fmt.Errorf("kernel: content size mismatch for %s: expected %d got %d", contentStorageRef, expectedSize, len(data))
+	}
+	return nil
+}
+
 func (s *ResourceContentStore) canonicalPath(hexDigest string) string {
 	return filepath.Join(s.root, "content", "sha256", hexDigest[:2], hexDigest[2:4], hexDigest+resourceContentBinExt)
 }

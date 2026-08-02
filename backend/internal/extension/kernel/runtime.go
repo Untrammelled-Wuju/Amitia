@@ -40,6 +40,8 @@ type PackageUninstallConfirmationClaims struct {
 	PreviewHash            string         `json:"previewHash"`
 	SecurityPolicyHash     string         `json:"securityPolicyHash"`
 	SnapshotRequirementHash string        `json:"snapshotRequirementHash"`
+	InstalledPath          string         `json:"installedPath,omitempty"`
+	InstalledTreeHash      string         `json:"installedTreeHash,omitempty"`
 	UserID                 string         `json:"userId"`
 	ScopeType              string         `json:"scopeType"`
 	ScopeID                string         `json:"scopeId"`

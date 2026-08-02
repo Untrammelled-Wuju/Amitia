@@ -204,6 +204,29 @@ func (h *Handler) GetBinding(c *gin.Context) {
 	util.SuccessResponse(c, existing)
 }
 
+var behaviorUpdateWhitelist = map[string]bool{
+	"event_type":       true,
+	"conditions_json":  true,
+	"semantic":         true,
+	"preferred_action": true,
+	"priority_offset":  true,
+	"cooldown_ms":      true,
+	"enabled":          true,
+}
+
+func filterBehaviorUpdates(updates map[string]interface{}) (map[string]interface{}, []string) {
+	filtered := make(map[string]interface{})
+	var rejected []string
+	for k, v := range updates {
+		if behaviorUpdateWhitelist[k] {
+			filtered[k] = v
+		} else {
+			rejected = append(rejected, k)
+		}
+	}
+	return filtered, rejected
+}
+
 func (h *Handler) UpdateBinding(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -229,7 +252,12 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
 		return
 	}
-	if err := h.service.UpdateBinding(c.Request.Context(), id, updates); err != nil {
+	filtered, rejected := filterBehaviorUpdates(updates)
+	if len(rejected) > 0 {
+		util.ErrorResponse(c, response.InvalidParams, "包含不允许更新的字段", gin.H{"errorCode": "FIELD_NOT_ALLOWED", "fields": rejected})
+		return
+	}
+	if err := h.service.UpdateBinding(c.Request.Context(), id, filtered); err != nil {
 		writeBehaviorError(c, err)
 		return
 	}

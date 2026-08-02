@@ -357,8 +357,8 @@ func TestComputeContentBoundBatchHashSameCountDifferentContent(t *testing.T) {
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payloadB1),
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payloadB2),
 	)
-	hashA := computeContentBoundBatchHash(batchA, "ext1", 0)
-	hashB := computeContentBoundBatchHash(batchB, "ext1", 0)
+	hashA := computeContentBoundBatchHash(batchA, "ext1", 0, "")
+	hashB := computeContentBoundBatchHash(batchB, "ext1", 0, "")
 	if hashA == "" || hashB == "" {
 		t.Fatalf("expected non-empty hashes, got A=%s B=%s", hashA, hashB)
 	}
@@ -378,8 +378,8 @@ func TestComputeContentBoundBatchHashSameCountDifferentOrder(t *testing.T) {
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payload2),
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payload1),
 	)
-	hashForward := computeContentBoundBatchHash(batchForward, "ext1", 0)
-	hashReversed := computeContentBoundBatchHash(batchReversed, "ext1", 0)
+	hashForward := computeContentBoundBatchHash(batchForward, "ext1", 0, "")
+	hashReversed := computeContentBoundBatchHash(batchReversed, "ext1", 0, "")
 	if hashForward == "" || hashReversed == "" {
 		t.Fatalf("expected non-empty hashes")
 	}
@@ -393,33 +393,33 @@ func TestComputeContentBoundBatchHashSingleFieldChange(t *testing.T) {
 	baseBatch := wrapRawRecords(
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", basePayload),
 	)
-	baseHash := computeContentBoundBatchHash(baseBatch, "ext1", 0)
+	baseHash := computeContentBoundBatchHash(baseBatch, "ext1", 0, "")
 
 	changeNamespace := wrapRawRecords(
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_other", "entity", "e1", "upsert", basePayload),
 	)
-	if computeContentBoundBatchHash(changeNamespace, "ext1", 0) == baseHash {
+	if computeContentBoundBatchHash(changeNamespace, "ext1", 0, "") == baseHash {
 		t.Fatalf("namespace change should alter hash")
 	}
 
 	changeOperation := wrapRawRecords(
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "delete", basePayload),
 	)
-	if computeContentBoundBatchHash(changeOperation, "ext1", 0) == baseHash {
+	if computeContentBoundBatchHash(changeOperation, "ext1", 0, "") == baseHash {
 		t.Fatalf("operation change should alter hash")
 	}
 
 	changeSchemaVersion := wrapRawRecords(
 		makeTestRawLine("2.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", basePayload),
 	)
-	if computeContentBoundBatchHash(changeSchemaVersion, "ext1", 0) == baseHash {
+	if computeContentBoundBatchHash(changeSchemaVersion, "ext1", 0, "") == baseHash {
 		t.Fatalf("schemaVersion change should alter hash")
 	}
 
 	changeEntityType := wrapRawRecords(
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "setting", "e1", "upsert", basePayload),
 	)
-	if computeContentBoundBatchHash(changeEntityType, "ext1", 0) == baseHash {
+	if computeContentBoundBatchHash(changeEntityType, "ext1", 0, "") == baseHash {
 		t.Fatalf("entityType change should alter hash")
 	}
 }
@@ -431,12 +431,12 @@ func TestComputeContentBoundBatchHashStable(t *testing.T) {
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payload1),
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payload2),
 	)
-	hash1 := computeContentBoundBatchHash(batch, "ext1", 0)
-	hash2 := computeContentBoundBatchHash(batch, "ext1", 0)
+	hash1 := computeContentBoundBatchHash(batch, "ext1", 0, "")
+	hash2 := computeContentBoundBatchHash(batch, "ext1", 0, "")
 	if hash1 != hash2 {
 		t.Fatalf("same content must produce same hash: %s vs %s", hash1, hash2)
 	}
-	hash3 := computeContentBoundBatchHash(batch, "ext1", 10)
+	hash3 := computeContentBoundBatchHash(batch, "ext1", 10, "")
 	if hash3 == hash1 || hash3 == "" {
 		t.Fatalf("different startCursor should produce different non-empty hash: %s vs %s", hash1, hash3)
 	}

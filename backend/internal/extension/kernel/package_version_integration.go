@@ -116,7 +116,7 @@ func (r *Runtime) FinalizePackageOperation(ctx context.Context, operationID, ext
 		cause := fmt.Errorf("kernel: final gate failed during finalization: %s: %w", PackageErrCodeFinalGateFailed, err)
 		return persistFinalizationFailureState(context.Background(), r.container.PackageRepository, operationID, PackageOperationRequiresRecovery, "final_gate", PackageErrCodeFinalGateFailed, err.Error(), false, guard, cause)
 	}
-	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operationID, extensionID, guard.FencingToken); err != nil {
+	if err := r.container.PackageRepository.FinalizeOperationAndReleaseLeaseTx(ctx, operationID, extensionID, guard.FencingToken, "finalize_complete"); err != nil {
 		if IsPackageOperationError(err, PackageErrCodeLeaseFenced) || IsPackageOperationError(err, OperationErrTransitionConflict) {
 			cause := fmt.Errorf("kernel: lease conflict during finalization: %w", err)
 			return persistFinalizationFailureState(context.Background(), r.container.PackageRepository, operationID, PackageOperationRequiresRecovery, "finalize_lease_release", PackageErrCodeLeaseFenced, err.Error(), false, guard, cause)

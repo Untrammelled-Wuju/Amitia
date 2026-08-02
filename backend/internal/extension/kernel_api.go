@@ -318,6 +318,19 @@ func (api *KernelAPI) previewUninstall(c *gin.Context) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
+	requiredConfirmations := []string{}
+	switch preview.ArtifactPolicy {
+	case kernelruntime.ArtifactPolicyDeleteArtifact:
+		requiredConfirmations = []string{"confirm.uninstall.delete"}
+	case kernelruntime.ArtifactPolicyRetainArtifact:
+		requiredConfirmations = []string{"confirm.uninstall.retain"}
+	case kernelruntime.ArtifactPolicyRetainForRollback:
+		requiredConfirmations = []string{"confirm.uninstall.retain_for_rollback"}
+	case kernelruntime.ArtifactPolicyRetainForExport:
+		requiredConfirmations = []string{"confirm.uninstall.retain_for_export"}
+	default:
+		requiredConfirmations = []string{"confirm.uninstall.delete"}
+	}
 	resp := publicUninstallPreviewResponse{
 		ExtensionID:             preview.ExtensionID,
 		CurrentVersion:          preview.CurrentVersion,
@@ -328,7 +341,7 @@ func (api *KernelAPI) previewUninstall(c *gin.Context) {
 		PreviewHash:             preview.PreviewHash,
 		SecurityPolicyHash:      preview.SecurityPolicyHash,
 		SnapshotRequirementHash: preview.SnapshotRequirementHash,
-		RequiredConfirmations:   []string{"confirm.uninstall.delete"},
+		RequiredConfirmations:   requiredConfirmations,
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -359,8 +372,21 @@ func (api *KernelAPI) confirmUninstall(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "extension not ready for uninstall", "code": "PACKAGE_UNINSTALL_NOT_READY"})
 		return
 	}
+	requiredConfirmations := []string{}
+	switch preview.ArtifactPolicy {
+	case kernelruntime.ArtifactPolicyDeleteArtifact:
+		requiredConfirmations = []string{"confirm.uninstall.delete"}
+	case kernelruntime.ArtifactPolicyRetainArtifact:
+		requiredConfirmations = []string{"confirm.uninstall.retain"}
+	case kernelruntime.ArtifactPolicyRetainForRollback:
+		requiredConfirmations = []string{"confirm.uninstall.retain_for_rollback"}
+	case kernelruntime.ArtifactPolicyRetainForExport:
+		requiredConfirmations = []string{"confirm.uninstall.retain_for_export"}
+	default:
+		requiredConfirmations = []string{"confirm.uninstall.delete"}
+	}
 	confirmed := make(map[string]bool)
-	for _, required := range []string{"confirm.uninstall.delete"} {
+	for _, required := range requiredConfirmations {
 		if !req.Confirmations[required] {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "confirmation required: " + required, "code": "PACKAGE_CONFIRMATION_REQUIRED"})
 			return
@@ -377,6 +403,8 @@ func (api *KernelAPI) confirmUninstall(c *gin.Context) {
 		PreviewHash:             preview.PreviewHash,
 		SecurityPolicyHash:      preview.SecurityPolicyHash,
 		SnapshotRequirementHash: preview.SnapshotRequirementHash,
+		InstalledPath:           preview.InstalledPath,
+		InstalledTreeHash:       preview.InstalledHash,
 		UserID:                  kernelAPIUser(c),
 		ScopeType:               scopeType,
 		ScopeID:                 req.ScopeID,

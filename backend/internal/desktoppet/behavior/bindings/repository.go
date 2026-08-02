@@ -21,15 +21,32 @@ func (r *Repository) Create(ctx context.Context, binding BehaviorBinding) error 
 	return r.db.WithContext(ctx).Create(model).Error
 }
 
+var repoBindingAllowedColumns = map[string]bool{
+	"event_type":       true,
+	"conditions_json":  true,
+	"semantic":         true,
+	"preferred_action": true,
+	"priority_offset":  true,
+	"cooldown_ms":      true,
+	"enabled":          true,
+	"updated_at":       true,
+}
+
 func (r *Repository) Update(ctx context.Context, id string, updates map[string]interface{}) error {
 	if updates == nil {
 		updates = make(map[string]interface{})
 	}
 	updates["updated_at"] = time.Now().Format(time.RFC3339)
+	sanitized := make(map[string]interface{}, len(updates))
+	for k, v := range updates {
+		if repoBindingAllowedColumns[k] {
+			sanitized[k] = v
+		}
+	}
 	result := r.db.WithContext(ctx).
 		Model(&BehaviorBindingModel{}).
 		Where("id = ?", id).
-		Updates(updates)
+		Updates(sanitized)
 	if result.Error != nil {
 		return result.Error
 	}

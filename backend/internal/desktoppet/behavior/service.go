@@ -132,27 +132,49 @@ func (s *BehaviorService) CreateBinding(ctx context.Context, binding bindings.Be
 	return nil
 }
 
+var serviceBindingUpdateWhitelist = map[string]bool{
+	"event_type":       true,
+	"conditions_json":  true,
+	"semantic":         true,
+	"preferred_action": true,
+	"priority_offset":  true,
+	"cooldown_ms":      true,
+	"enabled":          true,
+}
+
+func filterServiceBindingUpdates(updates map[string]interface{}) map[string]interface{} {
+	filtered := make(map[string]interface{})
+	for k, v := range updates {
+		if serviceBindingUpdateWhitelist[k] {
+			filtered[k] = v
+		}
+	}
+	return filtered
+}
+
 func (s *BehaviorService) UpdateBinding(ctx context.Context, id string, updates map[string]interface{}) error {
 	existing, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
+	filtered := filterServiceBindingUpdates(updates)
+
 	if s.compile != nil && s.validateBinding != nil {
 		merged := *existing
-		if v, ok := updates["event_type"].(string); ok {
+		if v, ok := filtered["event_type"].(string); ok {
 			merged.EventType = v
 		}
-		if v, ok := updates["conditions_json"].(string); ok {
+		if v, ok := filtered["conditions_json"].(string); ok {
 			merged.ConditionsJSON = json.RawMessage(v)
 		}
-		if v, ok := updates["semantic"].(string); ok {
+		if v, ok := filtered["semantic"].(string); ok {
 			merged.Semantic = v
 		}
-		if v, ok := updates["preferred_action"].(string); ok {
+		if v, ok := filtered["preferred_action"].(string); ok {
 			merged.PreferredAction = v
 		}
-		if v, ok := updates["priority_offset"]; ok {
+		if v, ok := filtered["priority_offset"]; ok {
 			switch val := v.(type) {
 			case float64:
 				merged.PriorityOffset = int(val)
@@ -160,7 +182,7 @@ func (s *BehaviorService) UpdateBinding(ctx context.Context, id string, updates 
 				merged.PriorityOffset = val
 			}
 		}
-		if v, ok := updates["cooldown_ms"]; ok {
+		if v, ok := filtered["cooldown_ms"]; ok {
 			switch val := v.(type) {
 			case float64:
 				merged.CooldownMS = int64(val)
@@ -170,7 +192,7 @@ func (s *BehaviorService) UpdateBinding(ctx context.Context, id string, updates 
 				merged.CooldownMS = int64(val)
 			}
 		}
-		if v, ok := updates["enabled"].(bool); ok {
+		if v, ok := filtered["enabled"].(bool); ok {
 			merged.Enabled = v
 		}
 		condition, err := s.compile(merged.ConditionsJSON)
@@ -182,8 +204,8 @@ func (s *BehaviorService) UpdateBinding(ctx context.Context, id string, updates 
 		}
 	}
 
-	updates["updated_at"] = time.Now().Format(time.RFC3339)
-	return s.repo.Update(ctx, id, updates)
+	filtered["updated_at"] = time.Now().Format(time.RFC3339)
+	return s.repo.Update(ctx, id, filtered)
 }
 
 func (s *BehaviorService) DeleteBinding(ctx context.Context, id string) error {

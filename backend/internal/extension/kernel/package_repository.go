@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -728,7 +729,7 @@ func (r *PackageRepository) DB() *sql.DB {
 	return r.db
 }
 
-func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Context, operationID, extensionID string, fencingToken int64) error {
+func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Context, operationID, extensionID string, fencingToken int64, finalizeStep string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return storageOperationError("begin finalize operation and release lease", err)
@@ -767,6 +768,24 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Conte
 		return storageOperationError("read lease during finalization", leaseErr)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	stepID := operationID + ":" + finalizeStep
+	inputHash := "sha256:" + fmt.Sprintf("%x", sha256.Sum256([]byte(stepID)))
+	if _, err := tx.ExecContext(ctx, `INSERT INTO extension_package_operation_steps (
+		step_id, operation_id, step_name, step_order, status, attempt_count, result_json, error_code,
+		started_at, completed_at, input_hash, updated_at, cas_version
+	) VALUES (?, ?, ?, ?, 'completed', 1, ?, '', ?, ?, ?, ?, 1)`,
+		stepID, operationID, finalizeStep, 9999, `{"finalized":true,"atomic":true}`, now, now, inputHash, now); err != nil {
+		if isSQLiteConstraintViolation(err) {
+			if _, updErr := tx.ExecContext(ctx, `UPDATE extension_package_operation_steps SET status='completed',
+				result_json=?, completed_at=?, updated_at=?, cas_version=cas_version+1
+				WHERE operation_id=? AND step_name=? AND status!='completed'`,
+				`{"finalized":true,"atomic":true}`, now, now, operationID, finalizeStep); updErr != nil {
+				return storageOperationError("upsert finalize step during finalization", updErr)
+			}
+		} else {
+			return storageOperationError("record finalize step during finalization", err)
+		}
+	}
 	result, err := tx.ExecContext(ctx,
 		`UPDATE extension_package_operations SET status=?, current_step=?, error_code='', error_detail='',
 		recovery_required=0, updated_at=?, completed_at=?, lease_owner='', lease_expires_at=''

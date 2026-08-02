@@ -308,7 +308,29 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil || !uninstallPreview.Installable {
 		t.Fatalf("uninstall preflight failed: %+v %v", uninstallPreview, err)
 	}
-	uninstallOperation, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: preview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: ""})
+	uninstallClaims := PackageUninstallConfirmationClaims{
+		ExtensionID:             preview.ExtensionID,
+		CurrentVersion:          uninstallPreview.CurrentVersion,
+		CurrentVersionID:        uninstallPreview.CurrentVersionID,
+		CurrentGenerationID:     uninstallPreview.CurrentGenerationID,
+		ArtifactID:              uninstallPreview.ArtifactID,
+		ArtifactPolicy:          string(uninstallPreview.ArtifactPolicy),
+		PreviewHash:             uninstallPreview.PreviewHash,
+		SecurityPolicyHash:      uninstallPreview.SecurityPolicyHash,
+		SnapshotRequirementHash: uninstallPreview.SnapshotRequirementHash,
+		InstalledPath:           uninstallPreview.InstalledPath,
+		InstalledTreeHash:       uninstallPreview.InstalledHash,
+		UserID:                  "user-1",
+		ScopeType:               "global",
+		ScopeID:                 "",
+		Confirmations:           map[string]bool{"confirm.uninstall.delete": true},
+		ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
+	}
+	uninstallToken, err := runtime.SignUninstallConfirmation(uninstallClaims)
+	if err != nil {
+		t.Fatalf("sign uninstall confirmation failed: %v", err)
+	}
+	uninstallOperation, err := runtime.ExecutePackageUninstall(ctx, ExecutePackageUninstallRequest{ExtensionID: preview.ExtensionID, UserID: "user-1", ScopeType: "global", ScopeID: "", ConfirmationToken: uninstallToken})
 	if err != nil {
 		t.Fatal(err)
 	}

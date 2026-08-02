@@ -165,40 +165,66 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		resourceSnapshot := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
 		absExtRoot, absErr := filepath.Abs(r.container.ExtRoot)
 		if absErr != nil {
-			return "", "", "", "", "", fmt.Errorf("kernel: resolve ext root: %w", absErr)
+			return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resolve ext root: %w", absErr))
 		}
 		contentStore := NewResourceContentStore(absExtRoot)
 		for _, resource := range resources {
 			resource.Metadata, _ = sanitizePackageSnapshotMap(resource.Metadata)
 			raw, marshalErr := json.Marshal(resource)
 			if marshalErr != nil {
-				return "", "", "", "", "", marshalErr
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, marshalErr)
 			}
 			logicalPath := extractResourceStringField(resource, "logicalPath")
 			if logicalPath == "" {
 				logicalPath = resource.Reference
 			}
 			originalPath := resource.Reference
-
-			var contentHash string
-			var size int64
-			var contentStorageRef string
-			if originalPath != "" {
-				absOriginal, absErr := filepath.Abs(originalPath)
-				if absErr != nil {
-					return "", "", "", "", "", fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, absErr)
-				}
-				if strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
-					if _, statErr := os.Stat(absOriginal); statErr == nil {
-						if storedRef, hash, sz, storeErr := contentStore.StoreContent(absOriginal); storeErr == nil {
-							contentStorageRef = storedRef
-							contentHash = hash
-							size = sz
-						}
-					}
-				}
+			if originalPath == "" {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s original path empty", resource.ResourceID))
 			}
-
+			absOriginal, absErr := filepath.Abs(originalPath)
+			if absErr != nil {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, absErr))
+			}
+			if !strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s path %s escapes ext root", resource.ResourceID, absOriginal))
+			}
+			info, statErr := os.Stat(absOriginal)
+			if statErr != nil {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s file stat failed: %w", resource.ResourceID, statErr))
+			}
+			file, openErr := os.Open(absOriginal)
+			if openErr != nil {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: open resource file %s: %w", resource.ResourceID, openErr))
+			}
+			hasher := sha256.New()
+			if _, copyErr := io.Copy(hasher, file); copyErr != nil {
+				file.Close()
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: hash resource file %s: %w", resource.ResourceID, copyErr))
+			}
+			file.Close()
+			size := info.Size()
+			var contentStorageRef string
+			var contentHash string
+			contentStorageRef, contentHash, size, storeErr := contentStore.StoreContent(absOriginal)
+			if storeErr != nil {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s store content failed: %w", resource.ResourceID, storeErr))
+			}
+			if verifyErr := contentStore.VerifyContent(contentStorageRef, contentHash); verifyErr != nil {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s verify content failed: %w", resource.ResourceID, verifyErr))
+			}
+			readData, readErr := contentStore.ReadContent(contentStorageRef)
+			if readErr != nil {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s read content failed: %w", resource.ResourceID, readErr))
+			}
+			verifyHash := sha256.Sum256(readData)
+			verifyHashStr := "sha256:" + hex.EncodeToString(verifyHash[:])
+			if verifyHashStr != contentHash {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content hash mismatch after read: expected %s got %s", resource.ResourceID, contentHash, verifyHashStr))
+			}
+			if int64(len(readData)) != size {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content size mismatch: expected %d got %d", resource.ResourceID, size, len(readData)))
+			}
 			resourceSnapshot.Entries = append(resourceSnapshot.Entries, packageResourceSnapshotEntry{
 				Resource:                resource,
 				ResourceHash:            packageSnapshotDigest(raw),
@@ -1105,4 +1131,95 @@ func computeVerifiedResourceTreeHash(resources []domain.ResourceOwnership, absEx
 		hasher.Write([]byte{0})
 	}
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+type UninstallSnapshotRequirementInput struct {
+	InstalledPath          string
+	InstalledTreeHash      string
+	ArtifactID             string
+	ExtensionID            string
+	CurrentVersionID       string
+}
+
+func ComputeUninstallSnapshotRequirement(input UninstallSnapshotRequirementInput) RollbackSnapshotRequirement {
+	req := RollbackSnapshotRequirement{
+		Required:             true,
+		NoDataChange:         false,
+		ManifestNoDataChange: false,
+	}
+	if input.InstalledPath == "" || input.InstalledTreeHash == "" || input.ArtifactID == "" || input.ExtensionID == "" || input.CurrentVersionID == "" {
+		req.Reason = "uninstall preview identity incomplete, fail-closed"
+	} else {
+		req.Reason = "uninstall destroys all data, rollback point required"
+	}
+	req.RequirementHash = computeUninstallSnapshotRequirementHash(req, input)
+	return req
+}
+
+func computeUninstallSnapshotRequirementInput(installedPath, installedTreeHash, artifactID, extensionID, currentVersionID string) UninstallSnapshotRequirementInput {
+	return UninstallSnapshotRequirementInput{
+		InstalledPath:     installedPath,
+		InstalledTreeHash:  installedTreeHash,
+		ArtifactID:        artifactID,
+		ExtensionID:       extensionID,
+		CurrentVersionID:  currentVersionID,
+	}
+}
+
+func computeUninstallSnapshotRequirementFromClaims(claims packageConfirmationClaims, fromVersion string) RollbackSnapshotRequirement {
+	input := UninstallSnapshotRequirementInput{
+		InstalledPath:     claims.InstalledPath,
+		InstalledTreeHash:  claims.InstalledTreeHash,
+		ArtifactID:        claims.ArtifactID,
+		ExtensionID:       claims.ExtensionID,
+		CurrentVersionID:  claims.CurrentVersionID,
+	}
+	return ComputeUninstallSnapshotRequirement(input)
+}
+
+func computeUninstallSnapshotRequirementHash(req RollbackSnapshotRequirement, input UninstallSnapshotRequirementInput) string {
+	canonical := fmt.Sprintf(`{"required":%v,"noDataChange":%v,"manifestNoDataChange":%v,"reason":%q,"installedPath":%q,"installedTreeHash":%q,"artifactId":%q,"extensionId":%q,"currentVersionId":%q}`,
+		req.Required, req.NoDataChange, req.ManifestNoDataChange, req.Reason,
+		input.InstalledPath, input.InstalledTreeHash, input.ArtifactID, input.ExtensionID, input.CurrentVersionID)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+type InstallSnapshotRequirementInput struct {
+	InstalledPath     string
+	InstalledTreeHash string
+	ArtifactID        string
+	ExtensionID       string
+}
+
+func ComputeInstallSnapshotRequirement(input InstallSnapshotRequirementInput) RollbackSnapshotRequirement {
+	req := RollbackSnapshotRequirement{
+		Required:             true,
+		NoDataChange:         false,
+		ManifestNoDataChange: false,
+	}
+	if input.InstalledPath == "" || input.InstalledTreeHash == "" || input.ArtifactID == "" || input.ExtensionID == "" {
+		req.Reason = "install preview identity incomplete, fail-closed"
+	} else {
+		req.Reason = "install operation requires rollback snapshot for forward recovery"
+	}
+	req.RequirementHash = computeInstallSnapshotRequirementHash(req, input)
+	return req
+}
+
+func computeInstallSnapshotRequirementInput(installedPath, installedTreeHash, artifactID, extensionID string) InstallSnapshotRequirementInput {
+	return InstallSnapshotRequirementInput{
+		InstalledPath:     installedPath,
+		InstalledTreeHash: installedTreeHash,
+		ArtifactID:        artifactID,
+		ExtensionID:       extensionID,
+	}
+}
+
+func computeInstallSnapshotRequirementHash(req RollbackSnapshotRequirement, input InstallSnapshotRequirementInput) string {
+	canonical := fmt.Sprintf(`{"required":%v,"noDataChange":%v,"manifestNoDataChange":%v,"reason":%q,"installedPath":%q,"installedTreeHash":%q,"artifactId":%q,"extensionId":%q}`,
+		req.Required, req.NoDataChange, req.ManifestNoDataChange, req.Reason,
+		input.InstalledPath, input.InstalledTreeHash, input.ArtifactID, input.ExtensionID)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
 }

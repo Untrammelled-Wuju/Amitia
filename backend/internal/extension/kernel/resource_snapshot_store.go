@@ -173,17 +173,18 @@ func (s *ResourceSnapshotStore) ensureQuarantineContentStorageReferenceColumn(ct
 func (s *ResourceSnapshotStore) VerifyResourceSnapshotEntries(ctx context.Context, snapshotJSON string) error {
 	var snapshot packageResourceSnapshot
 	if err := json.Unmarshal([]byte(snapshotJSON), &snapshot); err != nil {
-		return fmt.Errorf("kernel: resource snapshot corrupt: %w", err)
+		return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 422, fmt.Errorf("kernel: resource snapshot corrupt: %w", err))
 	}
 	contentStore := NewResourceContentStore(s.extRoot)
 	for _, entry := range snapshot.Entries {
-		if entry.StorageReference == "" && entry.ContentHash != "" {
-			return fmt.Errorf("kernel: resource %s content storage reference missing", entry.Resource.ResourceID)
+		if entry.ContentStorageReference == "" {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 422, fmt.Errorf("kernel: resource %s content storage reference missing", entry.Resource.ResourceID))
 		}
-		if entry.ContentHash != "" {
-			if err := contentStore.VerifyContent(entry.StorageReference, entry.ContentHash); err != nil {
-				return fmt.Errorf("kernel: resource content verification failed for %s: %w", entry.Resource.ResourceID, err)
-			}
+		if entry.ContentHash == "" {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 422, fmt.Errorf("kernel: resource %s content hash missing", entry.Resource.ResourceID))
+		}
+		if err := contentStore.VerifyContentRef(entry.ContentStorageReference, entry.ContentHash, entry.Size); err != nil {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 422, fmt.Errorf("kernel: resource content verification failed for %s: %w", entry.Resource.ResourceID, err))
 		}
 	}
 	return nil
