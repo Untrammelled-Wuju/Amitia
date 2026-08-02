@@ -186,13 +186,16 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 			if absErr != nil {
 				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, absErr))
 			}
-			if !strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
-				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s path %s escapes ext root", resource.ResourceID, absOriginal))
-			}
-			info, statErr := os.Stat(absOriginal)
-			if statErr != nil {
-				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s file stat failed: %w", resource.ResourceID, statErr))
-			}
+		if validateErr := ValidateResourcePath(absOriginal, absExtRoot); validateErr != nil {
+			return "", "", "", "", "", validateErr
+		}
+		info, statErr := os.Lstat(absOriginal)
+		if statErr != nil {
+			return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s file stat failed: %w", resource.ResourceID, statErr))
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 500, fmt.Errorf("kernel: resource %s path %s is a symlink", resource.ResourceID, absOriginal))
+		}
 			file, openErr := os.Open(absOriginal)
 			if openErr != nil {
 				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: open resource file %s: %w", resource.ResourceID, openErr))
@@ -331,7 +334,13 @@ type tableSnapshotResult struct {
 
 func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, table string) (tableSnapshotResult, error) {
 	result := tableSnapshotResult{}
-	rows, queryErr := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", table))
+
+	resolver, resolverErr := ResolveExtensionUserDataNamespace(extensionID, table)
+	if resolverErr != nil {
+		return result, fmt.Errorf("kernel: resolve namespace for table %s: %w", table, resolverErr)
+	}
+
+	rows, queryErr := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", quoteIdentifier(table)))
 	if queryErr != nil {
 		return result, fmt.Errorf("kernel: query table %s for snapshot: %w", table, queryErr)
 	}
@@ -343,12 +352,21 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 	}
 	idColumn := ""
 	for _, col := range columns {
-		if col == "id" || col == "entity_id" {
+		if col == "entity_id" {
 			idColumn = col
 			break
 		}
+		if col == "id" && idColumn == "" {
+			idColumn = col
+		}
 	}
-	namespace := strings.TrimPrefix(table, migration.ExtensionNamespacePrefix(extensionID))
+	if idColumn == "" {
+		return result, NewPackageError(PackageErrCodeUserDataEntityIDMissing, 422,
+			fmt.Errorf("kernel: table %s has no entity_id or id column, cannot determine stable entity identity", table))
+	}
+
+	canonicalTable := resolver.CanonicalTable
+	entityType := resolver.LogicalEntityType
 
 	var lines []string
 	for rows.Next() {
@@ -369,16 +387,24 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 				entityID = fmt.Sprintf("%v", val)
 			}
 		}
+		if entityID == "" || entityID == "<nil>" {
+			return result, NewPackageError(PackageErrCodeUserDataEntityIDMissing, 422,
+				fmt.Errorf("kernel: table %s row has empty entity id, snapshot cannot be reliably restored", table))
+		}
 		payloadHash := computeUserDataPayloadHash(payload)
 		record := userDataRecord{
 			SchemaVersion: "1.0.0",
 			ExtensionID:   extensionID,
-			Namespace:     namespace,
-			EntityType:    "record",
+			Namespace:     canonicalTable,
+			EntityType:    entityType,
 			EntityID:      entityID,
 			Operation:     "upsert",
 			Payload:       payload,
 			PayloadHash:   payloadHash,
+		}
+		if err := validateUserDataRecord(record, extensionID); err != nil {
+			return result, NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
+				fmt.Errorf("kernel: table %s row validation failed for entity %s: %w", table, entityID, err))
 		}
 		jsonBytes, marshalErr := json.Marshal(record)
 		if marshalErr != nil {
@@ -394,6 +420,12 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 		return result, fmt.Errorf("kernel: user data snapshot integrity check failed: table %s export is empty", table)
 	}
 	result.jsonl = strings.Join(lines, "\n")
+
+	if _, _, selfErr := parseAndValidateJSONL(result.jsonl, extensionID); selfErr != nil {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s capture self-validation failed: %w", table, selfErr))
+	}
+
 	return result, nil
 }
 
@@ -571,12 +603,13 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 		if err := contentStore.VerifyContent(entry.ContentStorageReference, entry.ContentHash); err != nil {
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content verification failed at stage content_verification: %w", entry.Resource.ResourceID, err))
 		}
-		absOriginal, absErr := filepath.Abs(resolveResourceRestorePath(entry))
+		restorePath := resolveResourceRestorePath(entry)
+		if validateErr := ValidateRestoreTargetPath(restorePath, absExtRoot); validateErr != nil {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path validation failed for resource %s at stage path_validation: %w", entry.Resource.ResourceID, validateErr))
+		}
+		absOriginal, absErr := filepath.Abs(restorePath)
 		if absErr != nil {
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: resolve restore path for resource %s at stage path_validation: %w", entry.Resource.ResourceID, absErr))
-		}
-		if !strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path %s for resource %s escapes ext root at stage path_validation", absOriginal, entry.Resource.ResourceID))
 		}
 		data, readErr := contentStore.ReadContent(entry.ContentStorageReference)
 		if readErr != nil {
@@ -1079,12 +1112,12 @@ func computeVerifiedResourceTreeHash(resources []domain.ResourceOwnership, absEx
 		if originalPath == "" {
 			continue
 		}
+		if validateErr := ValidateResourcePath(originalPath, absExtRoot); validateErr != nil {
+			return "", validateErr
+		}
 		absPath, absErr := filepath.Abs(originalPath)
 		if absErr != nil {
 			return "", fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, absErr)
-		}
-		if !strings.HasPrefix(absPath, absExtRoot+string(filepath.Separator)) {
-			return "", fmt.Errorf("kernel: resource %s path %s escapes ext root", resource.ResourceID, absPath)
 		}
 		relPath, relErr := filepath.Rel(absExtRoot, absPath)
 		if relErr != nil {
@@ -1092,9 +1125,13 @@ func computeVerifiedResourceTreeHash(resources []domain.ResourceOwnership, absEx
 		}
 		normalizedPath := filepath.ToSlash(strings.ToLower(relPath))
 
-		info, statErr := os.Stat(absPath)
+		info, statErr := os.Lstat(absPath)
 		if statErr != nil {
 			return "", fmt.Errorf("kernel: resource %s file not found: %w", resource.ResourceID, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+				fmt.Errorf("kernel: resource %s path %s is a symlink", resource.ResourceID, absPath))
 		}
 
 		file, openErr := os.Open(absPath)

@@ -224,15 +224,12 @@ func (s *ResourceSnapshotStore) QuarantineNewResources(ctx context.Context, exte
 		quarantineID := "resource-quarantine-" + operationID + "-" + resource.ResourceID
 		quarantinePath := filepath.Join(quarantineDir, resource.ResourceID)
 
+		if validateErr := ValidateResourcePath(originalPath, absExtRoot); validateErr != nil {
+			return entries, validateErr
+		}
 		absOriginal, err := filepath.Abs(originalPath)
 		if err != nil {
 			return entries, fmt.Errorf("kernel: resolve original path for resource %s: %w", resource.ResourceID, err)
-		}
-		if !strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
-			return entries, fmt.Errorf("kernel: resource %s original path %s escapes ext root", resource.ResourceID, absOriginal)
-		}
-		if _, statErr := os.Stat(absOriginal); statErr != nil {
-			return entries, fmt.Errorf("kernel: resource %s source file not found: %w", resource.ResourceID, statErr)
 		}
 
 		entry := ResourceQuarantineEntry{
@@ -272,8 +269,14 @@ func (s *ResourceSnapshotStore) QuarantineNewResources(ctx context.Context, exte
 			return entries, fmt.Errorf("kernel: resource %s store content failed: %w", resource.ResourceID, storeErr)
 		}
 
-		if computedHash, hashErr := computeFileContentHash(quarantinePath); hashErr == nil && computedHash != contentHash {
-			return entries, fmt.Errorf("kernel: resource %s content hash mismatch after store: expected %s, got %s", resource.ResourceID, contentHash, computedHash)
+		computedHash, hashErr := computeFileContentHash(quarantinePath)
+		if hashErr != nil {
+			return entries, NewPackageError(PackageErrCodeResourceSnapshotHashComputeFailed, 500,
+				fmt.Errorf("kernel: resource %s compute content hash failed after store: %w", resource.ResourceID, hashErr))
+		}
+		if computedHash != contentHash {
+			return entries, NewPackageError(PackageErrCodeResourceSnapshotHashMismatch, 500,
+				fmt.Errorf("kernel: resource %s content hash mismatch after store: expected %s, got %s", resource.ResourceID, contentHash, computedHash))
 		}
 
 		if err := fsyncDir(quarantineDir); err != nil {
@@ -324,6 +327,7 @@ func (s *ResourceSnapshotStore) RestoreQuarantinedResources(ctx context.Context,
 	if err != nil {
 		return err
 	}
+	absExtRoot, _ := filepath.Abs(s.extRoot)
 	for _, entry := range entries {
 		if entry.OriginalPath == "" {
 			return fmt.Errorf("kernel: resource %s original path empty, cannot restore", entry.ResourceID)
@@ -342,12 +346,13 @@ func (s *ResourceSnapshotStore) RestoreQuarantinedResources(ctx context.Context,
 			return verifyErr
 		}
 
+		if validateErr := ValidateRestoreTargetPath(entry.OriginalPath, absExtRoot); validateErr != nil {
+			return validateErr
+		}
+
 		absOriginal, err := filepath.Abs(entry.OriginalPath)
 		if err != nil {
 			return fmt.Errorf("kernel: resolve original path for resource %s: %w", entry.ResourceID, err)
-		}
-		if mkErr := os.MkdirAll(filepath.Dir(absOriginal), 0755); mkErr != nil {
-			return fmt.Errorf("kernel: restore quarantined resource %s: mkdir: %w", entry.ResourceID, mkErr)
 		}
 
 		if renameErr := os.Rename(entry.QuarantinePath, absOriginal); renameErr != nil {
@@ -428,12 +433,12 @@ func (s *ResourceSnapshotStore) ComputeResourceTreeHash(ctx context.Context, ext
 		if originalPath == "" {
 			continue
 		}
+		if validateErr := ValidateResourcePath(originalPath, absExtRoot); validateErr != nil {
+			return "", validateErr
+		}
 		absPath, err := filepath.Abs(originalPath)
 		if err != nil {
 			return "", fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, err)
-		}
-		if !strings.HasPrefix(absPath, absExtRoot+string(filepath.Separator)) {
-			return "", fmt.Errorf("kernel: resource %s path %s escapes ext root", resource.ResourceID, absPath)
 		}
 		relPath, err := filepath.Rel(absExtRoot, absPath)
 		if err != nil {
@@ -488,12 +493,12 @@ func (s *ResourceSnapshotStore) ComputeVerifiedResourceTreeHash(ctx context.Cont
 		if originalPath == "" {
 			continue
 		}
+		if validateErr := ValidateResourcePath(originalPath, absExtRoot); validateErr != nil {
+			return "", validateErr
+		}
 		absPath, err := filepath.Abs(originalPath)
 		if err != nil {
 			return "", fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, err)
-		}
-		if !strings.HasPrefix(absPath, absExtRoot+string(filepath.Separator)) {
-			return "", fmt.Errorf("kernel: resource %s path %s escapes ext root", resource.ResourceID, absPath)
 		}
 		relPath, err := filepath.Rel(absExtRoot, absPath)
 		if err != nil {
@@ -501,9 +506,13 @@ func (s *ResourceSnapshotStore) ComputeVerifiedResourceTreeHash(ctx context.Cont
 		}
 		normalizedPath := filepath.ToSlash(strings.ToLower(relPath))
 
-		info, statErr := os.Stat(absPath)
+		info, statErr := os.Lstat(absPath)
 		if statErr != nil {
 			return "", fmt.Errorf("kernel: resource %s file not found: %w", resource.ResourceID, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+				fmt.Errorf("kernel: resource %s path %s is a symlink", resource.ResourceID, absPath))
 		}
 
 		file, openErr := os.Open(absPath)
@@ -710,4 +719,125 @@ func fsyncDir(dir string) error {
 	}
 	defer f.Close()
 	return f.Sync()
+}
+
+func ValidateResourcePath(resourcePath, extRoot string) error {
+	absExtRoot, err := filepath.Abs(extRoot)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: resolve ext root: %w", err))
+	}
+
+	realExtRoot, err := filepath.EvalSymlinks(absExtRoot)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: eval symlinks for ext root: %w", err))
+	}
+
+	absResourcePath, err := filepath.Abs(resourcePath)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: resolve resource path: %w", err))
+	}
+
+	info, err := os.Lstat(absResourcePath)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: lstat resource path: %w", err))
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: resource path %s is a symlink, symlinks are not allowed in snapshot resources", absResourcePath))
+	}
+
+	realResourcePath, err := filepath.EvalSymlinks(absResourcePath)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: eval symlinks for resource path: %w", err))
+	}
+
+	relPath, err := filepath.Rel(realExtRoot, realResourcePath)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: compute relative path for %s: %w", resourcePath, err))
+	}
+
+	cleanRel := filepath.Clean(relPath)
+	if cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanRel) {
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: resource path %s escapes ext root (rel: %s)", resourcePath, cleanRel))
+	}
+
+	parentDir := filepath.Dir(absResourcePath)
+	for parentDir != absExtRoot && len(parentDir) > len(absExtRoot) {
+		parentInfo, parentErr := os.Lstat(parentDir)
+		if parentErr != nil {
+			break
+		}
+		if parentInfo.Mode()&os.ModeSymlink != 0 {
+			return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+				fmt.Errorf("kernel: parent directory %s is a symlink, symlinks are not allowed", parentDir))
+		}
+		parentDir = filepath.Dir(parentDir)
+	}
+
+	return nil
+}
+
+func ValidateRestoreTargetPath(targetPath, extRoot string) error {
+	absExtRoot, err := filepath.Abs(extRoot)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: resolve ext root: %w", err))
+	}
+
+	realExtRoot, err := filepath.EvalSymlinks(absExtRoot)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: eval symlinks for ext root: %w", err))
+	}
+
+	absTargetPath, err := filepath.Abs(targetPath)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: resolve target path: %w", err))
+	}
+
+	parentDir := filepath.Dir(absTargetPath)
+	if mkErr := os.MkdirAll(parentDir, 0o700); mkErr != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: create parent directory for %s: %w", targetPath, mkErr))
+	}
+
+	realParentDir, err := filepath.EvalSymlinks(parentDir)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: eval symlinks for parent dir: %w", err))
+	}
+
+	parentInfo, err := os.Lstat(parentDir)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: lstat parent dir: %w", err))
+	}
+
+	if parentInfo.Mode()&os.ModeSymlink != 0 {
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: parent directory %s is a symlink, symlinks are not allowed for restore targets", parentDir))
+	}
+
+	relPath, err := filepath.Rel(realExtRoot, realParentDir)
+	if err != nil {
+		return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: compute relative path for parent: %w", err))
+	}
+
+	cleanRel := filepath.Clean(relPath)
+	if cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanRel) {
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: restore target parent %s escapes ext root (rel: %s)", parentDir, cleanRel))
+	}
+
+	return nil
 }

@@ -631,6 +631,52 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 	}
 	result.Checks = append(result.Checks, checkVersion)
 
+	checkResourceRestore := PackageFinalGateCheck{Name: "resource_restore_integrity"}
+	if r.container.ResourceSnapshotStore == nil {
+		checkResourceRestore.Detail = "resource snapshot store unavailable"
+	} else if r.container.PackageRepository == nil {
+		checkResourceRestore.Detail = "package repository unavailable"
+	} else {
+		rp, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
+		if rpErr != nil {
+			checkResourceRestore.Passed = true
+		} else if rp.ResourceSnapshotJSON == "" {
+			checkResourceRestore.Passed = true
+		} else if verifyErr := r.container.ResourceSnapshotStore.VerifyResourceSnapshotEntries(ctx, rp.ResourceSnapshotJSON); verifyErr != nil {
+			checkResourceRestore.Detail = fmt.Sprintf("resource snapshot verification failed: %v", verifyErr)
+		} else if qErr := r.container.ResourceSnapshotStore.VerifyNoActiveQuarantine(ctx, operation.OperationID); qErr != nil {
+			checkResourceRestore.Detail = fmt.Sprintf("active quarantine detected: %v", qErr)
+		} else {
+			checkResourceRestore.Passed = true
+		}
+	}
+	result.Checks = append(result.Checks, checkResourceRestore)
+
+	checkUserDataRestore := PackageFinalGateCheck{Name: "user_data_restore_integrity"}
+	if r.container.UserDataSnapshotStore == nil {
+		checkUserDataRestore.Detail = "user data snapshot store unavailable"
+	} else if r.container.PackageRepository == nil {
+		checkUserDataRestore.Detail = "package repository unavailable"
+	} else {
+		rpUd, rpUdErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
+		if rpUdErr != nil {
+			checkUserDataRestore.Passed = true
+		} else if rpUd.UserDataMigrationStateJSON == "" {
+			checkUserDataRestore.Passed = true
+		} else {
+			restoreOperationID := rpUd.SourceOperationID
+			if restoreOperationID == "" {
+				restoreOperationID = "restore-" + rpUd.RollbackPointID
+			}
+			if verifyUdErr := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID, rpUd.UserDataMigrationStateJSON); verifyUdErr != nil {
+				checkUserDataRestore.Detail = fmt.Sprintf("user data restore verification failed: %v", verifyUdErr)
+			} else {
+				checkUserDataRestore.Passed = true
+			}
+		}
+	}
+	result.Checks = append(result.Checks, checkUserDataRestore)
+
 	allPassed := true
 	var findings []PackageFinalGateFinding
 	for _, check := range result.Checks {

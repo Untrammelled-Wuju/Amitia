@@ -1552,7 +1552,7 @@ func TestFinalGateUserDataRestoreMismatchBlocksRollback(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "fgext", operationID, string(userStateJSON)); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, operationID); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON)); err != nil {
 		t.Fatalf("baseline verify should pass: %v", err)
 	}
 
@@ -1562,7 +1562,7 @@ func TestFinalGateUserDataRestoreMismatchBlocksRollback(t *testing.T) {
 		t.Fatalf("tamper applied_count: %v", err)
 	}
 
-	err = store.VerifyUserDataRestore(ctx, operationID)
+	err = store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON))
 	if err == nil {
 		t.Fatal("expected VerifyUserDataRestore to fail after journal tampering, got nil")
 	}
@@ -1615,7 +1615,7 @@ func TestFinalGateUserDataRestoreAggregateMismatchBlocksRollback(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "agg", operationID, string(userStateJSON)); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, operationID); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON)); err != nil {
 		t.Fatalf("baseline verify should pass: %v", err)
 	}
 
@@ -1626,7 +1626,7 @@ func TestFinalGateUserDataRestoreAggregateMismatchBlocksRollback(t *testing.T) {
 		t.Fatalf("tamper aggregate_hash: %v", err)
 	}
 
-	err = store.VerifyUserDataRestore(ctx, operationID)
+	err = store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON))
 	if err == nil {
 		t.Fatal("expected VerifyUserDataRestore to fail after aggregate_hash tampering, got nil")
 	}
