@@ -84,7 +84,7 @@ func scanPackageExportSecrets(files map[string][]byte) error {
 	return nil
 }
 
-func (s *PackageService) rollbackLegacyPackage(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (result PackageOperationResult, err error) {
+func (s *PackageService) rollbackLegacyPackage(ctx context.Context, extensionID, version, userID, scopeType, scopeID, confirmationToken string) (result PackageOperationResult, err error) {
 	if !isLegacyMigrationToolContext(ctx) {
 		return PackageOperationResult{}, NewExtensionError(ErrLegacyRuntimeEnabled, "legacy writer requires explicit migration mode", extensionID, false, nil)
 	}

@@ -2,29 +2,46 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"sort"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 type PackageRollbackPreviewResult struct {
-	ExtensionID       string   `json:"extensionId"`
-	CurrentVersion    string   `json:"currentVersion"`
-	TargetVersion     string   `json:"targetVersion"`
-	CurrentGeneration int64    `json:"currentGeneration"`
-	TargetArtifactID  string   `json:"targetArtifactId"`
-	InstalledPath     string   `json:"installedPath"`
-	InstalledHash     string   `json:"installedHash"`
-	RollbackPointID   string   `json:"rollbackPointId"`
-	SnapshotHash      string   `json:"snapshotHash"`
-	RetentionState    string   `json:"retentionState"`
-	RetentionUntil    string   `json:"retentionUntil"`
-	ManualRequired    bool     `json:"manualRequired"`
-	ManualReason      string   `json:"manualReason,omitempty"`
-	Dependents        []string `json:"dependents"`
-	Installable       bool     `json:"installable"`
-	GenerationID      string   `json:"generationId"`
-	OperationID       string   `json:"operationId"`
+	ExtensionID             string   `json:"extensionId"`
+	CurrentVersion          string   `json:"currentVersion"`
+	TargetVersion           string   `json:"targetVersion"`
+	CurrentGeneration       int64    `json:"currentGeneration"`
+	TargetArtifactID        string   `json:"targetArtifactId"`
+	InstalledPath           string   `json:"installedPath"`
+	InstalledHash           string   `json:"installedTreeHash"`
+	RollbackPointID         string   `json:"rollbackPointId"`
+	SnapshotHash            string   `json:"snapshotHash"`
+	RetentionState          string   `json:"retentionState"`
+	RetentionUntil          string   `json:"retentionUntil"`
+	ManualRequired          bool     `json:"manualRequired"`
+	ManualReason            string   `json:"manualReason,omitempty"`
+	Dependents              []string `json:"dependents"`
+	Installable             bool     `json:"installable"`
+	GenerationID            string   `json:"generationId"`
+	OperationID             string   `json:"operationId"`
+	PreviewSessionID        string   `json:"previewSessionId,omitempty"`
+	PreviewHash             string   `json:"previewHash,omitempty"`
+	SecurityPolicyHash      string   `json:"securityPolicyHash,omitempty"`
+	SnapshotRequirementHash string   `json:"snapshotRequirementHash,omitempty"`
+	RequiredConfirmations   []string `json:"requiredConfirmations,omitempty"`
+}
+
+type PackageRollbackConfirmation struct {
+	ConfirmationToken string    `json:"confirmationToken"`
+	ExpiresAt         time.Time `json:"expiresAt"`
+	PreviewSessionID  string    `json:"previewSessionId"`
 }
 
 func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageRollbackPreviewResult, error) {
@@ -128,5 +145,133 @@ func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, versi
 		}
 	}
 
+	previewSessionID := "rollback-preview-" + uuid.NewString()
+	result.PreviewSessionID = previewSessionID
+	result.SecurityPolicyHash = computeSecurityPolicyHash()
+	reqInput := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
+	if point.ConfigSnapshotJSON != "" {
+		reqInput.ConfigBeforeHash = packageSnapshotDigest([]byte(point.ConfigSnapshotJSON))
+	}
+	if point.ResourceSnapshotJSON != "" {
+		reqInput.ResourceBeforeTreeHash = packageSnapshotDigest([]byte(point.ResourceSnapshotJSON))
+	}
+	if point.UserDataMigrationStateJSON != "" {
+		reqInput.UserDataBeforeHash = packageSnapshotDigest([]byte(point.UserDataMigrationStateJSON))
+	}
+	if point.MigrationStateSnapshotJSON != "" {
+		var migrationState packageMigrationStateSnapshot
+		if json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState) == nil {
+			if migrationState.Mode != "" && migrationState.Mode != "none" {
+				reqInput.MigrationDefinitions = migrationState.Definitions
+			}
+			for i := range migrationState.Operations {
+				reqInput.MigrationOperations = append(reqInput.MigrationOperations, migrationState.Operations[i].Operation)
+			}
+		}
+	}
+	snapshotReq := ComputeRollbackSnapshotRequirement(reqInput)
+	result.SnapshotRequirementHash = snapshotReq.RequirementHash
+	reqInputForHash := reqInput
+	reqInputForHash.ManifestNoDataChange = true
+	snapshotReqForHash := ComputeRollbackSnapshotRequirement(reqInputForHash)
+	result.PreviewHash = computeRollbackPreviewHashFromData(extensionID, result.CurrentVersion, version, point.RollbackPointID, point.ArtifactID, point.SnapshotHash, snapshotReqForHash.RequirementHash, result.InstalledPath, result.InstalledHash, scopeType, scopeID)
+	result.RequiredConfirmations = []string{"confirm.rollback"}
+	hasMigrationPlan := len(reqInput.MigrationOperations) > 0
+	if hasMigrationPlan {
+		result.RequiredConfirmations = append(result.RequiredConfirmations, "confirm.rollback.migration_reverse")
+	}
+	sort.Strings(result.RequiredConfirmations)
+
 	return result, nil
+}
+
+
+func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRollbackConfirmationRequest) (PackageRollbackConfirmation, error) {
+	if r.container == nil || r.container.PackageRepository == nil {
+		return PackageRollbackConfirmation{}, fmt.Errorf("kernel: package services unavailable")
+	}
+	point, err := r.container.PackageRepository.GetRollbackPoint(ctx, request.ExtensionID, request.TargetVersion)
+	if err != nil {
+		return PackageRollbackConfirmation{}, fmt.Errorf("kernel: rollback point unavailable: %w", err)
+	}
+	if err := validatePackageSnapshot(point); err != nil {
+		return PackageRollbackConfirmation{}, err
+	}
+	current, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(request.ExtensionID))
+	if err != nil {
+		return PackageRollbackConfirmation{}, err
+	}
+	if err := validatePackageOwner(current, request.UserID, request.ScopeType, request.ScopeID); err != nil {
+		return PackageRollbackConfirmation{}, err
+	}
+	required := []string{"confirm.rollback"}
+	reqInput := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
+	if point.MigrationStateSnapshotJSON != "" {
+		var migrationState packageMigrationStateSnapshot
+		if json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState) == nil {
+			for i := range migrationState.Operations {
+				reqInput.MigrationOperations = append(reqInput.MigrationOperations, migrationState.Operations[i].Operation)
+			}
+		}
+	}
+	hasMigrationPlan := len(reqInput.MigrationOperations) > 0
+	if hasMigrationPlan {
+		required = append(required, "confirm.rollback.migration_reverse")
+	}
+	sort.Strings(required)
+	confirmed := make(map[string]bool, len(required))
+	for _, confirmation := range required {
+		if !request.Confirmations[confirmation] {
+			return PackageRollbackConfirmation{}, NewPackageError(PackageErrCodeConfirmationItemsMissing, 403, ErrPackageConfirmationItemsMissing)
+		}
+		confirmed[confirmation] = true
+	}
+	snapshotReq := ComputeRollbackSnapshotRequirement(reqInput)
+	installedPath, _ := current.Metadata["installedPath"].(string)
+	installedTreeHash, _ := current.Metadata["installedTreeHash"].(string)
+	previewHash := computeRollbackPreviewHashFromData(request.ExtensionID, current.InstalledVersion.String(), request.TargetVersion, point.RollbackPointID, point.ArtifactID, point.SnapshotHash, snapshotReq.RequirementHash, installedPath, installedTreeHash, request.ScopeType, request.ScopeID)
+	tokenExpiry := time.Now().UTC().Add(10 * time.Minute)
+	rollbackClaims := PackageRollbackConfirmationClaims{
+		SchemaVersion:           PackageRollbackConfirmationClaimsSchemaVersion,
+		OperationType:           string(PackageOperationTypeRollback),
+		PolicyVersion:           packagePolicyVersion,
+		ExtensionID:             request.ExtensionID,
+		ArtifactID:              point.ArtifactID,
+		SourceVersionID:         current.InstalledVersion.String(),
+		TargetVersionID:         request.TargetVersion,
+		RollbackPointID:         point.RollbackPointID,
+		PreviewSessionID:        request.PreviewSessionID,
+		PreviewHash:             previewHash,
+		SecurityPolicyHash:      computeSecurityPolicyHash(),
+		SnapshotRequirementHash: snapshotReq.RequirementHash,
+		UserID:                  request.UserID,
+		ScopeType:               request.ScopeType,
+		ScopeID:                 request.ScopeID,
+		ConfirmedItems:          confirmedItemsFromMap(confirmed),
+		IssuedAt:                time.Now().UTC().Unix(),
+		ExpiresAt:               tokenExpiry.Unix(),
+		Nonce:                   uuid.NewString(),
+	}
+	token, err := signPackageRollbackConfirmation(rollbackClaims)
+	if err != nil {
+		return PackageRollbackConfirmation{}, err
+	}
+	return PackageRollbackConfirmation{ConfirmationToken: token, ExpiresAt: tokenExpiry, PreviewSessionID: request.PreviewSessionID}, nil
+}
+
+func computeRollbackPreviewHashFromData(extensionID, currentVersion, targetVersion, rollbackPointID, artifactID, snapshotHash, snapshotRequirementHash, installedPath, installedTreeHash, scopeType, scopeID string) string {
+	canonical := fmt.Sprintf(`{"extensionId":%q,"currentVersion":%q,"targetVersion":%q,"rollbackPointId":%q,"artifactId":%q,"snapshotHash":%q,"snapshotRequirementHash":%q,"installedPath":%q,"installedTreeHash":%q,"scopeType":%q,"scopeId":%q}`,
+		extensionID, currentVersion, targetVersion, rollbackPointID, artifactID, snapshotHash, snapshotRequirementHash, installedPath, installedTreeHash, scopeType, scopeID)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+type PackageRollbackConfirmationRequest struct {
+	ExtensionID      string          `json:"extensionId"`
+	TargetVersion    string          `json:"targetVersion"`
+	UserID           string          `json:"-"`
+	ScopeType        string          `json:"scopeType"`
+	ScopeID          string          `json:"scopeId"`
+	PreviewSessionID string          `json:"previewSessionId,omitempty"`
+	Confirmations    map[string]bool `json:"confirmations"`
 }

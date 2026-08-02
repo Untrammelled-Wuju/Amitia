@@ -67,7 +67,7 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			if err != nil || repeatedUpdate.OperationID != updated.OperationID {
 				t.Fatalf("update idempotency failed: first=%s repeated=%s err=%v", updated.OperationID, repeatedUpdate.OperationID, err)
 			}
-			rolledBack, err := runtimeInstance.ExecutePackageRollback(ctx, firstPreview.ExtensionID, "1.0.0", "user-1", "global", "")
+			rolledBack, err := runtimeInstance.ExecutePackageRollback(ctx, firstPreview.ExtensionID, "1.0.0", "user-1", "global", "", "")
 			if err != nil || rolledBack.Version != "1.0.0" {
 				t.Fatalf("rollback failed: result=%+v err=%v", rolledBack, err)
 			}

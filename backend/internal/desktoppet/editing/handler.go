@@ -2,6 +2,7 @@ package editing
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -575,12 +576,7 @@ func (h *Handler) UploadCandidate(c *gin.Context) {
 	}
 	defer src.Close()
 	const maxFileBytes = 100 * 1024 * 1024
-	if file.Size > maxFileBytes {
-		util.ErrorResponse(c, response.InvalidParams, "文件超过最大允许大小", gin.H{"errorCode": ErrCodeEditUploadTooLarge})
-		return
-	}
-	data := make([]byte, file.Size) // audit:ok:size_validated
-	_, err = src.Read(data)
+	data, err := io.ReadAll(io.LimitReader(src, maxFileBytes))
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "读取文件失败", nil)
 		return

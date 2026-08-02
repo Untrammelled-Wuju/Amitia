@@ -3,6 +3,7 @@
 package security
 
 import (
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net"
@@ -20,6 +21,7 @@ type AuthConfig struct {
 	Mode           string
 	JWTSecret      string
 	LocalToken     string
+	LocalUserID    string
 	ListenAddress  string
 	AllowedOrigins []string
 }
@@ -124,7 +126,7 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 }
 
 func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
-	if !isLoopback(c.Request.RemoteAddr) && !isLoopback(cfg.ListenAddress) {
+	if !isLoopback(c.Request.RemoteAddr) || !isLoopback(cfg.ListenAddress) {
 		util.ErrorResponse(c, response.Unauthorized, "本地单用户模式仅允许回环访问", nil)
 		c.Abort()
 		return
@@ -144,13 +146,13 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 		}
 	}
 
-	if token == "" || token != cfg.LocalToken {
+	if token == "" || !secureEqual(token, cfg.LocalToken) {
 		util.ErrorResponse(c, response.Unauthorized, "本地令牌无效", nil)
 		c.Abort()
 		return
 	}
 
-	actor := buildLocalUserActor(c, AuthMethodLocalToken)
+	actor := buildLocalUserActor(cfg)
 	applyActorToContext(c, actor)
 }
 
@@ -236,8 +238,15 @@ func parseAndValidateJWT(tokenStr, secret string) (*auth.ActorContext, error) {
 	}, nil
 }
 
-func buildLocalUserActor(c *gin.Context, authMethod string) *auth.ActorContext {
-	userID := c.GetHeader("X-User-ID")
+func secureEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+func buildLocalUserActor(cfg AuthConfig) *auth.ActorContext {
+	userID := strings.TrimSpace(cfg.LocalUserID)
 	if userID == "" {
 		userID = "local_user"
 	}
@@ -247,10 +256,10 @@ func buildLocalUserActor(c *gin.Context, authMethod string) *auth.ActorContext {
 		UserID:         userID,
 		Roles:          []string{"local_user", "user"},
 		Permissions:    append(auth.DefaultUserPermissions(), auth.PermDesktopPetRepair),
-		AuthMethod:     authMethod,
+		AuthMethod:     AuthMethodLocalToken,
 		RequestID:      generateRequestID(),
-		CorrelationID:  c.GetHeader("X-Request-ID"),
-		IsLocalTrusted: authMethod == AuthMethodLocalToken,
+		CorrelationID:  "",
+		IsLocalTrusted: true,
 	}
 }
 

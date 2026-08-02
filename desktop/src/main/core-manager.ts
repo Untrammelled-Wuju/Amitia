@@ -33,14 +33,18 @@ export function getCoreResourcesPath(): string {
 export function ensureDataAndConfig(): { ok: boolean; errors: string[] } {
   const dataDir = ensureAmitiaDataDir();
   ensureDefaultConfig(dataDir);
+  ensureLocalToken(dataDir);
   ensureInitialSQL(dataDir);
   ensureCoreBinaries(dataDir);
   const validation = validateCorePrerequisites(dataDir, getCorePath());
   return { ok: validation.ok, errors: validation.missing };
 }
 
+const CURRENT_CONFIG_VERSION = 2;
+
 function ensureDefaultConfig(dataDir: string): void {
-  const destConfig = path.join(dataDir, "config", "config.yml");
+  const configDir = path.join(dataDir, "config");
+  const destConfig = path.join(configDir, "config.yml");
   const resourcesPath = getCoreResourcesPath();
   const templatePath = path.join(
     resourcesPath,
@@ -48,12 +52,30 @@ function ensureDefaultConfig(dataDir: string): void {
     "config.yaml",
   );
   console.log("[CoreManager] 配置模板路径:", templatePath);
-  if (fs.existsSync(templatePath)) {
-    fs.copyFileSync(templatePath, destConfig);
-    console.log("[CoreManager] 配置文件已更新:", destConfig);
-  } else {
+  fs.mkdirSync(configDir, { recursive: true });
+  if (!fs.existsSync(templatePath)) {
     console.error("[CoreManager] 配置模板不存在:", templatePath);
+    return;
   }
+  if (!fs.existsSync(destConfig)) {
+    fs.copyFileSync(templatePath, destConfig, fs.constants.COPYFILE_EXCL);
+    console.log("[CoreManager] 配置文件已创建:", destConfig);
+    return;
+  }
+  console.log("[CoreManager] 配置文件已存在, 跳过覆盖:", destConfig);
+}
+
+function ensureLocalToken(dataDir: string): void {
+  const tokenDir = path.join(dataDir, "security");
+  const tokenFile = path.join(tokenDir, "local-token");
+  fs.mkdirSync(tokenDir, { recursive: true });
+  if (fs.existsSync(tokenFile)) {
+    return;
+  }
+  const { randomBytes } = require("crypto");
+  const token = randomBytes(32).toString("base64url");
+  fs.writeFileSync(tokenFile, token, { mode: 0o600 });
+  console.log("[CoreManager] 本地安全令牌已生成");
 }
 
 function ensureInitialSQL(dataDir: string): void {

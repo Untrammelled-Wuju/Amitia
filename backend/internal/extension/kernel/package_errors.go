@@ -92,6 +92,14 @@ var (
 	ErrPackageSnapshotExemptionInvalid             = errors.New("kernel: snapshot exemption invalid")
 	ErrPackageSnapshotEvidenceMissing              = errors.New("kernel: snapshot evidence missing")
 	ErrPackageFinalGateEvidenceMissing             = errors.New("kernel: final gate evidence missing")
+	ErrPackageConfirmationClaimsInvalid            = errors.New("kernel: confirmation claims invalid")
+	ErrPackageConfirmationOperationMismatch        = errors.New("kernel: confirmation token operation type mismatch")
+	ErrPackageRollbackNotConfirmed                 = errors.New("kernel: rollback requires confirmation token")
+	ErrPackageRollbackTokenInvalid                 = errors.New("kernel: rollback confirmation token invalid")
+	ErrPackageSnapshotRequirementHashMismatch      = errors.New("kernel: snapshot requirement hash mismatch")
+	ErrPackageArtifactEvidenceInvalid              = errors.New("kernel: artifact evidence invalid")
+	ErrPackageArtifactReferenceMissing             = errors.New("kernel: artifact reference missing")
+	ErrPackageArtifactReferenceMismatch            = errors.New("kernel: artifact reference mismatch")
 )
 
 const (
@@ -180,6 +188,14 @@ const (
 	PackageErrCodeResourceRestoreIncomplete            = "PACKAGE_RESOURCE_RESTORE_INCOMPLETE"
 	PackageErrCodeSnapshotSchemaUnsupported            = "PACKAGE_SNAPSHOT_SCHEMA_UNSUPPORTED"
 	PackageErrCodeSnapshotIntegrityFailed              = "PACKAGE_SNAPSHOT_INTEGRITY_FAILED"
+	PackageErrCodeConfirmationClaimsInvalid             = "PACKAGE_CONFIRMATION_CLAIMS_INVALID"
+	PackageErrCodeConfirmationOperationMismatch         = "PACKAGE_CONFIRMATION_OPERATION_MISMATCH"
+	PackageErrCodeRollbackNotConfirmed                  = "PACKAGE_ROLLBACK_NOT_CONFIRMED"
+	PackageErrCodeRollbackTokenInvalid                  = "PACKAGE_ROLLBACK_TOKEN_INVALID"
+	PackageErrCodeSnapshotRequirementHashMismatch       = "PACKAGE_SNAPSHOT_REQUIREMENT_HASH_MISMATCH"
+	PackageErrCodeArtifactEvidenceInvalid               = "PACKAGE_ARTIFACT_EVIDENCE_INVALID"
+	PackageErrCodeArtifactReferenceMissing              = "PACKAGE_ARTIFACT_REFERENCE_MISSING"
+	PackageErrCodeArtifactReferenceMismatch             = "PACKAGE_ARTIFACT_REFERENCE_MISMATCH"
 )
 
 type PackageError struct {
@@ -311,6 +327,14 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeResourceRestoreIncomplete:            409,
 	PackageErrCodeSnapshotSchemaUnsupported:            422,
 	PackageErrCodeSnapshotIntegrityFailed:              409,
+	PackageErrCodeConfirmationClaimsInvalid:             403,
+	PackageErrCodeConfirmationOperationMismatch:         403,
+	PackageErrCodeRollbackNotConfirmed:                  403,
+	PackageErrCodeRollbackTokenInvalid:                  403,
+	PackageErrCodeSnapshotRequirementHashMismatch:       409,
+	PackageErrCodeArtifactEvidenceInvalid:               409,
+	PackageErrCodeArtifactReferenceMissing:              409,
+	PackageErrCodeArtifactReferenceMismatch:             409,
 }
 
 func PackageErrorHTTPStatus(code string) int {

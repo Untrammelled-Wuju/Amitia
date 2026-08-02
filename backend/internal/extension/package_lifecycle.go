@@ -153,14 +153,14 @@ func stringSetDifference(left, right []string) []string {
 	return result
 }
 
-func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+func (s *PackageService) Rollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID, confirmationToken string) (PackageOperationResult, error) {
 	if s.kernel == nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
-	result, err := s.kernel.ExecutePackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+	result, err := s.kernel.ExecutePackageRollback(ctx, extensionID, version, userID, scopeType, scopeID, confirmationToken)
 	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRollbackFailed, "Extension Kernel 回滚失败", err.Error(), false, err)
 	}
@@ -392,6 +392,16 @@ func (s *PackageService) PreviewRollback(ctx context.Context, extensionID, versi
 		return kernelruntime.PackageRollbackPreviewResult{}, err
 	}
 	return s.kernel.PreviewPackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+}
+
+func (s *PackageService) ConfirmRollback(ctx context.Context, request kernelruntime.PackageRollbackConfirmationRequest) (kernelruntime.PackageRollbackConfirmation, error) {
+	if s.kernel == nil {
+		return kernelruntime.PackageRollbackConfirmation{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
+	}
+	if err := s.validatePackageScope(ctx, request.UserID, request.ScopeType, request.ScopeID); err != nil {
+		return kernelruntime.PackageRollbackConfirmation{}, err
+	}
+	return s.kernel.ConfirmPackageRollback(ctx, request)
 }
 
 func (s *PackageService) VerifyOperationFinalGate(ctx context.Context, operationID string) (kernelruntime.PackageFinalGateResult, error) {

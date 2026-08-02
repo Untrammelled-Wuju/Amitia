@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 )
 
 type PackageHandler struct {
@@ -215,14 +216,12 @@ func (h *PackageHandler) Compare(c *gin.Context) {
 
 func (h *PackageHandler) Rollback(c *gin.Context) {
 	var request struct {
-		ScopeType string `json:"scopeType"`
-		ScopeID   string `json:"scopeId"`
+		ScopeType         string `json:"scopeType"`
+		ScopeID           string `json:"scopeId"`
+		ConfirmationToken string `json:"confirmationToken"`
 	}
-	if c.ShouldBindJSON(&request) != nil {
-		h.problems.problem(c, NewExtensionError(ErrPackageRollbackFailed, "回滚请求无效", "", false, nil))
-		return
-	}
-	result, err := h.service.Rollback(c.Request.Context(), c.Param("id"), c.Param("version"), fmt.Sprint(c.GetInt(authenticatedUserKey)), request.ScopeType, request.ScopeID)
+	_ = c.ShouldBindJSON(&request)
+	result, err := h.service.Rollback(c.Request.Context(), c.Param("id"), c.Param("version"), fmt.Sprint(c.GetInt(authenticatedUserKey)), request.ScopeType, request.ScopeID, request.ConfirmationToken)
 	if err != nil {
 		h.problems.problem(c, err)
 		return
@@ -263,6 +262,32 @@ func (h *PackageHandler) PreviewUninstall(c *gin.Context) {
 
 func (h *PackageHandler) PreviewRollback(c *gin.Context) {
 	result, err := h.service.PreviewRollback(c.Request.Context(), c.Param("id"), c.Param("version"), fmt.Sprint(c.GetInt(authenticatedUserKey)), c.Query("scopeType"), c.Query("scopeId"))
+	if err != nil {
+		h.problems.problem(c, err)
+		return
+	}
+	success(c, result)
+}
+
+func (h *PackageHandler) ConfirmRollback(c *gin.Context) {
+	var request struct {
+		ExtensionID      string          `json:"extensionId"`
+		TargetVersion    string          `json:"targetVersion"`
+		ScopeType        string          `json:"scopeType"`
+		ScopeID          string          `json:"scopeId"`
+		PreviewSessionID string          `json:"previewSessionId"`
+		Confirmations    map[string]bool `json:"confirmations"`
+	}
+	_ = c.ShouldBindJSON(&request)
+	result, err := h.service.ConfirmRollback(c.Request.Context(), kernelruntime.PackageRollbackConfirmationRequest{
+		ExtensionID:      request.ExtensionID,
+		UserID:           fmt.Sprint(c.GetInt(authenticatedUserKey)),
+		ScopeType:        request.ScopeType,
+		ScopeID:          request.ScopeID,
+		TargetVersion:    request.TargetVersion,
+		PreviewSessionID: request.PreviewSessionID,
+		Confirmations:    request.Confirmations,
+	})
 	if err != nil {
 		h.problems.problem(c, err)
 		return

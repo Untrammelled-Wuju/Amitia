@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"time"
 )
 
@@ -107,7 +108,7 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 	}
 	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
-		if err := os.RemoveAll(dir); err != nil {
+		if err := removeTree(dir); err != nil {
 			lastErr = err
 			time.Sleep(200 * time.Millisecond)
 			continue
@@ -131,6 +132,27 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 		lastErr = fmt.Errorf("failed to remove directory after %d attempts: %s", maxAttempts, dir)
 	}
 	return lastErr
+}
+
+func removeTree(dir string) error {
+	var paths []string
+	walkErr := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		paths = append(paths, p)
+		return nil
+	})
+	if walkErr != nil {
+		return walkErr
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(paths)))
+	for _, p := range paths {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func powershellRemoveDir(dir string) error {

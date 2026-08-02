@@ -350,6 +350,71 @@ type PackageConfirmationClaims struct {
 	RollbackPointID         string             `json:"rollbackPointId,omitempty"`
 	CurrentVersion          string             `json:"currentVersion,omitempty"`
 	TargetVersion           string             `json:"targetVersion,omitempty"`
+	SourceGeneration        int64              `json:"sourceGeneration,omitempty"`
+	TargetGeneration        int64              `json:"targetGeneration,omitempty"`
+}
+
+type PackageRollbackConfirmationClaims struct {
+	SchemaVersion           int      `json:"schemaVersion"`
+	OperationType           string   `json:"operationType"`
+	PolicyVersion           string   `json:"policyVersion"`
+	ExtensionID             string   `json:"extensionId"`
+	ArtifactID              string   `json:"artifactId"`
+	SourceVersionID         string   `json:"sourceVersionId,omitempty"`
+	SourceGenerationID      string   `json:"sourceGenerationId,omitempty"`
+	TargetVersionID         string   `json:"targetVersionId,omitempty"`
+	TargetGenerationID      string   `json:"targetGenerationId,omitempty"`
+	RollbackPointID         string   `json:"rollbackPointId"`
+	PreviewSessionID        string   `json:"previewSessionId"`
+	PreviewHash             string   `json:"previewHash"`
+	SecurityPolicyHash      string   `json:"securityPolicyHash"`
+	SnapshotRequirementHash string   `json:"snapshotRequirementHash"`
+	UserID                  string   `json:"userId"`
+	ScopeType               string   `json:"scopeType"`
+	ScopeID                 string   `json:"scopeId"`
+	ConfirmedItems          []string `json:"confirmedItems"`
+	IssuedAt                int64    `json:"issuedAt"`
+	ExpiresAt               int64    `json:"expiresAt"`
+	Nonce                   string   `json:"nonce"`
+}
+
+const PackageRollbackConfirmationClaimsSchemaVersion = 1
+
+func signPackageRollbackConfirmation(claims PackageRollbackConfirmationClaims) (string, error) {
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+	mac := hmac.New(sha256.New, packageConfirmationKey)
+	_, _ = mac.Write([]byte(encoded))
+	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return encoded + "." + signature, nil
+}
+
+func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmationClaims, error) {
+	var claims PackageRollbackConfirmationClaims
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return claims, fmt.Errorf("kernel: rollback confirmation token invalid")
+	}
+	mac := hmac.New(sha256.New, packageConfirmationKey)
+	_, _ = mac.Write([]byte(parts[0]))
+	provided, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil || !hmac.Equal(mac.Sum(nil), provided) {
+		return claims, fmt.Errorf("kernel: rollback confirmation token invalid")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil || json.Unmarshal(payload, &claims) != nil {
+		return claims, fmt.Errorf("kernel: rollback confirmation token invalid")
+	}
+	if claims.ExpiresAt <= time.Now().UTC().Unix() {
+		return claims, fmt.Errorf("kernel: rollback confirmation token expired")
+	}
+	if claims.OperationType != "rollback" {
+		return claims, fmt.Errorf("kernel: rollback confirmation token operation type mismatch")
+	}
+	return claims, nil
 }
 
 func (c PackageConfirmationClaims) ExpiresAtTime() time.Time {
@@ -426,6 +491,65 @@ func validateRequiredConfirmations(confirmed []string, required []string) error 
 			fmt.Errorf("%w: %s", ErrPackageConfirmationItemsMissing, strings.Join(missing, ", ")))
 	}
 	return nil
+}
+
+func parseAndValidateOperationConfirmationClaims(operation PackageOperationRecord, expectedPolicyVersion string) (PackageConfirmationClaims, error) {
+	var claims PackageConfirmationClaims
+	if operation.ConfirmationClaimsJSON == "" || operation.ConfirmationClaimsJSON == "{}" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, ErrPackageConfirmationClaimsInvalid)
+	}
+	if err := json.Unmarshal([]byte(operation.ConfirmationClaimsJSON), &claims); err != nil {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: %v", ErrPackageConfirmationClaimsInvalid, err))
+	}
+	if claims.SchemaVersion == 0 {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: schemaVersion required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.OperationType != operation.OperationType {
+		return claims, NewPackageError(PackageErrCodeConfirmationOperationMismatch, 403, ErrPackageConfirmationOperationMismatch)
+	}
+	if claims.OperationType != string(PackageOperationTypeInstall) && claims.OperationType != string(PackageOperationTypeUpdate) && claims.OperationType != string(PackageOperationTypeRollback) && claims.OperationType != string(PackageOperationTypeUninstall) {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: invalid operationType %s", ErrPackageConfirmationClaimsInvalid, claims.OperationType))
+	}
+	if claims.ExtensionID != operation.ExtensionID {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: extensionId mismatch", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.UserID != operation.UserID {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: userId mismatch", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.ScopeType != operation.ScopeType {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: scopeType mismatch", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.ScopeID != operation.ScopeID {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: scopeId mismatch", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.PolicyVersion != expectedPolicyVersion {
+		return claims, NewPackageError(PackageErrCodeConfirmationPolicyVersionStale, 403, ErrPackageConfirmationPolicyVersionStale)
+	}
+	if claims.PreviewSessionID != operation.PreviewSessionID {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: previewSessionId mismatch", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.SnapshotRequirementHash != operation.SnapshotRequirementHash {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, ErrPackageSnapshotRequirementHashMismatch)
+	}
+	if claims.PreviewHash == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: previewHash required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.SecurityPolicyHash == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: securityPolicyHash required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.IssuedAt == 0 {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: issuedAt required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.ExpiresAt == 0 {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: expiresAt required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.Nonce == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: nonce required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
+		return claims, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
+	}
+	return claims, nil
 }
 
 type PackageUninstallPreviewIdentity struct {

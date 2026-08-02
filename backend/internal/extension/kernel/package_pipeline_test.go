@@ -280,7 +280,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if updatedInstallation.Metadata["apiSecretRef"] != "secret://extensions/pipeline/api" || updatedInstallation.Metadata["userOverride"] == nil {
 		t.Fatalf("update must preserve user configuration and secret references: %+v", updatedInstallation.Metadata)
 	}
-	rolledBack, err := runtime.ExecutePackageRollback(ctx, preview.ExtensionID, "1.0.0", "user-1", "global", "")
+	rolledBack, err := runtime.ExecutePackageRollback(ctx, preview.ExtensionID, "1.0.0", "user-1", "global", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

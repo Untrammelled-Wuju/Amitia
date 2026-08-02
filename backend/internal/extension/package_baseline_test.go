@@ -895,7 +895,7 @@ func TestLegacy_Package_Lifecycle_RollbackInvalidVersion(t *testing.T) {
 	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Rollback(ctx, preview.ID, "9.9.9", "1", "global", "")
+	_, err = service.Rollback(ctx, preview.ID, "9.9.9", "1", "global", "", "")
 	if err == nil {
 		t.Fatal("rollback to non-existent version should be rejected")
 	}
@@ -911,7 +911,7 @@ func TestLegacy_Package_Lifecycle_RollbackToCurrentVersion(t *testing.T) {
 	if _, err := service.installLegacyPackage(ctx, InstallPackageRequest{SessionID: preview.SessionID, UserID: "1", ScopeType: "global", ConfirmUnsigned: true}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.rollbackLegacyPackage(ctx, preview.ID, "1.0.0", "1", "global", "")
+	result, err := service.rollbackLegacyPackage(ctx, preview.ID, "1.0.0", "1", "global", "", "")
 	if err != nil || result.Status != "succeeded" {
 		t.Fatalf("rollback to current version should succeed: %v", err)
 	}

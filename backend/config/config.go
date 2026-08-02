@@ -149,6 +149,8 @@ func InitConfig(configPath string) {
 	v.SetDefault("security.mode", "local_single_user")
 	v.SetDefault("security.allowRemoteAccess", false)
 	v.SetDefault("security.localToken", "")
+	v.SetDefault("security.localTokenFile", "security/local-token")
+	v.SetDefault("security.localUserId", "1")
 	v.SetDefault("security.allowedOrigins", []string{"app://amitia", "http://127.0.0.1", "http://localhost"})
 
 	v.AutomaticEnv()
@@ -197,5 +199,7 @@ type SecurityRuntimeConfig struct {
 	Mode              string   `mapstructure:"mode"`
 	AllowRemoteAccess bool     `mapstructure:"allowRemoteAccess"`
 	LocalToken        string   `mapstructure:"localToken"`
+	LocalTokenFile    string   `mapstructure:"localTokenFile"`
+	LocalUserID       string   `mapstructure:"localUserId"`
 	AllowedOrigins    []string `mapstructure:"allowedOrigins"`
 }

@@ -43,7 +43,30 @@ type PackageUninstallPreviewResult struct {
 	ScopeID                string         `json:"scopeId,omitempty"`
 }
 
-func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (KernelInstallResult, error) {
+func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID, confirmationToken string) (KernelInstallResult, error) {
+	rollbackClaims, err := verifyPackageRollbackConfirmation(confirmationToken)
+	if err != nil {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, err)
+	}
+	if rollbackClaims.OperationType != string(PackageOperationTypeRollback) {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, ErrPackageRollbackTokenInvalid)
+	}
+	if rollbackClaims.PolicyVersion != packagePolicyVersion || rollbackClaims.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeConfirmationPolicyVersionStale, 403, ErrPackageConfirmationPolicyVersionStale)
+	}
+	if rollbackClaims.ExtensionID != extensionID {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, ErrPackageRollbackTokenInvalid)
+	}
+	if rollbackClaims.TargetVersionID != version {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, ErrPackageRollbackTokenInvalid)
+	}
+	if rollbackClaims.UserID != userID {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, ErrPackageRollbackTokenInvalid)
+	}
+	if rollbackClaims.ScopeType != scopeType || rollbackClaims.ScopeID != scopeID {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 403, ErrPackageRollbackTokenInvalid)
+	}
+	claimsJSON, _ := json.Marshal(rollbackClaims)
 	point, err := r.container.PackageRepository.GetRollbackPoint(ctx, extensionID, version)
 	if err != nil {
 		return KernelInstallResult{}, fmt.Errorf("kernel: rollback point unavailable: %w", err)
@@ -87,15 +110,18 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	confirmedItemsJSON, _ := json.Marshal(confirmedItemsToMap(rollbackClaims.ConfirmedItems))
 	rollbackOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID,
 		UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: version, FromVersion: current.InstalledVersion.String(),
 		OperationType: "rollback", Status: "created", CurrentStep: "created",
-		ArtifactID: artifact.ArtifactID, ConfirmationsJSON: "{}",
-
+		ArtifactID: artifact.ArtifactID, ConfirmationsJSON: string(confirmedItemsJSON),
+		ConfirmationClaimsJSON: string(claimsJSON), SnapshotRequirementHash: rollbackClaims.SnapshotRequirementHash,
+		PreviewSessionID: rollbackClaims.PreviewSessionID,
 		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "rollback", ExtensionID: extensionID, TargetVersion: version,
 			ArtifactID: artifact.ArtifactID, ScopeType: scopeType, ScopeID: scopeID,
+			PreviewSessionID: rollbackClaims.PreviewSessionID,
 		}), StartedAt: now, UpdatedAt: now}
 	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperation(ctx, rollbackOp)
 	if createErr != nil {

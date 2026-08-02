@@ -4,7 +4,9 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -63,11 +65,25 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 	}))
 
+	resolveLocalToken := func() string {
+		if config.AppCfg.Security.LocalToken != "" {
+			return config.AppCfg.Security.LocalToken
+		}
+		if config.AppCfg.Security.LocalTokenFile != "" {
+			data, err := os.ReadFile(config.AppCfg.Security.LocalTokenFile)
+			if err == nil {
+				return strings.TrimSpace(string(data))
+			}
+		}
+		return ""
+	}
+
 	localAdmin := r.Group("/api/local")
 	localAdmin.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:           config.AppCfg.Security.Mode,
 		JWTSecret:      config.AppCfg.JWT.Secret,
-		LocalToken:     config.AppCfg.Security.LocalToken,
+		LocalToken:     resolveLocalToken(),
+		LocalUserID:    config.AppCfg.Security.LocalUserID,
 		ListenAddress:  config.AppCfg.Server.Host,
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 	}))
@@ -89,7 +105,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:           config.AppCfg.Security.Mode,
 		JWTSecret:      config.AppCfg.JWT.Secret,
-		LocalToken:     config.AppCfg.Security.LocalToken,
+		LocalToken:     resolveLocalToken(),
+		LocalUserID:    config.AppCfg.Security.LocalUserID,
 		ListenAddress:  config.AppCfg.Server.Host,
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 	}))

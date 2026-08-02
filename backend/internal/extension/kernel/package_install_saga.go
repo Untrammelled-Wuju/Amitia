@@ -2,6 +2,8 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,15 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
+
+func computeInstallPreviewHash(session PackagePreviewSession, preview InstallPreview) string {
+	canonical := fmt.Sprintf(`{"sessionId":%q,"artifactId":%q,"extensionId":%q,"version":%q,"archiveHash":%q,"manifestHash":%q,"contentTreeHash":%q,"migrationPlanHash":%q,"installedPath":%q,"installedTreeHash":%q}`,
+		session.SessionID, session.ArtifactID, session.ExtensionID, session.Version,
+		session.ArchiveHash, session.ManifestHash, session.ContentTreeHash,
+		preview.MigrationPlanHash, preview.InstalledPath, preview.InstalledTreeHash)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
 
 func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInstallRequest) (KernelInstallResult, error) {
 	if r.container == nil || r.container.PackageRepository == nil || r.container.PackageArtifactStore == nil || r.container.PackageGenerationStore == nil {
@@ -90,12 +101,41 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	claimsNow := time.Now().UTC()
 	confirmationsJSON, _ := json.Marshal(claims.Confirmations)
+	claimsJSON, _ := json.Marshal(PackageConfirmationClaims{
+		SchemaVersion:           PackageConfirmationClaimsSchemaVersion,
+		OperationType:           string(PackageOperationTypeInstall),
+		ExtensionID:             session.ExtensionID,
+		ArtifactID:              session.ArtifactID,
+		PolicyVersion:           session.PolicyVersion,
+		SecurityPolicyHash:      computeSecurityPolicyHash(),
+		DeveloperSessionID:      preview.DeveloperSessionID,
+		MigrationPlanHash:       preview.MigrationPlanHash,
+		PreviewSessionID:        session.SessionID,
+		PreviewHash:             claims.PreviewHash,
+		SnapshotRequirementHash: claims.SnapshotRequirementHash,
+		InstalledPath:           preview.InstalledPath,
+		InstalledTreeHash:       preview.InstalledTreeHash,
+		UserID:                  session.UserID,
+		ScopeType:               session.ScopeType,
+		ScopeID:                 session.ScopeID,
+		ConfirmedItems:          confirmedItemsFromMap(claims.Confirmations),
+		Confirmations:           claims.Confirmations,
+		IssuedAt:                claimsNow.Unix(),
+		ExpiresAt:               claims.ExpiresAt,
+		Nonce:                   uuid.NewString(),
+		ArchiveHash:             session.ArchiveHash,
+		ManifestHash:            session.ManifestHash,
+		ContentTreeHash:         session.ContentTreeHash,
+		TargetVersion:           session.Version,
+	})
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: session.ExtensionID,
 		TargetVersion: session.Version, OperationType: "install", Status: "created",
 		CurrentStep: "create_operation", ArtifactID: artifact.ArtifactID,
 		PreviewSessionID: session.SessionID, ConfirmationsJSON: string(confirmationsJSON),
+		ConfirmationClaimsJSON: string(claimsJSON), SnapshotRequirementHash: claims.SnapshotRequirementHash,
 		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "install", ExtensionID: session.ExtensionID, TargetVersion: session.Version,
 			ArtifactID: artifact.ArtifactID, PreviewSessionID: session.SessionID,
@@ -375,12 +415,13 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 		tokenExpiry = expiresAt
 	}
 	installReq := ComputeInstallSnapshotRequirement(computeInstallSnapshotRequirementInput(preview.InstalledPath, preview.InstalledTreeHash, artifact.ArtifactID, session.ExtensionID))
+	previewHash := computeInstallPreviewHash(session, preview)
 	token, err := signPackageConfirmation(packageConfirmationClaims{SessionID: session.SessionID, ArtifactID: session.ArtifactID,
 		ArchiveHash: session.ArchiveHash, ManifestHash: session.ManifestHash, ContentTreeHash: session.ContentTreeHash,
 		UserID: session.UserID, ScopeType: session.ScopeType, ScopeID: session.ScopeID, PolicyVersion: session.PolicyVersion,
 		SecurityPolicyHash: computeSecurityPolicyHash(), DeveloperSessionID: preview.DeveloperSessionID, MigrationPlanHash: preview.MigrationPlanHash,
 		SnapshotRequirementHash: installReq.RequirementHash, InstalledPath: preview.InstalledPath, InstalledTreeHash: preview.InstalledTreeHash,
-		Confirmations: confirmed, ExpiresAt: tokenExpiry.Unix()})
+		PreviewHash: previewHash, Confirmations: confirmed, ExpiresAt: tokenExpiry.Unix()})
 	if err != nil {
 		return PackagePreviewConfirmation{}, err
 	}

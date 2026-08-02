@@ -225,7 +225,12 @@ func (h *Handler) GetPetIdentity(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "petId 不能为空", gin.H{"errorCode": "INVALID_PARAMS"})
 		return
 	}
-	identity, err := h.svc.GetPetIdentity(c.Request.Context(), "", petID)
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	identity, err := h.svc.GetPetIdentity(c.Request.Context(), actor.UserID, petID)
 	if err != nil {
 		writeReleaseError(c, err)
 		return

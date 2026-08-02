@@ -136,7 +136,7 @@ func TestPackageRollbackRejectsBlockedStoredArtifact(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.ExecutePackageRollback(ctx, v1.ExtensionID, "1.0.0", "user-1", "global", ""); err == nil || !strings.Contains(err.Error(), "verification failed") {
+	if _, err := runtime.ExecutePackageRollback(ctx, v1.ExtensionID, "1.0.0", "user-1", "global", "", ""); err == nil || !strings.Contains(err.Error(), "token invalid") {
 		t.Fatalf("blocked historical artifact must fail full verification: %v", err)
 	}
 	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(v1.ExtensionID))

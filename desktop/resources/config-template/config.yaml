@@ -7,8 +7,20 @@ storage:
   dataDir: "data"
 
 jwt:
-  secret: "u-ai-secret-key-change-me"
+  secret: ""
   expireDays: 7
+
+security:
+  mode: "local_single_user"
+  allowRemoteAccess: false
+  localUserId: "1"
+  allowedOrigins:
+    - "app://amitia"
+    - "http://127.0.0.1:18899"
+    - "http://localhost:18899"
+
+config:
+  version: 2
 
 app:
   name: "U-Ai"

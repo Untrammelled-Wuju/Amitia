@@ -62,17 +62,47 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	claimsNow := time.Now().UTC()
 	confirmationsJSON, _ := json.Marshal(confirmed.claims.Confirmations)
+	claimsJSON, _ := json.Marshal(PackageConfirmationClaims{
+		SchemaVersion:           PackageConfirmationClaimsSchemaVersion,
+		OperationType:           string(PackageOperationTypeUpdate),
+		ExtensionID:             confirmed.session.ExtensionID,
+		ArtifactID:              confirmed.artifact.ArtifactID,
+		PolicyVersion:           confirmed.session.PolicyVersion,
+		SecurityPolicyHash:      computeSecurityPolicyHash(),
+		DeveloperSessionID:      confirmed.preview.DeveloperSessionID,
+		MigrationPlanHash:       confirmed.preview.MigrationPlanHash,
+		PreviewSessionID:        confirmed.session.SessionID,
+		PreviewHash:             confirmed.claims.PreviewHash,
+		SnapshotRequirementHash: confirmed.claims.SnapshotRequirementHash,
+		UserID:                  request.UserID,
+		ScopeType:               request.ScopeType,
+		ScopeID:                 request.ScopeID,
+		ConfirmedItems:          confirmedItemsFromMap(confirmed.claims.Confirmations),
+		Confirmations:           confirmed.claims.Confirmations,
+		IssuedAt:                claimsNow.Unix(),
+		ExpiresAt:               confirmed.claims.ExpiresAt,
+		Nonce:                   uuid.NewString(),
+		ArchiveHash:             confirmed.session.ArchiveHash,
+		ManifestHash:            confirmed.session.ManifestHash,
+		ContentTreeHash:         confirmed.session.ContentTreeHash,
+		SourceVersionID:         current.InstalledVersion.String(),
+		TargetVersion:           confirmed.session.Version,
+		TargetVersionID:         confirmed.session.Version,
+	})
 	updateOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: confirmed.session.ExtensionID,
-		TargetVersion: confirmed.session.Version, OperationType: "update", Status: "created",
+		TargetVersion: confirmed.session.Version, FromVersion: current.InstalledVersion.String(),
+		OperationType: "update", Status: "created",
 		CurrentStep: "create_operation", ArtifactID: confirmed.artifact.ArtifactID,
 		PreviewSessionID: confirmed.session.SessionID, ConfirmationsJSON: string(confirmationsJSON),
+		ConfirmationClaimsJSON: string(claimsJSON), SnapshotRequirementHash: confirmed.claims.SnapshotRequirementHash,
 		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "update", ExtensionID: confirmed.session.ExtensionID, TargetVersion: confirmed.session.Version,
 			ArtifactID: confirmed.artifact.ArtifactID, PreviewSessionID: confirmed.session.SessionID,
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
-		}), FromVersion: confirmed.session.Version, StartedAt: now, UpdatedAt: now}
+		}), StartedAt: now, UpdatedAt: now}
 	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperation(ctx, updateOp)
 	if createErr != nil {
 		return KernelInstallResult{}, createErr
@@ -401,6 +431,9 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 	r.evaluatePackageCompatibilityAndDependencies(ctx, pkg, &dependencyPreview)
 	if len(dependencyPreview.Issues) > 0 {
 		return confirmedPackageUpdate{}, fmt.Errorf("kernel: dependency or compatibility state changed after preview")
+	}
+	if claims.PreviewHash == "" || claims.SnapshotRequirementHash == "" {
+		return confirmedPackageUpdate{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, ErrPackageConfirmationClaimsInvalid)
 	}
 	return confirmedPackageUpdate{session: session, preview: preview, claims: claims, artifact: artifact, pkg: pkg}, nil
 }

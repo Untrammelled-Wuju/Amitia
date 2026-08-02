@@ -14,13 +14,6 @@ func removeTree(path string) error {
 		return nil
 	}
 
-	err := os.RemoveAll(path)
-	if err == nil {
-		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-			return nil
-		}
-	}
-
 	var paths []string
 	walkErr := filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -36,7 +29,9 @@ func removeTree(path string) error {
 	sort.Sort(sort.Reverse(sort.StringSlice(paths)))
 
 	for _, p := range paths {
-		os.Remove(p)
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove %s: %w", p, err)
+		}
 	}
 
 	if _, err := os.Stat(path); err == nil {
