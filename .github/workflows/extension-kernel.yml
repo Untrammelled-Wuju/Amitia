@@ -92,15 +92,81 @@ jobs:
       - name: Run legacy CI graph tests (production dependency scan)
         working-directory: backend
         run: |
-          go test ./internal/extension/ -v -count=1 -run "TestProductionSourceExcludesLegacyWriteImplementations|TestLegacyWriteFilesHaveBuildTag|TestMigrationCLIHasBuildTag|TestProductionDependencyGraphExcludesLegacyMigration|TestLegacyMigrationCLIEntryCompiles"
+          go test ./internal/extension/ -v -count=1 -run "TestProductionSourceExcludesLegacyWriteImplementations|TestLegacyWriteFilesHaveBuildTag|TestMigrationCLIHasBuildTag|TestProductionDependencyGraphExcludesLegacyMigration|TestLegacyMigrationCLIEntryCompiles|TestProductionRuntimeExcludesLegacyDependencies"
       - name: Run legacy final zero tests (production runtime exclusions)
         working-directory: backend
         run: |
-          go test ./internal/extension/ -v -count=1 -run "TestProductionRuntimeExcludesLegacyDependencies|TestPackageServiceMetricsIncludeLegacyMonitoring|TestPackageServiceInstallRequiresKernelProxy|TestPackageServiceLifecycleRequiresKernelProxy"
+          go test ./internal/extension/ -v -count=1 -run "TestLegacyMigrationCanonicalStatesAndProductionBoundary|TestLegacyMigrationOldStatesNormalizeAndPersist|TestLegacyMigrationUnknownAndDatabaseErrorsFailClosed|TestLegacyMigrationCompletedSurvivesKernelRestartWithoutFallback"
       - name: Run legacy counter persistence tests (default build zero counter)
         working-directory: backend
         run: |
           go test ./internal/extension/kernel/ -v -count=1 -run "TestDefaultBuildLegacyWriteCounterAlwaysZero|TestLegacyCountersPersistAcrossReinitializationAndProveZeroWindow"
+
+  production-legacy-isolation:
+    name: Production legacy isolation (binary verification)
+    runs-on: ubuntu-latest
+    needs: legacy-dependency-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+      - name: Default dependency graph scan
+        working-directory: backend
+        run: |
+          go list -deps ./... > production-deps.txt
+          if grep -q "internal/extension/package_legacy_migration" production-deps.txt; then
+            echo "ERROR: default build depends on package_legacy_migration"
+            exit 1
+          fi
+          if grep -q "cmd/legacy-package-migrate" production-deps.txt; then
+            echo "ERROR: default build depends on cmd/legacy-package-migrate"
+            exit 1
+          fi
+      - name: Default GoFiles check
+        working-directory: backend
+        run: |
+          go list -json ./internal/extension > extension-package.json
+          if grep -q "package_service.go" extension-package.json; then
+            echo "ERROR: default build includes package_service.go"
+            exit 1
+          fi
+          if grep -q "package_installer.go" extension-package.json; then
+            echo "ERROR: default build includes package_installer.go"
+            exit 1
+          fi
+          if grep -q "package_lifecycle.go" extension-package.json; then
+            echo "ERROR: default build includes package_lifecycle.go"
+            exit 1
+          fi
+      - name: Build production server
+        working-directory: backend
+        run: |
+          go build -trimpath -o extension-server ./cmd/server
+      - name: Production binary symbol check
+        working-directory: backend
+        run: |
+          go tool nm extension-server > production-symbols.txt
+          if grep -q "PackageService" production-symbols.txt; then
+            echo "ERROR: production binary contains PackageService symbol"
+            exit 1
+          fi
+          if grep -q "NewPackageService" production-symbols.txt; then
+            echo "ERROR: production binary contains NewPackageService symbol"
+            exit 1
+          fi
+          if grep -q "MigrateLegacyPackageData" production-symbols.txt; then
+            echo "ERROR: production binary contains MigrateLegacyPackageData symbol"
+            exit 1
+          fi
+      - name: Legacy migration CLI build check
+        working-directory: backend
+        run: |
+          go build -tags legacy_migration -o legacy-migrate ./cmd/legacy-package-migrate
+      - name: Legacy migration tests
+        working-directory: backend
+        run: |
+          go test -tags legacy_migration ./internal/extension/package_legacy_migration/... -count=1
 
   backend-race-tests:
     name: Backend race tests (extension kernel)

@@ -243,7 +243,7 @@ func TestPackageWorkflowLifecycle(t *testing.T) {
 	if diff.FromVersion != "1.0.0" {
 		t.Fatalf("diff failed: %+v", diff)
 	}
-	if _, err := service.rollbackLegacyPackage(ctx, preview.ID, "1.0.0", "1", "global", ""); err != nil {
+	if _, err := service.rollbackLegacyPackage(ctx, preview.ID, "1.0.0", "1", "global", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	uninstallPreview, err := service.legacyPreviewUninstall(ctx, preview.ID, "1", "global", "")
@@ -319,7 +319,7 @@ func TestUnifiedLifecycleKeepsInstructionsStateConsistent(t *testing.T) {
 	validator, _ := NewSchemaValidator()
 	repository := NewRepository(db)
 	service := NewService(registry, nil, repository, validator)
-	service.AttachLifecycleService(NewExtensionLifecycleService(registry, repository, agentSkills))
+	_ = NewExtensionLifecycleService(registry, repository, agentSkills)
 	scope := ExecutionScope{UserID: "1"}
 	if err := service.EnableSkill(ctx, scope, installed.ExtensionID); err != nil {
 		t.Fatal(err)

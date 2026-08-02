@@ -920,7 +920,7 @@ func TestLegacy_Package_Lifecycle_RollbackToCurrentVersion(t *testing.T) {
 func TestLegacy_Package_Lifecycle_UninstallRejectsBuiltin(t *testing.T) {
 	service, _, _, _ := packageTestService(t)
 	ctx := context.Background()
-	_, err := service.Uninstall(ctx, "builtin.skill", "1", "global", "")
+	_, err := service.Uninstall(ctx, "builtin.skill", "1", "global", "", "")
 	if err == nil {
 		t.Fatal("uninstalling non-existent should fail")
 	}

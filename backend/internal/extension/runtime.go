@@ -193,13 +193,6 @@ func (r *Runtime) ExecuteModelTool(ctx context.Context, modelName string, input 
 	return result, true
 }
 
-func (r *Runtime) AttachPackageKernelProxy(proxy *KernelLifecycleProxy) error {
-	if proxy == nil {
-		return nil
-	}
-	return proxy.kernel.RecoverPackageOperations(context.Background())
-}
-
 func (r *Runtime) RunPackageStartupCleanup(ctx context.Context) error {
 	if r.Repository == nil || r.Repository.db == nil {
 		return nil
