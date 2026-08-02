@@ -1,24 +1,21 @@
-﻿server:
+server:
   port: 18899
   host: "127.0.0.1"
   mode: "debug"
-
 storage:
   dataDir: "data"
-
 jwt:
   secret: ""
   expireDays: 7
-
 security:
   mode: "local_single_user"
   allowRemoteAccess: false
   localToken: ""
+  localTokenFile: "security/local-token"
   allowedOrigins:
     - "app://amitia"
     - "http://127.0.0.1"
     - "http://localhost"
-
 app:
   name: "U-Ai"
   version: "26.1.8"
@@ -26,7 +23,6 @@ app:
 chat:
   mergeWindowMs: 5000
   contextWindowMaxRounds: 20
-
 qdrant:
   host: "127.0.0.1"
   port: 19178
@@ -49,12 +45,10 @@ qdrant:
     amitia_emotes:
       name: "amitia_emotes"
       vectorDim: 1536
-
 embedding:
   modelName: "text-embedding-3-small"
   baseUrl: ""
   apiKey: ""
-
 surrealdb:
   host: "127.0.0.1"
   port: 18000
@@ -63,7 +57,6 @@ surrealdb:
   username: "root"
   password: "root"
   dataPath: "data/graph.db"
-
 desktopPetRuntime:
   enabled: true
   path: "/internal/desktop-pet/runtime/ws"
