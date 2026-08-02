@@ -103,9 +103,19 @@ func TestR3_Concurrency_EnsureArtifactReference_Idempotent(t *testing.T) {
 		t.Skip("package repository unavailable")
 	}
 	artifactID := "artifact-ensure-test"
-	refType := "installation"
+	refType := ArtifactReferenceInstallation
 	ownerID := "com.r3.test/ensure-owner"
 	expiresAt := time.Now().UTC().Add(time.Hour)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := container.PackageRepository.PutArtifact(ctx, PackageArtifact{
+		ArtifactID:     artifactID,
+		ExtensionID:    ownerID,
+		Version:        "1.0.0",
+		RetentionState: "active",
+		CreatedAt:      now,
+	}); err != nil {
+		t.Fatalf("setup artifact must succeed: %v", err)
+	}
 	err := container.PackageRepository.EnsureArtifactReference(ctx, artifactID, refType, ownerID, expiresAt)
 	if err != nil {
 		t.Fatalf("first ensure must succeed: %v", err)

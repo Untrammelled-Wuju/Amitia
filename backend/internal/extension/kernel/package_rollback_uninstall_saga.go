@@ -1308,8 +1308,17 @@ func (r *Runtime) verifyUninstallRestoredState(ctx context.Context, operation Pa
 	if err != nil {
 		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: artifact unavailable after restore: %w", err))
 	}
+	if artifact.ArtifactID != operation.ArtifactID {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: artifact identity mismatch after restore: %s != %s", artifact.ArtifactID, operation.ArtifactID))
+	}
+	if artifact.ExtensionID != operation.ExtensionID {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: artifact extension_id mismatch after restore: %s != %s", artifact.ExtensionID, operation.ExtensionID))
+	}
 	if filepath.Clean(artifact.InstalledPath) != filepath.Clean(qm.OriginalGenerationPath) {
 		return errors.New("kernel: artifact installed path mismatch after restore")
+	}
+	if artifact.RetentionState == "deleted" || artifact.DeletedAt != "" {
+		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: artifact is in deleted state after restore: retention_state=%s deleted_at=%s", artifact.RetentionState, artifact.DeletedAt))
 	}
 	version, err := r.container.PackageRepository.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion)
 	if err != nil {
@@ -1348,7 +1357,16 @@ func (r *Runtime) verifyUninstallRestoredState(ctx context.Context, operation Pa
 			return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: generation current pointer unavailable after restore: %w", curErr))
 		}
 		if qm.ExpectedGenerationID != "" && current.GenerationID != qm.ExpectedGenerationID {
-			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer mismatch after restore: expected %s, got %s", qm.ExpectedGenerationID, current.GenerationID))
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer generation_id mismatch after restore: expected %s, got %s", qm.ExpectedGenerationID, current.GenerationID))
+		}
+		if current.ExtensionID != operation.ExtensionID {
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer extension_id mismatch after restore: expected %s, got %s", operation.ExtensionID, current.ExtensionID))
+		}
+		if current.ArtifactID != operation.ArtifactID {
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer artifact_id mismatch after restore: expected %s, got %s", operation.ArtifactID, current.ArtifactID))
+		}
+		if qm.TreeHash != "" && current.TreeHash != qm.TreeHash {
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer tree_hash mismatch after restore: quarantine %s, current.json %s", qm.TreeHash, current.TreeHash))
 		}
 	}
 	if installErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, PackageGenerationCurrent{

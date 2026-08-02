@@ -146,6 +146,8 @@ const (
 	PackageErrCodeRestoredStateMismatch                = "PACKAGE_RESTORED_STATE_MISMATCH"
 	PackageErrCodeFinalizationEvidenceMissing          = "PACKAGE_FINALIZATION_EVIDENCE_MISSING"
 	PackageErrCodeLeaseStopFailed                      = "PACKAGE_LEASE_STOP_FAILED"
+	PackageErrCodeLeaseMissing                         = "PACKAGE_LEASE_MISSING"
+	PackageErrCodeLeaseExpired                         = "PACKAGE_LEASE_EXPIRED"
 	PackageErrCodeConfirmationRequired                 = "PACKAGE_CONFIRMATION_REQUIRED"
 	PackageErrCodeConfirmationInvalid                  = "PACKAGE_CONFIRMATION_INVALID"
 	PackageErrCodeConfirmationExpired                  = "PACKAGE_CONFIRMATION_EXPIRED"
@@ -275,6 +277,8 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeRestoredStateMismatch:                409,
 	PackageErrCodeFinalizationEvidenceMissing:          409,
 	PackageErrCodeLeaseStopFailed:                      500,
+	PackageErrCodeLeaseMissing:                         409,
+	PackageErrCodeLeaseExpired:                         409,
 	PackageErrCodeConfirmationRequired:                 403,
 	PackageErrCodeConfirmationInvalid:                  403,
 	PackageErrCodeConfirmationExpired:                  403,

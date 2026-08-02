@@ -777,25 +777,37 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTxWithStep(ctx conte
 	}
 	var leaseOpID string
 	var leaseFencingToken int64
+	var leaseOwnerID string
+	var leaseExpiresAt string
 	leaseErr := tx.QueryRowContext(ctx,
-		`SELECT operation_id, fencing_token FROM extension_package_operation_leases WHERE extension_id=?`,
-		extensionID).Scan(&leaseOpID, &leaseFencingToken)
-	if leaseErr == nil {
-		if leaseOpID != operationID {
-			return operationStateError(PackageErrCodeLeaseFenced,
-				"lease taken over by another operation: "+leaseOpID, nil)
-		}
-		if leaseFencingToken != fencingToken {
-			return operationStateError(PackageErrCodeLeaseFenced,
-				"fencing token mismatch during finalization", nil)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=?`,
-			extensionID, operationID); err != nil {
-			return storageOperationError("delete lease during finalization with step", err)
-		}
-	} else if !errors.Is(leaseErr, sql.ErrNoRows) {
+		`SELECT operation_id, fencing_token, owner_id, lease_expires_at FROM extension_package_operation_leases WHERE extension_id=?`,
+		extensionID).Scan(&leaseOpID, &leaseFencingToken, &leaseOwnerID, &leaseExpiresAt)
+	if errors.Is(leaseErr, sql.ErrNoRows) {
+		return operationStateError(PackageErrCodeLeaseMissing,
+			"extension lease missing: operation cannot finalize without lease", nil)
+	}
+	if leaseErr != nil {
 		return storageOperationError("read lease during finalization with step", leaseErr)
+	}
+	if leaseOpID != operationID {
+		return operationStateError(PackageErrCodeLeaseFenced,
+			"lease taken over by another operation: "+leaseOpID, nil)
+	}
+	if leaseFencingToken != fencingToken {
+		return operationStateError(PackageErrCodeLeaseFenced,
+			"fencing token mismatch during finalization", nil)
+	}
+	if leaseExpiresAt != "" {
+		expiresAt, parseErr := time.Parse(time.RFC3339Nano, leaseExpiresAt)
+		if parseErr == nil && expiresAt.Before(time.Now().UTC()) {
+			return operationStateError(PackageErrCodeLeaseExpired,
+				"lease has expired: operation cannot finalize", nil)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=?`,
+		extensionID, operationID); err != nil {
+		return storageOperationError("delete lease during finalization with step", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	stepID := step.StepID
@@ -925,25 +937,36 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Conte
 	}
 	var leaseOpID string
 	var leaseFencingToken int64
+	var leaseExpiresAt string
 	leaseErr := tx.QueryRowContext(ctx,
-		`SELECT operation_id, fencing_token FROM extension_package_operation_leases WHERE extension_id=?`,
-		extensionID).Scan(&leaseOpID, &leaseFencingToken)
-	if leaseErr == nil {
-		if leaseOpID != operationID {
-			return operationStateError(PackageErrCodeLeaseFenced,
-				"lease taken over by another operation: "+leaseOpID, nil)
-		}
-		if leaseFencingToken != fencingToken {
-			return operationStateError(PackageErrCodeLeaseFenced,
-				"fencing token mismatch during finalization", nil)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=?`,
-			extensionID, operationID); err != nil {
-			return storageOperationError("delete lease during finalization", err)
-		}
-	} else if !errors.Is(leaseErr, sql.ErrNoRows) {
+		`SELECT operation_id, fencing_token, lease_expires_at FROM extension_package_operation_leases WHERE extension_id=?`,
+		extensionID).Scan(&leaseOpID, &leaseFencingToken, &leaseExpiresAt)
+	if errors.Is(leaseErr, sql.ErrNoRows) {
+		return operationStateError(PackageErrCodeLeaseMissing,
+			"extension lease missing: operation cannot finalize without lease", nil)
+	}
+	if leaseErr != nil {
 		return storageOperationError("read lease during finalization", leaseErr)
+	}
+	if leaseOpID != operationID {
+		return operationStateError(PackageErrCodeLeaseFenced,
+			"lease taken over by another operation: "+leaseOpID, nil)
+	}
+	if leaseFencingToken != fencingToken {
+		return operationStateError(PackageErrCodeLeaseFenced,
+			"fencing token mismatch during finalization", nil)
+	}
+	if leaseExpiresAt != "" {
+		expiresAt, parseErr := time.Parse(time.RFC3339Nano, leaseExpiresAt)
+		if parseErr == nil && expiresAt.Before(time.Now().UTC()) {
+			return operationStateError(PackageErrCodeLeaseExpired,
+				"lease has expired: operation cannot finalize", nil)
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=?`,
+		extensionID, operationID); err != nil {
+		return storageOperationError("delete lease during finalization", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	stepID := operationID + ":" + finalizeStep

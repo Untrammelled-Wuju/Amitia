@@ -1154,10 +1154,51 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 
 	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryFinalGate, order, guard, func() (string, error) {
 		order++
-		if err := r.newPackageRecoveryFinalizer().runRecoveryFinalGate(ctx, operation, guard, completed); err != nil {
-			return "", err
+		finalGateResult, gateErr := r.verifyPackageFinalGateWithGuard(ctx, operation.OperationID, guard)
+		if gateErr != nil {
+			return "", gateErr
 		}
-		return `{"final_gate_passed":true}`, nil
+		if !finalGateResult.Passed {
+			return "", NewPackageErrorWithRecovery(PackageErrCodeFinalGateFailed, 409, false, true, "Inspect final gate result",
+				fmt.Errorf("final gate not passed for operation %s", operation.OperationID))
+		}
+		releasedQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+		if qmErr != nil {
+			return "", NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataMissing, 409, false, true, "Inspect persisted quarantine metadata",
+				fmt.Errorf("released quarantine metadata not found for operation %s: %w", operation.OperationID, qmErr))
+		}
+		if releasedQM.State != "released" {
+			return "", NewPackageErrorWithRecovery(PackageErrCodeQuarantineReleaseFailed, 409, false, true, "Inspect persisted quarantine metadata",
+				fmt.Errorf("quarantine metadata state is not released: %s", releasedQM.State))
+		}
+		if releasedQM.ReleasedAt == "" {
+			return "", NewPackageErrorWithRecovery(PackageErrCodeQuarantineReleaseFailed, 409, false, true, "Inspect persisted quarantine metadata",
+				fmt.Errorf("quarantine metadata released_at is empty after release"))
+		}
+		if releasedQM.TreeHash != "" && finalGateResult.ExtensionID != "" {
+			for _, check := range finalGateResult.Checks {
+				if check.Name == "generation_pointer_consistent" && !check.Passed {
+					return "", NewPackageErrorWithRecovery(PackageErrCodeFinalGateFailed, 409, false, true, "Inspect final gate generation pointer",
+						fmt.Errorf("final gate generation_pointer_consistent check not passed"))
+				}
+			}
+		}
+		finalGateResult.Findings = append(finalGateResult.Findings, PackageFinalGateFinding{
+			FindingID:   "qm-released-" + releasedQM.QuarantineID,
+			OperationID: operation.OperationID,
+			ExtensionID: operation.ExtensionID,
+			FindingType: "quarantine_metadata_released_final_proof",
+			ResourceID:  releasedQM.QuarantineID,
+			Severity:    "info",
+			Actual:      fmt.Sprintf("state=%s released_at=%s tree_hash=%s", releasedQM.State, releasedQM.ReleasedAt, releasedQM.TreeHash),
+			DetectedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+			ResolvedAt:  releasedQM.ReleasedAt,
+		})
+		resultBytes, marshalErr := json.Marshal(finalGateResult)
+		if marshalErr != nil {
+			return "", fmt.Errorf("marshal final gate result: %w", marshalErr)
+		}
+		return string(resultBytes), nil
 	})
 	if err != nil {
 		return r.requirePackageRecovery(ctx, operation, "uninstall recovery final_gate failed", err, guard)
@@ -1171,6 +1212,23 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 }
 
 func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, guard PackageWriteGuard) error {
+	authoritativeOp, _, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	if err != nil {
+		return r.requirePackageRecovery(ctx, operation, "finalize failed: cannot read authoritative operation", err, guard)
+	}
+	if string(authoritativeOp.Status) == string(PackageOperationCompleted) {
+		if err := r.verifyUninstallFinalizedState(ctx, operation); err != nil {
+			return r.requirePackageRecovery(ctx, operation, "finalize verification failed", err, guard)
+		}
+		existing := PackageOperationStep{
+			StepID:      operation.OperationID + ":" + StepUninstallRecoveryFinalize,
+			OperationID: operation.OperationID,
+			StepName:    StepUninstallRecoveryFinalize,
+			Status:      StatusCompleted,
+		}
+		completed[StepUninstallRecoveryFinalize] = existing
+		return nil
+	}
 	if existing, ok := completed[StepUninstallRecoveryFinalize]; ok && existing.Status == StatusCompleted {
 		if err := r.verifyUninstallFinalizedState(ctx, operation); err != nil {
 			return r.requirePackageRecovery(ctx, operation, "finalize verification failed", err, guard)
@@ -1180,6 +1238,14 @@ func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation Packa
 	gateStep, hasGate := completed[StepUninstallRecoveryFinalGate]
 	if !hasGate || gateStep.Status != StatusCompleted || gateStep.ResultJSON == "" {
 		return r.requirePackageRecovery(ctx, operation, "finalize blocked: final gate step missing or incomplete", nil, guard)
+	}
+	if err := r.container.PackageRepository.TransitionOperation(ctx,
+		operation.OperationID,
+		[]PackageOperationStatus{PackageOperationInProgress},
+		PackageOperationFinalizing,
+		PackageOperationTransition{CurrentStep: StepUninstallRecoveryFinalize},
+		guard); err != nil {
+		return r.requirePackageRecovery(ctx, operation, "uninstall recovery transition to finalizing failed", err, guard)
 	}
 	finalGateResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(gateStep.ResultJSON)))
 	finalizeResultJSON := fmt.Sprintf(`{"finalized":true,"atomic":true,"operationId":%q,"extensionId":%q,"fencingToken":%d,"finalGateStep":%q,"finalGateResultHash":%q}`,

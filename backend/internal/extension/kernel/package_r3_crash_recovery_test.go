@@ -34,6 +34,18 @@ func makeUninstallRecoveryOperation(t *testing.T, ctx context.Context, container
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	opID := fmt.Sprintf("op-uninstall-recovery-%s-%d", extensionID, time.Now().UnixNano())
+	if err := container.PackageRepository.PutArtifact(ctx, PackageArtifact{
+		ArtifactID:      artifactID,
+		ExtensionID:     extensionID,
+		Version:         "1.0.0",
+		ArchiveHash:     "sha256:" + fmt.Sprintf("%x", sha256.Sum256([]byte(artifactID))),
+		ManifestHash:    "sha256:manifest",
+		ContentTreeHash: "sha256:content",
+		RetentionState:  "active",
+		CreatedAt:       now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	op := PackageOperationRecord{
 		OperationID:       opID,
 		TraceID:           "trace-" + opID,
