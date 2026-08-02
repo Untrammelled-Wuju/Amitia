@@ -68,9 +68,9 @@ const (
 type AnchorProfile string
 
 const (
-	AnchorFeetCenter    AnchorProfile = "feet_center"
-	AnchorCenter        AnchorProfile = "center"
-	AnchorEdgeContact   AnchorProfile = "edge_contact"
+	AnchorFeetCenter     AnchorProfile = "feet_center"
+	AnchorCenter         AnchorProfile = "center"
+	AnchorEdgeContact    AnchorProfile = "edge_contact"
 	AnchorSurfaceContact AnchorProfile = "surface_contact"
 )
 
@@ -89,19 +89,19 @@ type FramePhase struct {
 }
 
 type ActionIdentity struct {
-	Key                 string        `json:"key"`
-	Name                string        `json:"name"`
-	Description         string        `json:"description"`
-	CategoryKey         string        `json:"categoryKey"`
-	CategoryName        string        `json:"categoryName"`
-	Source              ActionSource  `json:"source"`
-	DefinitionVersion   int           `json:"definitionVersion"`
-	Enabled             bool          `json:"enabled"`
-	Recommended         bool          `json:"recommended"`
-	SupportsDefaultIdle bool          `json:"supportsDefaultIdle"`
-	CategorySortOrder   int           `json:"categorySortOrder"`
-	ActionSortOrder     int           `json:"actionSortOrder"`
-	Tags                []string      `json:"tags"`
+	Key                 string       `json:"key"`
+	Name                string       `json:"name"`
+	Description         string       `json:"description"`
+	CategoryKey         string       `json:"categoryKey"`
+	CategoryName        string       `json:"categoryName"`
+	Source              ActionSource `json:"source"`
+	DefinitionVersion   int          `json:"definitionVersion"`
+	Enabled             bool         `json:"enabled"`
+	Recommended         bool         `json:"recommended"`
+	SupportsDefaultIdle bool         `json:"supportsDefaultIdle"`
+	CategorySortOrder   int          `json:"categorySortOrder"`
+	ActionSortOrder     int          `json:"actionSortOrder"`
+	Tags                []string     `json:"tags"`
 }
 
 type ActionGenerationSpec struct {
@@ -140,10 +140,10 @@ type ActionProcessingHints struct {
 }
 
 type ActionSpec struct {
-	SchemaVersion int                  `json:"schemaVersion"`
-	Identity      ActionIdentity       `json:"identity"`
-	Generation    ActionGenerationSpec `json:"generation"`
-	Playback      ActionPlaybackSpec   `json:"playback"`
+	SchemaVersion int                   `json:"schemaVersion"`
+	Identity      ActionIdentity        `json:"identity"`
+	Generation    ActionGenerationSpec  `json:"generation"`
+	Playback      ActionPlaybackSpec    `json:"playback"`
 	Processing    ActionProcessingHints `json:"processing"`
 }
 
@@ -161,13 +161,13 @@ const (
 
 const (
 	GenerationStrategySequential = "sequential_frames"
-	GenerationTypeSequential    = GenerationStrategySequential
+	GenerationTypeSequential     = GenerationStrategySequential
 )
 
 type CategoryDef struct {
-	Key  string `json:"key"`
-	Name string `json:"name"`
-	SortOrder int `json:"sortOrder"`
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	SortOrder int    `json:"sortOrder"`
 }
 
 var BuiltinCategories = []CategoryDef{

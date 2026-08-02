@@ -51,18 +51,18 @@ func TestLegacySkillToTool(t *testing.T) {
 
 func TestBuiltinSkillToTool(t *testing.T) {
 	def := extension.SkillDefinition{
-		ID:          "dev.amitia.skill.agent-skill-activate",
-		ModelName:   "agent_skill_activate",
-		Name:        "agent_skill_activate",
-		Description: "Activate Agent Skill",
-		Version:     "1.0.0",
-		Source:      extension.SkillSourceBuiltin,
+		ID:           "dev.amitia.skill.agent-skill-activate",
+		ModelName:    "agent_skill_activate",
+		Name:         "agent_skill_activate",
+		Description:  "Activate Agent Skill",
+		Version:      "1.0.0",
+		Source:       extension.SkillSourceBuiltin,
 		InputSchema:  json.RawMessage(`{"type":"object"}`),
 		OutputSchema: json.RawMessage(`{"type":"object"}`),
-		Internal:    true,
-		Enabled:     true,
-		Compatible:  true,
-		TimeoutMS:   5000,
+		Internal:     true,
+		Enabled:      true,
+		Compatible:   true,
+		TimeoutMS:    5000,
 	}
 
 	result := BuiltinSkillToTool(def)
@@ -80,17 +80,17 @@ func TestBuiltinSkillToTool(t *testing.T) {
 
 func TestInternalSkillToTool(t *testing.T) {
 	def := extension.SkillDefinition{
-		ID:          "dev.amitia.skill.agent-skill-activate",
-		ModelName:   "agent_skill_activate",
-		Name:        "agent_skill_activate",
-		Description: "Activate Agent Skill",
-		Version:     "1.0.0",
-		Source:      extension.SkillSourceBuiltin,
+		ID:           "dev.amitia.skill.agent-skill-activate",
+		ModelName:    "agent_skill_activate",
+		Name:         "agent_skill_activate",
+		Description:  "Activate Agent Skill",
+		Version:      "1.0.0",
+		Source:       extension.SkillSourceBuiltin,
 		InputSchema:  json.RawMessage(`{"type":"object"}`),
 		OutputSchema: json.RawMessage(`{"type":"object"}`),
-		Internal:    true,
-		Enabled:     true,
-		TimeoutMS:   5000,
+		Internal:     true,
+		Enabled:      true,
+		TimeoutMS:    5000,
 	}
 
 	result := InternalSkillToTool(def)

@@ -96,52 +96,52 @@ const (
 )
 
 const (
-	DimensionIntegrity            = "integrity"
-	DimensionSubjectIntegrity     = "subject_integrity"
+	DimensionIntegrity             = "integrity"
+	DimensionSubjectIntegrity      = "subject_integrity"
 	DimensionBackgroundCleanliness = "background_cleanliness"
-	DimensionAnchorStability      = "anchor_stability"
-	DimensionIdentityConsistency  = "identity_consistency"
-	DimensionMotionContinuity     = "motion_continuity"
-	DimensionLoopContinuity       = "loop_continuity"
-	DimensionVisualConsistency    = "visual_consistency"
-	DimensionEvaluationConfidence = "evaluation_confidence"
+	DimensionAnchorStability       = "anchor_stability"
+	DimensionIdentityConsistency   = "identity_consistency"
+	DimensionMotionContinuity      = "motion_continuity"
+	DimensionLoopContinuity        = "loop_continuity"
+	DimensionVisualConsistency     = "visual_consistency"
+	DimensionEvaluationConfidence  = "evaluation_confidence"
 )
 
 const (
-	RuleFileMissing               = "FILE_MISSING"
-	RuleFileUndecodable           = "FILE_UNDECODABLE"
-	RuleFileHashMismatch          = "FILE_HASH_MISMATCH"
-	RuleFrameCountMismatch        = "FRAME_COUNT_MISMATCH"
-	RuleFrameIndexGap             = "FRAME_INDEX_GAP"
-	RuleFrameDimensionMismatch    = "FRAME_DIMENSION_MISMATCH"
-	RuleAlphaAllTransparent       = "ALPHA_ALL_TRANSPARENT"
-	RuleAlphaPolicyViolation      = "ALPHA_POLICY_VIOLATION"
-	RuleSubjectEmpty              = "SUBJECT_EMPTY"
-	RuleSubjectTooSmall           = "SUBJECT_TOO_SMALL"
-	RuleSubjectTooLarge           = "SUBJECT_TOO_LARGE"
-	RuleSubjectFragmented         = "SUBJECT_FRAGMENTED"
-	RuleSubjectClipped            = "SUBJECT_CLIPPED"
-	RuleUnexpectedEdgeContact     = "UNEXPECTED_EDGE_CONTACT"
+	RuleFileMissing                = "FILE_MISSING"
+	RuleFileUndecodable            = "FILE_UNDECODABLE"
+	RuleFileHashMismatch           = "FILE_HASH_MISMATCH"
+	RuleFrameCountMismatch         = "FRAME_COUNT_MISMATCH"
+	RuleFrameIndexGap              = "FRAME_INDEX_GAP"
+	RuleFrameDimensionMismatch     = "FRAME_DIMENSION_MISMATCH"
+	RuleAlphaAllTransparent        = "ALPHA_ALL_TRANSPARENT"
+	RuleAlphaPolicyViolation       = "ALPHA_POLICY_VIOLATION"
+	RuleSubjectEmpty               = "SUBJECT_EMPTY"
+	RuleSubjectTooSmall            = "SUBJECT_TOO_SMALL"
+	RuleSubjectTooLarge            = "SUBJECT_TOO_LARGE"
+	RuleSubjectFragmented          = "SUBJECT_FRAGMENTED"
+	RuleSubjectClipped             = "SUBJECT_CLIPPED"
+	RuleUnexpectedEdgeContact      = "UNEXPECTED_EDGE_CONTACT"
 	RuleBackgroundResidueComponent = "BACKGROUND_RESIDUE_COMPONENT"
-	RuleAlphaHalo                 = "ALPHA_HALO"
-	RuleAnchorJitter              = "ANCHOR_JITTER"
-	RuleScaleJitter               = "SCALE_JITTER"
-	RuleIdentityDrift             = "IDENTITY_DRIFT"
-	RuleMotionJump                = "MOTION_JUMP"
-	RuleMotionDirectionReversal   = "MOTION_DIRECTION_REVERSAL"
-	RuleExactDuplicateFrame       = "EXACT_DUPLICATE_FRAME"
-	RulePerceptualDuplicateFrame  = "PERCEPTUAL_DUPLICATE_FRAME"
-	RuleFrozenSequence            = "FROZEN_SEQUENCE"
-	RuleLoopDiscontinuity         = "LOOP_DISCONTINUITY"
-	RuleLoopVelocityDiscontinuity = "LOOP_VELOCITY_DISCONTINUITY"
-	RuleColorFlicker              = "COLOR_FLICKER"
-	RuleLowEvaluationConfidence   = "LOW_EVALUATION_CONFIDENCE"
-	RuleMissingMeasurement        = "MISSING_MEASUREMENT"
-	RuleDetectorFailure           = "DETECTOR_FAILURE"
-	RuleLegacyFlagImported        = "LEGACY_FLAG_IMPORTED"
-	RuleMeasurementMissing        = "MEASUREMENT_MISSING_REQUIRED"
+	RuleAlphaHalo                  = "ALPHA_HALO"
+	RuleAnchorJitter               = "ANCHOR_JITTER"
+	RuleScaleJitter                = "SCALE_JITTER"
+	RuleIdentityDrift              = "IDENTITY_DRIFT"
+	RuleMotionJump                 = "MOTION_JUMP"
+	RuleMotionDirectionReversal    = "MOTION_DIRECTION_REVERSAL"
+	RuleExactDuplicateFrame        = "EXACT_DUPLICATE_FRAME"
+	RulePerceptualDuplicateFrame   = "PERCEPTUAL_DUPLICATE_FRAME"
+	RuleFrozenSequence             = "FROZEN_SEQUENCE"
+	RuleLoopDiscontinuity          = "LOOP_DISCONTINUITY"
+	RuleLoopVelocityDiscontinuity  = "LOOP_VELOCITY_DISCONTINUITY"
+	RuleColorFlicker               = "COLOR_FLICKER"
+	RuleLowEvaluationConfidence    = "LOW_EVALUATION_CONFIDENCE"
+	RuleMissingMeasurement         = "MISSING_MEASUREMENT"
+	RuleDetectorFailure            = "DETECTOR_FAILURE"
+	RuleLegacyFlagImported         = "LEGACY_FLAG_IMPORTED"
+	RuleMeasurementMissing         = "MEASUREMENT_MISSING_REQUIRED"
 	RuleOptionalMeasurementMissing = "OPTIONAL_MEASUREMENT_MISSING"
-	RuleCoordinateSpaceMismatch   = "COORDINATE_SPACE_MISMATCH"
+	RuleCoordinateSpaceMismatch    = "COORDINATE_SPACE_MISMATCH"
 )
 
 type FramePairRef struct {
@@ -200,19 +200,19 @@ type FindingSummary struct {
 }
 
 type ActionQualityResult struct {
-	EvaluationID        string                    `json:"evaluationId"`
-	ActionRevisionID    string                    `json:"actionRevisionId"`
-	ActionKey           string                    `json:"actionKey"`
-	ExecutionStatus     EvaluationExecutionStatus `json:"executionStatus"`
-	Verdict             *ContentVerdict           `json:"verdict,omitempty"`
-	OverallScore        *float64                  `json:"overallScore,omitempty"`
-	OverallConfidence   float64                   `json:"overallConfidence"`
-	DimensionScores     []DimensionScore          `json:"dimensionScores"`
-	FindingSummary      FindingSummary            `json:"findingSummary"`
-	ProfileHash         string                    `json:"profileHash"`
-	EngineVersion       string                    `json:"engineVersion"`
-	ReportPath          string                    `json:"reportPath"`
-	ReportHash          string                    `json:"reportHash"`
+	EvaluationID      string                    `json:"evaluationId"`
+	ActionRevisionID  string                    `json:"actionRevisionId"`
+	ActionKey         string                    `json:"actionKey"`
+	ExecutionStatus   EvaluationExecutionStatus `json:"executionStatus"`
+	Verdict           *ContentVerdict           `json:"verdict,omitempty"`
+	OverallScore      *float64                  `json:"overallScore,omitempty"`
+	OverallConfidence float64                   `json:"overallConfidence"`
+	DimensionScores   []DimensionScore          `json:"dimensionScores"`
+	FindingSummary    FindingSummary            `json:"findingSummary"`
+	ProfileHash       string                    `json:"profileHash"`
+	EngineVersion     string                    `json:"engineVersion"`
+	ReportPath        string                    `json:"reportPath"`
+	ReportHash        string                    `json:"reportHash"`
 }
 
 type QualityEvaluation struct {
@@ -361,14 +361,14 @@ type QualityGateResultRecord struct {
 func (QualityGateResultRecord) TableName() string { return "desktop_pet_quality_gate_results" }
 
 type ActiveQualityEvaluationBindingRecord struct {
-	ID                string `json:"id"`
-	ActionRevisionID  string `json:"actionRevisionId"`
-	ProfileID         string `json:"profileId"`
+	ID                 string `json:"id"`
+	ActionRevisionID   string `json:"actionRevisionId"`
+	ProfileID          string `json:"profileId"`
 	ActiveEvaluationID string `json:"activeEvaluationId"`
-	BindingRevision   int64  `json:"bindingRevision"`
-	BoundAt           string `json:"boundAt"`
-	CreatedAt         string `json:"createdAt"`
-	UpdatedAt         string `json:"updatedAt"`
+	BindingRevision    int64  `json:"bindingRevision"`
+	BoundAt            string `json:"boundAt"`
+	CreatedAt          string `json:"createdAt"`
+	UpdatedAt          string `json:"updatedAt"`
 }
 
 func (ActiveQualityEvaluationBindingRecord) TableName() string {
@@ -402,33 +402,35 @@ type QualityReviewDecisionRecord struct {
 func (QualityReviewDecisionRecord) TableName() string { return "desktop_pet_quality_review_decisions" }
 
 type QualityMeasurementCacheRecord struct {
-	ID                  string  `json:"id"`
-	FrameArtifactID     string  `json:"frameArtifactId"`
-	ContentHash         string  `json:"contentHash"`
-	MeasurementVersion  string  `json:"measurementVersion"`
-	Width               int     `json:"width"`
-	Height              int     `json:"height"`
-	HasAlphaChannel     bool    `json:"hasAlphaChannel"`
-	AlphaCoverage       float64 `json:"alphaCoverage"`
+	ID                    string  `json:"id"`
+	FrameArtifactID       string  `json:"frameArtifactId"`
+	ContentHash           string  `json:"contentHash"`
+	MeasurementVersion    string  `json:"measurementVersion"`
+	Width                 int     `json:"width"`
+	Height                int     `json:"height"`
+	HasAlphaChannel       bool    `json:"hasAlphaChannel"`
+	AlphaCoverage         float64 `json:"alphaCoverage"`
 	FullyTransparentRatio float64 `json:"fullyTransparentRatio"`
 	SemiTransparentRatio  float64 `json:"semiTransparentRatio"`
 	OpaqueRatio           float64 `json:"opaqueRatio"`
-	Decodable           bool    `json:"decodable"`
-	MimeType            string  `json:"mimeType"`
-	PixelHash           string  `json:"pixelHash"`
-	MeasurementsJSON    string  `json:"measurementsJson"`
-	CreatedAt           string  `json:"createdAt"`
+	Decodable             bool    `json:"decodable"`
+	MimeType              string  `json:"mimeType"`
+	PixelHash             string  `json:"pixelHash"`
+	MeasurementsJSON      string  `json:"measurementsJson"`
+	CreatedAt             string  `json:"createdAt"`
 }
 
-func (QualityMeasurementCacheRecord) TableName() string { return "desktop_pet_quality_measurement_cache" }
+func (QualityMeasurementCacheRecord) TableName() string {
+	return "desktop_pet_quality_measurement_cache"
+}
 
 type QualityOutboxEventRecord struct {
-	ID            string `json:"id"`
-	EventType     string `json:"eventType"`
-	PayloadJSON   string `json:"payloadJson"`
-	Status        string `json:"status"`
-	CreatedAt     string `json:"createdAt"`
-	PublishedAt   string `json:"publishedAt"`
+	ID          string `json:"id"`
+	EventType   string `json:"eventType"`
+	PayloadJSON string `json:"payloadJson"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"createdAt"`
+	PublishedAt string `json:"publishedAt"`
 }
 
 func (QualityOutboxEventRecord) TableName() string { return "desktop_pet_quality_outbox_events" }
@@ -452,17 +454,17 @@ type CoordinateSpace struct {
 }
 
 type ActionMeasurementSet struct {
-	ActionRevisionID   string            `json:"actionRevisionId"`
-	ActionKey          string            `json:"actionKey"`
-	CanvasWidth        int               `json:"canvasWidth"`
-	CanvasHeight       int               `json:"canvasHeight"`
-	FrameCount         int               `json:"frameCount"`
-	FrameMeasurements  []FrameMeasurement `json:"frameMeasurements"`
-	LoopType           string            `json:"loopType"`
-	PlaybackMode       string            `json:"playbackMode"`
-	AnchorProfile      string            `json:"anchorProfile"`
-	ActionSpecHash     string            `json:"actionSpecHash"`
-	RevisionHash       string            `json:"revisionHash"`
+	ActionRevisionID  string             `json:"actionRevisionId"`
+	ActionKey         string             `json:"actionKey"`
+	CanvasWidth       int                `json:"canvasWidth"`
+	CanvasHeight      int                `json:"canvasHeight"`
+	FrameCount        int                `json:"frameCount"`
+	FrameMeasurements []FrameMeasurement `json:"frameMeasurements"`
+	LoopType          string             `json:"loopType"`
+	PlaybackMode      string             `json:"playbackMode"`
+	AnchorProfile     string             `json:"anchorProfile"`
+	ActionSpecHash    string             `json:"actionSpecHash"`
+	RevisionHash      string             `json:"revisionHash"`
 }
 
 type FrameMeasurement struct {
@@ -507,10 +509,10 @@ type DecodedFrame struct {
 }
 
 type ProblemFrameSummary struct {
-	FrameIndex   int             `json:"frameIndex"`
+	FrameIndex   int              `json:"frameIndex"`
 	Findings     []QualityFinding `json:"findings"`
-	ThumbnailURL string          `json:"thumbnailUrl"`
-	Severity     Severity        `json:"severity"`
+	ThumbnailURL string           `json:"thumbnailUrl"`
+	Severity     Severity         `json:"severity"`
 }
 
 type EvaluateRequest struct {
@@ -546,31 +548,31 @@ type ReevaluateRequest struct {
 }
 
 type QualityGateResult struct {
-	ProcessingTaskID       string                 `json:"processingTaskId"`
-	GateStatus             GateStatus             `json:"gateStatus"`
-	RequiredActionCount    int                    `json:"requiredActionCount"`
-	AcceptedActionCount    int                    `json:"acceptedActionCount"`
-	WarningActionCount     int                    `json:"warningActionCount"`
-	ReviewActionCount      int                    `json:"reviewActionCount"`
-	RejectedActionCount    int                    `json:"rejectedActionCount"`
-	FailedEvaluationCount  int                    `json:"failedEvaluationCount"`
-	ActionVerdicts         []ActionVerdictSummary `json:"actionVerdicts"`
-	ActiveRevisionSetHash  string                 `json:"activeRevisionSetHash"`
-	EvaluationSetHash      string                 `json:"evaluationSetHash"`
-	RuleSetVersion         string                 `json:"ruleSetVersion"`
-	ProfileID              string                 `json:"profileId"`
+	ProcessingTaskID      string                 `json:"processingTaskId"`
+	GateStatus            GateStatus             `json:"gateStatus"`
+	RequiredActionCount   int                    `json:"requiredActionCount"`
+	AcceptedActionCount   int                    `json:"acceptedActionCount"`
+	WarningActionCount    int                    `json:"warningActionCount"`
+	ReviewActionCount     int                    `json:"reviewActionCount"`
+	RejectedActionCount   int                    `json:"rejectedActionCount"`
+	FailedEvaluationCount int                    `json:"failedEvaluationCount"`
+	ActionVerdicts        []ActionVerdictSummary `json:"actionVerdicts"`
+	ActiveRevisionSetHash string                 `json:"activeRevisionSetHash"`
+	EvaluationSetHash     string                 `json:"evaluationSetHash"`
+	RuleSetVersion        string                 `json:"ruleSetVersion"`
+	ProfileID             string                 `json:"profileId"`
 }
 
 type ActionVerdictSummary struct {
-	ActionKey       string                    `json:"actionKey"`
-	ActionName      string                    `json:"actionName"`
-	Required        bool                      `json:"required"`
-	Verdict         ContentVerdict            `json:"verdict"`
-	ExecutionStatus EvaluationExecutionStatus `json:"executionStatus"`
-	OverallScore    *float64                  `json:"overallScore,omitempty"`
-	FindingCount    int                       `json:"findingCount"`
-	HardGateCount   int                       `json:"hardGateCount"`
-	ActionRevisionID string                   `json:"actionRevisionId"`
+	ActionKey        string                    `json:"actionKey"`
+	ActionName       string                    `json:"actionName"`
+	Required         bool                      `json:"required"`
+	Verdict          ContentVerdict            `json:"verdict"`
+	ExecutionStatus  EvaluationExecutionStatus `json:"executionStatus"`
+	OverallScore     *float64                  `json:"overallScore,omitempty"`
+	FindingCount     int                       `json:"findingCount"`
+	HardGateCount    int                       `json:"hardGateCount"`
+	ActionRevisionID string                    `json:"actionRevisionId"`
 }
 
 type DetectorInput struct {
@@ -588,25 +590,25 @@ type EvaluateResult struct {
 }
 
 type CommitEvaluationRequest struct {
-	Evaluation           *QualityEvaluation
-	Findings             []QualityFinding
-	Scores               []DimensionScore
-	Verdict              ContentVerdict
-	OverallScore         float64
-	OverallConfidence    float64
-	ReportPath           string
-	ReportHash           string
-	ProfileSnapshotJSON  string
-	ProfileHash          string
-	ProcessingTaskID     string
-	ActionKey            string
+	Evaluation          *QualityEvaluation
+	Findings            []QualityFinding
+	Scores              []DimensionScore
+	Verdict             ContentVerdict
+	OverallScore        float64
+	OverallConfidence   float64
+	ReportPath          string
+	ReportHash          string
+	ProfileSnapshotJSON string
+	ProfileHash         string
+	ProcessingTaskID    string
+	ActionKey           string
 }
 
 type CommitEvaluationResult struct {
-	EvaluationID       string
-	GateResult         *QualityGateResult
-	WritebackApplied   bool
-	ActiveBindingSet   bool
+	EvaluationID     string
+	GateResult       *QualityGateResult
+	WritebackApplied bool
+	ActiveBindingSet bool
 }
 
 type EvaluateTaskGateRequest struct {
@@ -658,12 +660,12 @@ const (
 )
 
 const (
-	ReviewDecisionApproveWithReason  = "approve_with_reason"
-	ReviewDecisionReject             = "reject"
+	ReviewDecisionApproveWithReason   = "approve_with_reason"
+	ReviewDecisionReject              = "reject"
 	ReviewDecisionRequestRegeneration = "request_regeneration"
 )
 
 const (
-	InputSourceNewBridge     = "quality_input_bridge"
+	InputSourceNewBridge        = "quality_input_bridge"
 	InputSourceLegacyProjection = "legacy_projection"
 )

@@ -46,17 +46,17 @@ type SpriteSheetLayout struct {
 }
 
 type SourceFrameRef struct {
-	FrameIndex      int
-	ArtifactID      string
-	RelativePath    string
-	ContentHash     string
-	CellIndex       *int
-	CropMinX        int
-	CropMinY        int
-	CropMaxX        int
-	CropMaxY        int
-	ExpectedWidth   int
-	ExpectedHeight  int
+	FrameIndex     int
+	ArtifactID     string
+	RelativePath   string
+	ContentHash    string
+	CellIndex      *int
+	CropMinX       int
+	CropMinY       int
+	CropMaxX       int
+	CropMaxY       int
+	ExpectedWidth  int
+	ExpectedHeight int
 }
 
 type RevisionRef struct {
@@ -79,23 +79,23 @@ type QualityGateResult struct {
 }
 
 type RuntimeOperationResult struct {
-	OperationID      string
-	DesiredRevision  int64
-	DeliveryStatus   string
-	RuntimeOnline    bool
-	EffectiveStatus  string
-	ErrorCode        string
+	OperationID     string
+	DesiredRevision int64
+	DeliveryStatus  string
+	RuntimeOnline   bool
+	EffectiveStatus string
+	ErrorCode       string
 }
 
 const (
-	DeliveryStatusQueued        = "queued"
-	DeliveryStatusSent          = "sent"
-	DeliveryStatusAcked         = "acked"
-	DeliveryStatusApplied       = "applied"
-	DeliveryStatusFailed        = "failed"
-	DeliveryStatusPendingSync   = "pending_sync"
+	DeliveryStatusQueued         = "queued"
+	DeliveryStatusSent           = "sent"
+	DeliveryStatusAcked          = "acked"
+	DeliveryStatusApplied        = "applied"
+	DeliveryStatusFailed         = "failed"
+	DeliveryStatusPendingSync    = "pending_sync"
 	DeliveryStatusPendingRuntime = "pending_runtime"
-	DeliveryStatusExpired       = "expired"
+	DeliveryStatusExpired        = "expired"
 )
 
 const (
@@ -108,11 +108,11 @@ const (
 type QualityVerdict string
 
 const (
-	VerdictAccepted          QualityVerdict = "accepted"
-	VerdictAcceptedWithWarn  QualityVerdict = "accepted_with_warning"
-	VerdictNeedsReview       QualityVerdict = "needs_review"
-	VerdictRejected          QualityVerdict = "rejected"
-	VerdictEvaluationFailed  QualityVerdict = "evaluation_failed"
+	VerdictAccepted         QualityVerdict = "accepted"
+	VerdictAcceptedWithWarn QualityVerdict = "accepted_with_warning"
+	VerdictNeedsReview      QualityVerdict = "needs_review"
+	VerdictRejected         QualityVerdict = "rejected"
+	VerdictEvaluationFailed QualityVerdict = "evaluation_failed"
 )
 
 func MapVerdictToReleaseStatus(v QualityVerdict) string {

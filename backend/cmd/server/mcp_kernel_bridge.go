@@ -57,9 +57,9 @@ type mcpRemoteTask struct {
 }
 
 type mcpRemoteCallResult struct {
-	Content  []json.RawMessage `json:"content"`
-	IsError  bool              `json:"isError"`
-	Task     *mcpRemoteTask    `json:"task,omitempty"`
+	Content []json.RawMessage `json:"content"`
+	IsError bool              `json:"isError"`
+	Task    *mcpRemoteTask    `json:"task,omitempty"`
 }
 
 type mcpPostProcessor struct {

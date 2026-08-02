@@ -187,14 +187,14 @@ func (r *repository) UpdateActionRevisionQuality(id, evaluationID, verdict strin
 func (r *repository) WritebackQualitySnapshotCAS(id, contentHash, evaluationID, profileID, ruleSetVersion, verdict string, score *float64, sourceContentHash string) (bool, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	updates := map[string]any{
-		"quality_evaluation_id":        evaluationID,
-		"quality_profile_id":           profileID,
-		"quality_ruleset_version":      ruleSetVersion,
-		"quality_verdict":              verdict,
-		"quality_overall_score":        score,
-		"quality_source_content_hash":  sourceContentHash,
-		"quality_evaluated_at":         now,
-		"updated_at":                   now,
+		"quality_evaluation_id":       evaluationID,
+		"quality_profile_id":          profileID,
+		"quality_ruleset_version":     ruleSetVersion,
+		"quality_verdict":             verdict,
+		"quality_overall_score":       score,
+		"quality_source_content_hash": sourceContentHash,
+		"quality_evaluated_at":        now,
+		"updated_at":                  now,
 	}
 	query := r.db.Model(&ActionRevision{}).Where("id = ?", id)
 	if contentHash != "" {

@@ -3,24 +3,24 @@
 package quality
 
 type EvaluationInputSnapshot struct {
-	ID                   string    `json:"id"`
-	UserID               string    `json:"userId"`
-	CharacterID          string    `json:"characterId"`
-	ActionStreamID       string    `json:"actionStreamId"`
-	ActionRevisionID     string    `json:"actionRevisionId"`
-	ActionContentHash    string    `json:"actionContentHash"`
-	FrameSetHash         string    `json:"frameSetHash"`
-	BindingRevision      int64     `json:"bindingRevision"`
-	ProcessingRevisionID string    `json:"processingRevisionId"`
-	ActionKey            string    `json:"actionKey"`
-	ActionConfigHash     string    `json:"actionConfigHash"`
-	ActionSpecHash       string    `json:"actionSpecHash"`
-	PlaybackMode         string    `json:"playbackMode"`
-	FPS                  int       `json:"fps"`
-	ExpectedFrameCount   int       `json:"expectedFrameCount"`
-	FrameInputsJSON      string    `json:"frameInputsJson"`
-	SnapshotHash         string    `json:"snapshotHash"`
-	CreatedAt            string    `json:"createdAt"`
+	ID                   string `json:"id"`
+	UserID               string `json:"userId"`
+	CharacterID          string `json:"characterId"`
+	ActionStreamID       string `json:"actionStreamId"`
+	ActionRevisionID     string `json:"actionRevisionId"`
+	ActionContentHash    string `json:"actionContentHash"`
+	FrameSetHash         string `json:"frameSetHash"`
+	BindingRevision      int64  `json:"bindingRevision"`
+	ProcessingRevisionID string `json:"processingRevisionId"`
+	ActionKey            string `json:"actionKey"`
+	ActionConfigHash     string `json:"actionConfigHash"`
+	ActionSpecHash       string `json:"actionSpecHash"`
+	PlaybackMode         string `json:"playbackMode"`
+	FPS                  int    `json:"fps"`
+	ExpectedFrameCount   int    `json:"expectedFrameCount"`
+	FrameInputsJSON      string `json:"frameInputsJson"`
+	SnapshotHash         string `json:"snapshotHash"`
+	CreatedAt            string `json:"createdAt"`
 }
 
 func (EvaluationInputSnapshot) TableName() string {
@@ -28,18 +28,18 @@ func (EvaluationInputSnapshot) TableName() string {
 }
 
 type MeasurementSet struct {
-	ID                  string    `json:"id"`
-	ActionRevisionID    string    `json:"actionRevisionId"`
-	ActionContentHash   string    `json:"actionContentHash"`
-	FrameSetHash        string    `json:"frameSetHash"`
-	MeasurementVersion  string    `json:"measurementVersion"`
+	ID                     string `json:"id"`
+	ActionRevisionID       string `json:"actionRevisionId"`
+	ActionContentHash      string `json:"actionContentHash"`
+	FrameSetHash           string `json:"frameSetHash"`
+	MeasurementVersion     string `json:"measurementVersion"`
 	MeasurementProfileHash string `json:"measurementProfileHash"`
-	FrameCount          int       `json:"frameCount"`
-	CanvasWidth         int       `json:"canvasWidth"`
-	CanvasHeight        int       `json:"canvasHeight"`
-	MeasurementSetHash  string    `json:"measurementSetHash"`
-	Status              string    `json:"status"`
-	CreatedAt           string    `json:"createdAt"`
+	FrameCount             int    `json:"frameCount"`
+	CanvasWidth            int    `json:"canvasWidth"`
+	CanvasHeight           int    `json:"canvasHeight"`
+	MeasurementSetHash     string `json:"measurementSetHash"`
+	Status                 string `json:"status"`
+	CreatedAt              string `json:"createdAt"`
 }
 
 func (MeasurementSet) TableName() string {
@@ -71,16 +71,16 @@ func (FrameMeasurementRecord) TableName() string {
 }
 
 type SequenceMeasurementRecord struct {
-	ID                  string  `json:"id"`
-	MeasurementSetID    string  `json:"measurementSetId"`
-	FrameIndex          int     `json:"frameIndex"`
-	SubjectAreaRatio    float64 `json:"subjectAreaRatio"`
-	ConnectedCompCount  int     `json:"connectedComponentCount"`
-	LargestCompRatio    float64 `json:"largestComponentRatio"`
-	BorderFGCoverage    float64 `json:"borderForegroundCoverage"`
-	CentroidX           float64 `json:"centroidX"`
-	CentroidY           float64 `json:"centroidY"`
-	CreatedAt           string  `json:"createdAt"`
+	ID                 string  `json:"id"`
+	MeasurementSetID   string  `json:"measurementSetId"`
+	FrameIndex         int     `json:"frameIndex"`
+	SubjectAreaRatio   float64 `json:"subjectAreaRatio"`
+	ConnectedCompCount int     `json:"connectedComponentCount"`
+	LargestCompRatio   float64 `json:"largestComponentRatio"`
+	BorderFGCoverage   float64 `json:"borderForegroundCoverage"`
+	CentroidX          float64 `json:"centroidX"`
+	CentroidY          float64 `json:"centroidY"`
+	CreatedAt          string  `json:"createdAt"`
 }
 
 func (SequenceMeasurementRecord) TableName() string {
@@ -88,14 +88,14 @@ func (SequenceMeasurementRecord) TableName() string {
 }
 
 type QualityReportArtifact struct {
-	ID           string `json:"id"`
-	EvaluationID string `json:"evaluationId"`
-	StorageKey   string `json:"storageKey"`
-	ContentHash  string `json:"contentHash"`
-	ByteSize     int64  `json:"byteSize"`
+	ID            string `json:"id"`
+	EvaluationID  string `json:"evaluationId"`
+	StorageKey    string `json:"storageKey"`
+	ContentHash   string `json:"contentHash"`
+	ByteSize      int64  `json:"byteSize"`
 	SchemaVersion string `json:"schemaVersion"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"createdAt"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"createdAt"`
 }
 
 func (QualityReportArtifact) TableName() string {
@@ -103,15 +103,15 @@ func (QualityReportArtifact) TableName() string {
 }
 
 type ActiveQualityGateBinding struct {
-	ID                  string `json:"id"`
-	ProcessingTaskID    string `json:"processingTaskId"`
-	GateProfileHash     string `json:"gateProfileHash"`
-	ActiveGateID        string `json:"activeGateId"`
+	ID                    string `json:"id"`
+	ProcessingTaskID      string `json:"processingTaskId"`
+	GateProfileHash       string `json:"gateProfileHash"`
+	ActiveGateID          string `json:"activeGateId"`
 	ActiveRevisionSetHash string `json:"activeRevisionSetHash"`
-	EvaluationSetHash   string `json:"evaluationSetHash"`
-	BindingRevision     int64  `json:"bindingRevision"`
-	CreatedAt           string `json:"createdAt"`
-	UpdatedAt           string `json:"updatedAt"`
+	EvaluationSetHash     string `json:"evaluationSetHash"`
+	BindingRevision       int64  `json:"bindingRevision"`
+	CreatedAt             string `json:"createdAt"`
+	UpdatedAt             string `json:"updatedAt"`
 }
 
 func (ActiveQualityGateBinding) TableName() string {
@@ -152,19 +152,19 @@ func (QualityGateSnapshot) TableName() string {
 }
 
 type QualityOutboxEventV2 struct {
-	ID              string `json:"id"`
-	EventID         string `json:"eventId"`
-	EventType       string `json:"eventType"`
-	AggregateID     string `json:"aggregateId"`
-	AggregateSeq    int    `json:"aggregateSequence"`
-	PayloadJSON     string `json:"payloadJson"`
-	PayloadHash     string `json:"payloadHash"`
-	Status          string `json:"status"`
-	AttemptCount    int    `json:"attemptCount"`
-	AvailableAt     string `json:"availableAt"`
-	LastError       string `json:"lastError"`
-	CreatedAt       string `json:"createdAt"`
-	PublishedAt     string `json:"publishedAt"`
+	ID           string `json:"id"`
+	EventID      string `json:"eventId"`
+	EventType    string `json:"eventType"`
+	AggregateID  string `json:"aggregateId"`
+	AggregateSeq int    `json:"aggregateSequence"`
+	PayloadJSON  string `json:"payloadJson"`
+	PayloadHash  string `json:"payloadHash"`
+	Status       string `json:"status"`
+	AttemptCount int    `json:"attemptCount"`
+	AvailableAt  string `json:"availableAt"`
+	LastError    string `json:"lastError"`
+	CreatedAt    string `json:"createdAt"`
+	PublishedAt  string `json:"publishedAt"`
 }
 
 func (QualityOutboxEventV2) TableName() string {
@@ -172,21 +172,21 @@ func (QualityOutboxEventV2) TableName() string {
 }
 
 type QualityCommitJournalV2 struct {
-	ID               string `json:"id"`
-	CommitHash       string `json:"commitHash"`
-	EvaluationID     string `json:"evaluationId"`
-	ActionRevisionID string `json:"actionRevisionId"`
+	ID                string `json:"id"`
+	CommitHash        string `json:"commitHash"`
+	EvaluationID      string `json:"evaluationId"`
+	ActionRevisionID  string `json:"actionRevisionId"`
 	ActionContentHash string `json:"actionContentHash"`
-	Status           string `json:"status"`
-	StepsJSON        string `json:"stepsJson"`
-	ReportStagingKey string `json:"reportStagingKey"`
-	ReportFinalKey   string `json:"reportFinalKey"`
-	ReportHash       string `json:"reportHash"`
-	ResultHash       string `json:"resultHash"`
-	LastError        string `json:"lastError"`
-	CreatedAt        string `json:"createdAt"`
-	UpdatedAt        string `json:"updatedAt"`
-	CompletedAt      string `json:"completedAt"`
+	Status            string `json:"status"`
+	StepsJSON         string `json:"stepsJson"`
+	ReportStagingKey  string `json:"reportStagingKey"`
+	ReportFinalKey    string `json:"reportFinalKey"`
+	ReportHash        string `json:"reportHash"`
+	ResultHash        string `json:"resultHash"`
+	LastError         string `json:"lastError"`
+	CreatedAt         string `json:"createdAt"`
+	UpdatedAt         string `json:"updatedAt"`
+	CompletedAt       string `json:"completedAt"`
 }
 
 func (QualityCommitJournalV2) TableName() string {
@@ -194,23 +194,23 @@ func (QualityCommitJournalV2) TableName() string {
 }
 
 type QualityEvaluationRequestInbox struct {
-	ID               string `json:"id"`
-	EventID          string `json:"eventId"`
-	ActionRevisionID string `json:"actionRevisionId"`
+	ID                string `json:"id"`
+	EventID           string `json:"eventId"`
+	ActionRevisionID  string `json:"actionRevisionId"`
 	ActionContentHash string `json:"actionContentHash"`
-	ProfileID        string `json:"profileId"`
-	ProfileVersion   string `json:"profileVersion"`
-	RuleSetVersion   string `json:"ruleSetVersion"`
-	IdempotencyKey   string `json:"idempotencyKey"`
-	PayloadHash      string `json:"payloadHash"`
-	Status           string `json:"status"`
-	AttemptCount     int    `json:"attemptCount"`
-	LeaseOwner       string `json:"leaseOwner"`
-	LeaseExpiresAt   string `json:"leaseExpiresAt"`
-	LastError        string `json:"lastError"`
-	ReceivedAt       string `json:"receivedAt"`
-	ProcessedAt      string `json:"processedAt"`
-	CreatedAt        string `json:"createdAt"`
+	ProfileID         string `json:"profileId"`
+	ProfileVersion    string `json:"profileVersion"`
+	RuleSetVersion    string `json:"ruleSetVersion"`
+	IdempotencyKey    string `json:"idempotencyKey"`
+	PayloadHash       string `json:"payloadHash"`
+	Status            string `json:"status"`
+	AttemptCount      int    `json:"attemptCount"`
+	LeaseOwner        string `json:"leaseOwner"`
+	LeaseExpiresAt    string `json:"leaseExpiresAt"`
+	LastError         string `json:"lastError"`
+	ReceivedAt        string `json:"receivedAt"`
+	ProcessedAt       string `json:"processedAt"`
+	CreatedAt         string `json:"createdAt"`
 }
 
 func (QualityEvaluationRequestInbox) TableName() string {
@@ -218,15 +218,15 @@ func (QualityEvaluationRequestInbox) TableName() string {
 }
 
 type ActiveQualityBindingHistory struct {
-	ID                string    `json:"id"`
-	ActionRevisionID  string    `json:"actionRevisionId"`
-	ProfileHash       string    `json:"profileHash"`
-	BindingRevision   int64     `json:"bindingRevision"`
-	PreviousEvalID    string    `json:"previousEvaluationId"`
-	NewEvalID         string    `json:"newEvaluationId"`
-	Reason            string    `json:"reason"`
-	Actor             string    `json:"actor"`
-	OccurredAt        string    `json:"occurredAt"`
+	ID               string `json:"id"`
+	ActionRevisionID string `json:"actionRevisionId"`
+	ProfileHash      string `json:"profileHash"`
+	BindingRevision  int64  `json:"bindingRevision"`
+	PreviousEvalID   string `json:"previousEvaluationId"`
+	NewEvalID        string `json:"newEvaluationId"`
+	Reason           string `json:"reason"`
+	Actor            string `json:"actor"`
+	OccurredAt       string `json:"occurredAt"`
 }
 
 func (ActiveQualityBindingHistory) TableName() string {
@@ -234,13 +234,13 @@ func (ActiveQualityBindingHistory) TableName() string {
 }
 
 type QualityGateRebuildRequest struct {
-	ID               string    `json:"id"`
-	ProcessingTaskID string    `json:"processingTaskId"`
-	SourceEventType  string    `json:"sourceEventType"`
-	SourceEventID    string    `json:"sourceEventId"`
-	Reason           string    `json:"reason"`
-	Status           string    `json:"status"`
-	CreatedAt        string    `json:"createdAt"`
+	ID               string `json:"id"`
+	ProcessingTaskID string `json:"processingTaskId"`
+	SourceEventType  string `json:"sourceEventType"`
+	SourceEventID    string `json:"sourceEventId"`
+	Reason           string `json:"reason"`
+	Status           string `json:"status"`
+	CreatedAt        string `json:"createdAt"`
 }
 
 func (QualityGateRebuildRequest) TableName() string {

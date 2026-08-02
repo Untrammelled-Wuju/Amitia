@@ -3,9 +3,11 @@
 package quality
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -18,10 +20,36 @@ func NewHandler(svc QualityService) *Handler {
 	return &Handler{svc: svc}
 }
 
+func writeQualityError(c *gin.Context, err error) {
+	var qe *QualityError
+	if errors.As(err, &qe) {
+		switch qe.Code {
+		case ErrCodeQualityEvaluationNotFound:
+			util.ErrorResponse(c, response.NotFound, qe.Message, gin.H{"errorCode": qe.Code})
+		case ErrCodeQualityNotOwned:
+			util.ErrorResponse(c, response.Forbidden, qe.Message, gin.H{"errorCode": qe.Code})
+		default:
+			util.ErrorResponse(c, response.InternalError, qe.Message, gin.H{"errorCode": qe.Code})
+		}
+		return
+	}
+	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+}
+
 func (h *Handler) GetEvaluation(c *gin.Context) {
 	evaluationID := c.Param("evaluationId")
 	if evaluationID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "评估 ID 为空", nil)
+		return
+	}
+
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
+		writeQualityError(c, err)
 		return
 	}
 
@@ -50,6 +78,16 @@ func (h *Handler) GetActiveActionQuality(c *gin.Context) {
 		return
 	}
 
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if err := h.svc.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, actorID); err != nil {
+		writeQualityError(c, err)
+		return
+	}
+
 	result, err := h.svc.GetActiveActionQuality(c.Request.Context(), processingTaskID, actionKey)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
@@ -67,6 +105,16 @@ func (h *Handler) Reevaluate(c *gin.Context) {
 	evaluationID := c.Param("evaluationId")
 	if evaluationID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "评估 ID 为空", nil)
+		return
+	}
+
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
+		writeQualityError(c, err)
 		return
 	}
 
@@ -96,6 +144,16 @@ func (h *Handler) GetTaskGate(c *gin.Context) {
 		return
 	}
 
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if err := h.svc.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, actorID); err != nil {
+		writeQualityError(c, err)
+		return
+	}
+
 	result, err := h.svc.GetTaskGate(c.Request.Context(), processingTaskID)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
@@ -109,6 +167,16 @@ func (h *Handler) ListProblemFrames(c *gin.Context) {
 	evaluationID := c.Param("evaluationId")
 	if evaluationID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "评估 ID 为空", nil)
+		return
+	}
+
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
+		writeQualityError(c, err)
 		return
 	}
 
@@ -142,6 +210,16 @@ func (h *Handler) ListFindings(c *gin.Context) {
 	evaluationID := c.Param("evaluationId")
 	if evaluationID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "评估 ID 为空", nil)
+		return
+	}
+
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
+		writeQualityError(c, err)
 		return
 	}
 

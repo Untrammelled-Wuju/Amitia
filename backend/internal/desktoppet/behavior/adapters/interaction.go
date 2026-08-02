@@ -34,4 +34,5 @@ func (a *InteractionAdapter) OnInteractionLifecycle(ctx context.Context, evt beh
 
 type NoopInteractionAdapter struct{}
 
-func (n *NoopInteractionAdapter) OnInteractionLifecycle(_ context.Context, _ behavior.InteractionLifecycleEvent) {}
+func (n *NoopInteractionAdapter) OnInteractionLifecycle(_ context.Context, _ behavior.InteractionLifecycleEvent) {
+}

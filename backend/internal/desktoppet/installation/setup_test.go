@@ -261,10 +261,10 @@ func packageSourceDir(dataDir, taskID, pkgID string) string {
 }
 
 type actionSpec struct {
-	Key                  string
-	Name                 string
-	FrameCount           int
-	SupportsDefaultIdle  *bool
+	Key                 string
+	Name                string
+	FrameCount          int
+	SupportsDefaultIdle *bool
 }
 
 func boolPtr(v bool) *bool { return &v }
@@ -283,11 +283,11 @@ func createPackageOnDisk(t *testing.T, dataDir, taskID, pkgID string, canvasW, c
 	}
 
 	manifest := &processing.Manifest{
-		SchemaVersion:    processing.ManifestSchemaVersion,
-		PackageID:        pkgID,
-		Name:             "测试包",
-		CharacterID:      testCharacterID,
-		GenerationTaskID: taskID,
+		SchemaVersion:     processing.ManifestSchemaVersion,
+		PackageID:         pkgID,
+		Name:              "测试包",
+		CharacterID:       testCharacterID,
+		GenerationTaskID:  taskID,
 		ProcessingVersion: 1,
 		Canvas:            processing.ManifestCanvas{Width: canvasW, Height: canvasH},
 		DefaultAction:     defaultAction,
@@ -475,11 +475,11 @@ func createInstalledPackageOnDisk(t *testing.T, dataDir, installID string, actio
 	}
 
 	manifest := &processing.Manifest{
-		SchemaVersion:    processing.ManifestSchemaVersion,
-		PackageID:        testPackageID,
-		Name:             "测试包",
-		CharacterID:      testCharacterID,
-		GenerationTaskID: testTaskID,
+		SchemaVersion:     processing.ManifestSchemaVersion,
+		PackageID:         testPackageID,
+		Name:              "测试包",
+		CharacterID:       testCharacterID,
+		GenerationTaskID:  testTaskID,
 		ProcessingVersion: 1,
 		Canvas:            processing.ManifestCanvas{Width: testCanvasWidth, Height: testCanvasHeight},
 		DefaultAction:     "idle_normal",

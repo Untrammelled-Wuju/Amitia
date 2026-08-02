@@ -90,7 +90,6 @@ func (s *service) GetAbout() map[string]interface{} {
 	}
 }
 
-
 func (s *service) MoodDetectionConfig() map[string]interface{} {
 	enabled := s.getAppSetting("mood_detection_enabled") == "true"
 	return map[string]interface{}{"enabled": enabled, "threshold": 0.5}

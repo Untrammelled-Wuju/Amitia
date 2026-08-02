@@ -7,10 +7,10 @@ import (
 )
 
 var (
-	ErrRevisionConflict      = errors.New("settings: revision conflict")
-	ErrSettingsNotFound      = errors.New("settings: not found")
-	ErrOwnershipMismatch     = errors.New("settings: ownership mismatch")
-	ErrInvalidCASRevision    = errors.New("settings: invalid expected revision for CAS")
+	ErrRevisionConflict   = errors.New("settings: revision conflict")
+	ErrSettingsNotFound   = errors.New("settings: not found")
+	ErrOwnershipMismatch  = errors.New("settings: ownership mismatch")
+	ErrInvalidCASRevision = errors.New("settings: invalid expected revision for CAS")
 )
 
 type RuntimeSettings struct {
@@ -50,10 +50,10 @@ func (RuntimeSettings) TableName() string {
 }
 
 type SettingsCASRequest struct {
-	InstallationID     string
-	ExpectedRevision   int
-	InitiatorDeviceID  string
-	InitiatorUserID    string
+	InstallationID    string
+	ExpectedRevision  int
+	InitiatorDeviceID string
+	InitiatorUserID   string
 }
 
 func (r SettingsCASRequest) IsValid() bool {

@@ -186,8 +186,8 @@ func (s *service) testOpenAICompatibleConnection(cfg *VisionConfig) (map[string]
 	baseUrl := strings.TrimRight(cfg.BaseUrl, "/")
 	testImage := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg=="
 	reqBody := map[string]interface{}{
-		"model":       cfg.ModelName,
-		"max_tokens":  100,
+		"model":      cfg.ModelName,
+		"max_tokens": 100,
 		"messages": []map[string]interface{}{
 			{"role": "user", "content": []map[string]interface{}{
 				{"type": "text", "text": "你好，请简单回复连接成功"},

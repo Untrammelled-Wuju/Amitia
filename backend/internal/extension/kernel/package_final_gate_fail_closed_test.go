@@ -369,7 +369,7 @@ func TestFinalGateRetainArtifactPolicyFailsWhenArtifactNotFound(t *testing.T) {
 		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID: "art-retain-notfound",
+		ArtifactID:        "art-retain-notfound",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -422,7 +422,7 @@ func TestFinalGateRetainForRollbackPolicyFailsWhenArtifactNotFound(t *testing.T)
 		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID: "art-retain-rollback-notfound",
+		ArtifactID:        "art-retain-rollback-notfound",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -475,7 +475,7 @@ func TestFinalGateRetainForExportPolicyFailsWhenArtifactNotFound(t *testing.T) {
 		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID: "art-retain-export-notfound",
+		ArtifactID:        "art-retain-export-notfound",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -528,7 +528,7 @@ func TestFinalGateDeleteStepArtifactIDMismatchFailsClosed(t *testing.T) {
 		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID: "art-expected",
+		ArtifactID:        "art-expected",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -545,7 +545,7 @@ func TestFinalGateDeleteStepArtifactIDMismatchFailsClosed(t *testing.T) {
 		StepName: "remove_artifact", StepOrder: 3,
 		Status: "completed", AttemptCount: 1,
 		ResultJSON: `{"artifactId":"art-different","artifactPolicy":"deleteArtifact","deleted":true,"remainingRefs":0}`,
-		StartedAt: now, CompletedAt: now,
+		StartedAt:  now, CompletedAt: now,
 	}
 	if err := container.PackageRepository.PutStep(ctx, removeStep, guard); err != nil {
 		t.Fatal(err)
@@ -594,7 +594,7 @@ func TestFinalGateUninstallVersionIDMismatchFailsClosed(t *testing.T) {
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID: "art-version-mismatch", TargetVersion: "1.0.0",
-		TargetGeneration: "gen-1",
+		TargetGeneration:  "gen-1",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -648,7 +648,7 @@ func TestFinalGateUninstallGenerationIDMismatchFailsClosed(t *testing.T) {
 		OperationType: "uninstall", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID: "art-gen-mismatch", TargetVersion: "1.0.0",
-		TargetGeneration: "gen-original",
+		TargetGeneration:  "gen-original",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -701,9 +701,9 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
-		OperationType: "update", Status: "completed",
+		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID: "art-reqhash",
+		ArtifactID:        "art-reqhash",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -756,9 +756,9 @@ func TestFinalGateUpdatePreviewHashDriftDetected(t *testing.T) {
 		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
-		OperationType: "update", Status: "completed",
+		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID: "art-preview-drift",
+		ArtifactID:        "art-preview-drift",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
@@ -832,9 +832,9 @@ func TestFinalGateSnapshotRealDiffNonEmptyFails(t *testing.T) {
 		UserID: "user-1", ScopeType: "global", ExtensionID: extensionID,
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		TargetGeneration: "gen-2",
-		OperationType: "update", Status: "completed",
+		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID: "art-real-diff",
+		ArtifactID:        "art-real-diff",
 		ConfirmationsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {

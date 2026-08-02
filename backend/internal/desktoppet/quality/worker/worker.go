@@ -15,8 +15,8 @@ import (
 
 const (
 	qualityLeaseDuration     = 5 * time.Minute
-	qualityPollInterval     = 5 * time.Second
-	qualityWorkerID         = "quality-worker-1"
+	qualityPollInterval      = 5 * time.Second
+	qualityWorkerID          = "quality-worker-1"
 	qualityHeartbeatInterval = 30 * time.Second
 	qualityTimeFormat        = time.RFC3339
 	maxConcurrentEvaluations = 2

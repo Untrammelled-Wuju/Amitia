@@ -9,23 +9,23 @@ import (
 )
 
 const (
-	EnvelopeVersion     = 2
-	ProtocolName        = "amitia.desktop-pet.runtime"
+	EnvelopeVersion      = 2
+	ProtocolName         = "amitia.desktop-pet.runtime"
 	CurrentSchemaVersion = "2.0.0"
 )
 
 type MessageType string
 
 const (
-	MessageTypeHello        MessageType = "hello"
-	MessageTypeHelloAck     MessageType = "hello_ack"
-	MessageTypeCommand      MessageType = "command"
-	MessageTypeCommandAck   MessageType = "command_ack"
-	MessageTypeRuntimeEvent MessageType = "runtime_event"
+	MessageTypeHello         MessageType = "hello"
+	MessageTypeHelloAck      MessageType = "hello_ack"
+	MessageTypeCommand       MessageType = "command"
+	MessageTypeCommandAck    MessageType = "command_ack"
+	MessageTypeRuntimeEvent  MessageType = "runtime_event"
 	MessageTypeStateSnapshot MessageType = "state_snapshot"
-	MessageTypeError        MessageType = "error"
-	MessageTypePing         MessageType = "ping"
-	MessageTypePong         MessageType = "pong"
+	MessageTypeError         MessageType = "error"
+	MessageTypePing          MessageType = "ping"
+	MessageTypePong          MessageType = "pong"
 )
 
 func IsValidMessageType(t string) bool {

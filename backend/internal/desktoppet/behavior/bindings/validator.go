@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	ErrCodeBindingInvalid      = "binding_invalid"
+	ErrCodeBindingInvalid       = "binding_invalid"
 	ErrCodeBindingActionMissing = "binding_action_missing"
 )
 
@@ -14,10 +14,10 @@ func NewBindingError(code, msg string) error {
 }
 
 const (
-	MaxUserPriority       = 900
-	MinCooldownMS   int64 = 500
-	MinPriorityOffset     = -100
-	MaxPriorityOffset     = 100
+	MaxUserPriority         = 900
+	MinCooldownMS     int64 = 500
+	MinPriorityOffset       = -100
+	MaxPriorityOffset       = 100
 )
 
 type Validator struct {

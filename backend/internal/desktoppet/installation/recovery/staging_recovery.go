@@ -11,8 +11,8 @@ import (
 )
 
 type StagingRecovery struct {
-	worker     *RecoveryWorker
-	repo       RecoveryRepo
+	worker      *RecoveryWorker
+	repo        RecoveryRepo
 	stagingRepo StagingRepo
 }
 

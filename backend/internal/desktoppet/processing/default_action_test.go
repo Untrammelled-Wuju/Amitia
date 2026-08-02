@@ -168,8 +168,8 @@ func TestDefaultActionSelectorUserSpecifiedNotSucceeded(t *testing.T) {
 
 func TestDefaultActionIsDefaultIdleAction(t *testing.T) {
 	cases := []struct {
-		name    string
-		action  desktoppet.GenerationTaskAction
+		name     string
+		action   desktoppet.GenerationTaskAction
 		expected bool
 	}{
 		{"succeeded idle", newSucceededAction("idle_normal", 1, 1), true},

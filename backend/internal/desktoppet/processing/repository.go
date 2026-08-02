@@ -566,12 +566,12 @@ func (r *repository) ResetProcessingActionToPending(actionID string) error {
 	return r.db.Model(&ProcessingAction{}).
 		Where("id = ? AND status IN ?", actionID, []string{"processing", "queued"}).
 		Updates(map[string]interface{}{
-			"status":        "pending",
-			"progress":      0,
-			"started_at":    "",
-			"completed_at":  "",
-			"updated_at":    now,
-			"row_version":   gorm.Expr("row_version + 1"),
+			"status":       "pending",
+			"progress":     0,
+			"started_at":   "",
+			"completed_at": "",
+			"updated_at":   now,
+			"row_version":  gorm.Expr("row_version + 1"),
 		}).Error
 }
 

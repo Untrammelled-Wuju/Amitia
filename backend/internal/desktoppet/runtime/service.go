@@ -118,7 +118,7 @@ func (s *Service) GetRuntimeStatus(ctx context.Context, userID, runtimeID string
 	if conn == nil {
 		return &StatusView{
 			RuntimeID: runtimeID,
-			Sync: &SyncView{Status: "offline", PendingCommands: 0},
+			Sync:      &SyncView{Status: "offline", PendingCommands: 0},
 		}, nil
 	}
 
@@ -142,11 +142,11 @@ func (s *Service) GetRuntimeStatus(ctx context.Context, userID, runtimeID string
 	if len(states) > 0 {
 		st := states[0]
 		view.Actual = &ActualView{
-			InstallationID:  st.InstallationID,
-			Revision:        st.DesiredRevision,
-			Visible:         st.Visible != 0,
+			InstallationID:   st.InstallationID,
+			Revision:         st.DesiredRevision,
+			Visible:          st.Visible != 0,
 			CurrentActionKey: st.CurrentActionKey,
-			Stale:           st.Health == "offline" || st.Health == "stale",
+			Stale:            st.Health == "offline" || st.Health == "stale",
 		}
 		if st.ObservedAt != "" {
 			if t, err := time.Parse(runtimeTimeFormat, st.ObservedAt); err == nil {

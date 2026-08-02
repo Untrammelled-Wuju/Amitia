@@ -14,8 +14,8 @@ type fakeProvider struct {
 	modes []BackgroundMode
 }
 
-func (f *fakeProvider) Name() string                                      { return f.name }
-func (f *fakeProvider) SupportedModes() []BackgroundMode                  { return f.modes }
+func (f *fakeProvider) Name() string                     { return f.name }
+func (f *fakeProvider) SupportedModes() []BackgroundMode { return f.modes }
 func (f *fakeProvider) RemoveBackground(ctx context.Context, input ImageInput) (*BackgroundRemovalResult, error) {
 	return nil, errors.New("not implemented")
 }

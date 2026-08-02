@@ -116,10 +116,13 @@ func (s *QuotaService) CanIncrement(key QuotaKey, owner string, maximum int64) b
 }
 
 func (s *QuotaService) CheckStorage(userID string, requestedBytes int64) error {
+	if requestedBytes < 0 {
+		return nil
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	current := s.usage[QuotaKeyUserStorageBytes][userID]
-	if current+s.limits.UserStorageBytes < current+requestedBytes {
+	if requestedBytes > s.limits.UserStorageBytes-current {
 		return ErrStorageQuotaExceeded
 	}
 	return nil

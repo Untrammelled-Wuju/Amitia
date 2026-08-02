@@ -5,11 +5,11 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"gorm.io/gorm/clause"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-	"gorm.io/gorm/clause"
 )
 
 func (s *service) GetStorageInfo() map[string]interface{} {
@@ -428,7 +428,10 @@ func (s *service) StorageImportUserData(body map[string]interface{}) map[string]
 			}
 
 			result := s.db.Table(t.name).Clauses(clause.OnConflict{DoNothing: true}).Create(items)
-			if result.Error != nil { errors[t.name] = result.Error.Error(); continue }
+			if result.Error != nil {
+				errors[t.name] = result.Error.Error()
+				continue
+			}
 			count := len(items)
 			stats[t.name] = count
 			totalImported += count
@@ -439,7 +442,7 @@ func (s *service) StorageImportUserData(body map[string]interface{}) map[string]
 			"fileName":      fileName,
 			"totalImported": totalImported,
 			"stats":         stats,
-			"errors":         errors,
+			"errors":        errors,
 		}
 	}
 	return map[string]interface{}{"imported": false, "error": "missing fileName"}

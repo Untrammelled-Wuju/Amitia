@@ -62,10 +62,10 @@ func (a *ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, charact
 	if manifest != nil {
 		for _, action := range manifest.Actions {
 			actions[action.Key] = behavior.ActionCapability{
-				Key:          action.Key,
-				Name:         action.Name,
-				CategoryKey:  inferCategoryFromKey(action.Key),
-				Available:    true,
+				Key:         action.Key,
+				Name:        action.Name,
+				CategoryKey: inferCategoryFromKey(action.Key),
+				Available:   true,
 			}
 		}
 	}

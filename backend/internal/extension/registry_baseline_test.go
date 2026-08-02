@@ -178,11 +178,11 @@ func TestLegacy_Registry_RegisterWithNilHandlerInstructions(t *testing.T) {
 	definition.DefaultConfig = json.RawMessage(`{}`)
 	manifest := Manifest{
 		Schema: "https://schemas.amitia.dev/extensions/v1/manifest.schema.json", APIVersion: "extensions.amitia.dev/v1alpha1", Kind: "Skill",
-		Metadata: ManifestMetadata{ID: "dev.test.reg.instr", Name: "test-instr", Version: "1.0.0", Description: "test"},
+		Metadata:      ManifestMetadata{ID: "dev.test.reg.instr", Name: "test-instr", Version: "1.0.0", Description: "test"},
 		Compatibility: ManifestCompatibility{EngineMin: "1.0.0", EngineMaxExclusive: "2.0.0"},
-		Entry: SkillEntry{Kind: "instructions", Path: "SKILL.md", ArtifactID: "artifact-1"},
-		Capabilities: []string{}, Triggers: []SkillTrigger{TriggerLLM},
-		Execution: ManifestExecution{TimeoutMS: 100, Idempotent: false},
+		Entry:         SkillEntry{Kind: "instructions", Path: "SKILL.md", ArtifactID: "artifact-1"},
+		Capabilities:  []string{}, Triggers: []SkillTrigger{TriggerLLM},
+		Execution:   ManifestExecution{TimeoutMS: 100, Idempotent: false},
 		InputSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object"}`),
 		ConfigSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{}}`), DefaultConfig: json.RawMessage(`{}`),
 		Enabled: true, AllowLLM: true, AllowManual: false,

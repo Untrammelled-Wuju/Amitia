@@ -34,24 +34,23 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/processing/application"
 	processingcommit "github.com/u-ai/backend/internal/desktoppet/processing/commit"
 	processingevents "github.com/u-ai/backend/internal/desktoppet/processing/events"
-	processingworkspace "github.com/u-ai/backend/internal/desktoppet/processing/workspace"
 	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
-	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
-	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
+	processingworkspace "github.com/u-ai/backend/internal/desktoppet/processing/workspace"
 	"github.com/u-ai/backend/internal/desktoppet/quality"
-	qualityworker "github.com/u-ai/backend/internal/desktoppet/quality/worker"
 	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
+	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
 	qualityinput "github.com/u-ai/backend/internal/desktoppet/quality/input"
 	qualitymeasurement "github.com/u-ai/backend/internal/desktoppet/quality/measurement"
-	qualitywriteback "github.com/u-ai/backend/internal/desktoppet/quality/writeback"
-	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
 	qualityrecovery "github.com/u-ai/backend/internal/desktoppet/quality/recovery"
+	qualityworker "github.com/u-ai/backend/internal/desktoppet/quality/worker"
+	qualitywriteback "github.com/u-ai/backend/internal/desktoppet/quality/writeback"
 	"github.com/u-ai/backend/internal/desktoppet/release"
+	releasebuild "github.com/u-ai/backend/internal/desktoppet/release/build"
 	releaserepo "github.com/u-ai/backend/internal/desktoppet/release/repository"
 	releasestorage "github.com/u-ai/backend/internal/desktoppet/release/storage"
-	releasebuild "github.com/u-ai/backend/internal/desktoppet/release/build"
 	releaseworker "github.com/u-ai/backend/internal/desktoppet/release/worker"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -59,6 +58,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mcp"
 	mcpauth "github.com/u-ai/backend/internal/mcp/auth"
@@ -110,7 +111,6 @@ type AppServices struct {
 	QualityService        quality.QualityService
 	QualityWorker         *qualityworker.Worker
 	InstallationService   installation.Service
-	ReleaseService        installation.ReleaseService
 	NewReleaseService     release.ReleaseService
 	ReleaseRecoveryWorker *release.ReleaseRecoveryWorker
 	ReleaseBuildWorker    *releaseworker.ReleaseBuildWorker
@@ -129,6 +129,7 @@ type AppServices struct {
 	Emote                 *emote.Service
 	Temporal              *temporal.Service
 	RelTimeCoordinator    *temporal.RelationshipTimeCoordinator
+	OwnershipGuard        security.OwnershipGuard
 	MCPRepository         *mcp.Repository
 	MCPConnections        *mcpmanager.Manager
 	MCPAuth               *mcpauth.Manager
@@ -635,13 +636,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		return bridgeProcessor.SubmitToInbox(context.Background(), eventID, payload)
 	})
 
-	releaseStorage := installation.NewReleaseStorage(processingDataDir)
-	revisionSource := installation.NewRevisionSourceAdapter(ctx, editingRepo, editingSvc, processingDataDir)
-	releaseService := installation.NewReleaseService(installationRepo, releaseStorage, revisionSource, processingRepo, charRepo, desktopPetRuntime.Notifier(), ctx)
-	if err := releaseService.RecoverPendingOperations(); err != nil {
-		log.Warn("installation coordinator recovery warning: ", err)
-	}
-
 	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
 	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
 	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
@@ -657,13 +651,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 
 	var behaviorSvc *behavior.BehaviorService
 	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
-		DB:              ctx.DB,
-		RuntimeService:  desktopPetRuntime,
-		InstallRepo:     installationRepo,
-		PsycheStore:     psycheStore,
-		DataDir:         processingDataDir,
-		ShadowMode:      false,
-		RuntimeCmdOn:    true,
+		DB:             ctx.DB,
+		RuntimeService: desktopPetRuntime,
+		InstallRepo:    installationRepo,
+		PsycheStore:    psycheStore,
+		DataDir:        processingDataDir,
+		ShadowMode:     false,
+		RuntimeCmdOn:   true,
 	})
 	if assembleErr != nil {
 		log.Error("failed to assemble behavior engine: ", assembleErr)
@@ -686,55 +680,55 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	}
 
 	return &AppServices{
-		Graph:               graphSvc,
-		ChatDeliveryAdapter: deliveryAdapter,
-		Memory:              memSvc,
-		Profile:             profSvc,
-		Episodic:            epiSvc,
-		WorldBook:           wbSvc,
-		Vision:              visionSvc,
-		Companion:           compSvc,
-		Chat:                chatSvc,
-		UnifiedEntry:        entry,
-		DataLifecycle:       dataLifecycle,
-		RuntimeQueue:        runtimeQueue,
-		NewOutbox:           newOutboxStore,
-		DeliveryStore:       deliveryStore,
-		DeliveryWorker:      deliveryWorker,
-		OutboxWorker:        newOutboxWorker,
-		DesktopPetWorker:    desktopPetWorker,
-		ProcessingWorker:    processingWorker,
-		QualityService:      qualitySvc,
-		QualityWorker:       qualityWorker,
-		InstallationService: installationService,
-		ReleaseService:      releaseService,
-		NewReleaseService:    newReleaseService,
+		Graph:                 graphSvc,
+		ChatDeliveryAdapter:   deliveryAdapter,
+		Memory:                memSvc,
+		Profile:               profSvc,
+		Episodic:              epiSvc,
+		WorldBook:             wbSvc,
+		Vision:                visionSvc,
+		Companion:             compSvc,
+		Chat:                  chatSvc,
+		UnifiedEntry:          entry,
+		DataLifecycle:         dataLifecycle,
+		RuntimeQueue:          runtimeQueue,
+		NewOutbox:             newOutboxStore,
+		DeliveryStore:         deliveryStore,
+		DeliveryWorker:        deliveryWorker,
+		OutboxWorker:          newOutboxWorker,
+		DesktopPetWorker:      desktopPetWorker,
+		ProcessingWorker:      processingWorker,
+		QualityService:        qualitySvc,
+		QualityWorker:         qualityWorker,
+		InstallationService:   installationService,
+		NewReleaseService:     newReleaseService,
 		ReleaseRecoveryWorker: releaseRecoveryWorker,
 		ReleaseEventPublisher: releaseEventPublisher,
-		DesktopPetRuntime:   desktopPetRuntime,
-		EditingService:      editingSvc,
-		RegenerationWorker:  regenerationWorker,
-		BridgeRecoveryWorker: bridgeRecoveryWorker,
-		BehaviorService:     behaviorSvc,
-		AdapterManager:      adapterManager,
-		Reconciliation:      reconciliationEngine,
-		CircuitBreakers:     cbRegistry,
-		VoiceEntry:          voiceEntry,
-		Extension:           extensionRuntime,
-		KernelContainer:     kernelContainer,
-		Emote:               emoteSvc,
-		Temporal:            temporalSvc,
-		RelTimeCoordinator:  relTimeCoordinator,
-		MCPRepository:       mcpRepository,
-		MCPConnections:      connectionManager,
-		MCPAuth:             oauthManager,
-		MCPDiscovery:        discoveryService,
-		MCPSkills:           skillRuntime,
-		MCPSecrets:          secretStore,
-		MCPFeatures:         featureService,
-		MCPHost:             hostService,
-		MCPInteractions:     interactionBroker,
-		MCPDependencies:     dependencyService,
+		DesktopPetRuntime:     desktopPetRuntime,
+		EditingService:        editingSvc,
+		RegenerationWorker:    regenerationWorker,
+		BridgeRecoveryWorker:  bridgeRecoveryWorker,
+		BehaviorService:       behaviorSvc,
+		AdapterManager:        adapterManager,
+		Reconciliation:        reconciliationEngine,
+		CircuitBreakers:       cbRegistry,
+		VoiceEntry:            voiceEntry,
+		Extension:             extensionRuntime,
+		KernelContainer:       kernelContainer,
+		Emote:                 emoteSvc,
+		Temporal:              temporalSvc,
+		RelTimeCoordinator:    relTimeCoordinator,
+		OwnershipGuard:        security.NewSQLiteOwnershipGuard(ctx.DB),
+		MCPRepository:         mcpRepository,
+		MCPConnections:        connectionManager,
+		MCPAuth:               oauthManager,
+		MCPDiscovery:          discoveryService,
+		MCPSkills:             skillRuntime,
+		MCPSecrets:            secretStore,
+		MCPFeatures:           featureService,
+		MCPHost:               hostService,
+		MCPInteractions:       interactionBroker,
+		MCPDependencies:       dependencyService,
 	}
 }
 

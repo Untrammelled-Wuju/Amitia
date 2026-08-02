@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware"
 )
 
 func RegisterInternalRoutes(r *gin.Engine, svc *Service) {
@@ -17,24 +18,24 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, svc *Service) {
 	runtimeGroup := apiGroup.Group("/desktop-pets/runtime")
 
 	runtimeGroup.GET("/status", func(c *gin.Context) {
-		userID := c.GetString("userId")
+		userID := middleware.GetUserID(c)
 		if userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "userId required"}})
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
 			return
 		}
 		statuses, err := svc.ListRuntimeStatuses(c.Request.Context(), userID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": gin.H{"code": "INTERNAL", "message": err.Error()}})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": gin.H{"code": "INTERNAL", "message": "查询失败"}})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": statuses})
 	})
 
 	runtimeGroup.GET("/status/:runtimeId", func(c *gin.Context) {
-		userID := c.GetString("userId")
+		userID := middleware.GetUserID(c)
 		runtimeID := c.Param("runtimeId")
 		if userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "userId required"}})
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
 			return
 		}
 		status, err := svc.GetRuntimeStatus(c.Request.Context(), userID, runtimeID)
@@ -43,7 +44,7 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, svc *Service) {
 				c.JSON(MapRuntimeErrorCodeToHTTP(re.Code), gin.H{"success": false, "error": gin.H{"code": re.Code, "message": re.Message}})
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": gin.H{"code": "INTERNAL", "message": err.Error()}})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": gin.H{"code": "INTERNAL", "message": "查询失败"}})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
@@ -55,9 +56,9 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, svc *Service) {
 	})
 
 	runtimeGroup.GET("/bootstrap-token", func(c *gin.Context) {
-		userID := c.GetString("userId")
+		userID := middleware.GetUserID(c)
 		if userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "userId required"}})
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
 			return
 		}
 		info := svc.auth.BootstrapTokenInfo(svc.Config().Path)

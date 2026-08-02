@@ -5,13 +5,13 @@ package contracts
 type EntityType string
 
 const (
-	EntityGenerationTask    EntityType = "generation_task"
-	EntityGenerationAction  EntityType = "generation_action"
-	EntityGenerationFrame   EntityType = "generation_frame"
-	EntityProcessingTask    EntityType = "processing_task"
-	EntityProcessingAction  EntityType = "processing_action"
-	EntityProcessedFrame    EntityType = "processed_frame"
-	EntityPackage           EntityType = "package"
+	EntityGenerationTask   EntityType = "generation_task"
+	EntityGenerationAction EntityType = "generation_action"
+	EntityGenerationFrame  EntityType = "generation_frame"
+	EntityProcessingTask   EntityType = "processing_task"
+	EntityProcessingAction EntityType = "processing_action"
+	EntityProcessedFrame   EntityType = "processed_frame"
+	EntityPackage          EntityType = "package"
 )
 
 func (e EntityType) String() string { return string(e) }
@@ -46,23 +46,23 @@ func (e EntityType) SupportsPartialSuccess() bool {
 type ActorType string
 
 const (
-	ActorService     ActorType = "service"
-	ActorWorker      ActorType = "worker"
-	ActorRecovery    ActorType = "recovery"
-	ActorMigration   ActorType = "migration"
-	ActorOperator    ActorType = "operator"
-	ActorFinalizer   ActorType = "finalizer"
+	ActorService      ActorType = "service"
+	ActorWorker       ActorType = "worker"
+	ActorRecovery     ActorType = "recovery"
+	ActorMigration    ActorType = "migration"
+	ActorOperator     ActorType = "operator"
+	ActorFinalizer    ActorType = "finalizer"
 	ActorRetryService ActorType = "retry_service"
 )
 
 type TransitionReason string
 
 const (
-	ReasonUserSubmit          TransitionReason = "user.submit"
-	ReasonUserCancel          TransitionReason = "user.cancel"
-	ReasonUserRetry           TransitionReason = "user.retry"
-	ReasonUserRestart         TransitionReason = "user.restart"
-	ReasonUserRegenerate      TransitionReason = "user.regenerate"
+	ReasonUserSubmit     TransitionReason = "user.submit"
+	ReasonUserCancel     TransitionReason = "user.cancel"
+	ReasonUserRetry      TransitionReason = "user.retry"
+	ReasonUserRestart    TransitionReason = "user.restart"
+	ReasonUserRegenerate TransitionReason = "user.regenerate"
 
 	ReasonWorkerClaim         TransitionReason = "worker.claim"
 	ReasonWorkerStageAdvanced TransitionReason = "worker.stage_advanced"
@@ -71,17 +71,17 @@ const (
 	ReasonWorkerFrameFailed   TransitionReason = "worker.frame_failed"
 	ReasonWorkerLeaseLost     TransitionReason = "worker.lease_lost"
 
-	ReasonSystemServiceShutdown  TransitionReason = "system.service_shutdown"
-	ReasonSystemLeaseExpired     TransitionReason = "system.lease_expired"
-	ReasonSystemRecovered        TransitionReason = "system.recovered"
-	ReasonSystemPersistenceFailed TransitionReason = "system.persistence_failed"
+	ReasonSystemServiceShutdown    TransitionReason = "system.service_shutdown"
+	ReasonSystemLeaseExpired       TransitionReason = "system.lease_expired"
+	ReasonSystemRecovered          TransitionReason = "system.recovered"
+	ReasonSystemPersistenceFailed  TransitionReason = "system.persistence_failed"
 	ReasonSystemPackageBuildFailed TransitionReason = "system.package_build_failed"
-	ReasonSystemManifestInvalid  TransitionReason = "system.manifest_invalid"
-	ReasonSystemHashFailed       TransitionReason = "system.hash_failed"
-	ReasonSystemArtifactMissing  TransitionReason = "system.artifact_missing"
+	ReasonSystemManifestInvalid    TransitionReason = "system.manifest_invalid"
+	ReasonSystemHashFailed         TransitionReason = "system.hash_failed"
+	ReasonSystemArtifactMissing    TransitionReason = "system.artifact_missing"
 	ReasonSystemTransitionConflict TransitionReason = "system.transition_conflict"
-	ReasonSystemUnknownState     TransitionReason = "system.unknown_state"
-	ReasonSystemDependencyFailed TransitionReason = "system.dependency_failed"
+	ReasonSystemUnknownState       TransitionReason = "system.unknown_state"
+	ReasonSystemDependencyFailed   TransitionReason = "system.dependency_failed"
 )
 
 const (
@@ -166,11 +166,11 @@ func (r TransitionReason) String() string { return string(r) }
 type StopCause string
 
 const (
-	StopCauseUserCancel      StopCause = "user_cancel"
-	StopCauseServiceStop     StopCause = "service_stop"
-	StopCauseLeaseLost       StopCause = "lease_lost"
-	StopCauseParentFailed    StopCause = "parent_failed"
-	StopCauseExecutionSwap   StopCause = "execution_replaced"
+	StopCauseUserCancel    StopCause = "user_cancel"
+	StopCauseServiceStop   StopCause = "service_stop"
+	StopCauseLeaseLost     StopCause = "lease_lost"
+	StopCauseParentFailed  StopCause = "parent_failed"
+	StopCauseExecutionSwap StopCause = "execution_replaced"
 )
 
 func (s StopCause) String() string { return string(s) }

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
 	"github.com/u-ai/backend/internal/outbox"
+	"gorm.io/gorm"
 )
 
 type runtimeCaptureProcessor struct {

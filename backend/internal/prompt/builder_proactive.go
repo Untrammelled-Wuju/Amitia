@@ -1,4 +1,4 @@
-﻿package prompt
+package prompt
 
 func appendProactiveSections(ctx *buildContext) {
 	req := ctx.req

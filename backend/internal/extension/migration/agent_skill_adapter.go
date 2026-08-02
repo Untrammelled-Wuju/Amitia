@@ -58,7 +58,7 @@ func AgentSkillToDefinition(old extension.AgentSkillDefinition) kas.AgentSkillDe
 			Mode:     mode,
 			Priority: 0,
 		},
-		Resources:  resources,
+		Resources: resources,
 		TokenPolicy: kas.SkillTokenPolicy{
 			MaxInstructionTokens: tokenBudget,
 		},
@@ -70,8 +70,8 @@ func AgentSkillToDefinition(old extension.AgentSkillDefinition) kas.AgentSkillDe
 		Version:    old.Compatibility,
 		License:    old.License,
 		Compatibility: kas.SkillCompatibility{
-			Status:   string(old.CompatibilityStatus),
+			Status: string(old.CompatibilityStatus),
 		},
-		Metadata:      metadata,
+		Metadata: metadata,
 	}
 }

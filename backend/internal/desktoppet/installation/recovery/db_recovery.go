@@ -11,9 +11,9 @@ import (
 )
 
 type DBRecovery struct {
-	worker  *RecoveryWorker
-	repo    RecoveryRepo
-	dbRepo  DBRepo
+	worker *RecoveryWorker
+	repo   RecoveryRepo
+	dbRepo DBRepo
 }
 
 type DBRepo interface {

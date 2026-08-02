@@ -16,12 +16,12 @@ func DesktopPetActionRevisionDataMigrateMigration() Migration {
 			}
 
 			type legacyRevision struct {
-				ID          string `gorm:"column:id"`
-				UserID      string `gorm:"column:user_id"`
-				CharacterID string `gorm:"column:character_id"`
-				ActionKey   string `gorm:"column:action_key"`
+				ID               string `gorm:"column:id"`
+				UserID           string `gorm:"column:user_id"`
+				CharacterID      string `gorm:"column:character_id"`
+				ActionKey        string `gorm:"column:action_key"`
 				ProcessingTaskID string `gorm:"column:processing_task_id"`
-				RevisionNumber  int    `gorm:"column:revision_number"`
+				RevisionNumber   int    `gorm:"column:revision_number"`
 			}
 
 			var revs []legacyRevision

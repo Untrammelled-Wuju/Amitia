@@ -14,9 +14,9 @@ type bindingCandidate interface {
 }
 
 type Resolver struct {
-	clock      Clock
-	fallback   *FallbackGraph
-	bindings   *BindingResolver
+	clock    Clock
+	fallback *FallbackGraph
+	bindings *BindingResolver
 }
 
 type BindingResolver struct {
@@ -69,13 +69,13 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 			priority = 1000
 		}
 		candidates = append(candidates, CandidateAction{
-			Semantic:      "manual_" + actionKey,
-			PreferredKeys: []string{actionKey},
-			SourceEventID: event.EventID,
-			SourceLayer:   "manual",
-			Priority:      priority,
-			CreatedAt:     now,
-			MinPlay:       0,
+			Semantic:        "manual_" + actionKey,
+			PreferredKeys:   []string{actionKey},
+			SourceEventID:   event.EventID,
+			SourceLayer:     "manual",
+			Priority:        priority,
+			CreatedAt:       now,
+			MinPlay:         0,
 			InterruptPolicy: "force",
 		})
 	}
@@ -311,7 +311,9 @@ func withExpires(d time.Duration) func(*CandidateAction) {
 }
 
 func withUninterruptible(v bool) func(*CandidateAction) {
-	return func(c *CandidateAction) { c.InterruptPolicy = map[bool]string{true: "uninterruptible", false: "queue"}[v] }
+	return func(c *CandidateAction) {
+		c.InterruptPolicy = map[bool]string{true: "uninterruptible", false: "queue"}[v]
+	}
 }
 
 func timePtr(t time.Time) *time.Time { return &t }

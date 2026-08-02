@@ -12,8 +12,8 @@ func TestWorkflowToDefinition(t *testing.T) {
 		SchemaVersion: "1.0",
 		Steps: []extension.WorkflowStep{
 			{
-				ID:   "step-1",
-				Type: "skill",
+				ID:    "step-1",
+				Type:  "skill",
 				Input: json.RawMessage(`{"skillId":"test"}`),
 				OnError: extension.WorkflowErrorPolicy{
 					Mode:    "retry",

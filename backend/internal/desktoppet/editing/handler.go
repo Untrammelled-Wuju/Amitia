@@ -3,20 +3,23 @@ package editing
 import (
 	"errors"
 	"net/http"
-	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
-	service Service
+	service       Service
+	safeResponder *security.SafeArtifactResponder
 }
 
-func NewHandler(svc Service) *Handler { return &Handler{service: svc} }
+func NewHandler(svc Service, responder *security.SafeArtifactResponder) *Handler {
+	return &Handler{service: svc, safeResponder: responder}
+}
 
 func (h *Handler) ListRevisions(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
@@ -122,7 +125,7 @@ func (h *Handler) GetFrameImage(c *gin.Context) {
 		writeEditError(c, err)
 		return
 	}
-	serveImageFile(c, path, mimeType)
+	serveImageFile(h.safeResponder, c, path, mimeType)
 }
 
 func (h *Handler) GetFrameThumbnail(c *gin.Context) {
@@ -133,7 +136,7 @@ func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 		writeEditError(c, err)
 		return
 	}
-	serveImageFile(c, path, mimeType)
+	serveImageFile(h.safeResponder, c, path, mimeType)
 }
 
 func (h *Handler) GetActionEditSummary(c *gin.Context) {
@@ -615,19 +618,15 @@ func (h *Handler) ImportLegacyRevision(c *gin.Context) {
 	util.SuccessResponse(c, resp)
 }
 
-func serveImageFile(c *gin.Context, path, mimeType string) {
+func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, path, mimeType string) {
 	if path == "" {
-		c.Status(http.StatusNotFound)
-		return
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
 		c.Status(http.StatusNotFound)
 		return
 	}
 	c.Header("Content-Type", mimeType)
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Cache-Control", "private, max-age=300")
-	c.File(path) // audit:ok:path_origin=internal_service
+	responder.SafeFileResponse(c, path)
 }
 
 func writeEditError(c *gin.Context, err error) {

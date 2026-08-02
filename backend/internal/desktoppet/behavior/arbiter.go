@@ -73,10 +73,10 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 
 	if selectedIdx < 0 {
 		return &BehaviorDecision{
-			Status:     DecisionStatusNoAction,
-			ReasonCode: ErrCodeNoActionAvailable,
+			Status:             DecisionStatusNoAction,
+			ReasonCode:         ErrCodeNoActionAvailable,
 			RejectedCandidates: rejected,
-			CreatedAt:  now,
+			CreatedAt:          now,
 		}, nil
 	}
 
@@ -88,10 +88,10 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 			Reasons:   []RejectionReason{RejectMissingAction},
 		})
 		return &BehaviorDecision{
-			Status:     DecisionStatusNoAction,
-			ReasonCode: ErrCodeNoActionAvailable,
+			Status:             DecisionStatusNoAction,
+			ReasonCode:         ErrCodeNoActionAvailable,
 			RejectedCandidates: rejected,
-			CreatedAt:  now,
+			CreatedAt:          now,
 		}, nil
 	}
 
@@ -103,10 +103,10 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 			Reasons:   []RejectionReason{RejectUninterruptible},
 		})
 		return &BehaviorDecision{
-			Status:     DecisionStatusIgnored,
-			ReasonCode: "current_uninterruptible",
+			Status:             DecisionStatusIgnored,
+			ReasonCode:         "current_uninterruptible",
 			RejectedCandidates: rejected,
-			CreatedAt:  now,
+			CreatedAt:          now,
 		}, nil
 	}
 
@@ -118,22 +118,22 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 	}
 
 	decision := &BehaviorDecision{
-		DecisionID:      UUIDNew(),
-		EventID:         winner.SourceEventID,
-		UserID:          ctx.UserID,
-		CharacterID:     ctx.CharacterID,
-		InstallationID:  activePet.InstallationID,
-		ContextRevision: ctx.Revision,
-		RulesetVersion:  int(CurrentRulesetVersion),
-		Semantic:        winner.Semantic,
-		ActionKey:       actionKey,
-		Priority:        winner.Priority,
-		Status:          DecisionStatusSelected,
-		ReasonCode:      "selected",
+		DecisionID:         UUIDNew(),
+		EventID:            winner.SourceEventID,
+		UserID:             ctx.UserID,
+		CharacterID:        ctx.CharacterID,
+		InstallationID:     activePet.InstallationID,
+		ContextRevision:    ctx.Revision,
+		RulesetVersion:     int(CurrentRulesetVersion),
+		Semantic:           winner.Semantic,
+		ActionKey:          actionKey,
+		Priority:           winner.Priority,
+		Status:             DecisionStatusSelected,
+		ReasonCode:         "selected",
 		RejectedCandidates: rejected,
-		FallbackDepth:   depth,
-		ReturnPolicy:    winner.ReturnPolicy,
-		CreatedAt:       now,
+		FallbackDepth:      depth,
+		ReturnPolicy:       winner.ReturnPolicy,
+		CreatedAt:          now,
 	}
 
 	return decision, nil

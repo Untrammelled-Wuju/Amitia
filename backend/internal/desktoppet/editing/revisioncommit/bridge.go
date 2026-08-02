@@ -77,13 +77,13 @@ func (b *bridge) CommitFromProcessingRevision(ctx context.Context, req CommitFro
 	now := time.Now().UTC().Format(time.RFC3339)
 	journalID := fmt.Sprintf("bridge_%d", time.Now().UnixNano())
 	journal := &editing.RevisionBridgeJournal{
-		ID:                    journalID,
-		ProcessingRevisionID:  req.ProcessingRevisionID,
-		ProcessingActionID:    req.ProcessingActionID,
-		TargetActionKey:       req.ActionKey,
-		Status:                baseline.BridgeStatusProcessingPublished,
-		CreatedAt:             now,
-		UpdatedAt:             now,
+		ID:                   journalID,
+		ProcessingRevisionID: req.ProcessingRevisionID,
+		ProcessingActionID:   req.ProcessingActionID,
+		TargetActionKey:      req.ActionKey,
+		Status:               baseline.BridgeStatusProcessingPublished,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 	if err := b.journalRepo.Create(journal); err != nil {
 		return nil, fmt.Errorf("创建桥接日志失败: %w", err)
@@ -95,8 +95,8 @@ func (b *bridge) CommitFromProcessingRevision(ctx context.Context, req CommitFro
 	}
 	snapshot := &BridgeRequestSnapshot{
 		JournalID:   journalID,
-		RequestJSON:  string(reqJSON),
-		CreatedAt:    now,
+		RequestJSON: string(reqJSON),
+		CreatedAt:   now,
 	}
 	if err := b.journalRepo.SaveRequestSnapshot(snapshot); err != nil {
 		return nil, b.failJournal(journalID, fmt.Errorf("保存请求快照失败: %w", err))
@@ -115,8 +115,8 @@ func (b *bridge) CommitFromProcessingRevision(ctx context.Context, req CommitFro
 	}
 
 	var (
-		activatedBinding       *editing.ActiveActionRevisionBinding
-		previousRevisionID     string
+		activatedBinding        *editing.ActiveActionRevisionBinding
+		previousRevisionID      string
 		expectedBindingRevision int64
 	)
 	shouldBind := false
@@ -378,23 +378,23 @@ func (b *bridge) recoverPublishEvents(ctx context.Context, j *editing.RevisionBr
 
 func (b *bridge) toBaselineRequest(req CommitFromProcessingRequest) baseline.CreateBaselineRevisionRequest {
 	return baseline.CreateBaselineRevisionRequest{
-		UserID:                  req.UserID,
-		CharacterID:             req.CharacterID,
-		ProcessingTaskID:        req.ProcessingTaskID,
-		ProcessingActionID:      req.ProcessingActionID,
-		ProcessingRevisionID:    req.ProcessingRevisionID,
-		ActionKey:               req.ActionKey,
-		ActionConfigJSON:        req.ActionConfigJSON,
-		ActionConfigHash:        req.ActionConfigHash,
-		ActionSpecVersion:       req.ActionSpecVersion,
-		FrameCount:              req.FrameCount,
-		PlaybackMode:            req.PlaybackMode,
-		FPS:                     req.FPS,
-		AnchorJSON:              req.AnchorJSON,
-		FrameDurationMS:         req.FrameDurationMS,
-		LoopType:                req.LoopType,
-		PromotionPolicy:         req.PromotionPolicy,
-		CreatedBy:               req.CreatedBy,
+		UserID:               req.UserID,
+		CharacterID:          req.CharacterID,
+		ProcessingTaskID:     req.ProcessingTaskID,
+		ProcessingActionID:   req.ProcessingActionID,
+		ProcessingRevisionID: req.ProcessingRevisionID,
+		ActionKey:            req.ActionKey,
+		ActionConfigJSON:     req.ActionConfigJSON,
+		ActionConfigHash:     req.ActionConfigHash,
+		ActionSpecVersion:    req.ActionSpecVersion,
+		FrameCount:           req.FrameCount,
+		PlaybackMode:         req.PlaybackMode,
+		FPS:                  req.FPS,
+		AnchorJSON:           req.AnchorJSON,
+		FrameDurationMS:      req.FrameDurationMS,
+		LoopType:             req.LoopType,
+		PromotionPolicy:      req.PromotionPolicy,
+		CreatedBy:            req.CreatedBy,
 	}
 }
 

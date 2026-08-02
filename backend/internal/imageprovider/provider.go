@@ -15,17 +15,17 @@ type ImageInput struct {
 }
 
 type ImageGenerationRequest struct {
-	RequestID        string
-	IdempotencyKey   string
-	Mode             GenerationMode
-	Prompt           string
-	NegativePrompt   string
-	ReferenceImages  []ImageInput
-	Width            int
-	Height           int
-	Seed             *int64
-	OutputCount      int
-	Metadata         map[string]string
+	RequestID       string
+	IdempotencyKey  string
+	Mode            GenerationMode
+	Prompt          string
+	NegativePrompt  string
+	ReferenceImages []ImageInput
+	Width           int
+	Height          int
+	Seed            *int64
+	OutputCount     int
+	Metadata        map[string]string
 }
 
 type GeneratedImage struct {
@@ -45,16 +45,16 @@ type GenerationUsage struct {
 }
 
 type ImageGenerationResult struct {
-	Images        []GeneratedImage
-	Provider      string
-	Model         string
-	RequestID     string
-	RawMetadata   map[string]any
-	Status        string
-	OperationID   string
-	Usage         *GenerationUsage
-	ErrorCode     string
-	ErrorMessage  string
+	Images       []GeneratedImage
+	Provider     string
+	Model        string
+	RequestID    string
+	RawMetadata  map[string]any
+	Status       string
+	OperationID  string
+	Usage        *GenerationUsage
+	ErrorCode    string
+	ErrorMessage string
 }
 
 type ImageGenerationCapabilities struct {
@@ -69,10 +69,10 @@ type ImageGenerationCapabilities struct {
 }
 
 type ImageGenerationSubmission struct {
-	Status       string
-	OperationID  string
-	RequestID    string
-	Result       *ImageGenerationResult
+	Status      string
+	OperationID string
+	RequestID   string
+	Result      *ImageGenerationResult
 }
 
 type ImageModelConfig struct {
@@ -97,10 +97,10 @@ type ExtendedProvider interface {
 }
 
 type ProviderDescriptor struct {
-	Name            string
-	DefaultModel    string
-	DefaultBaseURL  string
-	SupportedModes  []GenerationMode
+	Name           string
+	DefaultModel   string
+	DefaultBaseURL string
+	SupportedModes []GenerationMode
 }
 
 type Registry struct {

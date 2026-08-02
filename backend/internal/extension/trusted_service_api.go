@@ -231,9 +231,9 @@ func (api *TrustedServiceAPI) stopService(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"service_id":  result.ServiceID,
-		"state":       string(result.State),
-		"stopped_at":  result.StoppedAt,
+		"service_id": result.ServiceID,
+		"state":      string(result.State),
+		"stopped_at": result.StoppedAt,
 	})
 }
 

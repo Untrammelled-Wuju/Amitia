@@ -13,19 +13,19 @@ var (
 )
 
 const (
-	JournalStageOperationCreated    = "operation_created"
-	JournalStageReleaseVerified    = "release_verified"
-	JournalStageStagingPrepared   = "staging_prepared"
-	JournalStageStagingVerified   = "staging_verified"
-	JournalStageOldInstallParked  = "old_install_parked"
-	JournalStageFilesPublished    = "files_published"
-	JournalStageDatabaseCommitted  = "database_committed"
+	JournalStageOperationCreated      = "operation_created"
+	JournalStageReleaseVerified       = "release_verified"
+	JournalStageStagingPrepared       = "staging_prepared"
+	JournalStageStagingVerified       = "staging_verified"
+	JournalStageOldInstallParked      = "old_install_parked"
+	JournalStageFilesPublished        = "files_published"
+	JournalStageDatabaseCommitted     = "database_committed"
 	JournalStageRuntimeDesiredUpdated = "runtime_desired_updated"
-	JournalStageRuntimeApplied    = "runtime_applied"
-	JournalStageCleanupCompleted  = "cleanup_completed"
-	JournalStageCompleted         = "completed"
-	JournalStageFailedRetryable = "failed_retryable"
-	JournalStageFailedTerminal  = "failed_terminal"
+	JournalStageRuntimeApplied        = "runtime_applied"
+	JournalStageCleanupCompleted      = "cleanup_completed"
+	JournalStageCompleted             = "completed"
+	JournalStageFailedRetryable       = "failed_retryable"
+	JournalStageFailedTerminal        = "failed_terminal"
 )
 
 type InstallationCommitJournal struct {
@@ -37,20 +37,20 @@ type InstallationCommitJournal struct {
 	DeviceID  string
 	RuntimeID string
 
-	InstallationID    string
-	PetID             string
-	SourceReleaseID   string
-	TargetReleaseID   string
+	InstallationID  string
+	PetID           string
+	SourceReleaseID string
+	TargetReleaseID string
 
-	Stage   string
-	Status  string
+	Stage  string
+	Status string
 
-	ExecutionID      string
+	ExecutionID       string
 	ExpectedOldStatus string
 
-	StagingPathKey  string
-	RollbackPathKey string
-	PublishedPathKey  string
+	StagingPathKey   string
+	RollbackPathKey  string
+	PublishedPathKey string
 	TrashPathKey     string
 
 	ErrorCode    string
@@ -92,17 +92,17 @@ var commitJournalTransitions = map[string]map[string]bool{
 		JournalStageFailedRetryable: true, JournalStageFailedTerminal: true,
 	},
 	JournalStageStagingVerified: {
-		JournalStageOldInstallParked: true,
-		JournalStageDatabaseCommitted: true,  // repair skip files publish
-		JournalStageFailedRetryable: true, JournalStageFailedTerminal: true,
+		JournalStageOldInstallParked:  true,
+		JournalStageDatabaseCommitted: true, // repair skip files publish
+		JournalStageFailedRetryable:   true, JournalStageFailedTerminal: true,
 	},
 	JournalStageOldInstallParked: {
-		JournalStageFilesPublished: true,
+		JournalStageFilesPublished:  true,
 		JournalStageFailedRetryable: true, JournalStageFailedTerminal: true,
 	},
 	JournalStageFilesPublished: {
 		JournalStageDatabaseCommitted: true,
-		JournalStageFailedRetryable: true, JournalStageFailedTerminal: true,
+		JournalStageFailedRetryable:   true, JournalStageFailedTerminal: true,
 	},
 	JournalStageDatabaseCommitted: {
 		JournalStageRuntimeDesiredUpdated: true, JournalStageCompleted: true,
@@ -117,18 +117,18 @@ var commitJournalTransitions = map[string]map[string]bool{
 		JournalStageFailedRetryable: true, JournalStageFailedTerminal: true,
 	},
 	JournalStageCleanupCompleted: {
-		JournalStageCompleted: true,
+		JournalStageCompleted:       true,
 		JournalStageFailedRetryable: true, JournalStageFailedTerminal: true,
 	},
 }
 
 const (
 	SwitchJournalCreated          = "created"
-	SwitchJournalBindingCommitted  = "binding_committed"
-	SwitchJournalDesiredCommitted  = "desired_committed"
-	SwitchJournalRuntimeApplied    = "runtime_applied"
-	SwitchJournalCompleted         = "completed"
-	SwitchJournalFailedRetryable = "failed_retryable"
+	SwitchJournalBindingCommitted = "binding_committed"
+	SwitchJournalDesiredCommitted = "desired_committed"
+	SwitchJournalRuntimeApplied   = "runtime_applied"
+	SwitchJournalCompleted        = "completed"
+	SwitchJournalFailedRetryable  = "failed_retryable"
 	SwitchJournalFailedTerminal   = "failed_terminal"
 )
 
@@ -141,8 +141,8 @@ type InstallationSwitchJournal struct {
 	DeviceID  string
 	RuntimeID string
 
-	OldInstallationID  string
-	NewInstallationID  string
+	OldInstallationID string
+	NewInstallationID string
 
 	OldBindingRevision int64
 	NewBindingRevision int64
@@ -187,18 +187,18 @@ func (j InstallationSwitchJournal) CanTransitionTo(newStage string) bool {
 var switchJournalTransitions = map[string]map[string]bool{
 	SwitchJournalCreated: {
 		SwitchJournalBindingCommitted: true,
-		SwitchJournalFailedRetryable: true, SwitchJournalFailedTerminal: true,
+		SwitchJournalFailedRetryable:  true, SwitchJournalFailedTerminal: true,
 	},
 	SwitchJournalBindingCommitted: {
 		SwitchJournalDesiredCommitted: true,
-		SwitchJournalFailedRetryable: true, SwitchJournalFailedTerminal: true,
+		SwitchJournalFailedRetryable:  true, SwitchJournalFailedTerminal: true,
 	},
 	SwitchJournalDesiredCommitted: {
 		SwitchJournalRuntimeApplied: true, SwitchJournalCompleted: true,
 		SwitchJournalFailedRetryable: true, SwitchJournalFailedTerminal: true,
 	},
 	SwitchJournalRuntimeApplied: {
-		SwitchJournalCompleted: true,
+		SwitchJournalCompleted:       true,
 		SwitchJournalFailedRetryable: true, SwitchJournalFailedTerminal: true,
 	},
 }

@@ -3,11 +3,11 @@ package interaction
 import (
 	"context"
 	"errors"
+	"github.com/u-ai/backend/internal/temporal"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
-	"github.com/u-ai/backend/internal/temporal"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"

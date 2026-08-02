@@ -133,19 +133,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, conn *Connection) error {
 func (r *Reconciler) updateActualStateFromSync(runtimeID, sessionID string, result *PendingResult) {
 	if result.ActualState != nil {
 		state := &RuntimeActualState{
-			RuntimeID:       runtimeID,
-			InstallationID:  result.ActualState.InstallationID,
-			PetInstanceID:   result.ActualState.PetInstanceID,
-			SessionID:       sessionID,
-			DesiredRevision: result.AppliedRev,
-			Visible:         boolToInt(result.ActualState.Visible),
+			RuntimeID:        runtimeID,
+			InstallationID:   result.ActualState.InstallationID,
+			PetInstanceID:    result.ActualState.PetInstanceID,
+			SessionID:        sessionID,
+			DesiredRevision:  result.AppliedRev,
+			Visible:          boolToInt(result.ActualState.Visible),
 			CurrentActionKey: result.ActualState.CurrentActionKey,
-			PositionX:       result.ActualState.PositionX,
-			PositionY:       result.ActualState.PositionY,
-			ScreenID:        result.ActualState.ScreenID,
-			Scale:           result.ActualState.Scale,
-			Health:          "healthy",
-			ObservedAt:      time.Now().Format(runtimeTimeFormat),
+			PositionX:        result.ActualState.PositionX,
+			PositionY:        result.ActualState.PositionY,
+			ScreenID:         result.ActualState.ScreenID,
+			Scale:            result.ActualState.Scale,
+			Health:           "healthy",
+			ObservedAt:       time.Now().Format(runtimeTimeFormat),
 		}
 		if err := r.state.UpsertActualState(state); err != nil {
 			log.Logger.Errorf("runtime reconciler: upsert actual state failed runtimeID=%s err=%v", runtimeID, err)

@@ -41,15 +41,15 @@ type BuildReleaseRequest struct {
 }
 
 type BuildReleaseResult struct {
-	Operation  *ReleaseBuildOperation
-	Release    *ReleaseData
-	Snapshot   *ReleaseBuildSequenceInfo
+	Operation *ReleaseBuildOperation
+	Release   *ReleaseData
+	Snapshot  *ReleaseBuildSequenceInfo
 }
 
 type ReleaseBuildSequenceInfo struct {
-	Sequence    int
-	Version     string
-	ReleaseID   string
+	Sequence  int
+	Version   string
+	ReleaseID string
 }
 
 type service struct {
@@ -215,20 +215,20 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	version := fmt.Sprintf("1.0.%d", releaseSequence)
 
 	releaseRecord := &ReleaseData{
-		ID:                releaseID,
-		PetID:             snapshot.PetID,
-		OwnerUserID:       req.UserID,
-		Version:           version,
-		ReleaseSequence:   releaseSequence,
-		SchemaVersion:     snapshot.PackageSchemaVersion,
-		Lifecycle:         string(ReleaseLifecycleBuilding),
-		SourceType:        "generated",
-		DefaultActionKey:  snapshot.DefaultActionKey,
-		BuildSnapshotID:   snapshot.ID,
-		IntegrityStatus:   string(ReleaseIntegrityUnknown),
+		ID:                  releaseID,
+		PetID:               snapshot.PetID,
+		OwnerUserID:         req.UserID,
+		Version:             version,
+		ReleaseSequence:     releaseSequence,
+		SchemaVersion:       snapshot.PackageSchemaVersion,
+		Lifecycle:           string(ReleaseLifecycleBuilding),
+		SourceType:          "generated",
+		DefaultActionKey:    snapshot.DefaultActionKey,
+		BuildSnapshotID:     snapshot.ID,
+		IntegrityStatus:     string(ReleaseIntegrityUnknown),
 		CompatibilityStatus: string(ReleaseCompatUnknown),
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := s.repo.CreateRelease(releaseRecord); err != nil {
 		s.failOperation(op, "RELEASE_CREATE_FAILED", err)
@@ -268,12 +268,12 @@ func (s *service) createSnapshot(ctx context.Context, req *BuildReleaseRequest, 
 	snapshotID := uuid.NewString()
 
 	snapshot := &ReleaseBuildSnapshot{
-		ID:                    snapshotID,
-		UserID:                req.UserID,
-		ProcessingTaskID:      req.ProcessingTaskID,
-		PackageSchemaVersion:  2,
+		ID:                     snapshotID,
+		UserID:                 req.UserID,
+		ProcessingTaskID:       req.ProcessingTaskID,
+		PackageSchemaVersion:   2,
 		RuntimeContractVersion: "1.0.0",
-		CreatedAt:             now,
+		CreatedAt:              now,
 	}
 
 	actionSnapshotsJSON := "[]"

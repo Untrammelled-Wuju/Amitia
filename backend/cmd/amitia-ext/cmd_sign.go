@@ -56,13 +56,13 @@ func runSign(args []string, output *Output) int {
 	packageSigner := trust.NewPackageSigner(signer)
 
 	doc, payload, err := packageSigner.SignPackage(trust.PackageSignatureInput{
-		ExtensionID:       pkg.Manifest.Extension.ID,
-		Version:           pkg.Manifest.Extension.Version,
-		ManifestVersion:   pkg.Manifest.ManifestVersion,
-		ManifestHash:      manifestHash,
-		ContentTreeHash:   pkg.Tree.TreeHash,
-		ArtifactHash:      artifactHash,
-		Channel:           *channel,
+		ExtensionID:     pkg.Manifest.Extension.ID,
+		Version:         pkg.Manifest.Extension.Version,
+		ManifestVersion: pkg.Manifest.ManifestVersion,
+		ManifestHash:    manifestHash,
+		ContentTreeHash: pkg.Tree.TreeHash,
+		ArtifactHash:    artifactHash,
+		Channel:         *channel,
 	})
 	if err != nil {
 		output.fail(ExitSig, fmt.Sprintf("签名失败: %v", err))
@@ -81,18 +81,18 @@ func runSign(args []string, output *Output) int {
 		OK:      true,
 		Message: fmt.Sprintf("签名成功 (amitiax-signature-v1): %s", archivePath),
 		Data: map[string]any{
-			"format":         doc.Format,
-			"algorithm":      doc.Algorithm,
-			"keyId":          doc.KeyID,
-			"publisherId":    doc.PublisherID,
-			"payloadHash":    doc.PayloadHash,
-			"createdAt":      doc.CreatedAt,
-			"channel":        doc.Channel,
-			"extensionId":    payload.ExtensionID,
-			"version":        payload.Version,
-			"manifestHash":   payload.ManifestHash,
+			"format":          doc.Format,
+			"algorithm":       doc.Algorithm,
+			"keyId":           doc.KeyID,
+			"publisherId":     doc.PublisherID,
+			"payloadHash":     doc.PayloadHash,
+			"createdAt":       doc.CreatedAt,
+			"channel":         doc.Channel,
+			"extensionId":     payload.ExtensionID,
+			"version":         payload.Version,
+			"manifestHash":    payload.ManifestHash,
 			"contentTreeHash": payload.ContentTreeHash,
-			"artifactHash":   payload.PackageHash,
+			"artifactHash":    payload.PackageHash,
 		},
 	})
 	return ExitSuccess

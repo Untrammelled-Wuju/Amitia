@@ -87,7 +87,7 @@ type PersistInput struct {
 }
 
 type PersistResult struct {
-	Artifacts      []*GenerationArtifact
+	Artifacts       []*GenerationArtifact
 	PrimaryArtifact *GenerationArtifact
 	ReceiptArtifact *GenerationArtifact
 }
@@ -335,10 +335,10 @@ func (p *ArtifactPersister) persistReceipt(input PersistInput, dir string) (*Gen
 	}
 
 	receiptData := map[string]any{
-		"provider":     input.Result.Provider,
-		"model":        input.Result.Model,
-		"operationID":  input.Result.OperationID,
-		"requestID":    input.Result.RequestID,
+		"provider":       input.Result.Provider,
+		"model":          input.Result.Model,
+		"operationID":    input.Result.OperationID,
+		"requestID":      input.Result.RequestID,
 		"candidateCount": len(input.Result.Candidates),
 	}
 	if input.Result.Usage != nil {

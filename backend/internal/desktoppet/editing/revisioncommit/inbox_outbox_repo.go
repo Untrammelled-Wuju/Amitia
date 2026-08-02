@@ -160,7 +160,7 @@ func (r *outboxRepository) AcquireLease(id, owner string, leaseDuration time.Dur
 	result := r.db.Model(&editing.ActionRevisionEventOutboxRecord{}).
 		Where("id = ? AND status = ?", id, baseline.OutboxStatusPending).
 		Updates(map[string]any{
-			"status":  baseline.OutboxStatusPublishing,
+			"status": baseline.OutboxStatusPublishing,
 		})
 	if result.Error != nil {
 		return false, result.Error
@@ -176,16 +176,16 @@ func (r *outboxRepository) AcquireLease(id, owner string, leaseDuration time.Dur
 func (r *outboxRepository) MarkPublished(id string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return r.db.Model(&editing.ActionRevisionEventOutboxRecord{}).Where("id = ?", id).Updates(map[string]any{
-		"status":        baseline.OutboxStatusPublished,
-		"published_at":  now,
+		"status":       baseline.OutboxStatusPublished,
+		"published_at": now,
 	}).Error
 }
 
 func (r *outboxRepository) MarkFailed(id, reason string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return r.db.Model(&editing.ActionRevisionEventOutboxRecord{}).Where("id = ?", id).Updates(map[string]any{
-		"status":     baseline.OutboxStatusFailed,
-		"last_error": reason,
+		"status":       baseline.OutboxStatusFailed,
+		"last_error":   reason,
 		"available_at": now,
 	}).Error
 }

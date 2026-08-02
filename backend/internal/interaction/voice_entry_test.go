@@ -2,9 +2,9 @@ package interaction
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/temporal"
 	"testing"
 	"time"
-	"github.com/u-ai/backend/internal/temporal"
 )
 
 func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing.T) {

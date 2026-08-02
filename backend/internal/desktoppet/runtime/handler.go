@@ -194,14 +194,14 @@ func (h *Handler) HandleRegister(conn *Connection, payload *contracts.RegisterPa
 	h.persistClientRegistration(conn, payload, selectedProtocol, sessionID)
 
 	welcome := &contracts.WelcomePayload{
-		SessionID:            sessionID,
-		SelectedProtocol:     selectedProtocol,
-		BackendInstanceID:    h.config.BackendInstanceID,
-		HeartbeatIntervalMs:  h.config.HeartbeatIntervalMs,
-		HeartbeatTimeoutMs:   h.config.HeartbeatTimeoutMs,
-		MaxMessageBytes:      h.config.MaxMessageBytes,
-		FullSyncRequired:     fullSyncRequired,
-		ServerTime:           time.Now().UTC(),
+		SessionID:           sessionID,
+		SelectedProtocol:    selectedProtocol,
+		BackendInstanceID:   h.config.BackendInstanceID,
+		HeartbeatIntervalMs: h.config.HeartbeatIntervalMs,
+		HeartbeatTimeoutMs:  h.config.HeartbeatTimeoutMs,
+		MaxMessageBytes:     h.config.MaxMessageBytes,
+		FullSyncRequired:    fullSyncRequired,
+		ServerTime:          time.Now().UTC(),
 	}
 
 	log.Logger.Infof("runtime handler: registered runtimeID=%s sessionID=%s protocol=%s fullSync=%v", payload.RuntimeID, sessionID, selectedProtocol, fullSyncRequired)

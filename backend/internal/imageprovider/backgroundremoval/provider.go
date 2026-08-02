@@ -276,10 +276,10 @@ func (r *defaultRegistry) Resolve(policy BackgroundPolicyConfig, input ImageDesc
 
 	if policy.FallbackPolicy == "keep_original" {
 		return &ResolvedProvider{
-			Provider: nil,
+			Provider:     nil,
 			Capabilities: BackgroundRemovalCapabilities{},
-			Degraded: true,
-			Reason: "fallback policy is keep_original, no provider selected",
+			Degraded:     true,
+			Reason:       "fallback policy is keep_original, no provider selected",
 		}, nil
 	}
 

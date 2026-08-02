@@ -15,18 +15,18 @@ type SplitResult struct {
 }
 
 type CellArtifact struct {
-	FrameIndex       int
-	CellIndex        int
-	Row              int
-	Column           int
-	X                int
-	Y                int
-	Width            int
-	Height           int
-	Empty            bool
-	Image            *image.NRGBA
-	PixelHash        string
-	SourceSheetHash  string
+	FrameIndex      int
+	CellIndex       int
+	Row             int
+	Column          int
+	X               int
+	Y               int
+	Width           int
+	Height          int
+	Empty           bool
+	Image           *image.NRGBA
+	PixelHash       string
+	SourceSheetHash string
 }
 
 type Splitter struct{}

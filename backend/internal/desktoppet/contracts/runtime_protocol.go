@@ -14,16 +14,16 @@ const (
 	DefaultHeartbeatIntervalMs = 10000
 	DefaultHeartbeatTimeoutMs  = 30000
 	MaxMessageBytes            = 1048576
-	RegisterTimeoutSeconds    = 10
+	RegisterTimeoutSeconds     = 10
 )
 
 const (
-	CapPetWindow                = "pet.window"
+	CapPetWindow                 = "pet.window"
 	CapPetAnimationFrameSequence = "pet.animation.frame_sequence"
-	CapPetSettings              = "pet.settings"
-	CapPetRecenter              = "pet.recenter"
-	CapPetClickThrough          = "pet.click_through"
-	CapPetInteractionEvents     = "pet.interaction_events"
+	CapPetSettings               = "pet.settings"
+	CapPetRecenter               = "pet.recenter"
+	CapPetClickThrough           = "pet.click_through"
+	CapPetInteractionEvents      = "pet.interaction_events"
 )
 
 type MessageKind string
@@ -36,22 +36,22 @@ const (
 )
 
 const (
-	MsgRuntimeRegister    = "runtime.register"
-	MsgRuntimeWelcome     = "runtime.welcome"
-	MsgRuntimeHeartbeat   = "runtime.heartbeat"
-	MsgRuntimeStateProbe  = "runtime.state_probe"
-	MsgRuntimeSync        = "runtime.sync"
-	MsgRuntimeSyncResult  = "runtime.sync_result"
-	MsgControlShutdown    = "control.shutdown"
-	MsgControlSuperseded  = "control.superseded"
+	MsgRuntimeRegister   = "runtime.register"
+	MsgRuntimeWelcome    = "runtime.welcome"
+	MsgRuntimeHeartbeat  = "runtime.heartbeat"
+	MsgRuntimeStateProbe = "runtime.state_probe"
+	MsgRuntimeSync       = "runtime.sync"
+	MsgRuntimeSyncResult = "runtime.sync_result"
+	MsgControlShutdown   = "control.shutdown"
+	MsgControlSuperseded = "control.superseded"
 
-	MsgPetSpawn              = "pet.spawn"
-	MsgPetDestroy            = "pet.destroy"
-	MsgPetShow               = "pet.show"
-	MsgPetHide               = "pet.hide"
-	MsgPetPlayAction         = "pet.play_action"
-	MsgPetUpdateSettings     = "pet.update_settings"
-	MsgPetRecenter           = "pet.recenter"
+	MsgPetSpawn                = "pet.spawn"
+	MsgPetDestroy              = "pet.destroy"
+	MsgPetShow                 = "pet.show"
+	MsgPetHide                 = "pet.hide"
+	MsgPetPlayAction           = "pet.play_action"
+	MsgPetUpdateSettings       = "pet.update_settings"
+	MsgPetRecenter             = "pet.recenter"
 	MsgPetDefaultActionChanged = "pet.default_action_changed"
 
 	MsgRuntimeResult = "runtime.result"
@@ -73,7 +73,7 @@ const (
 type CommandDurability string
 
 const (
-	DurabilityDurable          CommandDurability = "durable"
+	DurabilityDurable           CommandDurability = "durable"
 	DurabilityDurableCoalescing CommandDurability = "durable_coalescing"
 	DurabilityDurableImmediate  CommandDurability = "durable_immediate"
 	DurabilityEphemeral         CommandDurability = "ephemeral"
@@ -135,57 +135,57 @@ type RegisterPayload struct {
 
 type WelcomePayload struct {
 	SessionID           string    `json:"sessionId"`
-	SelectedProtocol   string    `json:"selectedProtocol"`
-	BackendInstanceID  string    `json:"backendInstanceId"`
-	HeartbeatIntervalMs int      `json:"heartbeatIntervalMs"`
-	HeartbeatTimeoutMs  int      `json:"heartbeatTimeoutMs"`
-	MaxMessageBytes     int      `json:"maxMessageBytes"`
-	FullSyncRequired    bool     `json:"fullSyncRequired"`
+	SelectedProtocol    string    `json:"selectedProtocol"`
+	BackendInstanceID   string    `json:"backendInstanceId"`
+	HeartbeatIntervalMs int       `json:"heartbeatIntervalMs"`
+	HeartbeatTimeoutMs  int       `json:"heartbeatTimeoutMs"`
+	MaxMessageBytes     int       `json:"maxMessageBytes"`
+	FullSyncRequired    bool      `json:"fullSyncRequired"`
 	ServerTime          time.Time `json:"serverTime"`
 }
 
 type PetInstanceSummary struct {
 	PetInstanceID    string  `json:"petInstanceId"`
 	InstallationID   string  `json:"installationId"`
-	Visible         bool    `json:"visible"`
+	Visible          bool    `json:"visible"`
 	CurrentActionKey string  `json:"currentActionKey"`
-	PositionX       int     `json:"positionX"`
-	PositionY       int     `json:"positionY"`
-	ScreenID        string  `json:"screenId"`
-	Scale           float64 `json:"scale"`
+	PositionX        int     `json:"positionX"`
+	PositionY        int     `json:"positionY"`
+	ScreenID         string  `json:"screenId"`
+	Scale            float64 `json:"scale"`
 }
 
 type HeartbeatPayload struct {
-	RendererHealthy             bool                  `json:"rendererHealthy"`
-	PetInstances                []PetInstanceSummary  `json:"petInstances"`
-	LastAppliedDesiredRevision   int64                 `json:"lastAppliedDesiredRevision"`
-	QueueDepth                  int                   `json:"queueDepth"`
-	MemoryUsageMB               int                   `json:"memoryUsageMB"`
-	ErrorSummary                string                `json:"errorSummary"`
+	RendererHealthy            bool                 `json:"rendererHealthy"`
+	PetInstances               []PetInstanceSummary `json:"petInstances"`
+	LastAppliedDesiredRevision int64                `json:"lastAppliedDesiredRevision"`
+	QueueDepth                 int                  `json:"queueDepth"`
+	MemoryUsageMB              int                  `json:"memoryUsageMB"`
+	ErrorSummary               string               `json:"errorSummary"`
 }
 
 type InstallationSnapshot struct {
-	InstallationID    string `json:"installationId"`
-	CharacterID       string `json:"characterId"`
-	PackageID         string `json:"packageId"`
-	PackageVersion    string `json:"packageVersion"`
-	InstallRoot       string `json:"installRoot"`
-	ManifestPath      string `json:"manifestPath"`
-	PackageHash        string `json:"packageHash"`
-	DefaultActionKey  string `json:"defaultActionKey"`
-	CanvasWidth       int    `json:"canvasWidth"`
-	CanvasHeight      int    `json:"canvasHeight"`
+	InstallationID   string `json:"installationId"`
+	CharacterID      string `json:"characterId"`
+	PackageID        string `json:"packageId"`
+	PackageVersion   string `json:"packageVersion"`
+	InstallRoot      string `json:"installRoot"`
+	ManifestPath     string `json:"manifestPath"`
+	PackageHash      string `json:"packageHash"`
+	DefaultActionKey string `json:"defaultActionKey"`
+	CanvasWidth      int    `json:"canvasWidth"`
+	CanvasHeight     int    `json:"canvasHeight"`
 }
 
 type SettingsSnapshot struct {
-	Revision        int64   `json:"revision"`
-	AlwaysOnTop     bool    `json:"alwaysOnTop"`
-	Scale           float64 `json:"scale"`
-	PositionX       int     `json:"positionX"`
-	PositionY       int     `json:"positionY"`
-	ScreenID        string  `json:"screenId"`
+	Revision         int64   `json:"revision"`
+	AlwaysOnTop      bool    `json:"alwaysOnTop"`
+	Scale            float64 `json:"scale"`
+	PositionX        int     `json:"positionX"`
+	PositionY        int     `json:"positionY"`
+	ScreenID         string  `json:"screenId"`
 	ClickThroughMode string  `json:"clickThroughMode"`
-	SoundEnabled    bool    `json:"soundEnabled"`
+	SoundEnabled     bool    `json:"soundEnabled"`
 }
 
 type SpawnPayload struct {
@@ -208,14 +208,14 @@ type HidePayload struct {
 }
 
 type PlayActionPayload struct {
-	ActionKey       string    `json:"actionKey"`
-	ActionSpecHash  string    `json:"actionSpecHash"`
-	PriorityOverride int      `json:"priorityOverride"`
-	ExpiresAt       time.Time `json:"expiresAt"`
+	ActionKey        string    `json:"actionKey"`
+	ActionSpecHash   string    `json:"actionSpecHash"`
+	PriorityOverride int       `json:"priorityOverride"`
+	ExpiresAt        time.Time `json:"expiresAt"`
 }
 
 type UpdateSettingsPayload struct {
-	SettingsRevision int64           `json:"settingsRevision"`
+	SettingsRevision int64            `json:"settingsRevision"`
 	Settings         SettingsSnapshot `json:"settings"`
 }
 
@@ -232,20 +232,20 @@ type DefaultActionChangedPayload struct {
 
 type StateProbePayload struct {
 	IncludeInstances bool `json:"includeInstances"`
-	IncludeHealth     bool `json:"includeHealth"`
+	IncludeHealth    bool `json:"includeHealth"`
 }
 
 type SyncPayload struct {
-	DesiredRevision int64        `json:"desiredRevision"`
-	EnsureAbsent    bool         `json:"ensureAbsent"`
+	DesiredRevision int64         `json:"desiredRevision"`
+	EnsureAbsent    bool          `json:"ensureAbsent"`
 	DesiredPet      *SpawnPayload `json:"desiredPet,omitempty"`
 }
 
 type SyncResultPayload struct {
-	AppliedRevision   int64                  `json:"appliedRevision"`
-	Instances         []PetInstanceSummary   `json:"instances"`
-	DestroyedStaleIds []string               `json:"destroyedStaleIds"`
-	Warnings          []string               `json:"warnings"`
+	AppliedRevision   int64                `json:"appliedRevision"`
+	Instances         []PetInstanceSummary `json:"instances"`
+	DestroyedStaleIds []string             `json:"destroyedStaleIds"`
+	Warnings          []string             `json:"warnings"`
 }
 
 type ShutdownPayload struct {
@@ -259,21 +259,21 @@ type SupersededPayload struct {
 }
 
 type ResultPayload struct {
-	CommandID        string               `json:"commandId"`
-	Status           ResultStatus        `json:"status"`
-	ErrorCode        string              `json:"errorCode"`
-	ErrorMessage     string              `json:"errorMessage"`
-	AppliedRevision  int64                `json:"appliedRevision"`
-	ActualState      *PetInstanceSummary  `json:"actualState,omitempty"`
-	AcceptedAction   string              `json:"acceptedAction,omitempty"`
-	PlaybackRequestID string             `json:"playbackRequestId,omitempty"`
+	CommandID         string              `json:"commandId"`
+	Status            ResultStatus        `json:"status"`
+	ErrorCode         string              `json:"errorCode"`
+	ErrorMessage      string              `json:"errorMessage"`
+	AppliedRevision   int64               `json:"appliedRevision"`
+	ActualState       *PetInstanceSummary `json:"actualState,omitempty"`
+	AcceptedAction    string              `json:"acceptedAction,omitempty"`
+	PlaybackRequestID string              `json:"playbackRequestId,omitempty"`
 	PreviousResult    json.RawMessage     `json:"previousResult,omitempty"`
 }
 
 type EventPayload struct {
-	EventType    string          `json:"eventType"`
-	PetInstanceID string         `json:"petInstanceId"`
-	Data         json.RawMessage `json:"data,omitempty"`
+	EventType     string          `json:"eventType"`
+	PetInstanceID string          `json:"petInstanceId"`
+	Data          json.RawMessage `json:"data,omitempty"`
 }
 
 type DesiredRuntimeSnapshot struct {
@@ -284,11 +284,11 @@ type DesiredRuntimeSnapshot struct {
 }
 
 type RuntimeStateSnapshot struct {
-	RuntimeID  string                `json:"runtimeId"`
-	SessionID  string                `json:"sessionId"`
-	Instances  []PetInstanceSummary  `json:"instances"`
-	Health     string                `json:"health"`
-	ObservedAt time.Time             `json:"observedAt"`
+	RuntimeID  string               `json:"runtimeId"`
+	SessionID  string               `json:"sessionId"`
+	Instances  []PetInstanceSummary `json:"instances"`
+	Health     string               `json:"health"`
+	ObservedAt time.Time            `json:"observedAt"`
 }
 
 func IsValidMessageKind(kind MessageKind) bool {

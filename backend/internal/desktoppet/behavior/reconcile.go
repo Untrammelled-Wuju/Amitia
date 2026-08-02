@@ -60,15 +60,15 @@ func NewReconciler(
 		stateSource = &NoopStateSourceQuery{}
 	}
 	return &Reconciler{
-		clock:        clock,
-		reducer:      reducer,
-		resolver:     resolver,
-		arbiter:      arbiter,
-		stateSource:  stateSource,
-		affectPort:   affectPort,
-		activityPort: activityPort,
+		clock:         clock,
+		reducer:       reducer,
+		resolver:      resolver,
+		arbiter:       arbiter,
+		stateSource:   stateSource,
+		affectPort:    affectPort,
+		activityPort:  activityPort,
 		activePetPort: activePetPort,
-		runtimePort:  runtimePort,
+		runtimePort:   runtimePort,
 	}
 }
 
@@ -101,7 +101,7 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 
 	reconciledCtx.Desired = DesiredBehaviorState{
 		Semantic:    "fallback_idle",
-		SourceLayer:  "stable",
+		SourceLayer: "stable",
 	}
 	if reconciledCtx.Stable.ActivityKey != "" {
 		reconciledCtx.Desired = DesiredBehaviorState{

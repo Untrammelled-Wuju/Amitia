@@ -79,9 +79,9 @@ func TestBuildFramePrompt_SystemConstraintsAlwaysPresent(t *testing.T) {
 	}
 
 	cases := []struct {
-		name        string
-		userPrompt  string
-		frameIndex  int
+		name       string
+		userPrompt string
+		frameIndex int
 	}{
 		{"empty_user", "", 0},
 		{"with_user", "在卧室场景中行走，地面有地毯", 2},

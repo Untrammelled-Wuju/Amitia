@@ -17,21 +17,21 @@ import (
 )
 
 type AssemblyDeps struct {
-	DB              *gorm.DB
-	RuntimeService  *runtime.Service
-	InstallRepo     installation.Repository
-	PsycheStore     psyche.PsycheStore
-	DataDir         string
-	ShadowMode      bool
-	RuntimeCmdOn    bool
+	DB             *gorm.DB
+	RuntimeService *runtime.Service
+	InstallRepo    installation.Repository
+	PsycheStore    psyche.PsycheStore
+	DataDir        string
+	ShadowMode     bool
+	RuntimeCmdOn   bool
 }
 
 type AssembledBehavior struct {
-	Engine  *behavior.BehaviorEngine
-	Service *behavior.BehaviorService
-	Repo    behavior.BehaviorStateRepository
+	Engine      *behavior.BehaviorEngine
+	Service     *behavior.BehaviorService
+	Repo        behavior.BehaviorStateRepository
 	BindingRepo behavior.BindingRepository
-	Reconciler *behavior.Reconciler
+	Reconciler  *behavior.Reconciler
 }
 
 func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
@@ -77,10 +77,10 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 	)
 
 	engineConfig := behavior.EngineConfig{
-		ShadowMode:           deps.ShadowMode,
+		ShadowMode:            deps.ShadowMode,
 		RuntimeCommandEnabled: deps.RuntimeCmdOn,
-		MailboxCapacity:      behavior.MailboxCapacity,
-		MaxCASRetries:        behavior.MaxCASRetries,
+		MailboxCapacity:       behavior.MailboxCapacity,
+		MaxCASRetries:         behavior.MaxCASRetries,
 	}
 
 	engine := behavior.NewBehaviorEngine(
@@ -134,8 +134,8 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 					continue
 				}
 				scope := bindings.EvaluatorScope{
-					UserID:        userID,
-					CharacterID:   characterID,
+					UserID:         userID,
+					CharacterID:    characterID,
 					InstallationID: b.InstallationID,
 				}
 				newEvaluator.AddBinding(scope, b, cond)

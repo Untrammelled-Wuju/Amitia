@@ -29,25 +29,25 @@ type MigrationEnablement struct {
 }
 
 type MigrationScopeBinding struct {
-	Scope      string
-	SubjectID  string
+	Scope       string
+	SubjectID   string
 	SubjectType string
-	State      string
-	GrantedAt  *time.Time
+	State       string
+	GrantedAt   *time.Time
 }
 
 type MigrationPermissionReference struct {
-	Permission string
-	SubjectID  string
+	Permission  string
+	SubjectID   string
 	SubjectType string
-	State      string
-	Scope      string
+	State       string
+	Scope       string
 }
 
 type MigrationDependency struct {
-	Type    string
-	ID      string
-	Version string
+	Type     string
+	ID       string
+	Version  string
 	Optional bool
 }
 
@@ -59,30 +59,30 @@ type MigrationResourceReference struct {
 }
 
 type MigrationRuntimeHint struct {
-	Kind        string
+	Kind         string
 	DesiredState string
-	LastSeen    *time.Time
+	LastSeen     *time.Time
 	Reason       string
 }
 
 type MigrationEntity struct {
-	MigrationID   string
-	EntityType    string
-	LegacySource  LegacySourceReference
-	CanonicalID   string
-	Owner         MigrationOwner
-	Version       string
-	Definition    json.RawMessage
-	Enablement    MigrationEnablement
-	Scope         []MigrationScopeBinding
-	Permissions   []MigrationPermissionReference
-	Dependencies  []MigrationDependency
-	Resources     []MigrationResourceReference
-	RuntimeHints  []MigrationRuntimeHint
-	CollectedAt   time.Time
-	Confidence    string
-	Warnings      []string
-	Errors        []string
+	MigrationID  string
+	EntityType   string
+	LegacySource LegacySourceReference
+	CanonicalID  string
+	Owner        MigrationOwner
+	Version      string
+	Definition   json.RawMessage
+	Enablement   MigrationEnablement
+	Scope        []MigrationScopeBinding
+	Permissions  []MigrationPermissionReference
+	Dependencies []MigrationDependency
+	Resources    []MigrationResourceReference
+	RuntimeHints []MigrationRuntimeHint
+	CollectedAt  time.Time
+	Confidence   string
+	Warnings     []string
+	Errors       []string
 }
 
 type MigrationReport struct {
@@ -110,12 +110,12 @@ type MigrationConflict struct {
 }
 
 type MigrationPlan struct {
-	PlanID      string
-	SnapshotID  string
-	CreatedAt   time.Time
-	Entities    []MigrationEntity
-	Conflicts   []MigrationConflict
-	Strategy    string
+	PlanID         string
+	SnapshotID     string
+	CreatedAt      time.Time
+	Entities       []MigrationEntity
+	Conflicts      []MigrationConflict
+	Strategy       string
 	EstimatedSteps int
 }
 
@@ -195,16 +195,16 @@ func (d *DefaultConflictDetector) Detect(_ context.Context, entities []Migration
 		if existing, ok := canonicalMap[e.CanonicalID]; ok && existing != e.LegacySource.LegacyID {
 			conflicts = append(conflicts, MigrationConflict{
 				Type: "duplicate_canonical_id", Severity: "blocking",
-				Subject: e.CanonicalID,
+				Subject:     e.CanonicalID,
 				Description: fmt.Sprintf("canonical id %s shared by %s and %s", e.CanonicalID, existing, e.LegacySource.LegacyID),
-				Resolution: "namespace by source",
+				Resolution:  "namespace by source",
 			})
 		}
 		canonicalMap[e.CanonicalID] = e.LegacySource.LegacyID
 		if existing, ok := legacyMap[e.LegacySource.LegacyID]; ok && existing != e.CanonicalID {
 			conflicts = append(conflicts, MigrationConflict{
 				Type: "duplicate_legacy_id", Severity: "high",
-				Subject: e.LegacySource.LegacyID,
+				Subject:     e.LegacySource.LegacyID,
 				Description: fmt.Sprintf("legacy id %s maps to %s and %s", e.LegacySource.LegacyID, existing, e.CanonicalID),
 			})
 		}
@@ -216,8 +216,8 @@ func (d *DefaultConflictDetector) Detect(_ context.Context, entities []Migration
 var _ MigrationConflictDetector = (*DefaultConflictDetector)(nil)
 
 type DefaultPlanner struct {
-	validator  MigrationValidator
-	detector   MigrationConflictDetector
+	validator MigrationValidator
+	detector  MigrationConflictDetector
 }
 
 func NewDefaultPlanner(validator MigrationValidator, detector MigrationConflictDetector) *DefaultPlanner {
@@ -235,12 +235,12 @@ func (p *DefaultPlanner) Plan(ctx context.Context, snapshotID string, entities [
 	}
 	allConflicts = append(allConflicts, p.detector.Detect(ctx, entities)...)
 	plan := MigrationPlan{
-		PlanID:     newMigrationID("plan"),
-		SnapshotID: snapshotID,
-		CreatedAt:  time.Now().UTC(),
-		Entities:   entities,
-		Conflicts:  allConflicts,
-		Strategy:   "sequential",
+		PlanID:         newMigrationID("plan"),
+		SnapshotID:     snapshotID,
+		CreatedAt:      time.Now().UTC(),
+		Entities:       entities,
+		Conflicts:      allConflicts,
+		Strategy:       "sequential",
 		EstimatedSteps: len(entities) + len(allConflicts),
 	}
 	sort.Slice(plan.Entities, func(i, j int) bool {
@@ -315,10 +315,10 @@ func NewMigrationService(
 
 func (s *MigrationService) Run(ctx context.Context, snapshotID string, entities []MigrationEntity) (MigrationReport, error) {
 	report := MigrationReport{
-		ReportID:   newMigrationID("report"),
-		SnapshotID: snapshotID,
-		StartedAt:  time.Now().UTC(),
-		Status:     "running",
+		ReportID:      newMigrationID("report"),
+		SnapshotID:    snapshotID,
+		StartedAt:     time.Now().UTC(),
+		Status:        "running",
 		TotalEntities: len(entities),
 	}
 	plan, err := s.planner.Plan(ctx, snapshotID, entities, nil)

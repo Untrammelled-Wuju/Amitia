@@ -27,6 +27,8 @@ const (
 	ErrCodeMeasurementIncomplete      = "measurement_incomplete"
 	ErrCodeLegacyInvalidRevision      = "legacy_invalid_revision_binding"
 	ErrCodeQualityDisabled            = "desktop_pet_quality_disabled"
+	ErrCodeQualityEvaluationNotFound  = "QUALITY_EVALUATION_NOT_FOUND"
+	ErrCodeQualityNotOwned            = "QUALITY_NOT_OWNED"
 )
 
 var (

@@ -33,8 +33,8 @@ func TestErrorCodes_Defined(t *testing.T) {
 
 func TestMapProcessingErrorCode_NewCodes(t *testing.T) {
 	cases := []struct {
-		code    string
-		want    int
+		code string
+		want int
 	}{
 		{ErrCodeCanvasNormalizationFailed, response.OperationFailed},
 		{ErrCodeSubjectAlignmentFailed, response.OperationFailed},

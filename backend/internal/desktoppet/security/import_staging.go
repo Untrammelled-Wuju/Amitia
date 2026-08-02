@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -118,11 +119,11 @@ func (s *ImportStaging) MarkRejected() {
 
 func (s *ImportStaging) IsExpired() bool {
 	if s.ExpiresAt == "" {
-		return false
+		return true
 	}
 	expires, err := time.Parse(time.RFC3339Nano, s.ExpiresAt)
 	if err != nil {
-		return false
+		return true
 	}
 	return time.Now().UTC().After(expires)
 }
@@ -147,10 +148,41 @@ func SanitizeUploadName(name string) (string, error) {
 	if len(name) > 255 {
 		return "", errors.New("upload name too long")
 	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", errors.New("empty upload name")
+	}
+	if name == "." || name == ".." {
+		return "", errors.New("invalid upload name")
+	}
 	for _, c := range name {
 		if c == '/' || c == '\\' || c == '\x00' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' {
 			return "", fmt.Errorf("invalid character in upload name: %U", c)
 		}
+		if c < 0x20 || c == 0x7F {
+			return "", fmt.Errorf("invalid character in upload name: %U", c)
+		}
+	}
+	if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
+		return "", errors.New("invalid upload name format")
+	}
+	base := name
+	if idx := strings.Index(base, "."); idx > 0 {
+		base = base[:idx]
+	}
+	if isReservedDeviceName(base) {
+		return "", errors.New("reserved device name")
 	}
 	return name, nil
+}
+
+func isReservedDeviceName(name string) bool {
+	reserved := []string{"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
+	upper := strings.ToUpper(name)
+	for _, r := range reserved {
+		if upper == r {
+			return true
+		}
+	}
+	return false
 }

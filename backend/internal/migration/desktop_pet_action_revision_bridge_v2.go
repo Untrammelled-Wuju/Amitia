@@ -2,8 +2,8 @@ package migration
 
 func DesktopPetActionRevisionBridgeV2Migration() Migration {
 	return Migration{
-		Version:           "202607310019",
-		Name:              "add_desktop_pet_action_revision_bridge_v2",
+		Version: "202607310019",
+		Name:    "add_desktop_pet_action_revision_bridge_v2",
 		Up: func(s *Step) error {
 			if err := s.AddColumn("desktop_pet_action_streams", "root_processing_task_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 				return err

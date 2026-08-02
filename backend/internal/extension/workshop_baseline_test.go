@@ -1599,7 +1599,7 @@ func TestLegacy_Workshop_WorkshopSecretFieldsDetection(t *testing.T) {
 
 func TestLegacy_Workshop_CapabilityAnalysis(t *testing.T) {
 	compiled := CompiledWorkflow{
-		Capabilities:  []string{"network.https"},
+		Capabilities:   []string{"network.https"},
 		HasSideEffects: true,
 		Steps: []CompiledStep{
 			{ID: "call", Type: "http", Input: json.RawMessage(`{}`), TimeoutMS: 30000},
@@ -1639,8 +1639,8 @@ func TestLegacy_Workshop_CapabilityAnalysisMissing(t *testing.T) {
 func TestLegacy_Workshop_BuildWorkshopManifest(t *testing.T) {
 	draft := baselineDraft()
 	compiled := CompiledWorkflow{
-		Capabilities:  []string{},
-		Limits:        DefaultWorkflowLimits(),
+		Capabilities:   []string{},
+		Limits:         DefaultWorkflowLimits(),
 		HasSideEffects: false,
 		Idempotent:     true,
 	}
@@ -1814,7 +1814,6 @@ func TestLegacy_Workshop_DefaultWorkflowLimitsClamping(t *testing.T) {
 		t.Fatalf("duration not clamped: %d vs %d", clamped.MaxExecutionDurationMS, host.MaxExecutionDurationMS)
 	}
 }
-
 
 func TestLegacy_Workshop_UserIDInjection(t *testing.T) {
 	service, _, _, _ := newWorkshopBaselineService(t)

@@ -12,14 +12,14 @@ type GenerationAdapter interface {
 }
 
 type SingleFrameGenerationRequest struct {
-	GenerationTaskID  string
-	ActionKey         string
-	TargetFrameID     string
-	FrameIndex        int
-	TotalFrames       int
-	AdjacentFrames    []AdjacentFrameContext
-	FixIntent         string
-	UserID            string
+	GenerationTaskID string
+	ActionKey        string
+	TargetFrameID    string
+	FrameIndex       int
+	TotalFrames      int
+	AdjacentFrames   []AdjacentFrameContext
+	FixIntent        string
+	UserID           string
 }
 
 type AdjacentFrameContext struct {
@@ -29,11 +29,11 @@ type AdjacentFrameContext struct {
 }
 
 type SingleFrameGenerationResult struct {
-	ProviderAttemptID  string
-	ImagePath          string
-	Width              int
-	Height             int
-	CostActual         any
+	ProviderAttemptID string
+	ImagePath         string
+	Width             int
+	Height            int
+	CostActual        any
 }
 
 type FullActionGenerationRequest struct {
@@ -43,10 +43,10 @@ type FullActionGenerationRequest struct {
 }
 
 type FullActionGenerationResult struct {
-	ProviderAttemptID string
+	ProviderAttemptID   string
 	CandidateRevisionID string
-	FrameCount        int
-	FramePaths        []string
+	FrameCount          int
+	FramePaths          []string
 }
 
 type GenerationArtifactInfo struct {
@@ -67,30 +67,30 @@ type ProcessingAdapter interface {
 }
 
 type ProcessingActionInfo struct {
-	ProcessingActionID string
-	ProcessingTaskID   string
-	GenerationTaskID   string
-	ActionKey          string
-	ActionNameSnapshot string
+	ProcessingActionID  string
+	ProcessingTaskID    string
+	GenerationTaskID    string
+	ActionKey           string
+	ActionNameSnapshot  string
 	SourceAttemptNumber int
-	Status             string
-	LoopType           string
-	FPS                int
-	FrameDurationMS    int
-	Excluded           bool
+	Status              string
+	LoopType            string
+	FPS                 int
+	FrameDurationMS     int
+	Excluded            bool
 }
 
 type ProcessedFrameInfo struct {
-	FrameID         string
-	FrameIndex      int
-	ProcessedPath   string
-	SourcePath      string
-	Width           int
-	Height          int
-	ContentHash     string
-	AnchorX         float64
-	AnchorY         float64
-	QualityFlags    string
+	FrameID       string
+	FrameIndex    int
+	ProcessedPath string
+	SourcePath    string
+	Width         int
+	Height        int
+	ContentHash   string
+	AnchorX       float64
+	AnchorY       float64
+	QualityFlags  string
 }
 
 type BaselineRevisionImport struct {
@@ -117,13 +117,13 @@ type QualityEvaluationInfo struct {
 }
 
 type QualityFindingInfo struct {
-	FindingID    string
-	Severity     string
-	Dimension    string
-	FrameID      string
-	FramePairID  string
-	Description  string
-	Stale        bool
+	FindingID   string
+	Severity    string
+	Dimension   string
+	FrameID     string
+	FramePairID string
+	Description string
+	Stale       bool
 }
 
 type RevisionAssetStore interface {

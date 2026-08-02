@@ -15,7 +15,7 @@ import (
 
 type RuntimeNotifierAdapter struct {
 	dispatcher *Dispatcher
-	registry  *RuntimeRegistry
+	registry   *RuntimeRegistry
 }
 
 func NewRuntimeNotifierAdapter(dispatcher *Dispatcher, registry *RuntimeRegistry) *RuntimeNotifierAdapter {
@@ -31,7 +31,7 @@ func (n *RuntimeNotifierAdapter) NotifyInstallationEnabled(userId, installationI
 
 	settingsSnapshot := n.toSettingsSnapshot(settings, 0)
 	installationSnapshot := contracts.InstallationSnapshot{
-		InstallationID:   installationId,
+		InstallationID: installationId,
 	}
 
 	payload := contracts.SpawnPayload{
@@ -41,16 +41,16 @@ func (n *RuntimeNotifierAdapter) NotifyInstallationEnabled(userId, installationI
 	}
 
 	req := CommandRequest{
-		Name:           contracts.MsgPetSpawn,
-		RuntimeID:      n.selectRuntimeID(userId),
-		UserID:         userId,
-		InstallationID: installationId,
-		Payload:        payload,
+		Name:            contracts.MsgPetSpawn,
+		RuntimeID:       n.selectRuntimeID(userId),
+		UserID:          userId,
+		InstallationID:  installationId,
+		Payload:         payload,
 		Durability:      contracts.DurabilityDurable,
-		CoalesceKey:    "pet_present_" + installationId,
-		IdempotencyKey: "enable_" + installationId + "_" + uuid.NewString(),
+		CoalesceKey:     "pet_present_" + installationId,
+		IdempotencyKey:  "enable_" + installationId + "_" + uuid.NewString(),
 		DesiredRevision: payload.DesiredRevision,
-		Deadline:       30 * time.Second,
+		Deadline:        30 * time.Second,
 	}
 
 	receipt, err := n.dispatcher.Dispatch(ctx, req)
@@ -73,16 +73,16 @@ func (n *RuntimeNotifierAdapter) NotifyInstallationDisabled(userId, installation
 	}
 
 	req := CommandRequest{
-		Name:           contracts.MsgPetDestroy,
-		RuntimeID:      n.selectRuntimeID(userId),
-		UserID:         userId,
-		InstallationID: installationId,
-		Payload:        payload,
+		Name:            contracts.MsgPetDestroy,
+		RuntimeID:       n.selectRuntimeID(userId),
+		UserID:          userId,
+		InstallationID:  installationId,
+		Payload:         payload,
 		Durability:      contracts.DurabilityDurable,
-		CoalesceKey:    "pet_present_" + installationId,
-		IdempotencyKey: "disable_" + installationId + "_" + uuid.NewString(),
+		CoalesceKey:     "pet_present_" + installationId,
+		IdempotencyKey:  "disable_" + installationId + "_" + uuid.NewString(),
 		DesiredRevision: payload.DesiredRevision,
-		Deadline:       30 * time.Second,
+		Deadline:        30 * time.Second,
 	}
 
 	receipt, err := n.dispatcher.Dispatch(ctx, req)
@@ -110,7 +110,7 @@ func (n *RuntimeNotifierAdapter) NotifyActionPlayed(userId, installationId, acti
 		UserID:         userId,
 		InstallationID: installationId,
 		Payload:        payload,
-		Durability:      contracts.DurabilityEphemeral,
+		Durability:     contracts.DurabilityEphemeral,
 		IdempotencyKey: "play_" + installationId + "_" + actionKey + "_" + uuid.NewString(),
 		Deadline:       15 * time.Second,
 	}
@@ -134,15 +134,15 @@ func (n *RuntimeNotifierAdapter) NotifyRecenter(installationId string) error {
 	}
 
 	req := CommandRequest{
-		Name:           contracts.MsgPetRecenter,
-		RuntimeID:      n.selectRuntimeIDByInstallation(installationId),
-		InstallationID: installationId,
-		Payload:        payload,
+		Name:            contracts.MsgPetRecenter,
+		RuntimeID:       n.selectRuntimeIDByInstallation(installationId),
+		InstallationID:  installationId,
+		Payload:         payload,
 		Durability:      contracts.DurabilityDurableImmediate,
-		CoalesceKey:    "recenter_" + installationId,
-		IdempotencyKey: "recenter_" + installationId + "_" + uuid.NewString(),
+		CoalesceKey:     "recenter_" + installationId,
+		IdempotencyKey:  "recenter_" + installationId + "_" + uuid.NewString(),
 		DesiredRevision: payload.SettingsRevision,
-		Deadline:       15 * time.Second,
+		Deadline:        15 * time.Second,
 	}
 
 	receipt, err := n.dispatcher.Dispatch(ctx, req)
@@ -165,15 +165,15 @@ func (n *RuntimeNotifierAdapter) NotifyDefaultActionChanged(installationId, acti
 	}
 
 	req := CommandRequest{
-		Name:           contracts.MsgPetDefaultActionChanged,
-		RuntimeID:      n.selectRuntimeIDByInstallation(installationId),
-		InstallationID: installationId,
-		Payload:        payload,
+		Name:            contracts.MsgPetDefaultActionChanged,
+		RuntimeID:       n.selectRuntimeIDByInstallation(installationId),
+		InstallationID:  installationId,
+		Payload:         payload,
 		Durability:      contracts.DurabilityDurableCoalescing,
-		CoalesceKey:    "default_action_" + installationId,
-		IdempotencyKey: "default_action_" + installationId + "_" + uuid.NewString(),
+		CoalesceKey:     "default_action_" + installationId,
+		IdempotencyKey:  "default_action_" + installationId + "_" + uuid.NewString(),
 		DesiredRevision: payload.Revision,
-		Deadline:       15 * time.Second,
+		Deadline:        15 * time.Second,
 	}
 
 	receipt, err := n.dispatcher.Dispatch(ctx, req)
@@ -206,15 +206,15 @@ func (n *RuntimeNotifierAdapter) NotifyRuntimeSettingsUpdated(installationId str
 	}
 
 	req := CommandRequest{
-		Name:           contracts.MsgPetUpdateSettings,
-		RuntimeID:      n.selectRuntimeIDByInstallation(installationId),
-		InstallationID: installationId,
-		Payload:        payload,
+		Name:            contracts.MsgPetUpdateSettings,
+		RuntimeID:       n.selectRuntimeIDByInstallation(installationId),
+		InstallationID:  installationId,
+		Payload:         payload,
 		Durability:      contracts.DurabilityDurableCoalescing,
-		CoalesceKey:    "settings_" + installationId,
-		IdempotencyKey: "settings_" + installationId + "_" + uuid.NewString(),
+		CoalesceKey:     "settings_" + installationId,
+		IdempotencyKey:  "settings_" + installationId + "_" + uuid.NewString(),
 		DesiredRevision: payload.SettingsRevision,
-		Deadline:       15 * time.Second,
+		Deadline:        15 * time.Second,
 	}
 
 	receipt, err := n.dispatcher.Dispatch(ctx, req)
@@ -237,16 +237,16 @@ func (n *RuntimeNotifierAdapter) EnsureUninstalled(userId, installationId string
 	}
 
 	req := CommandRequest{
-		Name:           contracts.MsgPetDestroy,
-		RuntimeID:      n.selectRuntimeID(userId),
-		UserID:         userId,
-		InstallationID: installationId,
-		Payload:        payload,
+		Name:            contracts.MsgPetDestroy,
+		RuntimeID:       n.selectRuntimeID(userId),
+		UserID:          userId,
+		InstallationID:  installationId,
+		Payload:         payload,
 		Durability:      contracts.DurabilityDurable,
-		CoalesceKey:    "pet_present_" + installationId,
-		IdempotencyKey: "uninstall_" + installationId + "_" + uuid.NewString(),
+		CoalesceKey:     "pet_present_" + installationId,
+		IdempotencyKey:  "uninstall_" + installationId + "_" + uuid.NewString(),
 		DesiredRevision: payload.DesiredRevision,
-		Deadline:       30 * time.Second,
+		Deadline:        30 * time.Second,
 	}
 
 	receipt, err := n.dispatcher.Dispatch(ctx, req)
@@ -286,14 +286,14 @@ func (n *RuntimeNotifierAdapter) toSettingsSnapshot(settings *installation.Runti
 		return contracts.SettingsSnapshot{Revision: revision}
 	}
 	return contracts.SettingsSnapshot{
-		Revision:        revision,
-		AlwaysOnTop:     settings.AlwaysOnTop != 0,
-		Scale:           settings.Scale,
-		PositionX:       settings.PositionX,
-		PositionY:       settings.PositionY,
-		ScreenID:        settings.ScreenID,
+		Revision:         revision,
+		AlwaysOnTop:      settings.AlwaysOnTop != 0,
+		Scale:            settings.Scale,
+		PositionX:        settings.PositionX,
+		PositionY:        settings.PositionY,
+		ScreenID:         settings.ScreenID,
 		ClickThroughMode: settings.ClickThroughMode,
-		SoundEnabled:    settings.SoundEnabled != 0,
+		SoundEnabled:     settings.SoundEnabled != 0,
 	}
 }
 

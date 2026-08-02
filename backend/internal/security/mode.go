@@ -22,7 +22,6 @@ type SecurityConfig struct {
 	JWTSecret         string
 	LocalToken        string
 	AllowedOrigins    []string
-	FailOpen          bool
 }
 
 func (s *SecurityConfig) Validate() error {

@@ -3,6 +3,7 @@ package editing
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -14,15 +15,21 @@ func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	procAdapter := NewProcessingAdapter(ctx)
 	qualAdapter := NewQualityAdapter(ctx)
 	svc := NewService(repo, assetStore, genAdapter, procAdapter, qualAdapter, ctx.DB, dataDir)
-	registerRoutes(r, svc)
+	registry := security.NewPathRootRegistry()
+	_ = registry.Register(dataDir)
+	responder := security.NewSafeArtifactResponder(registry)
+	registerRoutes(r, svc, responder)
 }
 
 func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service) {
-	registerRoutes(r, svc)
+	registry := security.NewPathRootRegistry()
+	_ = registry.Register(config.AppCfg.Storage.DataDir)
+	responder := security.NewSafeArtifactResponder(registry)
+	registerRoutes(r, svc, responder)
 }
 
-func registerRoutes(r *gin.RouterGroup, svc Service) {
-	handler := NewHandler(svc)
+func registerRoutes(r *gin.RouterGroup, svc Service, responder *security.SafeArtifactResponder) {
+	handler := NewHandler(svc, responder)
 	g := r.Group("/desktop-pets")
 	{
 		g.GET("/processing-tasks/:processingTaskId/actions/:actionKey/revisions", handler.ListRevisions)

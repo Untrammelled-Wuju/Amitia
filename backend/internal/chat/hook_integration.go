@@ -95,14 +95,14 @@ func buildHookContext(invocationID, operationID, extensionID, userID, characterI
 		convID = &c
 	}
 	return hook.HookContextSnapshot{
-		InvocationID: invocationID,
-		OperationID:  operationID,
-		ExtensionID:  extensionID,
-		CharacterID:  charID,
+		InvocationID:   invocationID,
+		OperationID:    operationID,
+		ExtensionID:    extensionID,
+		CharacterID:    charID,
 		ConversationID: convID,
-		Platform:     channel,
-		Timestamp:    time.Now().UTC(),
-		Depth:        0,
+		Platform:       channel,
+		Timestamp:      time.Now().UTC(),
+		Depth:          0,
 	}
 }
 

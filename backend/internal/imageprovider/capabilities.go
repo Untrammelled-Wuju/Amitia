@@ -147,10 +147,10 @@ func (c ProviderCapabilities) ClampReferenceImages(requested int) int {
 }
 
 type CapabilitySnapshot struct {
-	SchemaVersion int                    `json:"schemaVersion"`
-	Provider      string                 `json:"provider"`
-	Model         string                 `json:"model"`
-	Capabilities  ProviderCapabilities   `json:"capabilities"`
-	Hash          string                 `json:"hash"`
-	CreatedAt     string                 `json:"createdAt"`
+	SchemaVersion int                  `json:"schemaVersion"`
+	Provider      string               `json:"provider"`
+	Model         string               `json:"model"`
+	Capabilities  ProviderCapabilities `json:"capabilities"`
+	Hash          string               `json:"hash"`
+	CreatedAt     string               `json:"createdAt"`
 }

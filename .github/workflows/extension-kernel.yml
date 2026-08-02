@@ -2,20 +2,9 @@ name: extension-kernel
 
 on:
   push:
-    branches: [develop, master]
-    paths:
-      - 'backend/internal/extension/**'
-      - 'backend/cmd/amitia-ext/**'
-      - 'backend/cmd/server/**'
-      - 'sdk/plugin-cli/**'
-      - 'sdk/plugin-sdk/**'
-      - 'testdata/extensions/**'
-      - 'front/**'
-      - 'desktop/**'
-      - 'android/**'
-      - '.github/workflows/extension-kernel.yml'
-      - '.tool-versions'
-      - 'scripts/extension-test.*'
+    branches: [develop, master, main]
+    tags:
+      - 'v*'
   pull_request:
     branches: [develop]
     paths:

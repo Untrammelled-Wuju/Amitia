@@ -177,15 +177,15 @@ func (s *actualStateService) AppendDomainEvent(eventType, aggregateID string, pa
 	}
 
 	outbox := &DomainEventOutbox{
-		ID:             "dtev_" + uuid.NewString(),
-		EventType:      eventType,
-		AggregateID:    aggregateID,
-		Payload:        payload,
-		Status:         OutboxStatusPending,
-		Attempt:        0,
-		InsertedAt:     now,
-		UpdatedAt:      now,
-		PublishedAt:    "",
+		ID:          "dtev_" + uuid.NewString(),
+		EventType:   eventType,
+		AggregateID: aggregateID,
+		Payload:     payload,
+		Status:      OutboxStatusPending,
+		Attempt:     0,
+		InsertedAt:  now,
+		UpdatedAt:   now,
+		PublishedAt: "",
 	}
 
 	if idemKey != nil {
@@ -206,9 +206,9 @@ func (s *actualStateService) ClaimDomainEvent(eventID string, now time.Time, cla
 		"id = ? OR (status = ? AND (claim_expires_at < ? OR claim_expires_at = ''))",
 		eventID, OutboxStatusPending, nowStr,
 	).Order("inserted_at ASC").Limit(1).Updates(map[string]interface{}{
-		"status":            OutboxStatusClaimed,
-		"claim_expires_at":  claimExpiry,
-		"updated_at":        nowStr,
+		"status":           OutboxStatusClaimed,
+		"claim_expires_at": claimExpiry,
+		"updated_at":       nowStr,
 	})
 
 	if result.Error != nil {
@@ -229,9 +229,9 @@ func (s *actualStateService) MarkDomainEventSent(eventID string, now time.Time) 
 func (s *actualStateService) MarkDomainEventFailed(eventID string, attempt int, errMsg string) error {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	return s.db.Model(&DomainEventOutbox{}).Where("id = ?", eventID).Updates(map[string]interface{}{
-		"attempt":     attempt,
-		"last_error":  errMsg,
-		"updated_at":  now,
+		"attempt":    attempt,
+		"last_error": errMsg,
+		"updated_at": now,
 	}).Error
 }
 

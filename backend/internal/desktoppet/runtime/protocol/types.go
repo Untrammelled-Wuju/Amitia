@@ -3,18 +3,18 @@
 package protocol
 
 const (
-	ProtocolVersion1_0 = "1.0"
+	ProtocolVersion1_0     = "1.0"
 	CurrentProtocolVersion = ProtocolVersion1_0
-	SnapshotVersionV2 = 2
+	SnapshotVersionV2      = 2
 	CurrentSnapshotVersion = SnapshotVersionV2
 )
 
 type RuntimeEventType string
 
 const (
-	EvtRuntimeConnected        RuntimeEventType = "runtime.connected"
-	EvtRuntimeDisconnected     RuntimeEventType = "runtime.disconnected"
-	EvtRuntimeHeartbeat        RuntimeEventType = "runtime.heartbeat"
+	EvtRuntimeConnected    RuntimeEventType = "runtime.connected"
+	EvtRuntimeDisconnected RuntimeEventType = "runtime.disconnected"
+	EvtRuntimeHeartbeat    RuntimeEventType = "runtime.heartbeat"
 
 	EvtDesktopPetClicked       RuntimeEventType = "desktop.pet.clicked"
 	EvtDesktopPetDoubleClicked RuntimeEventType = "desktop.pet.double_clicked"
@@ -38,36 +38,36 @@ const (
 	EvtWindowMoved          RuntimeEventType = "window.moved"
 	EvtWindowDisplayChanged RuntimeEventType = "window.display_changed"
 
-	EvtRuntimeStateSnapshot     RuntimeEventType = "runtime.state.snapshot"
+	EvtRuntimeStateSnapshot       RuntimeEventType = "runtime.state.snapshot"
 	EvtRuntimeCommandAcknowledged RuntimeEventType = "runtime.command.acknowledged"
-	EvtRuntimeCommandRejected    RuntimeEventType = "runtime.command.rejected"
+	EvtRuntimeCommandRejected     RuntimeEventType = "runtime.command.rejected"
 )
 
 var standardEventTypes = map[RuntimeEventType]struct{}{
-	EvtRuntimeConnected:        {},
-	EvtRuntimeDisconnected:     {},
-	EvtRuntimeHeartbeat:        {},
-	EvtDesktopPetClicked:       {},
-	EvtDesktopPetDoubleClicked: {},
-	EvtDesktopPetHoverEntered:  {},
-	EvtDesktopPetHoverMoved:    {},
-	EvtDesktopPetHoverLeft:     {},
-	EvtDesktopPetDragStarted:   {},
-	EvtDesktopPetDragMoved:     {},
-	EvtDesktopPetDragCompleted: {},
-	EvtDesktopPetDragCancelled: {},
-	EvtPlaybackActionRequested: {},
-	EvtPlaybackActionStarted:   {},
-	EvtPlaybackActionCompleted: {},
-	EvtPlaybackActionInterrupted: {},
-	EvtPlaybackActionFailed:    {},
-	EvtWindowShown:             {},
-	EvtWindowHidden:            {},
-	EvtWindowMoved:             {},
-	EvtWindowDisplayChanged:    {},
-	EvtRuntimeStateSnapshot:    {},
+	EvtRuntimeConnected:           {},
+	EvtRuntimeDisconnected:        {},
+	EvtRuntimeHeartbeat:           {},
+	EvtDesktopPetClicked:          {},
+	EvtDesktopPetDoubleClicked:    {},
+	EvtDesktopPetHoverEntered:     {},
+	EvtDesktopPetHoverMoved:       {},
+	EvtDesktopPetHoverLeft:        {},
+	EvtDesktopPetDragStarted:      {},
+	EvtDesktopPetDragMoved:        {},
+	EvtDesktopPetDragCompleted:    {},
+	EvtDesktopPetDragCancelled:    {},
+	EvtPlaybackActionRequested:    {},
+	EvtPlaybackActionStarted:      {},
+	EvtPlaybackActionCompleted:    {},
+	EvtPlaybackActionInterrupted:  {},
+	EvtPlaybackActionFailed:       {},
+	EvtWindowShown:                {},
+	EvtWindowHidden:               {},
+	EvtWindowMoved:                {},
+	EvtWindowDisplayChanged:       {},
+	EvtRuntimeStateSnapshot:       {},
 	EvtRuntimeCommandAcknowledged: {},
-	EvtRuntimeCommandRejected:  {},
+	EvtRuntimeCommandRejected:     {},
 }
 
 func IsValidEventType(t string) bool {
@@ -119,25 +119,25 @@ const (
 type ResumeMode string
 
 const (
-	ResumeModeResume      ResumeMode = "resume"
-	ResumeModeFullResync  ResumeMode = "full_resync"
+	ResumeModeResume       ResumeMode = "resume"
+	ResumeModeFullResync   ResumeMode = "full_resync"
 	ResumeModeSessionReset ResumeMode = "session_reset"
 )
 
 type Capability string
 
 const (
-	CapAnimationV2         Capability = "animation.v2"
-	CapPlaybackHold        Capability = "playback.hold"
-	CapPlaybackPingPong    Capability = "playback.ping_pong"
-	CapWindowClickThrough  Capability = "window.click-through.alpha"
-	CapWindowMultiDisplay  Capability = "window.multi-display"
-	CapRuntimeCommandAck   Capability = "runtime.command-ack"
-	CapRuntimeSnapshotV2   Capability = "runtime.snapshot.v2"
-	CapPetWindow           Capability = "pet.window"
-	CapPetAnimationFrame   Capability = "pet.animation.frame_sequence"
-	CapPetSettings         Capability = "pet.settings"
-	CapPetRecenter         Capability = "pet.recenter"
-	CapPetClickThrough     Capability = "pet.click_through"
+	CapAnimationV2          Capability = "animation.v2"
+	CapPlaybackHold         Capability = "playback.hold"
+	CapPlaybackPingPong     Capability = "playback.ping_pong"
+	CapWindowClickThrough   Capability = "window.click-through.alpha"
+	CapWindowMultiDisplay   Capability = "window.multi-display"
+	CapRuntimeCommandAck    Capability = "runtime.command-ack"
+	CapRuntimeSnapshotV2    Capability = "runtime.snapshot.v2"
+	CapPetWindow            Capability = "pet.window"
+	CapPetAnimationFrame    Capability = "pet.animation.frame_sequence"
+	CapPetSettings          Capability = "pet.settings"
+	CapPetRecenter          Capability = "pet.recenter"
+	CapPetClickThrough      Capability = "pet.click_through"
 	CapPetInteractionEvents Capability = "pet.interaction_events"
 )

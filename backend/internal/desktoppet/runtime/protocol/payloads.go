@@ -40,12 +40,12 @@ type PlaybackPayload struct {
 }
 
 type WindowPayload struct {
-	Visible    bool    `json:"visible"`
-	X          float64 `json:"x"`
-	Y          float64 `json:"y"`
-	DisplayID  string  `json:"displayId"`
-	Width      int     `json:"width"`
-	Height     int     `json:"height"`
+	Visible   bool    `json:"visible"`
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	DisplayID string  `json:"displayId"`
+	Width     int     `json:"width"`
+	Height    int     `json:"height"`
 }
 
 type RuntimeErrorPayload struct {
@@ -66,14 +66,14 @@ const (
 	InterruptReasonUserDrag             = "user_drag"
 	InterruptReasonCommandCancelled     = "command_cancelled"
 
-	ErrorCodeRendererNotReady          = "renderer_not_ready"
-	ErrorCodeWindowCreateFailed        = "window_create_failed"
-	ErrorCodeReleaseLoadFailed         = "release_load_failed"
-	ErrorCodeActionNotFound            = "action_not_found"
-	ErrorCodeFrameMissing              = "frame_missing"
-	ErrorCodeFrameDecodeFailed         = "frame_decode_failed"
-	ErrorCodeAnimationTimeout          = "animation_timeout"
-	ErrorCodeIpcDeliveryFailed         = "ipc_delivery_failed"
-	ErrorCodeRuntimeSessionSuperseded  = "runtime_session_superseded"
+	ErrorCodeRendererNotReady           = "renderer_not_ready"
+	ErrorCodeWindowCreateFailed         = "window_create_failed"
+	ErrorCodeReleaseLoadFailed          = "release_load_failed"
+	ErrorCodeActionNotFound             = "action_not_found"
+	ErrorCodeFrameMissing               = "frame_missing"
+	ErrorCodeFrameDecodeFailed          = "frame_decode_failed"
+	ErrorCodeAnimationTimeout           = "animation_timeout"
+	ErrorCodeIpcDeliveryFailed          = "ipc_delivery_failed"
+	ErrorCodeRuntimeSessionSuperseded   = "runtime_session_superseded"
 	ErrorCodeProtocolVersionUnsupported = "protocol_version_unsupported"
 )

@@ -39,19 +39,19 @@ func (e *DefaultRuleEvaluator) Evaluate(ctx context.Context, observations []Obse
 		dimension := e.ruleToDimension(ruleCode)
 
 		finding := QualityFinding{
-			ID:          uuid.NewString(),
-			RuleCode:    ruleCode,
-			RuleVersion: ruleCfg.RuleVersion,
-			Dimension:   dimension,
-			Severity:    severity,
-			MessageKey:  ruleCode,
-			Message:     e.buildMessage(ruleCode, obs, ruleCfg),
-			Confidence:  obs.Confidence,
-			HardGate:    hardGate,
-			MetricName:  obs.MetricName,
-			Comparison:  ruleCfg.Comparison,
+			ID:              uuid.NewString(),
+			RuleCode:        ruleCode,
+			RuleVersion:     ruleCfg.RuleVersion,
+			Dimension:       dimension,
+			Severity:        severity,
+			MessageKey:      ruleCode,
+			Message:         e.buildMessage(ruleCode, obs, ruleCfg),
+			Confidence:      obs.Confidence,
+			HardGate:        hardGate,
+			MetricName:      obs.MetricName,
+			Comparison:      ruleCfg.Comparison,
 			SuggestedAction: e.buildSuggestion(ruleCode, obs),
-			EvidenceRef: fmt.Sprintf("detector=%s:frame=%d", obs.DetectorKey, obs.FrameIndex),
+			EvidenceRef:     fmt.Sprintf("detector=%s:frame=%d", obs.DetectorKey, obs.FrameIndex),
 		}
 
 		if obs.FrameIndex >= 0 {

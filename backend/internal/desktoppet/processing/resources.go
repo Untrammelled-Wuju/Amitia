@@ -20,29 +20,29 @@ type FrameInfo struct {
 }
 
 type ActionJSON struct {
-	Key             string      `json:"key"`
-	Name            string      `json:"name"`
-	Version         int         `json:"version"`
-	LoopType        string      `json:"loopType"`
-	Fps             int         `json:"fps"`
-	FrameDurationMs int         `json:"frameDurationMs"`
-	FrameCount      int         `json:"frameCount"`
-	Frames          []FrameInfo `json:"frames"`
-	Anchor          AnchorJSON  `json:"anchor"`
-	Interruptible   bool        `json:"interruptible"`
-	ReturnAction    string      `json:"returnAction"`
-	PlaybackMode    string      `json:"playbackMode"`
-	ReturnPolicy    string      `json:"returnPolicy"`
-	Priority        int         `json:"priority"`
-	CooldownMs      int         `json:"cooldownMs"`
-	MutexGroup      string      `json:"mutexGroup"`
-	QueuePolicy     string      `json:"queuePolicy"`
-	DedupWindowMs   int         `json:"dedupWindowMs"`
-	InterruptAfterMs int        `json:"interruptAfterMs"`
-	MinimumPlayMs   int         `json:"minimumPlayMs"`
-	MaximumPlayMs   int         `json:"maximumPlayMs"`
-	AnchorProfile   string      `json:"anchorProfile"`
-	ActionSpecHash  string      `json:"actionSpecHash"`
+	Key              string      `json:"key"`
+	Name             string      `json:"name"`
+	Version          int         `json:"version"`
+	LoopType         string      `json:"loopType"`
+	Fps              int         `json:"fps"`
+	FrameDurationMs  int         `json:"frameDurationMs"`
+	FrameCount       int         `json:"frameCount"`
+	Frames           []FrameInfo `json:"frames"`
+	Anchor           AnchorJSON  `json:"anchor"`
+	Interruptible    bool        `json:"interruptible"`
+	ReturnAction     string      `json:"returnAction"`
+	PlaybackMode     string      `json:"playbackMode"`
+	ReturnPolicy     string      `json:"returnPolicy"`
+	Priority         int         `json:"priority"`
+	CooldownMs       int         `json:"cooldownMs"`
+	MutexGroup       string      `json:"mutexGroup"`
+	QueuePolicy      string      `json:"queuePolicy"`
+	DedupWindowMs    int         `json:"dedupWindowMs"`
+	InterruptAfterMs int         `json:"interruptAfterMs"`
+	MinimumPlayMs    int         `json:"minimumPlayMs"`
+	MaximumPlayMs    int         `json:"maximumPlayMs"`
+	AnchorProfile    string      `json:"anchorProfile"`
+	ActionSpecHash   string      `json:"actionSpecHash"`
 }
 
 type AnchorJSON struct {
@@ -212,12 +212,12 @@ func BuildActionJSON(actionKey, actionName string, frameCount, fps int, anchor A
 			X:    anchor.X,
 			Y:    anchor.Y,
 		},
-		Interruptible:  true,
-		ReturnAction:   returnAction,
-		PlaybackMode:   playbackMode,
-		ReturnPolicy:   returnPolicy,
-		QueuePolicy:    "replace",
-		AnchorProfile:  "feet_center",
+		Interruptible: true,
+		ReturnAction:  returnAction,
+		PlaybackMode:  playbackMode,
+		ReturnPolicy:  returnPolicy,
+		QueuePolicy:   "replace",
+		AnchorProfile: "feet_center",
 	}
 }
 

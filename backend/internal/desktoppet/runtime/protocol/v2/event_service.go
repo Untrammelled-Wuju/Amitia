@@ -117,7 +117,7 @@ func (s *eventService) MarkDelivered(eventIDs []string, t time.Time) error {
 	}
 	deliveredAt := t.Format("2006-01-02 15:04:05")
 	return s.db.Model(&EventRecord{}).Where("id IN ?", eventIDs).Updates(map[string]interface{}{
-		"delivered":     1,
-		"delivered_at":  deliveredAt,
+		"delivered":    1,
+		"delivered_at": deliveredAt,
 	}).Error
 }

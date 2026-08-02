@@ -28,7 +28,7 @@ func (r *releaseQualityGateReader) GetValidGateForRelease(
 	result, err := r.svc.GetValidGateForRelease(ctx, quality.GetValidGateForReleaseRequest{
 		UserID:                userID,
 		ProcessingTaskID:      processingTaskID,
-				ActiveRevisionSetHash: activeRevisionSetHash,
+		ActiveRevisionSetHash: activeRevisionSetHash,
 	})
 	if err != nil {
 		return nil, err

@@ -30,14 +30,14 @@ const (
 	ErrCodePackageHashFailed           = "PACKAGE_HASH_FAILED"
 	ErrCodePackageDefaultActionInvalid = "PACKAGE_DEFAULT_ACTION_INVALID"
 
-	packageIDPrefix        = "pet_"
-	packageMetadataFile    = "metadata.json"
-	packageManifestFile    = "manifest.json"
-	packagePreviewFile     = "preview.png"
-	packagePreviewSrcFile  = "package-preview.png"
-	packageActionJSONFile  = "action.json"
+	packageIDPrefix       = "pet_"
+	packageMetadataFile   = "metadata.json"
+	packageManifestFile   = "manifest.json"
+	packagePreviewFile    = "preview.png"
+	packagePreviewSrcFile = "package-preview.png"
+	packageActionJSONFile = "action.json"
 	packageFramesDir      = "frames"
-	packageBuildGenerator  = "u-ai-processing"
+	packageBuildGenerator = "u-ai-processing"
 )
 
 var (
@@ -85,10 +85,10 @@ type PackageBuildResult struct {
 }
 
 type PackageMetadata struct {
-	PackageID string            `json:"packageId"`
-	Version   int               `json:"version"`
-	CreatedAt string            `json:"createdAt"`
-	BuildInfo PackageBuildInfo  `json:"buildInfo"`
+	PackageID string           `json:"packageId"`
+	Version   int              `json:"version"`
+	CreatedAt string           `json:"createdAt"`
+	BuildInfo PackageBuildInfo `json:"buildInfo"`
 }
 
 type PackageBuildInfo struct {

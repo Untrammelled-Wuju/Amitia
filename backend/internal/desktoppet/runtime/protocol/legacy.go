@@ -7,20 +7,20 @@ import "encoding/json"
 type LegacyEventAdapter struct{}
 
 var legacyEventAliases = map[string]string{
-	"clicked":              "desktop.pet.clicked",
-	"double_clicked":       "desktop.pet.double_clicked",
-	"hovered":              "desktop.pet.hover.moved",
-	"drag_start":           "desktop.pet.drag.started",
-	"drag_started":         "desktop.pet.drag.started",
-	"dragged":              "desktop.pet.drag.completed",
-	"drag_end":             "desktop.pet.drag.completed",
-	"drag_moved":           "desktop.pet.drag.moved",
-	"action_started":       "playback.action.started",
-	"action_complete":      "playback.action.completed",
-	"action_switch":        "playback.action.started",
-	"action_interrupted":   "playback.action.interrupted",
-	"playback_completed":   "playback.action.completed",
-	"playback_interrupted": "playback.action.interrupted",
+	"clicked":               "desktop.pet.clicked",
+	"double_clicked":        "desktop.pet.double_clicked",
+	"hovered":               "desktop.pet.hover.moved",
+	"drag_start":            "desktop.pet.drag.started",
+	"drag_started":          "desktop.pet.drag.started",
+	"dragged":               "desktop.pet.drag.completed",
+	"drag_end":              "desktop.pet.drag.completed",
+	"drag_moved":            "desktop.pet.drag.moved",
+	"action_started":        "playback.action.started",
+	"action_complete":       "playback.action.completed",
+	"action_switch":         "playback.action.started",
+	"action_interrupted":    "playback.action.interrupted",
+	"playback_completed":    "playback.action.completed",
+	"playback_interrupted":  "playback.action.interrupted",
 	"play_action_forwarded": "playback.action.requested",
 }
 
@@ -38,10 +38,10 @@ func (LegacyEventAdapter) Translate(rawEventType string) (string, bool) {
 }
 
 type LegacyEventWrapper struct {
-	EventType        string
-	LegacyEventType  string
-	LegacyProtocol   bool
-	Payload          json.RawMessage
+	EventType       string
+	LegacyEventType string
+	LegacyProtocol  bool
+	Payload         json.RawMessage
 }
 
 func (LegacyEventAdapter) Wrap(legacyType, standardType string, payload json.RawMessage) LegacyEventWrapper {

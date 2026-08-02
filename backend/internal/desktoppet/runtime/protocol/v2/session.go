@@ -48,17 +48,17 @@ type RuntimeSession struct {
 
 	LastAppliedDesiredRevision   int64 `gorm:"column:last_applied_desired_revision;type:integer" json:"lastAppliedDesiredRevision"`
 	LastProcessedCommandSequence int64 `gorm:"column:last_processed_command_sequence;type:integer" json:"lastProcessedCommandSequence"`
-	LastEventSequence           int64 `gorm:"column:last_event_sequence;type:integer" json:"lastEventSequence"`
+	LastEventSequence            int64 `gorm:"column:last_event_sequence;type:integer" json:"lastEventSequence"`
 
 	Status string `gorm:"column:status;type:text;not null" json:"status"`
 
-	ConnectedAt    string `gorm:"column:connected_at;type:text" json:"connectedAt"`
+	ConnectedAt     string `gorm:"column:connected_at;type:text" json:"connectedAt"`
 	LastHeartbeatAt string `gorm:"column:last_heartbeat_at;type:text" json:"lastHeartbeatAt"`
-	DisconnectedAt string `gorm:"column:disconnected_at;type:text" json:"disconnectedAt"`
-	SupersededAt   string `gorm:"column:superseded_at;type:text" json:"supersededAt"`
-	SupersededBy   string `gorm:"column:superseded_by;type:text" json:"supersededBy"`
-	CreatedAt      string `gorm:"column:created_at;type:text" json:"createdAt"`
-	UpdatedAt      string `gorm:"column:updated_at;type:text" json:"updatedAt"`
+	DisconnectedAt  string `gorm:"column:disconnected_at;type:text" json:"disconnectedAt"`
+	SupersededAt    string `gorm:"column:superseded_at;type:text" json:"supersededAt"`
+	SupersededBy    string `gorm:"column:superseded_by;type:text" json:"supersededBy"`
+	CreatedAt       string `gorm:"column:created_at;type:text" json:"createdAt"`
+	UpdatedAt       string `gorm:"column:updated_at;type:text" json:"updatedAt"`
 }
 
 func (RuntimeSession) TableName() string {
@@ -74,23 +74,23 @@ func (s *RuntimeSession) IsTerminal() bool {
 }
 
 type HelloPayload struct {
-	RuntimeVersion              string   `json:"runtimeVersion"`
-	RuntimeContractVersion      string   `json:"runtimeContractVersion"`
-	DeviceID                    string   `json:"deviceId"`
-	RuntimeID                   string   `json:"runtimeId"`
-	Capabilities                []string `json:"runtimeCapabilities"`
-	LastAppliedDesiredRevision  int64    `json:"lastAppliedDesiredRevision"`
-	LastProcessedCommandSequence int64   `json:"lastProcessedCommandSequence"`
-	LastEventSequence           int64    `json:"lastEventSequence"`
-	ActualStateHash             string   `json:"actualStateHash,omitempty"`
+	RuntimeVersion               string   `json:"runtimeVersion"`
+	RuntimeContractVersion       string   `json:"runtimeContractVersion"`
+	DeviceID                     string   `json:"deviceId"`
+	RuntimeID                    string   `json:"runtimeId"`
+	Capabilities                 []string `json:"runtimeCapabilities"`
+	LastAppliedDesiredRevision   int64    `json:"lastAppliedDesiredRevision"`
+	LastProcessedCommandSequence int64    `json:"lastProcessedCommandSequence"`
+	LastEventSequence            int64    `json:"lastEventSequence"`
+	ActualStateHash              string   `json:"actualStateHash,omitempty"`
 }
 
 type HelloAckPayload struct {
-	Accepted      bool      `json:"accepted"`
-	SessionID     string    `json:"sessionId,omitempty"`
-	ServerTime    time.Time `json:"serverTime"`
-	DesiredRevision int64   `json:"currentDesiredRevision"`
-	ResumeMode    string    `json:"resumeMode,omitempty"`
-	ErrorCode     string    `json:"errorCode,omitempty"`
-	ErrorMessage  string    `json:"errorMessage,omitempty"`
+	Accepted        bool      `json:"accepted"`
+	SessionID       string    `json:"sessionId,omitempty"`
+	ServerTime      time.Time `json:"serverTime"`
+	DesiredRevision int64     `json:"currentDesiredRevision"`
+	ResumeMode      string    `json:"resumeMode,omitempty"`
+	ErrorCode       string    `json:"errorCode,omitempty"`
+	ErrorMessage    string    `json:"errorMessage,omitempty"`
 }

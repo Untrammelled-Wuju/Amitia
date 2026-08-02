@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/u-ai/backend/internal/delivery"
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/delivery"
 	"gorm.io/gorm"
 )
 
@@ -255,7 +255,6 @@ func TestCountTodayProactiveMessagesUsesCharacterConversationScope(t *testing.T)
 		t.Fatalf("expected char-2 count 2, got %d", got)
 	}
 }
-
 
 func TestRunActiveMessageTaskDoesNotCreateExtraDeliveryIntents(t *testing.T) {
 	svc := setupCompanionScopeService(t)

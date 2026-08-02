@@ -30,13 +30,13 @@ import (
 )
 
 const (
-	processingLeaseDuration     = 10 * time.Minute
-	processingHeartbeatInterval = 30 * time.Second
-	processingPollInterval      = 5 * time.Second
-	processingWorkerID          = "processing-worker-1"
-	processingTimeFormat        = "2006-01-02 15:04:05"
-	defaultBackgroundMode       = "remove_background"
-	defaultLoopType             = "loop"
+	processingLeaseDuration      = 10 * time.Minute
+	processingHeartbeatInterval  = 30 * time.Second
+	processingPollInterval       = 5 * time.Second
+	processingWorkerID           = "processing-worker-1"
+	processingTimeFormat         = "2006-01-02 15:04:05"
+	defaultBackgroundMode        = "remove_background"
+	defaultLoopType              = "loop"
 	maxConcurrentProcessingTasks = 2
 )
 
@@ -310,16 +310,16 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 	w.updateActionProgress(action, StageBackgroundRemoval, ProgressBackgroundRemoval)
 
 	pipelineReq := application.ProcessActionRequest{
-		Context:            ctx,
-		SourceDescriptor:   sourceDesc,
-		ConfigSnapshot:     configSnapshot,
-		ProcessingTaskID:   task.ID,
-		ProcessingActionID: action.ID,
+		Context:             ctx,
+		SourceDescriptor:    sourceDesc,
+		ConfigSnapshot:      configSnapshot,
+		ProcessingTaskID:    task.ID,
+		ProcessingActionID:  action.ID,
 		ProcessingAttemptID: attempt.ID,
-		ActionKey:          action.ActionKey,
-		GenerationTaskID:   task.GenerationTaskID,
-		ExecutionID:        executionID,
-		ProcessingVersion:  task.ProcessingVersion,
+		ActionKey:           action.ActionKey,
+		GenerationTaskID:    task.GenerationTaskID,
+		ExecutionID:         executionID,
+		ProcessingVersion:   task.ProcessingVersion,
 	}
 	result, err := w.pipeline.ProcessAction(pipelineReq)
 	if err != nil {

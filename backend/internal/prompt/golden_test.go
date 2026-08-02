@@ -760,8 +760,8 @@ func TestGolden_ProactiveTaskInstructionNotInCurrentUserMessage(t *testing.T) {
 
 	b := NewBuilder()
 	ir := b.Build(BuildRequest{
-		BaseIdentity:             "测试BaseIdentity",
-		CurrentUserInput:         "你好",
+		BaseIdentity:     "测试BaseIdentity",
+		CurrentUserInput: "你好",
 	})
 
 	if containsSection(ir, "proactive_task_instruction") {

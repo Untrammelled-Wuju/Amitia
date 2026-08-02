@@ -21,11 +21,11 @@ type SubsystemHealth struct {
 }
 
 type SelfHealMonitor struct {
-	db           *gorm.DB
-	addr         string
-	mu           sync.RWMutex
-	subsystems   map[string]*SubsystemHealth
-	stopCh       chan struct{}
+	db            *gorm.DB
+	addr          string
+	mu            sync.RWMutex
+	subsystems    map[string]*SubsystemHealth
+	stopCh        chan struct{}
 	checkInterval time.Duration
 	maxFailCount  int
 }

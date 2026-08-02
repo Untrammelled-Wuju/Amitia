@@ -14,7 +14,7 @@ type realClock struct{}
 
 func NewRealClock() Clock { return &realClock{} }
 
-func (c *realClock) Now() time.Time          { return time.Now() }
+func (c *realClock) Now() time.Time                  { return time.Now() }
 func (c *realClock) Since(t time.Time) time.Duration { return time.Since(t) }
 
 type FakeClock struct {
@@ -25,14 +25,14 @@ func NewFakeClock(at time.Time) *FakeClock {
 	return &FakeClock{current: at}
 }
 
-func (c *FakeClock) Now() time.Time { return c.current }
+func (c *FakeClock) Now() time.Time                  { return c.current }
 func (c *FakeClock) Since(t time.Time) time.Duration { return c.current.Sub(t) }
-func (c *FakeClock) Advance(d time.Duration) { c.current = c.current.Add(d) }
-func (c *FakeClock) Set(t time.Time) { c.current = t }
+func (c *FakeClock) Advance(d time.Duration)         { c.current = c.current.Add(d) }
+func (c *FakeClock) Set(t time.Time)                 { c.current = t }
 
 type MonotonicClock struct {
-	epoch    time.Time
-	mono     atomic.Int64
+	epoch time.Time
+	mono  atomic.Int64
 }
 
 func NewMonotonicClock(now time.Time) *MonotonicClock {

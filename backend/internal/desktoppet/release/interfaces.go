@@ -10,14 +10,14 @@ import (
 type GateStatus string
 
 const (
-	GateStatusPassed          GateStatus = "passed"
-	GateStatusPassedWithWarn  GateStatus = "passed_with_warning"
-	GateStatusMissing         GateStatus = "missing"
-	GateStatusPending         GateStatus = "pending"
-	GateStatusReviewRequired  GateStatus = "review_required"
-	GateStatusFailed          GateStatus = "failed"
-	GateStatusError           GateStatus = "error"
-	GateStatusStale           GateStatus = "stale"
+	GateStatusPassed         GateStatus = "passed"
+	GateStatusPassedWithWarn GateStatus = "passed_with_warning"
+	GateStatusMissing        GateStatus = "missing"
+	GateStatusPending        GateStatus = "pending"
+	GateStatusReviewRequired GateStatus = "review_required"
+	GateStatusFailed         GateStatus = "failed"
+	GateStatusError          GateStatus = "error"
+	GateStatusStale          GateStatus = "stale"
 )
 
 type QualityGateResult struct {
@@ -36,16 +36,16 @@ type QualityGateResult struct {
 }
 
 type GateActionVerdict struct {
-	ActionKey         string
-	ActionName        string
-	Required          bool
-	Verdict           string
-	ExecutionStatus   string
-	OverallScore      *float64
-	FindingCount      int
-	HardGateCount     int
-	ActionRevisionID  string
-	EvaluationID      string
+	ActionKey        string
+	ActionName       string
+	Required         bool
+	Verdict          string
+	ExecutionStatus  string
+	OverallScore     *float64
+	FindingCount     int
+	HardGateCount    int
+	ActionRevisionID string
+	EvaluationID     string
 }
 
 func (g GateStatus) IsAllowed() bool {
@@ -118,15 +118,15 @@ type SnapshotSource interface {
 }
 
 type TaskInfo struct {
-	ID               string
-	GenerationTaskID string
+	ID                string
+	GenerationTaskID  string
 	ProcessingVersion int
-	OutputWidth      int
-	OutputHeight     int
-	DefaultFPS       int
-	CharacterID      string
-	PackageName      string
-	UserID           string
+	OutputWidth       int
+	OutputHeight      int
+	DefaultFPS        int
+	CharacterID       string
+	PackageName       string
+	UserID            string
 }
 
 type ActionInfo struct {
@@ -238,17 +238,17 @@ type ReleaseRepository interface {
 }
 
 type PetIdentityData struct {
-	ID                string
-	OwnerUserID       string
-	SourceCharacterID string
-	Name              string
-	Slug              string
-	BindingPolicy     string
-	UpstreamPetID     string
-	DefaultActionKey  string
+	ID                  string
+	OwnerUserID         string
+	SourceCharacterID   string
+	Name                string
+	Slug                string
+	BindingPolicy       string
+	UpstreamPetID       string
+	DefaultActionKey    string
 	NextReleaseSequence int
-	CreatedAt         string
-	UpdatedAt         string
+	CreatedAt           string
+	UpdatedAt           string
 }
 
 type ReleaseStoragePort interface {

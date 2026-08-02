@@ -37,7 +37,7 @@ func NewOutboxProcessor(eventRepo OutboxEventRepo, publisher DesiredStatePublish
 	return &OutboxProcessor{
 		eventRepo: eventRepo,
 		publisher: publisher,
-		now:        time.Now,
+		now:       time.Now,
 	}
 }
 

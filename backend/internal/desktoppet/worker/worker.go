@@ -32,12 +32,12 @@ import (
 )
 
 const (
-	workerTimeFormat    = "2006-01-02 15:04:05"
-	pollInterval        = 3 * time.Second
-	heartbeatInterval   = 30 * time.Second
-	leaseDuration       = 5 * time.Minute
-	maxConcurrentTasks  = 4
-	maxFrameRetries     = 2
+	workerTimeFormat   = "2006-01-02 15:04:05"
+	pollInterval       = 3 * time.Second
+	heartbeatInterval  = 30 * time.Second
+	leaseDuration      = 5 * time.Minute
+	maxConcurrentTasks = 4
+	maxFrameRetries    = 2
 )
 
 type Worker struct {
@@ -259,15 +259,15 @@ func (w *Worker) startHeartbeat(ctx context.Context, taskID, executionID, worker
 				if !owned {
 					log.Logger.Errorf("heartbeat task %s ownership lost, stopping heartbeat", taskID)
 					_, _ = w.stateEngine.Transition(ctx, taskstate.TransitionRequest{
-						EntityType:  contracts.EntityGenerationTask,
-						EntityID:    taskID,
-						From:        []contracts.LifecycleStatus{contracts.StatusProcessing},
-						To:          contracts.StatusQueued,
-						Stage:       contracts.StageQueued,
-						Reason:      contracts.ReasonWorkerLeaseLost,
-						ActorType:   contracts.ActorWorker,
-						ActorID:     workerID,
-						ExecutionID: executionID,
+						EntityType:    contracts.EntityGenerationTask,
+						EntityID:      taskID,
+						From:          []contracts.LifecycleStatus{contracts.StatusProcessing},
+						To:            contracts.StatusQueued,
+						Stage:         contracts.StageQueued,
+						Reason:        contracts.ReasonWorkerLeaseLost,
+						ActorType:     contracts.ActorWorker,
+						ActorID:       workerID,
+						ExecutionID:   executionID,
 						NeedOwnership: true,
 					})
 					taskCancel()
@@ -657,17 +657,17 @@ func (w *Worker) executeWithGenerationExecutor(
 
 	rows, columns := generationlayout.RecommendGrid(spec.FrameCount)
 	promptDoc := generationprompt.PromptDocument{
-		SchemaVersion:      1,
-		CharacterIdentity:  action.ActionNameSnapshot,
-		ArtStyle:           "动漫风格",
-		CameraConstraint:   spec.CameraConstraint,
-		PoseConstraint:     spec.PoseConstraint,
-		MotionDescription:  spec.MotionDescription,
-		ContinuityConstraint: spec.ContinuityConstraint,
-		UserPrompt:         task.Prompt,
-		PromptFragment:     spec.PromptFragment,
+		SchemaVersion:          1,
+		CharacterIdentity:      action.ActionNameSnapshot,
+		ArtStyle:               "动漫风格",
+		CameraConstraint:       spec.CameraConstraint,
+		PoseConstraint:         spec.PoseConstraint,
+		MotionDescription:      spec.MotionDescription,
+		ContinuityConstraint:   spec.ContinuityConstraint,
+		UserPrompt:             task.Prompt,
+		PromptFragment:         spec.PromptFragment,
 		NegativePromptFragment: spec.NegativePromptFragment,
-		FramePhases:        framePhases,
+		FramePhases:            framePhases,
 		GridLayout: generationprompt.GridLayoutInput{
 			Rows:         rows,
 			Columns:      columns,
@@ -770,19 +770,19 @@ func (w *Worker) executeWithGenerationExecutor(
 func (w *Worker) runFrame(ctx context.Context, task *desktoppet.GenerationTask, action *desktoppet.GenerationTaskAction, actionAttempt int, spec specs.ActionGenerationSpec, frame *desktoppet.GenerationFrame, previousFramePath string, modelConfig imageprovider.ImageModelConfig, provider imageprovider.ImageGenerationProvider) string {
 	now := time.Now().Format(workerTimeFormat)
 	updates := map[string]interface{}{
-		"status":      "running",
-		"started_at":  now,
-		"updated_at":  now,
+		"status":     "running",
+		"started_at": now,
+		"updated_at": now,
 	}
 	if previousFramePath != "" {
 		updates["previous_frame_path"] = previousFramePath
 	}
 	_ = w.repo.UpdateFrame(w.db, frame.ID, updates)
 	desktoppet.PublishTaskEvent(task.ID, "frame.started", map[string]interface{}{
-		"task_id":      task.ID,
-		"action_key":   action.ActionKey,
-		"frame_index":  frame.FrameIndex,
-		"frame_phase":  frame.FramePhase,
+		"task_id":     task.ID,
+		"action_key":  action.ActionKey,
+		"frame_index": frame.FrameIndex,
+		"frame_phase": frame.FramePhase,
 	})
 
 	sourceAbsPath := filepath.Join(config.AppCfg.Storage.DataDir, task.SourceImagePath)
@@ -998,16 +998,16 @@ func (w *Worker) finalizeTask(ctx context.Context, task *desktoppet.GenerationTa
 	}
 
 	req := taskstate.TransitionRequest{
-		EntityType:  contracts.EntityGenerationTask,
-		EntityID:    task.ID,
-		From:        []contracts.LifecycleStatus{fromStatus},
-		To:          decision.Status,
-		Stage:       decision.Stage,
-		Reason:      decision.Reason,
-		Progress:    &decision.Progress,
-		ActorType:   contracts.ActorFinalizer,
-		ActorID:     task.WorkerID,
-		ExecutionID: task.ExecutionID,
+		EntityType:    contracts.EntityGenerationTask,
+		EntityID:      task.ID,
+		From:          []contracts.LifecycleStatus{fromStatus},
+		To:            decision.Status,
+		Stage:         decision.Stage,
+		Reason:        decision.Reason,
+		Progress:      &decision.Progress,
+		ActorType:     contracts.ActorFinalizer,
+		ActorID:       task.WorkerID,
+		ExecutionID:   task.ExecutionID,
 		NeedOwnership: true,
 	}
 	if decision.Status == contracts.StatusFailed {
@@ -1056,17 +1056,17 @@ func (w *Worker) RecoverOnStartup(ctx context.Context) {
 		log.Logger.Infof("desktoppet recovered task %s (lease expired), reset to queued", task.ID)
 
 		_ = w.stateStore.WriteAudit(ctx, taskstate.AuditRecord{
-			ID:         taskstate.NewAuditID(),
-			EntityType: contracts.EntityGenerationTask,
-			EntityID:   task.ID,
-			FromStatus: contracts.StatusProcessing,
-			ToStatus:   contracts.StatusQueued,
-			ToStage:    contracts.StageQueued,
-			ReasonCode: contracts.ReasonSystemLeaseExpired,
-			ActorType:  contracts.ActorRecovery,
-			ActorID:    "system",
+			ID:          taskstate.NewAuditID(),
+			EntityType:  contracts.EntityGenerationTask,
+			EntityID:    task.ID,
+			FromStatus:  contracts.StatusProcessing,
+			ToStatus:    contracts.StatusQueued,
+			ToStage:     contracts.StageQueued,
+			ReasonCode:  contracts.ReasonSystemLeaseExpired,
+			ActorType:   contracts.ActorRecovery,
+			ActorID:     "system",
 			ExecutionID: task.ExecutionID,
-			CreatedAt:  now,
+			CreatedAt:   now,
 		})
 
 		actions, _ := w.repo.ListActionsByTaskID(task.ID)

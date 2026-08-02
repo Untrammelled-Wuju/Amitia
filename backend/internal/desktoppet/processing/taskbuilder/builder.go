@@ -40,22 +40,22 @@ type CreateTaskRequest struct {
 }
 
 type ActionInput struct {
-	GenerationTaskActionID string
-	ActionKey              string
-	ActionNameSnapshot     string
-	GenerationActionID     string
-	GenerationAttemptID    string
-	SourceArtifactID       string
+	GenerationTaskActionID        string
+	ActionKey                     string
+	ActionNameSnapshot            string
+	GenerationActionID            string
+	GenerationAttemptID           string
+	SourceArtifactID              string
 	ActiveArtifactBindingRevision int64
-	ReferenceAssetID      string
-	ReferenceAssetContentHash string
-	GenerationPlanID       string
-	GenerationPlanHash     string
-	PromptDocumentID       string
-	PromptContentHash      string
-	ActionSpecSnapshot     *source.ActionSpecSnapshot
-	ActionSpecHash         string
-	Descriptor             *source.ProcessingSourceDescriptor
+	ReferenceAssetID              string
+	ReferenceAssetContentHash     string
+	GenerationPlanID              string
+	GenerationPlanHash            string
+	PromptDocumentID              string
+	PromptContentHash             string
+	ActionSpecSnapshot            *source.ActionSpecSnapshot
+	ActionSpecHash                string
+	Descriptor                    *source.ProcessingSourceDescriptor
 }
 
 func NewTaskBuilder(repo ProcessingRepo, manifestStore source.ManifestStore) *TaskBuilder {
@@ -100,7 +100,7 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 	taskID := fmt.Sprintf("pt_%d", time.Now().UnixNano())
 
 	task := &processing.ProcessingTask{
-		ID:                          taskID,
+		ID:                         taskID,
 		GenerationTaskID:           req.GenerationTaskID,
 		UserID:                     req.UserID,
 		CharacterID:                req.CharacterID,
@@ -166,23 +166,23 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 			}
 
 			manifestRecord, mErr := b.manifestBuilder.Build(source.BuildManifestRequest{
-				ID:                             fmt.Sprintf("pm_%d_%d", ts, i),
-				UserID:                         req.UserID,
-				CharacterID:                    req.CharacterID,
-				ProcessingTaskID:               taskID,
-				ProcessingActionID:             actionID,
-				GenerationTaskID:               req.GenerationTaskID,
-				GenerationActionID:             ai.GenerationActionID,
-				Descriptor:                     ai.Descriptor,
-				ActiveArtifactBindingRevision:  ai.ActiveArtifactBindingRevision,
-				ReferenceAssetID:               ai.ReferenceAssetID,
-				ReferenceAssetContentHash:      ai.ReferenceAssetContentHash,
-				GenerationPlanID:               ai.GenerationPlanID,
-				GenerationPlanHash:             ai.GenerationPlanHash,
-				PromptDocumentID:               ai.PromptDocumentID,
-				PromptContentHash:              ai.PromptContentHash,
-				ActionSpecSnapshot:             ai.ActionSpecSnapshot,
-				ActionSpecHash:                 ai.ActionSpecHash,
+				ID:                            fmt.Sprintf("pm_%d_%d", ts, i),
+				UserID:                        req.UserID,
+				CharacterID:                   req.CharacterID,
+				ProcessingTaskID:              taskID,
+				ProcessingActionID:            actionID,
+				GenerationTaskID:              req.GenerationTaskID,
+				GenerationActionID:            ai.GenerationActionID,
+				Descriptor:                    ai.Descriptor,
+				ActiveArtifactBindingRevision: ai.ActiveArtifactBindingRevision,
+				ReferenceAssetID:              ai.ReferenceAssetID,
+				ReferenceAssetContentHash:     ai.ReferenceAssetContentHash,
+				GenerationPlanID:              ai.GenerationPlanID,
+				GenerationPlanHash:            ai.GenerationPlanHash,
+				PromptDocumentID:              ai.PromptDocumentID,
+				PromptContentHash:             ai.PromptContentHash,
+				ActionSpecSnapshot:            ai.ActionSpecSnapshot,
+				ActionSpecHash:                ai.ActionSpecHash,
 			})
 			if mErr != nil {
 				return fmt.Errorf("taskbuilder: build manifest for action %s: %w", ai.ActionKey, mErr)

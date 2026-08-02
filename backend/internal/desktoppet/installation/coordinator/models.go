@@ -10,8 +10,8 @@ import (
 )
 
 type InstallRequest struct {
-	DeviceCtx      device.DeviceContext
-	PetID          string
+	DeviceCtx       device.DeviceContext
+	PetID           string
 	TargetReleaseID string
 	SourceReleaseID string
 	IdempotencyKey  string
@@ -39,10 +39,10 @@ type InstallResult struct {
 }
 
 type EnableDisableRequest struct {
-	DeviceCtx       device.DeviceContext
+	DeviceCtx      device.DeviceContext
 	InstallationID string
-	IdempotencyKey  string
-	Reason          string
+	IdempotencyKey string
+	Reason         string
 }
 
 func (r EnableDisableRequest) Validate() error {
@@ -53,14 +53,14 @@ func (r EnableDisableRequest) Validate() error {
 }
 
 type EnableDisableResult struct {
-	OperationID      string
+	OperationID     string
 	DesiredRevision int64
-	Status           string
-	ErrorCode        string
+	Status          string
+	ErrorCode       string
 }
 
 type SwitchRequest struct {
-	DeviceCtx       device.DeviceContext
+	DeviceCtx            device.DeviceContext
 	SourceInstallationID string
 	TargetReleaseID      string
 	IdempotencyKey       string
@@ -84,7 +84,7 @@ type SwitchResult struct {
 
 type UpgradeRequest struct {
 	DeviceCtx       device.DeviceContext
-	InstallationID string
+	InstallationID  string
 	TargetReleaseID string
 	IdempotencyKey  string
 }
@@ -97,11 +97,11 @@ func (r UpgradeRequest) Validate() error {
 }
 
 type DowngradeRequest struct {
-	DeviceCtx        device.DeviceContext
+	DeviceCtx       device.DeviceContext
 	InstallationID  string
-	TargetReleaseID  string
-	IdempotencyKey   string
-	SafetyConfirm    bool
+	TargetReleaseID string
+	IdempotencyKey  string
+	SafetyConfirm   bool
 }
 
 func (r DowngradeRequest) Validate() error {
@@ -112,9 +112,9 @@ func (r DowngradeRequest) Validate() error {
 }
 
 type RepairRequest struct {
-	DeviceCtx       device.DeviceContext
+	DeviceCtx      device.DeviceContext
 	InstallationID string
-	IdempotencyKey  string
+	IdempotencyKey string
 }
 
 func (r RepairRequest) Validate() error {
@@ -125,10 +125,10 @@ func (r RepairRequest) Validate() error {
 }
 
 type UninstallRequest struct {
-	DeviceCtx       device.DeviceContext
+	DeviceCtx      device.DeviceContext
 	InstallationID string
-	IdempotencyKey  string
-	Metadata        map[string]string
+	IdempotencyKey string
+	Metadata       map[string]string
 }
 
 func (r UninstallRequest) Validate() error {
@@ -139,17 +139,17 @@ func (r UninstallRequest) Validate() error {
 }
 
 type UninstallResult struct {
-	OperationID    string
-	Status         string
-	ErrorMessage   string
+	OperationID  string
+	Status       string
+	ErrorMessage string
 }
 
 type SettingsRequest struct {
-	DeviceCtx       device.DeviceContext
-	InstallationID string
+	DeviceCtx        device.DeviceContext
+	InstallationID   string
 	ExpectedRevision int
-	Updates         map[string]interface{}
-	IdempotencyKey  string
+	Updates          map[string]interface{}
+	IdempotencyKey   string
 }
 
 func (r SettingsRequest) Validate() error {
@@ -170,7 +170,7 @@ type SettingsResult struct {
 
 type DefaultActionRequest struct {
 	DeviceCtx        device.DeviceContext
-	InstallationID  string
+	InstallationID   string
 	DesiredActionKey string
 	IdempotencyKey   string
 }
@@ -183,9 +183,9 @@ func (r DefaultActionRequest) Validate() error {
 }
 
 type RecenterRequest struct {
-	DeviceCtx       device.DeviceContext
+	DeviceCtx      device.DeviceContext
 	InstallationID string
-	IdempotencyKey  string
+	IdempotencyKey string
 }
 
 func (r RecenterRequest) Validate() error {
@@ -196,11 +196,11 @@ func (r RecenterRequest) Validate() error {
 }
 
 type OperationContext struct {
-	DeviceCtx       device.DeviceContext
-	InstallationID  string
-	OperationID     string
-	ExecutionID     string
-	IdempotencyKey  string
+	DeviceCtx      device.DeviceContext
+	InstallationID string
+	OperationID    string
+	ExecutionID    string
+	IdempotencyKey string
 }
 
 func (ctx OperationContext) IsValid() bool {
@@ -208,31 +208,31 @@ func (ctx OperationContext) IsValid() bool {
 }
 
 type ReleaseValidationResult struct {
-	ReleaseID              string
-	IsInstallable          bool
-	HasStagingCopy         bool
-	HasPublishedCopy       bool
-	ManifestValid          bool
-	StagingPathKey         string
-	PublishedPathKey       string
-	SettingsRevision       int
-	DesiredSettings        settings.SettingsSnapshot
-	ErrorMessage           string
+	ReleaseID        string
+	IsInstallable    bool
+	HasStagingCopy   bool
+	HasPublishedCopy bool
+	ManifestValid    bool
+	StagingPathKey   string
+	PublishedPathKey string
+	SettingsRevision int
+	DesiredSettings  settings.SettingsSnapshot
+	ErrorMessage     string
 }
 
 type CommitStageResult struct {
-	JournalID        string
-	NextStage        string
-	DesiredRevision  int64
-	DesiredHash      string
-	OperationStatus  string
+	JournalID       string
+	NextStage       string
+	DesiredRevision int64
+	DesiredHash     string
+	OperationStatus string
 }
 
 type SwitchStageResult struct {
-	JournalID        string
-	NextStage        string
+	JournalID          string
+	NextStage          string
 	NewDesiredRevision int64
-	OperationStatus  string
+	OperationStatus    string
 }
 
 var (
@@ -248,9 +248,9 @@ var (
 	ErrInvalidRecenterRequest      = errors.New("coordinator: invalid recenter request")
 	ErrCoordinatorInternal         = errors.New("coordinator: internal error")
 	ErrReleaseNotInstallable       = errors.New("coordinator: release not installable")
-	ErrOperationFailedRetryable   = errors.New("coordinator: operation failed retryable")
-	ErrOperationFailedTerminal    = errors.New("coordinator: operation failed terminal")
-	ErrDesiredStateUpdateFailed   = errors.New("coordinator: desired state update failed")
-	ErrBindingUpdateFailed        = errors.New("coordinator: binding update failed")
-	ErrJournalUpdateFailed        = errors.New("coordinator: journal update failed")
+	ErrOperationFailedRetryable    = errors.New("coordinator: operation failed retryable")
+	ErrOperationFailedTerminal     = errors.New("coordinator: operation failed terminal")
+	ErrDesiredStateUpdateFailed    = errors.New("coordinator: desired state update failed")
+	ErrBindingUpdateFailed         = errors.New("coordinator: binding update failed")
+	ErrJournalUpdateFailed         = errors.New("coordinator: journal update failed")
 )

@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	SwitchStageBindingCommitted  = "binding_committed"
-	SwitchStageDesiredCommitted  = "desired_committed"
-	SwitchStageRuntimeApplied    = "switch_runtime_applied"
-	SwitchStageSwitchCompleted   = "switch_completed"
+	SwitchStageBindingCommitted = "binding_committed"
+	SwitchStageDesiredCommitted = "desired_committed"
+	SwitchStageRuntimeApplied   = "switch_runtime_applied"
+	SwitchStageSwitchCompleted  = "switch_completed"
 )
 
 type SwitchRecovery struct {
-	worker      *RecoveryWorker
-	repo        RecoveryRepo
-	switchRepo  SwitchRepo
+	worker     *RecoveryWorker
+	repo       RecoveryRepo
+	switchRepo SwitchRepo
 }
 
 type SwitchRepo interface {

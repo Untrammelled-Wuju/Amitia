@@ -100,19 +100,19 @@ func TestSetOverride(t *testing.T) {
 
 type fakePlatform struct{}
 
-func (fakePlatform) Name() string                       { return "fake" }
+func (fakePlatform) Name() string                         { return "fake" }
 func (fakePlatform) KillExistingServer(addr string) error { return nil }
-func (fakePlatform) ExecutableSuffix() string            { return "" }
-func (fakePlatform) BinarySuffix() string                { return "" }
-func (fakePlatform) RootFSDir() string                   { return "" }
-func (fakePlatform) DefaultDataDir() string             { return "data" }
-func (fakePlatform) IsWindows() bool                     { return false }
-func (fakePlatform) IsLinux() bool                       { return false }
-func (fakePlatform) IsAndroid() bool                     { return false }
-func (fakePlatform) IsAndroidEmbedded() bool             { return false }
-func (fakePlatform) WritePidFile(string) error          { return nil }
-func (fakePlatform) ReadPidFile(string) (int, error)    { return 0, nil }
-func (fakePlatform) RemovePidFile(string) error          { return nil }
+func (fakePlatform) ExecutableSuffix() string             { return "" }
+func (fakePlatform) BinarySuffix() string                 { return "" }
+func (fakePlatform) RootFSDir() string                    { return "" }
+func (fakePlatform) DefaultDataDir() string               { return "data" }
+func (fakePlatform) IsWindows() bool                      { return false }
+func (fakePlatform) IsLinux() bool                        { return false }
+func (fakePlatform) IsAndroid() bool                      { return false }
+func (fakePlatform) IsAndroidEmbedded() bool              { return false }
+func (fakePlatform) WritePidFile(string) error            { return nil }
+func (fakePlatform) ReadPidFile(string) (int, error)      { return 0, nil }
+func (fakePlatform) RemovePidFile(string) error           { return nil }
 
 func TestBinarySuffixMatchesExecutableSuffix(t *testing.T) {
 	p := Detect()

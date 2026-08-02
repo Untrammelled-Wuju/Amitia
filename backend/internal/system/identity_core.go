@@ -42,7 +42,7 @@ var identityCoreJSONFields = map[string]string{
 	"identity":       "identity",
 	"gender":         "gender",
 	"pronoun":        "pronoun",
-	"character_base":  "character_base",
+	"character_base": "character_base",
 	"system_prompt":  "character_base",
 	"boundary_rules": "boundary_rules",
 	"self_reference": "self_reference",

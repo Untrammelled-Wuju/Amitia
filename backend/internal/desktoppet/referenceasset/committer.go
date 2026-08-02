@@ -11,18 +11,18 @@ import (
 )
 
 type ReferenceAssetPublishJournal struct {
-	ID               string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	ReferenceAssetID string `gorm:"column:reference_asset_id;type:text" json:"referenceAssetId"`
-	StagingPath      string `gorm:"column:staging_path;type:text" json:"stagingPath"`
-	FinalPath        string `gorm:"column:final_path;type:text" json:"finalPath"`
-	SourceStorageKey string `gorm:"column:source_storage_key;type:text" json:"sourceStorageKey"`
+	ID                   string `gorm:"column:id;primaryKey;type:text" json:"id"`
+	ReferenceAssetID     string `gorm:"column:reference_asset_id;type:text" json:"referenceAssetId"`
+	StagingPath          string `gorm:"column:staging_path;type:text" json:"stagingPath"`
+	FinalPath            string `gorm:"column:final_path;type:text" json:"finalPath"`
+	SourceStorageKey     string `gorm:"column:source_storage_key;type:text" json:"sourceStorageKey"`
 	NormalizedStorageKey string `gorm:"column:normalized_storage_key;type:text" json:"normalizedStorageKey"`
-	ContentHash      string `gorm:"column:content_hash;type:text" json:"contentHash"`
-	JournalStatus    string `gorm:"column:journal_status;type:text;default:'staging'" json:"journalStatus"`
-	ErrorMessage     string `gorm:"column:error_message;type:text;default:''" json:"errorMessage"`
-	CreatedAt        string `gorm:"column:created_at;type:text" json:"createdAt"`
-	UpdatedAt        string `gorm:"column:updated_at;type:text" json:"updatedAt"`
-	CompletedAt      string `gorm:"column:completed_at;type:text;default:''" json:"completedAt"`
+	ContentHash          string `gorm:"column:content_hash;type:text" json:"contentHash"`
+	JournalStatus        string `gorm:"column:journal_status;type:text;default:'staging'" json:"journalStatus"`
+	ErrorMessage         string `gorm:"column:error_message;type:text;default:''" json:"errorMessage"`
+	CreatedAt            string `gorm:"column:created_at;type:text" json:"createdAt"`
+	UpdatedAt            string `gorm:"column:updated_at;type:text" json:"updatedAt"`
+	CompletedAt          string `gorm:"column:completed_at;type:text;default:''" json:"completedAt"`
 }
 
 func (ReferenceAssetPublishJournal) TableName() string {
@@ -30,8 +30,8 @@ func (ReferenceAssetPublishJournal) TableName() string {
 }
 
 const (
-	JournalStatusStaging     = "staging"
-	JournalStatusPersisted   = "persisted"
+	JournalStatusStaging       = "staging"
+	JournalStatusPersisted     = "persisted"
 	JournalStatusPublishFailed = "publish_failed"
 )
 
@@ -117,7 +117,7 @@ type CommitResult struct {
 }
 
 type Committer struct {
-	repo      Repository
+	repo        Repository
 	journalRepo JournalRepository
 }
 
@@ -199,13 +199,13 @@ func (c *Committer) Commit(input CommitInput) (*CommitResult, error) {
 	}
 
 	journal := &ReferenceAssetPublishJournal{
-		ReferenceAssetID:    assetID,
-		StagingPath:         sourceAbsPath,
-		FinalPath:           normalizedAbsPath,
-		SourceStorageKey:    sourceStorageKey,
+		ReferenceAssetID:     assetID,
+		StagingPath:          sourceAbsPath,
+		FinalPath:            normalizedAbsPath,
+		SourceStorageKey:     sourceStorageKey,
 		NormalizedStorageKey: normalizedStorageKey,
-		ContentHash:         asset.ContentHash,
-		JournalStatus:       JournalStatusStaging,
+		ContentHash:          asset.ContentHash,
+		JournalStatus:        JournalStatusStaging,
 	}
 
 	if err := c.journalRepo.Create(tx, journal); err != nil {

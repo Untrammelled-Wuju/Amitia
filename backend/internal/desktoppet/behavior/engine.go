@@ -10,33 +10,33 @@ import (
 )
 
 type EngineConfig struct {
-	ShadowMode         bool
+	ShadowMode            bool
 	RuntimeCommandEnabled bool
-	MailboxCapacity    int
-	MaxCASRetries      int
+	MailboxCapacity       int
+	MaxCASRetries         int
 }
 
 func DefaultEngineConfig() EngineConfig {
 	return EngineConfig{
-		ShadowMode:           true,
+		ShadowMode:            true,
 		RuntimeCommandEnabled: false,
-		MailboxCapacity:      MailboxCapacity,
-		MaxCASRetries:        MaxCASRetries,
+		MailboxCapacity:       MailboxCapacity,
+		MaxCASRetries:         MaxCASRetries,
 	}
 }
 
 type BehaviorEngine struct {
-	config       EngineConfig
-	clock        Clock
-	idGen        IDGenerator
-	repo         BehaviorStateRepository
+	config        EngineConfig
+	clock         Clock
+	idGen         IDGenerator
+	repo          BehaviorStateRepository
 	activePetPort ActivePetPort
-	runtimePort  RuntimeActionPort
-	reducer      *Reducer
-	resolver     *Resolver
-	arbiter      *Arbiter
-	reconciler   *Reconciler
-	coordinator  *Coordinator
+	runtimePort   RuntimeActionPort
+	reducer       *Reducer
+	resolver      *Resolver
+	arbiter       *Arbiter
+	reconciler    *Reconciler
+	coordinator   *Coordinator
 
 	mu      sync.RWMutex
 	running bool
@@ -72,14 +72,14 @@ func (m *EngineMetrics) IncEventReceived(eventType string) {
 	m.eventsReceived[eventType]++
 }
 
-func (m *EngineMetrics) IncDeduped()  { m.mu.Lock(); m.eventsDeduped++; m.mu.Unlock() }
-func (m *EngineMetrics) IncExpired()  { m.mu.Lock(); m.eventsExpired++; m.mu.Unlock() }
-func (m *EngineMetrics) IncIgnored()  { m.mu.Lock(); m.eventsIgnored++; m.mu.Unlock() }
-func (m *EngineMetrics) IncDecision() { m.mu.Lock(); m.decisionsTotal++; m.mu.Unlock() }
-func (m *EngineMetrics) IncNoAction() { m.mu.Lock(); m.decisionsNoAction++; m.mu.Unlock() }
-func (m *EngineMetrics) IncOverflow() { m.mu.Lock(); m.mailboxOverflow++; m.mu.Unlock() }
+func (m *EngineMetrics) IncDeduped()     { m.mu.Lock(); m.eventsDeduped++; m.mu.Unlock() }
+func (m *EngineMetrics) IncExpired()     { m.mu.Lock(); m.eventsExpired++; m.mu.Unlock() }
+func (m *EngineMetrics) IncIgnored()     { m.mu.Lock(); m.eventsIgnored++; m.mu.Unlock() }
+func (m *EngineMetrics) IncDecision()    { m.mu.Lock(); m.decisionsTotal++; m.mu.Unlock() }
+func (m *EngineMetrics) IncNoAction()    { m.mu.Lock(); m.decisionsNoAction++; m.mu.Unlock() }
+func (m *EngineMetrics) IncOverflow()    { m.mu.Lock(); m.mailboxOverflow++; m.mu.Unlock() }
 func (m *EngineMetrics) IncCASConflict() { m.mu.Lock(); m.casConflicts++; m.mu.Unlock() }
-func (m *EngineMetrics) IncRuntimeCmd() { m.mu.Lock(); m.runtimeCommands++; m.mu.Unlock() }
+func (m *EngineMetrics) IncRuntimeCmd()  { m.mu.Lock(); m.runtimeCommands++; m.mu.Unlock() }
 func (m *EngineMetrics) IncRuntimeFail() { m.mu.Lock(); m.runtimeFailures++; m.mu.Unlock() }
 
 func (m *EngineMetrics) Snapshot() map[string]interface{} {
@@ -117,18 +117,18 @@ func NewBehaviorEngine(
 	}
 	fallback := DefaultFallbackGraph()
 	engine := &BehaviorEngine{
-		config:       config,
-		clock:        clock,
-		idGen:        NewUUIDIDGen(),
-		repo:         repo,
+		config:        config,
+		clock:         clock,
+		idGen:         NewUUIDIDGen(),
+		repo:          repo,
 		activePetPort: activePetPort,
-		runtimePort:  runtimePort,
-		reducer:      NewReducer(clock),
-		resolver:     NewResolver(clock, fallback),
-		arbiter:      NewArbiter(clock, fallback),
-		reconciler:   reconciler,
-		metrics:      NewEngineMetrics(),
-		stopCh:       make(chan struct{}),
+		runtimePort:   runtimePort,
+		reducer:       NewReducer(clock),
+		resolver:      NewResolver(clock, fallback),
+		arbiter:       NewArbiter(clock, fallback),
+		reconciler:    reconciler,
+		metrics:       NewEngineMetrics(),
+		stopCh:        make(chan struct{}),
 	}
 
 	engine.coordinator = NewCoordinator(config.MailboxCapacity, engine.processEvent)
@@ -149,7 +149,7 @@ func (e *BehaviorEngine) Start(ctx context.Context) error {
 	go e.inboxWorker(ctx)
 
 	log.Info("behavior engine started", map[string]interface{}{
-		"shadowMode":           e.config.ShadowMode,
+		"shadowMode":            e.config.ShadowMode,
 		"runtimeCommandEnabled": e.config.RuntimeCommandEnabled,
 	})
 	return nil
@@ -359,8 +359,8 @@ func (e *BehaviorEngine) processEvent(ctx context.Context, event BehaviorEventEn
 	nextCtx, reduceResult, err := e.reducer.Reduce(*currentCtx, event)
 	if err != nil {
 		log.Warn("behavior engine: reducer error", map[string]interface{}{
-			"error":      err.Error(),
-			"eventType":  event.EventType,
+			"error":     err.Error(),
+			"eventType": event.EventType,
 		})
 		return
 	}

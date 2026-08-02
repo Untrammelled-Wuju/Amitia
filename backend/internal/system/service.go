@@ -4,10 +4,10 @@ package system
 
 import (
 	"encoding/json"
+	"github.com/u-ai/backend/internal/temporal"
 	"os"
 	"strconv"
 	"time"
-	"github.com/u-ai/backend/internal/temporal"
 
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -152,10 +152,10 @@ type Service interface {
 }
 
 type service struct {
-	db        *gorm.DB
-	startTime time.Time
-	healthLog []map[string]interface{}
-	dataDir   string
+	db          *gorm.DB
+	startTime   time.Time
+	healthLog   []map[string]interface{}
+	dataDir     string
 	temporalSvc *temporal.Service
 }
 

@@ -208,13 +208,13 @@ func TestWriteMetadata_WritesSanitizedJson(t *testing.T) {
 	d := NewResultDownloader()
 
 	metadata := map[string]interface{}{
-		"provider":     "seedream",
-		"model":        "doubao-seedream",
-		"frameCount":   8,
-		"api_key":      "sk-secret-value",
-		"userToken":    "tok-abc",
-		"nested":       map[string]interface{}{"secret": "should-be-redacted"},
-		"array":        []interface{}{map[string]interface{}{"password": "p"}},
+		"provider":   "seedream",
+		"model":      "doubao-seedream",
+		"frameCount": 8,
+		"api_key":    "sk-secret-value",
+		"userToken":  "tok-abc",
+		"nested":     map[string]interface{}{"secret": "should-be-redacted"},
+		"array":      []interface{}{map[string]interface{}{"password": "p"}},
 	}
 
 	if err := d.WriteMetadata("task-meta", "idle_normal", 1, metadata); err != nil {

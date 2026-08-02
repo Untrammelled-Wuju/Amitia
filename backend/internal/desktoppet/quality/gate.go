@@ -161,7 +161,7 @@ func (g *GateEvaluator) GetGateStatus(ctx context.Context, processingTaskID stri
 }
 
 type gateSnapshot struct {
-	ProcessingTaskID string                `json:"processingTaskId"`
+	ProcessingTaskID string                 `json:"processingTaskId"`
 	ActionVerdicts   []ActionVerdictSummary `json:"actionVerdicts"`
 }
 

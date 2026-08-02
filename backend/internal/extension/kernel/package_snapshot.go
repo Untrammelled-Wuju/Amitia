@@ -270,7 +270,7 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		db := r.container.Store.DB()
 		if db != nil {
 			for _, table := range userState.AffectedTables {
-				exported, exportErr := captureUserDataTableSnapshot(ctx, db, table)
+				exported, exportErr := captureUserDataTableSnapshot(ctx, db, string(installed.ExtensionID), table)
 				if exportErr != nil {
 					return "", "", "", "", "", fmt.Errorf("kernel: user data snapshot for table %s: %w", table, exportErr)
 				}
@@ -303,7 +303,7 @@ type tableSnapshotResult struct {
 	count int64
 }
 
-func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, table string) (tableSnapshotResult, error) {
+func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, table string) (tableSnapshotResult, error) {
 	result := tableSnapshotResult{}
 	rows, queryErr := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", table))
 	if queryErr != nil {
@@ -311,12 +311,21 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, table string)
 	}
 	defer rows.Close()
 
+	columns, colErr := rows.Columns()
+	if colErr != nil {
+		return result, fmt.Errorf("kernel: get columns for %s: %w", table, colErr)
+	}
+	idColumn := ""
+	for _, col := range columns {
+		if col == "id" || col == "entity_id" {
+			idColumn = col
+			break
+		}
+	}
+	namespace := strings.TrimPrefix(table, migration.ExtensionNamespacePrefix(extensionID))
+
 	var lines []string
 	for rows.Next() {
-		columns, colErr := rows.Columns()
-		if colErr != nil {
-			return result, fmt.Errorf("kernel: get columns for %s: %w", table, colErr)
-		}
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
 		for i := range values {
@@ -325,9 +334,25 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, table string)
 		if scanErr := rows.Scan(valuePtrs...); scanErr != nil {
 			return result, fmt.Errorf("kernel: scan row for %s: %w", table, scanErr)
 		}
-		record := make(map[string]interface{}, len(columns))
+		payload := make(map[string]interface{}, len(columns))
+		entityID := ""
 		for i, col := range columns {
-			record[col] = normalizeSQLValue(values[i])
+			val := normalizeSQLValue(values[i])
+			payload[col] = val
+			if col == idColumn {
+				entityID = fmt.Sprintf("%v", val)
+			}
+		}
+		payloadHash := computeUserDataPayloadHash(payload)
+		record := userDataRecord{
+			SchemaVersion: "1.0.0",
+			ExtensionID:   extensionID,
+			Namespace:     namespace,
+			EntityType:    "record",
+			EntityID:      entityID,
+			Operation:     "upsert",
+			Payload:       payload,
+			PayloadHash:   payloadHash,
 		}
 		jsonBytes, marshalErr := json.Marshal(record)
 		if marshalErr != nil {

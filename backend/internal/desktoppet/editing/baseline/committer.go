@@ -12,25 +12,25 @@ import (
 )
 
 type CommitterRequest struct {
-	UserID                string
-	CharacterID           string
-	ProcessingTaskID      string
-	ProcessingActionID    string
-	ProcessingAttemptID   string
-	ProcessingRevisionID  string
-	ActionKey             string
-	ActionConfigJSON      string
-	ActionConfigHash      string
-	ActionSpecVersion     string
-	ActionSpecHash        string
-	PlaybackMode          string
-	FPS                   int
-	FrameDurationMS       int
-	LoopType              string
-	AnchorJSON            string
-	PromotionPolicy       string
-	CreatedBy             string
-	CorrelationID         string
+	UserID               string
+	CharacterID          string
+	ProcessingTaskID     string
+	ProcessingActionID   string
+	ProcessingAttemptID  string
+	ProcessingRevisionID string
+	ActionKey            string
+	ActionConfigJSON     string
+	ActionConfigHash     string
+	ActionSpecVersion    string
+	ActionSpecHash       string
+	PlaybackMode         string
+	FPS                  int
+	FrameDurationMS      int
+	LoopType             string
+	AnchorJSON           string
+	PromotionPolicy      string
+	CreatedBy            string
+	CorrelationID        string
 }
 
 type CommitterResult struct {
@@ -336,33 +336,33 @@ func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, stream
 	eventID := fmt.Sprintf("evt-%d", time.Now().UnixNano())
 
 	createdPayload, _ := json.Marshal(map[string]any{
-		"actionRevisionId":      revisionID,
-		"actionStreamId":        streamID,
-		"revisionNumber":        req.ProcessingRevisionID,
-		"processingRevisionId":  processingRevisionID,
-		"actionKey":             req.ActionKey,
-		"userId":                req.UserID,
-		"characterId":           req.CharacterID,
-		"contentHash":           "",
-		"bindingRevision":       bindingRevision,
-		"occurredAt":            now,
+		"actionRevisionId":     revisionID,
+		"actionStreamId":       streamID,
+		"revisionNumber":       req.ProcessingRevisionID,
+		"processingRevisionId": processingRevisionID,
+		"actionKey":            req.ActionKey,
+		"userId":               req.UserID,
+		"characterId":          req.CharacterID,
+		"contentHash":          "",
+		"bindingRevision":      bindingRevision,
+		"occurredAt":           now,
 	})
 
 	createdEvent := &editing.ActionRevisionEventOutboxRecord{
-		ID:                  fmt.Sprintf("eo-%d", time.Now().UnixNano()),
-		EventID:             eventID,
-		EventType:           EventActionRevisionCreated,
-		AggregateType:       "action_revision",
-		AggregateID:         revisionID,
-		AggregateSequence:   1,
-		ActionStreamID:      streamID,
-		ActionRevisionID:    revisionID,
-		PreviousRevisionID:  previousRevisionID,
+		ID:                   fmt.Sprintf("eo-%d", time.Now().UnixNano()),
+		EventID:              eventID,
+		EventType:            EventActionRevisionCreated,
+		AggregateType:        "action_revision",
+		AggregateID:          revisionID,
+		AggregateSequence:    1,
+		ActionStreamID:       streamID,
+		ActionRevisionID:     revisionID,
+		PreviousRevisionID:   previousRevisionID,
 		ProcessingRevisionID: processingRevisionID,
-		PayloadJSON:         string(createdPayload),
-		Status:              OutboxStatusPending,
-		AvailableAt:         now,
-		CreatedAt:           now,
+		PayloadJSON:          string(createdPayload),
+		Status:               OutboxStatusPending,
+		AvailableAt:          now,
+		CreatedAt:            now,
 	}
 	if err := tx.Create(createdEvent).Error; err != nil {
 		return err
@@ -371,31 +371,31 @@ func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, stream
 	if req.PromotionPolicy == PromotionPolicyAlways || req.PromotionPolicy == PromotionPolicyFirstRevisionOnly {
 		activatedEventID := fmt.Sprintf("evt-%d", time.Now().UnixNano()+1)
 		activatedPayload, _ := json.Marshal(map[string]any{
-			"actionRevisionId": revisionID,
-			"actionStreamId":   streamID,
-			"bindingRevision":  bindingRevision,
+			"actionRevisionId":   revisionID,
+			"actionStreamId":     streamID,
+			"bindingRevision":    bindingRevision,
 			"previousRevisionId": previousRevisionID,
-			"actionKey":        req.ActionKey,
-			"userId":           req.UserID,
-			"characterId":      req.CharacterID,
-			"occurredAt":       now,
+			"actionKey":          req.ActionKey,
+			"userId":             req.UserID,
+			"characterId":        req.CharacterID,
+			"occurredAt":         now,
 		})
 
 		activatedEvent := &editing.ActionRevisionEventOutboxRecord{
-			ID:                  fmt.Sprintf("eo-%d", time.Now().UnixNano()+1),
-			EventID:             activatedEventID,
-			EventType:           EventActionRevisionActivated,
-			AggregateType:       "action_revision",
-			AggregateID:         revisionID,
-			AggregateSequence:   2,
-			ActionStreamID:      streamID,
-			ActionRevisionID:    revisionID,
-			PreviousRevisionID:  previousRevisionID,
+			ID:                   fmt.Sprintf("eo-%d", time.Now().UnixNano()+1),
+			EventID:              activatedEventID,
+			EventType:            EventActionRevisionActivated,
+			AggregateType:        "action_revision",
+			AggregateID:          revisionID,
+			AggregateSequence:    2,
+			ActionStreamID:       streamID,
+			ActionRevisionID:     revisionID,
+			PreviousRevisionID:   previousRevisionID,
 			ProcessingRevisionID: processingRevisionID,
-			PayloadJSON:         string(activatedPayload),
-			Status:              OutboxStatusPending,
-			AvailableAt:         now,
-			CreatedAt:           now,
+			PayloadJSON:          string(activatedPayload),
+			Status:               OutboxStatusPending,
+			AvailableAt:          now,
+			CreatedAt:            now,
 		}
 		if err := tx.Create(activatedEvent).Error; err != nil {
 			return err

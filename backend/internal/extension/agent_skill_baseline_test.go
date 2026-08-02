@@ -77,7 +77,7 @@ func TestLegacy_AgentSkill_PseudoSkillRegistration(t *testing.T) {
 	service := NewAgentSkillService(repository, registry, validator)
 
 	raw := agentSkillBaselineZIP(t, map[string][]byte{
-		"code-review/SKILL.md": []byte("---\nname: code-review\ndescription: Review code. Use when users request an audit.\n---\n\nBody."),
+		"code-review/SKILL.md":        []byte("---\nname: code-review\ndescription: Review code. Use when users request an audit.\n---\n\nBody."),
 		"code-review/assets/icon.png": []byte("fake-png"),
 	}, nil)
 	preview, err := service.PreviewZIP(ctx, "user-1", raw)
@@ -426,7 +426,7 @@ func TestLegacy_AgentSkill_ActivationTrace(t *testing.T) {
 	service := NewAgentSkillService(repository, registry, validator)
 
 	raw := agentSkillBaselineZIP(t, map[string][]byte{
-		"code-review/SKILL.md":               []byte("---\nname: code-review\ndescription: Review code. Use when users request an audit.\n---\n\nRead references/guide.md and references/checklist.md"),
+		"code-review/SKILL.md":                []byte("---\nname: code-review\ndescription: Review code. Use when users request an audit.\n---\n\nRead references/guide.md and references/checklist.md"),
 		"code-review/references/guide.md":     []byte("Guide content."),
 		"code-review/references/checklist.md": []byte("Checklist content."),
 	}, nil)

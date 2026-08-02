@@ -17,8 +17,8 @@ type RuntimeDesiredState struct {
 	RuntimeID string
 
 	InstallationID string
-	PetID           string
-	ReleaseID       string
+	PetID          string
+	ReleaseID      string
 
 	DesiredEnabled bool
 	DesiredVisible bool
@@ -43,10 +43,10 @@ func (RuntimeDesiredState) TableName() string {
 }
 
 type DeviceDesiredRevisionCounter struct {
-	UserID    string
-	DeviceID  string
+	UserID          string
+	DeviceID        string
 	CurrentRevision int64
-	UpdatedAt      string
+	UpdatedAt       string
 }
 
 func (DeviceDesiredRevisionCounter) TableName() string {
@@ -54,12 +54,12 @@ func (DeviceDesiredRevisionCounter) TableName() string {
 }
 
 type DesiredStateOutboxEvent struct {
-	EventID string
-	EventType string
-	UserID    string
-	DeviceID  string
-	RuntimeID string
-	InstallationID string
+	EventID         string
+	EventType       string
+	UserID          string
+	DeviceID        string
+	RuntimeID       string
+	InstallationID  string
 	DesiredRevision int64
 	DesiredHash     string
 	OperationID     string

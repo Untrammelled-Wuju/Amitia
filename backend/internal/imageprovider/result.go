@@ -3,7 +3,7 @@ package imageprovider
 type SubmissionState string
 
 const (
-	SubmissionAccepted  SubmissionState = "accepted"
+	SubmissionAccepted   SubmissionState = "accepted"
 	SubmissionProcessing SubmissionState = "processing"
 	SubmissionSucceeded  SubmissionState = "succeeded"
 	SubmissionFailed     SubmissionState = "failed"
@@ -17,27 +17,27 @@ type RemoteArtifactReceipt struct {
 }
 
 type CandidateImage struct {
-	Index       int
-	Bytes       []byte
-	MimeType    string
-	Width       int
-	Height      int
-	RemoteURL   string
+	Index         int
+	Bytes         []byte
+	MimeType      string
+	Width         int
+	Height        int
+	RemoteURL     string
 	RemoteReceipt *RemoteArtifactReceipt
-	Metadata    map[string]any
+	Metadata      map[string]any
 }
 
 type GenerationResult struct {
-	SubmissionState  SubmissionState
-	OperationID      string
-	RequestID        string
-	Candidates       []CandidateImage
-	Provider         string
-	Model            string
-	Usage            *GenerationUsage
-	ErrorCode        string
-	ErrorMessage     string
-	RawMetadata      map[string]any
+	SubmissionState SubmissionState
+	OperationID     string
+	RequestID       string
+	Candidates      []CandidateImage
+	Provider        string
+	Model           string
+	Usage           *GenerationUsage
+	ErrorCode       string
+	ErrorMessage    string
+	RawMetadata     map[string]any
 }
 
 func (r *GenerationResult) HasCandidates() bool {

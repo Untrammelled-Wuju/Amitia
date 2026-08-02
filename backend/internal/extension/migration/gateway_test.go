@@ -120,7 +120,7 @@ func TestPlanner(t *testing.T) {
 	p := NewDefaultPlanner(v, d)
 	entities := []MigrationEntity{
 		{
-			CanonicalID: "c1",
+			CanonicalID:  "c1",
 			EntityType:   "extension",
 			LegacySource: LegacySourceReference{LegacyID: "l1"},
 			Definition:   json.RawMessage(`{}`),
@@ -148,13 +148,13 @@ func TestMigrationServiceRun(t *testing.T) {
 	svc := NewMigrationService(gw, v, d, p, reports)
 	entities := []MigrationEntity{
 		{
-			CanonicalID: "c1",
+			CanonicalID:  "c1",
 			EntityType:   "extension",
 			LegacySource: LegacySourceReference{LegacyID: "l1"},
 			Definition:   json.RawMessage(`{}`),
 		},
 		{
-			CanonicalID: "",
+			CanonicalID:  "",
 			EntityType:   "extension",
 			LegacySource: LegacySourceReference{LegacyID: "l2"},
 		},

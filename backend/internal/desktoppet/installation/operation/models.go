@@ -12,62 +12,62 @@ import (
 )
 
 const (
-	TypeInstall      = "install"
+	TypeInstall       = "install"
 	TypeUpgrade       = "upgrade"
-	TypeDowngrade    = "downgrade"
-	TypeSwitch       = "switch"
-	TypeEnable       = "enable"
-	TypeDisable      = "disable"
-	TypeSettings     = "settings"
+	TypeDowngrade     = "downgrade"
+	TypeSwitch        = "switch"
+	TypeEnable        = "enable"
+	TypeDisable       = "disable"
+	TypeSettings      = "settings"
 	TypeDefaultAction = "default_action"
-	TypeRecenter     = "recenter"
-	TypeRepair       = "repair"
-	TypeUninstall    = "uninstall"
+	TypeRecenter      = "recenter"
+	TypeRepair        = "repair"
+	TypeUninstall     = "uninstall"
 )
 
 const (
-	OpStatusCreated          = "created"
-	OpStatusQueued           = "queued"
-	OpStatusRunning          = "running"
+	OpStatusCreated           = "created"
+	OpStatusQueued            = "queued"
+	OpStatusRunning           = "running"
 	OpStatusWaitingRuntimeACK = "waiting_runtime_ack"
-	OpStatusCompleted        = "completed"
-	OpStatusFailedRetryable  = "failed_retryable"
-	OpStatusFailedTerminal   = "failed_terminal"
-	OpStatusCancelRequested  = "cancel_requested"
-	OpStatusCancelled        = "cancelled"
+	OpStatusCompleted         = "completed"
+	OpStatusFailedRetryable   = "failed_retryable"
+	OpStatusFailedTerminal    = "failed_terminal"
+	OpStatusCancelRequested   = "cancel_requested"
+	OpStatusCancelled         = "cancelled"
 )
 
 const (
-	OpStageRequestValidated     = "request_validated"
-	OpStageReleaseVerified      = "release_verified"
-	OpStageStagingPrepared     = "staging_prepared"
-	OpStageStagingVerified     = "staging_verified"
-	OpStageOldInstallParked   = "old_install_parked"
-	OpStageFilesPublished      = "files_published"
-	OpStageDatabaseCommitted   = "database_committed"
-	OpStageDesiredStateCommitted = "desired_state_committed"
+	OpStageRequestValidated       = "request_validated"
+	OpStageReleaseVerified        = "release_verified"
+	OpStageStagingPrepared        = "staging_prepared"
+	OpStageStagingVerified        = "staging_verified"
+	OpStageOldInstallParked       = "old_install_parked"
+	OpStageFilesPublished         = "files_published"
+	OpStageDatabaseCommitted      = "database_committed"
+	OpStageDesiredStateCommitted  = "desired_state_committed"
 	OpStageRuntimeCommandEnqueued = "runtime_command_enqueued"
-	OpStageWaitingRuntimeACK   = "waiting_runtime_ack"
-	OpStageRuntimeApplied      = "runtime_applied"
-	OpStageCleanupCompleted    = "cleanup_completed"
-	OpStageCompleted           = "completed"
+	OpStageWaitingRuntimeACK      = "waiting_runtime_ack"
+	OpStageRuntimeApplied         = "runtime_applied"
+	OpStageCleanupCompleted       = "cleanup_completed"
+	OpStageCompleted              = "completed"
 )
 
 const (
-	ErrCodeIDEMPOTENCYConflict = "INSTALLATION_IDEMPOTENCY_CONFLICT"
-	ErrCodeJournalCONFLICT     = "INSTALLATION_JOURNAL_CONFLICT"
-	ErrCodeLeaseLOST           = "INSTALLATION_LEASE_LOST"
-	ErrCodeInvalidTRANSITION   = "INSTALLATION_INVALID_TRANSITION"
-	ErrCodeOWNERSHIPMismatch   = "INSTALLATION_OWNERSHIP_MISMATCH"
+	ErrCodeIDEMPOTENCYConflict   = "INSTALLATION_IDEMPOTENCY_CONFLICT"
+	ErrCodeJournalCONFLICT       = "INSTALLATION_JOURNAL_CONFLICT"
+	ErrCodeLeaseLOST             = "INSTALLATION_LEASE_LOST"
+	ErrCodeInvalidTRANSITION     = "INSTALLATION_INVALID_TRANSITION"
+	ErrCodeOWNERSHIPMismatch     = "INSTALLATION_OWNERSHIP_MISMATCH"
 	ErrCodeReleaseNOTINSTALLABLE = "INSTALLATION_RELEASE_NOT_INSTALLABLE"
 )
 
 var (
-	ErrInvalidTransition  = errors.New("operation: invalid state transition")
-	ErrLeaseLost          = errors.New("operation: lease lost before commit")
+	ErrInvalidTransition   = errors.New("operation: invalid state transition")
+	ErrLeaseLost           = errors.New("operation: lease lost before commit")
 	ErrIdempotencyConflict = errors.New("operation: idempotency key conflict")
-	ErrJournalConflict    = errors.New("operation: journal state conflict")
-	ErrOwnershipMismatch  = errors.New("operation: ownership mismatch")
+	ErrJournalConflict     = errors.New("operation: journal state conflict")
+	ErrOwnershipMismatch   = errors.New("operation: ownership mismatch")
 )
 
 var validTransitions = map[string]map[string]bool{
@@ -105,7 +105,7 @@ type InstallationOperation struct {
 	RuntimeID string
 
 	InstallationID string
-	PetID           string
+	PetID          string
 
 	SourceReleaseID string
 	TargetReleaseID string
@@ -181,9 +181,9 @@ type OperationResult struct {
 }
 
 type ClaimLeaseRequest struct {
-	OperationID   string
-	LeaseOwner    string
-	Timeout      time.Duration
+	OperationID      string
+	LeaseOwner       string
+	Timeout          time.Duration
 	ExpectedStatuses []string
 }
 

@@ -13,9 +13,9 @@ const (
 )
 
 const (
-	StagePreparing   Stage = "preparing"
-	StageGenerating  Stage = "generating"
-	StageFinalizing  Stage = "finalizing"
+	StagePreparing  Stage = "preparing"
+	StageGenerating Stage = "generating"
+	StageFinalizing Stage = "finalizing"
 )
 
 const (
@@ -27,27 +27,27 @@ const (
 )
 
 const (
-	StageValidatingSources   Stage = "validating_sources"
-	StageDetectingSubject    Stage = "detecting_subject"
-	StageRemovingBackground  Stage = "removing_background"
-	StageNormalizingCanvas   Stage = "normalizing_canvas"
-	StageAligningAnchors     Stage = "aligning_anchors"
-	StagePersistingFrames    Stage = "persisting_frames"
-	StageValidatingOutputs   Stage = "validating_outputs"
-	StagePackaging           Stage = "packaging"
+	StageValidatingSources  Stage = "validating_sources"
+	StageDetectingSubject   Stage = "detecting_subject"
+	StageRemovingBackground Stage = "removing_background"
+	StageNormalizingCanvas  Stage = "normalizing_canvas"
+	StageAligningAnchors    Stage = "aligning_anchors"
+	StagePersistingFrames   Stage = "persisting_frames"
+	StageValidatingOutputs  Stage = "validating_outputs"
+	StagePackaging          Stage = "packaging"
 )
 
 const (
-	StageLoadingSources     Stage = "loading_sources"
-	StageProcessingFrames   Stage = "processing_frames"
-	StageValidatingAction   Stage = "validating_action"
+	StageLoadingSources   Stage = "loading_sources"
+	StageProcessingFrames Stage = "processing_frames"
+	StageValidatingAction Stage = "validating_action"
 )
 
 const (
-	StageLoading            Stage = "loading"
-	StageBackgroundRemoval  Stage = "background_removal"
-	StageNormalizing        Stage = "normalizing"
-	StageAligning           Stage = "aligning"
+	StageLoading           Stage = "loading"
+	StageBackgroundRemoval Stage = "background_removal"
+	StageNormalizing       Stage = "normalizing"
+	StageAligning          Stage = "aligning"
 )
 
 const (

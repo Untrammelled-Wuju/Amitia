@@ -3,28 +3,32 @@
 package processing
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
-	"archive/zip"
-	"io"
-	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
-	service Service
+	service       Service
+	safeResponder *security.SafeArtifactResponder
 }
 
-func NewHandler(svc Service) *Handler { return &Handler{service: svc} }
+func NewHandler(svc Service, responder *security.SafeArtifactResponder) *Handler {
+	return &Handler{service: svc, safeResponder: responder}
+}
 
 type createPackagePayload struct {
 	DefaultAction     string   `json:"defaultAction"`
@@ -317,6 +321,16 @@ func (h *Handler) ExcludeAction(c *gin.Context) {
 
 func (h *Handler) ProcessingEventsStream(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "SSE_AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -385,7 +399,7 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath) // audit:ok:path_origin=internal_service
+	h.safeResponder.SafeFileResponse(c, fullPath)
 }
 
 func (h *Handler) SourceFrameImage(c *gin.Context) {
@@ -420,7 +434,7 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath) // audit:ok:path_origin=internal_service
+	h.safeResponder.SafeFileResponse(c, fullPath)
 }
 
 func (h *Handler) ActionPreview(c *gin.Context) {
@@ -450,7 +464,7 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath) // audit:ok:path_origin=internal_service
+	h.safeResponder.SafeFileResponse(c, fullPath)
 }
 
 func writeProcessingError(c *gin.Context, err error) {
@@ -532,9 +546,15 @@ func (h *Handler) ListPackages(c *gin.Context) {
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if page < 1 { page = 1 }
-	if pageSize < 1 { pageSize = 20 }
-	if pageSize > 100 { pageSize = 100 }
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
 
 	packages, total, err := h.service.ListPackages(userID, page, pageSize)
 	if err != nil {
@@ -576,13 +596,21 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 	defer zipWriter.Close()
 
 	err = filepath.Walk(packageDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil { return err }
-		if info.IsDir() { return nil }
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
 		relPath, _ := filepath.Rel(packageDir, path)
 		zipEntry, zerr := zipWriter.Create(filepath.ToSlash(relPath))
-		if zerr != nil { return zerr }
+		if zerr != nil {
+			return zerr
+		}
 		f, ferr := os.Open(path)
-		if ferr != nil { return ferr }
+		if ferr != nil {
+			return ferr
+		}
 		defer f.Close()
 		_, cperr := io.Copy(zipEntry, f)
 		return cperr

@@ -16,11 +16,11 @@ func runDoctor(args []string, output *Output) int {
 	fs.Parse(args)
 
 	data := map[string]any{
-		"cliVersion":   CLIVersion,
-		"goVersion":    runtime.Version(),
-		"os":           runtime.GOOS,
-		"arch":         runtime.GOARCH,
-		"cpuCount":     runtime.NumCPU(),
+		"cliVersion":    CLIVersion,
+		"goVersion":     runtime.Version(),
+		"os":            runtime.GOOS,
+		"arch":          runtime.GOARCH,
+		"cpuCount":      runtime.NumCPU(),
 		"packageFormat": "amitiax",
 	}
 

@@ -5,15 +5,15 @@ import (
 )
 
 type StagedAction struct {
-	ActionKey          string
-	DisplayName        string
-	RevisionID         string
-	QualityVerdict     string
-	LoopType           string
-	FPS                int
-	FrameCount         int
+	ActionKey           string
+	DisplayName         string
+	RevisionID          string
+	QualityVerdict      string
+	LoopType            string
+	FPS                 int
+	FrameCount          int
 	SupportsDefaultIdle bool
-	FrameEntries       []StagedFrameEntry
+	FrameEntries        []StagedFrameEntry
 }
 
 type StagedFrameEntry struct {

@@ -287,9 +287,9 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 
 	case "runtime.disconnected":
 		next.Desired = DesiredBehaviorState{
-			Semantic:    next.Foreground.Semantic,
+			Semantic:        next.Foreground.Semantic,
 			PreferredAction: next.Foreground.ActionKey,
-			SourceLayer: "foreground",
+			SourceLayer:     "foreground",
 		}
 		changed = true
 		layersChanged = append(layersChanged, "desired")
@@ -362,13 +362,13 @@ func (r *Reducer) checkLeases(ctx *BehaviorContextSnapshot, now time.Time) {
 
 func phaseRank(phase string) int {
 	ranks := map[string]int{
-		"received":          1,
-		"context_loading":   2,
-		"response_started":  3,
-		"response_ready":    4,
-		"completed":         5,
-		"failed":            5,
-		"cancelled":         5,
+		"received":         1,
+		"context_loading":  2,
+		"response_started": 3,
+		"response_ready":   4,
+		"completed":        5,
+		"failed":           5,
+		"cancelled":        5,
 	}
 	rank, ok := ranks[phase]
 	if !ok {

@@ -30,12 +30,12 @@ const (
 )
 
 const (
-	defaultMinSubjectRatio              = 0.05
-	defaultMaxSubjectRatio              = 0.95
-	defaultDriftThreshold               = 0.05
-	defaultScaleDriftThreshold          = 0.1
-	emptyFrameCoverageThreshold         = 0.01
-	backgroundResidueCoverageThreshold  = 0.9
+	defaultMinSubjectRatio             = 0.05
+	defaultMaxSubjectRatio             = 0.95
+	defaultDriftThreshold              = 0.05
+	defaultScaleDriftThreshold         = 0.1
+	emptyFrameCoverageThreshold        = 0.01
+	backgroundResidueCoverageThreshold = 0.9
 )
 
 type FrameQualityResult struct {

@@ -35,15 +35,15 @@ type TaskActionForPlanning struct {
 	FrameCount     int
 	ActionSpecJSON string
 	ActionSpecHash string
-	Mode             string
-	Capabilities     imageprovider.ProviderCapabilities
-	CapabilityHash   string
-	LayoutResult     *generationlayout.LayoutResult
-	PromptSnapshot   *generationprompt.PromptSnapshot
-	SeedPolicy       string
-	SeedValue        *int64
-	OutputCount      int
-	Budget           *Budget
+	Mode           string
+	Capabilities   imageprovider.ProviderCapabilities
+	CapabilityHash string
+	LayoutResult   *generationlayout.LayoutResult
+	PromptSnapshot *generationprompt.PromptSnapshot
+	SeedPolicy     string
+	SeedValue      *int64
+	OutputCount    int
+	Budget         *Budget
 }
 
 type PlanFreezeResult struct {

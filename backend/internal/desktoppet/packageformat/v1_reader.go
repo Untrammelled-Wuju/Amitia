@@ -80,8 +80,8 @@ func (r *V1Reader) ReadManifest(data []byte) (*Manifest, error) {
 		SourceCharacterID: v1.CharacterID,
 	}
 	manifest.Canvas = ManifestCanvas{
-		Width:           v1.Canvas.Width,
-		Height:          v1.Canvas.Height,
+		Width:            v1.Canvas.Width,
+		Height:           v1.Canvas.Height,
 		CoordinateSystem: CoordinateSystemTopLeft,
 	}
 	manifest.DefaultAction = v1.DefaultAction

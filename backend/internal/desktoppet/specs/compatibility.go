@@ -65,12 +65,12 @@ func (c *CompatibilityResolver) ResolveLegacy(opts LegacySpecOptions) (contracts
 			Tags:                []string{"legacy"},
 		},
 		Playback: contracts.ActionPlaybackSpec{
-			Mode:            mode,
-			DefaultFPS:      fps,
-			ReturnPolicy:    returnPolicy,
-			Interruptible:   true,
-			MutexGroup:      "legacy",
-			QueuePolicy:     contracts.QueueReplace,
+			Mode:          mode,
+			DefaultFPS:    fps,
+			ReturnPolicy:  returnPolicy,
+			Interruptible: true,
+			MutexGroup:    "legacy",
+			QueuePolicy:   contracts.QueueReplace,
 		},
 		Processing: contracts.ActionProcessingHints{
 			AnchorProfile:     contracts.AnchorFeetCenter,

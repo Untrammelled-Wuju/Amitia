@@ -44,17 +44,17 @@ func TestApplyDatabaseStartupMigrationsCreatesRetrievalLogsWithAllColumns(t *tes
 	}
 
 	expectedColumns := map[string]bool{
-		"id":                  false,
-		"conversation_id":     false,
-		"character_id":        false,
-		"request_id":          false,
-		"channel":             false,
-		"retrieval_version":   false,
-		"legacy":              false,
-		"query_text":          false,
+		"id":                   false,
+		"conversation_id":      false,
+		"character_id":         false,
+		"request_id":           false,
+		"channel":              false,
+		"retrieval_version":    false,
+		"legacy":               false,
+		"query_text":           false,
 		"retrieved_memory_ids": false,
-		"scoring_details":     false,
-		"created_at":          false,
+		"scoring_details":      false,
+		"created_at":           false,
 	}
 	for _, col := range columns {
 		if _, ok := expectedColumns[col.Name]; ok {

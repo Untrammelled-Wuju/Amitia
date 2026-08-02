@@ -2,8 +2,8 @@ package migration
 
 func ImageGenConfigMigration() Migration {
 	return Migration{
-		Version: "202607240001",
-		Name:    "add_image_gen_configs_table",
+		Version:           "202607240001",
+		Name:              "add_image_gen_configs_table",
 		AcceptedChecksums: []string{"d2c40f847889eb44c771304084db13923a10c70319078129b73b1da0490fb6dd"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS image_gen_configs (

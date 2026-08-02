@@ -3,8 +3,16 @@
 package readiness
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/surrealdb/surrealdb.go"
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/pkg/database/qdrant"
+	"gorm.io/gorm"
 )
 
 type SystemStatus string
@@ -207,4 +215,113 @@ func (r *WorkerRegistry) AllRequiredHealthy() bool {
 		}
 	}
 	return true
+}
+
+type ComponentChecker struct {
+	checkerName string
+	required    bool
+	evaluate    func() (SystemStatus, string)
+}
+
+func NewComponentChecker(name string, required bool, fn func() (SystemStatus, string)) *ComponentChecker {
+	return &ComponentChecker{
+		checkerName: name,
+		required:    required,
+		evaluate:    fn,
+	}
+}
+
+func (c *ComponentChecker) Name() string { return c.checkerName }
+
+func (c *ComponentChecker) IsRequired() bool { return c.required }
+
+func (c *ComponentChecker) Evaluate() (SystemStatus, string) { return c.evaluate() }
+
+func NewStartupReadinessService(db *gorm.DB, ext *extension.Runtime) *ReadinessService {
+	svc := NewReadinessService()
+	svc.Register(NewComponentChecker("sqlite", true, makeSQLitePingChecker(db)))
+	svc.Register(NewComponentChecker("surrealdb", true, makeSurrealPingChecker()))
+	svc.Register(NewComponentChecker("qdrant", true, makeQdrantPingChecker()))
+	svc.Register(NewComponentChecker("extension", true, makeExtensionPingChecker(ext)))
+	return svc
+}
+
+func makeSQLitePingChecker(db *gorm.DB) func() (SystemStatus, string) {
+	return func() (SystemStatus, string) {
+		if db == nil {
+			return StatusBlocked, "sqlite: database instance is nil"
+		}
+		sqlDB, err := db.DB()
+		if err != nil {
+			return StatusBlocked, fmt.Sprintf("sqlite: failed to get underlying *sql.DB: %v", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := sqlDB.PingContext(ctx); err != nil {
+			return StatusBlocked, fmt.Sprintf("sqlite: ping failed: %v", err)
+		}
+		return StatusReady, "sqlite: connection is healthy"
+	}
+}
+
+func makeSurrealPingChecker() func() (SystemStatus, string) {
+	return func() (SystemStatus, string) {
+		cfg := config.AppCfg.Surreal
+		url := fmt.Sprintf("ws://%s:%d/rpc", cfg.Host, cfg.Port)
+		db, err := surrealdb.New(url)
+		if err != nil {
+			return StatusBlocked, fmt.Sprintf("surrealdb: connection failed: %v", err)
+		}
+		defer db.Close(context.Background())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if _, err := db.SignIn(ctx, map[string]string{"user": cfg.Username, "pass": cfg.Password}); err != nil {
+			if _, err2 := db.SignIn(ctx, map[string]string{"user": "root", "pass": "root"}); err2 != nil {
+				return StatusBlocked, fmt.Sprintf("surrealdb: authentication failed: %v", err)
+			}
+		}
+
+		if err := db.Use(ctx, cfg.Namespace, cfg.Database); err != nil {
+			return StatusBlocked, fmt.Sprintf("surrealdb: use namespace/database failed: %v", err)
+		}
+
+		_, err = surrealdb.Query[any](ctx, db, "SELECT 1", nil)
+		if err != nil {
+			return StatusDegraded, fmt.Sprintf("surrealdb: query test failed: %v", err)
+		}
+		return StatusReady, "surrealdb: connection is healthy"
+	}
+}
+
+func makeQdrantPingChecker() func() (SystemStatus, string) {
+	return func() (SystemStatus, string) {
+		if qdrant.Client == nil {
+			return StatusBlocked, "qdrant: client is not initialized"
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := qdrant.Client.HealthCheck(ctx)
+		if err != nil {
+			return StatusBlocked, fmt.Sprintf("qdrant: health check failed: %v", err)
+		}
+		return StatusReady, "qdrant: connection is healthy"
+	}
+}
+
+func makeExtensionPingChecker(ext *extension.Runtime) func() (SystemStatus, string) {
+	return func() (SystemStatus, string) {
+		if ext == nil {
+			return StatusBlocked, "extension: runtime is not initialized"
+		}
+		if ext.Kernel == nil {
+			return StatusBlocked, "extension: kernel is not attached"
+		}
+		container := ext.Kernel.Container()
+		if container == nil {
+			return StatusBlocked, "extension: kernel has no container"
+		}
+		return StatusReady, "extension: runtime and kernel are operational"
+	}
 }

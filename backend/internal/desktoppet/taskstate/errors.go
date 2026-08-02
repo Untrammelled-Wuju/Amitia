@@ -10,26 +10,26 @@ import (
 )
 
 var (
-	ErrTransitionConflict        = errors.New("taskstate: transition conflict, rows affected 0")
-	ErrExecutionOwnershipLost    = errors.New("taskstate: execution ownership lost")
-	ErrInvalidTransition         = errors.New("taskstate: invalid transition")
-	ErrInvalidStatusStageCombo   = errors.New("taskstate: invalid status stage combination")
-	ErrEntityNotFound            = errors.New("taskstate: entity not found")
-	ErrVersionConflict           = errors.New("taskstate: row version conflict")
-	ErrIllegalTargetStatus       = errors.New("taskstate: target status not allowed for entity")
-	ErrTerminalOverrideAttempt   = errors.New("taskstate: terminal status cannot be overridden by worker")
-	ErrArtifactGateFailed        = errors.New("taskstate: artifact gate check failed")
-	ErrSnapshotInconsistent      = errors.New("taskstate: snapshot inconsistent with artifacts")
+	ErrTransitionConflict      = errors.New("taskstate: transition conflict, rows affected 0")
+	ErrExecutionOwnershipLost  = errors.New("taskstate: execution ownership lost")
+	ErrInvalidTransition       = errors.New("taskstate: invalid transition")
+	ErrInvalidStatusStageCombo = errors.New("taskstate: invalid status stage combination")
+	ErrEntityNotFound          = errors.New("taskstate: entity not found")
+	ErrVersionConflict         = errors.New("taskstate: row version conflict")
+	ErrIllegalTargetStatus     = errors.New("taskstate: target status not allowed for entity")
+	ErrTerminalOverrideAttempt = errors.New("taskstate: terminal status cannot be overridden by worker")
+	ErrArtifactGateFailed      = errors.New("taskstate: artifact gate check failed")
+	ErrSnapshotInconsistent    = errors.New("taskstate: snapshot inconsistent with artifacts")
 )
 
 type TransitionError struct {
-	Code         string
-	EntityType   contracts.EntityType
-	EntityID     string
-	FromStatus   contracts.LifecycleStatus
-	ToStatus     contracts.LifecycleStatus
-	Reason       contracts.TransitionReason
-	Err          error
+	Code       string
+	EntityType contracts.EntityType
+	EntityID   string
+	FromStatus contracts.LifecycleStatus
+	ToStatus   contracts.LifecycleStatus
+	Reason     contracts.TransitionReason
+	Err        error
 }
 
 func (e *TransitionError) Error() string {

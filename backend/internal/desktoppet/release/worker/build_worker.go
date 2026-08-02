@@ -10,15 +10,15 @@ import (
 )
 
 type ReleaseBuildWorker struct {
-	repo           release.ReleaseRepository
-	sequenceAlloc  release.SequenceAllocator
-	leaseManager   LeaseManagerPort
-	buildHandler   BuildHandler
-	checkInterval  time.Duration
-	stopCh         chan struct{}
-	wg             sync.WaitGroup
-	mu             sync.Mutex
-	running        bool
+	repo          release.ReleaseRepository
+	sequenceAlloc release.SequenceAllocator
+	leaseManager  LeaseManagerPort
+	buildHandler  BuildHandler
+	checkInterval time.Duration
+	stopCh        chan struct{}
+	wg            sync.WaitGroup
+	mu            sync.Mutex
+	running       bool
 }
 
 type LeaseManagerPort interface {

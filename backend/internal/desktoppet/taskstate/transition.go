@@ -96,14 +96,14 @@ type ApplyTransitionResult struct {
 }
 
 type EntitySnapshot struct {
-	Status          contracts.LifecycleStatus
-	Stage           contracts.Stage
-	RowVersion      int64
-	ExecutionID     string
-	WorkerID        string
-	CancelRequested bool
+	Status            contracts.LifecycleStatus
+	Stage             contracts.Stage
+	RowVersion        int64
+	ExecutionID       string
+	WorkerID          string
+	CancelRequested   bool
 	CancelRequestedAt string
-	LeaseExpiresAt  string
+	LeaseExpiresAt    string
 }
 
 type Store interface {

@@ -158,10 +158,10 @@ type InMemoryEventSink struct {
 }
 
 type CapturedEvent struct {
-	EventType    string
-	AggregateID  string
-	PayloadJSON  string
-	DeliveredAt  string
+	EventType   string
+	AggregateID string
+	PayloadJSON string
+	DeliveredAt string
 }
 
 func NewInMemoryEventSink() *InMemoryEventSink {

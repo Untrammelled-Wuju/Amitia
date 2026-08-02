@@ -76,7 +76,6 @@ func TestQQAndWechatPropagateSendFailure(t *testing.T) {
 	}
 }
 
-
 func textIntent(t *testing.T) DeliveryIntent {
 	t.Helper()
 	payload, err := json.Marshal(map[string]interface{}{"messageId": "m-text", "content": "hello"})

@@ -13,12 +13,12 @@ var (
 )
 
 type DeviceActiveInstallationBinding struct {
-	UserID    string
-	DeviceID  string
+	UserID   string
+	DeviceID string
 
 	InstallationID string
-	PetID           string
-	ReleaseID       string
+	PetID          string
+	ReleaseID      string
 
 	BindingRevision int64
 
@@ -41,8 +41,8 @@ func (b DeviceActiveInstallationBinding) IsValid() bool {
 type BindingHistoryEntry struct {
 	ID string
 
-	UserID    string
-	DeviceID  string
+	UserID   string
+	DeviceID string
 
 	PreviousInstallationID string
 	NewInstallationID      string
@@ -61,16 +61,16 @@ func (BindingHistoryEntry) TableName() string {
 }
 
 const (
-	BoundReasonInstall  = "install_bound"
-	BoundReasonEnable    = "enable_bound"
-	BoundReasonSwitch    = "switch_bound"
-	BoundReasonRestore   = "restore_bound"
+	BoundReasonInstall = "install_bound"
+	BoundReasonEnable  = "enable_bound"
+	BoundReasonSwitch  = "switch_bound"
+	BoundReasonRestore = "restore_bound"
 )
 
 type BindingConflictResolution struct {
-	ExistingBinding DeviceActiveInstallationBinding
+	ExistingBinding       DeviceActiveInstallationBinding
 	RequestedInstallation string
-	Strategy         ConflictResolutionStrategy
+	Strategy              ConflictResolutionStrategy
 }
 
 type ConflictResolutionStrategy int

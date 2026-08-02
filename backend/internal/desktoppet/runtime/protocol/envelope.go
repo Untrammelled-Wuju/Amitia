@@ -54,41 +54,41 @@ type RuntimeSessionContext struct {
 }
 
 type CommandAckPayload struct {
-	CommandID       string    `json:"commandId"`
-	CommandSequence int64     `json:"commandSequence"`
-	Status          string    `json:"status"`
-	RuntimeInstanceID string  `json:"runtimeInstanceId"`
-	ReceivedAt      time.Time `json:"receivedAt"`
-	RejectReason    string    `json:"rejectReason,omitempty"`
+	CommandID         string    `json:"commandId"`
+	CommandSequence   int64     `json:"commandSequence"`
+	Status            string    `json:"status"`
+	RuntimeInstanceID string    `json:"runtimeInstanceId"`
+	ReceivedAt        time.Time `json:"receivedAt"`
+	RejectReason      string    `json:"rejectReason,omitempty"`
 }
 
 type RuntimeHelloPayload struct {
-	ProtocolVersion              string   `json:"protocolVersion"`
-	DeviceID                     string   `json:"deviceId"`
-	ClientVersion                string   `json:"clientVersion"`
-	RuntimeCapabilities          []string `json:"runtimeCapabilities"`
-	LastReceivedCommandSequence  int64    `json:"lastReceivedCommandSequence"`
-	LastSentEventSequence        int64    `json:"lastSentEventSequence"`
-	LastAppliedDesiredRevision   int64    `json:"lastAppliedDesiredRevision"`
-	PendingCommandIDs            []string `json:"pendingCommandIds,omitempty"`
+	ProtocolVersion             string   `json:"protocolVersion"`
+	DeviceID                    string   `json:"deviceId"`
+	ClientVersion               string   `json:"clientVersion"`
+	RuntimeCapabilities         []string `json:"runtimeCapabilities"`
+	LastReceivedCommandSequence int64    `json:"lastReceivedCommandSequence"`
+	LastSentEventSequence       int64    `json:"lastSentEventSequence"`
+	LastAppliedDesiredRevision  int64    `json:"lastAppliedDesiredRevision"`
+	PendingCommandIDs           []string `json:"pendingCommandIds,omitempty"`
 }
 
 type RuntimeWelcomePayload struct {
-	RuntimeInstanceID      string    `json:"runtimeInstanceId"`
-	ServerTime             time.Time `json:"serverTime"`
-	AcceptedProtocolVersion string   `json:"acceptedProtocolVersion"`
-	CurrentDesiredRevision int64     `json:"currentDesiredRevision"`
-	ResumeMode             ResumeMode `json:"resumeMode"`
-	SessionID              string    `json:"sessionId"`
-	HeartbeatIntervalMs    int       `json:"heartbeatIntervalMs"`
-	HeartbeatTimeoutMs     int       `json:"heartbeatTimeoutMs"`
-	MaxMessageBytes        int       `json:"maxMessageBytes"`
+	RuntimeInstanceID       string     `json:"runtimeInstanceId"`
+	ServerTime              time.Time  `json:"serverTime"`
+	AcceptedProtocolVersion string     `json:"acceptedProtocolVersion"`
+	CurrentDesiredRevision  int64      `json:"currentDesiredRevision"`
+	ResumeMode              ResumeMode `json:"resumeMode"`
+	SessionID               string     `json:"sessionId"`
+	HeartbeatIntervalMs     int        `json:"heartbeatIntervalMs"`
+	HeartbeatTimeoutMs      int        `json:"heartbeatTimeoutMs"`
+	MaxMessageBytes         int        `json:"maxMessageBytes"`
 }
 
 type ActualStateMeta struct {
-	RuntimeInstanceID         string `json:"runtimeInstanceId"`
-	LastEventSequence         int64  `json:"lastEventSequence"`
-	LastCommandSequence       int64  `json:"lastCommandSequence"`
-	LastAppliedDesiredRevision int64 `json:"lastAppliedDesiredRevision"`
-	LastEventID               string `json:"lastEventId"`
+	RuntimeInstanceID          string `json:"runtimeInstanceId"`
+	LastEventSequence          int64  `json:"lastEventSequence"`
+	LastCommandSequence        int64  `json:"lastCommandSequence"`
+	LastAppliedDesiredRevision int64  `json:"lastAppliedDesiredRevision"`
+	LastEventID                string `json:"lastEventId"`
 }

@@ -8,7 +8,7 @@ func RegisterRoutes(r *gin.RouterGroup, svc *BehaviorService) {
 	handler := NewHandler(svc)
 	g := r.Group("/desktop-pet/behavior")
 	{
-		g.GET("/state/:userId/:characterId", handler.GetBehaviorState)
+		g.GET("/state/:characterId", handler.GetBehaviorState)
 		g.GET("/metrics", handler.GetMetrics)
 		g.POST("/simulate", handler.SimulateEvent)
 		g.POST("/reconcile", handler.TriggerReconcile)

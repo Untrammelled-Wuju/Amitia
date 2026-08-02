@@ -33,7 +33,7 @@ const (
 )
 
 type LegacySnapshotRequest struct {
-	IncludeEntities []LegacyEntityType
+	IncludeEntities  []LegacyEntityType
 	IncludeArtifacts bool
 	IncludeHistory   bool
 	Labels           map[string]string
@@ -55,31 +55,31 @@ type LegacySnapshot struct {
 }
 
 type LegacyEntityQuery struct {
-	EntityType  LegacyEntityType
-	Limit       int
-	Offset      int
-	Filter      map[string]string
-	OrderBy     string
-	OrderDesc   bool
+	EntityType LegacyEntityType
+	Limit      int
+	Offset     int
+	Filter     map[string]string
+	OrderBy    string
+	OrderDesc  bool
 }
 
 type LegacyEntityPage struct {
-	Items     []LegacyEntityRecord
-	Total     int64
-	Limit     int
-	Offset    int
-	HasMore   bool
+	Items   []LegacyEntityRecord
+	Total   int64
+	Limit   int
+	Offset  int
+	HasMore bool
 }
 
 type LegacyEntityRecord struct {
-	EntityType   LegacyEntityType
-	LegacyID     string
-	CanonicalID  string
-	RawData      json.RawMessage
-	Hash         string
-	Source       string
-	UpdatedAt    time.Time
-	Metadata     map[string]any
+	EntityType  LegacyEntityType
+	LegacyID    string
+	CanonicalID string
+	RawData     json.RawMessage
+	Hash        string
+	Source      string
+	UpdatedAt   time.Time
+	Metadata    map[string]any
 }
 
 type LegacyArtifactRecord struct {
@@ -94,12 +94,12 @@ type LegacyArtifactRecord struct {
 }
 
 type LegacyMigrationStatistics struct {
-	SnapshotID    string
-	EntityCounts  map[LegacyEntityType]int64
-	ArtifactCount int64
-	MissingArtifacts int64
+	SnapshotID         string
+	EntityCounts       map[LegacyEntityType]int64
+	ArtifactCount      int64
+	MissingArtifacts   int64
 	CorruptedArtifacts int64
-	GeneratedAt   time.Time
+	GeneratedAt        time.Time
 }
 
 type LegacyReadOnlyGateway interface {
@@ -113,11 +113,11 @@ type LegacyReadOnlyGateway interface {
 }
 
 var (
-	ErrSnapshotNotFound   = errors.New("migration: snapshot not found")
-	ErrSnapshotExpired    = errors.New("migration: snapshot expired")
-	ErrEntityNotFound     = errors.New("migration: entity not found")
-	ErrArtifactMissing    = errors.New("migration: artifact missing")
-	ErrWriteForbidden     = errors.New("migration: write forbidden on read-only gateway")
+	ErrSnapshotNotFound      = errors.New("migration: snapshot not found")
+	ErrSnapshotExpired       = errors.New("migration: snapshot expired")
+	ErrEntityNotFound        = errors.New("migration: entity not found")
+	ErrArtifactMissing       = errors.New("migration: artifact missing")
+	ErrWriteForbidden        = errors.New("migration: write forbidden on read-only gateway")
 	ErrSnapshotAlreadyExists = errors.New("migration: snapshot already exists")
 )
 
@@ -255,7 +255,7 @@ func (s *InMemoryEntityStore) Count(_ context.Context, snapshotID string, entity
 }
 
 type InMemoryArtifactStore struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	artifacts map[string]LegacyArtifactRecord
 }
 

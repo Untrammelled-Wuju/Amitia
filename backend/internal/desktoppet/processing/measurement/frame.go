@@ -3,15 +3,15 @@ package measurement
 import "encoding/json"
 
 type FrameMeasurementData struct {
-	FrameIndex     int                 `json:"frameIndex"`
-	SubjectBox     SubjectBoxData      `json:"subjectBox"`
-	SourceAnchor   AnchorData          `json:"sourceAnchor"`
-	TargetAnchor   AnchorData          `json:"targetAnchor"`
-	AlphaCoverage  float64             `json:"alphaCoverage"`
-	ComponentCount int                 `json:"componentCount"`
-	EdgeContact    EdgeContactData     `json:"edgeContact"`
-	Clipping       ClippingData        `json:"clipping"`
-	Trajectory     TrajectoryData      `json:"trajectory"`
+	FrameIndex     int                    `json:"frameIndex"`
+	SubjectBox     SubjectBoxData         `json:"subjectBox"`
+	SourceAnchor   AnchorData             `json:"sourceAnchor"`
+	TargetAnchor   AnchorData             `json:"targetAnchor"`
+	AlphaCoverage  float64                `json:"alphaCoverage"`
+	ComponentCount int                    `json:"componentCount"`
+	EdgeContact    EdgeContactData        `json:"edgeContact"`
+	Clipping       ClippingData           `json:"clipping"`
+	Trajectory     TrajectoryData         `json:"trajectory"`
 	StageMetrics   map[string]StageMetric `json:"stageMetrics,omitempty"`
 }
 
@@ -67,13 +67,13 @@ type StageMetric struct {
 }
 
 type SequenceMeasurement struct {
-	ActionKey         string                `json:"actionKey"`
-	FrameCount        int                   `json:"frameCount"`
+	ActionKey         string                 `json:"actionKey"`
+	FrameCount        int                    `json:"frameCount"`
 	FrameMeasurements []FrameMeasurementData `json:"frameMeasurements"`
-	ScaleResult       ScaleResultData       `json:"scaleResult"`
-	ReferenceFrame    int                   `json:"referenceFrame"`
-	ReferenceStrategy string                `json:"referenceStrategy"`
-	ProcessingReport  ProcessingReport      `json:"processingReport"`
+	ScaleResult       ScaleResultData        `json:"scaleResult"`
+	ReferenceFrame    int                    `json:"referenceFrame"`
+	ReferenceStrategy string                 `json:"referenceStrategy"`
+	ProcessingReport  ProcessingReport       `json:"processingReport"`
 }
 
 type ScaleResultData struct {
@@ -86,12 +86,12 @@ type ScaleResultData struct {
 }
 
 type ProcessingReport struct {
-	PipelineVersion string       `json:"pipelineVersion"`
-	ConfigHash      string       `json:"configHash"`
-	TotalDurationMs int64        `json:"totalDurationMs"`
-	ProviderUsed    string       `json:"providerUsed"`
-	Degraded        bool         `json:"degraded"`
-	DegradedReason  string       `json:"degradedReason,omitempty"`
+	PipelineVersion string        `json:"pipelineVersion"`
+	ConfigHash      string        `json:"configHash"`
+	TotalDurationMs int64         `json:"totalDurationMs"`
+	ProviderUsed    string        `json:"providerUsed"`
+	Degraded        bool          `json:"degraded"`
+	DegradedReason  string        `json:"degradedReason,omitempty"`
 	Stages          []StageReport `json:"stages"`
 }
 

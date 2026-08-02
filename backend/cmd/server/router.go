@@ -14,15 +14,17 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
+	"github.com/u-ai/backend/internal/desktoppet/doctor"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/quality"
+	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
-	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -95,11 +97,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
 		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx)
+		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
+		readiness.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		processing.RegisterProcessingRouter(apiGroup, ctx)
 		editing.RegisterEditingRouterWithService(apiGroup, services.EditingService)
 		quality.RegisterQualityRouter(apiGroup, services.QualityService)
 		installation.RegisterRoutes(apiGroup, services.InstallationService)
-		installation.RegisterReleaseRoutes(apiGroup, services.ReleaseService)
 		release.RegisterRoutes(apiGroup, services.NewReleaseService)
 		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)

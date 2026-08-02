@@ -315,13 +315,13 @@ func (s *StateStore) GetSnapshot(ctx context.Context, et contracts.EntityType, i
 	}
 
 	var row struct {
-		Status           string `gorm:"column:status"`
-		CurrentStage     string `gorm:"column:current_stage"`
-		RowVersion       int64  `gorm:"column:row_version"`
-		ExecutionID      string `gorm:"column:execution_id"`
-		WorkerID         string `gorm:"column:worker_id"`
+		Status            string `gorm:"column:status"`
+		CurrentStage      string `gorm:"column:current_stage"`
+		RowVersion        int64  `gorm:"column:row_version"`
+		ExecutionID       string `gorm:"column:execution_id"`
+		WorkerID          string `gorm:"column:worker_id"`
 		CancelRequestedAt string `gorm:"column:cancel_requested_at"`
-		LeaseExpiresAt   string `gorm:"column:lease_expires_at"`
+		LeaseExpiresAt    string `gorm:"column:lease_expires_at"`
 	}
 
 	allowedCols := columnsForEntity(et)
@@ -348,14 +348,14 @@ func (s *StateStore) GetSnapshot(ctx context.Context, et contracts.EntityType, i
 	}
 
 	snap := &taskstate.EntitySnapshot{
-		Status:          contracts.LifecycleStatus(row.Status),
-		Stage:           contracts.Stage(row.CurrentStage),
-		RowVersion:      row.RowVersion,
-		ExecutionID:     row.ExecutionID,
-		WorkerID:        row.WorkerID,
-		CancelRequested: row.CancelRequestedAt != "",
+		Status:            contracts.LifecycleStatus(row.Status),
+		Stage:             contracts.Stage(row.CurrentStage),
+		RowVersion:        row.RowVersion,
+		ExecutionID:       row.ExecutionID,
+		WorkerID:          row.WorkerID,
+		CancelRequested:   row.CancelRequestedAt != "",
 		CancelRequestedAt: row.CancelRequestedAt,
-		LeaseExpiresAt:  row.LeaseExpiresAt,
+		LeaseExpiresAt:    row.LeaseExpiresAt,
 	}
 	return snap, nil
 }

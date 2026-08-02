@@ -34,15 +34,15 @@ type agentSkillArtifactCacheEntry struct {
 }
 
 type AgentSkillService struct {
-	repository *Repository
-	registry   *Registry
-	validator  *SchemaValidator
-	limits     AgentSkillLimits
-	mu         sync.RWMutex
-	previews   map[string]agentSkillPreviewState
-	rounds     map[string]*agentSkillRoundState
-	artifacts  map[string]agentSkillArtifactCacheEntry
-	catalogs   map[string][]AgentSkillCatalogEntry
+	repository  *Repository
+	registry    *Registry
+	validator   *SchemaValidator
+	limits      AgentSkillLimits
+	mu          sync.RWMutex
+	previews    map[string]agentSkillPreviewState
+	rounds      map[string]*agentSkillRoundState
+	artifacts   map[string]agentSkillArtifactCacheEntry
+	catalogs    map[string][]AgentSkillCatalogEntry
 	afterRemove func(context.Context, string)
 }
 

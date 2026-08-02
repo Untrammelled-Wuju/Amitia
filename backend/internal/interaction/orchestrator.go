@@ -54,17 +54,17 @@ type ProcessRequest struct {
 }
 
 type ProcessResponse struct {
-	ConversationID string               `json:"conversationId"`
-	Sequence       int64                `json:"sequence"`
-	Reply          string               `json:"reply"`
-	Lines          []string             `json:"lines"`
-	CharacterID    string               `json:"characterId"`
-	CharacterName  string               `json:"characterName"`
-	MessageIDs     []string             `json:"messageIds"`
-	ForceVoice     bool                 `json:"forceVoice"`
-	AudioUrls      []string             `json:"audioUrls"`
-	RequestID      string               `json:"requestId"`
-	MessagePlan    *MessagePlan         `json:"messagePlan,omitempty"`
+	ConversationID string                `json:"conversationId"`
+	Sequence       int64                 `json:"sequence"`
+	Reply          string                `json:"reply"`
+	Lines          []string              `json:"lines"`
+	CharacterID    string                `json:"characterId"`
+	CharacterName  string                `json:"characterName"`
+	MessageIDs     []string              `json:"messageIds"`
+	ForceVoice     bool                  `json:"forceVoice"`
+	AudioUrls      []string              `json:"audioUrls"`
+	RequestID      string                `json:"requestId"`
+	MessagePlan    *MessagePlan          `json:"messagePlan,omitempty"`
 	Events         []outbox.OutboxRecord `json:"-"`
 }
 
@@ -103,11 +103,11 @@ const (
 )
 
 type OrchestrationResult struct {
-	InteractionID string               `json:"interactionId"`
-	Outcome       Outcome              `json:"outcome"`
-	Response      *ProcessResponse     `json:"response,omitempty"`
-	Error         string               `json:"error,omitempty"`
-	Duration      time.Duration        `json:"duration"`
+	InteractionID string                `json:"interactionId"`
+	Outcome       Outcome               `json:"outcome"`
+	Response      *ProcessResponse      `json:"response,omitempty"`
+	Error         string                `json:"error,omitempty"`
+	Duration      time.Duration         `json:"duration"`
 	Events        []outbox.OutboxRecord `json:"events,omitempty"`
 }
 

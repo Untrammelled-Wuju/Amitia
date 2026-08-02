@@ -8,11 +8,11 @@ import (
 )
 
 type Reconciler struct {
-	sessions    SessionService
-	commands    CommandService
-	events      EventService
-	states      ActualStateService
-	handler     *Handler
+	sessions SessionService
+	commands CommandService
+	events   EventService
+	states   ActualStateService
+	handler  *Handler
 }
 
 func NewReconciler(services *Services, handler *Handler) *Reconciler {
@@ -62,8 +62,8 @@ func (r *Reconciler) ExpireCommands(now time.Time) (int64, error) {
 			expired++
 
 			payload, _ := marshalJSON(map[string]interface{}{
-				"commandId":  cmd.ID,
-				"expiredAt":  now.Format(time.RFC3339),
+				"commandId": cmd.ID,
+				"expiredAt": now.Format(time.RFC3339),
 			})
 			seq := int64(0)
 			evtSeq, _ := r.events.GetLatestEventSeq(cmd.RuntimeSessionID)

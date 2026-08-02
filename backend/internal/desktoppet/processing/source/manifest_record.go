@@ -10,45 +10,45 @@ import (
 )
 
 type ProcessingSourceManifestRecord struct {
-	ID                    string `gorm:"column:id;primaryKey" json:"id"`
-	SchemaVersion         int    `gorm:"column:schema_version" json:"schemaVersion"`
-	UserID                string `gorm:"column:user_id;default:''" json:"userId,omitempty"`
-	CharacterID           string `gorm:"column:character_id;default:''" json:"characterId,omitempty"`
-	ProcessingTaskID      string `gorm:"column:processing_task_id" json:"processingTaskId"`
-	ProcessingActionID    string `gorm:"column:processing_action_id" json:"processingActionId"`
-	GenerationTaskID      string `gorm:"column:generation_task_id" json:"generationTaskId"`
-	GenerationActionID    string `gorm:"column:generation_action_id" json:"generationActionId"`
-	ActionKey             string `gorm:"column:action_key" json:"actionKey"`
-	GenerationMode        string `gorm:"column:generation_mode" json:"generationMode"`
-	GenerationAttemptID   string `gorm:"column:generation_attempt_id" json:"generationAttemptId"`
-	ActiveArtifactBindingRevision int64 `gorm:"column:active_artifact_binding_revision;default:0" json:"activeArtifactBindingRevision,omitempty"`
-	SourceArtifactID      string `gorm:"column:source_artifact_id" json:"sourceArtifactId"`
-	ArtifactRole          string `gorm:"column:artifact_role" json:"artifactRole"`
-	ArtifactKind          string `gorm:"column:artifact_kind" json:"artifactKind"`
-	ArtifactContentHash   string `gorm:"column:artifact_content_hash" json:"artifactContentHash"`
-	ArtifactStorageKey    string `gorm:"column:artifact_storage_key" json:"artifactStorageKey"`
-	ArtifactRelativePath  string `gorm:"column:artifact_relative_path" json:"artifactRelativePath"`
-	ArtifactWidth         int    `gorm:"column:artifact_width" json:"artifactWidth"`
-	ArtifactHeight        int    `gorm:"column:artifact_height" json:"artifactHeight"`
-	ArtifactMimeType      string `gorm:"column:artifact_mime_type" json:"artifactMimeType"`
-	ArtifactBytes         int64  `gorm:"column:artifact_bytes;default:0" json:"artifactBytes,omitempty"`
-	CandidateIndex        int    `gorm:"column:candidate_index" json:"candidateIndex"`
-	ReferenceAssetID      string `gorm:"column:reference_asset_id" json:"referenceAssetId"`
-	ReferenceAssetContentHash string `gorm:"column:reference_asset_content_hash;default:''" json:"referenceAssetContentHash,omitempty"`
-	GenerationPlanID      string `gorm:"column:generation_plan_id;default:''" json:"generationPlanId,omitempty"`
-	GenerationPlanHash    string `gorm:"column:generation_plan_hash;default:''" json:"generationPlanHash,omitempty"`
-	PromptDocumentID      string `gorm:"column:prompt_document_id" json:"promptDocumentId"`
-	PromptContentHash     string `gorm:"column:prompt_content_hash" json:"promptContentHash"`
-	ExpectedFrameCount    int    `gorm:"column:expected_frame_count" json:"expectedFrameCount"`
-	SpriteSheetLayoutJSON string `gorm:"column:sprite_sheet_layout_json" json:"spriteSheetLayoutJson"`
-	KeyframesJSON         string `gorm:"column:keyframes_json" json:"keyframesJson"`
-	LegacyFramesJSON      string `gorm:"column:legacy_frames_json" json:"legacyFramesJson"`
-	FramesJSON            string `gorm:"column:frames_json" json:"framesJson"`
-	ActionSpecSnapshotJSON string `gorm:"column:action_spec_snapshot_json" json:"actionSpecSnapshotJson"`
-	ActionSpecHash        string `gorm:"column:action_spec_hash;default:''" json:"actionSpecHash,omitempty"`
-	SourceConfigHash      string `gorm:"column:source_config_hash" json:"sourceConfigHash"`
-	ManifestHash          string `gorm:"column:manifest_hash" json:"manifestHash"`
-	CreatedAt             string `gorm:"column:created_at" json:"createdAt"`
+	ID                            string `gorm:"column:id;primaryKey" json:"id"`
+	SchemaVersion                 int    `gorm:"column:schema_version" json:"schemaVersion"`
+	UserID                        string `gorm:"column:user_id;default:''" json:"userId,omitempty"`
+	CharacterID                   string `gorm:"column:character_id;default:''" json:"characterId,omitempty"`
+	ProcessingTaskID              string `gorm:"column:processing_task_id" json:"processingTaskId"`
+	ProcessingActionID            string `gorm:"column:processing_action_id" json:"processingActionId"`
+	GenerationTaskID              string `gorm:"column:generation_task_id" json:"generationTaskId"`
+	GenerationActionID            string `gorm:"column:generation_action_id" json:"generationActionId"`
+	ActionKey                     string `gorm:"column:action_key" json:"actionKey"`
+	GenerationMode                string `gorm:"column:generation_mode" json:"generationMode"`
+	GenerationAttemptID           string `gorm:"column:generation_attempt_id" json:"generationAttemptId"`
+	ActiveArtifactBindingRevision int64  `gorm:"column:active_artifact_binding_revision;default:0" json:"activeArtifactBindingRevision,omitempty"`
+	SourceArtifactID              string `gorm:"column:source_artifact_id" json:"sourceArtifactId"`
+	ArtifactRole                  string `gorm:"column:artifact_role" json:"artifactRole"`
+	ArtifactKind                  string `gorm:"column:artifact_kind" json:"artifactKind"`
+	ArtifactContentHash           string `gorm:"column:artifact_content_hash" json:"artifactContentHash"`
+	ArtifactStorageKey            string `gorm:"column:artifact_storage_key" json:"artifactStorageKey"`
+	ArtifactRelativePath          string `gorm:"column:artifact_relative_path" json:"artifactRelativePath"`
+	ArtifactWidth                 int    `gorm:"column:artifact_width" json:"artifactWidth"`
+	ArtifactHeight                int    `gorm:"column:artifact_height" json:"artifactHeight"`
+	ArtifactMimeType              string `gorm:"column:artifact_mime_type" json:"artifactMimeType"`
+	ArtifactBytes                 int64  `gorm:"column:artifact_bytes;default:0" json:"artifactBytes,omitempty"`
+	CandidateIndex                int    `gorm:"column:candidate_index" json:"candidateIndex"`
+	ReferenceAssetID              string `gorm:"column:reference_asset_id" json:"referenceAssetId"`
+	ReferenceAssetContentHash     string `gorm:"column:reference_asset_content_hash;default:''" json:"referenceAssetContentHash,omitempty"`
+	GenerationPlanID              string `gorm:"column:generation_plan_id;default:''" json:"generationPlanId,omitempty"`
+	GenerationPlanHash            string `gorm:"column:generation_plan_hash;default:''" json:"generationPlanHash,omitempty"`
+	PromptDocumentID              string `gorm:"column:prompt_document_id" json:"promptDocumentId"`
+	PromptContentHash             string `gorm:"column:prompt_content_hash" json:"promptContentHash"`
+	ExpectedFrameCount            int    `gorm:"column:expected_frame_count" json:"expectedFrameCount"`
+	SpriteSheetLayoutJSON         string `gorm:"column:sprite_sheet_layout_json" json:"spriteSheetLayoutJson"`
+	KeyframesJSON                 string `gorm:"column:keyframes_json" json:"keyframesJson"`
+	LegacyFramesJSON              string `gorm:"column:legacy_frames_json" json:"legacyFramesJson"`
+	FramesJSON                    string `gorm:"column:frames_json" json:"framesJson"`
+	ActionSpecSnapshotJSON        string `gorm:"column:action_spec_snapshot_json" json:"actionSpecSnapshotJson"`
+	ActionSpecHash                string `gorm:"column:action_spec_hash;default:''" json:"actionSpecHash,omitempty"`
+	SourceConfigHash              string `gorm:"column:source_config_hash" json:"sourceConfigHash"`
+	ManifestHash                  string `gorm:"column:manifest_hash" json:"manifestHash"`
+	CreatedAt                     string `gorm:"column:created_at" json:"createdAt"`
 }
 
 func (ProcessingSourceManifestRecord) TableName() string {
@@ -183,43 +183,43 @@ func (b *ManifestBuilder) Build(req BuildManifestRequest) (*ProcessingSourceMani
 	}
 
 	record := &ProcessingSourceManifestRecord{
-		ID:                     req.ID,
-		SchemaVersion:          2,
-		UserID:                 req.UserID,
-		CharacterID:            req.CharacterID,
-		ProcessingTaskID:       req.ProcessingTaskID,
-		ProcessingActionID:     req.ProcessingActionID,
-		GenerationTaskID:       req.GenerationTaskID,
-		GenerationActionID:     req.GenerationActionID,
-		ActionKey:              descriptor.ActionKey,
-		GenerationMode:         descriptor.GenerationMode,
-		GenerationAttemptID:    descriptor.SourceAttemptID,
+		ID:                            req.ID,
+		SchemaVersion:                 2,
+		UserID:                        req.UserID,
+		CharacterID:                   req.CharacterID,
+		ProcessingTaskID:              req.ProcessingTaskID,
+		ProcessingActionID:            req.ProcessingActionID,
+		GenerationTaskID:              req.GenerationTaskID,
+		GenerationActionID:            req.GenerationActionID,
+		ActionKey:                     descriptor.ActionKey,
+		GenerationMode:                descriptor.GenerationMode,
+		GenerationAttemptID:           descriptor.SourceAttemptID,
 		ActiveArtifactBindingRevision: req.ActiveArtifactBindingRevision,
-		SourceArtifactID:       descriptor.Artifact.ArtifactID,
-		ArtifactRole:           "primary",
-		ArtifactKind:           string(descriptor.SourceKind),
-		ArtifactContentHash:    descriptor.Artifact.ContentHash,
-		ArtifactStorageKey:     descriptor.Artifact.RelativePath,
-		ArtifactRelativePath:   descriptor.Artifact.RelativePath,
-		ArtifactWidth:          descriptor.Artifact.Width,
-		ArtifactHeight:         descriptor.Artifact.Height,
-		ArtifactMimeType:       descriptor.Artifact.MIMEType,
-		CandidateIndex:         descriptor.CandidateIndex,
-		ReferenceAssetID:       req.ReferenceAssetID,
-		ReferenceAssetContentHash: req.ReferenceAssetContentHash,
-		GenerationPlanID:       req.GenerationPlanID,
-		GenerationPlanHash:     req.GenerationPlanHash,
-		PromptDocumentID:       req.PromptDocumentID,
-		PromptContentHash:      req.PromptContentHash,
-		ExpectedFrameCount:     len(descriptor.Frames),
-		SpriteSheetLayoutJSON:  layoutJSON,
-		KeyframesJSON:           "[]",
-		LegacyFramesJSON:        "[]",
-		FramesJSON:             framesJSON,
-		ActionSpecSnapshotJSON: actionSpecJSON,
-		ActionSpecHash:         req.ActionSpecHash,
-		SourceConfigHash:       descriptor.SourceConfigHash,
-		CreatedAt:              b.now(),
+		SourceArtifactID:              descriptor.Artifact.ArtifactID,
+		ArtifactRole:                  "primary",
+		ArtifactKind:                  string(descriptor.SourceKind),
+		ArtifactContentHash:           descriptor.Artifact.ContentHash,
+		ArtifactStorageKey:            descriptor.Artifact.RelativePath,
+		ArtifactRelativePath:          descriptor.Artifact.RelativePath,
+		ArtifactWidth:                 descriptor.Artifact.Width,
+		ArtifactHeight:                descriptor.Artifact.Height,
+		ArtifactMimeType:              descriptor.Artifact.MIMEType,
+		CandidateIndex:                descriptor.CandidateIndex,
+		ReferenceAssetID:              req.ReferenceAssetID,
+		ReferenceAssetContentHash:     req.ReferenceAssetContentHash,
+		GenerationPlanID:              req.GenerationPlanID,
+		GenerationPlanHash:            req.GenerationPlanHash,
+		PromptDocumentID:              req.PromptDocumentID,
+		PromptContentHash:             req.PromptContentHash,
+		ExpectedFrameCount:            len(descriptor.Frames),
+		SpriteSheetLayoutJSON:         layoutJSON,
+		KeyframesJSON:                 "[]",
+		LegacyFramesJSON:              "[]",
+		FramesJSON:                    framesJSON,
+		ActionSpecSnapshotJSON:        actionSpecJSON,
+		ActionSpecHash:                req.ActionSpecHash,
+		SourceConfigHash:              descriptor.SourceConfigHash,
+		CreatedAt:                     b.now(),
 	}
 	record.ManifestHash = record.ComputeManifestHash()
 
@@ -227,21 +227,21 @@ func (b *ManifestBuilder) Build(req BuildManifestRequest) (*ProcessingSourceMani
 }
 
 type BuildManifestRequest struct {
-	ID                  string
-	UserID              string
-	CharacterID         string
-	ProcessingTaskID    string
-	ProcessingActionID  string
-	GenerationTaskID    string
-	GenerationActionID  string
-	Descriptor          *ProcessingSourceDescriptor
+	ID                            string
+	UserID                        string
+	CharacterID                   string
+	ProcessingTaskID              string
+	ProcessingActionID            string
+	GenerationTaskID              string
+	GenerationActionID            string
+	Descriptor                    *ProcessingSourceDescriptor
 	ActiveArtifactBindingRevision int64
-	ReferenceAssetID    string
-	ReferenceAssetContentHash string
-	GenerationPlanID    string
-	GenerationPlanHash  string
-	PromptDocumentID    string
-	PromptContentHash   string
-	ActionSpecSnapshot  *ActionSpecSnapshot
-	ActionSpecHash      string
+	ReferenceAssetID              string
+	ReferenceAssetContentHash     string
+	GenerationPlanID              string
+	GenerationPlanHash            string
+	PromptDocumentID              string
+	PromptContentHash             string
+	ActionSpecSnapshot            *ActionSpecSnapshot
+	ActionSpecHash                string
 }

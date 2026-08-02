@@ -23,7 +23,7 @@ type FramePhase struct {
 }
 
 type ActionGenerationSpec struct {
-	ActionKey               string
+	ActionKey              string
 	LoopType               string
 	FrameCount             int
 	FramePhases            []FramePhase
@@ -49,7 +49,7 @@ func fromContracts(spec contracts.ActionSpec) ActionGenerationSpec {
 	}
 
 	return ActionGenerationSpec{
-		ActionKey:               spec.Identity.Key,
+		ActionKey:              spec.Identity.Key,
 		LoopType:               loopType,
 		FrameCount:             spec.Generation.FrameCount,
 		FramePhases:            phases,

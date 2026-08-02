@@ -25,14 +25,14 @@ type RuntimeDesiredStatePublisher interface {
 
 type DesiredStateSnapshot struct {
 	DesiredRevision int64
-	DesiredHash    string
-	InstallationID string
-	PetID          string
-	ReleaseID      string
-	UserID         string
-	DeviceID       string
-	RuntimeID      string
-	EnsureAbsent   bool
+	DesiredHash     string
+	InstallationID  string
+	PetID           string
+	ReleaseID       string
+	UserID          string
+	DeviceID        string
+	RuntimeID       string
+	EnsureAbsent    bool
 }
 
 type DeviceContext struct {
@@ -58,11 +58,11 @@ type ProjectionService interface {
 type RuntimeHeartbeat struct {
 	AppliedDesiredRevision  int64
 	AppliedSettingsRevision int64
-	ActualReleaseID        string
-	ActualVisible          int
-	ActualActionKey        string
-	ActualHealth           string
-	Timestamp              string
+	ActualReleaseID         string
+	ActualVisible           int
+	ActualActionKey         string
+	ActualHealth            string
+	Timestamp               string
 }
 
 type CommandResult struct {
@@ -79,7 +79,7 @@ type Projection struct {
 	InstallationID         string
 	PetID                  string
 	AppliedDesiredRevision int64
-	ActualReleaseID       string
+	ActualReleaseID        string
 	RuntimeSyncState       string
 }
 
@@ -125,8 +125,8 @@ func NewCoordinator(
 		runtimePublisher: publisher,
 		projectionSvc:    projection,
 		executionID:      generateExecutionID(),
-		defaultLeaseTTL:   5 * time.Minute,
-		maxRetryAttempts:  3,
+		defaultLeaseTTL:  5 * time.Minute,
+		maxRetryAttempts: 3,
 	}
 }
 
@@ -212,17 +212,17 @@ func (c *Coordinator) Repair(ctx context.Context, req RepairRequest) (*InstallRe
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
 	op := &operation.InstallationOperation{
-		ID:              uuidPrefix("opin_"),
-		OperationType:   operation.TypeRepair,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		InstallationID:   req.InstallationID,
-		IdempotencyKey:   c.buildIdempotencyKey(operation.TypeRepair, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
-		Status:           operation.OpStatusRunning,
-		Stage:            operation.OpStageRequestValidated,
-		CreatedAt:        time.Now().Format(operationTimeFormat),
-		UpdatedAt:        time.Now().Format(operationTimeFormat),
+		ID:             uuidPrefix("opin_"),
+		OperationType:  operation.TypeRepair,
+		UserID:         req.DeviceCtx.UserID,
+		DeviceID:       req.DeviceCtx.DeviceID,
+		RuntimeID:      req.DeviceCtx.RuntimeID,
+		InstallationID: req.InstallationID,
+		IdempotencyKey: c.buildIdempotencyKey(operation.TypeRepair, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
+		Status:         operation.OpStatusRunning,
+		Stage:          operation.OpStageRequestValidated,
+		CreatedAt:      time.Now().Format(operationTimeFormat),
+		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
 	_ = op
 	return &InstallResult{OperationID: op.ID, Status: operation.OpStatusRunning, Stage: operation.OpStageRequestValidated}, nil
@@ -233,17 +233,17 @@ func (c *Coordinator) Uninstall(ctx context.Context, req UninstallRequest) (*Uni
 		return &UninstallResult{Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
 	}
 	op := &operation.InstallationOperation{
-		ID:              uuidPrefix("opin_"),
-		OperationType:   operation.TypeUninstall,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		InstallationID:   req.InstallationID,
-		IdempotencyKey:   c.buildIdempotencyKey(operation.TypeUninstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
-		Status:           operation.OpStatusRunning,
-		Stage:            operation.OpStageRequestValidated,
-		CreatedAt:        time.Now().Format(operationTimeFormat),
-		UpdatedAt:        time.Now().Format(operationTimeFormat),
+		ID:             uuidPrefix("opin_"),
+		OperationType:  operation.TypeUninstall,
+		UserID:         req.DeviceCtx.UserID,
+		DeviceID:       req.DeviceCtx.DeviceID,
+		RuntimeID:      req.DeviceCtx.RuntimeID,
+		InstallationID: req.InstallationID,
+		IdempotencyKey: c.buildIdempotencyKey(operation.TypeUninstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
+		Status:         operation.OpStatusRunning,
+		Stage:          operation.OpStageRequestValidated,
+		CreatedAt:      time.Now().Format(operationTimeFormat),
+		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
 	_ = op
 	return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusRunning}, nil
@@ -254,18 +254,18 @@ func (c *Coordinator) UpdateSettings(ctx context.Context, req SettingsRequest) (
 		return &SettingsResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
 	op := &operation.InstallationOperation{
-		ID:              uuidPrefix("opin_"),
-		OperationType:   operation.TypeSettings,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		InstallationID:   req.InstallationID,
-		IdempotencyKey:   c.buildIdempotencyKey(operation.TypeSettings, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
-		Status:           operation.OpStatusCompleted,
-		Stage:            operation.OpStageCompleted,
-		CreatedAt:        time.Now().Format(operationTimeFormat),
-		UpdatedAt:        time.Now().Format(operationTimeFormat),
-		CompletedAt:      time.Now().Format(operationTimeFormat),
+		ID:             uuidPrefix("opin_"),
+		OperationType:  operation.TypeSettings,
+		UserID:         req.DeviceCtx.UserID,
+		DeviceID:       req.DeviceCtx.DeviceID,
+		RuntimeID:      req.DeviceCtx.RuntimeID,
+		InstallationID: req.InstallationID,
+		IdempotencyKey: c.buildIdempotencyKey(operation.TypeSettings, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
+		Status:         operation.OpStatusCompleted,
+		Stage:          operation.OpStageCompleted,
+		CreatedAt:      time.Now().Format(operationTimeFormat),
+		UpdatedAt:      time.Now().Format(operationTimeFormat),
+		CompletedAt:    time.Now().Format(operationTimeFormat),
 	}
 	_ = op
 	return &SettingsResult{
@@ -281,18 +281,18 @@ func (c *Coordinator) ChangeDefaultAction(ctx context.Context, req DefaultAction
 		return &EnableDisableResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
 	op := &operation.InstallationOperation{
-		ID:              uuidPrefix("opin_"),
-		OperationType:   operation.TypeDefaultAction,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		InstallationID:   req.InstallationID,
-		IdempotencyKey:   c.buildIdempotencyKey(operation.TypeDefaultAction, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.DesiredActionKey),
-		Status:           operation.OpStatusCompleted,
-		Stage:            operation.OpStageCompleted,
-		CreatedAt:        time.Now().Format(operationTimeFormat),
-		UpdatedAt:        time.Now().Format(operationTimeFormat),
-		CompletedAt:      time.Now().Format(operationTimeFormat),
+		ID:             uuidPrefix("opin_"),
+		OperationType:  operation.TypeDefaultAction,
+		UserID:         req.DeviceCtx.UserID,
+		DeviceID:       req.DeviceCtx.DeviceID,
+		RuntimeID:      req.DeviceCtx.RuntimeID,
+		InstallationID: req.InstallationID,
+		IdempotencyKey: c.buildIdempotencyKey(operation.TypeDefaultAction, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.DesiredActionKey),
+		Status:         operation.OpStatusCompleted,
+		Stage:          operation.OpStageCompleted,
+		CreatedAt:      time.Now().Format(operationTimeFormat),
+		UpdatedAt:      time.Now().Format(operationTimeFormat),
+		CompletedAt:    time.Now().Format(operationTimeFormat),
 	}
 	_ = op
 	return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusCompleted}, nil
@@ -303,18 +303,18 @@ func (c *Coordinator) Recenter(ctx context.Context, req RecenterRequest) (*Enabl
 		return &EnableDisableResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
 	op := &operation.InstallationOperation{
-		ID:              uuidPrefix("opin_"),
-		OperationType:   operation.TypeRecenter,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		InstallationID:   req.InstallationID,
-		IdempotencyKey:   c.buildIdempotencyKey(operation.TypeRecenter, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
-		Status:           operation.OpStatusCompleted,
-		Stage:            operation.OpStageCompleted,
-		CreatedAt:        time.Now().Format(operationTimeFormat),
-		UpdatedAt:        time.Now().Format(operationTimeFormat),
-		CompletedAt:      time.Now().Format(operationTimeFormat),
+		ID:             uuidPrefix("opin_"),
+		OperationType:  operation.TypeRecenter,
+		UserID:         req.DeviceCtx.UserID,
+		DeviceID:       req.DeviceCtx.DeviceID,
+		RuntimeID:      req.DeviceCtx.RuntimeID,
+		InstallationID: req.InstallationID,
+		IdempotencyKey: c.buildIdempotencyKey(operation.TypeRecenter, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID),
+		Status:         operation.OpStatusCompleted,
+		Stage:          operation.OpStageCompleted,
+		CreatedAt:      time.Now().Format(operationTimeFormat),
+		UpdatedAt:      time.Now().Format(operationTimeFormat),
+		CompletedAt:    time.Now().Format(operationTimeFormat),
 	}
 	_ = op
 	return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusCompleted}, nil
@@ -343,17 +343,17 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 	op := &operation.InstallationOperation{
 		ID:              uuidPrefix("opin_"),
 		OperationType:   operation.TypeInstall,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		PetID:            req.PetID,
-		TargetReleaseID:  req.TargetReleaseID,
-		SourceReleaseID:  req.SourceReleaseID,
-		IdempotencyKey:   idempotencyKey,
-		Status:           operation.OpStatusCreated,
-		Stage:            operation.OpStageRequestValidated,
-		CreatedAt:        time.Now().Format(operationTimeFormat),
-		UpdatedAt:        time.Now().Format(operationTimeFormat),
+		UserID:          req.DeviceCtx.UserID,
+		DeviceID:        req.DeviceCtx.DeviceID,
+		RuntimeID:       req.DeviceCtx.RuntimeID,
+		PetID:           req.PetID,
+		TargetReleaseID: req.TargetReleaseID,
+		SourceReleaseID: req.SourceReleaseID,
+		IdempotencyKey:  idempotencyKey,
+		Status:          operation.OpStatusCreated,
+		Stage:           operation.OpStageRequestValidated,
+		CreatedAt:       time.Now().Format(operationTimeFormat),
+		UpdatedAt:       time.Now().Format(operationTimeFormat),
 	}
 	if c.releaseValidator == nil {
 		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "NOT_CONFIGURED", ErrorMessage: "releaseValidator not configured"}, errors.New("releaseValidator not configured")
@@ -381,18 +381,18 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		opType = operation.TypeDisable
 	}
 	op := &operation.InstallationOperation{
-		ID:              uuidPrefix("opin_"),
-		OperationType:   opType,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		InstallationID:   req.InstallationID,
-		IdempotencyKey:   idempotencyKey,
-		Status:           operation.OpStatusCompleted,
-		Stage:            operation.OpStageCompleted,
-		CreatedAt:        time.Now().Format(operationTimeFormat),
-		UpdatedAt:        time.Now().Format(operationTimeFormat),
-		CompletedAt:      time.Now().Format(operationTimeFormat),
+		ID:             uuidPrefix("opin_"),
+		OperationType:  opType,
+		UserID:         req.DeviceCtx.UserID,
+		DeviceID:       req.DeviceCtx.DeviceID,
+		RuntimeID:      req.DeviceCtx.RuntimeID,
+		InstallationID: req.InstallationID,
+		IdempotencyKey: idempotencyKey,
+		Status:         operation.OpStatusCompleted,
+		Stage:          operation.OpStageCompleted,
+		CreatedAt:      time.Now().Format(operationTimeFormat),
+		UpdatedAt:      time.Now().Format(operationTimeFormat),
+		CompletedAt:    time.Now().Format(operationTimeFormat),
 	}
 	_ = op
 	return &EnableDisableResult{Status: operation.OpStatusCompleted}, nil
@@ -412,11 +412,11 @@ func (c *Coordinator) failInstall(op *operation.InstallationOperation, stage str
 	op.Stage = stage
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
 	return &InstallResult{
-		OperationID:   op.ID,
-		Status:        operation.OpStatusFailedTerminal,
-		Stage:         stage,
-		ErrorCode:     op.ErrorCode,
-		ErrorMessage:  cause.Error(),
+		OperationID:  op.ID,
+		Status:       operation.OpStatusFailedTerminal,
+		Stage:        stage,
+		ErrorCode:    op.ErrorCode,
+		ErrorMessage: cause.Error(),
 	}, cause
 }
 

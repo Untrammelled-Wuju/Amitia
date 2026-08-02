@@ -57,28 +57,28 @@ type PluginHost struct {
 	definitionHash      string
 	hostAPI             host_api.Gateway
 
-	nodePath       string
-	pluginHostPath string
-	workDir        string
-	env            []string
+	nodePath        string
+	pluginHostPath  string
+	workDir         string
+	env             []string
 	networkDisabled bool
-	expectedNonce  string
-	cmd            *exec.Cmd
-	stdin          io.WriteCloser
-	stdoutPipe     io.ReadCloser
-	stderrPipe     io.ReadCloser
-	pid            int
-	procCtx        context.Context
-	procCancel     context.CancelFunc
-	writeMu        sync.Mutex
-	pending        map[string]chan *jsonrpc.Response
-	pendingMu      sync.Mutex
-	reqCounter     int64
-	done           chan struct{}
-	closeOnce      sync.Once
-	exitErr        error
-	helloCh        chan *jsonrpc.Notification
-	readyCh        chan *jsonrpc.Notification
+	expectedNonce   string
+	cmd             *exec.Cmd
+	stdin           io.WriteCloser
+	stdoutPipe      io.ReadCloser
+	stderrPipe      io.ReadCloser
+	pid             int
+	procCtx         context.Context
+	procCancel      context.CancelFunc
+	writeMu         sync.Mutex
+	pending         map[string]chan *jsonrpc.Response
+	pendingMu       sync.Mutex
+	reqCounter      int64
+	done            chan struct{}
+	closeOnce       sync.Once
+	exitErr         error
+	helloCh         chan *jsonrpc.Notification
+	readyCh         chan *jsonrpc.Notification
 }
 
 type PluginHostConfig struct {

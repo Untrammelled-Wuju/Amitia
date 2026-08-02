@@ -11,19 +11,19 @@ import (
 )
 
 type RepoSourceResolver struct {
-	repo        processing.Repository
-	dataDir     string
+	repo         processing.Repository
+	dataDir      string
 	artifactRepo source.ArtifactSourceRepo
-	spriteSheet *source.SpriteSheetSourceAdapter
-	singleFrame *source.SingleFrameSourceAdapter
-	keyframe    *source.KeyframeSourceAdapter
-	legacy      *source.LegacyFrameAdapter
+	spriteSheet  *source.SpriteSheetSourceAdapter
+	singleFrame  *source.SingleFrameSourceAdapter
+	keyframe     *source.KeyframeSourceAdapter
+	legacy       *source.LegacyFrameAdapter
 }
 
 func NewRepoSourceResolver(repo processing.Repository, dataDir string, artifactRepo source.ArtifactSourceRepo) *RepoSourceResolver {
 	r := &RepoSourceResolver{
-		repo:        repo,
-		dataDir:     dataDir,
+		repo:         repo,
+		dataDir:      dataDir,
 		artifactRepo: artifactRepo,
 	}
 	if artifactRepo != nil {
@@ -259,7 +259,7 @@ func (a *RepoArtifactSourceAdapter) GetGenerationActionInfo(generationActionID s
 	return &source.GenerationActionValidationInfo{
 		ID:        action.ID,
 		ActionKey: action.ActionKey,
-		TaskID:     action.TaskID,
+		TaskID:    action.TaskID,
 	}, nil
 }
 

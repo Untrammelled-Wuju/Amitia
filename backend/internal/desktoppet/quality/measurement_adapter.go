@@ -31,15 +31,15 @@ type FrameData struct {
 }
 
 type ActionMetadata struct {
-	ActionKey       string
-	LoopType        string
-	PlaybackMode    string
-	AnchorProfile   string
-	ActionSpecHash  string
-	CanvasWidth     int
-	CanvasHeight    int
-	FrameCount      int
-	RevisionHash    string
+	ActionKey      string
+	LoopType       string
+	PlaybackMode   string
+	AnchorProfile  string
+	ActionSpecHash string
+	CanvasWidth    int
+	CanvasHeight   int
+	FrameCount     int
+	RevisionHash   string
 }
 
 type MeasurementDataProvider interface {

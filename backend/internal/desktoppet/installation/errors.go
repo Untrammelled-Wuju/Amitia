@@ -8,32 +8,32 @@ import (
 )
 
 const (
-	ErrCodeInstallationNotFound        = "INSTALLATION_NOT_FOUND"
-	ErrCodeInstallationDuplicate       = "INSTALLATION_DUPLICATE"
-	ErrCodeInstallationInvalid         = "INSTALLATION_INVALID"
-	ErrCodeInstallationFailed          = "INSTALLATION_FAILED"
-	ErrCodeRuntimeSettingsNotFound     = "RUNTIME_SETTINGS_NOT_FOUND"
-	ErrCodePackageNotReady             = "PACKAGE_NOT_READY"
-	ErrCodePackagePathTraversal        = "PACKAGE_PATH_TRAVERSAL"
-	ErrCodePackageSymlinkEscape        = "PACKAGE_SYMLINK_ESCAPE"
-	ErrCodePackageExecutableFound      = "PACKAGE_EXECUTABLE_FOUND"
-	ErrCodePackageHashMismatch         = "PACKAGE_HASH_MISMATCH"
-	ErrCodePackageDefaultActionInvalid = "PACKAGE_DEFAULT_ACTION_INVALID"
-	ErrCodeCharacterNotFound           = "CHARACTER_NOT_FOUND"
-	ErrCodePurgeNotConfirmed           = "PURGE_NOT_CONFIRMED"
-	ErrCodeDefaultActionNotIdle        = "DEFAULT_ACTION_NOT_IDLE"
-	ErrCodePetNotEnabled               = "PET_NOT_ENABLED"
-	ErrCodeActionNotFound              = "ACTION_NOT_FOUND"
-	ErrCodeRevisionConflict            = "REVISION_CONFLICT"
-	ErrCodeRuntimeDeliveryFailed       = "RUNTIME_DELIVERY_FAILED"
-	ErrCodePackageQualityGateBlocked   = "PACKAGE_QUALITY_GATE_BLOCKED"
-	ErrCodeInstallationReleaseInvalid     = "INSTALLATION_RELEASE_INVALID"
-	ErrCodeInstallationReleaseRevoked     = "INSTALLATION_RELEASE_REVOKED"
-	ErrCodeInstallationReleaseIntegrity   = "INSTALLATION_RELEASE_INTEGRITY_FAILED"
+	ErrCodeInstallationNotFound            = "INSTALLATION_NOT_FOUND"
+	ErrCodeInstallationDuplicate           = "INSTALLATION_DUPLICATE"
+	ErrCodeInstallationInvalid             = "INSTALLATION_INVALID"
+	ErrCodeInstallationFailed              = "INSTALLATION_FAILED"
+	ErrCodeRuntimeSettingsNotFound         = "RUNTIME_SETTINGS_NOT_FOUND"
+	ErrCodePackageNotReady                 = "PACKAGE_NOT_READY"
+	ErrCodePackagePathTraversal            = "PACKAGE_PATH_TRAVERSAL"
+	ErrCodePackageSymlinkEscape            = "PACKAGE_SYMLINK_ESCAPE"
+	ErrCodePackageExecutableFound          = "PACKAGE_EXECUTABLE_FOUND"
+	ErrCodePackageHashMismatch             = "PACKAGE_HASH_MISMATCH"
+	ErrCodePackageDefaultActionInvalid     = "PACKAGE_DEFAULT_ACTION_INVALID"
+	ErrCodeCharacterNotFound               = "CHARACTER_NOT_FOUND"
+	ErrCodePurgeNotConfirmed               = "PURGE_NOT_CONFIRMED"
+	ErrCodeDefaultActionNotIdle            = "DEFAULT_ACTION_NOT_IDLE"
+	ErrCodePetNotEnabled                   = "PET_NOT_ENABLED"
+	ErrCodeActionNotFound                  = "ACTION_NOT_FOUND"
+	ErrCodeRevisionConflict                = "REVISION_CONFLICT"
+	ErrCodeRuntimeDeliveryFailed           = "RUNTIME_DELIVERY_FAILED"
+	ErrCodePackageQualityGateBlocked       = "PACKAGE_QUALITY_GATE_BLOCKED"
+	ErrCodeInstallationReleaseInvalid      = "INSTALLATION_RELEASE_INVALID"
+	ErrCodeInstallationReleaseRevoked      = "INSTALLATION_RELEASE_REVOKED"
+	ErrCodeInstallationReleaseIntegrity    = "INSTALLATION_RELEASE_INTEGRITY_FAILED"
 	ErrCodeInstallationReleaseIncompatible = "INSTALLATION_RELEASE_INCOMPATIBLE"
-	ErrCodeInstallationSettingsConflict   = "INSTALLATION_SETTINGS_CONFLICT"
-	ErrCodeRuntimeApplyTimeout            = "RUNTIME_APPLY_TIMEOUT"
-	ErrCodeInstallationNotActive          = "INSTALLATION_NOT_ACTIVE"
+	ErrCodeInstallationSettingsConflict    = "INSTALLATION_SETTINGS_CONFLICT"
+	ErrCodeRuntimeApplyTimeout             = "RUNTIME_APPLY_TIMEOUT"
+	ErrCodeInstallationNotActive           = "INSTALLATION_NOT_ACTIVE"
 )
 
 var (
@@ -56,16 +56,16 @@ var (
 	ErrRevisionConflict            = errors.New("settings revision conflict")
 	ErrPackageQualityGateBlocked   = errors.New("package quality gate blocked")
 
-	ErrBindingNotFound             = errors.New("binding: not found for device")
+	ErrBindingNotFound              = errors.New("binding: not found for device")
 	ErrDesiredStateRevisionConflict = errors.New("desired state revision conflict")
 	ErrDesiredStateRevisionNotFound = errors.New("desired state revision counter not found")
-	ErrOperationNotFound           = errors.New("operation not found")
-	ErrOperationLeaseLost          = errors.New("operation lease lost")
-	ErrOperationLeaseNotAvailable  = errors.New("operation lease not available")
-	ErrJournalNotFound             = errors.New("journal not found")
-	ErrJournalStageConflict        = errors.New("journal stage conflict")
-	ErrProjectionNotFound          = errors.New("runtime projection not found")
-	ErrSettingsRevisionConflict    = errors.New("settings revision conflict")
+	ErrOperationNotFound            = errors.New("operation not found")
+	ErrOperationLeaseLost           = errors.New("operation lease lost")
+	ErrOperationLeaseNotAvailable   = errors.New("operation lease not available")
+	ErrJournalNotFound              = errors.New("journal not found")
+	ErrJournalStageConflict         = errors.New("journal stage conflict")
+	ErrProjectionNotFound           = errors.New("runtime projection not found")
+	ErrSettingsRevisionConflict     = errors.New("settings revision conflict")
 )
 
 type InstallationError struct {

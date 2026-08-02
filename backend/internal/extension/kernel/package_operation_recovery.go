@@ -859,7 +859,6 @@ func (r *Runtime) proveInstalledTree(installedPath string, installation domain.E
 	return nil
 }
 
-
 func (r *Runtime) validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation PackageOperationRecord) error {
 	if qm.QuarantineID == "" {
 		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("quarantine_id is empty"))
@@ -875,6 +874,21 @@ func (r *Runtime) validateQuarantineMetadataIntegrity(qm PackageQuarantineMetada
 	}
 	if qm.FencingToken <= 0 {
 		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("fencing_token is zero or missing"))
+	}
+	if r.container != nil && r.container.PackageRepository != nil {
+		var liveToken int64
+		var liveOpID string
+		db := r.container.PackageRepository.DB()
+		if db != nil {
+			if err := db.QueryRowContext(context.Background(),
+				`SELECT fencing_token, operation_id FROM extension_package_operation_leases WHERE extension_id = ?`,
+				operation.ExtensionID).Scan(&liveToken, &liveOpID); err == nil {
+				if liveToken != qm.FencingToken {
+					return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata",
+						fmt.Errorf("fencing_token stale: qm=%d live=%d (operation %s)", qm.FencingToken, liveToken, liveOpID))
+				}
+			}
+		}
 	}
 	if qm.GenerationQuarantinePath == "" {
 		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("generation_quarantine_path is empty"))

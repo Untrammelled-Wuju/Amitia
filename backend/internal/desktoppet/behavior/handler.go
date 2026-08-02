@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -47,12 +48,31 @@ func (h *Handler) GetBehaviorState(c *gin.Context) {
 	util.SuccessResponse(c, snapshot)
 }
 
+func requireAdmin(c *gin.Context) (string, bool) {
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return "", false
+	}
+	if !actor.HasPermission(auth.PermDesktopPetBehaviorAdmin) {
+		util.ErrorResponse(c, response.Forbidden, "需要管理员权限", gin.H{"errorCode": "FORBIDDEN"})
+		return "", false
+	}
+	return actor.UserID, true
+}
+
 func (h *Handler) GetMetrics(c *gin.Context) {
+	if _, ok := requireAdmin(c); !ok {
+		return
+	}
 	metrics := h.service.GetMetrics()
 	util.SuccessResponse(c, metrics)
 }
 
 func (h *Handler) SimulateEvent(c *gin.Context) {
+	if _, ok := requireAdmin(c); !ok {
+		return
+	}
 	var event BehaviorEventEnvelope
 	if err := c.ShouldBindJSON(&event); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
@@ -67,14 +87,21 @@ func (h *Handler) SimulateEvent(c *gin.Context) {
 }
 
 func (h *Handler) TriggerReconcile(c *gin.Context) {
+	actorID, ok := requireAdmin(c)
+	if !ok {
+		return
+	}
 	var req reconcileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
 		return
 	}
-	if req.UserID == "" || req.CharacterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "userId 和 characterId 不能为空", nil)
+	if req.CharacterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "characterId 不能为空", nil)
 		return
+	}
+	if req.UserID == "" {
+		req.UserID = actorID
 	}
 	if err := h.service.TriggerReconcile(c.Request.Context(), req.UserID, req.CharacterID); err != nil {
 		writeBehaviorError(c, err)
@@ -84,6 +111,9 @@ func (h *Handler) TriggerReconcile(c *gin.Context) {
 }
 
 func (h *Handler) SetShadowMode(c *gin.Context) {
+	if _, ok := requireAdmin(c); !ok {
+		return
+	}
 	var req setModeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
@@ -94,6 +124,9 @@ func (h *Handler) SetShadowMode(c *gin.Context) {
 }
 
 func (h *Handler) SetRuntimeCommand(c *gin.Context) {
+	if _, ok := requireAdmin(c); !ok {
+		return
+	}
 	var req setModeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
@@ -127,10 +160,12 @@ func (h *Handler) CreateBinding(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
 		return
 	}
-	if binding.UserID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "userId 不能为空", nil)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
+	binding.UserID = actorID
 	if binding.EventType == "" {
 		util.ErrorResponse(c, response.InvalidParams, "eventType 不能为空", nil)
 		return
@@ -152,18 +187,41 @@ func (h *Handler) GetBinding(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "绑定 ID 不能为空", nil)
 		return
 	}
-	binding, err := h.service.GetBinding(c.Request.Context(), id)
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	existing, err := h.service.GetBinding(c.Request.Context(), id)
 	if err != nil {
 		writeBehaviorError(c, err)
 		return
 	}
-	util.SuccessResponse(c, binding)
+	if existing.UserID != actorID {
+		util.ErrorResponse(c, response.Forbidden, "无权访问该绑定", gin.H{"errorCode": "BINDING_NOT_OWNED"})
+		return
+	}
+	util.SuccessResponse(c, existing)
 }
 
 func (h *Handler) UpdateBinding(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		util.ErrorResponse(c, response.InvalidParams, "绑定 ID 不能为空", nil)
+		return
+	}
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	existing, err := h.service.GetBinding(c.Request.Context(), id)
+	if err != nil {
+		writeBehaviorError(c, err)
+		return
+	}
+	if existing.UserID != actorID {
+		util.ErrorResponse(c, response.Forbidden, "无权操作该绑定", gin.H{"errorCode": "BINDING_NOT_OWNED"})
 		return
 	}
 	var updates map[string]interface{}
@@ -187,6 +245,20 @@ func (h *Handler) DeleteBinding(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		util.ErrorResponse(c, response.InvalidParams, "绑定 ID 不能为空", nil)
+		return
+	}
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	existing, err := h.service.GetBinding(c.Request.Context(), id)
+	if err != nil {
+		writeBehaviorError(c, err)
+		return
+	}
+	if existing.UserID != actorID {
+		util.ErrorResponse(c, response.Forbidden, "无权操作该绑定", gin.H{"errorCode": "BINDING_NOT_OWNED"})
 		return
 	}
 	if err := h.service.DeleteBinding(c.Request.Context(), id); err != nil {

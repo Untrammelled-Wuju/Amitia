@@ -17,25 +17,25 @@ var (
 type ConnectionState string
 
 const (
-	ConnStateHandshake  ConnectionState = "handshake"
-	ConnStateConnected  ConnectionState = "connected"
-	ConnStateDegraded   ConnectionState = "degraded"
-	ConnStateClosing    ConnectionState = "closing"
-	ConnStateClosed     ConnectionState = "closed"
+	ConnStateHandshake ConnectionState = "handshake"
+	ConnStateConnected ConnectionState = "connected"
+	ConnStateDegraded  ConnectionState = "degraded"
+	ConnStateClosing   ConnectionState = "closing"
+	ConnStateClosed    ConnectionState = "closed"
 )
 
 type Connection struct {
-	ID       string
-	UserID   string
-	DeviceID string
+	ID        string
+	UserID    string
+	DeviceID  string
 	RuntimeID string
 	SessionID string
 	State     ConnectionState
 	LastSeq   int64
 	LastBeat  time.Time
 
-	mu       sync.RWMutex
-	sendCh   []byte
+	mu     sync.RWMutex
+	sendCh []byte
 }
 
 func (c *Connection) GetState() ConnectionState {
@@ -51,10 +51,10 @@ func (c *Connection) SetState(s ConnectionState) {
 }
 
 type Handler struct {
-	sessions  SessionService
-	commands  CommandService
-	events    EventService
-	states    ActualStateService
+	sessions SessionService
+	commands CommandService
+	events   EventService
+	states   ActualStateService
 
 	connections map[string]*Connection
 	mu          sync.RWMutex
@@ -121,11 +121,11 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	conn.LastSeq = newSession.LastEventSequence
 
 	return &HelloAckPayload{
-		Accepted:         true,
-		SessionID:        newSession.ID,
-		ServerTime:       time.Now(),
-		DesiredRevision:  newSession.LastAppliedDesiredRevision,
-		ResumeMode:       "resume_or_full",
+		Accepted:        true,
+		SessionID:       newSession.ID,
+		ServerTime:      time.Now(),
+		DesiredRevision: newSession.LastAppliedDesiredRevision,
+		ResumeMode:      "resume_or_full",
 	}, nil
 }
 

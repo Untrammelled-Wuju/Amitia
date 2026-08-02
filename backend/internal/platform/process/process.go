@@ -11,12 +11,12 @@ import (
 type ProcessTreeHandle uintptr
 
 type ProcessConfig struct {
-	Executable  string
-	Args        []string
-	WorkingDir  string
-	Env         []string
-	OnStdout    func(line string)
-	OnStderr    func(line string)
+	Executable   string
+	Args         []string
+	WorkingDir   string
+	Env          []string
+	OnStdout     func(line string)
+	OnStderr     func(line string)
 	StartTimeout time.Duration
 }
 
@@ -29,16 +29,16 @@ type ProcessManager interface {
 }
 
 type ManagedProcess struct {
-	mu          sync.Mutex
-	PID         int
-	Handle      ProcessTreeHandle
-	cmd         *exec.Cmd
-	done        chan struct{}
-	exited      bool
-	exitCode    int
-	exitErr     error
-	startedAt   time.Time
-	cancel      context.CancelFunc
+	mu        sync.Mutex
+	PID       int
+	Handle    ProcessTreeHandle
+	cmd       *exec.Cmd
+	done      chan struct{}
+	exited    bool
+	exitCode  int
+	exitErr   error
+	startedAt time.Time
+	cancel    context.CancelFunc
 }
 
 func (p *ManagedProcess) Wait() (int, error) {

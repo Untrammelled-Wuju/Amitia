@@ -23,9 +23,9 @@ const (
 )
 
 const (
-	PromotionPolicyFirstRevisionOnly              = "first_revision_only"
+	PromotionPolicyFirstRevisionOnly                = "first_revision_only"
 	PromotionPolicyReplaceSystemBaselineIfUnchanged = "replace_system_baseline_if_unchanged"
-	PromotionPolicyManual                          = "manual"
+	PromotionPolicyManual                           = "manual"
 
 	PromotionPolicyAlways = "always"
 )
@@ -41,15 +41,15 @@ const (
 )
 
 const (
-	BridgeStatusReceived             = "received"
-	BridgeStatusValidated            = "validated"
-	BridgeStatusCommitting           = "committing"
-	BridgeStatusRevisionCreated      = "revision_created"
-	BridgeStatusBindingCommitted     = "binding_committed"
-	BridgeStatusEventsCommitted      = "events_committed"
-	BridgeStatusCompleted            = "completed"
-	BridgeStatusFailedRetryable      = "failed_retryable"
-	BridgeStatusFailedTerminal       = "failed_terminal"
+	BridgeStatusReceived         = "received"
+	BridgeStatusValidated        = "validated"
+	BridgeStatusCommitting       = "committing"
+	BridgeStatusRevisionCreated  = "revision_created"
+	BridgeStatusBindingCommitted = "binding_committed"
+	BridgeStatusEventsCommitted  = "events_committed"
+	BridgeStatusCompleted        = "completed"
+	BridgeStatusFailedRetryable  = "failed_retryable"
+	BridgeStatusFailedTerminal   = "failed_terminal"
 
 	BridgeStatusProcessingPublished   = "received"
 	BridgeStatusActionRevisionCreated = "revision_created"
@@ -67,7 +67,7 @@ const (
 )
 
 const (
-	OutboxStatusPending   = "pending"
+	OutboxStatusPending    = "pending"
 	OutboxStatusPublishing = "publishing"
 	OutboxStatusPublished  = "published"
 	OutboxStatusFailed     = "failed"
@@ -86,23 +86,23 @@ const (
 )
 
 type CreateBaselineRevisionRequest struct {
-	UserID                  string
-	CharacterID             string
-	ProcessingTaskID        string
-	ProcessingActionID      string
-	ProcessingRevisionID    string
-	ActionKey               string
-	ActionConfigJSON        string
-	ActionConfigHash        string
-	ActionSpecVersion       string
-	FrameCount              int
-	PlaybackMode            string
-	FPS                     int
-	AnchorJSON              string
-	FrameDurationMS         int
-	LoopType                string
-	PromotionPolicy         string
-	CreatedBy               string
+	UserID               string
+	CharacterID          string
+	ProcessingTaskID     string
+	ProcessingActionID   string
+	ProcessingRevisionID string
+	ActionKey            string
+	ActionConfigJSON     string
+	ActionConfigHash     string
+	ActionSpecVersion    string
+	FrameCount           int
+	PlaybackMode         string
+	FPS                  int
+	AnchorJSON           string
+	FrameDurationMS      int
+	LoopType             string
+	PromotionPolicy      string
+	CreatedBy            string
 }
 
 type ActionRevision struct {
@@ -147,24 +147,24 @@ type ActionRevisionEvent struct {
 }
 
 type ActiveRevisionRef struct {
-	ActionKey            string
-	ActionRevisionID     string
-	ContentHash          string
-	BindingRevision      int64
-	ActionStreamID       string
-	QualityEvaluationID  string
-	QualityVerdict       string
+	ActionKey           string
+	ActionRevisionID    string
+	ContentHash         string
+	BindingRevision     int64
+	ActionStreamID      string
+	QualityEvaluationID string
+	QualityVerdict      string
 }
 
 type ActiveRevisionSet struct {
-	ProcessingTaskID    string
-	UserID              string
-	CharacterID         string
-	Revisions           []ActiveRevisionRef
-	RequiredActionKeys  []string
-	OptionalActionKeys  []string
-	SetHash             string
-	CreatedAt           string
+	ProcessingTaskID   string
+	UserID             string
+	CharacterID        string
+	Revisions          []ActiveRevisionRef
+	RequiredActionKeys []string
+	OptionalActionKeys []string
+	SetHash            string
+	CreatedAt          string
 }
 
 type ReturnTarget struct {
@@ -179,26 +179,26 @@ type AnchorPolicy struct {
 }
 
 type ActionConfigSnapshot struct {
-	SchemaVersion        int
-	ActionKey            string
-	DisplayName          string
-	SpecVersion          string
-	SpecHash             string
-	PlaybackMode         string
-	FPS                  int
-	Interruptible        bool
-	InterruptAfterMS     int
-	Priority             int
-	CooldownMS           int
-	MinimumPlayMS        int
-	MaximumPlayMS        *int
-	MutexGroup           string
-	SupportsDefaultIdle  bool
+	SchemaVersion          int
+	ActionKey              string
+	DisplayName            string
+	SpecVersion            string
+	SpecHash               string
+	PlaybackMode           string
+	FPS                    int
+	Interruptible          bool
+	InterruptAfterMS       int
+	Priority               int
+	CooldownMS             int
+	MinimumPlayMS          int
+	MaximumPlayMS          *int
+	MutexGroup             string
+	SupportsDefaultIdle    bool
 	IsStableStateCandidate bool
-	IsTransitionOnly     bool
-	ReturnTo             ReturnTarget
-	Anchor               AnchorPolicy
-	ConfigHash           string
+	IsTransitionOnly       bool
+	ReturnTo               ReturnTarget
+	Anchor                 AnchorPolicy
+	ConfigHash             string
 }
 
 type CommitResult struct {
@@ -210,13 +210,13 @@ type CommitResult struct {
 }
 
 type ProcessingRevisionValidation struct {
-	Valid          bool
-	UserID         string
-	CharacterID    string
-	ProcessingTaskID string
+	Valid              bool
+	UserID             string
+	CharacterID        string
+	ProcessingTaskID   string
 	ProcessingActionID string
-	ActionKey      string
-	FrameCount     int
-	RevisionHash   string
-	ContentRootHash string
+	ActionKey          string
+	FrameCount         int
+	RevisionHash       string
+	ContentRootHash    string
 }

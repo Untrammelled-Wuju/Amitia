@@ -42,6 +42,8 @@ type QualityService interface {
 	GetTaskGate(ctx context.Context, processingTaskID string) (*QualityGateResult, error)
 	ListProblemFrames(ctx context.Context, evaluationID string, page, pageSize int) ([]ProblemFrameSummary, int64, error)
 	ListFindings(ctx context.Context, evaluationID string, severity string, dimension string, page, pageSize int) ([]QualityFinding, int64, error)
+	CheckEvaluationOwnership(ctx context.Context, evaluationID, userID string) error
+	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error
 }
 
 type QualityRepository interface {
@@ -111,22 +113,22 @@ type QualityActionInput struct {
 }
 
 type QualityFrameInput struct {
-	FrameRevisionID  string
-	FrameArtifactID  string
-	FrameIndex       int
-	AbsolutePath     string
-	RelativePath     string
-	ContentHash      string
-	PixelHash        string
-	MimeType         string
-	Width            int
-	Height           int
-	SubjectBox       Rect
-	Anchor           Point
-	CoordinateSpace  string
-	AlphaCoverage    float64
-	TransformChain   []Transform
-	Measurements     map[string]float64
+	FrameRevisionID string
+	FrameArtifactID string
+	FrameIndex      int
+	AbsolutePath    string
+	RelativePath    string
+	ContentHash     string
+	PixelHash       string
+	MimeType        string
+	Width           int
+	Height          int
+	SubjectBox      Rect
+	Anchor          Point
+	CoordinateSpace string
+	AlphaCoverage   float64
+	TransformChain  []Transform
+	Measurements    map[string]float64
 }
 
 type Rect struct {
@@ -157,10 +159,10 @@ type ImageMeasurementEngine interface {
 }
 
 type FrameMeasurementResult struct {
-	Width                int
-	Height               int
-	HasAlphaChannel      bool
-	AlphaCoverage        float64
+	Width                 int
+	Height                int
+	HasAlphaChannel       bool
+	AlphaCoverage         float64
 	FullyTransparentRatio float64
 	SemiTransparentRatio  float64
 	OpaqueRatio           float64
@@ -186,14 +188,14 @@ type ActionRevisionQualityWriteback interface {
 }
 
 type QualityWritebackRequest struct {
-	ActionRevisionID    string
-	ContentHash         string
-	EvaluationID        string
-	ProfileID           string
-	RuleSetVersion      string
-	Verdict             string
-	Score               *float64
-	SourceContentHash   string
+	ActionRevisionID  string
+	ContentHash       string
+	EvaluationID      string
+	ProfileID         string
+	RuleSetVersion    string
+	Verdict           string
+	Score             *float64
+	SourceContentHash string
 }
 
 type TaskQualityGateService interface {

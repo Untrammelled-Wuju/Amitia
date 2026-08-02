@@ -68,13 +68,13 @@ type V2Coordinator interface {
 }
 
 type service struct {
-	repo        Repository
-	installer   Installer
-	uninstaller Uninstaller
-	packageRepo processing.Repository
-	charRepo    character.Repository
-	dataDir     string
-	notifier    RuntimeNotifier
+	repo          Repository
+	installer     Installer
+	uninstaller   Uninstaller
+	packageRepo   processing.Repository
+	charRepo      character.Repository
+	dataDir       string
+	notifier      RuntimeNotifier
 	v2Coordinator V2Coordinator
 }
 
@@ -519,10 +519,10 @@ func (s *service) Recenter(userId, installationId string) error {
 	}
 	now := time.Now().Format(installationTimeFormat)
 	updates := map[string]interface{}{
-		"position_mode":      positionModeRecenter,
-		"settings_revision":  existing.SettingsRevision + 1,
+		"position_mode":       positionModeRecenter,
+		"settings_revision":   existing.SettingsRevision + 1,
 		"position_updated_at": now,
-		"updated_at":         now,
+		"updated_at":          now,
 	}
 	if err := s.repo.UpdateRuntimeSettings(installationId, updates); err != nil {
 		return NewInstallationError(ErrCodeInstallationFailed, "重置位置失败", err)

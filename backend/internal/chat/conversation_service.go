@@ -4,10 +4,10 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
@@ -192,7 +192,7 @@ func (s *service) ExportConversation(convID string, format string) (string, erro
 	case "json":
 		fileName = fmt.Sprintf("%s_%s.json", safeTitle, ts)
 		content, _ = json.MarshalIndent(gin.H{
-			"conversation": conv,
+			"conversation":  conv,
 			"characterName": charName,
 			"messages":      msgs,
 		}, "", "  ")

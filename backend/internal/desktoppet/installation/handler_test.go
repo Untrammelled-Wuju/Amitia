@@ -270,74 +270,6 @@ func newHandlerTestRouter(svc Service) *gin.Engine {
 	return r
 }
 
-type stubReleaseService struct {
-	uninstallErr       error
-	uninstallCalls     []uninstallCall
-}
-
-type uninstallCall struct {
-	UserID         string
-	InstallationID string
-	IdempotencyKey string
-}
-
-func (s *stubReleaseService) BuildRelease(req *BuildReleaseRequest) (*BuildReleaseResult, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) ImportPackage(req *ImportPackageRequest) (*ImportPackageResult, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) ListReleases(userID string) ([]*PackageRelease, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) ListReleasesByPet(petID string) ([]*PackageRelease, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) GetRelease(releaseID string) (*PackageRelease, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) GetReleaseFiles(releaseID string) ([]ReleaseFile, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) ListPetIdentities(userID string) ([]*PetIdentity, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) GetPetIdentity(petID string) (*PetIdentity, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) InstallRelease(userID, petID, releaseID, characterID, idempotencyKey string) (*Installation, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) UpgradeInstallation(userID, installationID, targetReleaseID, idempotencyKey string) (*Installation, error) {
-	return nil, nil
-}
-func (s *stubReleaseService) SwitchInstallation(userID, installationID, idempotencyKey string) error {
-	return nil
-}
-func (s *stubReleaseService) RepairInstallation(userID, installationID, idempotencyKey string) error {
-	return nil
-}
-func (s *stubReleaseService) UninstallInstallation(userID, installationID, idempotencyKey string) error {
-	s.uninstallCalls = append(s.uninstallCalls, uninstallCall{UserID: userID, InstallationID: installationID, IdempotencyKey: idempotencyKey})
-	return s.uninstallErr
-}
-func (s *stubReleaseService) RecoverPendingOperations() error {
-	return nil
-}
-func (s *stubReleaseService) CheckReleaseOwnership(releaseID, userID string) error {
-	return nil
-}
-func (s *stubReleaseService) CheckPetIdentityOwnership(petID, userID string) error {
-	return nil
-}
-
-func newReleaseHandlerTestRouter(svc ReleaseService) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	RegisterReleaseRoutes(r.Group("/api"), svc)
-	return r
-}
-
 func doRequest(t *testing.T, r *gin.Engine, method, path string, body interface{}) *httptest.ResponseRecorder {
 	t.Helper()
 	var req *http.Request
@@ -514,15 +446,15 @@ func TestHandler_InstallPackage_InstallationFailed_InternalError(t *testing.T) {
 
 func TestHandler_InstallPackage_Success_OK(t *testing.T) {
 	expected := &Installation{
-		ID:              "inst_123",
-		UserID:          "default",
-		CharacterID:     testCharacterID,
-		PackageID:       testPackageID,
-		PackageVersion:  "1",
-		Name:            "测试包",
-		Status:          StatusInstalled,
-		InstallPath:     "desktop-pets/installed/inst_123/",
-		ManifestPath:    "desktop-pets/installed/inst_123/manifest.json",
+		ID:               "inst_123",
+		UserID:           "default",
+		CharacterID:      testCharacterID,
+		PackageID:        testPackageID,
+		PackageVersion:   "1",
+		Name:             "测试包",
+		Status:           StatusInstalled,
+		InstallPath:      "desktop-pets/installed/inst_123/",
+		ManifestPath:     "desktop-pets/installed/inst_123/manifest.json",
 		DefaultActionKey: "idle_normal",
 	}
 	svc := &stubHandlerService{installResult: expected}
@@ -534,7 +466,7 @@ func TestHandler_InstallPackage_Success_OK(t *testing.T) {
 	var resp struct {
 		Code int          `json:"code"`
 		Msg  string       `json:"msg"`
-		Data  Installation `json:"data"`
+		Data Installation `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("解析响应失败: %v", err)
@@ -947,51 +879,6 @@ func TestHandler_PlayAction_Success(t *testing.T) {
 	}
 	if svc.playCalls[0].ActionKey != "idle_normal" {
 		t.Fatalf("ActionKey = %s, 期望 idle_normal", svc.playCalls[0].ActionKey)
-	}
-}
-
-func TestHandler_Uninstall_NotFound(t *testing.T) {
-	svc := &stubReleaseService{
-		uninstallErr: NewInstallationError(ErrCodeInstallationNotFound, "not found", ErrInstallationNotFound),
-	}
-	r := newReleaseHandlerTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/nonexistent", nil)
-	assertHTTPCode(t, w, response.NotFound, ErrCodeInstallationNotFound)
-}
-
-func TestHandler_Uninstall_Failed_InternalError(t *testing.T) {
-	svc := &stubReleaseService{
-		uninstallErr: NewInstallationError(ErrCodeInstallationFailed, "uninstall failed", ErrInstallationFailed),
-	}
-	r := newReleaseHandlerTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/inst_1", nil)
-	assertHTTPCode(t, w, response.InternalError, ErrCodeInstallationFailed)
-}
-
-func TestHandler_Uninstall_Invalid_BusinessError(t *testing.T) {
-	svc := &stubReleaseService{
-		uninstallErr: NewInstallationError(ErrCodeInstallationInvalid, "invalid", ErrInstallationInvalid),
-	}
-	r := newReleaseHandlerTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/inst_1", nil)
-	assertHTTPCode(t, w, response.BusinessError, ErrCodeInstallationInvalid)
-}
-
-func TestHandler_Uninstall_Success(t *testing.T) {
-	svc := &stubReleaseService{}
-	r := newReleaseHandlerTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodDelete, "/api/desktop-pets/installations/inst_1", nil)
-	assertHTTPCode(t, w, response.OK, "")
-
-	if len(svc.uninstallCalls) != 1 {
-		t.Fatalf("期望 1 次 Uninstall 调用, 实际 %d", len(svc.uninstallCalls))
-	}
-	if svc.uninstallCalls[0].InstallationID != "inst_1" {
-		t.Fatalf("Uninstall InstallationID = %s, 期望 inst_1", svc.uninstallCalls[0].InstallationID)
 	}
 }
 

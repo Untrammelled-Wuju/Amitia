@@ -18,15 +18,15 @@ type PackageValidator interface {
 }
 
 type ImportValidationResult struct {
-	IsValid          bool
-	SourcePackageHash string
-	SourceManifestHash string
-	SourceSchemaVersion int
-	Warnings         []string
-	BindingDecision  string
-	LicenseDecision  string
+	IsValid              bool
+	SourcePackageHash    string
+	SourceManifestHash   string
+	SourceSchemaVersion  int
+	Warnings             []string
+	BindingDecision      string
+	LicenseDecision      string
 	RuntimeCompatibility string
-	SelectedActions  []string
+	SelectedActions      []string
 }
 
 type ImportPackageRequest struct {
@@ -79,16 +79,16 @@ func (pi *PackageImporter) ImportPackage(ctx context.Context, req *ImportPackage
 	}
 
 	snapshot := &release.ImportPackageSnapshot{
-		ImportStagingID:      req.ImportStagingID,
-		SourcePackageHash:    validation.SourcePackageHash,
-		SourceManifestHash:   validation.SourceManifestHash,
-		SourceSchemaVersion:  validation.SourceSchemaVersion,
+		ImportStagingID:       req.ImportStagingID,
+		SourcePackageHash:     validation.SourcePackageHash,
+		SourceManifestHash:    validation.SourceManifestHash,
+		SourceSchemaVersion:   validation.SourceSchemaVersion,
 		NormalizationWarnings: formatWarnings(validation.Warnings),
-		SelectedActionsJSON:  formatSelectedActions(validation.SelectedActions),
-		BindingDecision:      validation.BindingDecision,
-		LicenseDecision:      validation.LicenseDecision,
-		RuntimeCompatibility: validation.RuntimeCompatibility,
-		UserID:               req.UserID,
+		SelectedActionsJSON:   formatSelectedActions(validation.SelectedActions),
+		BindingDecision:       validation.BindingDecision,
+		LicenseDecision:       validation.LicenseDecision,
+		RuntimeCompatibility:  validation.RuntimeCompatibility,
+		UserID:                req.UserID,
 	}
 
 	if err := pi.repo.CreateImportSnapshot(snapshot); err != nil {

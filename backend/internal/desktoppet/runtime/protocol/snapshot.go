@@ -5,25 +5,25 @@ package protocol
 import "time"
 
 type RuntimeStateSnapshotV2 struct {
-	SnapshotVersion            int       `json:"snapshotVersion"`
-	RuntimeInstanceID          string    `json:"runtimeInstanceId"`
-	InstallationID             string    `json:"installationId"`
-	PetID                      string    `json:"petId"`
-	ReleaseID                  string    `json:"releaseId"`
-	Connected                  bool      `json:"connected"`
-	WindowVisible              bool      `json:"windowVisible"`
-	WindowX                    float64   `json:"windowX"`
-	WindowY                    float64   `json:"windowY"`
-	DisplayID                  string    `json:"displayId"`
-	CurrentActionKey           string    `json:"currentActionKey"`
-	PlaybackID                 string    `json:"playbackId"`
-	PlaybackPhase              string    `json:"playbackPhase"`
-	FrameIndex                 int       `json:"frameIndex"`
-	CycleIndex                 int       `json:"cycleIndex"`
-	LastAppliedDesiredRevision int64     `json:"lastAppliedDesiredRevision"`
-	LastReceivedCommandSequence int64    `json:"lastReceivedCommandSequence"`
-	LastSentEventSequence      int64     `json:"lastSentEventSequence"`
-	CapturedAt                 time.Time `json:"capturedAt"`
+	SnapshotVersion             int       `json:"snapshotVersion"`
+	RuntimeInstanceID           string    `json:"runtimeInstanceId"`
+	InstallationID              string    `json:"installationId"`
+	PetID                       string    `json:"petId"`
+	ReleaseID                   string    `json:"releaseId"`
+	Connected                   bool      `json:"connected"`
+	WindowVisible               bool      `json:"windowVisible"`
+	WindowX                     float64   `json:"windowX"`
+	WindowY                     float64   `json:"windowY"`
+	DisplayID                   string    `json:"displayId"`
+	CurrentActionKey            string    `json:"currentActionKey"`
+	PlaybackID                  string    `json:"playbackId"`
+	PlaybackPhase               string    `json:"playbackPhase"`
+	FrameIndex                  int       `json:"frameIndex"`
+	CycleIndex                  int       `json:"cycleIndex"`
+	LastAppliedDesiredRevision  int64     `json:"lastAppliedDesiredRevision"`
+	LastReceivedCommandSequence int64     `json:"lastReceivedCommandSequence"`
+	LastSentEventSequence       int64     `json:"lastSentEventSequence"`
+	CapturedAt                  time.Time `json:"capturedAt"`
 }
 
 type OutboxPriority int

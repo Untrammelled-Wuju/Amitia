@@ -13,43 +13,43 @@ const (
 )
 
 type ProcessingConfigSnapshot struct {
-	SchemaVersion   int              `json:"schemaVersion"`
-	ProfileID       string           `json:"profileId,omitempty"`
-	ProfileVersion  string           `json:"profileVersion,omitempty"`
-	Canvas          CanvasPolicy     `json:"canvas"`
-	Decode          DecodePolicy     `json:"decode"`
-	Split           SplitPolicy      `json:"split"`
-	Background      BackgroundPolicy `json:"background"`
-	Subject         SubjectPolicy    `json:"subject"`
-	Scale           ScalePolicy      `json:"scale"`
-	Anchor          AnchorPolicy     `json:"anchor"`
-	Alignment       AlignmentPolicy  `json:"alignment"`
-	Encoding        EncodingPolicy   `json:"encoding"`
-	Measurement     MeasurementConfig `json:"measurement"`
-	Preview         PreviewConfig     `json:"preview"`
-	PipelineVersion string            `json:"pipelineVersion"`
-	AlgorithmSetHash string           `json:"algorithmSetHash,omitempty"`
+	SchemaVersion     int               `json:"schemaVersion"`
+	ProfileID         string            `json:"profileId,omitempty"`
+	ProfileVersion    string            `json:"profileVersion,omitempty"`
+	Canvas            CanvasPolicy      `json:"canvas"`
+	Decode            DecodePolicy      `json:"decode"`
+	Split             SplitPolicy       `json:"split"`
+	Background        BackgroundPolicy  `json:"background"`
+	Subject           SubjectPolicy     `json:"subject"`
+	Scale             ScalePolicy       `json:"scale"`
+	Anchor            AnchorPolicy      `json:"anchor"`
+	Alignment         AlignmentPolicy   `json:"alignment"`
+	Encoding          EncodingPolicy    `json:"encoding"`
+	Measurement       MeasurementConfig `json:"measurement"`
+	Preview           PreviewConfig     `json:"preview"`
+	PipelineVersion   string            `json:"pipelineVersion"`
+	AlgorithmSetHash  string            `json:"algorithmSetHash,omitempty"`
 	AlgorithmVersions map[string]string `json:"algorithmVersions,omitempty"`
-	ConfigHash      string            `json:"configHash"`
+	ConfigHash        string            `json:"configHash"`
 }
 
 type MeasurementConfig struct {
-	SchemaVersion      int     `json:"schemaVersion"`
-	ComputeSubjectBox  bool    `json:"computeSubjectBox"`
-	ComputeAlphaCoverage bool  `json:"computeAlphaCoverage"`
-	ComputeEdgeContact bool    `json:"computeEdgeContact"`
-	ComputeClipping    bool    `json:"computeClipping"`
-	ComputeTrajectory  bool    `json:"computeTrajectory"`
-	AlphaThreshold     int     `json:"alphaThreshold"`
+	SchemaVersion        int  `json:"schemaVersion"`
+	ComputeSubjectBox    bool `json:"computeSubjectBox"`
+	ComputeAlphaCoverage bool `json:"computeAlphaCoverage"`
+	ComputeEdgeContact   bool `json:"computeEdgeContact"`
+	ComputeClipping      bool `json:"computeClipping"`
+	ComputeTrajectory    bool `json:"computeTrajectory"`
+	AlphaThreshold       int  `json:"alphaThreshold"`
 }
 
 type PreviewConfig struct {
-	Enabled       bool   `json:"enabled"`
-	Format        string `json:"format"`
-	MaxWidth      int    `json:"maxWidth"`
-	MaxHeight     int    `json:"maxHeight"`
-	CompositeFPS  int    `json:"compositeFps"`
-	CompositeFrames int  `json:"compositeFrames"`
+	Enabled         bool   `json:"enabled"`
+	Format          string `json:"format"`
+	MaxWidth        int    `json:"maxWidth"`
+	MaxHeight       int    `json:"maxHeight"`
+	CompositeFPS    int    `json:"compositeFps"`
+	CompositeFrames int    `json:"compositeFrames"`
 }
 
 type CanvasPolicy struct {
@@ -74,27 +74,27 @@ type DecodePolicy struct {
 }
 
 type SplitPolicy struct {
-	AllowSizeTolerance  bool `json:"allowSizeTolerance"`
-	MaxTolerancePixels  int  `json:"maxTolerancePixels"`
-	EmptyCellHandling   string `json:"emptyCellHandling"`
-	CropBoundaryPolicy  string `json:"cropBoundaryPolicy"`
+	AllowSizeTolerance bool   `json:"allowSizeTolerance"`
+	MaxTolerancePixels int    `json:"maxTolerancePixels"`
+	EmptyCellHandling  string `json:"emptyCellHandling"`
+	CropBoundaryPolicy string `json:"cropBoundaryPolicy"`
 }
 
 type BackgroundPolicy struct {
-	ProviderName       string        `json:"providerName"`
-	Mode               string        `json:"mode"`
-	CapabilitiesVersion string       `json:"capabilitiesVersion"`
-	FallbackPolicy     string        `json:"fallbackPolicy"`
-	Timeout            time.Duration `json:"timeout"`
-	MaxRetries         int           `json:"maxRetries"`
-	KeepMask           bool          `json:"keepMask"`
+	ProviderName        string        `json:"providerName"`
+	Mode                string        `json:"mode"`
+	CapabilitiesVersion string        `json:"capabilitiesVersion"`
+	FallbackPolicy      string        `json:"fallbackPolicy"`
+	Timeout             time.Duration `json:"timeout"`
+	MaxRetries          int           `json:"maxRetries"`
+	KeepMask            bool          `json:"keepMask"`
 }
 
 type SubjectPolicy struct {
-	AlphaThreshold      int     `json:"alphaThreshold"`
-	MinComponentArea    float64 `json:"minComponentArea"`
-	SatelliteAreaRatio  float64 `json:"satelliteAreaRatio"`
-	MaxComponents       int     `json:"maxComponents"`
+	AlphaThreshold     int     `json:"alphaThreshold"`
+	MinComponentArea   float64 `json:"minComponentArea"`
+	SatelliteAreaRatio float64 `json:"satelliteAreaRatio"`
+	MaxComponents      int     `json:"maxComponents"`
 }
 
 type ScalePolicy struct {
@@ -105,20 +105,20 @@ type ScalePolicy struct {
 }
 
 type AnchorPolicy struct {
-	Source          string  `json:"source"`
-	Mode            string  `json:"mode"`
-	TargetX         float64 `json:"targetX"`
-	TargetY         float64 `json:"targetY"`
-	EstimationStrategy string `json:"estimationStrategy"`
+	Source             string  `json:"source"`
+	Mode               string  `json:"mode"`
+	TargetX            float64 `json:"targetX"`
+	TargetY            float64 `json:"targetY"`
+	EstimationStrategy string  `json:"estimationStrategy"`
 }
 
 type AlignmentPolicy struct {
-	StabilizationAxes   string  `json:"stabilizationAxes"`
-	AllowMotionX        bool    `json:"allowMotionX"`
-	AllowMotionY        bool    `json:"allowMotionY"`
-	ReferenceStrategy   string  `json:"referenceStrategy"`
-	MaxCorrectionX      float64 `json:"maxCorrectionX"`
-	MaxCorrectionY      float64 `json:"maxCorrectionY"`
+	StabilizationAxes string  `json:"stabilizationAxes"`
+	AllowMotionX      bool    `json:"allowMotionX"`
+	AllowMotionY      bool    `json:"allowMotionY"`
+	ReferenceStrategy string  `json:"referenceStrategy"`
+	MaxCorrectionX    float64 `json:"maxCorrectionX"`
+	MaxCorrectionY    float64 `json:"maxCorrectionY"`
 }
 
 type EncodingPolicy struct {

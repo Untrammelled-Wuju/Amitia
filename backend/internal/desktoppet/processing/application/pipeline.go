@@ -40,26 +40,26 @@ func NewPipeline(bgRegistry backgroundremoval.Registry, dataDir string) *Pipelin
 }
 
 type ProcessActionRequest struct {
-	Context            context.Context
-	SourceDescriptor   *source.ProcessingSourceDescriptor
-	ConfigSnapshot     *contracts.ProcessingConfigSnapshot
-	ProcessingTaskID   string
-	ProcessingActionID string
+	Context             context.Context
+	SourceDescriptor    *source.ProcessingSourceDescriptor
+	ConfigSnapshot      *contracts.ProcessingConfigSnapshot
+	ProcessingTaskID    string
+	ProcessingActionID  string
 	ProcessingAttemptID string
-	ActionKey          string
-	GenerationTaskID   string
-	ExecutionID        string
-	ProcessingVersion  int
+	ActionKey           string
+	GenerationTaskID    string
+	ExecutionID         string
+	ProcessingVersion   int
 }
 
 type PipelineFrameResult struct {
-	Index      int
-	FileName   string
-	FileHash   string
-	PixelHash  string
-	Width      int
-	Height     int
-	ByteSize   int64
+	Index     int
+	FileName  string
+	FileHash  string
+	PixelHash string
+	Width     int
+	Height    int
+	ByteSize  int64
 }
 
 type PipelineMaskResult struct {
@@ -72,21 +72,21 @@ type PipelineMaskResult struct {
 }
 
 type PipelinePreviewResult struct {
-	FileName  string
-	FileHash  string
-	Width     int
-	Height    int
-	ByteSize  int64
+	FileName string
+	FileHash string
+	Width    int
+	Height   int
+	ByteSize int64
 }
 
 type TransformChainData struct {
-	FrameIndex      int
-	SequenceNumber  int
-	FromSpace       string
-	ToSpace         string
-	TransformType   string
-	MatrixJSON      string
-	ParametersJSON  string
+	FrameIndex       int
+	SequenceNumber   int
+	FromSpace        string
+	ToSpace          string
+	TransformType    string
+	MatrixJSON       string
+	ParametersJSON   string
 	AlgorithmVersion string
 }
 
@@ -591,13 +591,13 @@ func (p *Pipeline) ProcessAction(req ProcessActionRequest) (*ProcessActionResult
 	for i := 0; i < frameCount; i++ {
 		frameName := fmt.Sprintf("frame_%04d.png", i)
 		pipelineFrames[i] = PipelineFrameResult{
-			Index:    i,
-			FileName: frameName,
-			FileHash: frameResults[i].FileHash,
+			Index:     i,
+			FileName:  frameName,
+			FileHash:  frameResults[i].FileHash,
 			PixelHash: frameResults[i].PixelHash,
-			Width:    frameResults[i].Width,
-			Height:   frameResults[i].Height,
-			ByteSize: frameResults[i].ByteSize,
+			Width:     frameResults[i].Width,
+			Height:    frameResults[i].Height,
+			ByteSize:  frameResults[i].ByteSize,
 		}
 		if req.ConfigSnapshot.Encoding.WriteMask {
 			maskName := fmt.Sprintf("mask_%04d.png", i)
@@ -615,38 +615,38 @@ func (p *Pipeline) ProcessAction(req ProcessActionRequest) (*ProcessActionResult
 	transforms := make([]TransformChainData, 0, frameCount*4)
 	for i := 0; i < frameCount; i++ {
 		transforms = append(transforms, TransformChainData{
-			FrameIndex:      i,
-			SequenceNumber:  0,
-			FromSpace:       "source",
-			ToSpace:         "foreground",
-			TransformType:   "background_removal",
+			FrameIndex:       i,
+			SequenceNumber:   0,
+			FromSpace:        "source",
+			ToSpace:          "foreground",
+			TransformType:    "background_removal",
 			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["background"],
 		})
 		transforms = append(transforms, TransformChainData{
-			FrameIndex:      i,
-			SequenceNumber:  1,
-			FromSpace:       "foreground",
-			ToSpace:         "scaled",
-			TransformType:   "scale",
-			ParametersJSON:  fmt.Sprintf(`{"scale":%.6f}`, scaleResult.ClampedScale),
+			FrameIndex:       i,
+			SequenceNumber:   1,
+			FromSpace:        "foreground",
+			ToSpace:          "scaled",
+			TransformType:    "scale",
+			ParametersJSON:   fmt.Sprintf(`{"scale":%.6f}`, scaleResult.ClampedScale),
 			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["scale"],
 		})
 		transforms = append(transforms, TransformChainData{
-			FrameIndex:      i,
-			SequenceNumber:  2,
-			FromSpace:       "scaled",
-			ToSpace:         "canvas",
-			TransformType:   "canvas_mapping",
-			MatrixJSON:      fmt.Sprintf(`{"drawX":%d,"drawY":%d}`, baseDrawXs[i], baseDrawYs[i]),
+			FrameIndex:       i,
+			SequenceNumber:   2,
+			FromSpace:        "scaled",
+			ToSpace:          "canvas",
+			TransformType:    "canvas_mapping",
+			MatrixJSON:       fmt.Sprintf(`{"drawX":%d,"drawY":%d}`, baseDrawXs[i], baseDrawYs[i]),
 			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["canvas"],
 		})
 		transforms = append(transforms, TransformChainData{
-			FrameIndex:      i,
-			SequenceNumber:  3,
-			FromSpace:       "canvas",
-			ToSpace:         "stabilized_canvas",
-			TransformType:   "stabilization",
-			ParametersJSON:  fmt.Sprintf(`{"correctionX":%.6f,"correctionY":%.6f,"clamped":%v}`, alignments[i].CorrectionX, alignments[i].CorrectionY, alignments[i].Clamped),
+			FrameIndex:       i,
+			SequenceNumber:   3,
+			FromSpace:        "canvas",
+			ToSpace:          "stabilized_canvas",
+			TransformType:    "stabilization",
+			ParametersJSON:   fmt.Sprintf(`{"correctionX":%.6f,"correctionY":%.6f,"clamped":%v}`, alignments[i].CorrectionX, alignments[i].CorrectionY, alignments[i].Clamped),
 			AlgorithmVersion: req.ConfigSnapshot.AlgorithmVersions["alignment"],
 		})
 	}

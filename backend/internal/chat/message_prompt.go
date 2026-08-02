@@ -11,13 +11,13 @@ import (
 )
 
 type processPromptInput struct {
-	BaseIdentity, CharacterConfig, PersonalityConfig, PersonalityRaw, ProfileContext, MemoryContext, Worldbook, PluginContext, AgentSkillContext, EmotionFusionRaw, AdultIntimacyRaw, MemoryInjectRaw, AntiRepeatRaw                     string
-	History                                                                                                                                                                                                                              []map[string]string
-	Runtime                                                                                                                                                                                                                              *interaction.RuntimeAssembly
-	AgentSkillCatalogIncluded                                                                                                                                                                                                            bool
-	AgentSkillTrace                                                                                                                                                                                                                      []promptir.AgentSkillTrace
+	BaseIdentity, CharacterConfig, PersonalityConfig, PersonalityRaw, ProfileContext, MemoryContext, Worldbook, PluginContext, AgentSkillContext, EmotionFusionRaw, AdultIntimacyRaw, MemoryInjectRaw, AntiRepeatRaw                      string
+	History                                                                                                                                                                                                                               []map[string]string
+	Runtime                                                                                                                                                                                                                               *interaction.RuntimeAssembly
+	AgentSkillCatalogIncluded                                                                                                                                                                                                             bool
+	AgentSkillTrace                                                                                                                                                                                                                       []promptir.AgentSkillTrace
 	StyleInstruction, TemporalContext, ProactiveScene, ProactiveTimeContext, ProactiveRecentContext, ProactivePersonality, ProactiveRelationship, ProactiveEmotion, ProactiveMemory, CharacterBase, ProactiveTaskInstruction, UserContent string
-	RelationshipTimeContext                                                                                                                                                                                                              string
+	RelationshipTimeContext                                                                                                                                                                                                               string
 }
 
 func buildProcessPromptMessages(input processPromptInput) ([]map[string]interface{}, *promptir.PromptTrace) {

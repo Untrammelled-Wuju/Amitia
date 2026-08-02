@@ -23,16 +23,16 @@ type FinalizeAttemptRequest struct {
 }
 
 type GenerationFinalizer struct {
-	attemptRepo       AttemptRepository
-	artifactRepo      ArtifactRepository
-	bindingService    *activebinding.BindingService
+	attemptRepo    AttemptRepository
+	artifactRepo   ArtifactRepository
+	bindingService *activebinding.BindingService
 }
 
 func NewGenerationFinalizer(attemptRepo AttemptRepository, artifactRepo ArtifactRepository, bindingService *activebinding.BindingService) *GenerationFinalizer {
 	return &GenerationFinalizer{
-		attemptRepo:       attemptRepo,
-		artifactRepo:      artifactRepo,
-		bindingService:    bindingService,
+		attemptRepo:    attemptRepo,
+		artifactRepo:   artifactRepo,
+		bindingService: bindingService,
 	}
 }
 

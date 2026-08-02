@@ -135,10 +135,10 @@ type PackagePreviewConfirmation struct {
 type ArtifactPolicy string
 
 const (
-	ArtifactPolicyRetainArtifact  ArtifactPolicy = "retainArtifact"
-	ArtifactPolicyDeleteArtifact  ArtifactPolicy = "deleteArtifact"
+	ArtifactPolicyRetainArtifact    ArtifactPolicy = "retainArtifact"
+	ArtifactPolicyDeleteArtifact    ArtifactPolicy = "deleteArtifact"
 	ArtifactPolicyRetainForRollback ArtifactPolicy = "retainForRollback"
-	ArtifactPolicyRetainForExport ArtifactPolicy = "retainForExport"
+	ArtifactPolicyRetainForExport   ArtifactPolicy = "retainForExport"
 )
 
 type RollbackSnapshotRequirement struct {
@@ -155,11 +155,11 @@ type RollbackSnapshotRequirement struct {
 }
 
 type RemoveArtifactStepResult struct {
-	ArtifactID     string          `json:"artifactId"`
-	ArtifactPolicy ArtifactPolicy  `json:"artifactPolicy"`
-	Deleted        bool            `json:"deleted"`
-	RemainingRefs  int             `json:"remainingRefs"`
-	DeletedAt      time.Time       `json:"deletedAt"`
+	ArtifactID     string         `json:"artifactId"`
+	ArtifactPolicy ArtifactPolicy `json:"artifactPolicy"`
+	Deleted        bool           `json:"deleted"`
+	RemainingRefs  int            `json:"remainingRefs"`
+	DeletedAt      time.Time      `json:"deletedAt"`
 }
 
 type packageConfirmationClaims struct {

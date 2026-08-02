@@ -48,7 +48,7 @@ const (
 
 const (
 	IntegrityAlgorithmV2       = "amitia-package-sha256-v2"
-	IntegrityAlgorithmV1Legacy  = "amitia-tree-sha256-v1"
+	IntegrityAlgorithmV1Legacy = "amitia-tree-sha256-v1"
 )
 
 const (
@@ -89,8 +89,8 @@ func MapLegacyLoopType(loopType string) string {
 }
 
 const (
-	FileRolePreview     = "preview"
-	FileRoleManifest    = "manifest"
+	FileRolePreview      = "preview"
+	FileRoleManifest     = "manifest"
 	FileRoleActionConfig = "action-config"
 	FileRoleFrame        = "frame"
 	FileRoleMetadata     = "metadata"
@@ -98,10 +98,10 @@ const (
 )
 
 const (
-	QualityVerdictAccepted           = "accepted"
+	QualityVerdictAccepted            = "accepted"
 	QualityVerdictAcceptedWithWarning = "accepted_with_warning"
-	QualityVerdictNeedsReview        = "needs_review"
-	QualityVerdictRejected           = "rejected"
+	QualityVerdictNeedsReview         = "needs_review"
+	QualityVerdictRejected            = "rejected"
 )
 
 const (
@@ -132,14 +132,14 @@ type ManifestAuthor struct {
 }
 
 type ManifestLicense struct {
-	SPDX        string `json:"spdx"`
-	NoticePath  string `json:"noticePath"`
+	SPDX       string `json:"spdx"`
+	NoticePath string `json:"noticePath"`
 }
 
 type ManifestCompatibility struct {
-	MinRuntimeVersion  string  `json:"minRuntimeVersion"`
-	MaxRuntimeVersion  *string `json:"maxRuntimeVersion,omitempty"`
-	RenderMode         string  `json:"renderMode"`
+	MinRuntimeVersion string  `json:"minRuntimeVersion"`
+	MaxRuntimeVersion *string `json:"maxRuntimeVersion,omitempty"`
+	RenderMode        string  `json:"renderMode"`
 }
 
 type ManifestBinding struct {
@@ -148,24 +148,24 @@ type ManifestBinding struct {
 }
 
 type ManifestCanvas struct {
-	Width           int    `json:"width"`
-	Height          int    `json:"height"`
+	Width            int    `json:"width"`
+	Height           int    `json:"height"`
 	CoordinateSystem string `json:"coordinateSystem"`
 }
 
 type ManifestActionEntry struct {
-	Key                  string `json:"key"`
-	Name                 string `json:"name"`
-	Config               string `json:"config"`
-	RevisionID           string `json:"revisionId"`
-	QualityEvaluationID  string `json:"qualityEvaluationId"`
-	QualityVerdict       string `json:"qualityVerdict"`
-	PlaybackMode         string `json:"playbackMode"`
-	FPS                  int    `json:"fps"`
-	FrameCount           int    `json:"frameCount"`
-	SupportsDefaultIdle  bool   `json:"supportsDefaultIdle"`
-	IsStableStateCandidate bool  `json:"isStableStateCandidate"`
-	IsTransitionOnly     bool   `json:"isTransitionOnly"`
+	Key                    string `json:"key"`
+	Name                   string `json:"name"`
+	Config                 string `json:"config"`
+	RevisionID             string `json:"revisionId"`
+	QualityEvaluationID    string `json:"qualityEvaluationId"`
+	QualityVerdict         string `json:"qualityVerdict"`
+	PlaybackMode           string `json:"playbackMode"`
+	FPS                    int    `json:"fps"`
+	FrameCount             int    `json:"frameCount"`
+	SupportsDefaultIdle    bool   `json:"supportsDefaultIdle"`
+	IsStableStateCandidate bool   `json:"isStableStateCandidate"`
+	IsTransitionOnly       bool   `json:"isTransitionOnly"`
 }
 
 type ManifestCapabilities struct {
@@ -189,38 +189,38 @@ type ManifestIntegrity struct {
 	Algorithm       string              `json:"algorithm"`
 	ManifestHash    string              `json:"manifestHash"`
 	ContentRootHash string              `json:"contentRootHash"`
-	FileCount        int                 `json:"fileCount"`
-	TotalBytes       int64               `json:"totalBytes"`
-	Files            []FileManifestEntry `json:"files"`
+	FileCount       int                 `json:"fileCount"`
+	TotalBytes      int64               `json:"totalBytes"`
+	Files           []FileManifestEntry `json:"files"`
 }
 
 type ManifestProvenance struct {
-	SourceType        string `json:"sourceType"`
-	GenerationTaskID  string `json:"generationTaskId"`
-	ProcessingTaskID  string `json:"processingTaskId"`
-	BuiltAt           string `json:"builtAt"`
-	Builder           string `json:"builder"`
+	SourceType       string `json:"sourceType"`
+	GenerationTaskID string `json:"generationTaskId"`
+	ProcessingTaskID string `json:"processingTaskId"`
+	BuiltAt          string `json:"builtAt"`
+	Builder          string `json:"builder"`
 }
 
 type Manifest struct {
-	SchemaVersion  int                    `json:"schemaVersion"`
-	ManifestFormat string                 `json:"manifestFormat"`
-	PetID          string                 `json:"petId"`
-	ReleaseID      string                 `json:"releaseId"`
-	Version        string                 `json:"version"`
-	Name           string                 `json:"name"`
-	Description    string                 `json:"description"`
-	Author         ManifestAuthor         `json:"author"`
-	License        ManifestLicense        `json:"license"`
-	Compatibility  ManifestCompatibility  `json:"compatibility"`
-	Binding        ManifestBinding        `json:"binding"`
-	Canvas         ManifestCanvas         `json:"canvas"`
-	DefaultAction  string                 `json:"defaultAction"`
-	Preview        string                 `json:"preview"`
-	Actions        []ManifestActionEntry  `json:"actions"`
-	Capabilities   ManifestCapabilities   `json:"capabilities"`
-	Integrity      ManifestIntegrity      `json:"integrity"`
-	Provenance     ManifestProvenance     `json:"provenance"`
+	SchemaVersion  int                   `json:"schemaVersion"`
+	ManifestFormat string                `json:"manifestFormat"`
+	PetID          string                `json:"petId"`
+	ReleaseID      string                `json:"releaseId"`
+	Version        string                `json:"version"`
+	Name           string                `json:"name"`
+	Description    string                `json:"description"`
+	Author         ManifestAuthor        `json:"author"`
+	License        ManifestLicense       `json:"license"`
+	Compatibility  ManifestCompatibility `json:"compatibility"`
+	Binding        ManifestBinding       `json:"binding"`
+	Canvas         ManifestCanvas        `json:"canvas"`
+	DefaultAction  string                `json:"defaultAction"`
+	Preview        string                `json:"preview"`
+	Actions        []ManifestActionEntry `json:"actions"`
+	Capabilities   ManifestCapabilities  `json:"capabilities"`
+	Integrity      ManifestIntegrity     `json:"integrity"`
+	Provenance     ManifestProvenance    `json:"provenance"`
 }
 
 func NewManifest() *Manifest {

@@ -9,7 +9,7 @@ import (
 )
 
 type testOutboxPublisher struct {
-	mu    sync.Mutex
+	mu     sync.Mutex
 	events []outbox.OutboxRecord
 }
 

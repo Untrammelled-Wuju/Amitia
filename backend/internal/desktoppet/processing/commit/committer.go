@@ -47,12 +47,12 @@ type CommitRequest struct {
 }
 
 type CommitResult struct {
-	CommitID         string
-	RevisionID       string
-	RevisionNumber   int
-	RootStorageKey   string
-	Status           string
-	ContentRootHash  string
+	CommitID        string
+	RevisionID      string
+	RevisionNumber  int
+	RootStorageKey  string
+	Status          string
+	ContentRootHash string
 }
 
 type Committer interface {
@@ -60,14 +60,14 @@ type Committer interface {
 }
 
 type ProcessingCommitter struct {
-	db              *gorm.DB
-	repo            processing.Repository
-	workspace       *workspace.WorkspaceManager
-	commitJournal   events.CommitJournalRepository
-	outbox          *events.EventOutbox
-	manifestStore   source.ManifestStore
-	dataDir         string
-	now             func() string
+	db            *gorm.DB
+	repo          processing.Repository
+	workspace     *workspace.WorkspaceManager
+	commitJournal events.CommitJournalRepository
+	outbox        *events.EventOutbox
+	manifestStore source.ManifestStore
+	dataDir       string
+	now           func() string
 }
 
 func NewProcessingCommitter(
@@ -165,29 +165,29 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 	}
 
 	rev := &processing.ProcessingRevision{
-		ID:                          revisionID,
-		ProcessingTaskID:            req.ProcessingTaskID,
-		ProcessingActionID:          req.ProcessingActionID,
-		ProcessingAttemptID:         req.ProcessingAttemptID,
-		RevisionNumber:              revisionNumber,
-		SourceAttemptID:             req.ProcessingAttemptID,
-		SourceManifestID:            req.SourceManifestID,
-		SourceGenerationAttemptID:   req.SourceGenerationAttemptID,
-		SourceGenerationArtifactID:  req.SourceGenerationArtifactID,
-		SourceArtifactContentHash:   req.SourceArtifactContentHash,
-		Status:                      contracts.RevisionStatusPreparing,
-		ConfigSnapshot:              req.ConfigSnapshot,
-		ConfigHash:                  req.ConfigHash,
-		PipelineVersion:             req.PipelineVersion,
-		FrameCount:                  req.PipelineResult.FrameCount,
-		RootRelativePath:            rootStorageKey,
-		RootStorageKey:              rootStorageKey,
-		RevisionHash:                req.PipelineResult.RevisionHash,
-		ContentRootHash:             contentRootHash,
-		CommitID:                    commitID,
-		Active:                      0,
-		CreatedAt:                   now,
-		UpdatedAt:                   now,
+		ID:                         revisionID,
+		ProcessingTaskID:           req.ProcessingTaskID,
+		ProcessingActionID:         req.ProcessingActionID,
+		ProcessingAttemptID:        req.ProcessingAttemptID,
+		RevisionNumber:             revisionNumber,
+		SourceAttemptID:            req.ProcessingAttemptID,
+		SourceManifestID:           req.SourceManifestID,
+		SourceGenerationAttemptID:  req.SourceGenerationAttemptID,
+		SourceGenerationArtifactID: req.SourceGenerationArtifactID,
+		SourceArtifactContentHash:  req.SourceArtifactContentHash,
+		Status:                     contracts.RevisionStatusPreparing,
+		ConfigSnapshot:             req.ConfigSnapshot,
+		ConfigHash:                 req.ConfigHash,
+		PipelineVersion:            req.PipelineVersion,
+		FrameCount:                 req.PipelineResult.FrameCount,
+		RootRelativePath:           rootStorageKey,
+		RootStorageKey:             rootStorageKey,
+		RevisionHash:               req.PipelineResult.RevisionHash,
+		ContentRootHash:            contentRootHash,
+		CommitID:                   commitID,
+		Active:                     0,
+		CreatedAt:                  now,
+		UpdatedAt:                  now,
 	}
 
 	artifacts := c.buildArtifactRecords(revisionID, req)
@@ -272,24 +272,24 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 		}
 
 		outboxEvent := events.ProcessingRevisionCommittedEvent{
-			UserID:                      req.UserID,
-			CharacterID:                 req.CharacterID,
-			ProcessingTaskID:            req.ProcessingTaskID,
-			ProcessingActionID:          req.ProcessingActionID,
-			ProcessingAttemptID:         req.ProcessingAttemptID,
-			ProcessingRevisionID:        revisionID,
-			RevisionNumber:              revisionNumber,
-			ActionKey:                   req.ActionKey,
-			SourceManifestID:            req.SourceManifestID,
-			SourceGenerationAttemptID:   req.SourceGenerationAttemptID,
-			SourceGenerationArtifactID:  req.SourceGenerationArtifactID,
-			SourceArtifactContentHash:   req.SourceArtifactContentHash,
-			FrameCount:                  req.PipelineResult.FrameCount,
-			RevisionHash:                req.PipelineResult.RevisionHash,
-			ContentRootHash:             contentRootHash,
-			ConfigHash:                  req.ConfigHash,
-			PipelineVersion:             req.PipelineVersion,
-			OccurredAt:                  nowInner,
+			UserID:                     req.UserID,
+			CharacterID:                req.CharacterID,
+			ProcessingTaskID:           req.ProcessingTaskID,
+			ProcessingActionID:         req.ProcessingActionID,
+			ProcessingAttemptID:        req.ProcessingAttemptID,
+			ProcessingRevisionID:       revisionID,
+			RevisionNumber:             revisionNumber,
+			ActionKey:                  req.ActionKey,
+			SourceManifestID:           req.SourceManifestID,
+			SourceGenerationAttemptID:  req.SourceGenerationAttemptID,
+			SourceGenerationArtifactID: req.SourceGenerationArtifactID,
+			SourceArtifactContentHash:  req.SourceArtifactContentHash,
+			FrameCount:                 req.PipelineResult.FrameCount,
+			RevisionHash:               req.PipelineResult.RevisionHash,
+			ContentRootHash:            contentRootHash,
+			ConfigHash:                 req.ConfigHash,
+			PipelineVersion:            req.PipelineVersion,
+			OccurredAt:                 nowInner,
 		}
 		if err := c.outbox.EmitProcessingRevisionCommitted(tx, outboxEvent); err != nil {
 			return fmt.Errorf("emit outbox event: %w", err)
@@ -592,8 +592,8 @@ func (c *ProcessingCommitter) writeRevisionManifest(stagingDir, revisionID strin
 
 func (c *ProcessingCommitter) writeSourceManifestRef(stagingDir string, req *CommitRequest) error {
 	ref := map[string]string{
-		"sourceManifestId":          req.SourceManifestID,
-		"sourceGenerationAttemptId": req.SourceGenerationAttemptID,
+		"sourceManifestId":           req.SourceManifestID,
+		"sourceGenerationAttemptId":  req.SourceGenerationAttemptID,
 		"sourceGenerationArtifactId": req.SourceGenerationArtifactID,
 		"sourceArtifactContentHash":  req.SourceArtifactContentHash,
 	}

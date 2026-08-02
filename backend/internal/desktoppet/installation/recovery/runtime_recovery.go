@@ -12,9 +12,9 @@ import (
 )
 
 type RuntimeRecovery struct {
-	worker       *RecoveryWorker
-	repo         RecoveryRepo
-	runtimeRepo  RuntimeRepo
+	worker      *RecoveryWorker
+	repo        RecoveryRepo
+	runtimeRepo RuntimeRepo
 }
 
 type RuntimeRepo interface {

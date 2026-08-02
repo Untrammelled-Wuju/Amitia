@@ -1,15 +1,15 @@
 package editing
 
 type RevisionManifest struct {
-	SchemaVersion      int                    `json:"schemaVersion"`
-	RevisionID         string                 `json:"revisionId"`
-	ParentRevisionID   string                 `json:"parentRevisionId"`
-	ProcessingTaskID   string                 `json:"processingTaskId"`
-	ActionKey          string                 `json:"actionKey"`
-	Playback           ManifestPlayback       `json:"playback"`
-	Frames             []ManifestFrame        `json:"frames"`
-	Quality            ManifestQuality        `json:"quality"`
-	CreatedAt          string                 `json:"createdAt"`
+	SchemaVersion    int              `json:"schemaVersion"`
+	RevisionID       string           `json:"revisionId"`
+	ParentRevisionID string           `json:"parentRevisionId"`
+	ProcessingTaskID string           `json:"processingTaskId"`
+	ActionKey        string           `json:"actionKey"`
+	Playback         ManifestPlayback `json:"playback"`
+	Frames           []ManifestFrame  `json:"frames"`
+	Quality          ManifestQuality  `json:"quality"`
+	CreatedAt        string           `json:"createdAt"`
 }
 
 type ManifestPlayback struct {
@@ -20,12 +20,12 @@ type ManifestPlayback struct {
 }
 
 type ManifestFrame struct {
-	FrameID      string         `json:"frameId"`
-	LogicalIndex int            `json:"logicalIndex"`
-	AssetID      string         `json:"assetId"`
-	ContentHash  string         `json:"contentHash"`
-	DurationMS   int            `json:"durationMs"`
-	Anchor       ManifestAnchor `json:"anchor"`
+	FrameID      string          `json:"frameId"`
+	LogicalIndex int             `json:"logicalIndex"`
+	AssetID      string          `json:"assetId"`
+	ContentHash  string          `json:"contentHash"`
+	DurationMS   int             `json:"durationMs"`
+	Anchor       ManifestAnchor  `json:"anchor"`
 	Lineage      ManifestLineage `json:"lineage"`
 }
 
@@ -70,7 +70,7 @@ type FrameRestorePayload struct {
 }
 
 type FrameDuplicatePayload struct {
-	FrameID string `json:"frameId"`
+	FrameID      string `json:"frameId"`
 	AfterFrameID string `json:"afterFrameID,omitempty"`
 }
 
@@ -82,9 +82,9 @@ type FrameInsertAssetPayload struct {
 }
 
 type FrameReplaceAssetPayload struct {
-	FrameID       string `json:"frameId"`
-	AssetID       string `json:"assetId"`
-	KeepAnchor    bool   `json:"keepAnchor"`
+	FrameID    string `json:"frameId"`
+	AssetID    string `json:"assetId"`
+	KeepAnchor bool   `json:"keepAnchor"`
 }
 
 type FrameSetDurationPayload struct {
@@ -98,8 +98,8 @@ type FrameBatchSetDurationPayload struct {
 }
 
 type ActionSetDefaultFPSPayload struct {
-	DefaultFPS   int  `json:"defaultFps"`
-	Recalculate  bool `json:"recalculate"`
+	DefaultFPS  int  `json:"defaultFps"`
+	Recalculate bool `json:"recalculate"`
 }
 
 type ActionSetLoopTypePayload struct {
@@ -123,10 +123,10 @@ type ActionSetCooldownOverridePayload struct {
 }
 
 type AnchorSetFramePayload struct {
-	FrameID   string  `json:"frameId"`
-	AnchorX   float64 `json:"anchorX"`
-	AnchorY   float64 `json:"anchorY"`
-	Space     string  `json:"space"`
+	FrameID string  `json:"frameId"`
+	AnchorX float64 `json:"anchorX"`
+	AnchorY float64 `json:"anchorY"`
+	Space   string  `json:"space"`
 }
 
 type AnchorBatchOffsetPayload struct {
@@ -165,9 +165,9 @@ type CandidateRejectPayload struct {
 }
 
 type CreateSessionRequest struct {
-	BaseRevisionID  string `json:"baseRevisionId"`
+	BaseRevisionID   string `json:"baseRevisionId"`
 	ClientInstanceID string `json:"clientInstanceId"`
-	IdempotencyKey  string `json:"idempotencyKey"`
+	IdempotencyKey   string `json:"idempotencyKey"`
 }
 
 type CreateSessionResponse struct {
@@ -183,14 +183,14 @@ type ApplyOperationRequest struct {
 }
 
 type ApplyOperationResponse struct {
-	SessionVersion int64 `json:"sessionVersion"`
-	Sequence       int   `json:"sequence"`
+	SessionVersion int64  `json:"sessionVersion"`
+	Sequence       int    `json:"sequence"`
 	Status         string `json:"status"`
 }
 
 type SessionConflictDetail struct {
-	CurrentVersion       int64           `json:"currentVersion"`
-	ExpectedVersion      int64           `json:"expectedVersion"`
+	CurrentVersion          int64              `json:"currentVersion"`
+	ExpectedVersion         int64              `json:"expectedVersion"`
 	OperationsSinceExpected []OperationSummary `json:"operationsSinceExpected"`
 }
 
@@ -208,24 +208,24 @@ type CommitSessionRequest struct {
 }
 
 type CommitSessionResponse struct {
-	RevisionID    string `json:"revisionId"`
-	QualityJobID  string `json:"qualityJobId"`
-	Status        string `json:"status"`
+	RevisionID   string `json:"revisionId"`
+	QualityJobID string `json:"qualityJobId"`
+	Status       string `json:"status"`
 }
 
 type CreateRegenerationJobRequest struct {
-	TargetFrameID      string `json:"targetFrameId"`
-	JobType            string `json:"jobType"`
-	IdempotencyKey     string `json:"idempotencyKey"`
+	TargetFrameID         string `json:"targetFrameId"`
+	JobType               string `json:"jobType"`
+	IdempotencyKey        string `json:"idempotencyKey"`
 	CostConfirmationToken string `json:"costConfirmationToken"`
-	FixIntent           string `json:"fixIntent,omitempty"`
-	UseAdjacentFrames   bool   `json:"useAdjacentFrames"`
+	FixIntent             string `json:"fixIntent,omitempty"`
+	UseAdjacentFrames     bool   `json:"useAdjacentFrames"`
 }
 
 type CreateRegenerationJobResponse struct {
-	JobID          string `json:"jobId"`
-	Status         string `json:"status"`
-	CostEstimate   any    `json:"costEstimate,omitempty"`
+	JobID        string `json:"jobId"`
+	Status       string `json:"status"`
+	CostEstimate any    `json:"costEstimate,omitempty"`
 }
 
 type AcceptCandidateRequest struct {
@@ -237,33 +237,33 @@ type RejectCandidateRequest struct {
 }
 
 type ActivateRevisionRequest struct {
-	RevisionID    string `json:"revisionId"`
-	ExpectedBindingVersion int64 `json:"expectedBindingVersion"`
-	Reason        string `json:"reason"`
-	IdempotencyKey string `json:"idempotencyKey"`
+	RevisionID             string `json:"revisionId"`
+	ExpectedBindingVersion int64  `json:"expectedBindingVersion"`
+	Reason                 string `json:"reason"`
+	IdempotencyKey         string `json:"idempotencyKey"`
 }
 
 type RevisionSummary struct {
-	ID              string `json:"id"`
-	RevisionNumber  int    `json:"revisionNumber"`
-	RevisionType    string `json:"revisionType"`
-	Status          string `json:"status"`
-	FrameCount      int    `json:"frameCount"`
-	DurationMS      int    `json:"durationMs"`
-	DefaultFPS      int    `json:"defaultFps"`
-	LoopType        string `json:"loopType"`
-	QualityVerdict  string `json:"qualityVerdict"`
-	ChangeSummary   string `json:"changeSummary"`
+	ID               string `json:"id"`
+	RevisionNumber   int    `json:"revisionNumber"`
+	RevisionType     string `json:"revisionType"`
+	Status           string `json:"status"`
+	FrameCount       int    `json:"frameCount"`
+	DurationMS       int    `json:"durationMs"`
+	DefaultFPS       int    `json:"defaultFps"`
+	LoopType         string `json:"loopType"`
+	QualityVerdict   string `json:"qualityVerdict"`
+	ChangeSummary    string `json:"changeSummary"`
 	ParentRevisionID string `json:"parentRevisionId"`
-	IsActive        bool   `json:"isActive"`
-	CreatedAt       string `json:"createdAt"`
+	IsActive         bool   `json:"isActive"`
+	CreatedAt        string `json:"createdAt"`
 }
 
 type RevisionDetail struct {
-	Revision   ActionRevision       `json:"revision"`
-	Frames     []ActionRevisionFrame `json:"frames"`
-	Assets     []FrameAsset          `json:"assets"`
-	Manifest   *RevisionManifest     `json:"manifest,omitempty"`
+	Revision ActionRevision        `json:"revision"`
+	Frames   []ActionRevisionFrame `json:"frames"`
+	Assets   []FrameAsset          `json:"assets"`
+	Manifest *RevisionManifest     `json:"manifest,omitempty"`
 }
 
 type ActionStreamSummary struct {
@@ -282,28 +282,28 @@ type ActionStreamSummary struct {
 }
 
 type FrameTimelineItem struct {
-	FrameID       string `json:"frameId"`
-	LogicalIndex  int    `json:"logicalIndex"`
-	AssetID       string `json:"assetId"`
-	ContentHash   string `json:"contentHash"`
-	DurationMS    int    `json:"durationMs"`
-	SourceType    string `json:"sourceType"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	AnchorX       float64 `json:"anchorX"`
-	AnchorY       float64 `json:"anchorY"`
-	HasQualityIssue bool  `json:"hasQualityIssue"`
+	FrameID         string  `json:"frameId"`
+	LogicalIndex    int     `json:"logicalIndex"`
+	AssetID         string  `json:"assetId"`
+	ContentHash     string  `json:"contentHash"`
+	DurationMS      int     `json:"durationMs"`
+	SourceType      string  `json:"sourceType"`
+	Width           int     `json:"width"`
+	Height          int     `json:"height"`
+	AnchorX         float64 `json:"anchorX"`
+	AnchorY         float64 `json:"anchorY"`
+	HasQualityIssue bool    `json:"hasQualityIssue"`
 }
 
 type ActionEditSummary struct {
-	ActionKey         string             `json:"actionKey"`
-	ActiveRevisionID  string             `json:"activeRevisionId"`
-	ActiveRevisionNum int                `json:"activeRevisionNum"`
-	FrameCount        int                `json:"frameCount"`
-	DurationMS        int                `json:"durationMs"`
-	QualityVerdict    string             `json:"qualityVerdict"`
-	HasOpenSession    bool               `json:"hasOpenSession"`
-	RevisionCount     int                `json:"revisionCount"`
+	ActionKey         string              `json:"actionKey"`
+	ActiveRevisionID  string              `json:"activeRevisionId"`
+	ActiveRevisionNum int                 `json:"activeRevisionNum"`
+	FrameCount        int                 `json:"frameCount"`
+	DurationMS        int                 `json:"durationMs"`
+	QualityVerdict    string              `json:"qualityVerdict"`
+	HasOpenSession    bool                `json:"hasOpenSession"`
+	RevisionCount     int                 `json:"revisionCount"`
 	Timeline          []FrameTimelineItem `json:"timeline,omitempty"`
 }
 
@@ -321,8 +321,8 @@ type SessionEvent struct {
 }
 
 type JobProgressDetail struct {
-	JobID     string `json:"jobId"`
-	Status    string `json:"status"`
-	Progress  int    `json:"progress"`
+	JobID       string `json:"jobId"`
+	Status      string `json:"status"`
+	Progress    int    `json:"progress"`
 	CandidateID string `json:"candidateId,omitempty"`
 }

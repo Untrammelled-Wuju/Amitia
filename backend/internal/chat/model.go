@@ -3,9 +3,9 @@
 package chat
 
 import (
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"time"
 )
@@ -250,19 +250,19 @@ type ProcessMessageRequest struct {
 }
 
 type ProcessMessageResponse struct {
-	ConversationID string                     `json:"conversationId"`
-	Sequence       int64                      `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Reply          string                     `json:"reply"`
-	Lines          []string                   `json:"lines"`
-	CharacterID    string                     `json:"characterId"`
-	CharacterName  string                     `json:"characterName"`
-	MessageIDs     []string                   `json:"messageIds"`
-	ForceVoice     bool                       `json:"forceVoice"`
-	AudioUrls      []string                   `json:"audioUrls"`
-	UserMessage    *MessageItem               `json:"userMessage"`
-	UserMessageID  string                     `json:"userMessageId"`
-	RequestID      string                     `json:"requestId"`
-	MessagePlan    *interaction.MessagePlan   `json:"messagePlan,omitempty"`
+	ConversationID string                   `json:"conversationId"`
+	Sequence       int64                    `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Reply          string                   `json:"reply"`
+	Lines          []string                 `json:"lines"`
+	CharacterID    string                   `json:"characterId"`
+	CharacterName  string                   `json:"characterName"`
+	MessageIDs     []string                 `json:"messageIds"`
+	ForceVoice     bool                     `json:"forceVoice"`
+	AudioUrls      []string                 `json:"audioUrls"`
+	UserMessage    *MessageItem             `json:"userMessage"`
+	UserMessageID  string                   `json:"userMessageId"`
+	RequestID      string                   `json:"requestId"`
+	MessagePlan    *interaction.MessagePlan `json:"messagePlan,omitempty"`
 	Events         []newoutbox.OutboxRecord `json:"-"`
 }
 

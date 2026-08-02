@@ -17,13 +17,13 @@ func NewPublishJournalManager(repo release.ReleaseRepository) *PublishJournalMan
 
 func (m *PublishJournalManager) CreateJournal(operationID, releaseID, petID string) (*release.ReleasePublishJournal, error) {
 	journal := &release.ReleasePublishJournal{
-		ID:        uuid.NewString(),
+		ID:          uuid.NewString(),
 		OperationID: operationID,
-		ReleaseID: releaseID,
-		PetID:     petID,
-		Stage:     release.JournalStageSnapshotCreated,
-		CreatedAt: formatTimestamp(time.Now()),
-		UpdatedAt: formatTimestamp(time.Now()),
+		ReleaseID:   releaseID,
+		PetID:       petID,
+		Stage:       release.JournalStageSnapshotCreated,
+		CreatedAt:   formatTimestamp(time.Now()),
+		UpdatedAt:   formatTimestamp(time.Now()),
 	}
 	if err := m.repo.CreatePublishJournal(journal); err != nil {
 		return nil, err

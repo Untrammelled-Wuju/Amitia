@@ -56,14 +56,14 @@ func seedPackagerTask(t *testing.T, db *gorm.DB, taskID, userID, status string) 
 func seedPackagerAction(t *testing.T, db *gorm.DB, actionID, taskID, actionKey, status string, supportsIdle int, frameCount int) desktoppet.GenerationTaskAction {
 	t.Helper()
 	action := desktoppet.GenerationTaskAction{
-		ID:                   actionID,
-		TaskID:               taskID,
-		ActionKey:            actionKey,
-		ActionNameSnapshot:   actionKey,
-		Status:               status,
-		SupportsDefaultIdle:  supportsIdle,
-		SortOrder:            1,
-		FrameCount:           frameCount,
+		ID:                    actionID,
+		TaskID:                taskID,
+		ActionKey:             actionKey,
+		ActionNameSnapshot:    actionKey,
+		Status:                status,
+		SupportsDefaultIdle:   supportsIdle,
+		SortOrder:             1,
+		FrameCount:            frameCount,
 		GenerationSpecVersion: "v1",
 	}
 	if err := db.Create(&action).Error; err != nil {
@@ -223,8 +223,8 @@ func TestPackager_ValidateIncludedActions_ActionNotSucceeded(t *testing.T) {
 	p := NewPackager(repo, t.TempDir())
 
 	req := &PackageBuildRequest{
-		DefaultAction:    "idle_normal",
-		IncludedActions:  []string{"idle_normal", "walk_left"},
+		DefaultAction:   "idle_normal",
+		IncludedActions: []string{"idle_normal", "walk_left"},
 		SucceededActions: []desktoppet.GenerationTaskAction{
 			{ActionKey: "idle_normal", Status: "succeeded", SupportsDefaultIdle: 1},
 			{ActionKey: "walk_left", Status: "failed", SupportsDefaultIdle: 0},
@@ -241,8 +241,8 @@ func TestPackager_ValidateIncludedActions_DefaultActionNotIncluded(t *testing.T)
 	p := NewPackager(repo, t.TempDir())
 
 	req := &PackageBuildRequest{
-		DefaultAction:    "idle_normal",
-		IncludedActions:  []string{"wave"},
+		DefaultAction:   "idle_normal",
+		IncludedActions: []string{"wave"},
 		SucceededActions: []desktoppet.GenerationTaskAction{
 			{ActionKey: "idle_normal", Status: "succeeded", SupportsDefaultIdle: 1},
 			{ActionKey: "wave", Status: "succeeded", SupportsDefaultIdle: 0},
@@ -259,8 +259,8 @@ func TestPackager_ValidateIncludedActions_DefaultActionNotSupportsIdle(t *testin
 	p := NewPackager(repo, t.TempDir())
 
 	req := &PackageBuildRequest{
-		DefaultAction:    "wave",
-		IncludedActions:  []string{"wave"},
+		DefaultAction:   "wave",
+		IncludedActions: []string{"wave"},
 		SucceededActions: []desktoppet.GenerationTaskAction{
 			{ActionKey: "wave", Status: "succeeded", SupportsDefaultIdle: 0},
 		},

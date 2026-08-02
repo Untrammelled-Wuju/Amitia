@@ -120,37 +120,37 @@ func (api *EventAPI) publishEvent(c *gin.Context) {
 		return
 	}
 	var body struct {
-		EventTypeID    string          `json:"eventTypeId"`
-		Version        int             `json:"version"`
-		Payload        json.RawMessage `json:"payload"`
-		ProducerID     string          `json:"producerId"`
-		ProducerType   string          `json:"producerType"`
-		AggregateType  string          `json:"aggregateType"`
-		AggregateID    string          `json:"aggregateId"`
-		PartitionKey   string          `json:"partitionKey"`
-		OrderingKey    string          `json:"orderingKey"`
-		TraceID        string          `json:"traceId"`
-		OperationID    string          `json:"operationId"`
-		ParentEventID  string          `json:"parentEventId"`
-		ParentDepth    int             `json:"parentDepth"`
-		Metadata       json.RawMessage `json:"metadata"`
+		EventTypeID   string          `json:"eventTypeId"`
+		Version       int             `json:"version"`
+		Payload       json.RawMessage `json:"payload"`
+		ProducerID    string          `json:"producerId"`
+		ProducerType  string          `json:"producerType"`
+		AggregateType string          `json:"aggregateType"`
+		AggregateID   string          `json:"aggregateId"`
+		PartitionKey  string          `json:"partitionKey"`
+		OrderingKey   string          `json:"orderingKey"`
+		TraceID       string          `json:"traceId"`
+		OperationID   string          `json:"operationId"`
+		ParentEventID string          `json:"parentEventId"`
+		ParentDepth   int             `json:"parentDepth"`
+		Metadata      json.RawMessage `json:"metadata"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
 		return
 	}
 	opts := event.PublishOptions{
-		ProducerID:     body.ProducerID,
-		ProducerType:   body.ProducerType,
-		AggregateType:  body.AggregateType,
-		AggregateID:    body.AggregateID,
-		PartitionKey:   body.PartitionKey,
-		OrderingKey:    body.OrderingKey,
-		TraceID:        body.TraceID,
-		OperationID:    body.OperationID,
-		ParentEventID:  body.ParentEventID,
-		ParentDepth:    body.ParentDepth,
-		Metadata:       body.Metadata,
+		ProducerID:    body.ProducerID,
+		ProducerType:  body.ProducerType,
+		AggregateType: body.AggregateType,
+		AggregateID:   body.AggregateID,
+		PartitionKey:  body.PartitionKey,
+		OrderingKey:   body.OrderingKey,
+		TraceID:       body.TraceID,
+		OperationID:   body.OperationID,
+		ParentEventID: body.ParentEventID,
+		ParentDepth:   body.ParentDepth,
+		Metadata:      body.Metadata,
 	}
 	result, err := svc.Publish(c.Request.Context(), event.EventTypeID(body.EventTypeID), body.Version, body.Payload, opts)
 	if err != nil {
@@ -167,20 +167,20 @@ func (api *EventAPI) publishEventTx(c *gin.Context) {
 		return
 	}
 	var body struct {
-		EventTypeID    string          `json:"eventTypeId"`
-		Version        int             `json:"version"`
-		Payload        json.RawMessage `json:"payload"`
-		ProducerID     string          `json:"producerId"`
-		ProducerType   string          `json:"producerType"`
-		AggregateType  string          `json:"aggregateType"`
-		AggregateID    string          `json:"aggregateId"`
-		PartitionKey   string          `json:"partitionKey"`
-		OrderingKey    string          `json:"orderingKey"`
-		TraceID        string          `json:"traceId"`
-		OperationID    string          `json:"operationId"`
-		ParentEventID  string          `json:"parentEventId"`
-		ParentDepth    int             `json:"parentDepth"`
-		Metadata       json.RawMessage `json:"metadata"`
+		EventTypeID   string          `json:"eventTypeId"`
+		Version       int             `json:"version"`
+		Payload       json.RawMessage `json:"payload"`
+		ProducerID    string          `json:"producerId"`
+		ProducerType  string          `json:"producerType"`
+		AggregateType string          `json:"aggregateType"`
+		AggregateID   string          `json:"aggregateId"`
+		PartitionKey  string          `json:"partitionKey"`
+		OrderingKey   string          `json:"orderingKey"`
+		TraceID       string          `json:"traceId"`
+		OperationID   string          `json:"operationId"`
+		ParentEventID string          `json:"parentEventId"`
+		ParentDepth   int             `json:"parentDepth"`
+		Metadata      json.RawMessage `json:"metadata"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
@@ -193,17 +193,17 @@ func (api *EventAPI) publishEventTx(c *gin.Context) {
 	}
 	defer tx.Rollback()
 	opts := event.PublishOptions{
-		ProducerID:     body.ProducerID,
-		ProducerType:   body.ProducerType,
-		AggregateType:  body.AggregateType,
-		AggregateID:    body.AggregateID,
-		PartitionKey:   body.PartitionKey,
-		OrderingKey:    body.OrderingKey,
-		TraceID:        body.TraceID,
-		OperationID:    body.OperationID,
-		ParentEventID:  body.ParentEventID,
-		ParentDepth:    body.ParentDepth,
-		Metadata:       body.Metadata,
+		ProducerID:    body.ProducerID,
+		ProducerType:  body.ProducerType,
+		AggregateType: body.AggregateType,
+		AggregateID:   body.AggregateID,
+		PartitionKey:  body.PartitionKey,
+		OrderingKey:   body.OrderingKey,
+		TraceID:       body.TraceID,
+		OperationID:   body.OperationID,
+		ParentEventID: body.ParentEventID,
+		ParentDepth:   body.ParentDepth,
+		Metadata:      body.Metadata,
 	}
 	result, err := svc.PublishTx(c.Request.Context(), tx, event.EventTypeID(body.EventTypeID), body.Version, body.Payload, opts)
 	if err != nil {

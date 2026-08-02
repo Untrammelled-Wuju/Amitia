@@ -84,9 +84,9 @@ func (w *RecoveryWorker) recoverStuckJobs(ctx context.Context) {
 			log.Logger.Infof("recovery worker marked job %s as failed_terminal", job.ID)
 		} else {
 			if uErr := w.repo.UpdateJobFields(job.ID, map[string]any{
-				"status":            JobStatusQueued,
-				"lease_owner":       "",
-				"lease_expires_at":  "",
+				"status":           JobStatusQueued,
+				"lease_owner":      "",
+				"lease_expires_at": "",
 			}); uErr != nil {
 				log.Logger.Errorf("recovery worker requeue job %s failed: %v", job.ID, uErr)
 				continue

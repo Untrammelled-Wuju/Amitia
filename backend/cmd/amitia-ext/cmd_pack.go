@@ -151,11 +151,11 @@ func runPack(args []string, output *Output) int {
 		OK:      true,
 		Message: fmt.Sprintf("打包成功: %s", outAbs),
 		Data: map[string]any{
-			"file":      outAbs,
-			"treeHash":  treeHash,
-			"fileCount": len(fileEntries),
+			"file":        outAbs,
+			"treeHash":    treeHash,
+			"fileCount":   len(fileEntries),
 			"extensionId": m.Extension.ID,
-			"version":   m.Extension.Version,
+			"version":     m.Extension.Version,
 		},
 	})
 	return ExitSuccess

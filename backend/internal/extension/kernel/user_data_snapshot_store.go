@@ -45,20 +45,20 @@ const (
 )
 
 type UserDataRestoreJournal struct {
-	JournalID    string
-	OperationID  string
-	ExtensionID  string
-	TableName    string
-	TotalRows    int64
-	ImportedRows int64
-	AppliedCount int64
-	Cursor       string
-	BatchHash    string
+	JournalID     string
+	OperationID   string
+	ExtensionID   string
+	TableName     string
+	TotalRows     int64
+	ImportedRows  int64
+	AppliedCount  int64
+	Cursor        string
+	BatchHash     string
 	NamespaceHash string
-	State        UserDataRestoreState
-	StartedAt    string
-	UpdatedAt    string
-	ErrorDetail  string
+	State         UserDataRestoreState
+	StartedAt     string
+	UpdatedAt     string
+	ErrorDetail   string
 }
 
 type UserDataSnapshotStore struct {

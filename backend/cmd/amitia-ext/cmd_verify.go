@@ -39,11 +39,11 @@ func runVerify(args []string, output *Output) int {
 		OK:      true,
 		Message: fmt.Sprintf("完整性验证通过: %s", archivePath),
 		Data: map[string]any{
-			"extensionId": pkg.Manifest.Extension.ID,
-			"version":     pkg.Manifest.Extension.Version,
-			"treeHash":    pkg.Tree.TreeHash,
-			"fileCount":   len(pkg.Integrity.Files),
-			"hasV2Sig":    len(pkg.V2Signature) > 0,
+			"extensionId":  pkg.Manifest.Extension.ID,
+			"version":      pkg.Manifest.Extension.Version,
+			"treeHash":     pkg.Tree.TreeHash,
+			"fileCount":    len(pkg.Integrity.Files),
+			"hasV2Sig":     len(pkg.V2Signature) > 0,
 			"hasLegacySig": pkg.Signatures != nil,
 		},
 	}

@@ -6,10 +6,10 @@ import (
 )
 
 type FallbackGraph struct {
-	edges     map[string][]string
-	compiled  bool
-	hasCycle  bool
-	maxDepth  int
+	edges    map[string][]string
+	compiled bool
+	hasCycle bool
+	maxDepth int
 }
 
 func NewFallbackGraph() *FallbackGraph {

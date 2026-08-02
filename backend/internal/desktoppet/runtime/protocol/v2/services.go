@@ -5,10 +5,10 @@ import (
 )
 
 type Services struct {
-	Sessions       SessionService
-	Commands       CommandService
-	Events         EventService
-	ActualStates   ActualStateService
+	Sessions     SessionService
+	Commands     CommandService
+	Events       EventService
+	ActualStates ActualStateService
 }
 
 func NewServices(db *gorm.DB) *Services {

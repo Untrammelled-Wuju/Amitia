@@ -45,13 +45,13 @@ type InboxEntryPayload struct {
 }
 
 type BridgeProcessor struct {
-	inboxRepo     BridgeInboxRepository
-	journalRepo   BridgeJournalRepository
-	committer     *baseline.BaselineActionRevisionCommitter
-	procReader    ProcessingRevisionReader
-	outboxRepo    OutboxRepository
-	eventPub      EventPublisher
-	workerID      string
+	inboxRepo   BridgeInboxRepository
+	journalRepo BridgeJournalRepository
+	committer   *baseline.BaselineActionRevisionCommitter
+	procReader  ProcessingRevisionReader
+	outboxRepo  OutboxRepository
+	eventPub    EventPublisher
+	workerID    string
 }
 
 type EventPublisher interface {
@@ -193,25 +193,25 @@ func (p *BridgeProcessor) processPayload(ctx context.Context, entry *editing.Act
 	_ = p.journalRepo.UpdateStatus(journalID, baseline.BridgeStatusCommitting, "")
 
 	commitReq := baseline.CommitterRequest{
-		UserID:                payload.UserID,
-		CharacterID:           payload.CharacterID,
-		ProcessingTaskID:      payload.ProcessingTaskID,
-		ProcessingActionID:    payload.ProcessingActionID,
-		ProcessingAttemptID:   payload.ProcessingAttemptID,
-		ProcessingRevisionID:  payload.ProcessingRevisionID,
-		ActionKey:             payload.ActionKey,
-		ActionConfigJSON:      payload.ActionConfigJSON,
-		ActionConfigHash:      payload.ActionConfigHash,
-		ActionSpecVersion:     payload.ActionSpecVersion,
-		ActionSpecHash:        payload.ActionSpecHash,
-		PlaybackMode:          payload.PlaybackMode,
-		FPS:                   payload.FPS,
-		FrameDurationMS:       payload.FrameDurationMS,
-		LoopType:              payload.LoopType,
-		AnchorJSON:            payload.AnchorJSON,
-		PromotionPolicy:       payload.PromotionPolicy,
-		CreatedBy:             payload.CreatedBy,
-		CorrelationID:         entry.EventID,
+		UserID:               payload.UserID,
+		CharacterID:          payload.CharacterID,
+		ProcessingTaskID:     payload.ProcessingTaskID,
+		ProcessingActionID:   payload.ProcessingActionID,
+		ProcessingAttemptID:  payload.ProcessingAttemptID,
+		ProcessingRevisionID: payload.ProcessingRevisionID,
+		ActionKey:            payload.ActionKey,
+		ActionConfigJSON:     payload.ActionConfigJSON,
+		ActionConfigHash:     payload.ActionConfigHash,
+		ActionSpecVersion:    payload.ActionSpecVersion,
+		ActionSpecHash:       payload.ActionSpecHash,
+		PlaybackMode:         payload.PlaybackMode,
+		FPS:                  payload.FPS,
+		FrameDurationMS:      payload.FrameDurationMS,
+		LoopType:             payload.LoopType,
+		AnchorJSON:           payload.AnchorJSON,
+		PromotionPolicy:      payload.PromotionPolicy,
+		CreatedBy:            payload.CreatedBy,
+		CorrelationID:        entry.EventID,
 	}
 
 	result, err := p.committer.Commit(commitReq, procRev, artifacts)

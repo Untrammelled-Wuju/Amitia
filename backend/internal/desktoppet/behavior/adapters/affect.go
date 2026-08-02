@@ -71,4 +71,5 @@ func (a *AffectAdapter) OnAffectChanged(ctx context.Context, characterID string,
 
 type NoopAffectAdapter struct{}
 
-func (n *NoopAffectAdapter) OnAffectChanged(_ context.Context, _ string, _, _ behavior.AffectBehaviorSnapshot) {}
+func (n *NoopAffectAdapter) OnAffectChanged(_ context.Context, _ string, _, _ behavior.AffectBehaviorSnapshot) {
+}

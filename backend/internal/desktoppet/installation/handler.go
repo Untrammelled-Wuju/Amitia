@@ -6,8 +6,8 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/internal/middleware"
+	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 

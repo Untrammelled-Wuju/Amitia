@@ -7,9 +7,9 @@ const continuityConstraint = "保持与参考图同一角色，脸部/发型/服
 
 var defaultSpecs = map[string]ActionGenerationSpec{
 	"idle_normal": {
-		ActionKey:   "idle_normal",
-		LoopType:    LoopTypeLoop,
-		FrameCount:  8,
+		ActionKey:  "idle_normal",
+		LoopType:   LoopTypeLoop,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然站立姿态，双臂自然下垂"},
 			{Index: 1, Description: "胸腔轻微扩张，开始吸气"},
@@ -30,9 +30,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"idle_breathing": {
-		ActionKey:   "idle_breathing",
-		LoopType:    LoopTypeLoop,
-		FrameCount:  8,
+		ActionKey:  "idle_breathing",
+		LoopType:   LoopTypeLoop,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立姿态，双臂自然下垂"},
 			{Index: 1, Description: "缓慢吸气，胸腔轻微扩张"},
@@ -53,9 +53,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"idle_blink": {
-		ActionKey:   "idle_blink",
-		LoopType:    LoopTypeLoop,
-		FrameCount:  4,
+		ActionKey:  "idle_blink",
+		LoopType:   LoopTypeLoop,
+		FrameCount: 4,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "眼睛完全睁开，自然站立"},
 			{Index: 1, Description: "上眼睑开始下落"},
@@ -72,9 +72,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"idle_look_around": {
-		ActionKey:   "idle_look_around",
-		LoopType:    LoopTypeLoop,
-		FrameCount:  12,
+		ActionKey:  "idle_look_around",
+		LoopType:   LoopTypeLoop,
+		FrameCount: 12,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，正视前方"},
 			{Index: 1, Description: "头部开始向左转"},
@@ -99,9 +99,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"idle_sway": {
-		ActionKey:   "idle_sway",
-		LoopType:    LoopTypeLoop,
-		FrameCount:  10,
+		ActionKey:  "idle_sway",
+		LoopType:   LoopTypeLoop,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，身体居中"},
 			{Index: 1, Description: "身体重心开始向左偏移"},
@@ -124,9 +124,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"walk_left": {
-		ActionKey:   "walk_left",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "walk_left",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，准备向左迈步"},
 			{Index: 1, Description: "右腿抬起向左迈出"},
@@ -147,9 +147,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"walk_right": {
-		ActionKey:   "walk_right",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "walk_right",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，准备向右迈步"},
 			{Index: 1, Description: "左腿抬起向右迈出"},
@@ -170,9 +170,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"run_left": {
-		ActionKey:   "run_left",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "run_left",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始奔跑预备，身体前倾"},
 			{Index: 1, Description: "右腿大力蹬地向左"},
@@ -193,9 +193,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"run_right": {
-		ActionKey:   "run_right",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "run_right",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始奔跑预备，身体前倾"},
 			{Index: 1, Description: "左腿大力蹬地向右"},
@@ -216,9 +216,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"jump": {
-		ActionKey:   "jump",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "jump",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，准备起跳"},
 			{Index: 1, Description: "双腿弯曲下蹲蓄力"},
@@ -241,9 +241,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"land": {
-		ActionKey:   "land",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "land",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "身体在空中下落"},
 			{Index: 1, Description: "双脚触地瞬间"},
@@ -262,9 +262,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"turn_around": {
-		ActionKey:   "turn_around",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "turn_around",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始正面对着镜头"},
 			{Index: 1, Description: "开始转身，肩膀转动"},
@@ -283,9 +283,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"wave": {
-		ActionKey:   "wave",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "wave",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，右臂自然下垂"},
 			{Index: 1, Description: "右臂抬起至肩部高度"},
@@ -306,9 +306,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"nod": {
-		ActionKey:   "nod",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  4,
+		ActionKey:  "nod",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 4,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始正视前方"},
 			{Index: 1, Description: "头部开始向下点"},
@@ -325,9 +325,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"shake_head": {
-		ActionKey:   "shake_head",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  4,
+		ActionKey:  "shake_head",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 4,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始正视前方"},
 			{Index: 1, Description: "头部转向左侧"},
@@ -344,9 +344,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"clap": {
-		ActionKey:   "clap",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "clap",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，双手在胸前分开"},
 			{Index: 1, Description: "双手开始合拢"},
@@ -367,9 +367,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"point": {
-		ActionKey:   "point",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "point",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，右臂下垂"},
 			{Index: 1, Description: "右臂抬起，前臂弯曲"},
@@ -388,9 +388,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"stretch": {
-		ActionKey:   "stretch",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "stretch",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "双臂开始上举"},
@@ -413,9 +413,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"bow": {
-		ActionKey:   "bow",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "bow",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "上半身开始前倾"},
@@ -436,9 +436,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"happy": {
-		ActionKey:   "happy",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "happy",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "嘴角开始上扬"},
@@ -459,9 +459,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"excited": {
-		ActionKey:   "excited",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "excited",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "双臂开始上举，表情兴奋"},
@@ -484,9 +484,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"shy": {
-		ActionKey:   "shy",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "shy",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "脸颊开始泛红"},
@@ -507,9 +507,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"sad": {
-		ActionKey:   "sad",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "sad",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "嘴角开始下垂"},
@@ -530,9 +530,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"cry": {
-		ActionKey:   "cry",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "cry",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "眼眶开始泛红"},
@@ -555,9 +555,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"angry": {
-		ActionKey:   "angry",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "angry",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "眉头开始紧锁"},
@@ -578,9 +578,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"surprised": {
-		ActionKey:   "surprised",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "surprised",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "眼睛开始睁大"},
@@ -599,9 +599,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"confused": {
-		ActionKey:   "confused",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "confused",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "一侧眉毛开始上挑"},
@@ -622,9 +622,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"embarrassed": {
-		ActionKey:   "embarrassed",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "embarrassed",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "脸颊开始泛红"},
@@ -645,9 +645,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"scared": {
-		ActionKey:   "scared",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "scared",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始自然表情"},
 			{Index: 1, Description: "瞳孔开始收缩"},
@@ -668,9 +668,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"proud": {
-		ActionKey:   "proud",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "proud",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "下巴开始抬起"},
@@ -691,9 +691,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"tired": {
-		ActionKey:   "tired",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "tired",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "双肩开始下沉"},
@@ -714,9 +714,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"sit": {
-		ActionKey:   "sit",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "sit",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "双腿开始弯曲"},
@@ -735,9 +735,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"sleep": {
-		ActionKey:   "sleep",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  12,
+		ActionKey:  "sleep",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 12,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "开始弯腰"},
@@ -762,9 +762,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"wake_up": {
-		ActionKey:   "wake_up",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "wake_up",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "躺卧睡眠姿态"},
 			{Index: 1, Description: "眼皮开始颤动"},
@@ -785,9 +785,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"eat": {
-		ActionKey:   "eat",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "eat",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始坐姿或站姿"},
 			{Index: 1, Description: "拿起食物"},
@@ -810,9 +810,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"drink": {
-		ActionKey:   "drink",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "drink",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始姿态"},
 			{Index: 1, Description: "拿起杯子"},
@@ -833,9 +833,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"read": {
-		ActionKey:   "read",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "read",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始坐姿"},
 			{Index: 1, Description: "拿起书本"},
@@ -858,9 +858,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"write": {
-		ActionKey:   "write",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "write",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始坐姿"},
 			{Index: 1, Description: "拿起笔"},
@@ -883,9 +883,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"use_phone": {
-		ActionKey:   "use_phone",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "use_phone",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始姿态"},
 			{Index: 1, Description: "拿出手机"},
@@ -908,9 +908,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"work": {
-		ActionKey:   "work",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "work",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始坐姿"},
 			{Index: 1, Description: "双手放在桌面"},
@@ -933,9 +933,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"study": {
-		ActionKey:   "study",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "study",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始坐姿"},
 			{Index: 1, Description: "翻开书本"},
@@ -958,9 +958,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"clicked": {
-		ActionKey:   "clicked",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  4,
+		ActionKey:  "clicked",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 4,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "受到点击惊讶反应"},
@@ -977,9 +977,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"double_clicked": {
-		ActionKey:   "double_clicked",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  4,
+		ActionKey:  "double_clicked",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 4,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "第一次点击反应"},
@@ -996,9 +996,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"hovered": {
-		ActionKey:   "hovered",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  4,
+		ActionKey:  "hovered",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 4,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "注意到鼠标靠近"},
@@ -1015,9 +1015,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"dragged": {
-		ActionKey:   "dragged",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "dragged",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "被抓起的瞬间"},
@@ -1036,9 +1036,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"picked_up": {
-		ActionKey:   "picked_up",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "picked_up",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "被抓住的瞬间"},
@@ -1059,9 +1059,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"dropped": {
-		ActionKey:   "dropped",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "dropped",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "悬空姿态"},
 			{Index: 1, Description: "开始下落"},
@@ -1080,9 +1080,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"fall": {
-		ActionKey:   "fall",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "fall",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始悬空或边缘姿态"},
 			{Index: 1, Description: "开始失去平衡"},
@@ -1105,9 +1105,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"edge_sit": {
-		ActionKey:   "edge_sit",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "edge_sit",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "走向窗口边缘"},
@@ -1128,9 +1128,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"edge_climb": {
-		ActionKey:   "edge_climb",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "edge_climb",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始在边缘下方"},
 			{Index: 1, Description: "双手抓住边缘"},
@@ -1153,9 +1153,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"sleep_on_desktop": {
-		ActionKey:   "sleep_on_desktop",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  12,
+		ActionKey:  "sleep_on_desktop",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 12,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始坐姿"},
 			{Index: 1, Description: "开始疲倦打哈欠"},
@@ -1180,9 +1180,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"listening": {
-		ActionKey:   "listening",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "listening",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "身体微微前倾"},
@@ -1201,9 +1201,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"thinking": {
-		ActionKey:   "thinking",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "thinking",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "眉头开始微皱"},
@@ -1224,9 +1224,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"speaking": {
-		ActionKey:   "speaking",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  10,
+		ActionKey:  "speaking",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 10,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立，闭嘴"},
 			{Index: 1, Description: "嘴巴开始张开"},
@@ -1249,9 +1249,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"agreeing": {
-		ActionKey:   "agreeing",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "agreeing",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "开始点头"},
@@ -1270,9 +1270,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"disagreeing": {
-		ActionKey:   "disagreeing",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  6,
+		ActionKey:  "disagreeing",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 6,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "开始摇头"},
@@ -1291,9 +1291,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"waiting": {
-		ActionKey:   "waiting",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "waiting",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "双手交叠身前"},
@@ -1314,9 +1314,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"greeting": {
-		ActionKey:   "greeting",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "greeting",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "看到对方露出笑容"},
@@ -1337,9 +1337,9 @@ var defaultSpecs = map[string]ActionGenerationSpec{
 		Version:                1,
 	},
 	"goodbye": {
-		ActionKey:   "goodbye",
-		LoopType:    LoopTypeOnce,
-		FrameCount:  8,
+		ActionKey:  "goodbye",
+		LoopType:   LoopTypeOnce,
+		FrameCount: 8,
 		FramePhases: []FramePhase{
 			{Index: 0, Description: "起始站立"},
 			{Index: 1, Description: "抬起右手"},

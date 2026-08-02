@@ -23,15 +23,15 @@ type BehaviorBinding struct {
 }
 
 func (b BehaviorBinding) GetID() string              { return b.ID }
-func (b BehaviorBinding) GetEventType() string        { return b.EventType }
-func (b BehaviorBinding) IsEnabled() bool             { return b.Enabled }
-func (b BehaviorBinding) GetSemantic() string         { return b.Semantic }
-func (b BehaviorBinding) GetPreferredAction() string  { return b.PreferredAction }
-func (b BehaviorBinding) GetPriorityOffset() int      { return b.PriorityOffset }
-func (b BehaviorBinding) GetCooldownMS() int64        { return b.CooldownMS }
-func (b BehaviorBinding) GetUserID() string           { return b.UserID }
-func (b BehaviorBinding) GetCharacterID() string      { return b.CharacterID }
-func (b BehaviorBinding) GetInstallationID() string   { return b.InstallationID }
+func (b BehaviorBinding) GetEventType() string       { return b.EventType }
+func (b BehaviorBinding) IsEnabled() bool            { return b.Enabled }
+func (b BehaviorBinding) GetSemantic() string        { return b.Semantic }
+func (b BehaviorBinding) GetPreferredAction() string { return b.PreferredAction }
+func (b BehaviorBinding) GetPriorityOffset() int     { return b.PriorityOffset }
+func (b BehaviorBinding) GetCooldownMS() int64       { return b.CooldownMS }
+func (b BehaviorBinding) GetUserID() string          { return b.UserID }
+func (b BehaviorBinding) GetCharacterID() string     { return b.CharacterID }
+func (b BehaviorBinding) GetInstallationID() string  { return b.InstallationID }
 
 type bindingEntry interface {
 	GetID() string

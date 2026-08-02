@@ -26,18 +26,18 @@ type AttemptInfo struct {
 }
 
 type ArtifactInfo struct {
-	ArtifactID    string
-	TaskID        string
-	TaskActionID  string
-	AttemptID     string
-	ArtifactType  string
-	Status        string
-	RelativePath  string
-	Hash          string
-	Width         int
-	Height        int
-	LayoutJSON    string
-	IsPrimary     bool
+	ArtifactID   string
+	TaskID       string
+	TaskActionID string
+	AttemptID    string
+	ArtifactType string
+	Status       string
+	RelativePath string
+	Hash         string
+	Width        int
+	Height       int
+	LayoutJSON   string
+	IsPrimary    bool
 }
 
 var (

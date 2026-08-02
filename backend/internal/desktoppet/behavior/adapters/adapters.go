@@ -29,8 +29,8 @@ func (p *enginePublisher) PublishBehaviorEvent(ctx context.Context, event behavi
 
 type realClock struct{}
 
-func (realClock) Now() time.Time                    { return time.Now() }
-func (realClock) Since(t time.Time) time.Duration   { return time.Since(t) }
+func (realClock) Now() time.Time                  { return time.Now() }
+func (realClock) Since(t time.Time) time.Duration { return time.Since(t) }
 
 type AdapterManagerOptions struct {
 	Clock         behavior.Clock

@@ -10,15 +10,15 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig       `mapstructure:"server"`
-	Storage   StorageConfig      `mapstructure:"storage"`
-	JWT       JWTConfig          `mapstructure:"jwt"`
-	App       AppConfig          `mapstructure:"app"`
-	Chat      ChatConfig         `mapstructure:"chat"`
-	Qdrant    QdrantConfig       `mapstructure:"qdrant"`
-	Embedding EmbeddingConfig    `mapstructure:"embedding"`
-	Surreal          SurrealConfig          `mapstructure:"surrealdb"`
-	Prompt           PromptFeatureFlags     `mapstructure:"prompt"`
+	Server            ServerConfig            `mapstructure:"server"`
+	Storage           StorageConfig           `mapstructure:"storage"`
+	JWT               JWTConfig               `mapstructure:"jwt"`
+	App               AppConfig               `mapstructure:"app"`
+	Chat              ChatConfig              `mapstructure:"chat"`
+	Qdrant            QdrantConfig            `mapstructure:"qdrant"`
+	Embedding         EmbeddingConfig         `mapstructure:"embedding"`
+	Surreal           SurrealConfig           `mapstructure:"surrealdb"`
+	Prompt            PromptFeatureFlags      `mapstructure:"prompt"`
 	DesktopPetRuntime DesktopPetRuntimeConfig `mapstructure:"desktopPetRuntime"`
 }
 

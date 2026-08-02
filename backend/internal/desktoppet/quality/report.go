@@ -26,16 +26,16 @@ type reportExecution struct {
 
 type qualityReport struct {
 	SchemaVersion     int              `json:"schemaVersion"`
-	EvaluationID     string           `json:"evaluationId"`
-	ActionRevisionID string           `json:"actionRevisionId"`
-	ActionKey        string           `json:"actionKey"`
-	Input            reportInput      `json:"input"`
-	Execution        reportExecution  `json:"execution"`
-	Verdict          string           `json:"verdict"`
-	OverallScore     *float64         `json:"overallScore,omitempty"`
-	OverallConfidence float64         `json:"overallConfidence"`
-	DimensionScores  []DimensionScore `json:"dimensionScores"`
-	Findings         []QualityFinding `json:"findings"`
+	EvaluationID      string           `json:"evaluationId"`
+	ActionRevisionID  string           `json:"actionRevisionId"`
+	ActionKey         string           `json:"actionKey"`
+	Input             reportInput      `json:"input"`
+	Execution         reportExecution  `json:"execution"`
+	Verdict           string           `json:"verdict"`
+	OverallScore      *float64         `json:"overallScore,omitempty"`
+	OverallConfidence float64          `json:"overallConfidence"`
+	DimensionScores   []DimensionScore `json:"dimensionScores"`
+	Findings          []QualityFinding `json:"findings"`
 }
 
 type ReportGenerator struct {
@@ -84,14 +84,14 @@ func (g *ReportGenerator) GenerateReport(eval *QualityEvaluation, result *Action
 	}
 
 	report := qualityReport{
-		SchemaVersion:      1,
-		EvaluationID:       eval.ID,
-		ActionRevisionID:   eval.ActionRevisionID,
-		ActionKey:          eval.ActionKey,
+		SchemaVersion:    1,
+		EvaluationID:     eval.ID,
+		ActionRevisionID: eval.ActionRevisionID,
+		ActionKey:        eval.ActionKey,
 		Input: reportInput{
 			MeasurementSetID: eval.MeasurementSetID,
 			ProfileHash:      eval.ProfileHash,
-			EngineVersion:     eval.EngineVersion,
+			EngineVersion:    eval.EngineVersion,
 		},
 		Execution: reportExecution{
 			Status:     eval.ExecutionStatus,

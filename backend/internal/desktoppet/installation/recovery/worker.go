@@ -18,9 +18,9 @@ var (
 )
 
 const (
-	DefaultLeaseTTL        = 5 * time.Minute
-	DefaultScanInterval    = 30 * time.Second
-	DefaultMaxRecoverBatch = 50
+	DefaultLeaseTTL          = 5 * time.Minute
+	DefaultScanInterval      = 30 * time.Second
+	DefaultMaxRecoverBatch   = 50
 	DefaultLeaseSafetyMargin = 30 * time.Second
 )
 
@@ -36,15 +36,15 @@ type RecoveryRepo interface {
 }
 
 type RecoveryCommitJournal struct {
-	ID              string
-	OperationID     string
-	Stage           string
-	Status          string
-	StagingPathKey  string
-	TargetReleaseID string
-	PetID           string
+	ID               string
+	OperationID      string
+	Stage            string
+	Status           string
+	StagingPathKey   string
+	TargetReleaseID  string
+	PetID            string
 	PublishedPathKey string
-	ErrorMessage    string
+	ErrorMessage     string
 }
 
 type RecoverySwitchJournal struct {
@@ -58,16 +58,16 @@ type RecoverySwitchJournal struct {
 }
 
 type RecoveryWorker struct {
-	repo          RecoveryRepo
-	leaseTTL      time.Duration
-	scanInterval  time.Duration
-	maxBatch      int
-	executionID   string
+	repo         RecoveryRepo
+	leaseTTL     time.Duration
+	scanInterval time.Duration
+	maxBatch     int
+	executionID  string
 
-	stagingRecovery  *StagingRecovery
-	dbRecovery       *DBRecovery
-	runtimeRecovery  *RuntimeRecovery
-	switchRecovery   *SwitchRecovery
+	stagingRecovery *StagingRecovery
+	dbRecovery      *DBRecovery
+	runtimeRecovery *RuntimeRecovery
+	switchRecovery  *SwitchRecovery
 }
 
 type RecoveryWorkerOption func(*RecoveryWorker)

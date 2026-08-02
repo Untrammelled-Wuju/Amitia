@@ -2,11 +2,15 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
@@ -112,6 +116,73 @@ type PackageQuarantineMetadata struct {
 	ReleasedAt               string
 	ReleaseState             string
 	ReleaseError             string
+	SnapshotJSON             string
+	SnapshotHash             string
+	ExpectedGenerationID     string
+	ExpectedVersionID        string
+}
+
+func (qm PackageQuarantineMetadata) snapshotVerified() bool {
+	if qm.SnapshotJSON == "" || qm.SnapshotHash == "" {
+		return false
+	}
+	var snapshot packageInstallationSnapshot
+	if err := json.Unmarshal([]byte(qm.SnapshotJSON), &snapshot); err != nil {
+		return false
+	}
+	return snapshot.computeHash() == qm.SnapshotHash
+}
+
+type packageInstallationSnapshot struct {
+	PackageID         string         `json:"packageId"`
+	InstalledVersion  string         `json:"installedVersion"`
+	InstalledPath     string         `json:"installedPath"`
+	InstalledTreeHash string         `json:"installedTreeHash"`
+	Generation        int64          `json:"generation"`
+	GenerationID      string         `json:"generationId"`
+	Installable       bool           `json:"installable"`
+	Enabled           bool           `json:"enabled"`
+	Metadata          map[string]any `json:"metadata"`
+	CapturedAt        string         `json:"capturedAt"`
+}
+
+func (s packageInstallationSnapshot) computeHash() string {
+	hasher := sha256.New()
+	hasher.Write([]byte(s.PackageID))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(s.InstalledVersion))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(s.InstalledPath))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(s.InstalledTreeHash))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(fmt.Sprintf("%d", s.Generation)))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(s.GenerationID))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(s.CapturedAt))
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+}
+
+func captureInstallationSnapshot(installation domain.ExtensionInstallation, preview PackageUninstallPreviewResult) (string, string, string, error) {
+	snapshot := packageInstallationSnapshot{
+		PackageID:         preview.ArtifactID,
+		InstalledVersion:  preview.CurrentVersion,
+		InstalledPath:     preview.InstalledPath,
+		InstalledTreeHash: preview.InstalledHash,
+		Generation:        preview.Generation,
+		GenerationID:      preview.GenerationID,
+		Installable:       preview.Installable,
+		Enabled:           preview.Enabled,
+		Metadata:          installation.Metadata,
+		CapturedAt:        time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	jsonBytes, err := json.Marshal(snapshot)
+	if err != nil {
+		return "", "", "", fmt.Errorf("marshal installation snapshot: %w", err)
+	}
+	verifiedHash := snapshot.computeHash()
+	return string(jsonBytes), verifiedHash, snapshot.GenerationID, nil
 }
 
 var validQuarantineStates = map[string]struct{}{
@@ -141,8 +212,9 @@ func (r *PackageRepository) PutQuarantineMetadata(ctx context.Context, qm Packag
 	_, err = tx.ExecContext(ctx, `INSERT INTO package_quarantine_metadata (
 		quarantine_id, operation_id, extension_id, generation_quarantine_path,
 		current_quarantine_path, original_generation_path, original_current_path,
-		tree_hash, artifact_id, state, fencing_token, release_state, release_error, created_at, released_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		tree_hash, artifact_id, state, fencing_token, release_state, release_error, created_at, released_at,
+		snapshot_json, snapshot_hash, expected_generation_id, expected_version_id
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(quarantine_id) DO UPDATE SET generation_quarantine_path=excluded.generation_quarantine_path,
 		current_quarantine_path=excluded.current_quarantine_path,
 		original_generation_path=excluded.original_generation_path,
@@ -151,10 +223,15 @@ func (r *PackageRepository) PutQuarantineMetadata(ctx context.Context, qm Packag
 		fencing_token=excluded.fencing_token,
 		release_state=excluded.release_state,
 		release_error=excluded.release_error,
-		released_at=excluded.released_at`,
+		released_at=excluded.released_at,
+		snapshot_json=excluded.snapshot_json,
+		snapshot_hash=excluded.snapshot_hash,
+		expected_generation_id=excluded.expected_generation_id,
+		expected_version_id=excluded.expected_version_id`,
 		qm.QuarantineID, qm.OperationID, qm.ExtensionID, qm.GenerationQuarantinePath,
 		qm.CurrentQuarantinePath, qm.OriginalGenerationPath, qm.OriginalCurrentPath,
-		qm.TreeHash, qm.ArtifactID, qm.State, qm.FencingToken, qm.ReleaseState, qm.ReleaseError, qm.CreatedAt, qm.ReleasedAt)
+		qm.TreeHash, qm.ArtifactID, qm.State, qm.FencingToken, qm.ReleaseState, qm.ReleaseError, qm.CreatedAt, qm.ReleasedAt,
+		qm.SnapshotJSON, qm.SnapshotHash, qm.ExpectedGenerationID, qm.ExpectedVersionID)
 	if err != nil {
 		return storageOperationError("insert quarantine metadata", err)
 	}
@@ -165,11 +242,13 @@ func (r *PackageRepository) GetQuarantineMetadata(ctx context.Context, extension
 	var qm PackageQuarantineMetadata
 	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
 		generation_quarantine_path, current_quarantine_path, original_generation_path,
-		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error
+		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error,
+		snapshot_json, snapshot_hash, expected_generation_id, expected_version_id
 		FROM package_quarantine_metadata WHERE extension_id = ? AND state = 'active' ORDER BY created_at DESC LIMIT 1`,
 		extensionID).Scan(&qm.QuarantineID, &qm.OperationID, &qm.ExtensionID,
 		&qm.GenerationQuarantinePath, &qm.CurrentQuarantinePath, &qm.OriginalGenerationPath,
-		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError)
+		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError,
+		&qm.SnapshotJSON, &qm.SnapshotHash, &qm.ExpectedGenerationID, &qm.ExpectedVersionID)
 	if err != nil {
 		return PackageQuarantineMetadata{}, classifyOperationRead("read quarantine metadata", err)
 	}
@@ -180,12 +259,14 @@ func (r *PackageRepository) GetBlockingQuarantineMetadata(ctx context.Context, e
 	var qm PackageQuarantineMetadata
 	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
 		generation_quarantine_path, current_quarantine_path, original_generation_path,
-		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error
+		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error,
+		snapshot_json, snapshot_hash, expected_generation_id, expected_version_id
 		FROM package_quarantine_metadata WHERE extension_id = ? AND state IN ('active', 'restoring', 'finalizing')
 		ORDER BY created_at DESC LIMIT 1`,
 		extensionID).Scan(&qm.QuarantineID, &qm.OperationID, &qm.ExtensionID,
 		&qm.GenerationQuarantinePath, &qm.CurrentQuarantinePath, &qm.OriginalGenerationPath,
-		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError)
+		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError,
+		&qm.SnapshotJSON, &qm.SnapshotHash, &qm.ExpectedGenerationID, &qm.ExpectedVersionID)
 	if err != nil {
 		return PackageQuarantineMetadata{}, classifyOperationRead("read blocking quarantine metadata", err)
 	}
@@ -196,11 +277,13 @@ func (r *PackageRepository) GetQuarantineMetadataByOperation(ctx context.Context
 	var qm PackageQuarantineMetadata
 	err := r.db.QueryRowContext(ctx, `SELECT quarantine_id, operation_id, extension_id,
 		generation_quarantine_path, current_quarantine_path, original_generation_path,
-		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error
+		original_current_path, tree_hash, artifact_id, state, fencing_token, created_at, released_at, release_state, release_error,
+		snapshot_json, snapshot_hash, expected_generation_id, expected_version_id
 		FROM package_quarantine_metadata WHERE operation_id = ? ORDER BY created_at DESC LIMIT 1`,
 		operationID).Scan(&qm.QuarantineID, &qm.OperationID, &qm.ExtensionID,
 		&qm.GenerationQuarantinePath, &qm.CurrentQuarantinePath, &qm.OriginalGenerationPath,
-		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError)
+		&qm.OriginalCurrentPath, &qm.TreeHash, &qm.ArtifactID, &qm.State, &qm.FencingToken, &qm.CreatedAt, &qm.ReleasedAt, &qm.ReleaseState, &qm.ReleaseError,
+		&qm.SnapshotJSON, &qm.SnapshotHash, &qm.ExpectedGenerationID, &qm.ExpectedVersionID)
 	if err != nil {
 		return PackageQuarantineMetadata{}, classifyOperationRead("read quarantine metadata by operation", err)
 	}

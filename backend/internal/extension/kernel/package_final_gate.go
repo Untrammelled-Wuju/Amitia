@@ -526,7 +526,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 					snapshotHashEmpty := rollbackPoint.SnapshotHash == ""
 					if configEmpty || resourceEmpty || migrationEmpty || userDataEmpty || snapshotHashEmpty {
 						req := computeRollbackSnapshotRequirement(rollbackPoint)
-					if req.NoDataChange {
+						if req.NoDataChange {
 							checkSnapshot.Passed = true
 						} else {
 							checkSnapshot.Detail = fmt.Sprintf("snapshot incomplete: config=%v resource=%v migration=%v userData=%v hash=%v", !configEmpty, !resourceEmpty, !migrationEmpty, !userDataEmpty, !snapshotHashEmpty)

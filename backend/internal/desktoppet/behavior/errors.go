@@ -6,22 +6,22 @@ import (
 )
 
 const (
-	ErrCodeEventSchemaInvalid       = "behavior_event_schema_invalid"
-	ErrCodeEventOwnershipMismatch   = "behavior_event_ownership_mismatch"
-	ErrCodeEventDuplicate           = "behavior_event_duplicate"
-	ErrCodeEventExpired             = "behavior_event_expired"
-	ErrCodeContextConflict          = "behavior_context_conflict"
-	ErrCodeContextCorrupt           = "behavior_context_corrupt"
-	ErrCodeBindingInvalid           = "behavior_binding_invalid"
-	ErrCodeBindingActionMissing     = "behavior_binding_action_missing"
-	ErrCodeNoActiveInstallation     = "behavior_no_active_installation"
-	ErrCodeNoActionAvailable        = "behavior_no_action_available"
-	ErrCodeRuntimeOffline           = "behavior_runtime_offline"
-	ErrCodeRuntimeCommandFailed     = "behavior_runtime_command_failed"
-	ErrCodePlaybackFailed           = "behavior_playback_failed"
-	ErrCodeSnapshotUnavailable      = "behavior_snapshot_unavailable"
-	ErrCodeMailboxOverflow          = "behavior_mailbox_overflow"
-	ErrCodeRulesetInvalid           = "behavior_ruleset_invalid"
+	ErrCodeEventSchemaInvalid     = "behavior_event_schema_invalid"
+	ErrCodeEventOwnershipMismatch = "behavior_event_ownership_mismatch"
+	ErrCodeEventDuplicate         = "behavior_event_duplicate"
+	ErrCodeEventExpired           = "behavior_event_expired"
+	ErrCodeContextConflict        = "behavior_context_conflict"
+	ErrCodeContextCorrupt         = "behavior_context_corrupt"
+	ErrCodeBindingInvalid         = "behavior_binding_invalid"
+	ErrCodeBindingActionMissing   = "behavior_binding_action_missing"
+	ErrCodeNoActiveInstallation   = "behavior_no_active_installation"
+	ErrCodeNoActionAvailable      = "behavior_no_action_available"
+	ErrCodeRuntimeOffline         = "behavior_runtime_offline"
+	ErrCodeRuntimeCommandFailed   = "behavior_runtime_command_failed"
+	ErrCodePlaybackFailed         = "behavior_playback_failed"
+	ErrCodeSnapshotUnavailable    = "behavior_snapshot_unavailable"
+	ErrCodeMailboxOverflow        = "behavior_mailbox_overflow"
+	ErrCodeRulesetInvalid         = "behavior_ruleset_invalid"
 )
 
 type BehaviorError struct {

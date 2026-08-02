@@ -22,14 +22,14 @@ func TestProductionSourceExcludesLegacyWriteImplementations(t *testing.T) {
 		"legacyUninstallPackage(",
 	}
 	exemptFiles := map[string]bool{
-		"package_legacy_writer.go":     true,
-		"package_legacy_lifecycle.go":  true,
-		"package_recovery.go":          true,
-		"package_manager_test.go":      true,
-		"package_baseline_test.go":     true,
-		"legacy_ci_graph_test.go":      true,
-		"legacy_final_zero_test.go":    true,
-		"openapi_routes_test.go":       true,
+		"package_legacy_writer.go":    true,
+		"package_legacy_lifecycle.go": true,
+		"package_recovery.go":         true,
+		"package_manager_test.go":     true,
+		"package_baseline_test.go":    true,
+		"legacy_ci_graph_test.go":     true,
+		"legacy_final_zero_test.go":   true,
+		"openapi_routes_test.go":      true,
 	}
 	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {

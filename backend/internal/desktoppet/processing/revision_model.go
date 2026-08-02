@@ -1,35 +1,35 @@
 package processing
 
 type ProcessingRevision struct {
-	ID                 string `gorm:"column:id;primaryKey" json:"id"`
-	ProcessingTaskID   string `gorm:"column:processing_task_id" json:"processingTaskId"`
-	ProcessingActionID string `gorm:"column:processing_action_id" json:"processingActionId"`
-	ProcessingAttemptID string `gorm:"column:processing_attempt_id;default:''" json:"processingAttemptId,omitempty"`
-	RevisionNumber     int    `gorm:"column:revision_number" json:"revisionNumber"`
-	SourceAttemptID    string `gorm:"column:source_attempt_id" json:"sourceAttemptId"`
-	SourceCandidateIdx int    `gorm:"column:source_candidate_index" json:"sourceCandidateIndex"`
-	SourceManifestID   string `gorm:"column:source_manifest_id;default:''" json:"sourceManifestId"`
-	SourceGenerationAttemptID string `gorm:"column:source_generation_attempt_id;default:''" json:"sourceGenerationAttemptId,omitempty"`
+	ID                         string `gorm:"column:id;primaryKey" json:"id"`
+	ProcessingTaskID           string `gorm:"column:processing_task_id" json:"processingTaskId"`
+	ProcessingActionID         string `gorm:"column:processing_action_id" json:"processingActionId"`
+	ProcessingAttemptID        string `gorm:"column:processing_attempt_id;default:''" json:"processingAttemptId,omitempty"`
+	RevisionNumber             int    `gorm:"column:revision_number" json:"revisionNumber"`
+	SourceAttemptID            string `gorm:"column:source_attempt_id" json:"sourceAttemptId"`
+	SourceCandidateIdx         int    `gorm:"column:source_candidate_index" json:"sourceCandidateIndex"`
+	SourceManifestID           string `gorm:"column:source_manifest_id;default:''" json:"sourceManifestId"`
+	SourceGenerationAttemptID  string `gorm:"column:source_generation_attempt_id;default:''" json:"sourceGenerationAttemptId,omitempty"`
 	SourceGenerationArtifactID string `gorm:"column:source_generation_artifact_id;default:''" json:"sourceGenerationArtifactId,omitempty"`
-	SourceArtifactContentHash string `gorm:"column:source_artifact_content_hash;default:''" json:"sourceArtifactContentHash,omitempty"`
-	Status             string `gorm:"column:status" json:"status"`
-	ConfigSnapshot     string `gorm:"column:config_snapshot" json:"configSnapshot"`
-	ConfigHash         string `gorm:"column:config_hash" json:"configHash"`
-	PipelineVersion    string `gorm:"column:pipeline_version" json:"pipelineVersion"`
-	FrameCount         int    `gorm:"column:frame_count" json:"frameCount"`
-	RootRelativePath   string `gorm:"column:root_relative_path" json:"rootRelativePath"`
-	RootStorageKey     string `gorm:"column:root_storage_key;default:''" json:"rootStorageKey,omitempty"`
-	RevisionHash       string `gorm:"column:revision_hash" json:"revisionHash"`
-	ContentRootHash    string `gorm:"column:content_root_hash;default:''" json:"contentRootHash"`
-	CommitID           string `gorm:"column:commit_id;default:''" json:"commitId"`
-	Active             int    `gorm:"column:active" json:"active"`
-	ErrorCode          string `gorm:"column:error_code" json:"errorCode"`
-	ErrorMessage       string `gorm:"column:error_message" json:"errorMessage"`
-	CreatedAt          string `gorm:"column:created_at" json:"createdAt"`
-	PublishedAt        string `gorm:"column:published_at" json:"publishedAt"`
-	CommittedAt        string `gorm:"column:committed_at;default:''" json:"committedAt,omitempty"`
-	UpdatedAt          string `gorm:"column:updated_at" json:"updatedAt"`
-	ActivatedAt        string `gorm:"column:activated_at;default:''" json:"activatedAt"`
+	SourceArtifactContentHash  string `gorm:"column:source_artifact_content_hash;default:''" json:"sourceArtifactContentHash,omitempty"`
+	Status                     string `gorm:"column:status" json:"status"`
+	ConfigSnapshot             string `gorm:"column:config_snapshot" json:"configSnapshot"`
+	ConfigHash                 string `gorm:"column:config_hash" json:"configHash"`
+	PipelineVersion            string `gorm:"column:pipeline_version" json:"pipelineVersion"`
+	FrameCount                 int    `gorm:"column:frame_count" json:"frameCount"`
+	RootRelativePath           string `gorm:"column:root_relative_path" json:"rootRelativePath"`
+	RootStorageKey             string `gorm:"column:root_storage_key;default:''" json:"rootStorageKey,omitempty"`
+	RevisionHash               string `gorm:"column:revision_hash" json:"revisionHash"`
+	ContentRootHash            string `gorm:"column:content_root_hash;default:''" json:"contentRootHash"`
+	CommitID                   string `gorm:"column:commit_id;default:''" json:"commitId"`
+	Active                     int    `gorm:"column:active" json:"active"`
+	ErrorCode                  string `gorm:"column:error_code" json:"errorCode"`
+	ErrorMessage               string `gorm:"column:error_message" json:"errorMessage"`
+	CreatedAt                  string `gorm:"column:created_at" json:"createdAt"`
+	PublishedAt                string `gorm:"column:published_at" json:"publishedAt"`
+	CommittedAt                string `gorm:"column:committed_at;default:''" json:"committedAt,omitempty"`
+	UpdatedAt                  string `gorm:"column:updated_at" json:"updatedAt"`
+	ActivatedAt                string `gorm:"column:activated_at;default:''" json:"activatedAt"`
 }
 
 func (ProcessingRevision) TableName() string { return "desktop_pet_processing_revisions" }

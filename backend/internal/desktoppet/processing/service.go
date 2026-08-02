@@ -102,15 +102,15 @@ func NewService(repo Repository, db *gorm.DB, ctx *app.AppContext, dataDir strin
 }
 
 type CreateProcessingTaskRequest struct {
-	GenerationTaskID            string
-	UserID                      string
-	OutputWidth                 int
-	OutputHeight                int
-	TargetCharacterHeightRatio  float64
-	AnchorMode                  string
-	BackgroundMode              string
-	OutputFormat                string
-	DefaultFPS                  int
+	GenerationTaskID           string
+	UserID                     string
+	OutputWidth                int
+	OutputHeight               int
+	TargetCharacterHeightRatio float64
+	AnchorMode                 string
+	BackgroundMode             string
+	OutputFormat               string
+	DefaultFPS                 int
 }
 
 type GetProcessingTaskResponse struct {
@@ -121,14 +121,14 @@ type GetProcessingTaskResponse struct {
 }
 
 type ActionStatusInfo struct {
-	ActionKey    string   `json:"actionKey"`
-	ActionName   string   `json:"actionName"`
-	Status       string   `json:"status"`
-	Progress     int      `json:"progress"`
-	QualityLevel string   `json:"qualityLevel"`
-	QualityFlags []string `json:"qualityFlags"`
-	SourceAttempt int     `json:"sourceAttempt"`
-	Excluded     bool     `json:"excluded"`
+	ActionKey     string   `json:"actionKey"`
+	ActionName    string   `json:"actionName"`
+	Status        string   `json:"status"`
+	Progress      int      `json:"progress"`
+	QualityLevel  string   `json:"qualityLevel"`
+	QualityFlags  []string `json:"qualityFlags"`
+	SourceAttempt int      `json:"sourceAttempt"`
+	Excluded      bool     `json:"excluded"`
 }
 
 type QualitySummary struct {
@@ -277,29 +277,29 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 			}
 		}
 		pa := ProcessingAction{
-			ID:                     uuid.New().String(),
-			ProcessingTaskID:       taskID,
-			GenerationTaskActionID: genAction.ID,
-			ActionKey:              genAction.ActionKey,
-			ActionNameSnapshot:     genAction.ActionNameSnapshot,
-			SourceAttemptNumber:    attemptNumber,
-			Status:                 "pending",
-			Progress:               0,
-			SourceFrameCount:       genAction.FrameCount,
-			CreatedAt:              now,
-			UpdatedAt:              now,
+			ID:                      uuid.New().String(),
+			ProcessingTaskID:        taskID,
+			GenerationTaskActionID:  genAction.ID,
+			ActionKey:               genAction.ActionKey,
+			ActionNameSnapshot:      genAction.ActionNameSnapshot,
+			SourceAttemptNumber:     attemptNumber,
+			Status:                  "pending",
+			Progress:                0,
+			SourceFrameCount:        genAction.FrameCount,
+			CreatedAt:               now,
+			UpdatedAt:               now,
 			ActionSpecSchemaVersion: genAction.ActionSpecSchemaVersion,
-			ActionSpecVersion:      genAction.ActionSpecVersion,
-			ActionSpecHash:         genAction.ActionSpecHash,
-			ReturnPolicy:           genAction.ReturnPolicySnapshot,
-			ReturnActionKey:        genAction.ReturnActionKeySnapshot,
-			Interruptible:          genAction.InterruptibleSnapshot,
-			Priority:               genAction.PrioritySnapshot,
-			CooldownMS:             genAction.CooldownMSSnapshot,
-			MutexGroup:             genAction.MutexGroupSnapshot,
-			AnchorProfile:          genAction.AnchorProfileSnapshot,
-			PlaybackMode:           genAction.PlaybackModeSnapshot,
-			QueuePolicy:            "replace",
+			ActionSpecVersion:       genAction.ActionSpecVersion,
+			ActionSpecHash:          genAction.ActionSpecHash,
+			ReturnPolicy:            genAction.ReturnPolicySnapshot,
+			ReturnActionKey:         genAction.ReturnActionKeySnapshot,
+			Interruptible:           genAction.InterruptibleSnapshot,
+			Priority:                genAction.PrioritySnapshot,
+			CooldownMS:              genAction.CooldownMSSnapshot,
+			MutexGroup:              genAction.MutexGroupSnapshot,
+			AnchorProfile:           genAction.AnchorProfileSnapshot,
+			PlaybackMode:            genAction.PlaybackModeSnapshot,
+			QueuePolicy:             "replace",
 		}
 		actions = append(actions, pa)
 	}
@@ -372,13 +372,13 @@ func (s *service) GetProcessingTask(id string) (*GetProcessingTaskResponse, erro
 
 	for _, action := range actions {
 		info := ActionStatusInfo{
-			ActionKey:    action.ActionKey,
-			ActionName:   action.ActionNameSnapshot,
-			Status:       action.Status,
-			Progress:     action.Progress,
+			ActionKey:     action.ActionKey,
+			ActionName:    action.ActionNameSnapshot,
+			Status:        action.Status,
+			Progress:      action.Progress,
 			SourceAttempt: action.SourceAttemptNumber,
-			Excluded:     action.Excluded == 1,
-			QualityFlags: []string{},
+			Excluded:      action.Excluded == 1,
+			QualityFlags:  []string{},
 		}
 
 		frames, ferr := s.repo.ListProcessedFramesByAction(action.ID)

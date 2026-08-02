@@ -66,11 +66,11 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 	_, _, err = image.DecodeConfig(file)
 	if err != nil {
 		result := &quality.FrameMeasurementResult{
-			Decodable:  false,
-			FileSize:   fileSize,
-			MimeType:   mimeType,
-			FileHash:   fileHash,
-			PixelHash:  "",
+			Decodable: false,
+			FileSize:  fileSize,
+			MimeType:  mimeType,
+			FileHash:  fileHash,
+			PixelHash: "",
 		}
 		e.createCache(ctx, frameArtifactID, contentHash, result)
 		return result, nil
@@ -83,11 +83,11 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 	img, _, err := image.Decode(file)
 	if err != nil {
 		result := &quality.FrameMeasurementResult{
-			Decodable:  false,
-			FileSize:   fileSize,
-			MimeType:   mimeType,
-			FileHash:   fileHash,
-			PixelHash:  "",
+			Decodable: false,
+			FileSize:  fileSize,
+			MimeType:  mimeType,
+			FileHash:  fileHash,
+			PixelHash: "",
 		}
 		e.createCache(ctx, frameArtifactID, contentHash, result)
 		return result, nil
@@ -131,18 +131,18 @@ func (e *ImageMeasurementEngineImpl) MeasureFrame(ctx context.Context, framePath
 	pixelHash := hex.EncodeToString(hasher.Sum(nil))
 
 	result := &quality.FrameMeasurementResult{
-		Width:                  realWidth,
-		Height:                 realHeight,
-		HasAlphaChannel:        hasAlphaChannel,
-		AlphaCoverage:          alphaCoverage,
-		FullyTransparentRatio:  fullyTransparentRatio,
-		SemiTransparentRatio:   semiTransparentRatio,
-		OpaqueRatio:            opaqueRatio,
-		Decodable:              true,
-		MimeType:               mimeType,
-		PixelHash:              pixelHash,
-		FileSize:               fileSize,
-		FileHash:               fileHash,
+		Width:                 realWidth,
+		Height:                realHeight,
+		HasAlphaChannel:       hasAlphaChannel,
+		AlphaCoverage:         alphaCoverage,
+		FullyTransparentRatio: fullyTransparentRatio,
+		SemiTransparentRatio:  semiTransparentRatio,
+		OpaqueRatio:           opaqueRatio,
+		Decodable:             true,
+		MimeType:              mimeType,
+		PixelHash:             pixelHash,
+		FileSize:              fileSize,
+		FileHash:              fileHash,
 	}
 
 	e.createCache(ctx, frameArtifactID, contentHash, result)
@@ -232,18 +232,18 @@ func cacheRecordToResult(cached *quality.QualityMeasurementCacheRecord, framePat
 	}
 
 	return &quality.FrameMeasurementResult{
-		Width:                  cached.Width,
-		Height:                 cached.Height,
-		HasAlphaChannel:        cached.HasAlphaChannel,
-		AlphaCoverage:          cached.AlphaCoverage,
-		FullyTransparentRatio:  cached.FullyTransparentRatio,
-		SemiTransparentRatio:   cached.SemiTransparentRatio,
-		OpaqueRatio:            cached.OpaqueRatio,
-		Decodable:              cached.Decodable,
-		MimeType:               cached.MimeType,
-		PixelHash:              cached.PixelHash,
-		FileSize:               realFileSize,
-		FileHash:               fileHash,
+		Width:                 cached.Width,
+		Height:                cached.Height,
+		HasAlphaChannel:       cached.HasAlphaChannel,
+		AlphaCoverage:         cached.AlphaCoverage,
+		FullyTransparentRatio: cached.FullyTransparentRatio,
+		SemiTransparentRatio:  cached.SemiTransparentRatio,
+		OpaqueRatio:           cached.OpaqueRatio,
+		Decodable:             cached.Decodable,
+		MimeType:              cached.MimeType,
+		PixelHash:             cached.PixelHash,
+		FileSize:              realFileSize,
+		FileHash:              fileHash,
 	}
 }
 
@@ -252,18 +252,18 @@ func (e *ImageMeasurementEngineImpl) createCache(ctx context.Context, frameArtif
 		return
 	}
 	record := &quality.QualityMeasurementCacheRecord{
-		FrameArtifactID:        frameArtifactID,
-		ContentHash:            contentHash,
-		Width:                  result.Width,
-		Height:                 result.Height,
-		HasAlphaChannel:        result.HasAlphaChannel,
-		AlphaCoverage:          result.AlphaCoverage,
-		FullyTransparentRatio:  result.FullyTransparentRatio,
-		SemiTransparentRatio:   result.SemiTransparentRatio,
-		OpaqueRatio:            result.OpaqueRatio,
-		Decodable:              result.Decodable,
-		MimeType:               result.MimeType,
-		PixelHash:              result.PixelHash,
+		FrameArtifactID:       frameArtifactID,
+		ContentHash:           contentHash,
+		Width:                 result.Width,
+		Height:                result.Height,
+		HasAlphaChannel:       result.HasAlphaChannel,
+		AlphaCoverage:         result.AlphaCoverage,
+		FullyTransparentRatio: result.FullyTransparentRatio,
+		SemiTransparentRatio:  result.SemiTransparentRatio,
+		OpaqueRatio:           result.OpaqueRatio,
+		Decodable:             result.Decodable,
+		MimeType:              result.MimeType,
+		PixelHash:             result.PixelHash,
 	}
 	_ = e.cache.CreateMeasurementCache(ctx, record)
 }

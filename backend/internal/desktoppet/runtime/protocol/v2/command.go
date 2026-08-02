@@ -33,21 +33,21 @@ func (c CommandType) IsEphemeral() bool {
 type CommandStatus string
 
 const (
-	CommandStatusCreated            CommandStatus = "created"
-	CommandStatusQueued             CommandStatus = "queued"
-	CommandStatusDispatching        CommandStatus = "dispatching"
+	CommandStatusCreated             CommandStatus = "created"
+	CommandStatusQueued              CommandStatus = "queued"
+	CommandStatusDispatching         CommandStatus = "dispatching"
 	CommandStatusTransportDispatched CommandStatus = "transport_dispatched"
-	CommandStatusRuntimeReceived    CommandStatus = "runtime_received"
-	CommandStatusRuntimeAccepted    CommandStatus = "runtime_accepted"
-	CommandStatusRendererAccepted   CommandStatus = "renderer_accepted"
-	CommandStatusPlaybackStarted    CommandStatus = "playback_started"
-	CommandStatusCompleted          CommandStatus = "completed"
-	CommandStatusFailedRetryable    CommandStatus = "failed_retryable"
-	CommandStatusFailedTerminal     CommandStatus = "failed_terminal"
-	CommandStatusExpired            CommandStatus = "expired"
-	CommandStatusCancelRequested    CommandStatus = "cancel_requested"
-	CommandStatusCancelled          CommandStatus = "cancelled"
-	CommandStatusSuperseded         CommandStatus = "superseded"
+	CommandStatusRuntimeReceived     CommandStatus = "runtime_received"
+	CommandStatusRuntimeAccepted     CommandStatus = "runtime_accepted"
+	CommandStatusRendererAccepted    CommandStatus = "renderer_accepted"
+	CommandStatusPlaybackStarted     CommandStatus = "playback_started"
+	CommandStatusCompleted           CommandStatus = "completed"
+	CommandStatusFailedRetryable     CommandStatus = "failed_retryable"
+	CommandStatusFailedTerminal      CommandStatus = "failed_terminal"
+	CommandStatusExpired             CommandStatus = "expired"
+	CommandStatusCancelRequested     CommandStatus = "cancel_requested"
+	CommandStatusCancelled           CommandStatus = "cancelled"
+	CommandStatusSuperseded          CommandStatus = "superseded"
 )
 
 func (s CommandStatus) IsTerminal() bool {
@@ -94,14 +94,14 @@ type RuntimeCommand struct {
 	IdempotencyKey string `gorm:"column:idempotency_key;type:text" json:"idempotencyKey"`
 	CoalesceKey    string `gorm:"column:coalesce_key;type:text" json:"coalesceKey"`
 
-	PayloadJSON         string `gorm:"column:payload_json;type:text" json:"payloadJSON"`
-	PayloadHash         string `gorm:"column:payload_hash;type:text" json:"payloadHash"`
-	PayloadSchemaVersion int   `gorm:"column:payload_schema_version;type:integer" json:"payloadSchemaVersion"`
+	PayloadJSON          string `gorm:"column:payload_json;type:text" json:"payloadJSON"`
+	PayloadHash          string `gorm:"column:payload_hash;type:text" json:"payloadHash"`
+	PayloadSchemaVersion int    `gorm:"column:payload_schema_version;type:integer" json:"payloadSchemaVersion"`
 
 	Status string `gorm:"column:status;type:text;not null" json:"status"`
 
-	DesiredRevision   int64 `gorm:"column:desired_revision;type:integer" json:"desiredRevision"`
-	SettingsRevision  int64 `gorm:"column:settings_revision;type:integer" json:"settingsRevision"`
+	DesiredRevision  int64 `gorm:"column:desired_revision;type:integer" json:"desiredRevision"`
+	SettingsRevision int64 `gorm:"column:settings_revision;type:integer" json:"settingsRevision"`
 
 	InstallationID string `gorm:"column:installation_id;type:text" json:"installationId"`
 	PetID          string `gorm:"column:pet_id;type:text" json:"petId"`
@@ -134,45 +134,45 @@ func (c *RuntimeCommand) IsDurable() bool {
 }
 
 type SyncDesiredStatePayload struct {
-	DesiredRevision   int64  `json:"desiredRevision"`
-	DesiredHash       string `json:"desiredHash"`
-	EnsureAbsent      bool   `json:"ensureAbsent"`
-	InstallationID    string `json:"installationId"`
-	PetID             string `json:"petId"`
-	CharacterID       string `json:"characterId"`
-	ReleaseID         string `json:"releaseId"`
-	ReleaseVersion    string `json:"releaseVersion"`
-	ContentRootHash   string `json:"contentRootHash"`
-	ManifestHash      string `json:"manifestHash"`
-	RuntimeContractVersion string `json:"runtimeContractVersion"`
-	DefaultActionKey  string `json:"defaultActionKey"`
-	SettingsRevision  int64  `json:"settingsRevision"`
-	SettingsSnapshot  json.RawMessage `json:"settingsSnapshot,omitempty"`
-	ResourceSnapshot  json.RawMessage `json:"resourceSnapshot,omitempty"`
+	DesiredRevision        int64           `json:"desiredRevision"`
+	DesiredHash            string          `json:"desiredHash"`
+	EnsureAbsent           bool            `json:"ensureAbsent"`
+	InstallationID         string          `json:"installationId"`
+	PetID                  string          `json:"petId"`
+	CharacterID            string          `json:"characterId"`
+	ReleaseID              string          `json:"releaseId"`
+	ReleaseVersion         string          `json:"releaseVersion"`
+	ContentRootHash        string          `json:"contentRootHash"`
+	ManifestHash           string          `json:"manifestHash"`
+	RuntimeContractVersion string          `json:"runtimeContractVersion"`
+	DefaultActionKey       string          `json:"defaultActionKey"`
+	SettingsRevision       int64           `json:"settingsRevision"`
+	SettingsSnapshot       json.RawMessage `json:"settingsSnapshot,omitempty"`
+	ResourceSnapshot       json.RawMessage `json:"resourceSnapshot,omitempty"`
 }
 
 type PlayActionPayload struct {
-	ActionKey     string  `json:"actionKey"`
-	ActionSpecHash string `json:"actionSpecHash,omitempty"`
-	PlaybackMode  string  `json:"playbackMode"`
-	Priority      int     `json:"priority"`
-	QueuePolicy   string  `json:"queuePolicy"`
-	Interruptible bool    `json:"interruptible"`
-	ReturnTo      string  `json:"returnTo,omitempty"`
-	PlaybackRate  float64 `json:"playbackRate"`
-	MinimumPlayMs int64   `json:"minimumPlayMs,omitempty"`
-	MaximumPlayMs int64   `json:"maximumPlayMs,omitempty"`
-	CompletionPolicy string `json:"completionPolicy,omitempty"`
+	ActionKey        string  `json:"actionKey"`
+	ActionSpecHash   string  `json:"actionSpecHash,omitempty"`
+	PlaybackMode     string  `json:"playbackMode"`
+	Priority         int     `json:"priority"`
+	QueuePolicy      string  `json:"queuePolicy"`
+	Interruptible    bool    `json:"interruptible"`
+	ReturnTo         string  `json:"returnTo,omitempty"`
+	PlaybackRate     float64 `json:"playbackRate"`
+	MinimumPlayMs    int64   `json:"minimumPlayMs,omitempty"`
+	MaximumPlayMs    int64   `json:"maximumPlayMs,omitempty"`
+	CompletionPolicy string  `json:"completionPolicy,omitempty"`
 }
 
 type CommandAckPayload struct {
-	CommandID             string    `json:"commandId"`
-	CommandSequence       int64     `json:"commandSequence"`
-	Status                string    `json:"status"`
-	PayloadHash           string    `json:"payloadHash,omitempty"`
-	RejectReason          string    `json:"rejectReason,omitempty"`
-	RejectErrorCode       string    `json:"rejectErrorCode,omitempty"`
-	EstimatedStartMs      int64     `json:"estimatedStartMs,omitempty"`
-	RuntimeSessionID      string    `json:"runtimeSessionId"`
-	ReceivedAt            time.Time `json:"receivedAt"`
+	CommandID        string    `json:"commandId"`
+	CommandSequence  int64     `json:"commandSequence"`
+	Status           string    `json:"status"`
+	PayloadHash      string    `json:"payloadHash,omitempty"`
+	RejectReason     string    `json:"rejectReason,omitempty"`
+	RejectErrorCode  string    `json:"rejectErrorCode,omitempty"`
+	EstimatedStartMs int64     `json:"estimatedStartMs,omitempty"`
+	RuntimeSessionID string    `json:"runtimeSessionId"`
+	ReceivedAt       time.Time `json:"receivedAt"`
 }

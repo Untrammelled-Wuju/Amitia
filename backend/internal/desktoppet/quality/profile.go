@@ -35,10 +35,10 @@ type QualityProfileSnapshot struct {
 	CreatedAt      string `json:"createdAt"`
 	EngineVersion  string `json:"engineVersion"`
 
-	ActionSpecHash string `json:"actionSpecHash"`
-	LoopType       string `json:"loopType"`
-	FrameCount     int    `json:"frameCount"`
-	AnchorProfile  string `json:"anchorProfile"`
+	ActionSpecHash string       `json:"actionSpecHash"`
+	LoopType       string       `json:"loopType"`
+	FrameCount     int          `json:"frameCount"`
+	AnchorProfile  string       `json:"anchorProfile"`
 	MotionPolicy   MotionPolicy `json:"motionPolicy"`
 
 	Detectors  map[string]DetectorConfig  `json:"detectors"`
@@ -59,31 +59,31 @@ type QualityProfileSnapshot struct {
 }
 
 type MotionPolicy struct {
-	AllowHorizontalMotion bool      `json:"allowHorizontalMotion"`
-	AllowVerticalMotion   bool      `json:"allowVerticalMotion"`
-	AllowScaleChange      bool      `json:"allowScaleChange"`
-	MaxAnchorJitter       float64   `json:"maxAnchorJitter"`
-	MaxScaleJitter        float64   `json:"maxScaleJitter"`
-	MaxMotionJump         float64   `json:"maxMotionJump"`
-	AllowedEdges          []string  `json:"allowedEdges"`
+	AllowHorizontalMotion bool     `json:"allowHorizontalMotion"`
+	AllowVerticalMotion   bool     `json:"allowVerticalMotion"`
+	AllowScaleChange      bool     `json:"allowScaleChange"`
+	MaxAnchorJitter       float64  `json:"maxAnchorJitter"`
+	MaxScaleJitter        float64  `json:"maxScaleJitter"`
+	MaxMotionJump         float64  `json:"maxMotionJump"`
+	AllowedEdges          []string `json:"allowedEdges"`
 }
 
 type DetectorConfig struct {
-	Enabled    bool              `json:"enabled"`
-	Version    string            `json:"version"`
+	Enabled    bool               `json:"enabled"`
+	Version    string             `json:"version"`
 	Parameters map[string]float64 `json:"parameters"`
-	CanDegrade bool              `json:"canDegrade"`
+	CanDegrade bool               `json:"canDegrade"`
 }
 
 type RuleConfig struct {
-	RuleVersion     int     `json:"ruleVersion"`
-	WarningThreshold  *float64 `json:"warningThreshold,omitempty"`
-	ReviewThreshold   *float64 `json:"reviewThreshold,omitempty"`
-	RejectThreshold   *float64 `json:"rejectThreshold,omitempty"`
-	Comparison      string  `json:"comparison"`
-	Severity        Severity `json:"severity"`
-	HardGate        bool    `json:"hardGate"`
-	MaxPenalty      float64 `json:"maxPenalty"`
+	RuleVersion      int      `json:"ruleVersion"`
+	WarningThreshold *float64 `json:"warningThreshold,omitempty"`
+	ReviewThreshold  *float64 `json:"reviewThreshold,omitempty"`
+	RejectThreshold  *float64 `json:"rejectThreshold,omitempty"`
+	Comparison       string   `json:"comparison"`
+	Severity         Severity `json:"severity"`
+	HardGate         bool     `json:"hardGate"`
+	MaxPenalty       float64  `json:"maxPenalty"`
 }
 
 type DimensionConfig struct {
@@ -142,16 +142,16 @@ func (p QualityProfileSnapshot) GetDetectorConfig(key string) (DetectorConfig, b
 
 func CanonicalProfileJSON(p QualityProfileSnapshot) string {
 	stable := QualityProfileSnapshot{
-		SchemaVersion:    p.SchemaVersion,
-		ProfileID:        p.ProfileID,
-		ProfileVersion:   p.ProfileVersion,
-		EngineVersion:    p.EngineVersion,
-		ActionSpecHash:   p.ActionSpecHash,
-		LoopType:         p.LoopType,
-		FrameCount:       p.FrameCount,
-		AnchorProfile:    p.AnchorProfile,
-		MotionPolicy:     p.MotionPolicy,
-		QualityMode:      p.QualityMode,
+		SchemaVersion:  p.SchemaVersion,
+		ProfileID:      p.ProfileID,
+		ProfileVersion: p.ProfileVersion,
+		EngineVersion:  p.EngineVersion,
+		ActionSpecHash: p.ActionSpecHash,
+		LoopType:       p.LoopType,
+		FrameCount:     p.FrameCount,
+		AnchorProfile:  p.AnchorProfile,
+		MotionPolicy:   p.MotionPolicy,
+		QualityMode:    p.QualityMode,
 	}
 	stable.Detectors = make(map[string]DetectorConfig, len(p.Detectors))
 	for k, v := range p.Detectors {

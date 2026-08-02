@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/u-ai/backend/config"
+	desktoppetAuth "github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -51,8 +52,6 @@ func AuthMiddleware() gin.HandlerFunc {
 		auth := c.GetHeader("Authorization")
 		if len(auth) > 7 && auth[:7] == "Bearer " {
 			tokenStr = auth[7:]
-		} else if qToken := c.Query("token"); qToken != "" {
-			tokenStr = qToken
 		}
 
 		if tokenStr == "" {
@@ -83,20 +82,43 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		c.Set("userId", claims.UserId)
+		actorType := desktoppetAuth.ActorTypeUser
+		roles := []string{"user"}
+		permissions := desktoppetAuth.DefaultUserPermissions()
+		if claims.Role == "admin" {
+			actorType = desktoppetAuth.ActorTypeAdmin
+			roles = []string{"admin"}
+			permissions = desktoppetAuth.AdminPermissions()
+		}
+
+		actor := &desktoppetAuth.ActorContext{
+			ActorType:   actorType,
+			UserID:      fmt.Sprintf("%d", claims.UserId),
+			Roles:       roles,
+			Permissions: permissions,
+			AuthMethod:  "jwt",
+		}
+
+		ctx := desktoppetAuth.WithActor(c.Request.Context(), actor)
+		c.Request = c.Request.WithContext(ctx)
+		c.Set("actorContext", actor)
+		c.Set("userId", fmt.Sprintf("%d", claims.UserId))
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
 		c.Next()
 	}
 }
 
-func GetUserID(c *gin.Context) int {
+func GetUserID(c *gin.Context) string {
 	if v, exists := c.Get("userId"); exists {
-		if id, ok := v.(int); ok {
-			return id
+		if s, ok := v.(string); ok {
+			return s
+		}
+		if i, ok := v.(int); ok {
+			return fmt.Sprintf("%d", i)
 		}
 	}
-	return 0
+	return ""
 }
 
 func GetUsername(c *gin.Context) string {

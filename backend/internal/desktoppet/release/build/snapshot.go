@@ -15,9 +15,9 @@ import (
 )
 
 type SnapshotCreator struct {
-	source    release.SnapshotSource
+	source     release.SnapshotSource
 	gateReader release.ReleaseQualityGateReader
-	repo      release.ReleaseRepository
+	repo       release.ReleaseRepository
 }
 
 func NewSnapshotCreator(
@@ -26,9 +26,9 @@ func NewSnapshotCreator(
 	repo release.ReleaseRepository,
 ) *SnapshotCreator {
 	return &SnapshotCreator{
-		source:    source,
+		source:     source,
 		gateReader: gateReader,
-		repo:      repo,
+		repo:       repo,
 	}
 }
 
@@ -42,11 +42,11 @@ type CreateSnapshotRequest struct {
 }
 
 type SnapshotResult struct {
-	Snapshot        *release.ReleaseBuildSnapshot
-	ActionSnapshots []release.ReleaseActionSnapshot
-	GateResult      *release.QualityGateResult
-	TaskInfo        *release.TaskInfo
-	Identity        *release.PetIdentityData
+	Snapshot          *release.ReleaseBuildSnapshot
+	ActionSnapshots   []release.ReleaseActionSnapshot
+	GateResult        *release.QualityGateResult
+	TaskInfo          *release.TaskInfo
+	Identity          *release.PetIdentityData
 	PreviewArtifactID string
 }
 
@@ -108,21 +108,21 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 	actionsJSON, _ := json.Marshal(includedActions)
 
 	snapshot := &release.ReleaseBuildSnapshot{
-		ID:                    uuid.NewString(),
-		UserID:                req.UserID,
-		PetID:                 identity.ID,
-		CharacterID:           taskInfo.CharacterID,
-		ProcessingTaskID:      req.ProcessingTaskID,
-		ActiveRevisionSetHash: activeRevisionSetHash,
-		QualityGateID:         gateResult.GateID,
-		QualityGateHash:       gateResult.GateHash,
-		DefaultActionKey:      defaultActionKey,
-		IncludedActionsJSON:   string(actionsJSON),
-		PackageSchemaVersion:  2,
+		ID:                     uuid.NewString(),
+		UserID:                 req.UserID,
+		PetID:                  identity.ID,
+		CharacterID:            taskInfo.CharacterID,
+		ProcessingTaskID:       req.ProcessingTaskID,
+		ActiveRevisionSetHash:  activeRevisionSetHash,
+		QualityGateID:          gateResult.GateID,
+		QualityGateHash:        gateResult.GateHash,
+		DefaultActionKey:       defaultActionKey,
+		IncludedActionsJSON:    string(actionsJSON),
+		PackageSchemaVersion:   2,
 		RuntimeContractVersion: "1.0.0",
-		BuildConfigHash:       buildConfigHash,
-		InputHash:             inputHash,
-		CreatedAt:             formatTimestamp(time.Now()),
+		BuildConfigHash:        buildConfigHash,
+		InputHash:              inputHash,
+		CreatedAt:              formatTimestamp(time.Now()),
 	}
 
 	if err := sc.repo.CreateBuildSnapshot(snapshot); err != nil {
@@ -283,13 +283,13 @@ func (sc *SnapshotCreator) buildActionSnapshots(processingTaskID string, actionK
 		contentHash := hashActionContent(detail.RevisionID, detail.FrameCount, detail.LoopType, detail.Interruptible, frameHashes)
 
 		snapshots = append(snapshots, release.ReleaseActionSnapshot{
-			ActionKey:           actionKey,
-			ActionRevisionID:    detail.RevisionID,
-			ContentHash:         contentHash,
-			ActionConfigHash:    fmt.Sprintf("%s|%d|%s|%t", detail.RevisionID, detail.FrameCount, detail.LoopType, detail.Interruptible),
-			FrameSetHash:        frameSetHash,
-			FrameArtifactIDs:    frameArtifactIDs,
-			QualityVerdict:      detail.QualityVerdict,
+			ActionKey:        actionKey,
+			ActionRevisionID: detail.RevisionID,
+			ContentHash:      contentHash,
+			ActionConfigHash: fmt.Sprintf("%s|%d|%s|%t", detail.RevisionID, detail.FrameCount, detail.LoopType, detail.Interruptible),
+			FrameSetHash:     frameSetHash,
+			FrameArtifactIDs: frameArtifactIDs,
+			QualityVerdict:   detail.QualityVerdict,
 		})
 	}
 	return snapshots, nil

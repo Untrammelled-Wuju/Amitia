@@ -145,16 +145,16 @@ func TestAssembledEngine_SubmitEvent(t *testing.T) {
 	})
 
 	event := behavior.BehaviorEventEnvelope{
-		EventID:     "evt-test-001",
-		EventType:   "chat.response.started",
+		EventID:       "evt-test-001",
+		EventType:     "chat.response.started",
 		SchemaVersion: 1,
-		OccurredAt:  time.Now(),
-		ReceivedAt:  time.Now(),
-		UserID:      "test-user-1",
-		CharacterID: "test-char-1",
-		Origin:      behavior.OriginInteraction,
-		DedupKey:    "test:user-1:char-1:001",
-		Payload:     payload,
+		OccurredAt:    time.Now(),
+		ReceivedAt:    time.Now(),
+		UserID:        "test-user-1",
+		CharacterID:   "test-char-1",
+		Origin:        behavior.OriginInteraction,
+		DedupKey:      "test:user-1:char-1:001",
+		Payload:       payload,
 	}
 
 	err = result.Engine.SubmitEvent(ctx, event)
@@ -272,9 +272,9 @@ func TestMapEmotionLabel(t *testing.T) {
 
 func TestInferTimePeriodActivity(t *testing.T) {
 	tests := []struct {
-		hour      int
-		wantKey   string
-		wantSrc   string
+		hour    int
+		wantKey string
+		wantSrc string
 	}{
 		{2, "sleeping", "time_inference"},
 		{7, "morning_routine", "time_inference"},

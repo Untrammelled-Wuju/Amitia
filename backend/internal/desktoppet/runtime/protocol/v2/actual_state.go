@@ -1,15 +1,15 @@
 package v2
 
 const (
-	InstanceStatusAbsent           = "absent"
-	InstanceStatusStarting         = "starting"
-	InstanceStatusLoadingRelease   = "loading_release"
-	InstanceStatusWindowCreated    = "window_created"
+	InstanceStatusAbsent               = "absent"
+	InstanceStatusStarting             = "starting"
+	InstanceStatusLoadingRelease       = "loading_release"
+	InstanceStatusWindowCreated        = "window_created"
 	InstanceStatusRendererInitializing = "renderer_initializing"
-	InstanceStatusReady            = "ready"
-	InstanceStatusStopping         = "stopping"
-	InstanceStatusStopped          = "stopped"
-	InstanceStatusFailed           = "failed"
+	InstanceStatusReady                = "ready"
+	InstanceStatusStopping             = "stopping"
+	InstanceStatusStopped              = "stopped"
+	InstanceStatusFailed               = "failed"
 )
 
 const (
@@ -21,12 +21,12 @@ const (
 )
 
 const (
-	RendererStatusAbsent         = "absent"
-	RendererStatusBootstrapped   = "bootstrapped"
-	RendererStatusRuntimeReady   = "runtime_ready"
-	RendererStatusUnresponsive   = "unresponsive"
-	RendererStatusCrashed        = "crashed"
-	RendererStatusFailed         = "failed"
+	RendererStatusAbsent       = "absent"
+	RendererStatusBootstrapped = "bootstrapped"
+	RendererStatusRuntimeReady = "runtime_ready"
+	RendererStatusUnresponsive = "unresponsive"
+	RendererStatusCrashed      = "crashed"
+	RendererStatusFailed       = "failed"
 )
 
 const (
@@ -55,7 +55,7 @@ type RuntimeActualState struct {
 
 	RuntimeSessionID     string `gorm:"column:runtime_session_id;type:text" json:"runtimeSessionId"`
 	ConnectionGeneration int64  `gorm:"column:connection_generation;type:integer" json:"connectionGeneration"`
-	LastEventSequence   int64  `gorm:"column:last_event_sequence;type:integer" json:"lastEventSequence"`
+	LastEventSequence    int64  `gorm:"column:last_event_sequence;type:integer" json:"lastEventSequence"`
 
 	AppliedDesiredRevision  int64  `gorm:"column:applied_desired_revision;type:integer" json:"appliedDesiredRevision"`
 	AppliedDesiredHash      string `gorm:"column:applied_desired_hash;type:text" json:"appliedDesiredHash"`
@@ -65,10 +65,10 @@ type RuntimeActualState struct {
 	PetID          string `gorm:"column:pet_id;type:text" json:"petId"`
 	ReleaseID      string `gorm:"column:release_id;type:text" json:"releaseId"`
 
-	InstanceStatus    string `gorm:"column:instance_status;type:text" json:"instanceStatus"`
-	WindowStatus      string `gorm:"column:window_status;type:text" json:"windowStatus"`
-	RendererStatus    string `gorm:"column:renderer_status;type:text" json:"rendererStatus"`
-	PlaybackStatus    string `gorm:"column:playback_status;type:text" json:"playbackStatus"`
+	InstanceStatus string `gorm:"column:instance_status;type:text" json:"instanceStatus"`
+	WindowStatus   string `gorm:"column:window_status;type:text" json:"windowStatus"`
+	RendererStatus string `gorm:"column:renderer_status;type:text" json:"rendererStatus"`
+	PlaybackStatus string `gorm:"column:playback_status;type:text" json:"playbackStatus"`
 
 	Visible bool `gorm:"column:visible;type:integer" json:"visible"`
 
@@ -125,7 +125,7 @@ func (CommandAttempt) TableName() string {
 }
 
 type CommandResult struct {
-	ID string `gorm:"column:id;primaryKey;type:text" json:"id"`
+	ID        string `gorm:"column:id;primaryKey;type:text" json:"id"`
 	CommandID string `gorm:"column:command_id;type:text;not null;uniqueIndex:idx_cmd_result_cmd_runtime" json:"commandId"`
 	RuntimeID string `gorm:"column:runtime_id;type:text;not null;uniqueIndex:idx_cmd_result_cmd_runtime" json:"runtimeId"`
 	AttemptID string `gorm:"column:attempt_id;type:text" json:"attemptId"`
@@ -163,18 +163,18 @@ func (DeviceCommandSequence) TableName() string {
 }
 
 type DomainEventOutbox struct {
-	ID              string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	EventType       string `gorm:"column:event_type;type:text;not null" json:"eventType"`
-	AggregateID     string `gorm:"column:aggregate_id;type:text" json:"aggregateId"`
-	Payload         []byte `gorm:"column:payload;type:blob" json:"payload"`
-	Status          string `gorm:"column:status;type:text;not null" json:"status"`
-	Attempt         int    `gorm:"column:attempt;type:integer" json:"attempt"`
-	IdempotencyKey  string `gorm:"column:idempotency_key;type:text" json:"idempotencyKey"`
-	ClaimExpiresAt  string `gorm:"column:claim_expires_at;type:text" json:"claimExpiresAt"`
-	LastError       string `gorm:"column:last_error;type:text" json:"lastError,omitempty"`
-	InsertedAt      string `gorm:"column:inserted_at;type:text" json:"insertedAt"`
-	UpdatedAt       string `gorm:"column:updated_at;type:text" json:"updatedAt"`
-	PublishedAt     string `gorm:"column:published_at;type:text" json:"publishedAt,omitempty"`
+	ID             string `gorm:"column:id;primaryKey;type:text" json:"id"`
+	EventType      string `gorm:"column:event_type;type:text;not null" json:"eventType"`
+	AggregateID    string `gorm:"column:aggregate_id;type:text" json:"aggregateId"`
+	Payload        []byte `gorm:"column:payload;type:blob" json:"payload"`
+	Status         string `gorm:"column:status;type:text;not null" json:"status"`
+	Attempt        int    `gorm:"column:attempt;type:integer" json:"attempt"`
+	IdempotencyKey string `gorm:"column:idempotency_key;type:text" json:"idempotencyKey"`
+	ClaimExpiresAt string `gorm:"column:claim_expires_at;type:text" json:"claimExpiresAt"`
+	LastError      string `gorm:"column:last_error;type:text" json:"lastError,omitempty"`
+	InsertedAt     string `gorm:"column:inserted_at;type:text" json:"insertedAt"`
+	UpdatedAt      string `gorm:"column:updated_at;type:text" json:"updatedAt"`
+	PublishedAt    string `gorm:"column:published_at;type:text" json:"publishedAt,omitempty"`
 }
 
 func (DomainEventOutbox) TableName() string {
@@ -182,14 +182,14 @@ func (DomainEventOutbox) TableName() string {
 }
 
 type CommandDedup struct {
-	ID              string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	UserID          string `gorm:"column:user_id;type:text;not null;primaryKey" json:"userId"`
-	DeviceID        string `gorm:"column:device_id;type:text;not null" json:"deviceId"`
-	IdempotencyKey  string `gorm:"column:idempotency_key;type:text;not null" json:"idempotencyKey"`
-	NakCount        int    `gorm:"column:nak_count;type:integer" json:"nakCount"`
-	LastNakAt       string `gorm:"column:last_nak_at;type:text" json:"lastNakAt"`
-	InsertedAt      string `gorm:"column:inserted_at;type:text" json:"insertedAt"`
-	UpdatedAt       string `gorm:"column:updated_at;type:text" json:"updatedAt"`
+	ID             string `gorm:"column:id;primaryKey;type:text" json:"id"`
+	UserID         string `gorm:"column:user_id;type:text;not null;primaryKey" json:"userId"`
+	DeviceID       string `gorm:"column:device_id;type:text;not null" json:"deviceId"`
+	IdempotencyKey string `gorm:"column:idempotency_key;type:text;not null" json:"idempotencyKey"`
+	NakCount       int    `gorm:"column:nak_count;type:integer" json:"nakCount"`
+	LastNakAt      string `gorm:"column:last_nak_at;type:text" json:"lastNakAt"`
+	InsertedAt     string `gorm:"column:inserted_at;type:text" json:"insertedAt"`
+	UpdatedAt      string `gorm:"column:updated_at;type:text" json:"updatedAt"`
 }
 
 func (CommandDedup) TableName() string {

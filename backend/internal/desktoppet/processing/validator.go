@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	_ "golang.org/x/image/webp"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
@@ -15,7 +16,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	_ "golang.org/x/image/webp"
 
 	"github.com/u-ai/backend/internal/desktoppet"
 	"gorm.io/gorm"

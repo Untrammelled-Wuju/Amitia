@@ -24,21 +24,21 @@ const (
 )
 
 const (
-	StageValidatingSources   = "validating_sources"
-	StageBackgroundRemoval   = "background_removal"
-	StageSubjectDetection    = "subject_detection"
-	StageScaling             = "scaling"
-	StageAnchor              = "anchor"
-	StageCanvas              = "canvas_normalization"
-	StageAlignment           = "alignment"
-	StageQuality             = "quality_check"
-	StageLoop                = "loop_check"
-	StageWriteFrames         = "write_frames"
-	StageActionJSON          = "action_json"
-	StagePreview             = "generating_previews"
-	StageManifest            = "manifest"
-	StagePackaging           = "packaging"
-	StageCompleted           = "completed"
+	StageValidatingSources = "validating_sources"
+	StageBackgroundRemoval = "background_removal"
+	StageSubjectDetection  = "subject_detection"
+	StageScaling           = "scaling"
+	StageAnchor            = "anchor"
+	StageCanvas            = "canvas_normalization"
+	StageAlignment         = "alignment"
+	StageQuality           = "quality_check"
+	StageLoop              = "loop_check"
+	StageWriteFrames       = "write_frames"
+	StageActionJSON        = "action_json"
+	StagePreview           = "generating_previews"
+	StageManifest          = "manifest"
+	StagePackaging         = "packaging"
+	StageCompleted         = "completed"
 )
 
 func (w *Worker) publishProgress(taskID string, progress int, stage string) {

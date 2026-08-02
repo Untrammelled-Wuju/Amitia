@@ -11,18 +11,20 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
-	service Service
+	service       Service
+	safeResponder *security.SafeArtifactResponder
 }
 
-func NewHandler(svc Service) *Handler { return &Handler{service: svc} }
+func NewHandler(svc Service, responder *security.SafeArtifactResponder) *Handler {
+	return &Handler{service: svc, safeResponder: responder}
+}
 
 func (h *Handler) GetActionDefinitions(c *gin.Context) {
 	data, err := h.service.GetActionDefinitions()
@@ -154,7 +156,7 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath) // audit:ok:path_origin=internal_service
+	h.safeResponder.SafeFileResponse(c, fullPath)
 }
 
 func (h *Handler) StartTask(c *gin.Context) {
@@ -261,7 +263,7 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 	if mimeType != "" {
 		c.Header("Content-Type", mimeType)
 	}
-	c.File(fullPath) // audit:ok:path_origin=internal_service
+	h.safeResponder.SafeFileResponse(c, fullPath)
 }
 
 func (h *Handler) GetTaskTransitions(c *gin.Context) {
@@ -285,9 +287,6 @@ func (h *Handler) GetTaskTransitions(c *gin.Context) {
 	util.SuccessResponse(c, records)
 }
 
-// DEPRECATED: TaskEventsStream lacks ownership validation on SSE subscription.
-// Requires RequireTaskOwnership guard before subscribing to the event bus.
-// See: docs/security/sse-ownership-guard.md
 func (h *Handler) TaskEventsStream(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actorID, err := middleware.ResolveActorID(c)
@@ -295,7 +294,11 @@ func (h *Handler) TaskEventsStream(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "SSE_AUTH_REQUIRED"})
 		return
 	}
-	_ = actorID
+	userID := actorID
+	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -336,64 +339,4 @@ func writeServiceError(c *gin.Context, err error) {
 		return
 	}
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
-}
-
-// DEPRECATED: ResolveUserID is fail-open - returns "default" on any auth failure.
-// Use middleware.DesktopPetAuthMiddleware + middleware.ResolveActorID instead.
-// This function MUST NOT be used in production handlers.
-// See: docs/security/ownership-guard.md
-func ResolveUserID(c *gin.Context) string {
-	auth := c.GetHeader("Authorization")
-	if len(auth) <= 7 || auth[:7] != "Bearer " {
-		return "default"
-	}
-	tokenStr := auth[7:]
-	if tokenStr == "" {
-		return "default"
-	}
-	secret := config.AppCfg.JWT.Secret
-	if secret == "" {
-		return "default"
-	}
-	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return []byte(secret), nil
-	}, jwt.WithValidMethods([]string{"HS256"}))
-	if err != nil || token == nil {
-		return "default"
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return "default"
-	}
-	uidRaw, exists := claims["userId"]
-	if !exists {
-		return "default"
-	}
-	switch v := uidRaw.(type) {
-	case float64:
-		if v == 0 {
-			return "default"
-		}
-		return strconv.Itoa(int(v))
-	case int:
-		if v == 0 {
-			return "default"
-		}
-		return strconv.Itoa(v)
-	case int64:
-		if v == 0 {
-			return "default"
-		}
-		return strconv.FormatInt(v, 10)
-	case string:
-		if v == "" {
-			return "default"
-		}
-		return v
-	default:
-		return "default"
-	}
 }

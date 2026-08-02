@@ -176,9 +176,9 @@ func safeProcess(fn ProcessFunc, ctx context.Context, event BehaviorEventEnvelop
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("behavior coordinator: panic in process function", map[string]interface{}{
-				"panic":      r,
-				"eventId":    event.EventID,
-				"eventType":  event.EventType,
+				"panic":       r,
+				"eventId":     event.EventID,
+				"eventType":   event.EventType,
 				"characterId": event.CharacterID,
 			})
 		}

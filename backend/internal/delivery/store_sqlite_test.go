@@ -256,7 +256,6 @@ func TestEmoteDeliveryStatusBackfill(t *testing.T) {
 	}
 }
 
-
 func TestClaimNextIntentsReturnsLeaseToken(t *testing.T) {
 	store := newTestStore(t)
 	now := time.Now().UTC()

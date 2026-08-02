@@ -13,38 +13,38 @@ import (
 )
 
 type qualityService struct {
-	repo               QualityRepository
-	engine             *Engine
-	executor           *EngineExecutor
-	profileRegistry    *ProfileRegistry
-	gateEvaluator      *GateEvaluator
-	measurementSrc     MeasurementSource
-	events             EventPublisher
-	committer          QualityCommitter
-	taskGateService    TaskQualityGateService
-	gateInvalidator    QualityGateInvalidator
-	reviewDecisionSvc  QualityReviewDecisionService
-	recoveryWorker     QualityRecoveryWorker
-	outboxPublisher    QualityOutboxPublisher
-	inputRepository    QualityInputRepository
-	measurementEngine  ImageMeasurementEngine
+	repo              QualityRepository
+	engine            *Engine
+	executor          *EngineExecutor
+	profileRegistry   *ProfileRegistry
+	gateEvaluator     *GateEvaluator
+	measurementSrc    MeasurementSource
+	events            EventPublisher
+	committer         QualityCommitter
+	taskGateService   TaskQualityGateService
+	gateInvalidator   QualityGateInvalidator
+	reviewDecisionSvc QualityReviewDecisionService
+	recoveryWorker    QualityRecoveryWorker
+	outboxPublisher   QualityOutboxPublisher
+	inputRepository   QualityInputRepository
+	measurementEngine ImageMeasurementEngine
 }
 
 type ServiceConfig struct {
-	DB               *gorm.DB
-	DataDir          string
-	MeasurementSrc   MeasurementSource
-	EventPublisher   EventPublisher
-	Detectors        []Detector
-	Repo               QualityRepository
-	Committer          QualityCommitter
-	TaskGateService    TaskQualityGateService
-	GateInvalidator    QualityGateInvalidator
-	ReviewDecisionSvc  QualityReviewDecisionService
-	RecoveryWorker     QualityRecoveryWorker
-	OutboxPublisher    QualityOutboxPublisher
-	InputRepository    QualityInputRepository
-	MeasurementEngine  ImageMeasurementEngine
+	DB                *gorm.DB
+	DataDir           string
+	MeasurementSrc    MeasurementSource
+	EventPublisher    EventPublisher
+	Detectors         []Detector
+	Repo              QualityRepository
+	Committer         QualityCommitter
+	TaskGateService   TaskQualityGateService
+	GateInvalidator   QualityGateInvalidator
+	ReviewDecisionSvc QualityReviewDecisionService
+	RecoveryWorker    QualityRecoveryWorker
+	OutboxPublisher   QualityOutboxPublisher
+	InputRepository   QualityInputRepository
+	MeasurementEngine ImageMeasurementEngine
 }
 
 func NewQualityService(cfg ServiceConfig) (QualityService, error) {
@@ -100,16 +100,16 @@ func (s *qualityService) CreateEvaluation(ctx context.Context, req CreateEvaluat
 	}
 
 	eval := &QualityEvaluation{
-		ID:                 uuid.NewString(),
-		ProcessingTaskID:   req.ProcessingTaskID,
-		ProcessingActionID: req.ProcessingActionID,
-		ActionRevisionID:   req.ActionRevisionID,
-		ActionKey:          req.ActionKey,
-		ExecutionStatus:    EvalPending,
+		ID:                  uuid.NewString(),
+		ProcessingTaskID:    req.ProcessingTaskID,
+		ProcessingActionID:  req.ProcessingActionID,
+		ActionRevisionID:    req.ActionRevisionID,
+		ActionKey:           req.ActionKey,
+		ExecutionStatus:     EvalPending,
 		ProfileSnapshotJSON: "",
-		ProfileHash:        "",
-		EngineVersion:      EngineVersion,
-		QualityMode:        qualityMode,
+		ProfileHash:         "",
+		EngineVersion:       EngineVersion,
+		QualityMode:         qualityMode,
 	}
 
 	if err := s.repo.CreateEvaluation(ctx, eval); err != nil {
@@ -176,15 +176,15 @@ func (s *qualityService) Reevaluate(ctx context.Context, req ReevaluateRequest) 
 	}
 
 	newEval := &QualityEvaluation{
-		ID:                   uuid.NewString(),
-		ProcessingTaskID:     oldEval.ProcessingTaskID,
-		ProcessingActionID:   oldEval.ProcessingActionID,
-		ActionRevisionID:     oldEval.ActionRevisionID,
-		ActionKey:            oldEval.ActionKey,
-		ExecutionStatus:      EvalPending,
-		EngineVersion:        EngineVersion,
+		ID:                     uuid.NewString(),
+		ProcessingTaskID:       oldEval.ProcessingTaskID,
+		ProcessingActionID:     oldEval.ProcessingActionID,
+		ActionRevisionID:       oldEval.ActionRevisionID,
+		ActionKey:              oldEval.ActionKey,
+		ExecutionStatus:        EvalPending,
+		EngineVersion:          EngineVersion,
 		SupersedesEvaluationID: oldEval.ID,
-		QualityMode:          qualityMode,
+		QualityMode:            qualityMode,
 	}
 
 	if err := s.repo.CreateEvaluation(ctx, newEval); err != nil {
@@ -257,6 +257,34 @@ func (s *qualityService) ListFindings(ctx context.Context, evaluationID string, 
 	}
 
 	return findings, total, nil
+}
+
+func (s *qualityService) CheckEvaluationOwnership(ctx context.Context, evaluationID, userID string) error {
+	eval, err := s.repo.GetEvaluation(ctx, evaluationID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return NewQualityError(ErrCodeQualityEvaluationNotFound, "评估不存在", err)
+		}
+		return err
+	}
+	if eval.UserID != userID {
+		return NewQualityError(ErrCodeQualityNotOwned, "评估不属于当前用户", nil)
+	}
+	return nil
+}
+
+func (s *qualityService) CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error {
+	evals, err := s.repo.ListEvaluationsByTask(ctx, processingTaskID)
+	if err != nil {
+		return NewQualityError(ErrCodeQualityEvaluationNotFound, "处理任务不存在", err)
+	}
+	if len(evals) == 0 {
+		return NewQualityError(ErrCodeQualityEvaluationNotFound, "处理任务不存在", nil)
+	}
+	if evals[0].UserID != userID {
+		return NewQualityError(ErrCodeQualityNotOwned, "处理任务不属于当前用户", nil)
+	}
+	return nil
 }
 
 func (s *qualityService) buildActionQualityResult(eval *QualityEvaluation, findingRecords []QualityFindingRecord, scoreRecords []QualityDimensionScoreRecord) *ActionQualityResult {

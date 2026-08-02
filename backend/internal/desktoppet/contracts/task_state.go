@@ -76,13 +76,13 @@ func IsValidLifecycleStatus(s string) bool {
 }
 
 var deprecatedStatuses = map[string]string{
-	"skipped":    "",
-	"warning":    "",
-	"submitted":  "",
-	"polling":    "",
-	"completed":  "",
-	"draft":      "",
-	"running":    "",
+	"skipped":   "",
+	"warning":   "",
+	"submitted": "",
+	"polling":   "",
+	"completed": "",
+	"draft":     "",
+	"running":   "",
 }
 
 func IsDeprecatedStatus(s string) bool {

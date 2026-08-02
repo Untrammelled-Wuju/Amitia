@@ -64,38 +64,38 @@ type PackagePreviewSession struct {
 }
 
 type PackageOperationRecord struct {
-	OperationID        string
-	TraceID            string
-	UserID             string
-	ScopeType          string
-	ScopeID            string
-	ExtensionID        string
-	TargetVersion      string
-	OperationType      string
-	Status             string
-	CurrentStep        string
-	ArtifactID         string
-	PreviewSessionID   string
-	ConfirmationsJSON  string
-	ConfirmationClaimsJSON string
-	ErrorCode          string
-	ErrorDetail        string
-	StartedAt          string
-	UpdatedAt          string
-	CompletedAt        string
-	StableGeneration   string
-	TargetGeneration   string
-	CurrentPointerJSON string
-	IdempotencyKey     string
-	RequestHash        string
-	FromVersion        string
-	RecoveryRequired   bool
-	CancelRequestedAt  string
-	LeaseOwner         string
-	LeaseExpiresAt     string
-	AttemptCount       int
-	FencingToken       int64
-	OwnerInstanceID    string
+	OperationID             string
+	TraceID                 string
+	UserID                  string
+	ScopeType               string
+	ScopeID                 string
+	ExtensionID             string
+	TargetVersion           string
+	OperationType           string
+	Status                  string
+	CurrentStep             string
+	ArtifactID              string
+	PreviewSessionID        string
+	ConfirmationsJSON       string
+	ConfirmationClaimsJSON  string
+	ErrorCode               string
+	ErrorDetail             string
+	StartedAt               string
+	UpdatedAt               string
+	CompletedAt             string
+	StableGeneration        string
+	TargetGeneration        string
+	CurrentPointerJSON      string
+	IdempotencyKey          string
+	RequestHash             string
+	FromVersion             string
+	RecoveryRequired        bool
+	CancelRequestedAt       string
+	LeaseOwner              string
+	LeaseExpiresAt          string
+	AttemptCount            int
+	FencingToken            int64
+	OwnerInstanceID         string
 	SnapshotRequirementHash string
 }
 

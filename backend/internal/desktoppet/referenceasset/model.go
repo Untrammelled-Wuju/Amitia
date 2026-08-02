@@ -1,52 +1,52 @@
 package referenceasset
 
 type ReferenceAsset struct {
-	ID               string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	TaskID           string `gorm:"column:task_id;type:text" json:"taskId"`
-	SourcePath       string `gorm:"column:source_path;type:text" json:"sourcePath"`
-	SourceHash       string `gorm:"column:source_hash;type:text" json:"sourceHash"`
-	SourceMIME       string `gorm:"column:source_mime;type:text" json:"sourceMime"`
-	SourceWidth      int    `gorm:"column:source_width;type:integer" json:"sourceWidth"`
-	SourceHeight     int    `gorm:"column:source_height;type:integer" json:"sourceHeight"`
-	NormalizedPath   string `gorm:"column:normalized_path;type:text" json:"normalizedPath"`
-	NormalizedHash   string `gorm:"column:normalized_hash;type:text" json:"normalizedHash"`
-	NormalizedMIME   string `gorm:"column:normalized_mime;type:text" json:"normalizedMime"`
-	NormalizedWidth  int    `gorm:"column:normalized_width;type:integer" json:"normalizedWidth"`
-	NormalizedHeight int    `gorm:"column:normalized_height;type:integer" json:"normalizedHeight"`
-	ConfigHash       string `gorm:"column:config_hash;type:text" json:"configHash"`
-	ContentHash      string `gorm:"column:content_hash;type:text" json:"contentHash"`
-	NormalizerVersion string `gorm:"column:normalizer_version;type:text" json:"normalizerVersion"`
-	SubjectBox       string `gorm:"column:subject_box;type:text" json:"subjectBox"`
-	Anchor           string `gorm:"column:anchor;type:text" json:"anchor"`
-	CoordinateSpace  string `gorm:"column:coordinate_space;type:text" json:"coordinateSpace"`
-	CharacterID      string `gorm:"column:character_id;type:text" json:"characterId"`
-	UserID           string `gorm:"column:user_id;type:text" json:"userId"`
-	SourceArtifactID    string `gorm:"column:source_artifact_id;type:text" json:"sourceArtifactId"`
-	StoragePath         string `gorm:"column:storage_path;type:text" json:"storagePath"`
-	Status              string `gorm:"column:status;type:text;default:'staging'" json:"status"`
-	SourceBytes         int64  `gorm:"column:source_bytes;type:integer;default:0" json:"sourceBytes"`
-	NormalizedBytes     int64  `gorm:"column:normalized_bytes;type:integer;default:0" json:"normalizedBytes"`
-	NormalizerProfileID    string `gorm:"column:normalizer_profile_id;type:text;default:''" json:"normalizerProfileId"`
+	ID                       string `gorm:"column:id;primaryKey;type:text" json:"id"`
+	TaskID                   string `gorm:"column:task_id;type:text" json:"taskId"`
+	SourcePath               string `gorm:"column:source_path;type:text" json:"sourcePath"`
+	SourceHash               string `gorm:"column:source_hash;type:text" json:"sourceHash"`
+	SourceMIME               string `gorm:"column:source_mime;type:text" json:"sourceMime"`
+	SourceWidth              int    `gorm:"column:source_width;type:integer" json:"sourceWidth"`
+	SourceHeight             int    `gorm:"column:source_height;type:integer" json:"sourceHeight"`
+	NormalizedPath           string `gorm:"column:normalized_path;type:text" json:"normalizedPath"`
+	NormalizedHash           string `gorm:"column:normalized_hash;type:text" json:"normalizedHash"`
+	NormalizedMIME           string `gorm:"column:normalized_mime;type:text" json:"normalizedMime"`
+	NormalizedWidth          int    `gorm:"column:normalized_width;type:integer" json:"normalizedWidth"`
+	NormalizedHeight         int    `gorm:"column:normalized_height;type:integer" json:"normalizedHeight"`
+	ConfigHash               string `gorm:"column:config_hash;type:text" json:"configHash"`
+	ContentHash              string `gorm:"column:content_hash;type:text" json:"contentHash"`
+	NormalizerVersion        string `gorm:"column:normalizer_version;type:text" json:"normalizerVersion"`
+	SubjectBox               string `gorm:"column:subject_box;type:text" json:"subjectBox"`
+	Anchor                   string `gorm:"column:anchor;type:text" json:"anchor"`
+	CoordinateSpace          string `gorm:"column:coordinate_space;type:text" json:"coordinateSpace"`
+	CharacterID              string `gorm:"column:character_id;type:text" json:"characterId"`
+	UserID                   string `gorm:"column:user_id;type:text" json:"userId"`
+	SourceArtifactID         string `gorm:"column:source_artifact_id;type:text" json:"sourceArtifactId"`
+	StoragePath              string `gorm:"column:storage_path;type:text" json:"storagePath"`
+	Status                   string `gorm:"column:status;type:text;default:'staging'" json:"status"`
+	SourceBytes              int64  `gorm:"column:source_bytes;type:integer;default:0" json:"sourceBytes"`
+	NormalizedBytes          int64  `gorm:"column:normalized_bytes;type:integer;default:0" json:"normalizedBytes"`
+	NormalizerProfileID      string `gorm:"column:normalizer_profile_id;type:text;default:''" json:"normalizerProfileId"`
 	NormalizerProfileVersion string `gorm:"column:normalizer_profile_version;type:text;default:''" json:"normalizerProfileVersion"`
-	NormalizerConfigHash  string `gorm:"column:normalizer_config_hash;type:text;default:''" json:"normalizerConfigHash"`
-	NormalizedArtifactID string `gorm:"column:normalized_artifact_id;type:text;default:''" json:"normalizedArtifactId"`
-	CreatedAt           string `gorm:"column:created_at;type:text" json:"createdAt"`
+	NormalizerConfigHash     string `gorm:"column:normalizer_config_hash;type:text;default:''" json:"normalizerConfigHash"`
+	NormalizedArtifactID     string `gorm:"column:normalized_artifact_id;type:text;default:''" json:"normalizedArtifactId"`
+	CreatedAt                string `gorm:"column:created_at;type:text" json:"createdAt"`
 }
 
 const (
-	ReferenceAssetStatusStaging      = "staging"
-	ReferenceAssetStatusPersisted    = "persisted"
+	ReferenceAssetStatusStaging       = "staging"
+	ReferenceAssetStatusPersisted     = "persisted"
 	ReferenceAssetStatusPublishFailed = "publish_failed"
-	ReferenceAssetStatusCorrupted    = "corrupted"
-	ReferenceAssetStatusArchived     = "archived"
+	ReferenceAssetStatusCorrupted     = "corrupted"
+	ReferenceAssetStatusArchived      = "archived"
 )
 
 const (
-	NormalizerProfileIDDefault       = "default"
-	NormalizerProfileVersionDefault  = "1"
-	CoordinateSpaceDefault           = "pixel"
-	SubjectBoxStatusNotMeasured      = `{"status":"not_measured"}`
-	AnchorSourceProfileDefault       = `{"source":"profile_default"}`
+	NormalizerProfileIDDefault      = "default"
+	NormalizerProfileVersionDefault = "1"
+	CoordinateSpaceDefault          = "pixel"
+	SubjectBoxStatusNotMeasured     = `{"status":"not_measured"}`
+	AnchorSourceProfileDefault      = `{"source":"profile_default"}`
 )
 
 func (ReferenceAsset) TableName() string { return "desktop_pet_reference_assets" }

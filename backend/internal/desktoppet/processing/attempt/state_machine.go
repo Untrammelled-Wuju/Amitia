@@ -37,11 +37,11 @@ var allowedTransitions = map[string]map[string]bool{
 		StateCancelRequested:   true,
 	},
 	StatePipelineCompleted: {
-		StateCommitting:     true,
+		StateCommitting:      true,
 		StateCancelRequested: true,
 	},
 	StateCommitting: {
-		StateCommitted:      true,
+		StateCommitted:       true,
 		StateFailedRetryable: true,
 	},
 	StateCancelRequested: {

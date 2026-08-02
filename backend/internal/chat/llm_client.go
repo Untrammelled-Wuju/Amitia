@@ -569,7 +569,7 @@ func (s *service) callGeminiWithTools(ctx context.Context, cfg *ModelConfig, mes
 		Candidates []struct {
 			Content struct {
 				Parts []struct {
-					Text string `json:"text"`
+					Text     string `json:"text"`
 					FuncCall struct {
 						Name string          `json:"name"`
 						Args json.RawMessage `json:"args"`

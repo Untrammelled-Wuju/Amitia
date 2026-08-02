@@ -12,11 +12,11 @@ var (
 
 const (
 	SyncStatePending  = "pending"
-	SyncStateOffline   = "offline"
-	SyncStateSyncing   = "syncing"
-	SyncStateApplied   = "applied"
-	SyncStateDegraded  = "degraded"
-	SyncStateFailed    = "failed"
+	SyncStateOffline  = "offline"
+	SyncStateSyncing  = "syncing"
+	SyncStateApplied  = "applied"
+	SyncStateDegraded = "degraded"
+	SyncStateFailed   = "failed"
 )
 
 type InstallationRuntimeProjection struct {
@@ -27,17 +27,17 @@ type InstallationRuntimeProjection struct {
 	RuntimeID string
 
 	InstallationID string
-	PetID           string
+	PetID          string
 
-	AppliedDesiredRevision int64
+	AppliedDesiredRevision  int64
 	AppliedSettingsRevision int64
-	ActualReleaseID        string
-	ActualVisible          int
-	ActualActionKey        string
-	ActualHealth           string
-	RuntimeSyncState       string
+	ActualReleaseID         string
+	ActualVisible           int
+	ActualActionKey         string
+	ActualHealth            string
+	RuntimeSyncState        string
 
-	LastAppliedAt string
+	LastAppliedAt   string
 	LastHeartbeatAt string
 
 	CreatedAt string
@@ -60,10 +60,10 @@ func (p InstallationRuntimeProjection) IsRuntimeHealthy() bool {
 }
 
 type ProjectionDelta struct {
-	PreviousState string
-	NextState     string
+	PreviousState   string
+	NextState       string
 	DesiredRevision int64
 	AppliedRevision int64
-	EventSource    string
-	EventID       string
+	EventSource     string
+	EventID         string
 }

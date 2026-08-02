@@ -44,10 +44,10 @@ type DeviceResolver interface {
 
 type RequestContext struct {
 	DeviceIDHeader string
-	RuntimeID     string
-	Platform      string
-	AppVersion    string
-	AuthToken     string
+	RuntimeID      string
+	Platform       string
+	AppVersion     string
+	AuthToken      string
 }
 
 func (r RequestContext) HasExplicitDevice() bool {
@@ -56,16 +56,16 @@ func (r RequestContext) HasExplicitDevice() bool {
 
 type VerificationPolicy struct {
 	RequireDeviceOwnership bool
-	RequireRuntimeMatch     bool
-	AllowFallbackToFirst    bool
+	RequireRuntimeMatch    bool
+	AllowFallbackToFirst   bool
 	StaleThreshold         time.Duration
 }
 
 func DefaultVerificationPolicy() VerificationPolicy {
 	return VerificationPolicy{
 		RequireDeviceOwnership: true,
-		RequireRuntimeMatch:     true,
-		AllowFallbackToFirst:    false,
+		RequireRuntimeMatch:    true,
+		AllowFallbackToFirst:   false,
 		StaleThreshold:         24 * time.Hour,
 	}
 }

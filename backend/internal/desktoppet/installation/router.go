@@ -19,22 +19,3 @@ func RegisterRoutes(r *gin.RouterGroup, svc Service) {
 		g.POST("/installations/:installationId/actions/:actionKey/play", handler.PlayAction)
 	}
 }
-
-func RegisterReleaseRoutes(r *gin.RouterGroup, releaseSvc ReleaseService) {
-	handler := NewReleaseHandler(releaseSvc)
-	g := r.Group("/desktop-pets")
-	{
-		g.POST("/releases/build", handler.BuildRelease)
-		g.POST("/releases/import", handler.ImportPackage)
-		g.GET("/releases", handler.ListReleases)
-		g.GET("/releases/:releaseId", handler.GetRelease)
-		g.GET("/pets", handler.ListPets)
-		g.GET("/pets/:petId", handler.GetPet)
-		g.GET("/pets/:petId/releases", handler.ListReleasesByPet)
-		g.POST("/pets/:petId/releases/:releaseId/install", handler.InstallRelease)
-		g.POST("/installations/:installationId/upgrade", handler.UpgradeInstallation)
-		g.POST("/installations/:installationId/switch", handler.SwitchInstallation)
-		g.POST("/installations/:installationId/repair", handler.RepairInstallation)
-		g.DELETE("/installations/:installationId", handler.UninstallInstallation)
-	}
-}

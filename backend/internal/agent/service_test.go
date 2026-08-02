@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 func TestWebhookRejectsNilContextBeforeUnifiedEntry(t *testing.T) {

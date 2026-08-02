@@ -3,24 +3,24 @@ package imageprovider
 type PriceUnit string
 
 const (
-	PriceUnitPerImage  PriceUnit = "per_image"
+	PriceUnitPerImage   PriceUnit = "per_image"
 	PriceUnitPerRequest PriceUnit = "per_request"
 	PriceUnitPerPixel   PriceUnit = "per_pixel"
 )
 
 type PriceEntry struct {
-	Provider     string     `json:"provider"`
-	Model        string     `json:"model"`
-	Mode         GenerationMode `json:"mode"`
-	Width        int        `json:"width"`
-	Height       int        `json:"height"`
-	OutputCount  int        `json:"outputCount"`
-	Unit         PriceUnit  `json:"unit"`
-	Amount       *float64   `json:"amount"`
-	Currency     string     `json:"currency"`
-	EffectiveAt  string     `json:"effectiveAt"`
-	SourceLabel  string     `json:"sourceLabel"`
-	Version      string     `json:"version"`
+	Provider    string         `json:"provider"`
+	Model       string         `json:"model"`
+	Mode        GenerationMode `json:"mode"`
+	Width       int            `json:"width"`
+	Height      int            `json:"height"`
+	OutputCount int            `json:"outputCount"`
+	Unit        PriceUnit      `json:"unit"`
+	Amount      *float64       `json:"amount"`
+	Currency    string         `json:"currency"`
+	EffectiveAt string         `json:"effectiveAt"`
+	SourceLabel string         `json:"sourceLabel"`
+	Version     string         `json:"version"`
 }
 
 type PricingCatalog struct {
@@ -76,13 +76,13 @@ func (c *PricingCatalog) Match(provider, model string, mode GenerationMode, widt
 }
 
 type CostEstimate struct {
-	PriceKnown          bool     `json:"priceKnown"`
-	Currency            string   `json:"currency"`
-	EstimatedMin        *float64 `json:"estimatedMin"`
-	EstimatedMax        *float64 `json:"estimatedMax"`
-	PricingSource       string   `json:"pricingSource"`
-	PricingVersion      string   `json:"pricingVersion"`
-	Warnings            []string `json:"warnings"`
+	PriceKnown     bool     `json:"priceKnown"`
+	Currency       string   `json:"currency"`
+	EstimatedMin   *float64 `json:"estimatedMin"`
+	EstimatedMax   *float64 `json:"estimatedMax"`
+	PricingSource  string   `json:"pricingSource"`
+	PricingVersion string   `json:"pricingVersion"`
+	Warnings       []string `json:"warnings"`
 }
 
 func (c *PricingCatalog) Estimate(provider, model string, mode GenerationMode, width, height, outputCount, primaryRequests, maxCalls int) CostEstimate {

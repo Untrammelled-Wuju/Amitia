@@ -13,7 +13,7 @@ const (
 )
 
 type PixelPoint struct {
-	X, Y float64
+	X, Y  float64
 	Space CoordinateSpaceID
 }
 

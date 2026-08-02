@@ -97,8 +97,8 @@ func (c *LoopChecker) CheckLoopWithMode(actionKey, playbackMode string, imgs []i
 			imgW := imgBounds.Dx()
 			imgH := imgBounds.Dy()
 			if imgW > 0 && imgH > 0 {
-				dx := absFloat(headCenterX - tailCenterX) / float64(imgW)
-				dy := absFloat(headCenterY - tailCenterY) / float64(imgH)
+				dx := absFloat(headCenterX-tailCenterX) / float64(imgW)
+				dy := absFloat(headCenterY-tailCenterY) / float64(imgH)
 				if dx > c.anchorJumpThreshold || dy > c.anchorJumpThreshold {
 					result.AnchorJump = true
 				}

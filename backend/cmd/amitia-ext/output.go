@@ -19,11 +19,11 @@ const (
 const CLIVersion = "0.1.0"
 
 type Result struct {
-	OK       bool        `json:"ok"`
-	Message  string      `json:"message,omitempty"`
-	Data     any         `json:"data,omitempty"`
-	Errors   []string    `json:"errors,omitempty"`
-	Warnings []string    `json:"warnings,omitempty"`
+	OK       bool     `json:"ok"`
+	Message  string   `json:"message,omitempty"`
+	Data     any      `json:"data,omitempty"`
+	Errors   []string `json:"errors,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type Output struct {

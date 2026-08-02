@@ -70,7 +70,8 @@ type BehaviorEventConsumer interface {
 
 type NoopInteractionObserver struct{}
 
-func (n *NoopInteractionObserver) OnInteractionLifecycle(_ context.Context, _ InteractionLifecycleEvent) {}
+func (n *NoopInteractionObserver) OnInteractionLifecycle(_ context.Context, _ InteractionLifecycleEvent) {
+}
 
 type NoopToolObserver struct{}
 
@@ -82,7 +83,8 @@ func (n *NoopVoiceObserver) OnVoiceLifecycle(_ context.Context, _ VoiceLifecycle
 
 type NoopAffectObserver struct{}
 
-func (n *NoopAffectObserver) OnAffectChanged(_ context.Context, _ string, _, _ AffectBehaviorSnapshot) {}
+func (n *NoopAffectObserver) OnAffectChanged(_ context.Context, _ string, _, _ AffectBehaviorSnapshot) {
+}
 
 type NoopDesktopObserver struct{}
 

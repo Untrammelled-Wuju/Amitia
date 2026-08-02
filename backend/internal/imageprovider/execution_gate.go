@@ -8,17 +8,17 @@ import (
 )
 
 type ExecutionGate struct {
-	mu           sync.Mutex
-	concurrency  map[string]chan struct{}
-	rateLimit    map[string]*rateLimiter
-	maxPerKey    int
-	ratePerSec   int
+	mu          sync.Mutex
+	concurrency map[string]chan struct{}
+	rateLimit   map[string]*rateLimiter
+	maxPerKey   int
+	ratePerSec  int
 }
 
 type rateLimiter struct {
-	tokens   chan struct{}
-	refill   chan struct{}
-	stopCh   chan struct{}
+	tokens chan struct{}
+	refill chan struct{}
+	stopCh chan struct{}
 }
 
 func NewExecutionGate(maxPerKey, ratePerSec int) *ExecutionGate {

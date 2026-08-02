@@ -28,19 +28,19 @@ type GenerationSnapshot struct {
 }
 
 type ProcessingSnapshot struct {
-	TaskStatus                  contracts.LifecycleStatus
-	CancelRequested             bool
-	HasActiveChildren           bool
-	AllActionsSucceeded         bool
+	TaskStatus                   contracts.LifecycleStatus
+	CancelRequested              bool
+	HasActiveChildren            bool
+	AllActionsSucceeded          bool
 	HasAtLeastOneActionSucceeded bool
-	PackageExists               bool
-	PackageReady                bool
-	PackagePathValid            bool
-	ManifestValid               bool
-	HashValid                   bool
-	IncludedActionsMatch        bool
-	AllowPartialResult          bool
-	ActualProgress              int
+	PackageExists                bool
+	PackageReady                 bool
+	PackagePathValid             bool
+	ManifestValid                bool
+	HashValid                    bool
+	IncludedActionsMatch         bool
+	AllowPartialResult           bool
+	ActualProgress               int
 }
 
 func AggregateGenerationTask(s GenerationSnapshot) AggregateDecision {

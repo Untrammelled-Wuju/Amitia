@@ -16,14 +16,14 @@ func NewAttemptFactory(attemptRepo AttemptRepository) *AttemptFactory {
 }
 
 type CreateAttemptInput struct {
-	Tx               *gorm.DB
-	TaskID           string
-	TaskActionID     string
-	Plan             *GenerationPlanSnapshot
-	ParentAttemptID  string
-	Reason           string
-	ExecutionID      string
-	WorkerID         string
+	Tx              *gorm.DB
+	TaskID          string
+	TaskActionID    string
+	Plan            *GenerationPlanSnapshot
+	ParentAttemptID string
+	Reason          string
+	ExecutionID     string
+	WorkerID        string
 }
 
 func (f *AttemptFactory) Create(input CreateAttemptInput) (*ActionGenerationAttempt, error) {

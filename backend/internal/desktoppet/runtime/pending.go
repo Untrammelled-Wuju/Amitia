@@ -11,15 +11,15 @@ import (
 )
 
 type PendingResult struct {
-	CommandID  string
-	Status     contracts.ResultStatus
-	ErrorCode  string
-	ErrorMsg   string
-	AppliedRev int64
-	ActualState *contracts.PetInstanceSummary
+	CommandID      string
+	Status         contracts.ResultStatus
+	ErrorCode      string
+	ErrorMsg       string
+	AppliedRev     int64
+	ActualState    *contracts.PetInstanceSummary
 	AcceptedAction string
 	PlaybackReqID  string
-	Err        error
+	Err            error
 }
 
 type waiter struct {

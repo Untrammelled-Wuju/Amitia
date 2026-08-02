@@ -34,19 +34,19 @@ func (s *sessionService) DB() *gorm.DB { return s.db }
 func (s *sessionService) CreateSession(userID, deviceID, runtimeID string, prevGen int64) (*RuntimeSession, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	session := &RuntimeSession{
-		ID:                    "rtsessv2_" + uuid.NewString(),
-		UserID:                userID,
-		DeviceID:              deviceID,
-		RuntimeID:             runtimeID,
-		ConnectionGeneration:  prevGen + 1,
-		Status:                string(SessionStatusSyncing),
-		LastAppliedDesiredRevision: 0,
+		ID:                           "rtsessv2_" + uuid.NewString(),
+		UserID:                       userID,
+		DeviceID:                     deviceID,
+		RuntimeID:                    runtimeID,
+		ConnectionGeneration:         prevGen + 1,
+		Status:                       string(SessionStatusSyncing),
+		LastAppliedDesiredRevision:   0,
 		LastProcessedCommandSequence: 0,
-		LastEventSequence:     0,
-		ConnectedAt:           now,
-		LastHeartbeatAt:       now,
-		CreatedAt:             now,
-		UpdatedAt:             now,
+		LastEventSequence:            0,
+		ConnectedAt:                  now,
+		LastHeartbeatAt:              now,
+		CreatedAt:                    now,
+		UpdatedAt:                    now,
 	}
 	if err := s.db.Create(session).Error; err != nil {
 		return nil, err
@@ -105,21 +105,21 @@ func (s *sessionService) AcquireSession(ctx *gorm.DB, userID, deviceID, runtimeI
 
 	now := time.Now().Format("2006-01-02 15:04:05")
 	newSession := &RuntimeSession{
-		ID:                    "rtsessv2_" + uuid.NewString(),
-		UserID:                userID,
-		DeviceID:              deviceID,
-		RuntimeID:             runtimeID,
-		ConnectionGeneration:  prevGen + 1,
-		RuntimeContractVersion: contractVersion,
-		CapabilitiesHash:      capsHash,
-		LastAppliedDesiredRevision: lastAppliedRev,
+		ID:                           "rtsessv2_" + uuid.NewString(),
+		UserID:                       userID,
+		DeviceID:                     deviceID,
+		RuntimeID:                    runtimeID,
+		ConnectionGeneration:         prevGen + 1,
+		RuntimeContractVersion:       contractVersion,
+		CapabilitiesHash:             capsHash,
+		LastAppliedDesiredRevision:   lastAppliedRev,
 		LastProcessedCommandSequence: lastCmdSeq,
-		LastEventSequence:     lastEvtSeq,
-		Status:                string(SessionStatusSyncing),
-		ConnectedAt:           now,
-		LastHeartbeatAt:       now,
-		CreatedAt:             now,
-		UpdatedAt:             now,
+		LastEventSequence:            lastEvtSeq,
+		Status:                       string(SessionStatusSyncing),
+		ConnectedAt:                  now,
+		LastHeartbeatAt:              now,
+		CreatedAt:                    now,
+		UpdatedAt:                    now,
 	}
 
 	if len(caps) > 0 {

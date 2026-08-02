@@ -56,19 +56,19 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 	hash := ComputePayloadHash(payloadBytes)
 
 	cmd := &RuntimeCommand{
-		ID:             "rtcmdv2_" + uuid.NewString(),
-		UserID:         userID,
-		DeviceID:       deviceID,
-		CommandType:    commandType,
-		Status:         string(CommandStatusQueued),
+		ID:              "rtcmdv2_" + uuid.NewString(),
+		UserID:          userID,
+		DeviceID:        deviceID,
+		CommandType:     commandType,
+		Status:          string(CommandStatusQueued),
 		DesiredRevision: payload.GetRevision(),
-		IdempotencyKey: idempotencyKey,
-		CoalesceKey:    coalesceKey,
-		DeviceSequence: deviceSeq,
-		PayloadJSON:    string(payloadBytes),
-		PayloadHash:    hash,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		IdempotencyKey:  idempotencyKey,
+		CoalesceKey:     coalesceKey,
+		DeviceSequence:  deviceSeq,
+		PayloadJSON:     string(payloadBytes),
+		PayloadHash:     hash,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	var existing RuntimeCommand
@@ -175,40 +175,40 @@ func (s *commandService) MarkTransportDispatched(commandID, runtimeID string, t 
 
 func (s *commandService) MarkRuntimeReceived(commandID, runtimeID, sessionID string, t time.Time) error {
 	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND runtime_id = ?", commandID, runtimeID).Updates(map[string]interface{}{
-		"status":              string(CommandStatusRuntimeReceived),
-		"runtime_session_id":  sessionID,
-		"updated_at":          t,
+		"status":             string(CommandStatusRuntimeReceived),
+		"runtime_session_id": sessionID,
+		"updated_at":         t,
 	}).Error
 }
 
 func (s *commandService) MarkRuntimeAccepted(commandID, runtimeID, sessionID string, t time.Time) error {
 	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND runtime_id = ?", commandID, runtimeID).Updates(map[string]interface{}{
-		"status":              string(CommandStatusRuntimeAccepted),
-		"runtime_session_id":  sessionID,
-		"updated_at":          t,
+		"status":             string(CommandStatusRuntimeAccepted),
+		"runtime_session_id": sessionID,
+		"updated_at":         t,
 	}).Error
 }
 
 func (s *commandService) MarkRendererAccepted(commandID, runtimeID, sessionID string, t time.Time) error {
 	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND runtime_id = ?", commandID, runtimeID).Updates(map[string]interface{}{
-		"status":              string(CommandStatusRendererAccepted),
-		"runtime_session_id":  sessionID,
-		"updated_at":          t,
+		"status":             string(CommandStatusRendererAccepted),
+		"runtime_session_id": sessionID,
+		"updated_at":         t,
 	}).Error
 }
 
 func (s *commandService) MarkPlaybackStarted(commandID, playbackID string, t time.Time) error {
 	return s.db.Model(&RuntimeCommand{}).Where("id = ?", commandID).Updates(map[string]interface{}{
-		"status":            string(CommandStatusPlaybackStarted),
-		"updated_at":        t,
+		"status":     string(CommandStatusPlaybackStarted),
+		"updated_at": t,
 	}).Error
 }
 
 func (s *commandService) MarkCompleted(commandID, playbackID string, t time.Time) error {
 	return s.db.Model(&RuntimeCommand{}).Where("id = ?", commandID).Updates(map[string]interface{}{
-		"status":        string(CommandStatusCompleted),
-		"completed_at":  t,
-		"updated_at":    t,
+		"status":       string(CommandStatusCompleted),
+		"completed_at": t,
+		"updated_at":   t,
 	}).Error
 }
 
@@ -310,9 +310,9 @@ func (s *commandService) AllocateDeviceSequence(tx *gorm.DB, userID, deviceID st
 		"user_id = ? AND device_id = ? AND sequence = ?",
 		userID, deviceID, seq.Sequence,
 	).Updates(map[string]interface{}{
-		"sequence":          newSeq,
-		"last_reserved_at":  now,
-		"updated_at":        now,
+		"sequence":         newSeq,
+		"last_reserved_at": now,
+		"updated_at":       now,
 	})
 	if result.Error != nil {
 		return 0, result.Error

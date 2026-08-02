@@ -221,10 +221,10 @@ func (r *attemptRepository) AtomicallyCreateAttempt(tx *gorm.DB, taskActionID st
 	err = tx.Table("desktop_pet_generation_task_actions").
 		Where("id = ?", taskActionID).
 		Updates(map[string]interface{}{
-			"current_attempt":    newAttemptNumber,
-			"attempt_number":     newAttemptNumber,
+			"current_attempt":     newAttemptNumber,
+			"attempt_number":      newAttemptNumber,
 			"next_attempt_number": newAttemptNumber + 1,
-			"updated_at":         nowRFC3339(),
+			"updated_at":          nowRFC3339(),
 		}).Error
 	if err != nil {
 		return nil, fmt.Errorf("update task action next attempt number: %w", err)
