@@ -2,8 +2,6 @@ package kernel
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -510,32 +508,41 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 		} else {
 			rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
 			if rpErr != nil {
-				if IsRepositoryErrorKind(rpErr, RepositoryErrorNotFound) {
-					checkSnapshot.Detail = "rollback point not found, fail closed"
+				if !IsRepositoryErrorKind(rpErr, RepositoryErrorNotFound) {
+					checkSnapshot.Detail = fmt.Sprintf("rollback point query failed (repository unavailable): %v", rpErr)
+		} else {
+				claims, claimsErr := parseOperationConfirmationClaims(operation)
+				if claimsErr != nil {
+					checkSnapshot.Detail = fmt.Sprintf("rollback point not found and no valid snapshot exemption claims (fail-closed): %v", claimsErr)
 				} else {
-					checkSnapshot.Detail = fmt.Sprintf("rollback point query failed: %v", rpErr)
-				}
-			} else {
-				if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
-					checkSnapshot.Detail = fmt.Sprintf("snapshot validation failed: %v", validateErr)
-				} else {
-					configEmpty := rollbackPoint.ConfigSnapshotJSON == ""
-					resourceEmpty := rollbackPoint.ResourceSnapshotJSON == ""
-					migrationEmpty := rollbackPoint.MigrationStateSnapshotJSON == ""
-					userDataEmpty := rollbackPoint.UserDataMigrationStateJSON == ""
-					snapshotHashEmpty := rollbackPoint.SnapshotHash == ""
-					if configEmpty || resourceEmpty || migrationEmpty || userDataEmpty || snapshotHashEmpty {
-						req := computeRollbackSnapshotRequirement(rollbackPoint)
-						if req.NoDataChange {
-							checkSnapshot.Passed = true
-						} else {
-							checkSnapshot.Detail = fmt.Sprintf("snapshot incomplete: config=%v resource=%v migration=%v userData=%v hash=%v", !configEmpty, !resourceEmpty, !migrationEmpty, !userDataEmpty, !snapshotHashEmpty)
-						}
-					} else {
+					emptyPoint := PackageRollbackPoint{ExtensionID: operation.ExtensionID, SourceVersion: operation.FromVersion}
+					currentReq := computeRollbackSnapshotRequirementFromPoint(emptyPoint)
+					if isRollbackSnapshotExempt(currentReq, claims) {
 						checkSnapshot.Passed = true
+						checkSnapshot.Detail = fmt.Sprintf("exempt: rollback point absent, claims hash=%s current hash=%s no-data-change confirmed", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+					} else {
+						checkSnapshot.Detail = fmt.Sprintf("rollback point not found and snapshot exemption claims invalid (fail-closed): claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
 					}
 				}
 			}
+		} else {
+			if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
+				checkSnapshot.Detail = fmt.Sprintf("snapshot validation failed: %v", validateErr)
+			} else {
+				claims, claimsErr := parseOperationConfirmationClaims(operation)
+				if claimsErr != nil {
+					checkSnapshot.Detail = fmt.Sprintf("snapshot present but no valid snapshot exemption claims (fail-closed): %v", claimsErr)
+				} else {
+					currentReq := computeRollbackSnapshotRequirementFromPoint(rollbackPoint)
+					if isRollbackSnapshotExempt(currentReq, claims) {
+						checkSnapshot.Passed = true
+						checkSnapshot.Detail = fmt.Sprintf("exempt: snapshot integrity confirmed via claims, claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+					} else {
+						checkSnapshot.Detail = fmt.Sprintf("snapshot exemption claims mismatch (fail-closed): claims hash=%s current hash=%s", claims.SnapshotRequirementHash, currentReq.RequirementHash)
+					}
+				}
+			}
+		}
 		}
 		result.Checks = append(result.Checks, checkSnapshot)
 	}
@@ -685,61 +692,10 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 }
 
 func computeRollbackSnapshotRequirement(point PackageRollbackPoint) RollbackSnapshotRequirement {
-	req := RollbackSnapshotRequirement{}
-	if point.MigrationStateSnapshotJSON == "" {
-		req.MigrationStateUnverified = true
-	} else {
-		var migrationState packageMigrationStateSnapshot
-		if json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState) != nil {
-			req.MigrationStateUnverified = true
-		} else if migrationState.Mode != "none" || len(migrationState.Definitions) > 0 || len(migrationState.Operations) > 0 {
-			req.MigrationRequired = true
-		}
-	}
-	if point.ConfigSnapshotJSON != "" {
-		var configState map[string]interface{}
-		if json.Unmarshal([]byte(point.ConfigSnapshotJSON), &configState) == nil && len(configState) > 0 {
-			req.ConfigChanged = true
-		}
-	}
-	if point.ResourceSnapshotJSON != "" {
-		var resourceState packageResourceSnapshot
-		if json.Unmarshal([]byte(point.ResourceSnapshotJSON), &resourceState) == nil && len(resourceState.Entries) > 0 {
-			req.ResourcesChanged = true
-		}
-	}
-	if point.UserDataMigrationStateJSON != "" {
-		var userDataState packageUserDataMigrationState
-		if json.Unmarshal([]byte(point.UserDataMigrationStateJSON), &userDataState) == nil {
-			if userDataState.Mode != "none" || len(userDataState.AffectedTables) > 0 || len(userDataState.DataExports) > 0 {
-				req.UserDataChanged = true
-			}
-		}
-	}
-	req.NoDataChange = !req.ConfigChanged && !req.ResourcesChanged && !req.UserDataChanged && !req.MigrationRequired && !req.MigrationStateUnverified
-	req.Required = !req.NoDataChange
-	if req.Required {
-		if req.MigrationStateUnverified {
-			req.Reason = "migration state unverified (empty or corrupt), fail-closed"
-		} else {
-			req.Reason = "config/resource/userData/migration changes detected"
-		}
-	} else {
-		req.Reason = "no data change detected"
-	}
-	req.RequirementHash = computeSnapshotRequirementHash(req)
-	return req
+	return computeRollbackSnapshotRequirementFromPoint(point)
 }
 
-func computeSnapshotRequirementHash(req RollbackSnapshotRequirement) string {
-	canonical := fmt.Sprintf(`{"required":%v,"configChanged":%v,"resourcesChanged":%v,"userDataChanged":%v,"migrationRequired":%v,"migrationStateUnverified":%v,"noDataChange":%v}`,
-		req.Required, req.ConfigChanged, req.ResourcesChanged, req.UserDataChanged, req.MigrationRequired, req.MigrationStateUnverified, req.NoDataChange)
-	h := sha256.Sum256([]byte(canonical))
-	return "sha256:" + hex.EncodeToString(h[:])
-}
-
-func isRollbackSnapshotExempt(point PackageRollbackPoint, claims packageConfirmationClaims) bool {
-	req := computeRollbackSnapshotRequirement(point)
+func isRollbackSnapshotExempt(req RollbackSnapshotRequirement, claims packageConfirmationClaims) bool {
 	if !req.NoDataChange {
 		return false
 	}

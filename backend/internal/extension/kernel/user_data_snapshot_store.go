@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,12 @@ import (
 )
 
 const userDataRestoreBatchSize = 100
+
+const (
+	PackageErrCodeUserDataNamespaceViolation  = "PACKAGE_USER_DATA_NAMESPACE_VIOLATION"
+	PackageErrCodeUserDataJournalHashMismatch = "PACKAGE_USER_DATA_JOURNAL_HASH_MISMATCH"
+	PackageErrCodeUserDataJournalLegacyEmpty  = "PACKAGE_USER_DATA_JOURNAL_LEGACY_EMPTY"
+)
 
 const userDataRestoreJournalDDL = `CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
 	journal_id TEXT NOT NULL,
@@ -28,6 +35,7 @@ const userDataRestoreJournalDDL = `CREATE TABLE IF NOT EXISTS extension_package_
 	cursor TEXT NOT NULL DEFAULT '',
 	batch_hash TEXT NOT NULL DEFAULT '',
 	namespace_hash TEXT NOT NULL DEFAULT '',
+	aggregate_hash TEXT NOT NULL DEFAULT '',
 	state TEXT NOT NULL DEFAULT 'pending',
 	started_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL,
@@ -48,6 +56,7 @@ type UserDataRestoreJournal struct {
 	JournalID     string
 	OperationID   string
 	ExtensionID   string
+	Namespace     string
 	TableName     string
 	TotalRows     int64
 	ImportedRows  int64
@@ -55,6 +64,7 @@ type UserDataRestoreJournal struct {
 	Cursor        string
 	BatchHash     string
 	NamespaceHash string
+	AggregateHash string
 	State         UserDataRestoreState
 	StartedAt     string
 	UpdatedAt     string
@@ -88,6 +98,7 @@ func (s *UserDataSnapshotStore) ensureJournalColumns(ctx context.Context) error 
 		s.ensureCursorColumn,
 		s.ensureBatchHashColumn,
 		s.ensureNamespaceHashColumn,
+		s.ensureAggregateHashColumn,
 	}
 	for _, fn := range closures {
 		if err := fn(ctx); err != nil {
@@ -158,6 +169,22 @@ func (s *UserDataSnapshotStore) ensureNamespaceHashColumn(ctx context.Context) e
 	}
 	_, err = s.db.ExecContext(ctx,
 		`ALTER TABLE extension_package_user_data_restore_journal ADD COLUMN namespace_hash TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+func (s *UserDataSnapshotStore) ensureAggregateHashColumn(ctx context.Context) error {
+	var name string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name FROM pragma_table_info('extension_package_user_data_restore_journal') WHERE name='aggregate_hash'`,
+	).Scan(&name)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`ALTER TABLE extension_package_user_data_restore_journal ADD COLUMN aggregate_hash TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 
@@ -285,19 +312,43 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 	if !migration.IsExtensionNamespaceTable(table, extensionID) {
 		return fmt.Errorf("kernel: user data table %q does not belong to extension namespace", table)
 	}
-	records, err := parseAndValidateJSONL(jsonlData, extensionID)
+	records, parsedRecords, err := parseAndValidateJSONL(jsonlData, extensionID)
 	if err != nil {
 		return err
 	}
-	journal, err := s.getOrCreateRestoreJournal(ctx, operationID, extensionID, table, int64(len(records)))
+	if len(parsedRecords) == 0 {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: no valid records found for restore"))
+	}
+	entityTypeSet := make(map[string]struct{})
+	var schemaVersion, namespace string
+	for i, pr := range parsedRecords {
+		entityTypeSet[pr.EntityType] = struct{}{}
+		if i == 0 {
+			schemaVersion = pr.SchemaVersion
+			namespace = pr.Namespace
+			continue
+		}
+		if pr.Namespace != namespace {
+			return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+				fmt.Errorf("kernel: all records must share the same namespace, found %s vs %s", pr.Namespace, namespace))
+		}
+		if pr.SchemaVersion != schemaVersion {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: all records must share the same schema version, found %s vs %s", pr.SchemaVersion, schemaVersion))
+		}
+	}
+	entityTypes := make([]string, 0, len(entityTypeSet))
+	for et := range entityTypeSet {
+		entityTypes = append(entityTypes, et)
+	}
+	expectedNamespaceHash := computeNamespaceHash(extensionID, table, namespace, entityTypes, schemaVersion, "v1")
+	journal, err := s.getOrCreateRestoreJournal(ctx, operationID, extensionID, table, namespace, int64(len(records)), expectedNamespaceHash)
 	if err != nil {
 		return err
 	}
 	if journal.State == UserDataRestoreCompleted {
-		if err := s.verifyJournalAppliedCount(journal, int64(len(records))); err != nil {
-			return err
-		}
-		return nil
+		return s.verifyJournalConsistency(journal, int64(len(records)))
 	}
 	if journal.State == UserDataRestoreFailed {
 		journal.ImportedRows = 0
@@ -305,38 +356,97 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		journal.Cursor = ""
 		journal.BatchHash = ""
 	}
+	startCursor, cursorErr := parseJournalCursor(journal, int64(len(records)))
+	if cursorErr != nil {
+		return cursorErr
+	}
+	if journal.AppliedCount != startCursor {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: journal applied_count %d does not match cursor %d", journal.AppliedCount, startCursor))
+	}
+	if startCursor == int64(len(records)) {
+		if startCursor > 0 {
+			if err := s.deleteDifferingRows(ctx, table, records, extensionID); err != nil {
+				s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error())
+				return fmt.Errorf("kernel: delete differing rows for %s: %w", table, err)
+			}
+			recomputedAggHash, recomputeErr := s.computeAggregateHashFromDB(ctx, table)
+			if recomputeErr != nil {
+				s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, recomputeErr.Error())
+				return fmt.Errorf("kernel: recompute aggregate hash on recovery for table %s: %w", table, recomputeErr)
+			}
+			if journal.AggregateHash != recomputedAggHash {
+				err := fmt.Errorf("kernel: aggregate hash mismatch on recovery for table %s", table)
+				s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error())
+				return err
+			}
+			if err := s.updateRestoreJournalHashes(ctx, journal, expectedNamespaceHash, recomputedAggHash); err != nil {
+				return fmt.Errorf("kernel: update journal hashes on recovery: %w", err)
+			}
+		}
+		if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreCompleted, ""); err != nil {
+			return fmt.Errorf("kernel: update journal to completed: %w", err)
+		}
+		return nil
+	}
 	if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreImporting, ""); err != nil {
 		return fmt.Errorf("kernel: update journal to importing: %w", err)
 	}
-	startCursor := int(journal.ImportedRows)
-	batchRecords := records
-	if startCursor > 0 && startCursor < len(records) {
-		batchRecords = records[startCursor:]
-	}
-	imported, batchHash, importErr := s.importRowsFromJSONL(ctx, table, batchRecords, journal.AppliedCount)
-	if importErr != nil {
-		if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, importErr.Error()); journalErr != nil {
-			return errors.Join(importErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+	appliedCount := journal.AppliedCount
+	aggregateHasher := sha256.New()
+	if journal.AggregateHash != "" && startCursor > 0 {
+		if prevBytes, decErr := hex.DecodeString(journal.AggregateHash); decErr == nil {
+			aggregateHasher.Write(prevBytes)
 		}
-		return importErr
 	}
-	totalImported := int64(startCursor) + int64(imported)
-	cursorPos := totalImported
-	if err := s.updateRestoreJournalProgress(ctx, journal, totalImported, strconv.FormatInt(cursorPos, 10), batchHash); err != nil {
-		return fmt.Errorf("kernel: update journal progress: %w", err)
+	remaining := records[startCursor:]
+	batchIdx := int(startCursor / userDataRestoreBatchSize)
+	for i := 0; i < len(remaining); i += userDataRestoreBatchSize {
+		end := i + userDataRestoreBatchSize
+		if end > len(remaining) {
+			end = len(remaining)
+		}
+		batch := remaining[i:end]
+		batchIdx++
+		batchHash := computeContentBoundBatchHash(batch, extensionID, startCursor+int64(i))
+		if batchHash == "" {
+			if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed,
+				fmt.Sprintf("batch content hash computation failed at cursor %d", startCursor+int64(i))); failErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: batch content hash failed"))
+			}
+			return fmt.Errorf("kernel: batch content hash computation failed at cursor %d", startCursor+int64(i))
+		}
+		batchApplied, _, err := s.importBatchAtomic(ctx, journal, table, batch, startCursor+int64(i), appliedCount, batchIdx)
+		if err != nil {
+			if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error()); failErr != nil {
+				return errors.Join(err, fmt.Errorf("kernel: update journal to failed: %w", failErr))
+			}
+			return err
+		}
+		if batchApplied != int64(len(batch)) {
+			err := fmt.Errorf("kernel: batch import incomplete: expected %d, got %d", len(batch), batchApplied)
+			if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error()); failErr != nil {
+				return errors.Join(err, fmt.Errorf("kernel: update journal to failed: %w", failErr))
+			}
+			return err
+		}
+		appliedCount += batchApplied
 	}
 	if err := s.deleteDifferingRows(ctx, table, records, extensionID); err != nil {
-		if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error()); journalErr != nil {
-			return errors.Join(err, fmt.Errorf("kernel: update journal to failed after diff delete: %w", journalErr))
+		if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error()); failErr != nil {
+			return errors.Join(err, fmt.Errorf("kernel: update journal to failed after diff delete: %w", failErr))
 		}
 		return fmt.Errorf("kernel: delete differing rows for %s: %w", table, err)
 	}
-	appliedCount := journal.AppliedCount + int64(imported)
-	if err := s.updateAppliedCount(ctx, journal, appliedCount); err != nil {
-		return fmt.Errorf("kernel: update applied count: %w", err)
+	aggHashFromDB, aggErr := s.computeAggregateHashFromDB(ctx, table)
+	if aggErr != nil {
+		if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, aggErr.Error()); failErr != nil {
+			return errors.Join(aggErr, fmt.Errorf("kernel: update journal to failed after aggregate hash failure: %w", failErr))
+		}
+		return fmt.Errorf("kernel: compute aggregate hash from DB for table %s: %w", table, aggErr)
 	}
-	if totalImported != int64(len(records)) {
-		return fmt.Errorf("kernel: import incomplete for table %s", table)
+	if err := s.updateRestoreJournalHashes(ctx, journal, expectedNamespaceHash, aggHashFromDB); err != nil {
+		return fmt.Errorf("kernel: update journal hashes: %w", err)
 	}
 	if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreCompleted, ""); err != nil {
 		return fmt.Errorf("kernel: update journal to completed: %w", err)
@@ -344,33 +454,54 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 	return nil
 }
 
-func (s *UserDataSnapshotStore) verifyJournalAppliedCount(journal *UserDataRestoreJournal, expected int64) error {
-	if journal.State == UserDataRestoreCompleted && journal.ImportedRows != expected {
+func parseJournalCursor(journal *UserDataRestoreJournal, totalRecords int64) (int64, error) {
+	if journal.Cursor == "" {
+		return 0, nil
+	}
+	cursor, err := strconv.ParseInt(journal.Cursor, 10, 64)
+	if err != nil || cursor < 0 || cursor > totalRecords {
+		return 0, NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: journal cursor %q out of valid range [0, %d]", journal.Cursor, totalRecords))
+	}
+	return cursor, nil
+}
+
+func (s *UserDataSnapshotStore) verifyJournalConsistency(journal *UserDataRestoreJournal, totalRecords int64) error {
+	if journal.State == UserDataRestoreCompleted && journal.ImportedRows != totalRecords {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-			fmt.Errorf("kernel: completed journal imported rows %d does not match snapshot %d", journal.ImportedRows, expected))
+			fmt.Errorf("kernel: completed journal imported rows %d does not match snapshot %d", journal.ImportedRows, totalRecords))
+	}
+	if journal.State == UserDataRestoreCompleted && journal.AppliedCount != totalRecords {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: completed journal applied count %d does not match snapshot %d", journal.AppliedCount, totalRecords))
+	}
+	if journal.State == UserDataRestoreCompleted && journal.Cursor != strconv.FormatInt(totalRecords, 10) {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: completed journal cursor %q does not match expected %d", journal.Cursor, totalRecords))
 	}
 	return nil
 }
 
-func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(ctx context.Context, operationID, extensionID, table string, totalRows int64) (*UserDataRestoreJournal, error) {
+func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(ctx context.Context, operationID, extensionID, table, namespace string, totalRows int64, expectedNamespaceHash string) (*UserDataRestoreJournal, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	journal := &UserDataRestoreJournal{
 		JournalID:   "ud-journal-" + operationID + "-" + table,
 		OperationID: operationID,
 		ExtensionID: extensionID,
+		Namespace:   namespace,
 		TableName:   table,
 		TotalRows:   totalRows,
 		State:       UserDataRestorePending,
 		StartedAt:   now,
 		UpdatedAt:   now,
 	}
-	var state, startedAt, updatedAt, errorDetail, cursor, batchHash, namespaceHash string
+	var state, startedAt, updatedAt, errorDetail, cursor, batchHash, namespaceHash, aggregateHash string
 	var importedRows, appliedCount int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT state, imported_rows, applied_count, cursor, batch_hash, namespace_hash, started_at, updated_at, error_detail
+		`SELECT state, imported_rows, applied_count, cursor, batch_hash, namespace_hash, aggregate_hash, started_at, updated_at, error_detail
 		 FROM extension_package_user_data_restore_journal
 		 WHERE operation_id=? AND table_name=?`, operationID, table,
-	).Scan(&state, &importedRows, &appliedCount, &cursor, &batchHash, &namespaceHash, &startedAt, &updatedAt, &errorDetail)
+	).Scan(&state, &importedRows, &appliedCount, &cursor, &batchHash, &namespaceHash, &aggregateHash, &startedAt, &updatedAt, &errorDetail)
 	if err == nil {
 		journal.State = UserDataRestoreState(state)
 		journal.ImportedRows = importedRows
@@ -378,9 +509,22 @@ func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(ctx context.Context, o
 		journal.Cursor = cursor
 		journal.BatchHash = batchHash
 		journal.NamespaceHash = namespaceHash
+		journal.AggregateHash = aggregateHash
 		journal.StartedAt = startedAt
 		journal.UpdatedAt = updatedAt
 		journal.ErrorDetail = errorDetail
+		if journal.ExtensionID != extensionID {
+			return nil, NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+				fmt.Errorf("kernel: restore journal %s belongs to extension %s, cannot be used for extension %s", journal.JournalID, journal.ExtensionID, extensionID))
+		}
+		if journal.NamespaceHash == "" {
+			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal %s has empty namespace hash from legacy version, cannot continue restore", journal.JournalID))
+		}
+		if journal.NamespaceHash != expectedNamespaceHash {
+			return nil, NewPackageError(PackageErrCodeUserDataJournalHashMismatch, 422,
+				fmt.Errorf("kernel: restore journal %s namespace hash mismatch: expected %s, actual %s", journal.JournalID, expectedNamespaceHash, journal.NamespaceHash))
+		}
 		return journal, nil
 	}
 	if err != sql.ErrNoRows {
@@ -388,9 +532,9 @@ func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(ctx context.Context, o
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO extension_package_user_data_restore_journal
-		 (journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, namespace_hash, state, started_at, updated_at, error_detail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		journal.JournalID, operationID, extensionID, table, totalRows, 0, 0, "", "", "",
+		 (journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, namespace_hash, aggregate_hash, state, started_at, updated_at, error_detail)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		journal.JournalID, operationID, extensionID, table, totalRows, 0, 0, "", "", expectedNamespaceHash, "",
 		string(UserDataRestorePending), now, now, "")
 	if err != nil {
 		return nil, fmt.Errorf("create restore journal: %w", err)
@@ -411,59 +555,35 @@ func (s *UserDataSnapshotStore) updateRestoreJournalState(ctx context.Context, j
 	return err
 }
 
-func (s *UserDataSnapshotStore) updateRestoreJournalProgress(ctx context.Context, journal *UserDataRestoreJournal, importedRows int64, cursor, batchHash string) error {
+func (s *UserDataSnapshotStore) updateJournalAggregateHash(ctx context.Context, journal *UserDataRestoreJournal, aggregateHash string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	journal.ImportedRows = importedRows
+	journal.AggregateHash = aggregateHash
+	journal.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE extension_package_user_data_restore_journal
+		 SET aggregate_hash=?, updated_at=?
+		 WHERE operation_id=? AND table_name=?`,
+		aggregateHash, now, journal.OperationID, journal.TableName)
+	return err
+}
+
+func (s *UserDataSnapshotStore) updateRestoreJournalProgress(ctx context.Context, journal *UserDataRestoreJournal, appliedCount int64, cursor string, batchHash string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	journal.AppliedCount = appliedCount
 	journal.Cursor = cursor
 	journal.BatchHash = batchHash
 	journal.UpdatedAt = now
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal
-		 SET imported_rows=?, cursor=?, batch_hash=?, updated_at=?
+		 SET applied_count=?, cursor=?, batch_hash=?, updated_at=?
 		 WHERE operation_id=? AND table_name=?`,
-		importedRows, cursor, batchHash, now, journal.OperationID, journal.TableName)
+		appliedCount, cursor, batchHash, now, journal.OperationID, journal.TableName)
 	return err
 }
 
-func (s *UserDataSnapshotStore) updateAppliedCount(ctx context.Context, journal *UserDataRestoreJournal, appliedCount int64) error {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	journal.AppliedCount = appliedCount
-	journal.UpdatedAt = now
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE extension_package_user_data_restore_journal
-		 SET applied_count=?, updated_at=?
-		 WHERE operation_id=? AND table_name=?`,
-		appliedCount, now, journal.OperationID, journal.TableName)
-	return err
-}
-
-func (s *UserDataSnapshotStore) importRowsFromJSONL(ctx context.Context, table string, records []map[string]interface{}, startAppliedCount int64) (int, string, error) {
-	if len(records) == 0 {
-		return 0, "", nil
-	}
-	imported := 0
-	var batchHasher = sha256.New()
-	for i := 0; i < len(records); i += userDataRestoreBatchSize {
-		end := i + userDataRestoreBatchSize
-		if end > len(records) {
-			end = len(records)
-		}
-		batch := records[i:end]
-		batchImported, err := s.importBatch(ctx, table, batch)
-		if err != nil {
-			batchHash := hex.EncodeToString(batchHasher.Sum(nil))
-			return imported + batchImported, batchHash, err
-		}
-		imported += batchImported
-		batchHasher.Write([]byte(fmt.Sprintf("batch:%d:count:%d;", i/userDataRestoreBatchSize+1, batchImported)))
-	}
-	batchHash := hex.EncodeToString(batchHasher.Sum(nil))
-	return imported, batchHash, nil
-}
-
-func (s *UserDataSnapshotStore) importBatch(ctx context.Context, table string, batch []map[string]interface{}) (int, error) {
+func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *UserDataRestoreJournal, table string, batch []map[string]interface{}, cursorBefore int64, appliedCountBefore int64, batchIdx int) (int64, string, error) {
 	if len(batch) == 0 {
-		return 0, nil
+		return 0, "", nil
 	}
 	columns := extractColumnsFromRecords(batch[0])
 	var filteredColumns []string
@@ -475,16 +595,16 @@ func (s *UserDataSnapshotStore) importBatch(ctx context.Context, table string, b
 	}
 	columns = filteredColumns
 	if len(columns) == 0 {
-		return 0, fmt.Errorf("no columns detected for table %s", table)
+		return 0, "", fmt.Errorf("no columns detected for table %s", table)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin import batch transaction: %w", err)
+		return 0, "", fmt.Errorf("begin atomic batch transaction: %w", err)
 	}
 	defer tx.Rollback()
-	tableColumns, err := s.getTableColumns(ctx, table)
+	tableColumns, err := s.getTableColumnsTx(ctx, tx, table)
 	if err != nil {
-		return 0, fmt.Errorf("get columns for table %s: %w", table, err)
+		return 0, "", fmt.Errorf("get columns for table %s: %w", table, err)
 	}
 	idColumn := detectIDColumnName(tableColumns)
 	insertColumns := buildInsertColumns(columns, idColumn, tableColumns)
@@ -498,10 +618,10 @@ func (s *UserDataSnapshotStore) importBatch(ctx context.Context, table string, b
 		quoteIdentifier(table), strings.Join(quotedColumns, ", "), placeholders)
 	stmt, err := tx.PrepareContext(ctx, query)
 	if err != nil {
-		return 0, fmt.Errorf("prepare import statement for %s: %w", table, err)
+		return 0, "", fmt.Errorf("prepare import statement for %s: %w", table, err)
 	}
 	defer stmt.Close()
-	imported := 0
+	imported := int64(0)
 	for _, record := range batch {
 		args := make([]interface{}, len(insertColumns))
 		for i, col := range insertColumns {
@@ -518,18 +638,68 @@ func (s *UserDataSnapshotStore) importBatch(ctx context.Context, table string, b
 			}
 		}
 		if _, err := stmt.ExecContext(ctx, args...); err != nil {
-			return imported, fmt.Errorf("import row into %s: %w", table, err)
+			return imported, "", fmt.Errorf("import row into %s: %w", table, err)
 		}
 		imported++
 	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit import batch for %s: %w", table, err)
+	newCursor := cursorBefore + imported
+	newAppliedCount := appliedCountBefore + imported
+	batchHash := computeAtomicBatchHash(journal.OperationID, journal.TableName, batchIdx, cursorBefore, imported, journal.BatchHash)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := tx.ExecContext(ctx,
+		`UPDATE extension_package_user_data_restore_journal
+		 SET imported_rows=?, cursor=?, applied_count=?, batch_hash=?, updated_at=?
+		 WHERE operation_id=? AND table_name=? AND state=?`,
+		newCursor, strconv.FormatInt(newCursor, 10), newAppliedCount, batchHash, now,
+		journal.OperationID, journal.TableName, string(UserDataRestoreImporting))
+	if err != nil {
+		return 0, "", fmt.Errorf("update journal in batch transaction: %w", err)
 	}
-	return imported, nil
+	rowsAff, _ := res.RowsAffected()
+	if rowsAff == 0 {
+		return 0, "", fmt.Errorf("kernel: journal update affected 0 rows, expected importing state (op=%s table=%s)", journal.OperationID, journal.TableName)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, "", fmt.Errorf("commit atomic batch for %s: %w", table, err)
+	}
+	journal.ImportedRows = newCursor
+	journal.Cursor = strconv.FormatInt(newCursor, 10)
+	journal.AppliedCount = newAppliedCount
+	journal.BatchHash = batchHash
+	journal.UpdatedAt = now
+	return imported, batchHash, nil
+}
+
+func computeAtomicBatchHash(operationID, table string, batchIdx int, cursorBefore, imported int64, prevHash string) string {
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("op:%s:tbl:%s:batch:%d:cursor:%d:count:%d", operationID, table, batchIdx, cursorBefore, imported)))
+	if prevHash != "" {
+		h.Write([]byte(":prev:" + prevHash))
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (s *UserDataSnapshotStore) getTableColumns(ctx context.Context, table string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", quoteIdentifier(table)))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, colType string
+		var dflt any
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		columns = append(columns, name)
+	}
+	return columns, rows.Err()
+}
+
+func (s *UserDataSnapshotStore) getTableColumnsTx(ctx context.Context, tx *sql.Tx, table string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", quoteIdentifier(table)))
 	if err != nil {
 		return nil, err
 	}
@@ -701,38 +871,148 @@ func (s *UserDataSnapshotStore) fullTableReplace(ctx context.Context, table stri
 	return tx.Commit()
 }
 
+func (s *UserDataSnapshotStore) updateRestoreJournalHashes(ctx context.Context, journal *UserDataRestoreJournal, nsHash, aggHash string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	journal.NamespaceHash = nsHash
+	journal.AggregateHash = aggHash
+	journal.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE extension_package_user_data_restore_journal
+		 SET namespace_hash=?, aggregate_hash=?, updated_at=?
+		 WHERE operation_id=? AND table_name=?`,
+		nsHash, aggHash, now, journal.OperationID, journal.TableName)
+	return err
+}
+
+func (s *UserDataSnapshotStore) computeAggregateHashFromDB(ctx context.Context, table string) (string, error) {
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", quoteIdentifier(table)))
+	if err != nil {
+		return "", fmt.Errorf("kernel: query table for aggregate hash %s: %w", table, err)
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", fmt.Errorf("kernel: get columns for aggregate hash %s: %w", table, err)
+	}
+	hashes := make([]string, 0, 64)
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range columns {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return "", fmt.Errorf("kernel: scan row for aggregate hash %s: %w", table, err)
+		}
+		payload := make(map[string]interface{}, len(columns))
+		for i, col := range columns {
+			payload[col] = normalizeSQLValue(values[i])
+		}
+		hashes = append(hashes, computeUserDataPayloadHash(payload))
+	}
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("kernel: iterate rows for aggregate hash %s: %w", table, err)
+	}
+	sort.Strings(hashes)
+	hasher := sha256.New()
+	for _, h := range hashes {
+		hasher.Write([]byte(h))
+	}
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
 func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, operationID string) error {
 	if s.db == nil {
-		return fmt.Errorf("kernel: user data snapshot store database unavailable")
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: user data snapshot store database unavailable"))
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT table_name, state, imported_rows, total_rows, applied_count, cursor, error_detail
+		`SELECT table_name, state, imported_rows, total_rows, applied_count, cursor, error_detail,
+		        namespace_hash, aggregate_hash, batch_hash, extension_id
 		 FROM extension_package_user_data_restore_journal
 		 WHERE operation_id=?`, operationID)
 	if err != nil {
-		return fmt.Errorf("query restore journals: %w", err)
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: query restore journals for operation %s: %w", operationID, err))
 	}
 	defer rows.Close()
+	found := false
 	for rows.Next() {
-		var table, state, errorDetail, cursor string
+		found = true
+		var table, state, errorDetail, cursor, namespaceHash, aggregateHash, batchHash, extensionID string
 		var importedRows, totalRows, appliedCount int64
-		if err := rows.Scan(&table, &state, &importedRows, &totalRows, &appliedCount, &cursor, &errorDetail); err != nil {
-			return fmt.Errorf("scan restore journal: %w", err)
+		if err := rows.Scan(&table, &state, &importedRows, &totalRows, &appliedCount, &cursor, &errorDetail,
+			&namespaceHash, &aggregateHash, &batchHash, &extensionID); err != nil {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: scan restore journal for operation %s: %w", operationID, err))
 		}
 		if state != string(UserDataRestoreCompleted) {
-			return fmt.Errorf("kernel: user data restore incomplete for table %s (state=%s)", table, state)
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: user data restore incomplete for table %s (state=%s)", table, state))
 		}
 		if errorDetail != "" {
-			return fmt.Errorf("kernel: user data restore error for table %s: %s", table, errorDetail)
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: user data restore error for table %s: %s", table, errorDetail))
 		}
 		if importedRows != totalRows {
-			return fmt.Errorf("kernel: user data restore record count mismatch for table %s: imported %d total %d", table, importedRows, totalRows)
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: user data restore imported rows mismatch for table %s: imported %d total %d", table, importedRows, totalRows))
 		}
-		if cursor != strconv.FormatInt(totalRows, 10) {
-			return fmt.Errorf("kernel: user data restore cursor not at EOF for table %s: cursor=%s expected=%d", table, cursor, totalRows)
+		if appliedCount != totalRows {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: user data restore applied count mismatch for table %s: applied %d total %d", table, appliedCount, totalRows))
+		}
+		expectedCursor := strconv.FormatInt(totalRows, 10)
+		if cursor != expectedCursor {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: user data restore cursor not at EOF for table %s: cursor=%s expected=%s", table, cursor, expectedCursor))
+		}
+		if namespaceHash == "" {
+			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal for table %s has empty namespace hash", table))
+		}
+		if totalRows > 0 && batchHash == "" {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: restore journal for table %s has empty batch hash but %d rows were imported", table, totalRows))
+		}
+		if aggregateHash == "" {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: restore journal for table %s has empty aggregate hash", table))
+		}
+		storedHashForCompare := strings.TrimPrefix(aggregateHash, "sha256:")
+		if _, decErr := hex.DecodeString(storedHashForCompare); decErr != nil || len(storedHashForCompare) != 64 {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: restore journal for table %s aggregate hash has invalid format", table))
+		}
+		actualAggHash, aggErr := s.computeAggregateHashFromDB(ctx, table)
+		if aggErr != nil {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: recompute aggregate hash for table %s: %w", table, aggErr))
+		}
+		if actualAggHash != aggregateHash {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: aggregate hash mismatch for table %s: stored=%s actual=%s", table, aggregateHash, actualAggHash))
+		}
+		var dbCount int64
+		countErr := s.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quoteIdentifier(table))).Scan(&dbCount)
+		if countErr != nil {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: count records in table %s: %w", table, countErr))
+		}
+		if dbCount != totalRows {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: actual DB record count mismatch for table %s: expected %d actual %d", table, totalRows, dbCount))
 		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: iterate restore journals for operation %s: %w", operationID, err))
+	}
+	if !found {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: no restore journals found for operation %s", operationID))
+	}
+	return nil
 }
 
 func (s *UserDataSnapshotStore) ClearRestoreJournals(ctx context.Context, operationID string) error {
@@ -751,6 +1031,85 @@ func computeUserDataPayloadHash(payload interface{}) string {
 	}
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func computeContentBoundBatchHash(batch []map[string]interface{}, extensionID string, cursor int64) string {
+	if len(batch) == 0 || extensionID == "" {
+		return ""
+	}
+	h := sha256.New()
+	h.Write([]byte("ext:" + extensionID + ":cursor:" + strconv.FormatInt(cursor, 10) + ":"))
+	for idx, record := range batch {
+		raw, exists := record["_raw"]
+		if !exists {
+			return ""
+		}
+		rawStr, ok := raw.(string)
+		if !ok || strings.TrimSpace(rawStr) == "" {
+			return ""
+		}
+		var parsed userDataRecord
+		if err := json.Unmarshal([]byte(rawStr), &parsed); err != nil {
+			return ""
+		}
+		if err := validateUserDataRecord(parsed, extensionID); err != nil {
+			return ""
+		}
+		h.Write([]byte(fmt.Sprintf("[%d:%s:%s:%s:%s:%s:%s]", idx,
+			parsed.ExtensionID, parsed.Namespace, parsed.SchemaVersion, parsed.EntityType, parsed.EntityID, parsed.Operation)))
+		h.Write([]byte(parsed.PayloadHash))
+		h.Write([]byte(";"))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func computeContentBoundChainHash(records []map[string]interface{}, extensionID string, cursor int) string {
+	if len(records) == 0 || extensionID == "" {
+		return ""
+	}
+	h := sha256.New()
+	h.Write([]byte("chain:ext:" + extensionID + ":cursor:" + strconv.Itoa(cursor) + ":"))
+	for idx, record := range records {
+		raw, exists := record["_raw"]
+		if !exists {
+			return ""
+		}
+		rawStr, ok := raw.(string)
+		if !ok || strings.TrimSpace(rawStr) == "" {
+			return ""
+		}
+		var parsed userDataRecord
+		if err := json.Unmarshal([]byte(rawStr), &parsed); err != nil {
+			return ""
+		}
+		if err := validateUserDataRecord(parsed, extensionID); err != nil {
+			return ""
+		}
+		h.Write([]byte(fmt.Sprintf("[%d:%s:%s:%s:%s:%s:%s]", idx,
+			parsed.ExtensionID, parsed.Namespace, parsed.SchemaVersion, parsed.EntityType, parsed.EntityID, parsed.Operation)))
+		h.Write([]byte(parsed.PayloadHash))
+		h.Write([]byte(";"))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func computeNamespaceHash(extensionID, table, namespace string, entityTypes []string, schemaVersion, isolationPolicyVersion string) string {
+	hasher := sha256.New()
+	normalizedExtID := strings.ToLower(strings.TrimSpace(extensionID))
+	normalizedTable := strings.ToLower(strings.TrimSpace(table))
+	normalizedNS := strings.ToLower(strings.TrimSpace(namespace))
+	sortedEntityTypes := make([]string, len(entityTypes))
+	copy(sortedEntityTypes, entityTypes)
+	sort.Strings(sortedEntityTypes)
+	normalizedEntityTypes := make([]string, len(sortedEntityTypes))
+	for i, et := range sortedEntityTypes {
+		normalizedEntityTypes[i] = strings.ToLower(strings.TrimSpace(et))
+	}
+	normalizedSchemaVer := strings.ToLower(strings.TrimSpace(schemaVersion))
+	normalizedPolicyVer := strings.ToLower(strings.TrimSpace(isolationPolicyVersion))
+
+	hasher.Write([]byte(normalizedPolicyVer + ":" + normalizedExtID + "|" + normalizedTable + "|" + normalizedNS + "|" + strings.Join(normalizedEntityTypes, ",") + "|" + normalizedSchemaVer))
+	return "ns:" + hex.EncodeToString(hasher.Sum(nil))
 }
 
 func detectIDColumn(records []map[string]interface{}) string {
@@ -782,9 +1141,10 @@ func quoteIdentifier(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
-func parseAndValidateJSONL(jsonlData, extensionID string) ([]map[string]interface{}, error) {
+func parseAndValidateJSONL(jsonlData, extensionID string) ([]map[string]interface{}, []userDataRecord, error) {
 	lines := strings.Split(jsonlData, "\n")
 	var records []map[string]interface{}
+	var parsedRecords []userDataRecord
 	for lineNum, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -792,11 +1152,11 @@ func parseAndValidateJSONL(jsonlData, extensionID string) ([]map[string]interfac
 		}
 		var record userDataRecord
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			return nil, NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			return nil, nil, NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: user data record parse error at line %d: %w", lineNum+1, err))
 		}
 		if err := validateUserDataRecord(record, extensionID); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		recordMap := map[string]interface{}{}
 		if record.EntityID != "" {
@@ -808,10 +1168,11 @@ func parseAndValidateJSONL(jsonlData, extensionID string) ([]map[string]interfac
 		recordMap["_line"] = lineNum + 1
 		recordMap["_raw"] = line
 		records = append(records, recordMap)
+		parsedRecords = append(parsedRecords, record)
 	}
 	if len(records) == 0 {
-		return nil, NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+		return nil, nil, NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: user data snapshot has no valid records"))
 	}
-	return records, nil
+	return records, parsedRecords, nil
 }

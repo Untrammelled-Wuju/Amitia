@@ -344,7 +344,7 @@ func TestSagaSnapshotRequirementHashDrift(t *testing.T) {
 	driftedReq.Required = !validReq.Required
 	driftedReq.ConfigChanged = !validReq.ConfigChanged
 	driftedReq.ResourcesChanged = !validReq.ResourcesChanged
-	driftedReq.MigrationRequired = !validReq.MigrationRequired
+	driftedReq.MigrationPlanPresent = !validReq.MigrationPlanPresent
 	driftedHash := computeSnapshotRequirementHash(driftedReq)
 
 	if validHash == driftedHash {
@@ -372,8 +372,8 @@ func TestSagaSnapshotRealDiffNonEmpty(t *testing.T) {
 	if incompleteReq.NoDataChange {
 		t.Log("snapshot has no data change; snapshot integrity checks pass")
 	} else {
-		t.Logf("snapshot has non-empty diff (configChanged=%v resourceChanged=%v migrationRequired=%v userDataChanged=%v)",
-			incompleteReq.ConfigChanged, incompleteReq.ResourcesChanged, incompleteReq.MigrationRequired, incompleteReq.UserDataChanged)
+		t.Logf("snapshot has non-empty diff (configChanged=%v resourceChanged=%v migrationPlanPresent=%v userDataChanged=%v)",
+			incompleteReq.ConfigChanged, incompleteReq.ResourcesChanged, incompleteReq.MigrationPlanPresent, incompleteReq.UserDataChanged)
 	}
 
 	if rp.ConfigSnapshotJSON != "" && rp.MigrationStateSnapshotJSON != "" {

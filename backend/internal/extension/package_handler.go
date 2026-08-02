@@ -238,7 +238,11 @@ func (h *PackageHandler) Dependencies(c *gin.Context) {
 }
 
 func (h *PackageHandler) Uninstall(c *gin.Context) {
-	result, err := h.service.Uninstall(c.Request.Context(), c.Param("id"), fmt.Sprint(c.GetInt(authenticatedUserKey)), c.Query("scopeType"), c.Query("scopeId"))
+	var req struct {
+		ConfirmationToken string `json:"confirmationToken"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	result, err := h.service.Uninstall(c.Request.Context(), c.Param("id"), fmt.Sprint(c.GetInt(authenticatedUserKey)), c.Query("scopeType"), c.Query("scopeId"), req.ConfirmationToken)
 	if err != nil {
 		h.problems.problem(c, err)
 		return

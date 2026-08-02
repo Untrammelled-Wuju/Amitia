@@ -1,4 +1,4 @@
-server:
+﻿server:
   port: 18899
   host: "127.0.0.1"
   mode: "debug"
@@ -9,6 +9,15 @@ storage:
 jwt:
   secret: "u-ai-secret-key-change-me"
   expireDays: 7
+
+security:
+  mode: "local_single_user"
+  allowRemoteAccess: false
+  localToken: "dev-local-token"
+  allowedOrigins:
+    - "app://amitia"
+    - "http://127.0.0.1"
+    - "http://localhost"
 
 app:
   name: "U-Ai"

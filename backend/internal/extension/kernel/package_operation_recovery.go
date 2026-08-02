@@ -273,7 +273,7 @@ func (r *Runtime) reconcileUninstallCompensatedState(ctx context.Context, operat
 			return qmErr
 		}
 	}
-	if err := validateQuarantineMetadataIntegrity(qm, operation, r.container.ExtRoot); err != nil {
+	if err := validateQuarantineMetadataIntegrity(qm, operation, r.container.ExtRoot, guard.FencingToken, r.container.PackageRepository.getExtensionLease); err != nil {
 		return err
 	}
 	if operation.ArtifactID != "" {
@@ -338,7 +338,40 @@ func (r *Runtime) reconcileUninstallCompensatedState(ctx context.Context, operat
 	return nil
 }
 
-func validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation PackageOperationRecord, extRoot string) error {
+type quarantineLeaseQuerier func(ctx context.Context, extensionID string) (PackageExtensionLease, error)
+
+func validateQuarantineMetadataFence(qm PackageQuarantineMetadata, operation PackageOperationRecord, recoveryGuardToken int64, leaseQuerier quarantineLeaseQuerier) error {
+	if recoveryGuardToken <= 0 {
+		return operationStateError(OperationErrProofUnavailable, "recovery guard token unavailable for quarantine fence proof", nil)
+	}
+	if leaseQuerier == nil {
+		return operationStateError(OperationErrProofUnavailable, "lease querier unavailable for quarantine fence proof", nil)
+	}
+	if qm.FencingToken <= 0 {
+		return operationStateError(OperationErrProofUnavailable,
+			fmt.Sprintf("quarantine metadata fencing_token must be greater than zero: %d", qm.FencingToken), nil)
+	}
+	if qm.FencingToken > recoveryGuardToken {
+		return operationStateError(OperationErrTokenStale,
+			fmt.Sprintf("quarantine metadata fencing_token exceeds recovery guard: metadata=%d recovery=%d", qm.FencingToken, recoveryGuardToken), nil)
+	}
+	liveLease, liveErr := leaseQuerier(context.Background(), operation.ExtensionID)
+	if liveErr != nil {
+		return operationStateError(OperationErrProofUnavailable,
+			"lease repository unavailable for quarantine fence proof", liveErr)
+	}
+	if liveLease.OperationID != operation.OperationID {
+		return operationStateError(OperationErrLeaseProofMismatch,
+			fmt.Sprintf("lease operation mismatch for quarantine fence proof: lease=%s operation=%s", liveLease.OperationID, operation.OperationID), nil)
+	}
+	if liveLease.FencingToken != recoveryGuardToken {
+		return operationStateError(OperationErrLeaseProofMismatch,
+			fmt.Sprintf("lease fencing token mismatch for quarantine fence proof: lease=%d recovery=%d", liveLease.FencingToken, recoveryGuardToken), nil)
+	}
+	return nil
+}
+
+func validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation PackageOperationRecord, extRoot string, recoveryGuardToken int64, leaseQuerier quarantineLeaseQuerier) error {
 	var missing []string
 	if qm.QuarantineID == "" {
 		missing = append(missing, "QuarantineID")
@@ -384,6 +417,9 @@ func validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation
 			"Inspect persisted quarantine metadata",
 			fmt.Errorf("quarantine metadata extension id mismatch: %s != %s", qm.ExtensionID, operation.ExtensionID),
 		)
+	}
+	if err := validateQuarantineMetadataFence(qm, operation, recoveryGuardToken, leaseQuerier); err != nil {
+		return err
 	}
 	validStates := map[string]bool{"active": true, "finalized": true, "restored": true}
 	if !validStates[qm.State] {
@@ -859,7 +895,7 @@ func (r *Runtime) proveInstalledTree(installedPath string, installation domain.E
 	return nil
 }
 
-func (r *Runtime) validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation PackageOperationRecord) error {
+func (r *Runtime) validateQuarantineMetadataIntegrity(qm PackageQuarantineMetadata, operation PackageOperationRecord, guard PackageWriteGuard) error {
 	if qm.QuarantineID == "" {
 		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("quarantine_id is empty"))
 	}
@@ -872,23 +908,8 @@ func (r *Runtime) validateQuarantineMetadataIntegrity(qm PackageQuarantineMetada
 	if qm.ArtifactID == "" || qm.ArtifactID != operation.ArtifactID {
 		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("artifact_id mismatch: expected %s got %s", operation.ArtifactID, qm.ArtifactID))
 	}
-	if qm.FencingToken <= 0 {
-		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("fencing_token is zero or missing"))
-	}
-	if r.container != nil && r.container.PackageRepository != nil {
-		var liveToken int64
-		var liveOpID string
-		db := r.container.PackageRepository.DB()
-		if db != nil {
-			if err := db.QueryRowContext(context.Background(),
-				`SELECT fencing_token, operation_id FROM extension_package_operation_leases WHERE extension_id = ?`,
-				operation.ExtensionID).Scan(&liveToken, &liveOpID); err == nil {
-				if liveToken != qm.FencingToken {
-					return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata",
-						fmt.Errorf("fencing_token stale: qm=%d live=%d (operation %s)", qm.FencingToken, liveToken, liveOpID))
-				}
-			}
-		}
+	if err := validateQuarantineMetadataFence(qm, operation, guard.FencingToken, r.container.PackageRepository.getExtensionLease); err != nil {
+		return err
 	}
 	if qm.GenerationQuarantinePath == "" {
 		return NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataIncomplete, 409, false, true, "Reload quarantine metadata", fmt.Errorf("generation_quarantine_path is empty"))
@@ -999,7 +1020,7 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 
 	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryVerifyQuarantineMetadata, order, guard, func() (string, error) {
 		order++
-		if err := r.validateQuarantineMetadataIntegrity(cachedQM, operation); err != nil {
+		if err := r.validateQuarantineMetadataIntegrity(cachedQM, operation, guard); err != nil {
 			return "", err
 		}
 		return `{"verified":true}`, nil

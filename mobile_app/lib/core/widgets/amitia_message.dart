@@ -36,11 +36,17 @@ _MockKind? _parseMock(String content) {
     case 'emote':
       final p = rest.indexOf('|');
       if (p == -1) return _MockKind(_MockType.emote, [rest, '']);
-      return _MockKind(_MockType.emote, [rest.substring(0, p), rest.substring(p + 1)]);
+      return _MockKind(_MockType.emote, [
+        rest.substring(0, p),
+        rest.substring(p + 1),
+      ]);
     case 'code':
       final p = rest.indexOf('|');
       if (p == -1) return _MockKind(_MockType.code, [rest, '']);
-      return _MockKind(_MockType.code, [rest.substring(0, p), rest.substring(p + 1)]);
+      return _MockKind(_MockType.code, [
+        rest.substring(0, p),
+        rest.substring(p + 1),
+      ]);
     default:
       return null;
   }
@@ -49,8 +55,10 @@ _MockKind? _parseMock(String content) {
 String mockImagePayload(String name) => '$_mockPrefix$_image|$name';
 String mockVideoPayload(String title) => '$_mockPrefix$_video|$title';
 String mockAudioPayload(String duration) => '$_mockPrefix$_audio|$duration';
-String mockEmotePayload(String emoji, String name) => '$_mockPrefix$_emote|$emoji|$name';
-String mockCodePayload(String lang, String body) => '$_mockPrefix$_code|$lang|$body';
+String mockEmotePayload(String emoji, String name) =>
+    '$_mockPrefix$_emote|$emoji|$name';
+String mockCodePayload(String lang, String body) =>
+    '$_mockPrefix$_code|$lang|$body';
 
 const _image = 'image';
 const _video = 'video';
@@ -122,17 +130,24 @@ class AmitiaMessageBubble extends StatelessWidget {
         bottom: AppSpacing.sm,
       ),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser && showAvatar) ...[
-            _MiniAvatar(initial: avatarInitial ?? '阿', colorHex: avatarColor ?? '#7668EE'),
+            _MiniAvatar(
+              initial: avatarInitial ?? '阿',
+              colorHex: avatarColor ?? '#7668EE',
+            ),
             const SizedBox(width: 8),
           ] else if (!isUser)
             const SizedBox(width: 40),
           Flexible(
             child: Column(
-              crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isUser
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 _buildContent(context, isUser, mock),
                 if (message.status == MessageStatus.error)
@@ -141,11 +156,21 @@ class AmitiaMessageBubble extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.error_outline, size: 14, color: context.error),
+                        Icon(
+                          Icons.error_outline,
+                          size: 14,
+                          color: context.error,
+                        ),
                         const SizedBox(width: 4),
                         GestureDetector(
                           onTap: onRetry,
-                          child: Text('重试', style: TextStyle(fontSize: 12, color: context.error)),
+                          child: Text(
+                            '重试',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.error,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -168,16 +193,30 @@ class AmitiaMessageBubble extends StatelessWidget {
         case _MockType.audio:
           return _MockAudioMessage(duration: mock.args[0], isUser: isUser);
         case _MockType.emote:
-          return _MockEmoteMessage(emoji: mock.args[0], name: mock.args[1], isUser: isUser);
+          return _MockEmoteMessage(
+            emoji: mock.args[0],
+            name: mock.args[1],
+            isUser: isUser,
+          );
         case _MockType.code:
-          return _MockCodeMessage(lang: mock.args[0], body: mock.args[1], isUser: isUser);
+          return _MockCodeMessage(
+            lang: mock.args[0],
+            body: mock.args[1],
+            isUser: isUser,
+          );
       }
     }
     if (message.type == MessageType.file) {
-      return _FileMessage(fileName: message.fileName ?? '', fileSizeKB: message.fileSizeKB ?? 0, isUser: isUser);
+      return _FileMessage(
+        fileName: message.fileName ?? '',
+        fileSizeKB: message.fileSizeKB ?? 0,
+        isUser: isUser,
+      );
     }
     return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * (isUser ? 0.78 : 0.82)),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * (isUser ? 0.78 : 0.82),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
@@ -187,7 +226,9 @@ class AmitiaMessageBubble extends StatelessWidget {
           bottomLeft: Radius.circular(isUser ? 16 : 4),
           bottomRight: Radius.circular(isUser ? 4 : 16),
         ),
-        border: isUser ? null : Border.all(color: context.borderPrimary, width: 0.5),
+        border: isUser
+            ? null
+            : Border.all(color: context.borderPrimary, width: 0.5),
       ),
       child: Text(
         message.content,
@@ -207,13 +248,22 @@ class _MiniAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(int.parse('FF${colorHex.replaceAll('#', '')}', radix: 16));
+    final color = Color(
+      int.parse('FF${colorHex.replaceAll('#', '')}', radix: 16),
+    );
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       child: Center(
-        child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+        child: Text(
+          initial,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -229,17 +279,25 @@ class _FileMessage extends StatelessWidget {
   final int fileSizeKB;
   final bool isUser;
 
-  const _FileMessage({required this.fileName, required this.fileSizeKB, required this.isUser});
+  const _FileMessage({
+    required this.fileName,
+    required this.fileSizeKB,
+    required this.isUser,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.7),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.7,
+      ),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
-        border: isUser ? null : Border.all(color: context.borderPrimary, width: 0.5),
+        border: isUser
+            ? null
+            : Border.all(color: context.borderPrimary, width: 0.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -251,16 +309,27 @@ class _FileMessage extends StatelessWidget {
               color: context.accentSoft,
               borderRadius: AppRadius.brSmall,
             ),
-            child: Icon(Icons.description_outlined, color: context.accentPrimary, size: 22),
+            child: Icon(
+              Icons.description_outlined,
+              color: context.accentPrimary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(fileName, style: AppTypography.bodySmall(context), overflow: TextOverflow.ellipsis),
+                Text(
+                  fileName,
+                  style: AppTypography.bodySmall(context),
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
-                Text('${(fileSizeKB / 1024).toStringAsFixed(1)} MB', style: AppTypography.label(context)),
+                Text(
+                  '${(fileSizeKB / 1024).toStringAsFixed(1)} MB',
+                  style: AppTypography.label(context),
+                ),
               ],
             ),
           ),
@@ -280,11 +349,15 @@ class _MockImageMessage extends StatelessWidget {
     return GestureDetector(
       onTap: () => _preview(context),
       child: Container(
-        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.6),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.6,
+        ),
         decoration: BoxDecoration(
           color: _parseHex('#7668EE'),
           borderRadius: AppRadius.brMedium,
-          border: isUser ? null : Border.all(color: context.borderPrimary, width: 0.5),
+          border: isUser
+              ? null
+              : Border.all(color: context.borderPrimary, width: 0.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,15 +366,24 @@ class _MockImageMessage extends StatelessWidget {
               height: 140,
               decoration: BoxDecoration(
                 color: _parseHex('#7668EE'),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
               ),
               child: Center(
-                child: Icon(Icons.image_outlined, size: 40, color: Colors.white.withValues(alpha: 0.8)),
+                child: Icon(
+                  Icons.image_outlined,
+                  size: 40,
+                  color: Colors.white.withValues(alpha: 0.8),
+                ),
               ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Text(name, style: const TextStyle(fontSize: 12, color: Colors.white)),
+              child: Text(
+                name,
+                style: const TextStyle(fontSize: 12, color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -328,9 +410,16 @@ class _MockImageMessage extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.image_outlined, size: 64, color: Colors.white.withValues(alpha: 0.8)),
+                    Icon(
+                      Icons.image_outlined,
+                      size: 64,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
                     const SizedBox(height: 12),
-                    Text(name, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                    Text(
+                      name,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
                   ],
                 ),
               ),
@@ -350,7 +439,9 @@ class _MockVideoMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.6),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.6,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E2E),
         borderRadius: AppRadius.brMedium,
@@ -362,7 +453,9 @@ class _MockVideoMessage extends StatelessWidget {
             height: 120,
             decoration: BoxDecoration(
               color: const Color(0xFF1E1E2E),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Center(
               child: Container(
@@ -372,7 +465,11 @@ class _MockVideoMessage extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+                child: const Icon(
+                  Icons.play_arrow,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
             ),
           ),
@@ -380,9 +477,22 @@ class _MockVideoMessage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               children: [
-                Icon(Icons.videocam_outlined, size: 14, color: Colors.white.withValues(alpha: 0.7)),
+                Icon(
+                  Icons.videocam_outlined,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
                 const SizedBox(width: 6),
-                Expanded(child: Text(title, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.9)), overflow: TextOverflow.ellipsis)),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -400,12 +510,16 @@ class _MockAudioMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.62),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.62,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
-        border: isUser ? null : Border.all(color: context.borderPrimary, width: 0.5),
+        border: isUser
+            ? null
+            : Border.all(color: context.borderPrimary, width: 0.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -450,12 +564,18 @@ class _MockEmoteMessage extends StatelessWidget {
   final String emoji;
   final String name;
   final bool isUser;
-  const _MockEmoteMessage({required this.emoji, required this.name, required this.isUser});
+  const _MockEmoteMessage({
+    required this.emoji,
+    required this.name,
+    required this.isUser,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: isUser
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         Container(
           padding: const EdgeInsets.all(8),
@@ -479,12 +599,18 @@ class _MockCodeMessage extends StatelessWidget {
   final String lang;
   final String body;
   final bool isUser;
-  const _MockCodeMessage({required this.lang, required this.body, required this.isUser});
+  const _MockCodeMessage({
+    required this.lang,
+    required this.body,
+    required this.isUser,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.82),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFF282C34),
         borderRadius: AppRadius.brMedium,
@@ -496,9 +622,19 @@ class _MockCodeMessage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
-                Icon(Icons.code, size: 14, color: Colors.white.withValues(alpha: 0.6)),
+                Icon(
+                  Icons.code,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.6),
+                ),
                 const SizedBox(width: 6),
-                Text(lang, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7))),
+                Text(
+                  lang,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
               ],
             ),
           ),
@@ -507,7 +643,12 @@ class _MockCodeMessage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: SelectableText(
               body,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: Color(0xFFABB2BF), height: 1.5),
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                color: Color(0xFFABB2BF),
+                height: 1.5,
+              ),
             ),
           ),
         ],
@@ -551,7 +692,11 @@ class _AgentTaskMessage extends StatelessWidget {
     final isRunning = statusLabel == '运行中';
     final isPaused = statusLabel == '已暂停';
     return Padding(
-      padding: const EdgeInsets.only(left: AppSpacing.lg, right: 60, bottom: AppSpacing.sm),
+      padding: const EdgeInsets.only(
+        left: AppSpacing.lg,
+        right: 60,
+        bottom: AppSpacing.sm,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -569,35 +714,59 @@ class _AgentTaskMessage extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.auto_awesome, size: 16, color: context.accentPrimary),
+                      Icon(
+                        Icons.auto_awesome,
+                        size: 16,
+                        color: context.accentPrimary,
+                      ),
                       const SizedBox(width: 6),
-                      Expanded(child: Text('正在执行：${message.agentTaskTitle ?? ''}', style: AppTypography.cardTitle(context).copyWith(fontSize: 14))),
+                      Expanded(
+                        child: Text(
+                          '正在执行：${message.agentTaskTitle ?? ''}',
+                          style: AppTypography.cardTitle(
+                            context,
+                          ).copyWith(fontSize: 14),
+                        ),
+                      ),
                       AmitiaStatusBadge(label: statusLabel, type: _badgeType),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  ...(message.agentTaskSteps ?? []).map((step) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(color: context.accentPrimary, shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(step, style: AppTypography.caption(context)),
-                      ],
+                  ...(message.agentTaskSteps ?? []).map(
+                    (step) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: context.accentPrimary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(step, style: AppTypography.caption(context)),
+                        ],
+                      ),
                     ),
-                  )),
+                  ),
                   const SizedBox(height: 10),
-                  AmitiaProgressBar(progress: (message.agentTaskProgress ?? 0) / 100),
+                  AmitiaProgressBar(
+                    progress: (message.agentTaskProgress ?? 0) / 100,
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('进度 ${message.agentTaskProgress ?? 0}%', style: AppTypography.label(context)),
-                      Text('已用时 ${message.agentTaskElapsed ?? '00:00'}', style: AppTypography.label(context)),
+                      Text(
+                        '进度 ${message.agentTaskProgress ?? 0}%',
+                        style: AppTypography.label(context),
+                      ),
+                      Text(
+                        '已用时 ${message.agentTaskElapsed ?? '00:00'}',
+                        style: AppTypography.label(context),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -605,31 +774,56 @@ class _AgentTaskMessage extends StatelessWidget {
                     children: [
                       GestureDetector(
                         onTap: onAgentTaskTap,
-                        child: Text('查看详情', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
+                        child: Text(
+                          '查看详情',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.accentPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                       const Spacer(),
                       if (isRunning)
                         GestureDetector(
                           onTap: onPauseAgentTask,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: context.accentSoft,
                               borderRadius: AppRadius.brTag,
                             ),
-                            child: Text('暂停', style: TextStyle(fontSize: 12, color: context.accentPrimary)),
+                            child: Text(
+                              '暂停',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.accentPrimary,
+                              ),
+                            ),
                           ),
                         )
                       else if (isPaused)
                         GestureDetector(
                           onTap: onResumeAgentTask,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: context.accentSoft,
                               borderRadius: AppRadius.brTag,
                             ),
-                            child: Text('继续', style: TextStyle(fontSize: 12, color: context.accentPrimary)),
+                            child: Text(
+                              '继续',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.accentPrimary,
+                              ),
+                            ),
                           ),
                         ),
                     ],
@@ -651,7 +845,11 @@ class _ToolCallMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: AppSpacing.lg, right: 60, bottom: AppSpacing.sm),
+      padding: const EdgeInsets.only(
+        left: AppSpacing.lg,
+        right: 60,
+        bottom: AppSpacing.sm,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -665,14 +863,24 @@ class _ToolCallMessage extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.build_outlined, size: 16, color: context.textTertiary),
+                  Icon(
+                    Icons.build_outlined,
+                    size: 16,
+                    color: context.textTertiary,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: RichText(
                       text: TextSpan(
                         style: AppTypography.caption(context),
                         children: [
-                          TextSpan(text: '${message.toolName ?? '工具'}: ', style: TextStyle(color: context.accentPrimary, fontWeight: FontWeight.w500)),
+                          TextSpan(
+                            text: '${message.toolName ?? '工具'}: ',
+                            style: TextStyle(
+                              color: context.accentPrimary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                           TextSpan(text: message.toolResult ?? ''),
                         ],
                       ),
@@ -714,7 +922,15 @@ const List<(String, List<String>)> _mockEmotes = [
   ('动物', ['🐶', '🐱', '🐰', '🦊', '🐼', '🐨', '🐯', '🐸']),
 ];
 
-const List<String> _codeLanguages = ['Dart', 'Python', 'JavaScript', 'Go', 'SQL', 'JSON', 'Shell'];
+const List<String> _codeLanguages = [
+  'Dart',
+  'Python',
+  'JavaScript',
+  'Go',
+  'SQL',
+  'JSON',
+  'Shell',
+];
 
 class AmitiaChatInput extends StatefulWidget {
   final ValueChanged<String> onSend;
@@ -764,7 +980,9 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetCtx) {
         return SafeArea(
           child: Padding(
@@ -788,7 +1006,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                 Text('选择文件', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 12),
                 ListTile(
-                  leading: _sheetIcon(context, Icons.folder_outlined, context.accentPrimary),
+                  leading: _sheetIcon(
+                    context,
+                    Icons.folder_outlined,
+                    context.accentPrimary,
+                  ),
                   title: const Text('选择文件'),
                   onTap: () {
                     Navigator.pop(sheetCtx);
@@ -797,7 +1019,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   },
                 ),
                 ListTile(
-                  leading: _sheetIcon(context, Icons.history, context.accentPrimary),
+                  leading: _sheetIcon(
+                    context,
+                    Icons.history,
+                    context.accentPrimary,
+                  ),
                   title: const Text('从工作区选择'),
                   onTap: () {
                     Navigator.pop(sheetCtx);
@@ -807,17 +1033,31 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                 ),
                 const Divider(height: 1),
                 const SizedBox(height: 8),
-                Text('最近文件', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  '最近文件',
+                  style: AppTypography.label(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 4),
-                ..._mockFiles.map((f) => ListTile(
-                      leading: _sheetIcon(context, Icons.description_outlined, context.textTertiary),
-                      title: Text(f.$1, style: AppTypography.bodySmall(context)),
-                      trailing: Text('${(f.$2 / 1024).toStringAsFixed(1)} MB', style: AppTypography.label(context)),
-                      onTap: () {
-                        Navigator.pop(sheetCtx);
-                        widget.onSendFile?.call(f.$1, f.$2);
-                      },
-                    )),
+                ..._mockFiles.map(
+                  (f) => ListTile(
+                    leading: _sheetIcon(
+                      context,
+                      Icons.description_outlined,
+                      context.textTertiary,
+                    ),
+                    title: Text(f.$1, style: AppTypography.bodySmall(context)),
+                    trailing: Text(
+                      '${(f.$2 / 1024).toStringAsFixed(1)} MB',
+                      style: AppTypography.label(context),
+                    ),
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      widget.onSendFile?.call(f.$1, f.$2);
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -830,7 +1070,9 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetCtx) {
         return SafeArea(
           child: Padding(
@@ -878,9 +1120,19 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.image_outlined, color: Colors.white.withValues(alpha: 0.85), size: 22),
+                            Icon(
+                              Icons.image_outlined,
+                              color: Colors.white.withValues(alpha: 0.85),
+                              size: 22,
+                            ),
                             const SizedBox(height: 4),
-                            Text(img.$1, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                            Text(
+                              img.$1,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -913,31 +1165,57 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('语言', style: AppTypography.label(ctx).copyWith(fontWeight: FontWeight.w600)),
+                    Text(
+                      '语言',
+                      style: AppTypography.label(
+                        ctx,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: lang,
                       decoration: InputDecoration(
                         isDense: true,
-                        border: OutlineInputBorder(borderRadius: AppRadius.brSmall),
+                        border: OutlineInputBorder(
+                          borderRadius: AppRadius.brSmall,
+                        ),
                       ),
                       items: _codeLanguages
-                          .map((l) => DropdownMenuItem(value: l, child: Text(l, style: AppTypography.bodySmall(ctx))))
+                          .map(
+                            (l) => DropdownMenuItem(
+                              value: l,
+                              child: Text(
+                                l,
+                                style: AppTypography.bodySmall(ctx),
+                              ),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (v) => setSheetState(() => lang = v ?? _codeLanguages.first),
+                      onChanged: (v) =>
+                          setSheetState(() => lang = v ?? _codeLanguages.first),
                     ),
                     const SizedBox(height: 14),
-                    Text('代码', style: AppTypography.label(ctx).copyWith(fontWeight: FontWeight.w600)),
+                    Text(
+                      '代码',
+                      style: AppTypography.label(
+                        ctx,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: codeCtrl,
                       maxLines: 6,
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                      ),
                       decoration: InputDecoration(
                         hintText: '输入代码……',
                         hintStyle: TextStyle(color: context.textTertiary),
                         isDense: true,
-                        border: OutlineInputBorder(borderRadius: AppRadius.brSmall),
+                        border: OutlineInputBorder(
+                          borderRadius: AppRadius.brSmall,
+                        ),
                       ),
                     ),
                   ],
@@ -946,7 +1224,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text('取消', style: TextStyle(color: context.textSecondary)),
+                  child: Text(
+                    '取消',
+                    style: TextStyle(color: context.textSecondary),
+                  ),
                 ),
                 AmitiaButton(
                   label: '插入',
@@ -970,7 +1251,9 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       isScrollControlled: true,
       builder: (sheetCtx) {
         return _VoiceRecorderSheet(
@@ -987,7 +1270,9 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetCtx) {
         return _EmotePicker(
           onSend: (emoji, name) {
@@ -1011,93 +1296,236 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     );
   }
 
+  void _showComposerTools() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: context.borderPrimary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _ComposerTool(
+                icon: Icons.photo_library_outlined,
+                label: '添加图片',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showImagePicker();
+                },
+              ),
+              _ComposerTool(
+                icon: Icons.attach_file_outlined,
+                label: '添加文件',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showFileSheet();
+                },
+              ),
+              _ComposerTool(
+                icon: Icons.code,
+                label: '插入代码',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showCodeDialog();
+                },
+              ),
+              _ComposerTool(
+                icon: Icons.emoji_emotions_outlined,
+                label: '选择表情',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showEmotePicker();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        decoration: BoxDecoration(
-          color: context.surfacePrimary,
-          border: Border(top: BorderSide(color: context.borderSecondary, width: 1)),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                _InputAction(icon: Icons.attach_file_outlined, onTap: _showFileSheet),
-                const SizedBox(width: 6),
-                _InputAction(icon: Icons.image_outlined, onTap: _showImagePicker),
-                const SizedBox(width: 6),
-                _InputAction(icon: Icons.code, onTap: _showCodeDialog),
-                const SizedBox(width: 6),
-                _InputAction(icon: Icons.mic_outlined, onTap: _showVoiceSheet),
-                const SizedBox(width: 6),
-                _InputAction(icon: Icons.emoji_emotions_outlined, onTap: _showEmotePicker),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    constraints: const BoxConstraints(maxHeight: 120),
-                    child: TextField(
-                      controller: _controller,
-                      maxLines: null,
-                      onChanged: (v) => setState(() => _hasText = v.trim().isNotEmpty),
-                      style: AppTypography.bodySmall(context),
-                      decoration: InputDecoration(
-                        hintText: '输入消息……',
-                        hintStyle: TextStyle(color: context.textTertiary, fontSize: 14),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        filled: true,
-                        fillColor: context.surfaceSecondary,
-                        border: OutlineInputBorder(
-                          borderRadius: AppRadius.brLarge,
-                          borderSide: BorderSide.none,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
+          decoration: BoxDecoration(
+            color: context.surfaceSecondary,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: context.borderPrimary, width: 0.8),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _controller,
+                minLines: 1,
+                maxLines: 4,
+                textCapitalization: TextCapitalization.sentences,
+                onChanged: (value) =>
+                    setState(() => _hasText = value.trim().isNotEmpty),
+                onSubmitted: (_) => _send(),
+                style: AppTypography.bodySmall(context).copyWith(fontSize: 16),
+                decoration: InputDecoration(
+                  hintText: '有什么可以帮忙的？',
+                  hintStyle: TextStyle(
+                    color: context.textTertiary,
+                    fontSize: 16,
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  border: InputBorder.none,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: '添加内容',
+                      onPressed: _showComposerTools,
+                      icon: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: context.backgroundPrimary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: context.borderPrimary),
+                        ),
+                        child: Icon(
+                          Icons.add,
+                          size: 19,
+                          color: context.textPrimary,
                         ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _send,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: _hasText ? context.accentPrimary : context.accentPrimary.withValues(alpha: 0.4),
-                      shape: BoxShape.circle,
+                    _ClaudeStyleToolChip(onTap: _showComposerTools),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: '开始语音输入',
+                      onPressed: _showVoiceSheet,
+                      icon: Icon(
+                        Icons.mic_none_outlined,
+                        size: 23,
+                        color: context.textPrimary,
+                      ),
                     ),
-                    child: const Icon(Icons.arrow_upward, color: Colors.white, size: 20),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: () => widget.onAgentModeChanged?.call(!widget.isAgentMode),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: widget.isAgentMode ? context.accentSoft : Colors.transparent,
-                      borderRadius: AppRadius.brTag,
-                      border: widget.isAgentMode ? null : Border.all(color: context.borderPrimary, width: 1),
+                    IconButton(
+                      tooltip: '发送消息',
+                      onPressed: _hasText ? _send : null,
+                      icon: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: _hasText
+                              ? context.accentPrimary
+                              : context.borderPrimary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.arrow_upward_rounded,
+                          size: 19,
+                          color: _hasText
+                              ? context.surfacePrimary
+                              : context.textTertiary,
+                        ),
+                      ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.auto_awesome, size: 14, color: widget.isAgentMode ? context.accentPrimary : context.textTertiary),
-                        const SizedBox(width: 4),
-                        Text('Agent 模式', style: TextStyle(fontSize: 12, color: widget.isAgentMode ? context.accentPrimary : context.textTertiary, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClaudeStyleToolChip extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ClaudeStyleToolChip({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: context.backgroundPrimary,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: context.borderPrimary),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.tune_rounded, size: 15, color: context.textSecondary),
+              const SizedBox(width: 5),
+              Text(
+                '工具',
+                style: AppTypography.label(
+                  context,
+                ).copyWith(color: context.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ComposerTool extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ComposerTool({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: AppRadius.brSmall,
+        onTap: onTap,
+        child: SizedBox(
+          height: 52,
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: context.textPrimary),
+              const SizedBox(width: 16),
+              Text(label, style: AppTypography.body(context)),
+            ],
+          ),
         ),
       ),
     );
@@ -1203,24 +1631,28 @@ class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
                 child: Icon(
                   _state == _VoiceState.recording ? Icons.mic : Icons.mic_none,
                   size: 44,
-                  color: _state == _VoiceState.recording ? context.error : context.accentPrimary,
+                  color: _state == _VoiceState.recording
+                      ? context.error
+                      : context.accentPrimary,
                 ),
               ),
             ),
             const SizedBox(height: 16),
             Text(
               _duration,
-              style: AppTypography.pageLargeTitle(context).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+              style: AppTypography.pageLargeTitle(
+                context,
+              ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
             ),
             const SizedBox(height: 8),
             Text(
               _state == _VoiceState.idle
                   ? '点击开始录音'
                   : _state == _VoiceState.recording
-                      ? '正在录音……'
-                      : _state == _VoiceState.paused
-                          ? '已暂停'
-                          : '录制完成',
+                  ? '正在录音……'
+                  : _state == _VoiceState.paused
+                  ? '已暂停'
+                  : '录制完成',
               style: AppTypography.caption(context),
             ),
             const SizedBox(height: 24),
@@ -1353,18 +1785,27 @@ class _EmotePickerState extends State<_EmotePicker> {
                   return GestureDetector(
                     onTap: () => setState(() => _group = i),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
-                        color: isSelected ? context.accentSoft : Colors.transparent,
+                        color: isSelected
+                            ? context.accentSoft
+                            : Colors.transparent,
                         borderRadius: AppRadius.brTag,
                       ),
                       child: Text(
                         _mockEmotes[i].$1,
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                          color: isSelected ? context.accentPrimary : context.textSecondary,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: isSelected
+                              ? context.accentPrimary
+                              : context.textSecondary,
                         ),
                       ),
                     ),
@@ -1394,7 +1835,10 @@ class _EmotePickerState extends State<_EmotePicker> {
                         borderRadius: AppRadius.brSmall,
                       ),
                       child: Center(
-                        child: Text(emoji, style: const TextStyle(fontSize: 28)),
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 28),
+                        ),
                       ),
                     ),
                   );
@@ -1404,20 +1848,6 @@ class _EmotePickerState extends State<_EmotePicker> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _InputAction extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _InputAction({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Icon(icon, size: 20, color: context.textTertiary),
     );
   }
 }
@@ -1450,16 +1880,22 @@ class AmitiaPermissionSheet extends StatelessWidget {
           const SizedBox(height: 4),
           Text(taskTitle, style: AppTypography.caption(context)),
           const SizedBox(height: 20),
-          ...permissions.map((p) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle_outline, size: 20, color: context.accentPrimary),
-                const SizedBox(width: 12),
-                Expanded(child: Text(p, style: AppTypography.body(context))),
-              ],
+          ...permissions.map(
+            (p) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 20,
+                    color: context.accentPrimary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(p, style: AppTypography.body(context))),
+                ],
+              ),
             ),
-          )),
+          ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
@@ -1471,16 +1907,37 @@ class AmitiaPermissionSheet extends StatelessWidget {
               children: [
                 Icon(Icons.shield_outlined, size: 18, color: context.warning),
                 const SizedBox(width: 8),
-                Expanded(child: Text('风险等级：中等 · 操作范围：本地文件', style: AppTypography.label(context).copyWith(color: context.warning))),
+                Expanded(
+                  child: Text(
+                    '风险等级：中等 · 操作范围：本地文件',
+                    style: AppTypography.label(
+                      context,
+                    ).copyWith(color: context.warning),
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          AmitiaButton(label: '此次允许', isFullWidth: true, onPressed: onAllowOnce),
+          AmitiaButton(
+            label: '此次允许',
+            isFullWidth: true,
+            onPressed: onAllowOnce,
+          ),
           const SizedBox(height: 8),
-          AmitiaButton(label: '始终允许此工具', isFullWidth: true, isSecondary: true, onPressed: onAllowAlways),
+          AmitiaButton(
+            label: '始终允许此工具',
+            isFullWidth: true,
+            isSecondary: true,
+            onPressed: onAllowAlways,
+          ),
           const SizedBox(height: 8),
-          AmitiaButton(label: '拒绝', isFullWidth: true, isDestructive: true, onPressed: onDeny),
+          AmitiaButton(
+            label: '拒绝',
+            isFullWidth: true,
+            isDestructive: true,
+            onPressed: onDeny,
+          ),
         ],
       ),
     );

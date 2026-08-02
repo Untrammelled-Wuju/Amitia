@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package quality
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/security"
+)
 
-func RegisterQualityRouter(r *gin.RouterGroup, svc QualityService) {
-	handler := NewHandler(svc)
+func RegisterQualityRouter(r *gin.RouterGroup, svc QualityService, guard security.OwnershipGuard) {
+	handler := NewHandler(svc, guard)
 
 	g := r.Group("/desktop-pets/quality")
 	{

@@ -13,6 +13,7 @@ type Config struct {
 	Server            ServerConfig            `mapstructure:"server"`
 	Storage           StorageConfig           `mapstructure:"storage"`
 	JWT               JWTConfig               `mapstructure:"jwt"`
+	Security          SecurityRuntimeConfig   `mapstructure:"security"`
 	App               AppConfig               `mapstructure:"app"`
 	Chat              ChatConfig              `mapstructure:"chat"`
 	Qdrant            QdrantConfig            `mapstructure:"qdrant"`
@@ -104,7 +105,7 @@ func InitConfig(configPath string) {
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("storage.dataDir", "../data")
-	v.SetDefault("jwt.secret", "u-ai-secret-key-change-me")
+	v.SetDefault("jwt.secret", "")
 	v.SetDefault("jwt.expireDays", 7)
 	v.SetDefault("app.name", "U-Ai")
 	v.SetDefault("app.version", "1.0.0-beta")
@@ -144,6 +145,11 @@ func InitConfig(configPath string) {
 	v.SetDefault("prompt.memoryRawEnabled", true)
 	v.SetDefault("prompt.replySanitizerEnabled", true)
 	v.SetDefault("prompt.proactiveRawEnabled", true)
+
+	v.SetDefault("security.mode", "local_single_user")
+	v.SetDefault("security.allowRemoteAccess", false)
+	v.SetDefault("security.localToken", "")
+	v.SetDefault("security.allowedOrigins", []string{"app://amitia", "http://127.0.0.1", "http://localhost"})
 
 	v.AutomaticEnv()
 
@@ -185,4 +191,11 @@ type DesktopPetRuntimeConfig struct {
 	RetryBaseDelayMs      int    `mapstructure:"retryBaseDelayMs"`
 	RetryMaxDelayMs       int    `mapstructure:"retryMaxDelayMs"`
 	CommandRetentionHours int    `mapstructure:"commandRetentionHours"`
+}
+
+type SecurityRuntimeConfig struct {
+	Mode              string   `mapstructure:"mode"`
+	AllowRemoteAccess bool     `mapstructure:"allowRemoteAccess"`
+	LocalToken        string   `mapstructure:"localToken"`
+	AllowedOrigins    []string `mapstructure:"allowedOrigins"`
 }

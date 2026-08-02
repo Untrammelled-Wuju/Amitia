@@ -4,10 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
@@ -53,7 +51,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _jumpToMessage(int index) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      final target = (index * 76.0).clamp(0.0, _scrollController.position.maxScrollExtent);
+      final target = (index * 76.0).clamp(
+        0.0,
+        _scrollController.position.maxScrollExtent,
+      );
       _scrollController.animateTo(
         target,
         duration: const Duration(milliseconds: 300),
@@ -91,7 +92,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) return;
       setState(() {
         if (index < _messages.length && _messages[index].id == msg.id) {
-          _messages[index] = _cloneWithStatus(_messages[index], MessageStatus.sent);
+          _messages[index] = _cloneWithStatus(
+            _messages[index],
+            MessageStatus.sent,
+          );
         }
       });
     });
@@ -139,13 +143,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) return;
       final replyTime = DateTime.now();
       setState(() {
-        _messages.add(ChatMessage(
-          id: 'a${replyTime.millisecondsSinceEpoch}',
-          role: MessageRole.assistant,
-          type: MessageType.text,
-          content: reply,
-          time: replyTime,
-        ));
+        _messages.add(
+          ChatMessage(
+            id: 'a${replyTime.millisecondsSinceEpoch}',
+            role: MessageRole.assistant,
+            type: MessageType.text,
+            content: reply,
+            time: replyTime,
+          ),
+        );
       });
       _scrollToBottom();
     });
@@ -153,76 +159,90 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _onSend(String text) {
     final now = DateTime.now();
-    _addUserMessage(ChatMessage(
-      id: 'u${now.millisecondsSinceEpoch}',
-      role: MessageRole.user,
-      type: MessageType.text,
-      content: text,
-      time: now,
-    ));
+    _addUserMessage(
+      ChatMessage(
+        id: 'u${now.millisecondsSinceEpoch}',
+        role: MessageRole.user,
+        type: MessageType.text,
+        content: text,
+        time: now,
+      ),
+    );
   }
 
   void _onSendFile(String fileName, int sizeKB) {
     final now = DateTime.now();
-    _addUserMessage(ChatMessage(
-      id: 'u${now.millisecondsSinceEpoch}',
-      role: MessageRole.user,
-      type: MessageType.file,
-      content: fileName,
-      time: now,
-      fileName: fileName,
-      fileSizeKB: sizeKB,
-    ));
+    _addUserMessage(
+      ChatMessage(
+        id: 'u${now.millisecondsSinceEpoch}',
+        role: MessageRole.user,
+        type: MessageType.file,
+        content: fileName,
+        time: now,
+        fileName: fileName,
+        fileSizeKB: sizeKB,
+      ),
+    );
   }
 
   void _onSendImage(String name) {
     final now = DateTime.now();
-    _addUserMessage(ChatMessage(
-      id: 'u${now.millisecondsSinceEpoch}',
-      role: MessageRole.user,
-      type: MessageType.text,
-      content: mockImagePayload(name),
-      time: now,
-    ));
+    _addUserMessage(
+      ChatMessage(
+        id: 'u${now.millisecondsSinceEpoch}',
+        role: MessageRole.user,
+        type: MessageType.text,
+        content: mockImagePayload(name),
+        time: now,
+      ),
+    );
   }
 
   void _onSendCode(String lang, String code) {
     final now = DateTime.now();
-    _addUserMessage(ChatMessage(
-      id: 'u${now.millisecondsSinceEpoch}',
-      role: MessageRole.user,
-      type: MessageType.text,
-      content: mockCodePayload(lang, code),
-      time: now,
-    ));
+    _addUserMessage(
+      ChatMessage(
+        id: 'u${now.millisecondsSinceEpoch}',
+        role: MessageRole.user,
+        type: MessageType.text,
+        content: mockCodePayload(lang, code),
+        time: now,
+      ),
+    );
   }
 
   void _onSendVoice(String duration) {
     final now = DateTime.now();
-    _addUserMessage(ChatMessage(
-      id: 'u${now.millisecondsSinceEpoch}',
-      role: MessageRole.user,
-      type: MessageType.text,
-      content: mockAudioPayload(duration),
-      time: now,
-    ));
+    _addUserMessage(
+      ChatMessage(
+        id: 'u${now.millisecondsSinceEpoch}',
+        role: MessageRole.user,
+        type: MessageType.text,
+        content: mockAudioPayload(duration),
+        time: now,
+      ),
+    );
   }
 
   void _onSendEmote(String emoji, String name) {
     final now = DateTime.now();
-    _addUserMessage(ChatMessage(
-      id: 'u${now.millisecondsSinceEpoch}',
-      role: MessageRole.user,
-      type: MessageType.text,
-      content: mockEmotePayload(emoji, name),
-      time: now,
-    ));
+    _addUserMessage(
+      ChatMessage(
+        id: 'u${now.millisecondsSinceEpoch}',
+        role: MessageRole.user,
+        type: MessageType.text,
+        content: mockEmotePayload(emoji, name),
+        time: now,
+      ),
+    );
   }
 
   bool _shouldShowAvatar(int index) {
     final current = _messages[index];
     if (current.role != MessageRole.assistant) return false;
-    if (current.type == MessageType.agentTask || current.type == MessageType.toolCall) return false;
+    if (current.type == MessageType.agentTask ||
+        current.type == MessageType.toolCall)
+      return false;
     if (index == 0) return true;
     final previous = _messages[index - 1];
     if (previous.role != MessageRole.assistant) return true;
@@ -234,7 +254,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetCtx) {
         return _MessageSearchSheet(
           messages: _messages,
@@ -252,16 +274,36 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       context,
       title: '聊天操作',
       actions: const [
-        AmitiaActionSheetItem(icon: Icons.person_outline, label: '查看角色详情', value: 0),
-        AmitiaActionSheetItem(icon: Icons.cleaning_services_outlined, label: '清空聊天记录', value: 1, isDestructive: true),
-        AmitiaActionSheetItem(icon: Icons.file_download_outlined, label: '导出聊天记录', value: 2),
-        AmitiaActionSheetItem(icon: Icons.share_outlined, label: '分享对话', value: 3),
+        AmitiaActionSheetItem(
+          icon: Icons.person_outline,
+          label: '查看角色详情',
+          value: 0,
+        ),
+        AmitiaActionSheetItem(
+          icon: Icons.cleaning_services_outlined,
+          label: '清空聊天记录',
+          value: 1,
+          isDestructive: true,
+        ),
+        AmitiaActionSheetItem(
+          icon: Icons.file_download_outlined,
+          label: '导出聊天记录',
+          value: 2,
+        ),
+        AmitiaActionSheetItem(
+          icon: Icons.share_outlined,
+          label: '分享对话',
+          value: 3,
+        ),
+        AmitiaActionSheetItem(icon: Icons.search, label: '搜索当前会话', value: 4),
       ],
     ).then((result) {
       if (result == null || !mounted) return;
       switch (result) {
         case 0:
-          context.push(AppRoutes.character(ref.read(currentCharacterIdProvider)));
+          context.push(
+            AppRoutes.character(ref.read(currentCharacterIdProvider)),
+          );
         case 1:
           showAmitiaConfirmDialog(
             context,
@@ -274,13 +316,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               setState(() {
                 _messages.clear();
                 _agentTaskStatus.clear();
-                _messages.add(ChatMessage(
-                  id: 'sys${DateTime.now().millisecondsSinceEpoch}',
-                  role: MessageRole.system,
-                  type: MessageType.systemNotice,
-                  content: '聊天记录已清空',
-                  time: DateTime.now(),
-                ));
+                _messages.add(
+                  ChatMessage(
+                    id: 'sys${DateTime.now().millisecondsSinceEpoch}',
+                    role: MessageRole.system,
+                    type: MessageType.systemNotice,
+                    content: '聊天记录已清空',
+                    time: DateTime.now(),
+                  ),
+                );
               });
               amitiaSnackBar(context, '聊天记录已清空');
             }
@@ -289,6 +333,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           amitiaSnackBar(context, '聊天记录已导出到本地');
         case 3:
           amitiaSnackBar(context, '对话链接已复制');
+        case 4:
+          _showMessageSearch(context);
       }
     });
   }
@@ -306,14 +352,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       appBar: AmitiaAppBar(
         centerTitle: true,
         navigation: AmitiaAppBarNavigation.drawer,
+        titleWidget: _ChatModelSelector(
+          isAgentMode: isAgentMode,
+          onAgentModeChanged: (value) {
+            ref.read(isAgentModeProvider.notifier).state = value;
+          },
+        ),
         actions: [
           AmitiaIconButton(
-            icon: Icons.search,
-            onPressed: () => _showMessageSearch(context),
-          ),
-          AmitiaIconButton(
-            icon: Icons.list_alt_outlined,
-            onPressed: () => context.push(AppRoutes.conversations),
+            icon: Icons.edit_square,
+            onPressed: () => context.go(AppRoutes.chat),
           ),
           AmitiaIconButton(
             icon: Icons.more_horiz,
@@ -324,26 +372,52 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                final isAgentTask = message.type == MessageType.agentTask;
-                return AmitiaMessageBubble(
-                  message: message,
-                  showAvatar: _shouldShowAvatar(index),
-                  avatarInitial: character.avatarInitial,
-                  avatarColor: character.avatarColor,
-                  characterName: character.name,
-                  onRetry: message.status == MessageStatus.error ? () => _retryMessage(index) : null,
-                  onAgentTaskTap: isAgentTask ? () => context.push(AppRoutes.agentTask('t1')) : null,
-                  onPauseAgentTask: isAgentTask ? () => _pauseAgentTask(index) : null,
-                  onResumeAgentTask: isAgentTask ? () => _resumeAgentTask(index) : null,
-                  agentTaskStatusLabel: isAgentTask ? (_agentTaskStatus[message.id] ?? '运行中') : null,
-                );
-              },
+            child: Stack(
+              children: [
+                ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    final message = _messages[index];
+                    final isAgentTask = message.type == MessageType.agentTask;
+                    return AmitiaMessageBubble(
+                      message: message,
+                      showAvatar: _shouldShowAvatar(index),
+                      avatarInitial: character.avatarInitial,
+                      avatarColor: character.avatarColor,
+                      characterName: character.name,
+                      onRetry: message.status == MessageStatus.error
+                          ? () => _retryMessage(index)
+                          : null,
+                      onAgentTaskTap: isAgentTask
+                          ? () => context.push(AppRoutes.agentTask('t1'))
+                          : null,
+                      onPauseAgentTask: isAgentTask
+                          ? () => _pauseAgentTask(index)
+                          : null,
+                      onResumeAgentTask: isAgentTask
+                          ? () => _resumeAgentTask(index)
+                          : null,
+                      agentTaskStatusLabel: isAgentTask
+                          ? (_agentTaskStatus[message.id] ?? '运行中')
+                          : null,
+                    );
+                  },
+                ),
+                _ChatScrollFade(
+                  alignment: Alignment.topCenter,
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  color: context.backgroundPrimary,
+                ),
+                _ChatScrollFade(
+                  alignment: Alignment.bottomCenter,
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  color: context.backgroundPrimary,
+                ),
+              ],
             ),
           ),
           AmitiaChatInput(
@@ -359,6 +433,182 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             onSendEmote: _onSendEmote,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChatScrollFade extends StatelessWidget {
+  final Alignment alignment;
+  final Alignment begin;
+  final Alignment end;
+  final Color color;
+
+  const _ChatScrollFade({
+    required this.alignment,
+    required this.begin,
+    required this.end,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Align(
+        alignment: alignment,
+        child: Container(
+          width: double.infinity,
+          height: 32,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: begin,
+              end: end,
+              colors: [color, color.withValues(alpha: 0)],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatModelSelector extends StatelessWidget {
+  final bool isAgentMode;
+  final ValueChanged<bool> onAgentModeChanged;
+
+  const _ChatModelSelector({
+    required this.isAgentMode,
+    required this.onAgentModeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '选择聊天模式',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            showModalBottomSheet(
+              context: context,
+              backgroundColor: context.surfacePrimary,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              builder: (sheetContext) => SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: context.borderPrimary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _ChatModeOption(
+                        icon: Icons.auto_awesome_outlined,
+                        title: 'Amitia',
+                        subtitle: '快速对话与日常协助',
+                        selected: !isAgentMode,
+                        onTap: () {
+                          onAgentModeChanged(false);
+                          Navigator.pop(sheetContext);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _ChatModeOption(
+                        icon: Icons.hub_outlined,
+                        title: 'Agent',
+                        subtitle: '可规划并执行多步任务',
+                        selected: isAgentMode,
+                        onTap: () {
+                          onAgentModeChanged(true);
+                          Navigator.pop(sheetContext);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isAgentMode ? 'Agent' : 'Amitia',
+                  style: AppTypography.cardTitle(
+                    context,
+                  ).copyWith(fontSize: 17),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: context.textPrimary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatModeOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ChatModeOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? context.surfaceSecondary : Colors.transparent,
+      borderRadius: AppRadius.brMedium,
+      child: InkWell(
+        borderRadius: AppRadius.brMedium,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: context.textPrimary),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTypography.cardTitle(context)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: AppTypography.caption(context)),
+                  ],
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check, color: context.textPrimary, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -400,11 +650,15 @@ class _MessageSearchSheetState extends State<_MessageSearchSheet> {
 
   String _preview(ChatMessage m) {
     if (m.type == MessageType.file) return '[文件] ${m.fileName ?? m.content}';
-    if (m.content.startsWith('__mock:image|')) return '[图片] ${m.content.split('|').last}';
-    if (m.content.startsWith('__mock:video|')) return '[视频] ${m.content.split('|').last}';
-    if (m.content.startsWith('__mock:audio|')) return '[语音] ${m.content.split('|').last}';
+    if (m.content.startsWith('__mock:image|'))
+      return '[图片] ${m.content.split('|').last}';
+    if (m.content.startsWith('__mock:video|'))
+      return '[视频] ${m.content.split('|').last}';
+    if (m.content.startsWith('__mock:audio|'))
+      return '[语音] ${m.content.split('|').last}';
     if (m.content.startsWith('__mock:emote|')) return '[表情]';
-    if (m.content.startsWith('__mock:code|')) return '[代码] ${m.content.split('|').last}';
+    if (m.content.startsWith('__mock:code|'))
+      return '[代码] ${m.content.split('|').last}';
     return m.content;
   }
 
@@ -441,38 +695,49 @@ class _MessageSearchSheetState extends State<_MessageSearchSheet> {
               Expanded(
                 child: _query.trim().isEmpty
                     ? Center(
-                        child: Text('输入关键词后在当前会话中搜索消息', style: AppTypography.caption(context), textAlign: TextAlign.center),
+                        child: Text(
+                          '输入关键词后在当前会话中搜索消息',
+                          style: AppTypography.caption(context),
+                          textAlign: TextAlign.center,
+                        ),
                       )
                     : results.isEmpty
-                        ? Center(
-                            child: Text('没有找到匹配「$_query」的消息', style: AppTypography.caption(context), textAlign: TextAlign.center),
-                          )
-                        : ListView.separated(
-                            itemCount: results.length,
-                            separatorBuilder: (_, _) => Divider(height: 1, color: context.borderSecondary),
-                            itemBuilder: (ctx, i) {
-                              final item = results[i];
-                              final msg = item.$2;
-                              return ListTile(
-                                leading: Icon(
-                                  msg.role == MessageRole.user ? Icons.person_outline : Icons.smart_toy_outlined,
-                                  size: 20,
-                                  color: context.textTertiary,
-                                ),
-                                title: Text(
-                                  _preview(msg),
-                                  style: AppTypography.bodySmall(context),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(
-                                  '${msg.time.hour.toString().padLeft(2, '0')}:${msg.time.minute.toString().padLeft(2, '0')}',
-                                  style: AppTypography.label(context),
-                                ),
-                                onTap: () => widget.onJump(item.$1),
-                              );
-                            },
-                          ),
+                    ? Center(
+                        child: Text(
+                          '没有找到匹配「$_query」的消息',
+                          style: AppTypography.caption(context),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: results.length,
+                        separatorBuilder: (_, _) =>
+                            Divider(height: 1, color: context.borderSecondary),
+                        itemBuilder: (ctx, i) {
+                          final item = results[i];
+                          final msg = item.$2;
+                          return ListTile(
+                            leading: Icon(
+                              msg.role == MessageRole.user
+                                  ? Icons.person_outline
+                                  : Icons.smart_toy_outlined,
+                              size: 20,
+                              color: context.textTertiary,
+                            ),
+                            title: Text(
+                              _preview(msg),
+                              style: AppTypography.bodySmall(context),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              '${msg.time.hour.toString().padLeft(2, '0')}:${msg.time.minute.toString().padLeft(2, '0')}',
+                              style: AppTypography.label(context),
+                            ),
+                            onTap: () => widget.onJump(item.$1),
+                          );
+                        },
+                      ),
               ),
             ],
           ),

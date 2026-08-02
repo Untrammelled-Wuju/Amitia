@@ -5,6 +5,7 @@ package security
 import (
 	"errors"
 	"net"
+	"strings"
 )
 
 type SecurityMode string
@@ -51,20 +52,22 @@ func (s *SecurityConfig) Validate() error {
 }
 
 func isLoopback(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		host = addr
-	}
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
+	if strings.TrimSpace(addr) == "" {
 		return false
 	}
-	return ip.IsLoopback()
-}
 
-func (s *SecurityConfig) IsFailOpen() bool {
-	return s.FailOpen
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	} else if port == "" {
+		return false
+	}
+
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

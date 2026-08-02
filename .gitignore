@@ -8,6 +8,11 @@ front/dist/
 *.db-journal
 backend/data/data/backups/
 backend/data/migration_backups/
+backend/cmd/data/migration_backups/
+backend/data/app.db.bak_*
+backend/data/app.db
+backend/data/app.db-shm
+backend/data/app.db-wal
 *.log
 /logs/
 /backend/logs/

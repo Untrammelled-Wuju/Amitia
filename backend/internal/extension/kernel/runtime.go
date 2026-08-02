@@ -2,6 +2,9 @@ package kernel
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +28,66 @@ type InstalledExtension struct {
 	Path        string    `json:"path"`
 	ModuleCount int       `json:"moduleCount"`
 	InstalledAt time.Time `json:"installedAt"`
+}
+
+type PackageUninstallConfirmationClaims struct {
+	ExtensionID            string         `json:"extensionId"`
+	CurrentVersion         string         `json:"currentVersion"`
+	CurrentVersionID       string         `json:"currentVersionId"`
+	CurrentGenerationID    string         `json:"currentGenerationId"`
+	ArtifactID             string         `json:"artifactId"`
+	ArtifactPolicy         string         `json:"artifactPolicy"`
+	PreviewHash            string         `json:"previewHash"`
+	SecurityPolicyHash     string         `json:"securityPolicyHash"`
+	SnapshotRequirementHash string        `json:"snapshotRequirementHash"`
+	UserID                 string         `json:"userId"`
+	ScopeType              string         `json:"scopeType"`
+	ScopeID                string         `json:"scopeId"`
+	Confirmations          map[string]bool `json:"confirmations"`
+	PolicyVersion          string         `json:"policyVersion"`
+	ExpiresAt              int64          `json:"expiresAt"`
+}
+
+func (c PackageUninstallConfirmationClaims) ExpiresAtString() string {
+	return time.Unix(c.ExpiresAt, 0).UTC().Format(time.RFC3339)
+}
+
+func (r *Runtime) PolicyVersion() string {
+	return "v1"
+}
+
+func (r *Runtime) SignUninstallConfirmation(claims PackageUninstallConfirmationClaims) (string, error) {
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+	mac := hmac.New(sha256.New, packageConfirmationKey)
+	_, _ = mac.Write([]byte(encoded))
+	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return encoded + "." + signature, nil
+}
+
+func (r *Runtime) VerifyUninstallConfirmation(token string) (PackageUninstallConfirmationClaims, error) {
+	var claims PackageUninstallConfirmationClaims
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return claims, fmt.Errorf("kernel: confirmation token invalid")
+	}
+	mac := hmac.New(sha256.New, packageConfirmationKey)
+	_, _ = mac.Write([]byte(parts[0]))
+	provided, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil || !hmac.Equal(mac.Sum(nil), provided) {
+		return claims, fmt.Errorf("kernel: confirmation token invalid")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil || json.Unmarshal(payload, &claims) != nil {
+		return claims, fmt.Errorf("kernel: confirmation token invalid")
+	}
+	if claims.ExpiresAt <= time.Now().UTC().Unix() {
+		return claims, fmt.Errorf("kernel: confirmation token expired")
+	}
+	return claims, nil
 }
 
 type Runtime struct {

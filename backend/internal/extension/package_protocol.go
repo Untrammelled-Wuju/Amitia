@@ -63,6 +63,7 @@ const (
 	ErrPackageUpgradeFailed                = "PACKAGE_UPGRADE_FAILED"
 	ErrPackageRollbackFailed               = "PACKAGE_ROLLBACK_FAILED"
 	ErrPackageUninstallFailed              = "PACKAGE_UNINSTALL_FAILED"
+	ErrPackageConfirmationRequired         = "PACKAGE_CONFIRMATION_REQUIRED"
 	ErrPackageConfigMigrationRequired      = "PACKAGE_CONFIG_MIGRATION_REQUIRED"
 	ErrPackageConfigMigrationFailed        = "PACKAGE_CONFIG_MIGRATION_FAILED"
 	ErrPackageImportSessionExpired         = "PACKAGE_IMPORT_SESSION_EXPIRED"
@@ -125,21 +126,26 @@ type PackageDependencyView struct {
 }
 
 type PackageUninstallPreview struct {
-	ExtensionID         string                  `json:"extensionId"`
-	CurrentVersion      string                  `json:"currentVersion"`
-	Enabled             bool                    `json:"enabled"`
-	Dependents          []PackageDependencyView `json:"dependents"`
-	ScheduleCount       int64                   `json:"scheduleCount"`
-	Grants              []string                `json:"grants"`
-	ConfigPresent       bool                    `json:"configPresent"`
-	HistoricalRuns      int64                   `json:"historicalRuns"`
-	ArtifactArchived    bool                    `json:"artifactArchived"`
-	Cleanup             []string                `json:"cleanup"`
-	Preserved           []string                `json:"preserved"`
-	ReadSource          string                  `json:"readSource"`
-	RuntimeImpacts      []PackageRuntimeImpact  `json:"runtimeImpacts,omitempty"`
-	ContributionSummary map[string]int          `json:"contributionSummary,omitempty"`
-	EventSubscriptions  []string                `json:"eventSubscriptions,omitempty"`
+	ExtensionID             string                  `json:"extensionId"`
+	CurrentVersion          string                  `json:"currentVersion"`
+	Enabled                 bool                    `json:"enabled"`
+	Dependents              []PackageDependencyView `json:"dependents"`
+	ScheduleCount           int64                   `json:"scheduleCount"`
+	Grants                  []string                `json:"grants"`
+	ConfigPresent           bool                    `json:"configPresent"`
+	HistoricalRuns          int64                   `json:"historicalRuns"`
+	ArtifactArchived        bool                    `json:"artifactArchived"`
+	Cleanup                 []string                `json:"cleanup"`
+	Preserved               []string                `json:"preserved"`
+	ReadSource              string                  `json:"readSource"`
+	PreviewHash             string                  `json:"previewHash,omitempty"`
+	ArtifactPolicy          string                  `json:"artifactPolicy,omitempty"`
+	SecurityPolicyHash      string                  `json:"securityPolicyHash,omitempty"`
+	SnapshotRequirementHash string                  `json:"snapshotRequirementHash,omitempty"`
+	RequiredConfirmations   []string                `json:"requiredConfirmations,omitempty"`
+	RuntimeImpacts          []PackageRuntimeImpact  `json:"runtimeImpacts,omitempty"`
+	ContributionSummary     map[string]int          `json:"contributionSummary,omitempty"`
+	EventSubscriptions      []string                `json:"eventSubscriptions,omitempty"`
 }
 
 type PackageRuntimeImpact struct {

@@ -266,7 +266,7 @@ func (s *stubHandlerService) GetCoordinator() V2Coordinator {
 func newHandlerTestRouter(svc Service) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	RegisterRoutes(r.Group("/api"), svc)
+	RegisterRoutes(r.Group("/api"), svc, nil)
 	return r
 }
 

@@ -33,6 +33,9 @@ const (
 	OperationErrRecoveryNotAllowed  = "PACKAGE_OPERATION_RECOVERY_NOT_ALLOWED"
 	OperationErrNotFound            = "PACKAGE_OPERATION_NOT_FOUND"
 	OperationErrStorageFailure      = "PACKAGE_OPERATION_STORAGE_FAILURE"
+	OperationErrTokenStale          = "PACKAGE_OPERATION_TOKEN_STALE"
+	OperationErrProofUnavailable    = "PACKAGE_OPERATION_PROOF_UNAVAILABLE"
+	OperationErrLeaseProofMismatch  = "PACKAGE_OPERATION_LEASE_PROOF_MISMATCH"
 )
 
 type PackageOperationStateError struct {

@@ -13,12 +13,13 @@ import (
 )
 
 type Handler struct {
-	service       Service
-	safeResponder *security.SafeArtifactResponder
+	service        Service
+	safeResponder  *security.SafeArtifactResponder
+	ownershipGuard security.OwnershipGuard
 }
 
-func NewHandler(svc Service, responder *security.SafeArtifactResponder) *Handler {
-	return &Handler{service: svc, safeResponder: responder}
+func NewHandler(svc Service, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) *Handler {
+	return &Handler{service: svc, safeResponder: responder, ownershipGuard: guard}
 }
 
 func (h *Handler) ListRevisions(c *gin.Context) {
@@ -28,14 +29,13 @@ func (h *Handler) ListRevisions(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "缺少处理任务ID或动作Key", nil)
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
-		writeEditError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeEditOwnershipError(c, err)
 		return
 	}
 	revs, err := h.service.ListRevisions(c.Request.Context(), processingTaskID, actionKey)
@@ -63,14 +63,13 @@ func (h *Handler) GetRevision(c *gin.Context) {
 func (h *Handler) GetActiveRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
-		writeEditError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeEditOwnershipError(c, err)
 		return
 	}
 	detail, err := h.service.GetActiveRevision(c.Request.Context(), processingTaskID, actionKey)
@@ -84,14 +83,13 @@ func (h *Handler) GetActiveRevision(c *gin.Context) {
 func (h *Handler) ActivateRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
-		writeEditError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeEditOwnershipError(c, err)
 		return
 	}
 	var req ActivateRevisionRequest
@@ -99,7 +97,7 @@ func (h *Handler) ActivateRevision(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
 		return
 	}
-	err = h.service.ActivateRevision(c.Request.Context(), processingTaskID, actionKey, req.RevisionID, req.ExpectedBindingVersion, req.Reason, userID)
+	err = h.service.ActivateRevision(c.Request.Context(), processingTaskID, actionKey, req.RevisionID, req.ExpectedBindingVersion, req.Reason, actor.UserID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -142,14 +140,13 @@ func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 func (h *Handler) GetActionEditSummary(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
-		writeEditError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeEditOwnershipError(c, err)
 		return
 	}
 	summary, err := h.service.GetActionEditSummary(c.Request.Context(), processingTaskID, actionKey)
@@ -163,14 +160,13 @@ func (h *Handler) GetActionEditSummary(c *gin.Context) {
 func (h *Handler) CreateSession(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
-		writeEditError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeEditOwnershipError(c, err)
 		return
 	}
 	var req CreateSessionRequest
@@ -178,7 +174,7 @@ func (h *Handler) CreateSession(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
 		return
 	}
-	resp, err := h.service.CreateSession(c.Request.Context(), processingTaskID, actionKey, userID, req)
+	resp, err := h.service.CreateSession(c.Request.Context(), processingTaskID, actionKey, actor.UserID, req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -600,17 +596,16 @@ func (h *Handler) GetLatestQualityEvaluation(c *gin.Context) {
 func (h *Handler) ImportLegacyRevision(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, userID); err != nil {
-		writeEditError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeEditOwnershipError(c, err)
 		return
 	}
-	resp, err := h.service.ImportLegacyRevision(c.Request.Context(), processingTaskID, actionKey, userID)
+	resp, err := h.service.ImportLegacyRevision(c.Request.Context(), processingTaskID, actionKey, actor.UserID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -637,6 +632,14 @@ func writeEditError(c *gin.Context, err error) {
 		return
 	}
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+}
+
+func writeEditOwnershipError(c *gin.Context, err error) {
+	if ownErr := security.MapOwnershipError(err); ownErr != nil {
+		util.ErrorResponse(c, ownErr.Code, ownErr.Msg, gin.H{"errorCode": ownErr.ErrCode})
+		return
+	}
+	writeEditError(c, err)
 }
 
 func mapEditErrorCode(code string) int {

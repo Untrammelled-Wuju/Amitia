@@ -49,6 +49,7 @@ import (
 	"github.com/u-ai/backend/internal/user"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
+	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -58,18 +59,40 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	}
 	r := gin.Default()
 	r.Use(middleware.TraceMiddleware())
-	r.Use(security.CorsMiddleware())
-	r.POST("/api/shutdown", func(c *gin.Context) {
+	r.Use(security.CorsMiddleware(security.CorsConfig{
+		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+	}))
+
+	localAdmin := r.Group("/api/local")
+	localAdmin.Use(security.AuthenticationMiddleware(security.AuthConfig{
+		Mode:           config.AppCfg.Security.Mode,
+		JWTSecret:      config.AppCfg.JWT.Secret,
+		LocalToken:     config.AppCfg.Security.LocalToken,
+		ListenAddress:  config.AppCfg.Server.Host,
+		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+	}))
+	localAdmin.Use(security.RequirePermission("system.shutdown"))
+	localAdmin.POST("/shutdown", func(c *gin.Context) {
+		actor := security.GetActor(c)
+		log.Info("system.shutdown.requested", "actor", actor.UserID, "method", actor.AuthMethod)
 		c.JSON(200, gin.H{"code": 200, "msg": "正在关闭服务..."})
 		go func() {
 			time.Sleep(300 * time.Millisecond)
+			log.Info("system.shutdown.completed")
 			if triggerShutdown != nil {
 				triggerShutdown()
 			}
 		}()
 	})
+
 	apiGroup := r.Group("/api")
-	apiGroup.Use(middleware.AuthMiddleware())
+	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
+		Mode:           config.AppCfg.Security.Mode,
+		JWTSecret:      config.AppCfg.JWT.Secret,
+		LocalToken:     config.AppCfg.Security.LocalToken,
+		ListenAddress:  config.AppCfg.Server.Host,
+		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+	}))
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
@@ -100,9 +123,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		processing.RegisterProcessingRouter(apiGroup, ctx)
-		editing.RegisterEditingRouterWithService(apiGroup, services.EditingService)
-		quality.RegisterQualityRouter(apiGroup, services.QualityService)
-		installation.RegisterRoutes(apiGroup, services.InstallationService)
+	editing.RegisterEditingRouterWithService(apiGroup, services.EditingService, services.OwnershipGuard)
+	quality.RegisterQualityRouter(apiGroup, services.QualityService, services.OwnershipGuard)
+	installation.RegisterRoutes(apiGroup, services.InstallationService, services.OwnershipGuard)
 		release.RegisterRoutes(apiGroup, services.NewReleaseService)
 		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)

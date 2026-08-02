@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/security"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/database/mysql"
@@ -51,6 +52,28 @@ func main() {
 		configPath = filepath.Join(runtimeRoot, configPath)
 	}
 	config.InitConfig(configPath)
+
+	secCfg := &security.SecurityConfig{
+		Mode:              security.SecurityMode(config.AppCfg.Security.Mode),
+		AllowRemoteAccess: config.AppCfg.Security.AllowRemoteAccess,
+		ListenAddress:     config.AppCfg.Server.Addr(),
+		JWTSecret:         config.AppCfg.JWT.Secret,
+		LocalToken:        config.AppCfg.Security.LocalToken,
+		AllowedOrigins:    config.AppCfg.Security.AllowedOrigins,
+	}
+	if err := secCfg.Validate(); err != nil {
+		log.Error("安全配置验证失败:", err)
+		fmt.Fprintf(os.Stderr, "安全配置验证失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	if secCfg.Mode == security.SecurityModeNetwork {
+		if secCfg.JWTSecret == "" || secCfg.JWTSecret == "u-ai-secret-key-change-me" || len(secCfg.JWTSecret) < 32 {
+			log.Error("网络模式要求有效的JWT Secret，长度至少32字节")
+			fmt.Fprintln(os.Stderr, "网络模式要求有效的JWT Secret，长度至少32字节")
+			os.Exit(1)
+		}
+	}
 
 	config.AppCfg.Storage.DataDir = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Storage.DataDir)
 	config.AppCfg.Surreal.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Surreal.DataPath)

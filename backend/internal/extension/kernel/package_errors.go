@@ -65,6 +65,7 @@ var (
 	ErrPackageQuarantineStatePersistFailed    = errors.New("kernel: quarantine metadata state persistence failed")
 	ErrPackageRecoveryStepPersistFailed       = errors.New("kernel: recovery step persistence failed")
 	ErrPackageRollbackSnapshotCorrupted       = errors.New("kernel: rollback snapshot hash mismatch")
+	ErrPackageResourceSnapshotInvalid         = errors.New("kernel: package resource snapshot invalid")
 	ErrPackageUninstallArtifactPolicyUnproven = errors.New("kernel: uninstall artifact retention policy unproven")
 	ErrPackageUninstallArtifactMissing        = errors.New("kernel: uninstall artifact unexpectedly missing")
 	ErrPackageUninstallArtifactReferenced     = errors.New("kernel: uninstall artifact still referenced")
@@ -73,6 +74,7 @@ var (
 	ErrPackageLegacyRuntimeEnabled            = errors.New("kernel: legacy runtime enabled in production")
 	ErrPackageConfirmationStale               = errors.New("kernel: confirmation token stale, re-preview required")
 	ErrPackageRollbackRequirementChanged      = errors.New("kernel: rollback snapshot requirement changed after confirmation")
+	ErrPackageUninstallArtifactRemovalFailed   = errors.New("kernel: uninstall artifact removal failed")
 )
 
 const (
@@ -109,6 +111,8 @@ const (
 	PackageErrCodeUninstallArtifactPolicyUnproven  = "PACKAGE_UNINSTALL_ARTIFACT_POLICY_UNPROVEN"
 	PackageErrCodeUninstallArtifactMissing         = "PACKAGE_UNINSTALL_ARTIFACT_UNEXPECTEDLY_MISSING"
 	PackageErrCodeUninstallArtifactReferenced      = "PACKAGE_UNINSTALL_ARTIFACT_STILL_REFERENCED"
+	PackageErrCodeUninstallArtifactRemovalFailed   = "PACKAGE_UNINSTALL_ARTIFACT_REMOVAL_FAILED"
+	PackageErrCodeResourceSnapshotInvalid          = "PACKAGE_RESOURCE_SNAPSHOT_INVALID"
 	PackageErrCodeMigrationSQLUnparseable          = "PACKAGE_MIGRATION_SQL_UNPARSEABLE"
 	PackageErrCodeMigrationNamespaceViolation      = "PACKAGE_MIGRATION_NAMESPACE_VIOLATION"
 	PackageErrCodeLegacyRuntimeEnabled             = "PACKAGE_LEGACY_RUNTIME_ENABLED"

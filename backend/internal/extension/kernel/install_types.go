@@ -142,24 +142,50 @@ const (
 )
 
 type RollbackSnapshotRequirement struct {
-	Required                 bool   `json:"required"`
-	Reason                   string `json:"reason,omitempty"`
-	ConfigChanged            bool   `json:"configChanged"`
-	ResourcesChanged         bool   `json:"resourcesChanged"`
-	UserDataChanged          bool   `json:"userDataChanged"`
-	MigrationRequired        bool   `json:"migrationRequired"`
-	MigrationStateUnverified bool   `json:"migrationStateUnverified,omitempty"`
-	NoDataChange             bool   `json:"noDataChange"`
-	RequirementHash          string `json:"requirementHash,omitempty"`
-	PreviewHash              string `json:"previewHash,omitempty"`
+	Required                   bool   `json:"required"`
+	Reason                     string `json:"reason,omitempty"`
+	ConfigChanged              bool   `json:"configChanged"`
+	ResourcesChanged           bool   `json:"resourcesChanged"`
+	UserDataChanged            bool   `json:"userDataChanged"`
+	MigrationPlanPresent       bool   `json:"migrationPlanPresent"`
+	MigrationDefinitionPresent bool   `json:"migrationDefinitionPresent"`
+	MigrationOperationPresent  bool   `json:"migrationOperationPresent"`
+	MigrationStateUnverified   bool   `json:"migrationStateUnverified,omitempty"`
+	ManifestNoDataChange       bool   `json:"manifestNoDataChange,omitempty"`
+	NoDataChange               bool   `json:"noDataChange"`
+	RequirementHash            string   `json:"requirementHash,omitempty"`
+	PreviewHash                string   `json:"previewHash,omitempty"`
+}
+
+type RollbackSnapshotRequirementInput struct {
+	Manifest               manifest_v2.Manifest
+	ManifestNoDataChange   bool
+	ConfigBeforeHash       string
+	ConfigAfterHash        string
+	ResourceBeforeTreeHash string
+	ResourceAfterTreeHash  string
+	ResourceSetDiff        ResourceSetDiff
+	UserDataBeforeHash     string
+	UserDataAfterHash      string
+	MigrationPlan          *migration.ReversiblePreflight
+	MigrationDefinitions   []migration.MigrationDefinition
+	MigrationOperations    []migration.MigrationOperation
+}
+
+type ResourceSetDiff struct {
+	Added   []string
+	Removed []string
+	Changed []string
 }
 
 type RemoveArtifactStepResult struct {
-	ArtifactID     string         `json:"artifactId"`
-	ArtifactPolicy ArtifactPolicy `json:"artifactPolicy"`
-	Deleted        bool           `json:"deleted"`
-	RemainingRefs  int            `json:"remainingRefs"`
-	DeletedAt      time.Time      `json:"deletedAt"`
+	ArtifactID         string         `json:"artifactId"`
+	ArtifactPolicy     ArtifactPolicy `json:"artifactPolicy"`
+	Deleted            bool           `json:"deleted"`
+	RemainingRefs      int            `json:"remainingRefs"`
+	DeletedAt          time.Time      `json:"deletedAt"`
+	EvidenceHashBefore string         `json:"evidenceHashBefore,omitempty"`
+	EvidenceHashAfter  string         `json:"evidenceHashAfter,omitempty"`
 }
 
 type packageConfirmationClaims struct {

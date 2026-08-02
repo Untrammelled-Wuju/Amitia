@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/pkg/comment/response"
 )
 
 type CharacterScope struct {
@@ -130,4 +131,25 @@ func SanitizeErrorForClient(err error) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+type OwnershipError struct {
+	Code    int
+	ErrCode string
+	Msg     string
+}
+
+func (e *OwnershipError) Error() string { return e.Msg }
+
+func MapOwnershipError(err error) *OwnershipError {
+	if errors.Is(err, ErrUnauthorized) {
+		return &OwnershipError{Code: response.Unauthorized, ErrCode: "AUTH_REQUIRED", Msg: "认证失败"}
+	}
+	if errors.Is(err, ErrForbidden) {
+		return &OwnershipError{Code: response.Forbidden, ErrCode: "FORBIDDEN", Msg: "无权访问该资源"}
+	}
+	if errors.Is(err, ErrNotFound) {
+		return &OwnershipError{Code: response.NotFound, ErrCode: "NOT_FOUND", Msg: "资源不存在"}
+	}
+	return nil
 }

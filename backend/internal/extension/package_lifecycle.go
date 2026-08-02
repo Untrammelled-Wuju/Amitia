@@ -195,21 +195,27 @@ func (s *PackageService) PreviewUninstall(ctx context.Context, extensionID, user
 	result := PackageUninstallPreview{ExtensionID: preview.ExtensionID, CurrentVersion: preview.CurrentVersion,
 		Enabled: preview.Enabled, Dependents: []PackageDependencyView{}, ArtifactArchived: true,
 		Cleanup:   []string{"Kernel 定义", "Module", "Contribution", "Installed Tree"},
-		Preserved: []string{"Artifact", "Operation", "Rollback Point"}, ReadSource: "kernel"}
-	for _, dependent := range preview.Dependents {
-		result.Dependents = append(result.Dependents, PackageDependencyView{ID: dependent, Required: true, Installed: true})
+		Preserved: []string{"Artifact", "Operation", "Rollback Point"}, ReadSource: "kernel",
+	}
+	if preview.Dependents != nil {
+		for _, dependent := range preview.Dependents {
+			result.Dependents = append(result.Dependents, PackageDependencyView{ID: dependent, Required: true, Installed: true})
+		}
 	}
 	return result, nil
 }
 
-func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID string) (PackageOperationResult, error) {
+func (s *PackageService) Uninstall(ctx context.Context, extensionID, userID, scopeType, scopeID, confirmationToken string) (PackageOperationResult, error) {
 	if s.kernel == nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageRepositoryUnavailable, "Extension Kernel 不可用", "", true, nil)
 	}
 	if err := s.validatePackageScope(ctx, userID, scopeType, scopeID); err != nil {
 		return PackageOperationResult{}, err
 	}
-	op, err := s.kernel.ExecutePackageUninstall(ctx, kernelruntime.ExecutePackageUninstallRequest{ExtensionID: extensionID, UserID: userID, ScopeType: scopeType, ScopeID: scopeID})
+	if confirmationToken == "" {
+		return PackageOperationResult{}, NewExtensionError(ErrPackageConfirmationRequired, "卸载必须携带确认令牌", "confirmationToken", false, nil)
+	}
+	op, err := s.kernel.ExecutePackageUninstall(ctx, kernelruntime.ExecutePackageUninstallRequest{ExtensionID: extensionID, UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ConfirmationToken: confirmationToken})
 	if err != nil {
 		return PackageOperationResult{}, NewExtensionError(ErrPackageUninstallFailed, "Extension Kernel 卸载失败", err.Error(), false, err)
 	}

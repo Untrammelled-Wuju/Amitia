@@ -539,64 +539,68 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 	}
 	contentStore := NewResourceContentStore(absExtRoot)
 	for _, entry := range snapshot.Entries {
-		if entry.ContentHash == "" {
-			continue
-		}
-		if entry.ContentStorageReference == "" {
-			return fmt.Errorf("kernel: resource %s content storage reference missing", entry.Resource.ResourceID)
+		if err := validatePackageResourceSnapshotEntry(entry); err != nil {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: resource %s snapshot entry validation failed at stage entry_validation: %w", entry.Resource.ResourceID, err))
 		}
 		if err := contentStore.VerifyContent(entry.ContentStorageReference, entry.ContentHash); err != nil {
-			return fmt.Errorf("kernel: resource content hash mismatch for %s: %w", entry.Resource.ResourceID, err)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content verification failed at stage content_verification: %w", entry.Resource.ResourceID, err))
 		}
-		originalPath := entry.OriginalPath
-		if originalPath == "" {
-			originalPath = entry.StorageReference
-		}
-		if originalPath == "" {
-			originalPath = entry.LogicalPath
-		}
-		if originalPath == "" {
-			continue
-		}
-		absOriginal, absErr := filepath.Abs(originalPath)
+		absOriginal, absErr := filepath.Abs(resolveResourceRestorePath(entry))
 		if absErr != nil {
-			return fmt.Errorf("kernel: resolve restore path for %s: %w", entry.Resource.ResourceID, absErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: resolve restore path for resource %s at stage path_validation: %w", entry.Resource.ResourceID, absErr))
 		}
 		if !strings.HasPrefix(absOriginal, absExtRoot+string(filepath.Separator)) {
-			return fmt.Errorf("kernel: restore path %s for resource %s escapes ext root", absOriginal, entry.Resource.ResourceID)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path %s for resource %s escapes ext root at stage path_validation", absOriginal, entry.Resource.ResourceID))
 		}
 		data, readErr := contentStore.ReadContent(entry.ContentStorageReference)
 		if readErr != nil {
-			return fmt.Errorf("kernel: read content for resource %s: %w", entry.Resource.ResourceID, readErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: read content for resource %s at stage content_read: %w", entry.Resource.ResourceID, readErr))
+		}
+		sum := sha256.Sum256(data)
+		actualHash := "sha256:" + hex.EncodeToString(sum[:])
+		if actualHash != entry.ContentHash {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content hash mismatch at stage content_verification: expected %s got %s", entry.Resource.ResourceID, entry.ContentHash, actualHash))
+		}
+		if info, statErr := os.Stat(absOriginal); statErr == nil && !info.IsDir() {
+			existingHash, hashErr := hashFileContent(absOriginal)
+			if hashErr != nil {
+				return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s failed to hash existing target at stage target_hash: %w", entry.Resource.ResourceID, hashErr))
+			}
+			if existingHash == entry.ContentHash {
+				continue
+			}
 		}
 		if mkErr := os.MkdirAll(filepath.Dir(absOriginal), 0o700); mkErr != nil {
-			return fmt.Errorf("kernel: create directory for restored resource %s: %w", entry.Resource.ResourceID, mkErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: create directory for restored resource %s at stage prepare: %w", entry.Resource.ResourceID, mkErr))
 		}
 		tmp, tmpErr := os.CreateTemp(filepath.Dir(absOriginal), ".restore-*.tmp")
 		if tmpErr != nil {
-			return fmt.Errorf("kernel: create temp file for restored resource %s: %w", entry.Resource.ResourceID, tmpErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: create temp file for restored resource %s at stage prepare: %w", entry.Resource.ResourceID, tmpErr))
 		}
 		tmpPath := tmp.Name()
 		if _, writeErr := tmp.Write(data); writeErr != nil {
 			tmp.Close()
 			os.Remove(tmpPath)
-			return fmt.Errorf("kernel: write restored resource %s: %w", entry.Resource.ResourceID, writeErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: write restored resource %s at stage write: %w", entry.Resource.ResourceID, writeErr))
 		}
 		if syncErr := tmp.Sync(); syncErr != nil {
 			tmp.Close()
 			os.Remove(tmpPath)
-			return fmt.Errorf("kernel: sync restored resource %s: %w", entry.Resource.ResourceID, syncErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: sync restored resource %s at stage write: %w", entry.Resource.ResourceID, syncErr))
 		}
 		if closeErr := tmp.Close(); closeErr != nil {
 			os.Remove(tmpPath)
-			return fmt.Errorf("kernel: close restored resource %s: %w", entry.Resource.ResourceID, closeErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: close restored resource %s at stage write: %w", entry.Resource.ResourceID, closeErr))
 		}
 		if renameErr := os.Rename(tmpPath, absOriginal); renameErr != nil {
 			os.Remove(tmpPath)
-			return fmt.Errorf("kernel: rename restored resource %s: %w", entry.Resource.ResourceID, renameErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: rename restored resource %s at stage commit: %w", entry.Resource.ResourceID, renameErr))
 		}
 		if dirSyncErr := syncDir(filepath.Dir(absOriginal)); dirSyncErr != nil {
-			return fmt.Errorf("kernel: sync directory after restore %s: %w", entry.Resource.ResourceID, dirSyncErr)
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: sync directory after restore %s at stage commit: %w", entry.Resource.ResourceID, dirSyncErr))
+		}
+		if verifyHash, verifyErr := hashFileContent(absOriginal); verifyErr != nil || verifyHash != entry.ContentHash {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s restored file hash verification failed at stage post_verify: expected %s got %s err=%v", entry.Resource.ResourceID, entry.ContentHash, verifyHash, verifyErr))
 		}
 	}
 	current, err := r.container.ResourceRepository.ListResources(ctx, extensionID)
@@ -880,6 +884,155 @@ func packageSecretReference(value any) string {
 func packageSnapshotDigest(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func validatePackageResourceSnapshotEntry(entry packageResourceSnapshotEntry) error {
+	if entry.Resource.ResourceID == "" {
+		return fmt.Errorf("resource id missing")
+	}
+	if entry.ContentHash == "" {
+		return fmt.Errorf("content hash missing")
+	}
+	if entry.ContentStorageReference == "" {
+		return fmt.Errorf("content storage reference missing")
+	}
+	if entry.Size <= 0 {
+		return fmt.Errorf("invalid size %d", entry.Size)
+	}
+	if entry.LogicalPath == "" && entry.OriginalPath == "" && entry.StorageReference == "" {
+		return fmt.Errorf("no restore target path available")
+	}
+	if entry.ResourceHash == "" {
+		return fmt.Errorf("resource hash missing")
+	}
+	raw, err := json.Marshal(entry.Resource)
+	if err != nil {
+		return fmt.Errorf("resource marshalling failed: %w", err)
+	}
+	if packageSnapshotDigest(raw) != entry.ResourceHash {
+		return fmt.Errorf("resource hash mismatch")
+	}
+	return nil
+}
+
+func resolveResourceRestorePath(entry packageResourceSnapshotEntry) string {
+	if entry.OriginalPath != "" {
+		return entry.OriginalPath
+	}
+	if entry.StorageReference != "" {
+		return entry.StorageReference
+	}
+	return entry.LogicalPath
+}
+
+func hashFileContent(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func ComputeRollbackSnapshotRequirement(input RollbackSnapshotRequirementInput) RollbackSnapshotRequirement {
+	req := RollbackSnapshotRequirement{
+		ManifestNoDataChange: input.ManifestNoDataChange,
+	}
+
+	req.ConfigChanged = input.ConfigBeforeHash != "" && input.ConfigAfterHash != "" && input.ConfigBeforeHash != input.ConfigAfterHash
+	req.ResourcesChanged = (input.ResourceBeforeTreeHash != "" && input.ResourceAfterTreeHash != "" && input.ResourceBeforeTreeHash != input.ResourceAfterTreeHash) ||
+		len(input.ResourceSetDiff.Added) > 0 || len(input.ResourceSetDiff.Removed) > 0 || len(input.ResourceSetDiff.Changed) > 0
+	req.UserDataChanged = input.UserDataBeforeHash != "" && input.UserDataAfterHash != "" && input.UserDataBeforeHash != input.UserDataAfterHash
+	req.MigrationPlanPresent = input.MigrationPlan != nil
+	req.MigrationDefinitionPresent = len(input.MigrationDefinitions) > 0
+	req.MigrationOperationPresent = len(input.MigrationOperations) > 0
+
+	configSourceMissing := (input.ConfigBeforeHash != "") != (input.ConfigAfterHash != "")
+	resourceSourceMissing := (input.ResourceBeforeTreeHash != "") != (input.ResourceAfterTreeHash != "")
+	userDataSourceMissing := (input.UserDataBeforeHash != "") != (input.UserDataAfterHash != "")
+	missingSource := configSourceMissing || resourceSourceMissing || userDataSourceMissing
+
+	anyChange := req.ConfigChanged || req.ResourcesChanged || req.UserDataChanged ||
+		req.MigrationPlanPresent || req.MigrationDefinitionPresent || req.MigrationOperationPresent
+
+	req.Required = anyChange || missingSource || !input.ManifestNoDataChange
+	req.NoDataChange = !req.Required
+
+	if req.Required {
+		switch {
+		case missingSource:
+			req.Reason = "before/after evidence count mismatch, fail-closed"
+		case !input.ManifestNoDataChange:
+			req.Reason = "manifest does not declare no-data-change, fail-closed"
+		case req.MigrationPlanPresent:
+			req.Reason = "migration plan present"
+		case req.MigrationDefinitionPresent:
+			req.Reason = "migration definitions present"
+		case req.MigrationOperationPresent:
+			req.Reason = "migration operations present"
+		case req.ConfigChanged:
+			req.Reason = "config changed"
+		case req.ResourcesChanged:
+			req.Reason = "resources changed"
+		case req.UserDataChanged:
+			req.Reason = "user data changed"
+		default:
+			req.Reason = "changes detected"
+		}
+	} else {
+		req.Reason = "no data change detected"
+	}
+
+	req.RequirementHash = computeSnapshotRequirementHash(req)
+	return req
+}
+
+func computeRollbackSnapshotRequirementFromPoint(point PackageRollbackPoint) RollbackSnapshotRequirement {
+	input := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
+	corrupt := false
+	if point.ConfigSnapshotJSON != "" {
+		input.ConfigBeforeHash = packageSnapshotDigest([]byte(point.ConfigSnapshotJSON))
+	}
+	if point.ResourceSnapshotJSON != "" {
+		input.ResourceBeforeTreeHash = packageSnapshotDigest([]byte(point.ResourceSnapshotJSON))
+	}
+	if point.UserDataMigrationStateJSON != "" {
+		input.UserDataBeforeHash = packageSnapshotDigest([]byte(point.UserDataMigrationStateJSON))
+	}
+	if point.MigrationStateSnapshotJSON != "" {
+		var migrationState packageMigrationStateSnapshot
+		if json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState) != nil {
+			corrupt = true
+		} else {
+			if migrationState.Mode != "" && migrationState.Mode != "none" {
+				input.MigrationDefinitions = migrationState.Definitions
+			}
+			for i := range migrationState.Operations {
+				input.MigrationOperations = append(input.MigrationOperations, migrationState.Operations[i].Operation)
+			}
+		}
+	}
+	req := ComputeRollbackSnapshotRequirement(input)
+	if corrupt && req.NoDataChange {
+		req.Required = true
+		req.NoDataChange = false
+		req.Reason = "migration state snapshot corrupt, fail-closed"
+		req.RequirementHash = computeSnapshotRequirementHash(req)
+	}
+	return req
+}
+
+func computeSnapshotRequirementHash(req RollbackSnapshotRequirement) string {
+	canonical := fmt.Sprintf(`{"required":%v,"configChanged":%v,"resourcesChanged":%v,"userDataChanged":%v,"migrationPlanPresent":%v,"migrationDefinitionPresent":%v,"migrationOperationPresent":%v,"migrationStateUnverified":%v,"manifestNoDataChange":%v,"noDataChange":%v}`,
+		req.Required, req.ConfigChanged, req.ResourcesChanged, req.UserDataChanged,
+		req.MigrationPlanPresent, req.MigrationDefinitionPresent, req.MigrationOperationPresent,
+		req.MigrationStateUnverified, req.ManifestNoDataChange, req.NoDataChange)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
 }
 
 func computeVerifiedResourceTreeHash(resources []domain.ResourceOwnership, absExtRoot string) (string, error) {

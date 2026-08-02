@@ -15,7 +15,8 @@ func RegisterProcessingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	registry := security.NewPathRootRegistry()
 	_ = registry.Register(config.AppCfg.Storage.DataDir)
 	responder := security.NewSafeArtifactResponder(registry)
-	handler := NewHandler(svc, responder)
+	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
+	handler := NewHandler(svc, responder, guard)
 
 	g := r.Group("/desktop-pets")
 	{

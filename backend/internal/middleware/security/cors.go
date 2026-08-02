@@ -3,17 +3,57 @@
 package security
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-func CorsMiddleware() gin.HandlerFunc {
+type CorsConfig struct {
+	AllowedOrigins []string
+	AllowedMethods []string
+	AllowedHeaders []string
+	MaxAge         int
+}
+
+func CorsMiddleware(cfg CorsConfig) gin.HandlerFunc {
+	if len(cfg.AllowedMethods) == 0 {
+		cfg.AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
+	}
+	if len(cfg.AllowedHeaders) == 0 {
+		cfg.AllowedHeaders = []string{"Content-Type", "Authorization", "X-Device-Timezone", "X-Amitia-Local-Token", "X-Request-ID"}
+	}
+	if cfg.MaxAge == 0 {
+		cfg.MaxAge = 86400
+	}
+
+	methods := strings.Join(cfg.AllowedMethods, ", ")
+	headers := strings.Join(cfg.AllowedHeaders, ", ")
+
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Device-Timezone")
-		c.Header("Access-Control-Max-Age", "86400")
+		origin := c.GetHeader("Origin")
+		allowed := false
+
+		if origin == "" {
+			allowed = true
+		} else {
+			for _, allowedOrigin := range cfg.AllowedOrigins {
+				if allowedOrigin == origin {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if allowed && origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		}
+
+		c.Header("Access-Control-Allow-Methods", methods)
+		c.Header("Access-Control-Allow-Headers", headers)
+		c.Header("Access-Control-Max-Age", fmt.Sprintf("%d", cfg.MaxAge))
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)

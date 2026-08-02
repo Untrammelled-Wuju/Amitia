@@ -22,12 +22,13 @@ import (
 )
 
 type Handler struct {
-	service       Service
-	safeResponder *security.SafeArtifactResponder
+	service        Service
+	safeResponder  *security.SafeArtifactResponder
+	ownershipGuard security.OwnershipGuard
 }
 
-func NewHandler(svc Service, responder *security.SafeArtifactResponder) *Handler {
-	return &Handler{service: svc, safeResponder: responder}
+func NewHandler(svc Service, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) *Handler {
+	return &Handler{service: svc, safeResponder: responder, ownershipGuard: guard}
 }
 
 type createPackagePayload struct {
@@ -98,14 +99,13 @@ func (h *Handler) GetProcessingTask(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -125,14 +125,13 @@ func (h *Handler) CancelProcessingTask(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -160,14 +159,13 @@ func (h *Handler) RetryProcessingAction(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -200,21 +198,20 @@ func (h *Handler) CreatePackage(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
 
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID:  processingTaskID,
-		UserID:            userID,
+		UserID:            actor.UserID,
 		DefaultAction:     payload.DefaultAction,
 		IncludedActions:   payload.IncludedActions,
 		UserDefaultAction: payload.UserDefaultAction,
@@ -258,14 +255,13 @@ func (h *Handler) SwitchAttempt(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -295,14 +291,13 @@ func (h *Handler) ExcludeAction(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -321,14 +316,13 @@ func (h *Handler) ExcludeAction(c *gin.Context) {
 
 func (h *Handler) ProcessingEventsStream(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "SSE_AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 	c.Header("Content-Type", "text/event-stream")
@@ -376,14 +370,13 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -411,14 +404,13 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -441,14 +433,13 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 	processingTaskID := c.Param("processingTaskId")
 	actionKey := c.Param("actionKey")
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckProcessingTaskOwnership(processingTaskID, userID); err != nil {
-		writeProcessingError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeProcessingOwnershipError(c, err)
 		return
 	}
 
@@ -475,6 +466,14 @@ func writeProcessingError(c *gin.Context, err error) {
 		return
 	}
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+}
+
+func writeProcessingOwnershipError(c *gin.Context, err error) {
+	if ownErr := security.MapOwnershipError(err); ownErr != nil {
+		util.ErrorResponse(c, ownErr.Code, ownErr.Msg, gin.H{"errorCode": ownErr.ErrCode})
+		return
+	}
+	writeProcessingError(c, err)
 }
 
 func mapProcessingErrorCode(code string) int {

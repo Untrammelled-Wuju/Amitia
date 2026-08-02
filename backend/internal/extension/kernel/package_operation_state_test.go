@@ -216,3 +216,106 @@ func TestOperationAuthorityMigratesLegacyDatabase(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateQuarantineMetadataFence_TokenScenarios(t *testing.T) {
+	op := PackageOperationRecord{OperationID: "op-fence-test", ExtensionID: "ext-fence", ArtifactID: "artifact-fence"}
+
+	testCases := []struct {
+		name          string
+		metadataToken int64
+		recoveryToken int64
+		leaseToken    int64
+		leaseOpID     string
+		leaseErr      error
+		wantErr       bool
+		wantErrCode   string
+	}{
+		{
+			name:          "cross_process_recovery_metadata_10_recovery_11_live_11_success",
+			metadataToken: 10,
+			recoveryToken: 11,
+			leaseToken:    11,
+			leaseOpID:     op.OperationID,
+			wantErr:       false,
+		},
+		{
+			name:          "same_process_recovery_metadata_11_recovery_11_live_11_success",
+			metadataToken: 11,
+			recoveryToken: 11,
+			leaseToken:    11,
+			leaseOpID:     op.OperationID,
+			wantErr:       false,
+		},
+		{
+			name:          "metadata_token_exceeds_recovery_stale",
+			metadataToken: 12,
+			recoveryToken: 11,
+			leaseToken:    11,
+			leaseOpID:     op.OperationID,
+			wantErr:       true,
+			wantErrCode:   OperationErrTokenStale,
+		},
+		{
+			name:          "lease_operation_id_mismatch_rejected",
+			metadataToken: 10,
+			recoveryToken: 11,
+			leaseToken:    11,
+			leaseOpID:     "op-other",
+			wantErr:       true,
+			wantErrCode:   OperationErrLeaseProofMismatch,
+		},
+		{
+			name:          "repository_unavailable_fail_closed",
+			metadataToken: 10,
+			recoveryToken: 11,
+			leaseErr:      NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("simulated unavailable")),
+			wantErr:       true,
+			wantErrCode:   OperationErrProofUnavailable,
+		},
+		{
+			name:          "old_guard_fencing_attempt_rejected",
+			metadataToken: 11,
+			recoveryToken: 10,
+			leaseToken:    11,
+			leaseOpID:     op.OperationID,
+			wantErr:       true,
+			wantErrCode:   OperationErrTokenStale,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			qm := PackageQuarantineMetadata{
+				QuarantineID: "qid-fence",
+				OperationID:  op.OperationID,
+				ExtensionID:  op.ExtensionID,
+				TreeHash:     "tree-hash-fence",
+				State:        "active",
+				FencingToken: tc.metadataToken,
+			}
+			querier := func(ctx context.Context, extensionID string) (PackageExtensionLease, error) {
+				if tc.leaseErr != nil {
+					return PackageExtensionLease{}, tc.leaseErr
+				}
+				return PackageExtensionLease{
+					ExtensionID:  extensionID,
+					OperationID:  tc.leaseOpID,
+					FencingToken: tc.leaseToken,
+				}, nil
+			}
+			err := validateQuarantineMetadataFence(qm, op, tc.recoveryToken, querier)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("expected success, got %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if tc.wantErrCode != "" && !IsPackageOperationError(err, tc.wantErrCode) {
+				t.Fatalf("expected error code %s, got %v", tc.wantErrCode, err)
+			}
+		})
+	}
+}

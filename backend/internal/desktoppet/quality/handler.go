@@ -7,17 +7,19 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
-	svc QualityService
+	svc            QualityService
+	ownershipGuard security.OwnershipGuard
 }
 
-func NewHandler(svc QualityService) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc QualityService, guard security.OwnershipGuard) *Handler {
+	return &Handler{svc: svc, ownershipGuard: guard}
 }
 
 func writeQualityError(c *gin.Context, err error) {
@@ -36,6 +38,14 @@ func writeQualityError(c *gin.Context, err error) {
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 }
 
+func writeQualityOwnershipError(c *gin.Context, err error) {
+	if ownErr := security.MapOwnershipError(err); ownErr != nil {
+		util.ErrorResponse(c, ownErr.Code, ownErr.Msg, gin.H{"errorCode": ownErr.ErrCode})
+		return
+	}
+	writeQualityError(c, err)
+}
+
 func (h *Handler) GetEvaluation(c *gin.Context) {
 	evaluationID := c.Param("evaluationId")
 	if evaluationID == "" {
@@ -43,13 +53,13 @@ func (h *Handler) GetEvaluation(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
-		writeQualityError(c, err)
+	if _, err := h.ownershipGuard.RequireQualityEvaluation(c.Request.Context(), actor, evaluationID); err != nil {
+		writeQualityOwnershipError(c, err)
 		return
 	}
 
@@ -78,13 +88,13 @@ func (h *Handler) GetActiveActionQuality(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if err := h.svc.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, actorID); err != nil {
-		writeQualityError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeQualityOwnershipError(c, err)
 		return
 	}
 
@@ -108,13 +118,13 @@ func (h *Handler) Reevaluate(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
-		writeQualityError(c, err)
+	if _, err := h.ownershipGuard.RequireQualityEvaluation(c.Request.Context(), actor, evaluationID); err != nil {
+		writeQualityOwnershipError(c, err)
 		return
 	}
 
@@ -144,13 +154,13 @@ func (h *Handler) GetTaskGate(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if err := h.svc.CheckProcessingTaskOwnership(c.Request.Context(), processingTaskID, actorID); err != nil {
-		writeQualityError(c, err)
+	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
+		writeQualityOwnershipError(c, err)
 		return
 	}
 
@@ -170,13 +180,13 @@ func (h *Handler) ListProblemFrames(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
-		writeQualityError(c, err)
+	if _, err := h.ownershipGuard.RequireQualityEvaluation(c.Request.Context(), actor, evaluationID); err != nil {
+		writeQualityOwnershipError(c, err)
 		return
 	}
 
@@ -213,13 +223,13 @@ func (h *Handler) ListFindings(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if err := h.svc.CheckEvaluationOwnership(c.Request.Context(), evaluationID, actorID); err != nil {
-		writeQualityError(c, err)
+	if _, err := h.ownershipGuard.RequireQualityEvaluation(c.Request.Context(), actor, evaluationID); err != nil {
+		writeQualityOwnershipError(c, err)
 		return
 	}
 

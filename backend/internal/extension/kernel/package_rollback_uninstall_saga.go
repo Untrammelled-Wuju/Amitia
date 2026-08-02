@@ -19,22 +19,24 @@ import (
 )
 
 type PackageUninstallPreviewResult struct {
-	ExtensionID         string         `json:"extensionId"`
-	CurrentVersion      string         `json:"currentVersion"`
-	CurrentVersionID    string         `json:"currentVersionId,omitempty"`
-	CurrentGenerationID string         `json:"currentGenerationId,omitempty"`
-	Generation          int64          `json:"generation"`
-	Enabled             bool           `json:"enabled"`
-	Dependents          []string       `json:"dependents"`
-	InstalledPath       string         `json:"installedPath"`
-	InstalledHash       string         `json:"installedTreeHash"`
-	ArtifactID          string         `json:"artifactId"`
-	Installable         bool           `json:"uninstallable"`
-	GenerationID        string         `json:"generationId"`
-	OperationID         string         `json:"operationId"`
-	ArtifactPolicy      ArtifactPolicy `json:"artifactPolicy,omitempty"`
-	PolicyReason        string         `json:"policyReason,omitempty"`
-	PreviewHash         string         `json:"previewHash,omitempty"`
+	ExtensionID            string         `json:"extensionId"`
+	CurrentVersion         string         `json:"currentVersion"`
+	CurrentVersionID       string         `json:"currentVersionId,omitempty"`
+	CurrentGenerationID    string         `json:"currentGenerationId,omitempty"`
+	Generation             int64          `json:"generation"`
+	Enabled                bool           `json:"enabled"`
+	Dependents             []string       `json:"dependents"`
+	InstalledPath          string         `json:"installedPath"`
+	InstalledHash          string         `json:"installedTreeHash"`
+	ArtifactID             string         `json:"artifactId"`
+	Installable            bool           `json:"uninstallable"`
+	GenerationID           string         `json:"generationId"`
+	OperationID            string         `json:"operationId"`
+	ArtifactPolicy         ArtifactPolicy `json:"artifactPolicy,omitempty"`
+	PolicyReason           string         `json:"policyReason,omitempty"`
+	PreviewHash            string         `json:"previewHash,omitempty"`
+	SecurityPolicyHash     string         `json:"securityPolicyHash,omitempty"`
+	SnapshotRequirementHash string        `json:"snapshotRequirementHash,omitempty"`
 }
 
 func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID string) (KernelInstallResult, error) {
@@ -667,6 +669,10 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "cleanup_kernel_repositories", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, uninstallGuard)
 		return op, errors.Join(err, persistErr)
 	}
+	if err := r.executeRemoveArtifactStep(ctx, op, preview, uninstallGuard); err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", StepRemoveArtifact, "PACKAGE_UNINSTALL_ARTIFACT_REMOVAL_FAILED", err.Error(), false, uninstallGuard)
+		return op, errors.Join(err, persistErr)
+	}
 	if quarantinePath != "" {
 		if err := os.RemoveAll(quarantinePath); err != nil {
 			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "remove_files", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, uninstallGuard)
@@ -1113,4 +1119,120 @@ func (r *Runtime) completeSimplePackageStep(ctx context.Context, operationID, na
 		return err
 	}
 	return r.container.PackageRepository.SetOperation(ctx, operationID, "in_progress", name, "", "", false, guard)
+}
+
+func computeArtifactEvidenceHash(artifactID string, refCount int, exists bool) string {
+	canonical := fmt.Sprintf("artifact:%s:refs=%d:exists=%v", artifactID, refCount, exists)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+func (r *Runtime) executeRemoveArtifactStep(ctx context.Context, op PackageOperationRecord, preview PackageUninstallPreviewResult, guard PackageWriteGuard) error {
+	artifactID := op.ArtifactID
+	if artifactID == "" {
+		return nil
+	}
+	repo := r.container.PackageRepository
+	policy := preview.ArtifactPolicy
+
+	evidenceBefore := computeArtifactEvidenceHash(artifactID, -1, true)
+
+	switch policy {
+	case ArtifactPolicyRetainArtifact:
+		if err := repo.ReleaseArtifactReference(ctx, artifactID, ArtifactReferenceInstallation, op.ExtensionID); err != nil && !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
+			return fmt.Errorf("failed to release installation reference for retain: %w", err)
+		}
+		art, getErr := repo.GetArtifact(ctx, artifactID)
+		if getErr != nil || art.ArtifactID == "" {
+			return NewPackageError(PackageErrCodeUninstallArtifactMissing, 404, fmt.Errorf("retain policy: artifact %s not found after releasing installation ref", artifactID))
+		}
+		refCount, countErr := repo.CountActiveArtifactReferences(ctx, artifactID)
+		if countErr != nil {
+			return fmt.Errorf("retain policy: failed to count remaining refs: %w", countErr)
+		}
+		return r.recordRemoveArtifactStep(ctx, op, policy, false, int(refCount), time.Time{}, evidenceBefore, evidenceBefore, guard)
+
+	case ArtifactPolicyRetainForRollback:
+		if err := repo.ReleaseArtifactReference(ctx, artifactID, ArtifactReferenceInstallation, op.ExtensionID); err != nil && !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
+			return fmt.Errorf("failed to release installation reference for retain_rollback: %w", err)
+		}
+		refCount, countErr := repo.CountActiveArtifactReferences(ctx, artifactID)
+		if countErr != nil {
+			return fmt.Errorf("retain_rollback policy: failed to count remaining refs: %w", countErr)
+		}
+		return r.recordRemoveArtifactStep(ctx, op, policy, false, int(refCount), time.Time{}, evidenceBefore, evidenceBefore, guard)
+
+	case ArtifactPolicyRetainForExport:
+		if err := repo.ReleaseArtifactReference(ctx, artifactID, ArtifactReferenceInstallation, op.ExtensionID); err != nil && !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
+			return fmt.Errorf("failed to release installation reference for retain_export: %w", err)
+		}
+		refCount, countErr := repo.CountActiveArtifactReferences(ctx, artifactID)
+		if countErr != nil {
+			return fmt.Errorf("retain_export policy: failed to count remaining refs: %w", countErr)
+		}
+		return r.recordRemoveArtifactStep(ctx, op, policy, false, int(refCount), time.Time{}, evidenceBefore, evidenceBefore, guard)
+
+	case ArtifactPolicyDeleteArtifact:
+		if err := repo.ReleaseArtifactReference(ctx, artifactID, ArtifactReferenceInstallation, op.ExtensionID); err != nil && !IsRepositoryErrorKind(err, RepositoryErrorNotFound) {
+			return fmt.Errorf("failed to release installation reference for delete: %w", err)
+		}
+		refCount, countErr := repo.CountActiveArtifactReferences(ctx, artifactID)
+		if countErr != nil {
+			kind := RepositoryErrorKindOf(countErr)
+			if kind == RepositoryErrorUnavailable {
+				return NewPackageError(PackageErrCodeQuarantineMetadataUnavailable, 503, fmt.Errorf("repository unavailable during delete policy execution: %w", countErr))
+			}
+			return fmt.Errorf("delete policy: failed to count refs: %w", countErr)
+		}
+		if refCount != 0 {
+			return r.recordRemoveArtifactStep(ctx, op, policy, false, int(refCount), time.Time{}, evidenceBefore, evidenceBefore, guard)
+		}
+		if _, markErr := repo.MarkArtifactGCPending(ctx, artifactID); markErr != nil {
+			return fmt.Errorf("delete policy: failed to mark artifact gc-pending: %w", markErr)
+		}
+		art, getErr := repo.GetArtifact(ctx, artifactID)
+		if getErr != nil {
+			return fmt.Errorf("delete policy: failed to get artifact for removal: %w", getErr)
+		}
+		removeErr := r.container.PackageArtifactStore.RemoveArchive(art)
+		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return NewPackageError(PackageErrCodeUninstallArtifactRemovalFailed, 500, fmt.Errorf("delete policy: failed to remove archive: %w", removeErr))
+		}
+		if completeErr := repo.CompleteArtifactGC(ctx, artifactID, removeErr); completeErr != nil {
+			return fmt.Errorf("delete policy: failed to complete artifact GC: %w", completeErr)
+		}
+		evidenceAfter := computeArtifactEvidenceHash(artifactID, 0, false)
+		deletedAt := time.Now().UTC()
+		return r.recordRemoveArtifactStep(ctx, op, policy, true, 0, deletedAt, evidenceBefore, evidenceAfter, guard)
+
+	default:
+		return NewPackageError(PackageErrCodeUninstallArtifactRemovalFailed, 500, fmt.Errorf("unknown artifact policy: %s", policy))
+	}
+}
+
+func (r *Runtime) recordRemoveArtifactStep(ctx context.Context, op PackageOperationRecord, policy ArtifactPolicy, deleted bool, remainingRefs int, deletedAt time.Time, evidenceBefore, evidenceAfter string, guard PackageWriteGuard) error {
+	result := RemoveArtifactStepResult{
+		ArtifactID:         op.ArtifactID,
+		ArtifactPolicy:     policy,
+		Deleted:            deleted,
+		RemainingRefs:      remainingRefs,
+		DeletedAt:          deletedAt,
+		EvidenceHashBefore: evidenceBefore,
+		EvidenceHashAfter:  evidenceAfter,
+	}
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("failed to marshal RemoveArtifactStepResult: %w", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	return r.container.PackageRepository.PutStep(ctx, PackageOperationStep{
+		StepID:      "step-remove-artifact-" + uuid.NewString(),
+		OperationID: op.OperationID,
+		StepName:    StepRemoveArtifact,
+		StepOrder:   31,
+		Status:      "completed",
+		ResultJSON:  string(resultJSON),
+		StartedAt:   now,
+		CompletedAt: now,
+	}, guard)
 }

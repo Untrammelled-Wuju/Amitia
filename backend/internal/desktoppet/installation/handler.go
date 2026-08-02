@@ -6,16 +6,20 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
-	service Service
+	service        Service
+	ownershipGuard security.OwnershipGuard
 }
 
-func NewHandler(svc Service) *Handler { return &Handler{service: svc} }
+func NewHandler(svc Service, guard security.OwnershipGuard) *Handler {
+	return &Handler{service: svc, ownershipGuard: guard}
+}
 
 type installPackagePayload struct {
 	CharacterID string `json:"character_id"`
@@ -81,14 +85,13 @@ func (h *Handler) GetInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckInstallationOwnership(installationID, userID); err != nil {
-		writeInstallationError(c, err)
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
 		return
 	}
 	inst, err := h.service.GetInstallation(installationID)
@@ -143,14 +146,13 @@ func (h *Handler) UpdateDefaultAction(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
 		return
 	}
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckInstallationOwnership(installationID, userID); err != nil {
-		writeInstallationError(c, err)
+	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
 		return
 	}
 	var payload updateDefaultActionPayload
@@ -264,6 +266,14 @@ func writeInstallationError(c *gin.Context, err error) {
 		return
 	}
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+}
+
+func writeInstallationOwnershipError(c *gin.Context, err error) {
+	if ownErr := security.MapOwnershipError(err); ownErr != nil {
+		util.ErrorResponse(c, ownErr.Code, ownErr.Msg, gin.H{"errorCode": ownErr.ErrCode})
+		return
+	}
+	writeInstallationError(c, err)
 }
 
 func mapInstallationErrorCode(code string) int {

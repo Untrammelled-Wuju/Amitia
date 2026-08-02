@@ -18,18 +18,19 @@ func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	registry := security.NewPathRootRegistry()
 	_ = registry.Register(dataDir)
 	responder := security.NewSafeArtifactResponder(registry)
-	registerRoutes(r, svc, responder)
+	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
+	registerRoutes(r, svc, responder, guard)
 }
 
-func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service) {
+func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard security.OwnershipGuard) {
 	registry := security.NewPathRootRegistry()
 	_ = registry.Register(config.AppCfg.Storage.DataDir)
 	responder := security.NewSafeArtifactResponder(registry)
-	registerRoutes(r, svc, responder)
+	registerRoutes(r, svc, responder, guard)
 }
 
-func registerRoutes(r *gin.RouterGroup, svc Service, responder *security.SafeArtifactResponder) {
-	handler := NewHandler(svc, responder)
+func registerRoutes(r *gin.RouterGroup, svc Service, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) {
+	handler := NewHandler(svc, responder, guard)
 	g := r.Group("/desktop-pets")
 	{
 		g.GET("/processing-tasks/:processingTaskId/actions/:actionKey/revisions", handler.ListRevisions)

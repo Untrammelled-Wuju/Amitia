@@ -16,6 +16,7 @@ const (
 	PermSecurityAuditRead        = "security.audit.read"
 	PermDoctorRun                = "doctor.run"
 	PermDoctorRepair             = "doctor.repair"
+	SystemShutdown               = "system.shutdown"
 )
 
 func DefaultUserPermissions() []string {
@@ -38,6 +39,7 @@ func AdminPermissions() []string {
 		PermSecurityAuditRead,
 		PermDoctorRun,
 		PermDoctorRepair,
+		SystemShutdown,
 	)
 }
 

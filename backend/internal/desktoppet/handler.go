@@ -18,12 +18,13 @@ import (
 )
 
 type Handler struct {
-	service       Service
-	safeResponder *security.SafeArtifactResponder
+	service        Service
+	safeResponder  *security.SafeArtifactResponder
+	ownershipGuard security.OwnershipGuard
 }
 
-func NewHandler(svc Service, responder *security.SafeArtifactResponder) *Handler {
-	return &Handler{service: svc, safeResponder: responder}
+func NewHandler(svc Service, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) *Handler {
+	return &Handler{service: svc, safeResponder: responder, ownershipGuard: guard}
 }
 
 func (h *Handler) GetActionDefinitions(c *gin.Context) {
@@ -59,12 +60,12 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	userID := actor.UserID
 
 	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, characterID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
 	if err != nil {
@@ -76,14 +77,13 @@ func (h *Handler) CreateTask(c *gin.Context) {
 
 func (h *Handler) GetTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	data, err := h.service.GetTask(taskID)
@@ -95,12 +95,12 @@ func (h *Handler) GetTask(c *gin.Context) {
 }
 
 func (h *Handler) ListTasks(c *gin.Context) {
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	userID := actor.UserID
 	characterID := c.Query("characterId")
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -115,14 +115,13 @@ func (h *Handler) ListTasks(c *gin.Context) {
 
 func (h *Handler) DeleteTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	if err := h.service.DeleteTask(taskID); err != nil {
@@ -134,14 +133,13 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 
 func (h *Handler) ReferenceImage(c *gin.Context) {
 	taskID := c.Param("taskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	fullPath, mimeType, err := h.service.GetTaskSourceImage(taskID)
@@ -161,14 +159,13 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 
 func (h *Handler) StartTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	summary, err := h.service.StartTask(taskID)
@@ -187,14 +184,13 @@ func (h *Handler) StartTask(c *gin.Context) {
 
 func (h *Handler) CancelTask(c *gin.Context) {
 	taskID := c.Param("taskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	if err := h.service.CancelTask(taskID); err != nil {
@@ -210,14 +206,13 @@ func (h *Handler) CancelTask(c *gin.Context) {
 func (h *Handler) RetryAction(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actionKey := c.Param("actionKey")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	action, err := h.service.RetryAction(taskID, actionKey)
@@ -236,14 +231,13 @@ func (h *Handler) RetryAction(c *gin.Context) {
 func (h *Handler) ActionFrameImage(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actionKey := c.Param("actionKey")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	frameIndex, err := strconv.Atoi(c.Param("frameIndex"))
@@ -268,14 +262,13 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 
 func (h *Handler) GetTaskTransitions(c *gin.Context) {
 	taskID := c.Param("taskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
@@ -289,14 +282,13 @@ func (h *Handler) GetTaskTransitions(c *gin.Context) {
 
 func (h *Handler) TaskEventsStream(c *gin.Context) {
 	taskID := c.Param("taskId")
-	actorID, err := middleware.ResolveActorID(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "SSE_AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckTaskOwnership(taskID, userID); err != nil {
-		writeServiceError(c, err)
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
 		return
 	}
 	c.Header("Content-Type", "text/event-stream")
@@ -305,7 +297,7 @@ func (h *Handler) TaskEventsStream(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	bus := DefaultEventBus()
-	subscriberID := fmt.Sprintf("sse-%s-%p-%d", actorID, c.Request, time.Now().UnixNano())
+	subscriberID := fmt.Sprintf("sse-%s-%p-%d", actor.UserID, c.Request, time.Now().UnixNano())
 	events := bus.Subscribe(taskID, subscriberID)
 	defer bus.Unsubscribe(taskID, subscriberID)
 
@@ -339,4 +331,12 @@ func writeServiceError(c *gin.Context, err error) {
 		return
 	}
 	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+}
+
+func writeOwnershipError(c *gin.Context, err error) {
+	if ownErr := security.MapOwnershipError(err); ownErr != nil {
+		util.ErrorResponse(c, ownErr.Code, ownErr.Msg, gin.H{"errorCode": ownErr.ErrCode})
+		return
+	}
+	writeServiceError(c, err)
 }
