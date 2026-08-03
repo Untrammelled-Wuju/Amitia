@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,14 @@ func newFinalizationOperation(t *testing.T, runtime *Runtime, container *Contain
 	op.OperationType = operationType
 	op.TargetVersion = ""
 	op.FromVersion = ""
+	confirmKey := "confirm." + operationType
+	secHash := computeSecurityPolicyHash()
+	previewHash := "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	claims := fmt.Sprintf(`{"schemaVersion":1,"operationType":%q,"extensionId":%q,"artifactId":%q,"previewHash":%q,"securityPolicyHash":%q,"policyVersion":%q,"userId":%q,"scopeType":%q,"scopeId":%q,"confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce-%s"}`,
+		operationType, extensionID, op.ArtifactID, previewHash, secHash, "2026-07-30-v1",
+		op.UserID, op.ScopeType, op.ScopeID, confirmKey, confirmKey,
+		time.Now().Unix(), time.Now().Add(time.Hour).Unix(), operationID)
+	op.ConfirmationClaimsJSON = claims
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
 	}

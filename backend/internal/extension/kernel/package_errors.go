@@ -100,6 +100,7 @@ var (
 	ErrPackageArtifactEvidenceInvalid              = errors.New("kernel: artifact evidence invalid")
 	ErrPackageArtifactReferenceMissing             = errors.New("kernel: artifact reference missing")
 	ErrPackageArtifactReferenceMismatch            = errors.New("kernel: artifact reference mismatch")
+	ErrPackageRecoveryExpectedVersionNotFound      = errors.New("kernel: expected version record not found during recovery")
 )
 
 const (

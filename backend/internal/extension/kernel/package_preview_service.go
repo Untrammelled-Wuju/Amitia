@@ -297,6 +297,7 @@ func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *Insta
 	if err != nil {
 		return
 	}
+	preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.update")
 	currentArtifact, artifactErr := r.container.PackageRepository.GetArtifact(ctx, current.PackageID)
 	if artifactErr == nil {
 		if current.InstalledVersion.String() == preview.Version && currentArtifact.ArchiveHash != preview.ArchiveHash {

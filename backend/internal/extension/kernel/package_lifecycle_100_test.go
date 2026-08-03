@@ -67,11 +67,22 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			if err != nil || repeatedUpdate.OperationID != updated.OperationID {
 				t.Fatalf("update idempotency failed: first=%s repeated=%s err=%v", updated.OperationID, repeatedUpdate.OperationID, err)
 			}
-			rolledBack, err := runtimeInstance.ExecutePackageRollback(ctx, firstPreview.ExtensionID, "1.0.0", "user-1", "global", "", "")
-			if err != nil || rolledBack.Version != "1.0.0" {
-				t.Fatalf("rollback failed: result=%+v err=%v", rolledBack, err)
-			}
-			installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(firstPreview.ExtensionID))
+		rollbackConfirm, err := runtimeInstance.ConfirmPackageRollback(ctx, PackageRollbackConfirmationRequest{
+			ExtensionID:   firstPreview.ExtensionID,
+			TargetVersion: "1.0.0",
+			UserID:        "user-1",
+			ScopeType:     "global",
+			ScopeID:       "",
+			Confirmations: map[string]bool{"confirm.rollback": true},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rolledBack, err := runtimeInstance.ExecutePackageRollback(ctx, firstPreview.ExtensionID, "1.0.0", "user-1", "global", "", rollbackConfirm.ConfirmationToken)
+		if err != nil || rolledBack.Version != "1.0.0" {
+			t.Fatalf("rollback failed: result=%+v err=%v", rolledBack, err)
+		}
+		installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(firstPreview.ExtensionID))
 			if err != nil {
 				t.Fatal(err)
 			}

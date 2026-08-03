@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -74,9 +75,23 @@ type packageUserDataMigrationState struct {
 }
 
 type UserDataTableSnapshotManifest struct {
+	SchemaVersion int `json:"schemaVersion"`
+
+	ExtensionID    string `json:"extensionId"`
+	CanonicalTable string `json:"canonicalTable"`
+	EntityType     string `json:"entityType"`
+	NamespaceHash  string `json:"namespaceHash"`
+
+	RecordCount   int64  `json:"recordCount"`
+	AggregateHash string `json:"aggregateHash"`
 	EmptySetHash  string `json:"emptySetHash"`
-	GenesisHash   string `json:"genesisHash"`
-	NamespaceHash string `json:"namespaceHash"`
+
+	BatchSize             int    `json:"batchSize"`
+	BatchAlgorithmVersion string `json:"batchAlgorithmVersion"`
+	GenesisHash           string `json:"genesisHash"`
+	FinalBatchHash        string `json:"finalBatchHash"`
+
+	DataExportReference string `json:"dataExportReference,omitempty"`
 }
 
 type packageSnapshotHashPayload struct {
@@ -188,6 +203,18 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 			originalPath := resource.Reference
 			if originalPath == "" {
 				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s original path empty", resource.ResourceID))
+			}
+			parsedRef, urlErr := url.Parse(originalPath)
+			isURIReference := urlErr == nil && parsedRef.Scheme != "" && strings.Contains(originalPath, "://")
+			if isURIReference {
+				resourceSnapshot.Entries = append(resourceSnapshot.Entries, packageResourceSnapshotEntry{
+					Resource:        resource,
+					ResourceHash:    packageSnapshotDigest(raw),
+					RestoreStrategy: "uri_reference",
+					LogicalPath:     logicalPath,
+					OriginalPath:    originalPath,
+				})
+				continue
 			}
 			absOriginal, absErr := filepath.Abs(originalPath)
 			if absErr != nil {
@@ -445,8 +472,23 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 		NamespacePolicyVersion: "v1",
 	})
 
+	genesisHash := computeUserDataGenesisHash(UserDataTableIdentity{
+		Domain:                "amitia-userdata-batch-genesis-v1",
+		SchemaVersion:         "1.0.0",
+		ExtensionID:           extensionID,
+		CanonicalTable:        canonicalTable,
+		EntityType:            entityType,
+		NamespaceHash:         namespaceHash,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+	})
+
 	result.manifest = UserDataTableSnapshotManifest{
-		NamespaceHash: namespaceHash,
+		SchemaVersion:         1,
+		ExtensionID:           extensionID,
+		CanonicalTable:        canonicalTable,
+		EntityType:            entityType,
+		NamespaceHash:         namespaceHash,
+		RecordCount:           result.count,
 		EmptySetHash: computeUserDataEmptySetHash(UserDataTableIdentity{
 			Domain:                "amitia-userdata-empty-set-v1",
 			SchemaVersion:         "1.0.0",
@@ -456,15 +498,11 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 			NamespaceHash:         namespaceHash,
 			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
 		}),
-		GenesisHash: computeUserDataGenesisHash(UserDataTableIdentity{
-			Domain:                "amitia-userdata-batch-genesis-v1",
-			SchemaVersion:         "1.0.0",
-			ExtensionID:           extensionID,
-			CanonicalTable:        canonicalTable,
-			EntityType:            entityType,
-			NamespaceHash:         namespaceHash,
-			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-		}),
+		GenesisHash:           genesisHash,
+		AggregateHash:         "",
+		BatchSize:             userDataRestoreBatchSize,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		FinalBatchHash:        genesisHash,
 	}
 
 	return result, nil

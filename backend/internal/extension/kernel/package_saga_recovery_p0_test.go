@@ -156,6 +156,20 @@ func TestPackageUninstallRechecksPreflightInsideLock(t *testing.T) {
 	if err != nil || !uninstallPreview.Installable {
 		t.Fatalf("uninstall preflight failed: %+v %v", uninstallPreview, err)
 	}
+	requiredMap := map[string]bool{"confirm.uninstall": true}
+	requiredItems := []string{"confirm.uninstall"}
+	switch uninstallPreview.ArtifactPolicy {
+	case ArtifactPolicyDeleteArtifact:
+		requiredMap["confirm.uninstall.delete"] = true
+		requiredItems = append(requiredItems, "confirm.uninstall.delete")
+	default:
+		requiredMap["confirm.uninstall.retain"] = true
+		requiredItems = append(requiredItems, "confirm.uninstall.retain")
+	}
+	if uninstallPreview.SnapshotRequirementHash != "" {
+		requiredMap["confirm.uninstall.data_change"] = true
+		requiredItems = append(requiredItems, "confirm.uninstall.data_change")
+	}
 	uninstallClaims := PackageUninstallConfirmationClaims{
 		ExtensionID:             installed.ExtensionID,
 		CurrentVersion:          uninstallPreview.CurrentVersion,
@@ -169,7 +183,9 @@ func TestPackageUninstallRechecksPreflightInsideLock(t *testing.T) {
 		UserID:                  "user-1",
 		ScopeType:               "global",
 		ScopeID:                 "",
-		Confirmations:           map[string]bool{"confirm.uninstall.delete": true},
+		PolicyVersion:           packagePolicyVersion,
+		Confirmations:           requiredMap,
+		ConfirmedItems:          requiredItems,
 		ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
 	}
 	uninstallToken, err := runtime.SignUninstallConfirmation(uninstallClaims)

@@ -3,10 +3,13 @@ package kernel
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -16,22 +19,23 @@ import (
 )
 
 type PackageFinalGateResult struct {
-	Passed                      bool                      `json:"passed"`
-	OperationID                 string                    `json:"operationId"`
-	OperationType               string                    `json:"operationType"`
-	ExtensionID                 string                    `json:"extensionId"`
-	Version                     string                    `json:"version"`
-	Mode                        string                    `json:"mode,omitempty"`
-	ClaimsVerified              bool                      `json:"claimsVerified"`
-	PolicyVersionVerified       bool                      `json:"policyVersionVerified"`
-	ConfirmedItemsVerified      bool                      `json:"confirmedItemsVerified"`
-	PreviewIdentityVerified     bool                      `json:"previewIdentityVerified"`
-	ArtifactPolicyVerified      bool                      `json:"artifactPolicyVerified"`
-	SnapshotRequirementVerified bool                      `json:"snapshotRequirementVerified"`
-	StepIntegrityVerified       bool                      `json:"stepIntegrityVerified"`
-	Checks                      []PackageFinalGateCheck   `json:"checks"`
-	Findings                    []PackageFinalGateFinding `json:"findings,omitempty"`
-	VerifiedAt                  string                    `json:"verifiedAt"`
+	Passed                      bool                        `json:"passed"`
+	OperationID                 string                      `json:"operationId"`
+	OperationType               string                      `json:"operationType"`
+	ExtensionID                 string                      `json:"extensionId"`
+	Version                     string                      `json:"version"`
+	Mode                        string                      `json:"mode,omitempty"`
+	ClaimsVerified              bool                        `json:"claimsVerified"`
+	PolicyVersionVerified       bool                        `json:"policyVersionVerified"`
+	ConfirmedItemsVerified      bool                        `json:"confirmedItemsVerified"`
+	PreviewIdentityVerified     bool                        `json:"previewIdentityVerified"`
+	ArtifactPolicyVerified      bool                        `json:"artifactPolicyVerified"`
+	SnapshotRequirementVerified bool                        `json:"snapshotRequirementVerified"`
+	StepIntegrityVerified       bool                        `json:"stepIntegrityVerified"`
+	SnapshotDecision            *PackageSnapshotFinalGateDecision `json:"snapshotDecision,omitempty"`
+	Checks                      []PackageFinalGateCheck     `json:"checks"`
+	Findings                    []PackageFinalGateFinding   `json:"findings,omitempty"`
+	VerifiedAt                  string                      `json:"verifiedAt"`
 }
 
 type PackageFinalGateCheck struct {
@@ -287,29 +291,36 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 								checkArtifact.Detail = fmt.Sprintf("retain policy: cannot resolve rollback point for reference: %v", rpErr)
 								break
 							}
+							if rp.ArtifactID != operation.ArtifactID {
+								checkArtifact.Detail = fmt.Sprintf("retain policy: rollback point artifact_id mismatch: point=%s operation=%s", rp.ArtifactID, operation.ArtifactID)
+								break
+							}
 							refOwnerID = rp.RollbackPointID
 							refDetail = fmt.Sprintf("rollbackPoint=%s", refOwnerID)
 						} else if requiredRefType == ArtifactReferenceExportLease {
-							checkArtifact.Detail = "retain policy: export retention unsupported without export model"
+							checkArtifact.Detail = "PACKAGE_EXPORT_RETENTION_UNSUPPORTED: export retention not supported without export model"
 							break
 						} else {
 							refOwnerID = operation.ExtensionID
 							refDetail = fmt.Sprintf("owner=%s", refOwnerID)
 						}
-						ref, getErr := r.container.PackageRepository.GetActiveArtifactReference(ctx, operation.ArtifactID, requiredRefType, refOwnerID)
-						if getErr != nil {
-							if IsRepositoryErrorKind(getErr, RepositoryErrorNotFound) {
-								checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference with %s (reference proof required)", requiredRefType, refDetail)
-							} else {
-								checkArtifact.Detail = fmt.Sprintf("retain policy: reference query failed: %v", getErr)
-							}
+						refs, listErr := r.container.PackageRepository.ListActiveArtifactReferences(ctx, operation.ArtifactID, requiredRefType, refOwnerID)
+						if listErr != nil {
+							checkArtifact.Detail = fmt.Sprintf("retain policy: list active references failed: %v", listErr)
+						} else if len(refs) == 0 {
+							checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference with %s (reference proof required)", requiredRefType, refDetail)
+						} else if len(refs) > 1 {
+							checkArtifact.Detail = fmt.Sprintf("retain policy: expected exactly 1 active %s reference, found %d (integrity error)", requiredRefType, len(refs))
 						} else {
+							ref := refs[0]
 							if ref.ArtifactID != operation.ArtifactID || ref.ReferenceType != requiredRefType || ref.ReferenceOwnerID != refOwnerID {
 								checkArtifact.Detail = "retain policy: reference identity mismatch"
+							} else if ref.ReleasedAt != "" {
+								checkArtifact.Detail = "retain policy: reference has been released"
 							} else if ref.ExpiresAt != "" && ref.ExpiresAt < time.Now().UTC().Format(time.RFC3339Nano) {
 								checkArtifact.Detail = "retain policy: reference expired"
 							} else {
-								checkArtifact.Detail = fmt.Sprintf("retain policy: verified %s reference %s", requiredRefType, refDetail)
+								checkArtifact.Detail = fmt.Sprintf("retain policy: verified exactly 1 active %s reference %s", requiredRefType, refDetail)
 								checkArtifact.Passed = true
 							}
 						}
@@ -649,35 +660,83 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 
 	if !isUninstall && (operation.OperationType == "update" || operation.OperationType == "rollback") {
 		checkSnapshot := PackageFinalGateCheck{Name: "snapshot_integrity"}
-		decision := PackageSnapshotFinalGateDecision{}
+		decision := &PackageSnapshotFinalGateDecision{}
 		if r.container.PackageRepository == nil {
 			checkSnapshot.Detail = "package repository unavailable for snapshot check"
 		} else {
-			rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
-			if rpErr != nil {
-				if !IsRepositoryErrorKind(rpErr, RepositoryErrorNotFound) {
-					checkSnapshot.Detail = fmt.Sprintf("rollback point query failed (repository unavailable): %v", rpErr)
+			claims, claimsErr := parseOperationConfirmationClaims(operation)
+			var snapshotPresent bool
+			if claimsErr != nil {
+				snapshotPresent = false
+				decision.SnapshotPresent = snapshotPresent
+				decision.Reasons = append(decision.Reasons, fmt.Sprintf("claims unavailable: %v", claimsErr))
+				rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
+				if rpErr == nil {
+					decision.SnapshotPresent = true
+					decision.SnapshotHash = rollbackPoint.SnapshotHash
+				}
+				decision.Required = true
+				if decision.SnapshotPresent {
+					if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
+						decision.Reasons = append(decision.Reasons, fmt.Sprintf("snapshot validation failed: %v", validateErr))
+						checkSnapshot.Detail = fmt.Sprintf("snapshot present but validation failed: %v", validateErr)
+					} else {
+						decision.SnapshotVerified = true
+						checkSnapshot.Passed = true
+						checkSnapshot.Detail = fmt.Sprintf("snapshot present and verified (claims unavailable, fail-closed): hash=%s", rollbackPoint.SnapshotHash)
+					}
 				} else {
-					decision.Required = true
-					decision.SnapshotPresent = false
-					decision.Reasons = append(decision.Reasons, "snapshot required but rollback point not found")
-					checkSnapshot.Detail = "rollback point not found and no valid snapshot exemption claims (fail-closed)"
+					checkSnapshot.Detail = "claims unavailable and no rollback point found (fail-closed)"
 				}
 			} else {
-				decision.SnapshotPresent = true
-				decision.SnapshotHash = rollbackPoint.SnapshotHash
-				decision.Required = true
-				if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
-					decision.Reasons = append(decision.Reasons, fmt.Sprintf("snapshot validation failed: %v", validateErr))
-					checkSnapshot.Detail = fmt.Sprintf("snapshot present but validation failed: %v", validateErr)
-				} else {
-					decision.SnapshotVerified = true
-					checkSnapshot.Passed = true
-					checkSnapshot.Detail = fmt.Sprintf("snapshot present and verified: hash=%s", rollbackPoint.SnapshotHash)
+				requirement := r.computeRollBackSnapshotRequirementFromClaims(ctx, operation, claims)
+				decision.RequirementHash = requirement.RequirementHash
+				rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
+				snapshotPresent = rpErr == nil
+				decision.SnapshotPresent = snapshotPresent
+
+				switch {
+				case requirement.Required:
+					decision.Required = true
+					if rpErr != nil {
+						decision.Reasons = append(decision.Reasons, "snapshot required but rollback point not found")
+						checkSnapshot.Detail = "snapshot required but rollback point not found (fail-closed)"
+					} else if snapshotPresent {
+						decision.SnapshotHash = rollbackPoint.SnapshotHash
+						if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
+							decision.Reasons = append(decision.Reasons, fmt.Sprintf("snapshot validation failed: %v", validateErr))
+							checkSnapshot.Detail = fmt.Sprintf("snapshot present but validation failed: %v", validateErr)
+						} else {
+							decision.SnapshotVerified = true
+							checkSnapshot.Passed = true
+							checkSnapshot.Detail = fmt.Sprintf("snapshot present and verified: hash=%s", rollbackPoint.SnapshotHash)
+						}
+					}
+				case !requirement.Required && snapshotPresent:
+					decision.Required = false
+					decision.SnapshotHash = rollbackPoint.SnapshotHash
+					if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
+						decision.Reasons = append(decision.Reasons, fmt.Sprintf("optional snapshot validation failed: %v", validateErr))
+						checkSnapshot.Detail = fmt.Sprintf("optional snapshot present but validation failed: %v", validateErr)
+					} else {
+						decision.SnapshotVerified = true
+						checkSnapshot.Passed = true
+						checkSnapshot.Detail = fmt.Sprintf("optional snapshot present and verified: hash=%s", rollbackPoint.SnapshotHash)
+					}
+				case !requirement.Required && !snapshotPresent:
+					decision.Required = false
+					if isRollbackSnapshotExempt(requirement, claims) {
+						decision.ExemptVerified = true
+						checkSnapshot.Passed = true
+						checkSnapshot.Detail = "snapshot exemption verified: no data change, requirement hash and policy hash consistent"
+					} else {
+						decision.Reasons = append(decision.Reasons, "snapshot exemption verification failed: requirement/policy hash mismatch or missing claims")
+						checkSnapshot.Detail = "snapshot not present and exemption verification failed"
+					}
 				}
 			}
 		}
-		_ = decision
+		result.SnapshotDecision = decision
 		result.Checks = append(result.Checks, checkSnapshot)
 	}
 
@@ -880,9 +939,6 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 }
 
 func recomputeAndVerifyRequiredConfirmations(claims PackageConfirmationClaims, operation PackageOperationRecord) error {
-	if len(claims.ConfirmedItems) == 0 && len(claims.Confirmations) == 0 {
-		return nil
-	}
 	seen := make(map[string]bool, len(claims.ConfirmedItems))
 	for _, item := range claims.ConfirmedItems {
 		if item == "" {
@@ -910,12 +966,14 @@ func recomputeAndVerifyRequiredConfirmations(claims PackageConfirmationClaims, o
 func computeRequiredConfirmationsForOperation(operationType string, claims PackageConfirmationClaims) []string {
 	switch operationType {
 	case OpInstall:
-		if claims.DeveloperSessionID != "" {
-			return []string{"confirm.unsigned_dev"}
-		}
-		return []string{}
-	case OpUpdate:
 		required := []string{}
+		if claims.DeveloperSessionID != "" {
+			required = append(required, "confirm.unsigned_dev")
+		}
+		sort.Strings(required)
+		return required
+	case OpUpdate:
+		required := []string{"confirm.update"}
 		if claims.MigrationPlanHash != "" {
 			required = append(required, "confirm.config_migration")
 		}
@@ -937,6 +995,121 @@ func computeRequiredConfirmationsForOperation(operationType string, claims Packa
 
 func computeRollbackSnapshotRequirement(point PackageRollbackPoint) RollbackSnapshotRequirement {
 	return computeRollbackSnapshotRequirementFromPoint(point)
+}
+
+func (r *Runtime) computeRollBackSnapshotRequirementFromClaims(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) RollbackSnapshotRequirement {
+	input := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
+	corrupt := false
+
+	var rollbackPoint *PackageRollbackPoint
+	if r.container.PackageRepository != nil && operation.FromVersion != "" {
+		if rp, err := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion); err == nil {
+			rollbackPoint = &rp
+		}
+	}
+
+	if rollbackPoint != nil {
+		if rollbackPoint.ConfigSnapshotJSON != "" {
+			input.ConfigBeforeHash = packageSnapshotDigest([]byte(rollbackPoint.ConfigSnapshotJSON))
+		}
+		if rollbackPoint.ResourceSnapshotJSON != "" {
+			input.ResourceBeforeTreeHash = packageSnapshotDigest([]byte(rollbackPoint.ResourceSnapshotJSON))
+		}
+		if rollbackPoint.UserDataMigrationStateJSON != "" {
+			input.UserDataBeforeHash = packageSnapshotDigest([]byte(rollbackPoint.UserDataMigrationStateJSON))
+		}
+		if rollbackPoint.MigrationStateSnapshotJSON != "" {
+			var migrationState packageMigrationStateSnapshot
+			if json.Unmarshal([]byte(rollbackPoint.MigrationStateSnapshotJSON), &migrationState) != nil {
+				corrupt = true
+			} else {
+				if migrationState.Mode != "" && migrationState.Mode != "none" {
+					input.MigrationDefinitions = migrationState.Definitions
+				}
+				for i := range migrationState.Operations {
+					input.MigrationOperations = append(input.MigrationOperations, migrationState.Operations[i].Operation)
+				}
+			}
+		}
+	}
+
+	if r.container.ContributionRepository != nil && r.container.PermissionRepository != nil && r.container.ScopeRepository != nil {
+		contributions, _ := r.container.ContributionRepository.ListContributions(ctx, domain.ExtensionID(operation.ExtensionID))
+		requirements, _ := r.container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(operation.ExtensionID))
+		grants, _ := r.container.PermissionRepository.ListGrants(ctx, domain.ExtensionID(operation.ExtensionID))
+		scopeBindings, _ := r.container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(operation.ExtensionID))
+
+		sort.Slice(contributions, func(i, j int) bool { return string(contributions[i].ID) < string(contributions[j].ID) })
+		sort.Slice(requirements, func(i, j int) bool { return requirements[i].PermissionName < requirements[j].PermissionName })
+		sort.Slice(grants, func(i, j int) bool { return grants[i].PermissionName < grants[j].PermissionName })
+		sort.Slice(scopeBindings, func(i, j int) bool {
+			if scopeBindings[i].ScopeType != scopeBindings[j].ScopeType {
+				return scopeBindings[i].ScopeType < scopeBindings[j].ScopeType
+			}
+			return scopeBindings[i].ScopeID < scopeBindings[j].ScopeID
+		})
+
+		afterConfig := packageConfigSnapshot{
+			Contributions: contributions,
+			Permissions: packageConfigPermissionSnapshot{
+				Requirements: requirements,
+				Grants:       grants,
+			},
+			ScopeBindings: scopeBindings,
+			SchemaVersion: packageConfigSnapshotSchemaVersion,
+		}
+		if configJSON, err := json.Marshal(afterConfig); err == nil {
+			input.ConfigAfterHash = packageSnapshotDigest(configJSON)
+		}
+	}
+
+	if r.container.ResourceRepository != nil {
+		resources, _ := r.container.ResourceRepository.ListResources(ctx, domain.ExtensionID(operation.ExtensionID))
+		sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
+		afterResource := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
+		for _, resource := range resources {
+			resource.Metadata, _ = sanitizePackageSnapshotMap(resource.Metadata)
+			originalPath := resource.Reference
+			absOriginal, absErr := filepath.Abs(originalPath)
+			if absErr != nil {
+				continue
+			}
+			info, statErr := os.Lstat(absOriginal)
+			if statErr != nil {
+				continue
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				corrupt = true
+				continue
+			}
+			file, openErr := os.Open(absOriginal)
+			if openErr != nil {
+				continue
+			}
+			hasher := sha256.New()
+			if _, copyErr := io.Copy(hasher, file); copyErr != nil {
+				file.Close()
+				continue
+			}
+			file.Close()
+			afterResource.Entries = append(afterResource.Entries, packageResourceSnapshotEntry{
+				Resource:    resource,
+				ContentHash: "sha256:" + hex.EncodeToString(hasher.Sum(nil)),
+			})
+		}
+		if resourceJSON, err := json.Marshal(afterResource); err == nil {
+			input.ResourceAfterTreeHash = packageSnapshotDigest(resourceJSON)
+		}
+	}
+
+	req := ComputeRollbackSnapshotRequirement(input)
+	if corrupt && req.NoDataChange {
+		req.Required = true
+		req.NoDataChange = false
+		req.Reason = "live state validation failure, fail-closed"
+		req.RequirementHash = computeSnapshotRequirementHash(req)
+	}
+	return req
 }
 
 func isRollbackSnapshotExempt(req RollbackSnapshotRequirement, claims PackageConfirmationClaims) bool {
@@ -1022,27 +1195,37 @@ func validateUninstallArtifactDeletion(ctx context.Context, repo *PackageReposit
 
 func validateArtifactPolicyStepResult(ctx context.Context, repo *PackageRepository, operationID, artifactID string, expectedPolicy ArtifactPolicy) bool {
 	if artifactID == "" || operationID == "" {
+		fmt.Fprintf(os.Stderr, "DEBUG_FG: empty artifactID or operationID\n")
 		return false
 	}
 	steps, err := repo.ListOperationSteps(ctx, operationID)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "DEBUG_FG: list steps failed: %v\n", err)
 		return false
 	}
+	if len(steps) == 0 {
+		fmt.Fprintf(os.Stderr, "DEBUG_FG: no steps found for operationID=%s\n", operationID)
+	}
 	for _, step := range steps {
+		fmt.Fprintf(os.Stderr, "DEBUG_FG: checking step name=%s status=%s hasResult=%v\n", step.StepName, step.Status, step.ResultJSON != "")
 		if step.Status != "completed" || step.StepName != "remove_artifact" {
 			continue
 		}
 		if step.ResultJSON == "" || step.ResultJSON == "{}" {
+			fmt.Fprintf(os.Stderr, "DEBUG_FG: empty result json for remove_artifact step\n")
 			return false
 		}
-		var stepResult ArtifactPolicyStepResult
+		var stepResult RemoveArtifactStepResult
 		if json.Unmarshal([]byte(step.ResultJSON), &stepResult) != nil {
+			fmt.Printf("DEBUG_FG: unmarshal failed json=%s\n", step.ResultJSON)
 			return false
 		}
 		if stepResult.ArtifactID != artifactID {
+			fmt.Fprintf(os.Stderr, "DEBUG_FG: artifactID mismatch step=%s op=%s\n", stepResult.ArtifactID, artifactID)
 			return false
 		}
 		if stepResult.ArtifactPolicy != expectedPolicy {
+			fmt.Fprintf(os.Stderr, "DEBUG_FG: policy mismatch step=%s expected=%s\n", stepResult.ArtifactPolicy, expectedPolicy)
 			return false
 		}
 		switch expectedPolicy {
@@ -1058,20 +1241,24 @@ func validateArtifactPolicyStepResult(ctx context.Context, repo *PackageReposito
 			}
 		case ArtifactPolicyRetainArtifact, ArtifactPolicyRetainForRollback, ArtifactPolicyRetainForExport:
 			if !stepResult.Retained {
+				fmt.Fprintf(os.Stderr, "DEBUG_FG: retain branch but Retained=false json=%s\n", step.ResultJSON)
 				return false
 			}
 			if stepResult.RetentionState == "deleted" {
+				fmt.Fprintf(os.Stderr, "DEBUG_FG: retain branch but state=deleted json=%s\n", step.ResultJSON)
 				return false
 			}
 		default:
+			fmt.Printf("DEBUG_FG: unknown policy=%s\n", expectedPolicy)
 			return false
 		}
 		if stepResult.EvidenceHash == "" {
+			fmt.Fprintf(os.Stderr, "DEBUG_FG: empty evidence hash, json=%s\n", step.ResultJSON)
 			return false
 		}
 		var deletedAt time.Time
-		if stepResult.DeletedAt != nil {
-			deletedAt = *stepResult.DeletedAt
+		if !stepResult.DeletedAt.IsZero() {
+			deletedAt = stepResult.DeletedAt
 		}
 		recomputedEvidence := computeArtifactStepEvidenceHash(RemoveArtifactStepResult{
 			ArtifactID:         stepResult.ArtifactID,
@@ -1080,12 +1267,13 @@ func validateArtifactPolicyStepResult(ctx context.Context, repo *PackageReposito
 			Deleted:            stepResult.Deleted,
 			Retained:           stepResult.Retained,
 			RetentionState:     stepResult.RetentionState,
-			RemainingRefs:      int(stepResult.RemainingRefs),
+			RemainingRefs:      stepResult.RemainingRefs,
 			DeletedAt:          deletedAt,
-			EvidenceHashBefore: stepResult.BeforeStateHash,
-			EvidenceHashAfter:  stepResult.AfterStateHash,
+			EvidenceHashBefore: stepResult.EvidenceHashBefore,
+			EvidenceHashAfter:  stepResult.EvidenceHashAfter,
 		})
 		if recomputedEvidence != stepResult.EvidenceHash {
+			fmt.Fprintf(os.Stderr, "DEBUG_FG: evidence mismatch stored=%s recomputed=%s json=%s\n", stepResult.EvidenceHash, recomputedEvidence, step.ResultJSON)
 			return false
 		}
 		return true

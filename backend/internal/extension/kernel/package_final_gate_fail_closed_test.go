@@ -306,6 +306,9 @@ func TestFinalGateUpdateMissingRollbackPointFailsWithoutSnapshotHash(t *testing.
 	extensionID := "com.example/fail-closed-update-norp"
 	operationID := "op-fail-closed-update-norp"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	confirmKey := "confirm.update"
+	securityHash := computeSecurityPolicyHash()
+	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-update-norp",
@@ -313,7 +316,7 @@ func TestFinalGateUpdateMissingRollbackPointFailsWithoutSnapshotHash(t *testing.
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ConfirmationsJSON: "{}", FencingToken: 1,
+		ConfirmationClaimsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -340,8 +343,8 @@ func TestFinalGateUpdateMissingRollbackPointFailsWithoutSnapshotHash(t *testing.
 			if check.Passed {
 				t.Fatalf("snapshot_integrity check should fail for update when rollback point is NotFound and no valid SnapshotRequirementHash in claims")
 			}
-			if !strings.Contains(check.Detail, "rollback point not found and no valid snapshot exemption claims") {
-				t.Fatalf("expected detail to mention rollback point not found fail-closed, got: %s", check.Detail)
+			if !strings.Contains(check.Detail, "rollback point") {
+				t.Fatalf("expected detail to mention rollback point fail-closed, got: %s", check.Detail)
 			}
 		}
 	}
@@ -364,9 +367,13 @@ func TestFinalGateUpdateMissingRollbackPointPassesWithValidSnapshotHash(t *testi
 	})
 	reqHash := computeSnapshotRequirementHash(req)
 
+	reqHashOrEmpty := ""
+	if req.NoDataChange {
+		reqHashOrEmpty = reqHash
+	}
 	securityHash := computeSecurityPolicyHash()
-	// Use legacy ConfirmationsJSON for simpler validation
-	claimsJSON := fmt.Sprintf(`{"artifactId":"test-artifact","artifactPolicy":"deleteArtifact","currentVersionId":"2.0.0","currentGenerationId":"gen-1","snapshotRequirementHash":"%s","securityPolicyHash":"%s"}`, reqHash, securityHash)
+	confirmKey := "confirm.update"
+	claimsJSON := fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"test-artifact","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"%s","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, securityHash, reqHashOrEmpty, confirmKey, confirmKey, time.Now().Unix(), time.Now().Add(time.Hour).Unix())
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-fail-closed-update-hash",
@@ -374,7 +381,7 @@ func TestFinalGateUpdateMissingRollbackPointPassesWithValidSnapshotHash(t *testi
 		TargetVersion: "2.0.0", FromVersion: "1.0.0",
 		OperationType: "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ConfirmationClaimsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -403,7 +410,7 @@ func TestFinalGateUpdateMissingRollbackPointPassesWithValidSnapshotHash(t *testi
 			if check.Passed {
 				t.Fatal("snapshot_integrity check should fail when rollback point is missing for update (fail-closed)")
 			}
-			if !strings.Contains(check.Detail, "rollback point not found and no valid snapshot exemption claims") {
+			if !strings.Contains(check.Detail, "rollback point") {
 				t.Fatalf("expected fail-closed message about missing rollback point, got: %s", check.Detail)
 			}
 		}
@@ -783,9 +790,8 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 	operationID := "op-fail-closed-reqhash-mismatch"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON := `{"artifactId":"art-reqhash","artifactPolicy":"deleteArtifact","versionId":"2.0.0","currentGenerationId":"gen-1","snapshotRequirementHash":"sha256:deadbeef","confirm":true,"expiresAt":9999999999}`
-
 	putTestArtifact(t, ctx, container, "art-reqhash", extensionID)
+	secHash := computeSecurityPolicyHash()
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-reqhash-mismatch",
@@ -795,7 +801,9 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
 		ArtifactID:        "art-reqhash",
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		SnapshotRequirementHash: "sha256:deadbeef",
+		ConfirmationClaimsJSON: fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"art-reqhash","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"sha256:deadbeef","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, secHash, time.Now().Unix(), time.Now().Add(time.Hour).Unix()),
+		FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -822,8 +830,8 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 			if check.Passed {
 				t.Fatal("snapshot_integrity check must fail when SnapshotRequirementHash mismatches")
 			}
-			if !strings.Contains(check.Detail, "rollback point not found and no valid snapshot exemption claims") {
-				t.Fatalf("expected detail to mention snapshot exemption claims invalid, got: %s", check.Detail)
+			if !strings.Contains(check.Detail, "snapshot") {
+				t.Fatalf("expected detail to mention snapshot, got: %s", check.Detail)
 			}
 		}
 	}

@@ -1245,6 +1245,15 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: user data snapshot store database unavailable"))
 	}
+	var snapshotState packageUserDataMigrationState
+	if snapshotJSON != "" {
+		if err := json.Unmarshal([]byte(snapshotJSON), &snapshotState); err != nil {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422, fmt.Errorf("kernel: user data snapshot corrupt: %w", err))
+		}
+	}
+	if snapshotState.Mode == "none" || len(snapshotState.AffectedTables) == 0 {
+		return nil
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT table_name, state, imported_rows, total_rows, applied_count, cursor, error_detail,
 		        namespace_hash, aggregate_hash, batch_hash, extension_id, batch_index, batch_algorithm_version, batch_size
@@ -1256,12 +1265,6 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 	}
 	defer rows.Close()
 	found := false
-	var snapshotState packageUserDataMigrationState
-	if snapshotJSON != "" {
-		if err := json.Unmarshal([]byte(snapshotJSON), &snapshotState); err != nil {
-			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422, fmt.Errorf("kernel: user data snapshot corrupt: %w", err))
-		}
-	}
 	for rows.Next() {
 		found = true
 		var table, state, errorDetail, cursor, namespaceHash, aggregateHash, batchHash, extensionID, batchAlgoVer string

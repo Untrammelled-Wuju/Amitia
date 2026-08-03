@@ -724,7 +724,8 @@ func TestVerifyFailsOnNoJournals(t *testing.T) {
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
 	}
-	err = store.VerifyUserDataRestore(ctx, "op-nonexistent", "")
+	snapshotJSON := `{"mode":"repository","affectedTables":["users_v1"],"recordCounts":{"users_v1":3},"dataExports":{"users_v1":"[]"},"tableManifests":{"users_v1":{"tableName":"users_v1","recordCount":3,"schemaVersion":1,"extensionID":"com.example/test","canonicalTable":"users_v1","genesisHash":"sha256:aa","emptySetHash":"sha256:bb","batchHash":"sha256:cc","aggregateHash":"sha256:dd","batchAlgorithmVersion":"v1","batchSize":100,"namespaceHash":"sha256:ee"}}}`
+	err = store.VerifyUserDataRestore(ctx, "op-nonexistent", snapshotJSON)
 	if err == nil {
 		t.Fatal("expected error for no journals, got nil")
 	}

@@ -177,6 +177,9 @@ func (s *ResourceSnapshotStore) VerifyResourceSnapshotEntries(ctx context.Contex
 	}
 	contentStore := NewResourceContentStore(s.extRoot)
 	for _, entry := range snapshot.Entries {
+		if entry.RestoreStrategy == "uri_reference" {
+			continue
+		}
 		if entry.ContentStorageReference == "" {
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 422, fmt.Errorf("kernel: resource %s content storage reference missing", entry.Resource.ResourceID))
 		}
@@ -433,9 +436,6 @@ func (s *ResourceSnapshotStore) ComputeResourceTreeHash(ctx context.Context, ext
 		if originalPath == "" {
 			continue
 		}
-		if validateErr := ValidateResourcePath(originalPath, absExtRoot); validateErr != nil {
-			return "", validateErr
-		}
 		absPath, err := filepath.Abs(originalPath)
 		if err != nil {
 			return "", fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, err)
@@ -445,6 +445,10 @@ func (s *ResourceSnapshotStore) ComputeResourceTreeHash(ctx context.Context, ext
 			return "", fmt.Errorf("kernel: compute relative path for %s: %w", resource.ResourceID, err)
 		}
 		normalizedPath := filepath.ToSlash(strings.ToLower(relPath))
+		cleanRel := filepath.Clean(normalizedPath)
+		if cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+"/") || filepath.IsAbs(cleanRel) {
+			return "", fmt.Errorf("kernel: resource path %s escapes ext root", resource.ResourceID)
+		}
 
 		contentHash := extractResourceStringField(resource, "contentHash")
 		if contentHash == "" {

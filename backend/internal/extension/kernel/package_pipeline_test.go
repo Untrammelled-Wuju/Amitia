@@ -280,7 +280,18 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if updatedInstallation.Metadata["apiSecretRef"] != "secret://extensions/pipeline/api" || updatedInstallation.Metadata["userOverride"] == nil {
 		t.Fatalf("update must preserve user configuration and secret references: %+v", updatedInstallation.Metadata)
 	}
-	rolledBack, err := runtime.ExecutePackageRollback(ctx, preview.ExtensionID, "1.0.0", "user-1", "global", "", "")
+	rollbackConfirm, err := runtime.ConfirmPackageRollback(ctx, PackageRollbackConfirmationRequest{
+		ExtensionID:   preview.ExtensionID,
+		TargetVersion: "1.0.0",
+		UserID:        "user-1",
+		ScopeType:     "global",
+		ScopeID:       "",
+		Confirmations: map[string]bool{"confirm.rollback": true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rolledBack, err := runtime.ExecutePackageRollback(ctx, preview.ExtensionID, "1.0.0", "user-1", "global", "", rollbackConfirm.ConfirmationToken)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,6 +319,11 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil || !uninstallPreview.Installable {
 		t.Fatalf("uninstall preflight failed: %+v %v", uninstallPreview, err)
 	}
+	requiredUninstallItems := requiredUninstallConfirmations(uninstallPreview)
+	uninstallConfirmations := make(map[string]bool)
+	for _, item := range requiredUninstallItems {
+		uninstallConfirmations[item] = true
+	}
 	uninstallClaims := PackageUninstallConfirmationClaims{
 		ExtensionID:             preview.ExtensionID,
 		CurrentVersion:          uninstallPreview.CurrentVersion,
@@ -323,7 +339,9 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 		UserID:                  "user-1",
 		ScopeType:               "global",
 		ScopeID:                 "",
-		Confirmations:           map[string]bool{"confirm.uninstall.delete": true},
+		PolicyVersion:           packagePolicyVersion,
+		Confirmations:           uninstallConfirmations,
+		ConfirmedItems:          requiredUninstallItems,
 		ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
 	}
 	uninstallToken, err := runtime.SignUninstallConfirmation(uninstallClaims)

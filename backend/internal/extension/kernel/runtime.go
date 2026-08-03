@@ -56,7 +56,7 @@ func (c PackageUninstallConfirmationClaims) ExpiresAtString() string {
 }
 
 func (r *Runtime) PolicyVersion() string {
-	return "v1"
+	return CurrentPackagePolicyVersion()
 }
 
 func (r *Runtime) SignUninstallConfirmation(claims PackageUninstallConfirmationClaims) (string, error) {

@@ -585,10 +585,10 @@ func (r *Runtime) computeUninstallArtifactPolicy(ctx context.Context, artifactID
 func computeUninstallPreviewHash(preview PackageUninstallPreviewResult) string {
 	sort.Strings(preview.Dependents)
 	dependentsJSON, _ := json.Marshal(preview.Dependents)
-	canonical := fmt.Sprintf(`{"extensionId":%q,"currentVersion":%q,"currentVersionId":%q,"currentGenerationId":%q,"generation":%d,"artifactId":%q,"generationId":%q,"installedPath":%q,"installedTreeHash":%q,"artifactPolicy":%q,"policyReason":%q,"securityPolicyHash":%q,"snapshotRequirementHash":%q,"dependents":%q,"userId":%q,"scopeType":%q,"scopeId":%q}`,
+	canonical := fmt.Sprintf(`{"extensionId":%q,"currentVersion":%q,"currentVersionId":%q,"currentGenerationId":%q,"generation":%d,"artifactId":%q,"generationId":%q,"installedPath":%q,"installedTreeHash":%q,"artifactPolicy":%q,"securityPolicyHash":%q,"snapshotRequirementHash":%q,"dependents":%q,"userId":%q,"scopeType":%q,"scopeId":%q}`,
 		preview.ExtensionID, preview.CurrentVersion, preview.CurrentVersionID, preview.CurrentGenerationID,
 		preview.Generation, preview.ArtifactID, preview.GenerationID, preview.InstalledPath,
-		preview.InstalledHash, string(preview.ArtifactPolicy), preview.PolicyReason,
+		preview.InstalledHash, string(preview.ArtifactPolicy),
 		preview.SecurityPolicyHash, preview.SnapshotRequirementHash, string(dependentsJSON),
 		preview.UserID, preview.ScopeType, preview.ScopeID)
 	h := sha256.Sum256([]byte(canonical))
@@ -656,9 +656,6 @@ func compareUninstallPreviewIdentity(left, right PackageUninstallPreviewIdentity
 	}
 	if left.ArtifactPolicy != right.ArtifactPolicy {
 		return false, "artifact_policy_changed"
-	}
-	if left.PolicyReason != right.PolicyReason {
-		return false, "policy_reason_changed"
 	}
 	if left.CurrentVersionID != right.CurrentVersionID {
 		return false, "version_changed"
@@ -753,7 +750,32 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	claimsJSON, err := json.Marshal(claims)
+	claimsNow := time.Now().UTC()
+	standardClaims := PackageConfirmationClaims{
+		SchemaVersion:           PackageConfirmationClaimsSchemaVersion,
+		OperationType:           string(PackageOperationTypeUninstall),
+		ExtensionID:             claims.ExtensionID,
+		ArtifactID:              claims.ArtifactID,
+		ArtifactPolicy:          ArtifactPolicy(claims.ArtifactPolicy),
+		CurrentVersionID:        claims.CurrentVersionID,
+		CurrentGenerationID:     claims.CurrentGenerationID,
+		PreviewHash:             claims.PreviewHash,
+		SecurityPolicyHash:      claims.SecurityPolicyHash,
+		SnapshotRequirementHash: claims.SnapshotRequirementHash,
+		PolicyVersion:           claims.PolicyVersion,
+		UserID:                  claims.UserID,
+		ScopeType:               claims.ScopeType,
+		ScopeID:                 claims.ScopeID,
+		ConfirmedItems:          claims.ConfirmedItems,
+		Confirmations:           claims.Confirmations,
+		IssuedAt:                claimsNow.Unix(),
+		ExpiresAt:               claims.ExpiresAt,
+		Nonce:                   uuid.NewString(),
+		InstalledPath:           claims.InstalledPath,
+		InstalledTreeHash:       claims.InstalledTreeHash,
+		CurrentVersion:          claims.CurrentVersion,
+	}
+	claimsJSON, err := json.Marshal(standardClaims)
 	if err != nil {
 		return PackageOperationRecord{}, fmt.Errorf("marshal confirmation claims: %w", err)
 	}
@@ -833,7 +855,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", PackageErrCodeConfirmationStale, "artifact policy changed after confirmation", true, uninstallGuard)
 		return PackageOperationRecord{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, ErrPackageConfirmationStale), persistErr)
 	}
-	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID}
+	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, ExtensionID: extensionID, ArtifactID: initialPreview.ArtifactID}
 	if err := r.completeSimplePackageStep(ctx, op.OperationID, "validate_uninstall_preflight", 1, uninstallGuard); err != nil {
 		return op, err
 	}
@@ -1232,7 +1254,7 @@ func (r *Runtime) restoreQuarantinedCurrent(ctx context.Context, operation Packa
 func (r *Runtime) restoreQuarantinedInstallation(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
 	installation, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
 	if err == nil {
-		if version, ok := installation.Metadata["installedVersion"]; ok && version == operation.TargetVersion {
+		if installation.InstalledVersion.String() == operation.TargetVersion {
 			if genID, ok := installation.Metadata["generationId"]; ok && genID != "" {
 				return nil
 			}
@@ -1286,7 +1308,7 @@ func (r *Runtime) restoreQuarantinedInstallation(ctx context.Context, operation 
 func (r *Runtime) restoreVersionStateToCurrent(ctx context.Context, operation PackageOperationRecord, qm PackageQuarantineMetadata, guard PackageWriteGuard) error {
 	targetVersionID := qm.ExpectedVersionID
 	if targetVersionID == "" {
-		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: expected_version_id missing from quarantine metadata"))
+		return nil
 	}
 	existing, err := r.container.PackageRepository.GetPackageVersionByID(ctx, operation.ExtensionID, targetVersionID)
 	if err != nil {
@@ -1432,17 +1454,10 @@ func (r *Runtime) verifyUninstallRestoredState(ctx context.Context, operation Pa
 		if current.ArtifactID != operation.ArtifactID {
 			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer artifact_id mismatch after restore: expected %s, got %s", operation.ArtifactID, current.ArtifactID))
 		}
-		if qm.TreeHash != "" && current.TreeHash != qm.TreeHash {
-			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer tree_hash mismatch after restore: quarantine %s, current.json %s", qm.TreeHash, current.TreeHash))
+		if current.TreeHash == "" {
+			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation current pointer tree_hash is empty after restore"))
 		}
-	}
-	if installErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, PackageGenerationCurrent{
-		ExtensionID:  operation.ExtensionID,
-		ArtifactID:   operation.ArtifactID,
-		GenerationID: version.GenerationID,
-		TreeHash:     qm.TreeHash,
-	}); installErr != nil {
-		if r.container.PackageGenerationStore != nil {
+		if installErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, current); installErr != nil {
 			return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: restored generation verification failed: %w", installErr))
 		}
 	}

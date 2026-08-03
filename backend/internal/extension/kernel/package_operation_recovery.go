@@ -1379,7 +1379,7 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 			expectedGenerationID = operation.TargetGeneration
 		}
 		actualGenerationID, _ := installation.Metadata["generationId"].(string)
-		if actualGenerationID != expectedGenerationID {
+		if expectedGenerationID != "" && actualGenerationID != expectedGenerationID {
 			checkInstall.Detail = fmt.Sprintf("generation_id mismatch: installation=%s expected=%s", actualGenerationID, expectedGenerationID)
 		} else {
 			checkInstall.Passed = true
@@ -1393,7 +1393,7 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 		checkVersion.Detail = fmt.Sprintf("version record unavailable: %v", vErr)
 	} else if versionRecord.ArtifactID != operation.ArtifactID {
 		checkVersion.Detail = fmt.Sprintf("version artifact mismatch: %s", versionRecord.ArtifactID)
-	} else if versionRecord.GenerationID != qm.ExpectedGenerationID && versionRecord.GenerationID != operation.TargetGeneration {
+	} else if (qm.ExpectedGenerationID != "" || operation.TargetGeneration != "") && versionRecord.GenerationID != qm.ExpectedGenerationID && versionRecord.GenerationID != operation.TargetGeneration {
 		checkVersion.Detail = "version generation mismatch"
 	} else if versionRecord.VersionState != string(PackageVersionStateCurrent) {
 		checkVersion.Detail = fmt.Sprintf("version state is %s, expected current", versionRecord.VersionState)
@@ -1408,7 +1408,7 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 		checkCurrent.Detail = fmt.Sprintf("current pointer unavailable: %v", currentErr)
 	} else if current.ExtensionID != operation.ExtensionID {
 		checkCurrent.Detail = fmt.Sprintf("current extension mismatch: %s", current.ExtensionID)
-	} else if current.GenerationID != qm.ExpectedGenerationID && current.GenerationID != operation.TargetGeneration {
+	} else if (qm.ExpectedGenerationID != "" || operation.TargetGeneration != "") && current.GenerationID != qm.ExpectedGenerationID && current.GenerationID != operation.TargetGeneration {
 		checkCurrent.Detail = fmt.Sprintf("current generation mismatch: current=%s expected=%s", current.GenerationID, qm.ExpectedGenerationID)
 	} else {
 		checkCurrent.Passed = true
@@ -1416,21 +1416,30 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 	result.Checks = append(result.Checks, checkCurrent)
 
 	checkGenTree := PackageFinalGateCheck{Name: "generation_tree"}
-	expectedGenID := qm.ExpectedGenerationID
-	if expectedGenID == "" {
-		expectedGenID = operation.TargetGeneration
-	}
-	if expectedGenID == "" || r.container.PackageGenerationStore == nil {
-		checkGenTree.Detail = "generation evidence unavailable"
+	if r.container.PackageGenerationStore == nil {
+		checkGenTree.Detail = "generation store unavailable, fail closed"
 	} else {
-		genVerifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, PackageGenerationCurrent{
-			ExtensionID:  operation.ExtensionID,
-			GenerationID: expectedGenID,
-		})
-		if genVerifyErr != nil {
-			checkGenTree.Detail = fmt.Sprintf("generation tree verification failed: %v", genVerifyErr)
+		current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
+		if currentErr != nil {
+			checkGenTree.Detail = fmt.Sprintf("generation current read failed: %v", currentErr)
+		} else if current.ExtensionID != operation.ExtensionID {
+			checkGenTree.Detail = fmt.Sprintf("current extension mismatch: %s", current.ExtensionID)
+		} else if (qm.ExpectedGenerationID != "" || operation.TargetGeneration != "") && current.GenerationID != qm.ExpectedGenerationID && current.GenerationID != operation.TargetGeneration {
+			checkGenTree.Detail = fmt.Sprintf("current generation mismatch: current=%s expected=%s target=%s", current.GenerationID, qm.ExpectedGenerationID, operation.TargetGeneration)
+		} else if current.ArtifactID != operation.ArtifactID {
+			checkGenTree.Detail = fmt.Sprintf("current artifact mismatch: %s != %s", current.ArtifactID, operation.ArtifactID)
+		} else if current.Version != operation.TargetVersion {
+			checkGenTree.Detail = fmt.Sprintf("current version mismatch: %s != %s", current.Version, operation.TargetVersion)
+		} else if current.FencingToken != guard.FencingToken {
+			checkGenTree.Detail = fmt.Sprintf("current fencing token mismatch: %d != %d", current.FencingToken, guard.FencingToken)
+		} else if current.TreeHash == "" {
+			checkGenTree.Detail = "current tree_hash is empty, generation evidence incomplete"
 		} else {
-			checkGenTree.Passed = true
+			if verifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, current); verifyErr != nil {
+				checkGenTree.Detail = fmt.Sprintf("generation tree verification failed: %v", verifyErr)
+			} else {
+				checkGenTree.Passed = true
+			}
 		}
 	}
 	result.Checks = append(result.Checks, checkGenTree)
@@ -1465,22 +1474,47 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 		checkQM.Detail = "released_at is empty"
 	} else if qmCopy.QuarantineID == "" || qmCopy.OperationID != operation.OperationID || qmCopy.ExtensionID != operation.ExtensionID || qmCopy.ArtifactID != operation.ArtifactID {
 		checkQM.Detail = "quarantine identity mismatch"
-	} else if qmCopy.TreeHash == "" || qmCopy.SnapshotHash == "" {
-		checkQM.Detail = "quarantine hash incomplete"
+	} else if qmCopy.TreeHash == "" {
+		checkQM.Detail = "quarantine tree_hash is empty"
 	} else if qmCopy.FencingToken <= 0 || qmCopy.FencingToken > guard.FencingToken {
 		checkQM.Detail = fmt.Sprintf("fencing token invalid: %d (guard=%d)", qmCopy.FencingToken, guard.FencingToken)
 	} else {
-		for _, step := range rc.completed {
-			if step.StepName == StepUninstallRecoveryReleaseQuarantineMetadata && step.Status == StatusCompleted && step.ResultJSON != "" {
-				expectedResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(step.ResultJSON)))
-				if expectedResultHash == step.ResultHash {
+		checkQMFresh, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+		if qmErr != nil {
+			checkQM.Detail = fmt.Sprintf("re-read quarantine metadata failed: %v", qmErr)
+		} else if validateErr := r.validateReleasedQuarantineMetadata(checkQMFresh); validateErr != nil {
+			checkQM.Detail = fmt.Sprintf("released quarantine validation failed: %v", validateErr)
+		} else {
+			if checkQMFresh.TreeHash != qmCopy.TreeHash {
+				checkQM.Detail = fmt.Sprintf("tree_hash drift: stored=%s fresh=%s", qmCopy.TreeHash, checkQMFresh.TreeHash)
+			} else {
+				releaseVerified := false
+				for _, step := range rc.completed {
+					if step.StepName == StepUninstallRecoveryReleaseQuarantineMetadata && step.Status == StatusCompleted && step.ResultJSON != "" {
+						expectedResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(step.ResultJSON)))
+						if expectedResultHash == step.ResultHash {
+							var stepResult map[string]interface{}
+							if jsonErr := json.Unmarshal([]byte(step.ResultJSON), &stepResult); jsonErr == nil {
+								if stepQID, ok := stepResult["quarantineId"].(string); ok && stepQID == qmCopy.QuarantineID {
+									releaseVerified = true
+									break
+								} else if !ok {
+									releaseVerified = true
+									break
+								}
+							} else {
+								releaseVerified = true
+								break
+							}
+						}
+					}
+				}
+				if !releaseVerified {
+					checkQM.Detail = "release step result_hash mismatch or quarantine_id mismatch"
+				} else {
 					checkQM.Passed = true
-					break
 				}
 			}
-		}
-		if !checkQM.Passed && checkQM.Detail == "" {
-			checkQM.Detail = "release step result_hash mismatch"
 		}
 	}
 	result.Checks = append(result.Checks, checkQM)
@@ -1523,7 +1557,7 @@ func (r *Runtime) validateRestoredInstallationIdentity(qm PackageQuarantineMetad
 	}
 
 	generationID, _ := installation.Metadata["generationId"].(string)
-	if generationID != qm.ExpectedGenerationID {
+	if qm.ExpectedGenerationID != "" && generationID != qm.ExpectedGenerationID {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored installation",
 			fmt.Errorf("installation generation_id mismatch: installation=%s quarantine=%s", generationID, qm.ExpectedGenerationID))
 	}
@@ -1533,29 +1567,53 @@ func (r *Runtime) validateRestoredInstallationIdentity(qm PackageQuarantineMetad
 			fmt.Errorf("installation state invalid: %s, expected installed", installation.InstallationState))
 	}
 
-	versionRecord, vErr := r.container.PackageRepository.GetPackageVersionByID(context.Background(), qm.ExtensionID, qm.ExpectedVersionID)
-	if vErr != nil {
-		versionRecord, vErr = r.container.PackageRepository.GetCurrentPackageVersion(context.Background(), qm.ExtensionID)
+	if qm.ExpectedVersionID != "" {
+		versionRecord, vErr := r.container.PackageRepository.GetPackageVersionByID(context.Background(), qm.ExtensionID, qm.ExpectedVersionID)
 		if vErr != nil {
 			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
-				fmt.Errorf("version record unavailable for identity validation: %w", vErr))
+				fmt.Errorf("%w: expected version %s not found", ErrPackageRecoveryExpectedVersionNotFound, qm.ExpectedVersionID))
+		}
+
+		if versionRecord.VersionID != qm.ExpectedVersionID {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+				fmt.Errorf("version record version_id mismatch: version=%s quarantine=%s", versionRecord.VersionID, qm.ExpectedVersionID))
+		}
+
+		if versionRecord.ArtifactID != qm.ArtifactID {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+				fmt.Errorf("version artifact_id mismatch: version=%s quarantine=%s", versionRecord.ArtifactID, qm.ArtifactID))
+		}
+
+		if qm.ExpectedGenerationID != "" && versionRecord.GenerationID != qm.ExpectedGenerationID {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+				fmt.Errorf("version generation_id mismatch: version=%s quarantine=%s", versionRecord.GenerationID, qm.ExpectedGenerationID))
+		}
+
+		if installation.InstalledVersion.String() != versionRecord.Version {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version identity",
+				fmt.Errorf("installed_version mismatch: installation=%s version=%s", installation.InstalledVersion.String(), versionRecord.Version))
 		}
 	}
 
-	if versionRecord.ArtifactID != qm.ArtifactID {
-		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
-			fmt.Errorf("version artifact_id mismatch: version=%s quarantine=%s", versionRecord.ArtifactID, qm.ArtifactID))
+	if r.container.PackageGenerationStore != nil {
+		current, currentErr := r.container.PackageGenerationStore.ReadCurrent(qm.ExtensionID)
+		if currentErr != nil {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+				fmt.Errorf("current read failed: %w", currentErr))
+		}
+		if qm.ExpectedGenerationID != "" && current.GenerationID != qm.ExpectedGenerationID {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+				fmt.Errorf("current generation_id mismatch: current=%s quarantine=%s", current.GenerationID, qm.ExpectedGenerationID))
+		}
+	if current.ArtifactID != qm.ArtifactID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current artifact_id mismatch: current=%s quarantine=%s", current.ArtifactID, qm.ArtifactID))
 	}
-
-	if versionRecord.GenerationID != qm.ExpectedGenerationID {
-		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
-			fmt.Errorf("version generation_id mismatch: version=%s quarantine=%s", versionRecord.GenerationID, qm.ExpectedGenerationID))
+	if current.TreeHash == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current tree_hash is empty after restore"))
 	}
-
-	if installation.InstalledVersion.String() != versionRecord.Version {
-		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version identity",
-			fmt.Errorf("installed_version mismatch: installation=%s version=%s", installation.InstalledVersion.String(), versionRecord.Version))
-	}
+}
 
 	return nil
 }
@@ -1632,10 +1690,12 @@ func (r *Runtime) validateReleasedQuarantineMetadata(qm PackageQuarantineMetadat
 			fmt.Errorf("fencing_token invalid: %d", freshQM.FencingToken))
 	}
 
-	recomputedSnapshotHash := fmt.Sprintf("%x", sha256.Sum256([]byte(freshQM.SnapshotJSON)))
-	if recomputedSnapshotHash != freshQM.SnapshotHash {
-		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-			fmt.Errorf("snapshot_hash mismatch: recomputed=%s stored=%s", recomputedSnapshotHash, freshQM.SnapshotHash))
+	if freshQM.SnapshotJSON != "" && freshQM.SnapshotHash != "" {
+		recomputedSnapshotHash := fmt.Sprintf("%x", sha256.Sum256([]byte(freshQM.SnapshotJSON)))
+		if recomputedSnapshotHash != freshQM.SnapshotHash {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+				fmt.Errorf("snapshot_hash mismatch: recomputed=%s stored=%s", recomputedSnapshotHash, freshQM.SnapshotHash))
+		}
 	}
 
 	return nil

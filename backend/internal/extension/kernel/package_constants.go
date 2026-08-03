@@ -59,7 +59,7 @@ const (
 	StepUninstallRecoveryReleaseQuarantineMetadata = "uninstall_recovery.release_quarantine_metadata"
 	StepUninstallRecoveryFinalGate                 = "uninstall_recovery.final_gate"
 	StepUninstallRecoveryFinalize                  = "uninstall_recovery.finalize"
-	StepRemoveArtifact                             = "uninstall.remove_artifact"
+	StepRemoveArtifact                             = "remove_artifact"
 )
 
 var legacyStepNameMap = map[string]string{

@@ -160,22 +160,47 @@ func (r *PackageRepository) FindArtifactReference(ctx context.Context, artifactI
 	return &ref, nil
 }
 
-func (r *PackageRepository) GetActiveArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) (PackageArtifactReference, error) {
-	var ref PackageArtifactReference
-	err := r.db.QueryRowContext(ctx,
+func (r *PackageRepository) ListActiveArtifactReferences(ctx context.Context, artifactID, referenceType, ownerID string) ([]PackageArtifactReference, error) {
+	rows, err := r.db.QueryContext(ctx,
 		`SELECT reference_id, artifact_id, reference_type, reference_owner_id, expires_at, created_at, released_at
 		FROM extension_package_artifact_references
-		WHERE artifact_id=? AND reference_type=? AND reference_owner_id=? AND released_at=''
-		LIMIT 1`, artifactID, referenceType, ownerID).Scan(
-		&ref.ReferenceID, &ref.ArtifactID, &ref.ReferenceType, &ref.ReferenceOwnerID,
-		&ref.ExpiresAt, &ref.CreatedAt, &ref.ReleasedAt)
+		WHERE artifact_id=? AND reference_type=? AND reference_owner_id=? AND released_at=''`,
+		artifactID, referenceType, ownerID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ref, NewRepositoryError(RepositoryErrorNotFound, err)
-		}
-		return ref, err
+		return nil, err
 	}
-	return ref, nil
+	defer rows.Close()
+	var refs []PackageArtifactReference
+	for rows.Next() {
+		var ref PackageArtifactReference
+		if err := rows.Scan(&ref.ReferenceID, &ref.ArtifactID, &ref.ReferenceType, &ref.ReferenceOwnerID,
+			&ref.ExpiresAt, &ref.CreatedAt, &ref.ReleasedAt); err != nil {
+			return nil, err
+		}
+		if ref.ExpiresAt != "" {
+			if expiresAt, parseErr := time.Parse(time.RFC3339Nano, ref.ExpiresAt); parseErr == nil && expiresAt.Before(time.Now().UTC()) {
+				continue
+			}
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
+}
+
+func (r *PackageRepository) GetActiveArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) (PackageArtifactReference, error) {
+	refs, err := r.ListActiveArtifactReferences(ctx, artifactID, referenceType, ownerID)
+	if err != nil {
+		var empty PackageArtifactReference
+		if errors.Is(err, sql.ErrNoRows) {
+			return empty, NewRepositoryError(RepositoryErrorNotFound, err)
+		}
+		return empty, err
+	}
+	if len(refs) == 0 {
+		var empty PackageArtifactReference
+		return empty, NewRepositoryError(RepositoryErrorNotFound, fmt.Errorf("no active reference"))
+	}
+	return refs[0], nil
 }
 
 func (r *PackageRepository) EnsureArtifactReference(ctx context.Context, expectedArtifactID, expectedReferenceType, expectedOwnerID string, expiresAt time.Time) error {
