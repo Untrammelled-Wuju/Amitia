@@ -20,27 +20,27 @@ import (
 )
 
 type PackageUninstallPreviewResult struct {
-	ExtensionID            string         `json:"extensionId"`
-	CurrentVersion         string         `json:"currentVersion"`
-	CurrentVersionID       string         `json:"currentVersionId,omitempty"`
-	CurrentGenerationID    string         `json:"currentGenerationId,omitempty"`
-	Generation             int64          `json:"generation"`
-	Enabled                bool           `json:"enabled"`
-	Dependents             []string       `json:"dependents"`
-	InstalledPath          string         `json:"installedPath"`
-	InstalledHash          string         `json:"installedTreeHash"`
-	ArtifactID             string         `json:"artifactId"`
-	Installable            bool           `json:"uninstallable"`
-	GenerationID           string         `json:"generationId"`
-	OperationID            string         `json:"operationId"`
-	ArtifactPolicy         ArtifactPolicy `json:"artifactPolicy,omitempty"`
-	PolicyReason           string         `json:"policyReason,omitempty"`
-	PreviewHash            string         `json:"previewHash,omitempty"`
-	SecurityPolicyHash     string         `json:"securityPolicyHash,omitempty"`
-	SnapshotRequirementHash string        `json:"snapshotRequirementHash,omitempty"`
-	UserID                 string         `json:"userId,omitempty"`
-	ScopeType              string         `json:"scopeType,omitempty"`
-	ScopeID                string         `json:"scopeId,omitempty"`
+	ExtensionID             string         `json:"extensionId"`
+	CurrentVersion          string         `json:"currentVersion"`
+	CurrentVersionID        string         `json:"currentVersionId,omitempty"`
+	CurrentGenerationID     string         `json:"currentGenerationId,omitempty"`
+	Generation              int64          `json:"generation"`
+	Enabled                 bool           `json:"enabled"`
+	Dependents              []string       `json:"dependents"`
+	InstalledPath           string         `json:"installedPath"`
+	InstalledHash           string         `json:"installedTreeHash"`
+	ArtifactID              string         `json:"artifactId"`
+	Installable             bool           `json:"uninstallable"`
+	GenerationID            string         `json:"generationId"`
+	OperationID             string         `json:"operationId"`
+	ArtifactPolicy          ArtifactPolicy `json:"artifactPolicy,omitempty"`
+	PolicyReason            string         `json:"policyReason,omitempty"`
+	PreviewHash             string         `json:"previewHash,omitempty"`
+	SecurityPolicyHash      string         `json:"securityPolicyHash,omitempty"`
+	SnapshotRequirementHash string         `json:"snapshotRequirementHash,omitempty"`
+	UserID                  string         `json:"userId,omitempty"`
+	ScopeType               string         `json:"scopeType,omitempty"`
+	ScopeID                 string         `json:"scopeId,omitempty"`
 }
 
 func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, version, userID, scopeType, scopeID, confirmationToken string) (KernelInstallResult, error) {
@@ -118,7 +118,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		ArtifactID: artifact.ArtifactID, ConfirmationsJSON: string(confirmedItemsJSON),
 		ConfirmationClaimsJSON: string(claimsJSON), SnapshotRequirementHash: rollbackClaims.SnapshotRequirementHash,
 		PreviewSessionID: rollbackClaims.PreviewSessionID,
-		IdempotencyKey: idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
+		IdempotencyKey:   idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "rollback", ExtensionID: extensionID, TargetVersion: version,
 			ArtifactID: artifact.ArtifactID, ScopeType: scopeType, ScopeID: scopeID,
 			PreviewSessionID: rollbackClaims.PreviewSessionID,
@@ -755,7 +755,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		UserID: userID, ScopeType: scopeType, ScopeID: scopeID, ExtensionID: extensionID,
 		TargetVersion: initialPreview.CurrentVersion, OperationType: "uninstall", Status: "created", CurrentStep: "created",
 		ArtifactID: initialPreview.ArtifactID, ConfirmationsJSON: string(confirmationsJSON),
-		ConfirmationClaimsJSON: string(claimsJSON),
+		ConfirmationClaimsJSON:  string(claimsJSON),
 		SnapshotRequirementHash: claims.SnapshotRequirementHash,
 		IdempotencyKey:          idempotencyKey, RequestHash: computePackageRequestHash(PackageOperationRecord{
 			OperationType: "uninstall", ExtensionID: extensionID, TargetVersion: initialPreview.CurrentVersion,
@@ -815,7 +815,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	leaseIdentity := buildUninstallPreviewIdentity(preview, r.PolicyVersion())
 	same, driftCategory := compareUninstallPreviewIdentity(initialIdentity, leaseIdentity)
 	if !preview.Installable || !same {
-		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", "PACKAGE_UNINSTALL_PREFLIGHT_CHANGED", "uninstall preflight changed after acquiring lease: " + driftCategory, true, uninstallGuard)
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", "PACKAGE_UNINSTALL_PREFLIGHT_CHANGED", "uninstall preflight changed after acquiring lease: "+driftCategory, true, uninstallGuard)
 		return PackageOperationRecord{}, errors.Join(fmt.Errorf("kernel: uninstall preflight changed: %s", driftCategory), persistErr)
 	}
 	if string(preview.ArtifactPolicy) != claims.ArtifactPolicy {

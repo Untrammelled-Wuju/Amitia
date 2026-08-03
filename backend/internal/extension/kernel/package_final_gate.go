@@ -252,35 +252,35 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 					} else {
 						checkArtifact.Detail = fmt.Sprintf("delete policy: artifact query failed, fail closed: %v", artifactErr)
 					}
-			case ArtifactPolicyRetainArtifact, ArtifactPolicyRetainForRollback, ArtifactPolicyRetainForExport:
-				if artifactErr != nil {
-					checkArtifact.Detail = fmt.Sprintf("retain policy: artifact unavailable: %v", artifactErr)
-				} else if artifact.RetentionState == "deleted" || artifact.DeletedAt != "" {
-					checkArtifact.Detail = "retain policy: artifact is in deleted state"
-				} else if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
-					checkArtifact.Detail = "retain policy: remove_artifact step evidence incomplete"
-				} else {
-					var requiredRefType string
-					switch expectedPolicy {
-					case ArtifactPolicyRetainForRollback:
-						requiredRefType = ArtifactReferenceRollbackPoint
-					case ArtifactPolicyRetainForExport:
-						requiredRefType = ArtifactReferenceExportLease
-					}
-					if requiredRefType != "" {
-						hasActiveRef, refOwner, refErr := r.container.PackageRepository.AcquireArtifactReferenceOwnershipProof(ctx, operation.ArtifactID, requiredRefType, operation.ExtensionID)
-						if refErr != nil {
-							checkArtifact.Detail = fmt.Sprintf("retain policy: reference proof query failed: %v", refErr)
-						} else if !hasActiveRef {
-							checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference owned by %s for retained artifact (reference proof required)", requiredRefType, operation.ExtensionID)
+				case ArtifactPolicyRetainArtifact, ArtifactPolicyRetainForRollback, ArtifactPolicyRetainForExport:
+					if artifactErr != nil {
+						checkArtifact.Detail = fmt.Sprintf("retain policy: artifact unavailable: %v", artifactErr)
+					} else if artifact.RetentionState == "deleted" || artifact.DeletedAt != "" {
+						checkArtifact.Detail = "retain policy: artifact is in deleted state"
+					} else if !validateArtifactPolicyStepResult(ctx, r.container.PackageRepository, operationID, operation.ArtifactID, expectedPolicy) {
+						checkArtifact.Detail = "retain policy: remove_artifact step evidence incomplete"
+					} else {
+						var requiredRefType string
+						switch expectedPolicy {
+						case ArtifactPolicyRetainForRollback:
+							requiredRefType = ArtifactReferenceRollbackPoint
+						case ArtifactPolicyRetainForExport:
+							requiredRefType = ArtifactReferenceExportLease
+						}
+						if requiredRefType != "" {
+							hasActiveRef, refOwner, refErr := r.container.PackageRepository.AcquireArtifactReferenceOwnershipProof(ctx, operation.ArtifactID, requiredRefType, operation.ExtensionID)
+							if refErr != nil {
+								checkArtifact.Detail = fmt.Sprintf("retain policy: reference proof query failed: %v", refErr)
+							} else if !hasActiveRef {
+								checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference owned by %s for retained artifact (reference proof required)", requiredRefType, operation.ExtensionID)
+							} else {
+								checkArtifact.Detail = fmt.Sprintf("retain policy: verified %s reference owner=%s", requiredRefType, refOwner)
+								checkArtifact.Passed = true
+							}
 						} else {
-							checkArtifact.Detail = fmt.Sprintf("retain policy: verified %s reference owner=%s", requiredRefType, refOwner)
 							checkArtifact.Passed = true
 						}
-					} else {
-						checkArtifact.Passed = true
 					}
-				}
 				default:
 					checkArtifact.Detail = fmt.Sprintf("unknown artifact policy in claims: %s", expectedPolicy)
 				}
@@ -1034,29 +1034,29 @@ func validateArtifactPolicyStepResult(ctx context.Context, repo *PackageReposito
 		default:
 			return false
 		}
-	if stepResult.EvidenceHash == "" {
-		return false
+		if stepResult.EvidenceHash == "" {
+			return false
+		}
+		var deletedAt time.Time
+		if stepResult.DeletedAt != nil {
+			deletedAt = *stepResult.DeletedAt
+		}
+		recomputedEvidence := computeArtifactStepEvidenceHash(RemoveArtifactStepResult{
+			ArtifactID:         stepResult.ArtifactID,
+			ExtensionID:        stepResult.ExtensionID,
+			ArtifactPolicy:     stepResult.ArtifactPolicy,
+			Deleted:            stepResult.Deleted,
+			Retained:           stepResult.Retained,
+			RetentionState:     stepResult.RetentionState,
+			RemainingRefs:      int(stepResult.RemainingRefs),
+			DeletedAt:          deletedAt,
+			EvidenceHashBefore: stepResult.BeforeStateHash,
+			EvidenceHashAfter:  stepResult.AfterStateHash,
+		})
+		if recomputedEvidence != stepResult.EvidenceHash {
+			return false
+		}
+		return true
 	}
-	var deletedAt time.Time
-	if stepResult.DeletedAt != nil {
-		deletedAt = *stepResult.DeletedAt
-	}
-	recomputedEvidence := computeArtifactStepEvidenceHash(RemoveArtifactStepResult{
-		ArtifactID:         stepResult.ArtifactID,
-		ExtensionID:        stepResult.ExtensionID,
-		ArtifactPolicy:     stepResult.ArtifactPolicy,
-		Deleted:            stepResult.Deleted,
-		Retained:           stepResult.Retained,
-		RetentionState:     stepResult.RetentionState,
-		RemainingRefs:      int(stepResult.RemainingRefs),
-		DeletedAt:          deletedAt,
-		EvidenceHashBefore: stepResult.BeforeStateHash,
-		EvidenceHashAfter:  stepResult.AfterStateHash,
-	})
-	if recomputedEvidence != stepResult.EvidenceHash {
-		return false
-	}
-	return true
-}
 	return false
 }

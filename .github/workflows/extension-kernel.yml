@@ -127,18 +127,12 @@ jobs:
         working-directory: backend
         run: |
           go list -json ./internal/extension > extension-package.json
-          if grep -q "package_service.go" extension-package.json; then
-            echo "ERROR: default build includes package_service.go"
-            exit 1
-          fi
-          if grep -q "package_installer.go" extension-package.json; then
-            echo "ERROR: default build includes package_installer.go"
-            exit 1
-          fi
-          if grep -q "package_lifecycle.go" extension-package.json; then
-            echo "ERROR: default build includes package_lifecycle.go"
-            exit 1
-          fi
+          for f in "package_service.go" "package_installer.go" "package_lifecycle.go"; do
+            if jq -e --arg f "$f" '.GoFiles | map(select(. == $f)) | length > 0' extension-package.json | grep -q true; then
+              echo "ERROR: default build includes $f"
+              exit 1
+            fi
+          done
       - name: Build production server
         working-directory: backend
         run: |

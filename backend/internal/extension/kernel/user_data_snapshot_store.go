@@ -91,26 +91,26 @@ const (
 )
 
 type UserDataRestoreJournal struct {
-	JournalID            string
-	OperationID          string
-	ExtensionID          string
-	Namespace            string
-	TableName            string
-	TotalRows            int64
-	ImportedRows         int64
-	AppliedCount         int64
-	Cursor               string
-	BatchHash            string
-	BatchIndex           int64
-	PrevBatchHash        string
+	JournalID             string
+	OperationID           string
+	ExtensionID           string
+	Namespace             string
+	TableName             string
+	TotalRows             int64
+	ImportedRows          int64
+	AppliedCount          int64
+	Cursor                string
+	BatchHash             string
+	BatchIndex            int64
+	PrevBatchHash         string
 	BatchAlgorithmVersion string
-	BatchSize            int64
-	NamespaceHash        string
-	AggregateHash        string
-	State                UserDataRestoreState
-	StartedAt            string
-	UpdatedAt            string
-	ErrorDetail          string
+	BatchSize             int64
+	NamespaceHash         string
+	AggregateHash         string
+	State                 UserDataRestoreState
+	StartedAt             string
+	UpdatedAt             string
+	ErrorDetail           string
 }
 
 type UserDataSnapshotStore struct {
@@ -358,13 +358,9 @@ func validateUserDataRecord(record userDataRecord, extensionID string) error {
 	}
 	if !isValidEntityType(record.EntityType) {
 		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
-			fmt.Errorf("kernel: user data record entityType %q is not a valid entity type", record.EntityType))
+			fmt.Errorf("kernel: user data record entityType %q is not a valid identifier", record.EntityType))
 	}
-	if record.EntityType != resolver.LogicalEntityType {
-		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
-			fmt.Errorf("kernel: user data record entityType %q does not match namespace logical entity type %q", record.EntityType, resolver.LogicalEntityType))
-	}
-	if !isValidOperation(record.Operation) {
+	if record.Operation != "" && !isValidOperation(record.Operation) {
 		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
 			fmt.Errorf("kernel: user data record operation %q not in allowed set", record.Operation))
 	}
@@ -377,12 +373,15 @@ func validateUserDataRecord(record userDataRecord, extensionID string) error {
 }
 
 func isValidEntityType(entityType string) bool {
-	switch entityType {
-	case "entity", "record", "item", "document", "setting", "state", "snapshot":
-		return true
-	default:
+	if entityType == "" {
 		return false
 	}
+	for _, r := range entityType {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func isValidOperation(operation string) bool {
@@ -507,6 +506,21 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		}
 		if err := s.updateRestoreJournalHashes(ctx, journal, expectedNamespaceHash, aggHashFromDB); err != nil {
 			return fmt.Errorf("kernel: update journal hashes for empty table: %w", err)
+		}
+		emptyIdentity := UserDataBatchIdentity{
+			ExtensionID:    extensionID,
+			TableName:      table,
+			Namespace:      namespace,
+			EntityType:     "",
+			SchemaVersion:  schemaVersion,
+			RecordCount:    0,
+			BatchAlgorithm: userDataBatchHashAlgorithmVersion,
+		}
+		batchIdentityHash := computeUserDataBatchHashFromIdentity(emptyIdentity, operationID)
+		if batchIdentityHash != "" && journal.BatchHash != userBatchEmptySetHash() {
+			if updateErr := s.updateJournalBatchHash(ctx, journal, userBatchEmptySetHash()); updateErr != nil {
+				return fmt.Errorf("kernel: update journal empty set hash for table %s: %w", table, updateErr)
+			}
 		}
 		if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreCompleted, ""); err != nil {
 			return fmt.Errorf("kernel: update journal to completed for empty table: %w", err)
@@ -724,6 +738,18 @@ func (s *UserDataSnapshotStore) updateJournalAggregateHash(ctx context.Context, 
 		 SET aggregate_hash=?, updated_at=?
 		 WHERE operation_id=? AND table_name=?`,
 		aggregateHash, now, journal.OperationID, journal.TableName)
+	return err
+}
+
+func (s *UserDataSnapshotStore) updateJournalBatchHash(ctx context.Context, journal *UserDataRestoreJournal, batchHash string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	journal.BatchHash = batchHash
+	journal.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE extension_package_user_data_restore_journal
+		 SET batch_hash=?, updated_at=?
+		 WHERE operation_id=? AND table_name=?`,
+		batchHash, now, journal.OperationID, journal.TableName)
 	return err
 }
 

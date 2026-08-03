@@ -1355,7 +1355,7 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 		checkGenTree.Detail = "generation evidence unavailable"
 	} else {
 		genVerifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, PackageGenerationCurrent{
-			ExtensionID: operation.ExtensionID,
+			ExtensionID:  operation.ExtensionID,
 			GenerationID: expectedGenID,
 		})
 		if genVerifyErr != nil {

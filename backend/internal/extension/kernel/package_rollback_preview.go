@@ -185,7 +185,6 @@ func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, versi
 	return result, nil
 }
 
-
 func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRollbackConfirmationRequest) (PackageRollbackConfirmation, error) {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return PackageRollbackConfirmation{}, fmt.Errorf("kernel: package services unavailable")
