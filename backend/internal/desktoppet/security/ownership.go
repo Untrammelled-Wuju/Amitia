@@ -17,10 +17,9 @@ type CharacterScope struct {
 }
 
 type GenerationTaskScope struct {
-	UserID         string
-	TaskID         string
-	CharacterID    string
-	ActionStreamID string
+	UserID      string
+	TaskID      string
+	CharacterID string
 }
 
 type ProcessingTaskScope struct {
@@ -32,16 +31,16 @@ type ProcessingTaskScope struct {
 type ActionRevisionScope struct {
 	UserID           string
 	CharacterID      string
-	ActionStreamID   string
 	RevisionID       string
 	ProcessingTaskID string
 }
 
 type QualityScope struct {
-	UserID       string
-	EvaluationID string
-	RevisionID   string
-	CharacterID  string
+	UserID           string
+	EvaluationID     string
+	ActionRevisionID string
+	CharacterID      string
+	ProcessingTaskID string
 }
 
 type ReleaseScope struct {
@@ -62,10 +61,10 @@ type EditSessionScope struct {
 }
 
 type RegenerationJobScope struct {
-	UserID     string
-	JobID      string
-	SessionID  string
-	RevisionID string
+	UserID         string
+	JobID          string
+	SessionID      string
+	BaseRevisionID string
 }
 
 type CandidateScope struct {
@@ -81,9 +80,9 @@ type RuntimeCommandScope struct {
 }
 
 type BehaviorBindingScope struct {
-	UserID    string
-	BindingID string
-	DeviceID  string
+	UserID         string
+	BindingID      string
+	InstallationID string
 }
 
 var (

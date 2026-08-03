@@ -3,9 +3,10 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -78,7 +79,104 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		return ""
 	}
 
-	localAdmin := r.Group("/api/local")
+	r.GET("/livez", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "alive"})
+	})
+
+	r.GET("/readyz", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ready"})
+	})
+
+	public := r.Group("/api/public")
+	{
+		public.GET("/auth/status", func(c *gin.Context) {
+			mode := config.AppCfg.Security.Mode
+			c.JSON(200, gin.H{"code": 200, "data": gin.H{"mode": mode, "configured": mode != ""}, "msg": "ok"})
+		})
+		public.POST("/auth/setup", func(c *gin.Context) {
+			c.JSON(501, gin.H{"code": 501, "msg": "setup not implemented"})
+		})
+		public.POST("/auth/login", func(c *gin.Context) {
+			c.JSON(501, gin.H{"code": 501, "msg": "login not implemented"})
+		})
+	}
+
+	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir)
+	if err != nil {
+		log.Error("failed to init session service", "error", err)
+	}
+
+	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
+	services.DesktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
+	localTokens.Use(security.AuthenticationMiddleware(security.AuthConfig{
+		Mode:           config.AppCfg.Security.Mode,
+		JWTSecret:      config.AppCfg.JWT.Secret,
+		LocalToken:     resolveLocalToken(),
+		LocalUserID:    config.AppCfg.Security.LocalUserID,
+		ListenAddress:  config.AppCfg.Server.Host,
+		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+	}))
+	{
+		localTokens.POST("/sessions", func(c *gin.Context) {
+			if sessionSvc == nil {
+				c.JSON(500, gin.H{"code": 500, "msg": "session service not available"})
+				return
+			}
+			sessionSvc.CreateSession(c)
+		})
+		localTokens.POST("/token/rotate", func(c *gin.Context) {
+			if sessionSvc == nil {
+				c.JSON(500, gin.H{"code": 500, "msg": "session service not available"})
+				return
+			}
+			sessionSvc.RotateToken(c)
+		})
+		localTokens.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+			actor := security.GetActor(c)
+			if actor == nil || actor.UserID == "" {
+				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
+				return
+			}
+			deviceID := c.Param("deviceId")
+			if deviceID == "" {
+				c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
+				return
+			}
+			rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, 10*time.Minute)
+			if err != nil {
+				log.Error("failed to create bootstrap ticket", "error", err)
+				c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
+				return
+			}
+			c.JSON(200, gin.H{
+				"code": 200,
+				"msg":  "ok",
+				"data": gin.H{
+					"ticketId":   ticket.ID,
+					"ticket":     rawTicket,
+					"deviceId":   ticket.DeviceID,
+					"expiresAt":  ticket.ExpiresAt,
+					"ttlSeconds": 600,
+				},
+			})
+		})
+		localTokens.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+			actor := security.GetActor(c)
+			if actor == nil || actor.UserID == "" {
+				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
+				return
+			}
+			affected, err := bootstrapTicketRepo.RevokeUserTickets(c.Request.Context(), actor.UserID)
+			if err != nil {
+				log.Error("failed to revoke bootstrap tickets", "error", err)
+				c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
+				return
+			}
+			c.JSON(200, gin.H{"code": 200, "msg": "ok", "data": gin.H{"revoked": affected}})
+		})
+	}
+
+	localAdmin := r.Group("/api/local/admin")
 	localAdmin.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:           config.AppCfg.Security.Mode,
 		JWTSecret:      config.AppCfg.JWT.Secret,
@@ -91,7 +189,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	localAdmin.POST("/shutdown", func(c *gin.Context) {
 		actor := security.GetActor(c)
 		log.Info("system.shutdown.requested", "actor", actor.UserID, "method", actor.AuthMethod)
-		c.JSON(200, gin.H{"code": 200, "msg": "正在关闭服务..."})
+		c.JSON(202, gin.H{"code": 202, "msg": "shutting down", "shutdownOperationId": generateShutdownOpID()})
 		go func() {
 			time.Sleep(300 * time.Millisecond)
 			log.Info("system.shutdown.completed")
@@ -140,9 +238,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		processing.RegisterProcessingRouter(apiGroup, ctx)
-	editing.RegisterEditingRouterWithService(apiGroup, services.EditingService, services.OwnershipGuard)
-	quality.RegisterQualityRouter(apiGroup, services.QualityService, services.OwnershipGuard)
-	installation.RegisterRoutes(apiGroup, services.InstallationService, services.OwnershipGuard)
+		editing.RegisterEditingRouterWithService(apiGroup, services.EditingService, services.OwnershipGuard)
+		quality.RegisterQualityRouter(apiGroup, services.QualityService, services.OwnershipGuard)
+		installation.RegisterRoutes(apiGroup, services.InstallationService, services.OwnershipGuard)
 		release.RegisterRoutes(apiGroup, services.NewReleaseService, services.OwnershipGuard)
 		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)
@@ -168,12 +266,41 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	}
 	runtime.RegisterInternalRoutes(r, services.DesktopPetRuntime)
 	runtime.RegisterUserRoutes(apiGroup, services.DesktopPetRuntime)
-	r.Static("/audio", "./data/tts_cache")
-	r.Static("/exports", "./data/exports")
-	r.Static("/voice", "./data/voice_msg")
-	r.Static("/images", "./data/images")
-	r.Static("/videos", "./data/videos")
-	r.Static("/avatars", "./data/avatars")
-	r.Static("/emote-assets", filepath.Join(config.AppCfg.Storage.DataDir, "emotes"))
+
+	maintenance := r.Group("/api/maintenance")
+	maintenance.Use(security.AuthenticationMiddleware(security.AuthConfig{
+		Mode:           "maintenance",
+		JWTSecret:      config.AppCfg.JWT.Secret,
+		LocalToken:     resolveLocalToken(),
+		LocalUserID:    config.AppCfg.Security.LocalUserID,
+		ListenAddress:  config.AppCfg.Server.Host,
+		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+	}))
+	{
+		maintenance.GET("/doctor", func(c *gin.Context) {
+			c.JSON(200, gin.H{"code": 200, "msg": "doctor not implemented"})
+		})
+		maintenance.GET("/readiness", func(c *gin.Context) {
+			c.JSON(200, gin.H{"code": 200, "msg": "readiness not implemented"})
+		})
+		maintenance.GET("/migrations", func(c *gin.Context) {
+			c.JSON(200, gin.H{"code": 200, "msg": "migrations not implemented"})
+		})
+		maintenance.POST("/backup", func(c *gin.Context) {
+			c.JSON(200, gin.H{"code": 200, "msg": "backup not implemented"})
+		})
+		maintenance.POST("/export", func(c *gin.Context) {
+			c.JSON(200, gin.H{"code": 200, "msg": "export not implemented"})
+		})
+	}
+
 	return r
+}
+
+func generateShutdownOpID() string {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "shutdown_fallback"
+	}
+	return "sd_" + base64.RawURLEncoding.EncodeToString(b)
 }

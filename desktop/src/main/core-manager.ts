@@ -42,6 +42,84 @@ export function ensureDataAndConfig(): { ok: boolean; errors: string[] } {
 
 const CURRENT_CONFIG_VERSION = 2;
 
+const CONFIG_MIGRATIONS: Array<{
+  from: number;
+  to: number;
+  apply: (config: Record<string, unknown>) => void;
+}> = [
+  {
+    from: 1,
+    to: 2,
+    apply: (config: Record<string, unknown>) => {
+      if (!config.security) {
+        config.security = {};
+      }
+      const sec = config.security as Record<string, unknown>;
+      if (!sec.localTokenStorageKey) {
+        sec.localTokenStorageKey = "security/local-token";
+      }
+    },
+  },
+];
+
+function migrateConfig(configPath: string): void {
+  try {
+    const content = fs.readFileSync(configPath, "utf8");
+    const lines = content.split("\n");
+    let configVersion = 1;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("config:") || trimmed.startsWith("version:")) {
+        const match = trimmed.match(/version:\s*(\d+)/);
+        if (match) {
+          configVersion = parseInt(match[1], 10);
+          break;
+        }
+      }
+    }
+
+    if (configVersion >= CURRENT_CONFIG_VERSION) {
+      return;
+    }
+
+    let config: Record<string, unknown> = {};
+    try {
+      const yaml = require("yaml");
+      config = yaml.parse(content) || {};
+    } catch {
+      config = {};
+    }
+
+    const applicableMigrations = CONFIG_MIGRATIONS.filter(
+      (m) => m.from >= configVersion,
+    );
+    for (const migration of applicableMigrations) {
+      migration.apply(config);
+    }
+
+    const configSection = config.config as Record<string, unknown> | undefined;
+    if (configSection) {
+      configSection.version = CURRENT_CONFIG_VERSION;
+    } else {
+      config.config = { version: CURRENT_CONFIG_VERSION };
+    }
+
+    try {
+      const yaml = require("yaml");
+      const backupPath = `${configPath}.bak`;
+      fs.copyFileSync(configPath, backupPath);
+      const tmpPath = `${configPath}.tmp`;
+      fs.writeFileSync(tmpPath, yaml.stringify(config), { encoding: "utf8" });
+      fs.renameSync(tmpPath, configPath);
+      console.log(`[CoreManager] 配置已迁移至版本 ${CURRENT_CONFIG_VERSION}`);
+    } catch (err) {
+      console.error("[CoreManager] 配置迁移写入失败:", err);
+    }
+  } catch (err) {
+    console.error("[CoreManager] 配置迁移失败:", err);
+  }
+}
+
 function ensureDefaultConfig(dataDir: string): void {
   const configDir = path.join(dataDir, "config");
   const destConfig = path.join(configDir, "config.yml");
@@ -60,9 +138,11 @@ function ensureDefaultConfig(dataDir: string): void {
   if (!fs.existsSync(destConfig)) {
     fs.copyFileSync(templatePath, destConfig, fs.constants.COPYFILE_EXCL);
     console.log("[CoreManager] 配置文件已创建:", destConfig);
+    migrateConfig(destConfig);
     return;
   }
   console.log("[CoreManager] 配置文件已存在, 跳过覆盖:", destConfig);
+  migrateConfig(destConfig);
 }
 
 function ensureLocalToken(dataDir: string): void {
@@ -249,7 +329,7 @@ function cleanupRemainingProcesses(): void {
 }
 
 async function gracefulShutdown(pid: number): Promise<boolean> {
-  const healthUrl = "http://127.0.0.1:18899/api/health";
+  const healthUrl = "http://127.0.0.1:18899/livez";
   const isAlive = await httpHealthCheck(healthUrl, 2000);
   if (!isAlive) {
     console.log("[CoreManager] 核心服务不可达，跳过优雅关闭");
@@ -257,7 +337,7 @@ async function gracefulShutdown(pid: number): Promise<boolean> {
   }
 
   console.log("[CoreManager] 尝试优雅关闭核心服务...");
-  const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/shutdown", 3000);
+  const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/shutdown", 3000);
   if (!shutdownOk) {
     console.warn("[CoreManager] 优雅关闭请求失败");
     return false;
@@ -328,7 +408,7 @@ function httpHealthCheck(url: string, timeoutMs: number): Promise<boolean> {
 
 export async function waitForCoreReady(timeoutMs = 60000): Promise<void> {
   const startedAt = Date.now();
-  const healthUrl = "http://127.0.0.1:18899/api/health";
+  const healthUrl = "http://127.0.0.1:18899/livez";
 
   while (Date.now() - startedAt < timeoutMs) {
     if (!isCoreRunning() && Date.now() - startedAt > 2000) {

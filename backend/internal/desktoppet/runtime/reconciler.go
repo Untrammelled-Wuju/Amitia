@@ -47,13 +47,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, conn *Connection) error {
 	sessionID := conn.SessionID()
 	userID := conn.UserID()
 
-	if userID == "" {
-		userID = r.registry.GetUserRuntime(conn.RuntimeID())
-		if userID != "" {
-			conn.userID = userID
-		}
-	}
-
 	conn.SetState(SessionStateSyncing)
 	log.Logger.Infof("runtime reconciler: starting reconcile runtimeID=%s sessionID=%s userID=%s", runtimeID, sessionID, userID)
 

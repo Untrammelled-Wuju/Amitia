@@ -3,10 +3,13 @@
 package security
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -120,7 +123,7 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		c.Abort()
 		return
 	}
-	actor.CorrelationID = c.GetHeader("X-Request-ID")
+	actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
 
 	applyActorToContext(c, actor)
 }
@@ -153,6 +156,7 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 	}
 
 	actor := buildLocalUserActor(cfg)
+	actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
 	applyActorToContext(c, actor)
 }
 
@@ -228,12 +232,12 @@ func parseAndValidateJWT(tokenStr, secret string) (*auth.ActorContext, error) {
 	}
 
 	return &auth.ActorContext{
-		ActorType:   actorType,
-		UserID:      fmt.Sprintf("%d", claims.UserId),
-		Roles:       roles,
-		Permissions: permissions,
-		AuthMethod:  AuthMethodJWT,
-		RequestID:   generateRequestID(),
+		ActorType:     actorType,
+		UserID:        fmt.Sprintf("%d", claims.UserId),
+		Roles:         roles,
+		Permissions:   permissions,
+		AuthMethod:    AuthMethodJWT,
+		RequestID:     generateRequestID(),
 		CorrelationID: "",
 	}, nil
 }
@@ -271,7 +275,7 @@ func buildAdminActor(c *gin.Context, authMethod string) *auth.ActorContext {
 		Permissions:    auth.AdminPermissions(),
 		AuthMethod:     authMethod,
 		RequestID:      generateRequestID(),
-		CorrelationID:  c.GetHeader("X-Request-ID"),
+		CorrelationID:  sanitizeCorrelationID(c.GetHeader("X-Request-ID")),
 		IsLocalTrusted: true,
 	}
 }
@@ -287,7 +291,32 @@ func applyActorToContext(c *gin.Context, actor *auth.ActorContext) {
 }
 
 func generateRequestID() string {
-	return fmt.Sprintf("req_%d", time.Now().UnixNano())
+	id, err := NewRequestID()
+	if err != nil {
+		return fmt.Sprintf("req_fallback_%d", time.Now().UnixNano())
+	}
+	return id
+}
+
+func NewRequestID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "req_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+var correlationIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
+
+func sanitizeCorrelationID(raw string) string {
+	if correlationIDPattern.MatchString(raw) {
+		return raw
+	}
+	id, err := NewRequestID()
+	if err != nil {
+		return ""
+	}
+	return id
 }
 
 func GetActor(c *gin.Context) *auth.ActorContext {

@@ -1,0 +1,303 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package security
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+const (
+	DesktopSessionStatusActive  = "active"
+	DesktopSessionStatusRevoked = "revoked"
+	DesktopSessionStatusExpired = "expired"
+
+	DesktopSessionDuration = 15 * time.Minute
+	DesktopSessionRenewalWindow = 2 * time.Minute
+)
+
+type DesktopSession struct {
+	ID                string    `gorm:"primaryKey;column:id"`
+	UserID            string    `gorm:"column:user_id;not null"`
+	DesktopInstanceID string    `gorm:"column:desktop_instance_id;not null"`
+	TokenHash         string    `gorm:"column:token_hash;not null"`
+	Status            string    `gorm:"column:status;not null;default:active"`
+	CreatedAt         time.Time `gorm:"column:created_at;not null"`
+	ExpiresAt         time.Time `gorm:"column:expires_at;not null"`
+	LastUsedAt        time.Time `gorm:"column:last_used_at"`
+	RevokedAt         *time.Time `gorm:"column:revoked_at"`
+}
+
+func (DesktopSession) TableName() string {
+	return "desktop_pet_local_sessions"
+}
+
+type DesktopSessionService struct {
+	mu          sync.RWMutex
+	db          *gorm.DB
+	dataDir     string
+}
+
+func NewDesktopSessionService(db *gorm.DB, dataDir string) (*DesktopSessionService, error) {
+	if db == nil {
+		return nil, errors.New("db is required")
+	}
+	if dataDir == "" {
+		return nil, errors.New("dataDir is required")
+	}
+	svc := &DesktopSessionService{db: db, dataDir: dataDir}
+	if err := svc.ensureTable(); err != nil {
+		return nil, fmt.Errorf("ensure sessions table: %w", err)
+	}
+	return svc, nil
+}
+
+func (s *DesktopSessionService) ensureTable() error {
+	return s.db.AutoMigrate(&DesktopSession{})
+}
+
+func (s *DesktopSessionService) resolveLocalToken(userID string) (string, error) {
+	tokenFile := filepath.Join(s.dataDir, "security", "local-token")
+	data, err := os.ReadFile(tokenFile)
+	if err != nil {
+		return "", fmt.Errorf("read local token: %w", err)
+	}
+	token := string(data)
+	if len(token) < 32 {
+		return "", errors.New("local token too short")
+	}
+	return token, nil
+}
+
+func (s *DesktopSessionService) validateLocalToken(token string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	expected, err := s.resolveLocalToken("")
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256([]byte(token))
+	expectedHash := sha256.Sum256([]byte(expected))
+	if subtle.ConstantTimeCompare(hash[:], expectedHash[:]) != 1 {
+		return "", errors.New("invalid local token")
+	}
+	return expected, nil
+}
+
+type createSessionRequest struct {
+	DesktopInstanceID string `json:"desktopInstanceId" binding:"required"`
+	Challenge         string `json:"challenge"`
+}
+
+type createSessionResponse struct {
+	SessionToken string    `json:"sessionToken"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+}
+
+func (s *DesktopSessionService) CreateSession(c *gin.Context) {
+	actor := GetActor(c)
+	if actor == nil || !actor.IsLocalTrusted {
+		c.JSON(403, gin.H{"code": 403, "msg": "forbidden"})
+		return
+	}
+
+	var req createSessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"code": 400, "msg": "invalid request"})
+		return
+	}
+
+	expected, err := s.resolveLocalToken("")
+	if err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "local token not configured"})
+		return
+	}
+	_ = expected
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to generate session"})
+		return
+	}
+	sessionToken := base64.RawURLEncoding.EncodeToString(tokenBytes)
+	tokenHash := sha256.Sum256([]byte(sessionToken))
+	tokenHashStr := base64.RawURLEncoding.EncodeToString(tokenHash[:])
+
+	now := time.Now()
+	session := &DesktopSession{
+		ID:                generateSessionID(),
+		UserID:            actor.UserID,
+		DesktopInstanceID: req.DesktopInstanceID,
+		TokenHash:         tokenHashStr,
+		Status:            DesktopSessionStatusActive,
+		CreatedAt:         now,
+		ExpiresAt:         now.Add(DesktopSessionDuration),
+		LastUsedAt:        now,
+	}
+
+	if err := s.db.Create(session).Error; err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to store session"})
+		return
+	}
+
+	c.JSON(200, createSessionResponse{
+		SessionToken: sessionToken,
+		ExpiresAt:    session.ExpiresAt,
+	})
+}
+
+func (s *DesktopSessionService) ValidateSession(sessionToken string) (*DesktopSession, error) {
+	if sessionToken == "" {
+		return nil, errors.New("empty session token")
+	}
+
+	hash := sha256.Sum256([]byte(sessionToken))
+	hashStr := base64.RawURLEncoding.EncodeToString(hash[:])
+
+	var session DesktopSession
+	if err := s.db.Where("token_hash = ? AND status = ?", hashStr, DesktopSessionStatusActive).First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("session not found")
+		}
+		return nil, err
+	}
+
+	if time.Now().After(session.ExpiresAt) {
+		_ = s.revokeSession(&session)
+		return nil, errors.New("session expired")
+	}
+
+	return &session, nil
+}
+
+func (s *DesktopSessionService) TouchSession(session *DesktopSession) error {
+	now := time.Now()
+	result := s.db.Model(session).Update("last_used_at", now)
+	return result.Error
+}
+
+func (s *DesktopSessionService) RenewSession(session *DesktopSession) error {
+	if time.Until(session.ExpiresAt) > DesktopSessionRenewalWindow {
+		return nil
+	}
+	newExpiry := time.Now().Add(DesktopSessionDuration)
+	result := s.db.Model(session).Update("expires_at", newExpiry)
+	return result.Error
+}
+
+func (s *DesktopSessionService) revokeSession(session *DesktopSession) error {
+	now := time.Now()
+	result := s.db.Model(session).Updates(map[string]interface{}{
+		"status":     DesktopSessionStatusRevoked,
+		"revoked_at": now,
+	})
+	return result.Error
+}
+
+func (s *DesktopSessionService) RevokeSession(sessionToken string) error {
+	if sessionToken == "" {
+		return nil
+	}
+	hash := sha256.Sum256([]byte(sessionToken))
+	hashStr := base64.RawURLEncoding.EncodeToString(hash[:])
+
+	var session DesktopSession
+	if err := s.db.Where("token_hash = ? AND status = ?", hashStr, DesktopSessionStatusActive).First(&session).Error; err != nil {
+		return err
+	}
+	return s.revokeSession(&session)
+}
+
+func (s *DesktopSessionService) RotateToken(c *gin.Context) {
+	actor := GetActor(c)
+	if actor == nil || !actor.IsLocalTrusted || actor.AuthMethod != AuthMethodLocalToken {
+		c.JSON(403, gin.H{"code": 403, "msg": "forbidden"})
+		return
+	}
+
+	newToken := make([]byte, 32)
+	if _, err := rand.Read(newToken); err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to generate token"})
+		return
+	}
+
+	tokenFile := filepath.Join(s.dataDir, "security", "local-token")
+	tmpFile := tokenFile + ".tmp"
+	if err := os.WriteFile(tmpFile, newToken, 0600); err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to write token"})
+		return
+	}
+	if err := os.Rename(tmpFile, tokenFile); err != nil {
+		os.Remove(tmpFile)
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to update token"})
+		return
+	}
+
+	if err := s.db.Model(&DesktopSession{}).Where("status = ?", DesktopSessionStatusActive).Updates(map[string]interface{}{
+		"status":     DesktopSessionStatusRevoked,
+		"revoked_at": time.Now(),
+	}).Error; err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke old sessions"})
+		return
+	}
+
+	c.JSON(200, gin.H{"code": 200, "msg": "token rotated"})
+}
+
+var sessionIDRand = func() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "sess_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func generateSessionID() string {
+	id, err := sessionIDRand()
+	if err != nil {
+		return fmt.Sprintf("sess_fallback_%d", time.Now().UnixNano())
+	}
+	return id
+}
+
+func DesktopSessionAuthMiddleware(sessionSvc *DesktopSessionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if sessionSvc == nil {
+			c.JSON(500, gin.H{"code": 500, "msg": "session service not initialized"})
+			c.Abort()
+			return
+		}
+
+		sessionToken := c.GetHeader("X-Amitia-Desktop-Session")
+		if sessionToken == "" {
+			c.JSON(401, gin.H{"code": 401, "msg": "missing session"})
+			c.Abort()
+			return
+		}
+
+		session, err := sessionSvc.ValidateSession(sessionToken)
+		if err != nil {
+			c.JSON(401, gin.H{"code": 401, "msg": "invalid session"})
+			c.Abort()
+			return
+		}
+
+		_ = sessionSvc.TouchSession(session)
+
+		c.Set("desktopSession", session)
+		c.Set("actorUserID", session.UserID)
+		c.Next()
+	}
+}

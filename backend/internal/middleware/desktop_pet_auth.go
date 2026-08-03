@@ -4,7 +4,7 @@ package middleware
 
 import (
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"net"
 	"strings"
@@ -17,9 +17,11 @@ import (
 )
 
 func generateRequestID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return "req_" + base64.RawURLEncoding.EncodeToString(b)
 }
 
 func handleAuthFailure(c *gin.Context, authErr error) {
@@ -47,11 +49,15 @@ func extractBearerToken(auth string) string {
 
 func getRequestID(c *gin.Context) string {
 	if v, ok := c.Get("requestID"); ok {
-		if s, ok := v.(string); ok {
+		if s, ok := v.(string); ok && s != "" {
 			return s
 		}
 	}
-	return generateRequestID()
+	id := generateRequestID()
+	if id == "" {
+		id = "req_fallback"
+	}
+	return id
 }
 
 func isLoopbackRequest(c *gin.Context) bool {
@@ -115,6 +121,9 @@ func EnsureCorrelationID(c *gin.Context) string {
 	corrID := c.GetHeader("X-Correlation-ID")
 	if !isValidCorrelationID(corrID) {
 		corrID = generateRequestID()
+		if corrID == "" {
+			corrID = "corr_fallback"
+		}
 	}
 	c.Header("X-Correlation-ID", corrID)
 	return corrID

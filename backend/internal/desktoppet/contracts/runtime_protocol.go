@@ -131,6 +131,7 @@ type RegisterPayload struct {
 	LastAppliedDesiredRevision   int64    `json:"lastAppliedDesiredRevision"`
 	LastProcessedCommandSequence uint64   `json:"lastProcessedCommandSequence"`
 	ChallengeResponse            string   `json:"challengeResponse"`
+	BootstrapTicket              string   `json:"bootstrapTicket"`
 }
 
 type WelcomePayload struct {

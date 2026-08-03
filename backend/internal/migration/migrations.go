@@ -134,5 +134,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetReleaseDomainV3Migration(),
 		DesktopPetInstallationV2Migration(),
 		DesktopPetBehaviorV2ColumnsMigration(),
+		DesktopPetLocalSessionMigration(),
+		RuntimeBootstrapTicketMigration(),
 	}
 }

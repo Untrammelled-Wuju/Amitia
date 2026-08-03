@@ -12,18 +12,19 @@ import (
 )
 
 type Service struct {
-	config     *DesktopPetRuntimeConfig
-	auth       *Auth
-	registry   *RuntimeRegistry
-	pending    *PendingTracker
-	store      CommandStore
-	state      StateStore
-	dispatcher *Dispatcher
-	snapshot   *SnapshotBuilder
-	reconciler *Reconciler
-	handler    *Handler
-	metrics    *Metrics
-	notifier   *RuntimeNotifierAdapter
+	config              *DesktopPetRuntimeConfig
+	auth                *Auth
+	registry            *RuntimeRegistry
+	pending             *PendingTracker
+	store               CommandStore
+	state               StateStore
+	dispatcher          *Dispatcher
+	snapshot            *SnapshotBuilder
+	reconciler          *Reconciler
+	handler             *Handler
+	metrics             *Metrics
+	notifier            *RuntimeNotifierAdapter
+	bootstrapTicketRepo *BootstrapTicketRepository
 
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -73,6 +74,13 @@ func NewService(
 	return svc
 }
 
+func (s *Service) SetBootstrapTicketRepo(repo *BootstrapTicketRepository) {
+	s.bootstrapTicketRepo = repo
+	if s.handler != nil {
+		s.handler.SetBootstrapRepo(repo)
+	}
+}
+
 func (s *Service) Start(ctx context.Context) error {
 	var err error
 	s.startOnce.Do(func() {
@@ -80,8 +88,29 @@ func (s *Service) Start(ctx context.Context) error {
 		log.Logger.Infof("runtime service: started path=%s backendInstanceID=%s", s.config.Path, s.config.BackendInstanceID)
 		go s.reconciler.RunPeriodic(s.ctx, 10*time.Second)
 		go s.runDispatchLoop(s.ctx)
+		if s.bootstrapTicketRepo != nil {
+			go s.runBootstrapTicketGC(s.ctx)
+		}
 	})
 	return err
+}
+
+func (s *Service) runBootstrapTicketGC(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			expired, err := s.bootstrapTicketRepo.ExpireOldTickets(ctx)
+			if err != nil {
+				log.Logger.Warnf("runtime bootstrap ticket GC: expire old tickets failed err=%v", err)
+			} else if expired > 0 {
+				log.Logger.Debugf("runtime bootstrap ticket GC: expired %d tickets", expired)
+			}
+		}
+	}
 }
 
 func (s *Service) Close(ctx context.Context) error {

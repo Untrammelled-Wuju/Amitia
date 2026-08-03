@@ -32,18 +32,19 @@ type NoopEventSink struct{}
 func (NoopEventSink) OnRuntimeEvent(_ context.Context, _ RuntimeDomainEvent) error { return nil }
 
 type Handler struct {
-	config      *DesktopPetRuntimeConfig
-	auth        *Auth
-	registry    *RuntimeRegistry
-	pending     *PendingTracker
-	state       StateStore
-	eventSink   RuntimeEventSink
-	deduper     *eventDeduplicator
-	upgrader    websocket.Upgrader
-	onRegister  func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
-	onResult    func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
-	onEvent     func(msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
-	onHeartbeat func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
+	config        *DesktopPetRuntimeConfig
+	auth          *Auth
+	bootstrapRepo *BootstrapTicketRepository
+	registry      *RuntimeRegistry
+	pending       *PendingTracker
+	state         StateStore
+	eventSink     RuntimeEventSink
+	deduper       *eventDeduplicator
+	upgrader      websocket.Upgrader
+	onRegister    func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
+	onResult      func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
+	onEvent       func(msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
+	onHeartbeat   func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
 }
 
 func NewHandler(
@@ -55,19 +56,24 @@ func NewHandler(
 	eventSink RuntimeEventSink,
 ) *Handler {
 	return &Handler{
-		config:    config,
-		auth:      auth,
-		registry:  registry,
-		pending:   pending,
-		state:     state,
-		eventSink: eventSink,
-		deduper:   newEventDeduplicator(defaultEventDedupCapacity),
+		config:        config,
+		auth:          auth,
+		registry:      registry,
+		pending:       pending,
+		state:         state,
+		eventSink:     eventSink,
+		bootstrapRepo: nil,
+		deduper:       newEventDeduplicator(defaultEventDedupCapacity),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
 			CheckOrigin:     auth.CheckOrigin,
 		},
 	}
+}
+
+func (h *Handler) SetBootstrapRepo(repo *BootstrapTicketRepository) {
+	h.bootstrapRepo = repo
 }
 
 func (h *Handler) SetCallbacks(
@@ -158,6 +164,27 @@ func (h *Handler) HandleRegister(conn *Connection, payload *contracts.RegisterPa
 	sessionID := "rtsess_" + uuid.New().String()
 	conn.sessionID = sessionID
 	conn.runtimeID = payload.RuntimeID
+
+	if h.bootstrapRepo != nil && payload.BootstrapTicket != "" {
+		ticket, ticketErr := h.bootstrapRepo.Consume(context.Background(), payload.BootstrapTicket, payload.RuntimeID)
+		if ticketErr != nil {
+			switch ticketErr {
+			case ErrTicketExpired:
+				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket expired", ErrRuntimeUnauthorized)
+			case ErrTicketConsumed:
+				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket already used", ErrRuntimeUnauthorized)
+			case ErrTicketRevoked:
+				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket revoked", ErrRuntimeUnauthorized)
+			case ErrTicketNotFound:
+				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "invalid bootstrap ticket", ErrRuntimeUnauthorized)
+			default:
+				log.Logger.Warnf("runtime handler: bootstrap ticket validation failed err=%v", ticketErr)
+				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket validation failed", ErrRuntimeUnauthorized)
+			}
+		}
+		conn.userID = ticket.UserID
+		log.Logger.Infof("runtime handler: bootstrap ticket consumed ticketId=%s userID=%s", ticket.ID, ticket.UserID)
+	}
 
 	conn.SetCapabilities(payload.Capabilities)
 

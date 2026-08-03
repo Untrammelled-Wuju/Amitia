@@ -5384,3 +5384,35 @@ CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpinst_user_device_pet ON desktop_pet_installations(user_id, device_id, pet_id);
+
+--- 来源: desktop_session.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_local_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT '',
+    desktop_instance_id TEXT NOT NULL DEFAULT '',
+    token_hash TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT '',
+    expires_at TEXT NOT NULL DEFAULT '',
+    last_used_at TEXT NOT NULL DEFAULT '',
+    revoked_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_dpls_token ON desktop_pet_local_sessions(token_hash, status);
+CREATE INDEX IF NOT EXISTS idx_dpls_user ON desktop_pet_local_sessions(user_id, status);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_runtime_bootstrap_tickets (
+    id TEXT PRIMARY KEY,
+    ticket_hash TEXT UNIQUE NOT NULL,
+    user_id TEXT NOT NULL DEFAULT '',
+    device_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    expires_at TEXT NOT NULL DEFAULT '',
+    consumed_at TEXT NOT NULL DEFAULT '',
+    consumed_by_runtime TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_bt_user ON desktop_pet_runtime_bootstrap_tickets(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_bt_device ON desktop_pet_runtime_bootstrap_tickets(device_id);
+CREATE INDEX IF NOT EXISTS idx_bt_status ON desktop_pet_runtime_bootstrap_tickets(status);
