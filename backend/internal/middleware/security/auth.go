@@ -11,7 +11,6 @@ import (
 	"net"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -23,10 +22,13 @@ import (
 type AuthConfig struct {
 	Mode           string
 	JWTSecret      string
+	JWTIssuer      string
+	JWTAudience    string
 	LocalToken     string
 	LocalUserID    string
 	ListenAddress  string
 	AllowedOrigins []string
+	SessionService *DesktopSessionService
 }
 
 type JWTClaims struct {
@@ -37,8 +39,9 @@ type JWTClaims struct {
 }
 
 const (
-	AuthMethodJWT        = "jwt"
-	AuthMethodLocalToken = "local_token"
+	AuthMethodJWT           = "jwt"
+	AuthMethodLocalToken    = "local_token"
+	AuthMethodDesktopSession = "desktop_session"
 )
 
 var maintenanceAllowedPaths = map[string]bool{
@@ -117,7 +120,7 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 
-	actor, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret)
+	actor, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
 	if err != nil {
 		util.ErrorResponse(c, response.InvalidToken, "令牌无效", nil)
 		c.Abort()
@@ -139,6 +142,19 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 		util.ErrorResponse(c, response.Unauthorized, "来源不允许", nil)
 		c.Abort()
 		return
+	}
+
+	sessionToken := c.GetHeader("X-Amitia-Desktop-Session")
+	if sessionToken != "" && cfg.SessionService != nil {
+		session, err := cfg.SessionService.ValidateSessionWithContext(c.Request.Context(), sessionToken)
+		if err == nil {
+			_ = cfg.SessionService.TouchSessionWithContext(c.Request.Context(), session)
+			_ = cfg.SessionService.RenewSessionWithContext(c.Request.Context(), session)
+			actor := buildDesktopSessionActor(session, cfg)
+			actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
+			applyActorToContext(c, actor)
+			return
+		}
 	}
 
 	token := c.GetHeader("X-Amitia-Local-Token")
@@ -182,7 +198,7 @@ func handleMaintenanceAuth(c *gin.Context, cfg AuthConfig) {
 
 	tokenStr := extractBearerToken(c)
 	if tokenStr != "" {
-		actor, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret)
+		actor, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
 		if err == nil {
 			applyActorToContext(c, actor)
 			return
@@ -201,14 +217,19 @@ func extractBearerToken(c *gin.Context) string {
 	return ""
 }
 
-func parseAndValidateJWT(tokenStr, secret string) (*auth.ActorContext, error) {
+func parseAndValidateJWT(tokenStr, secret, issuer, audience string) (*auth.ActorContext, error) {
 	claims := &JWTClaims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return []byte(secret), nil
-	})
+	},
+		jwt.WithValidMethods([]string{"HS256", "HS384", "HS512"}),
+		jwt.WithIssuedAt(),
+		jwt.WithIssuer(issuer),
+		jwt.WithAudience(audience),
+	)
 
 	if err != nil {
 		return nil, err
@@ -267,6 +288,23 @@ func buildLocalUserActor(cfg AuthConfig) *auth.ActorContext {
 	}
 }
 
+func buildDesktopSessionActor(session *DesktopSession, cfg AuthConfig) *auth.ActorContext {
+	perms := auth.DefaultUserPermissions()
+	perms = append(perms, auth.PermDesktopPetRepair)
+
+	return &auth.ActorContext{
+		ActorType:      auth.ActorTypeLocalUser,
+		UserID:         session.UserID,
+		Roles:          []string{"local_user", "user"},
+		Permissions:    perms,
+		AuthMethod:     AuthMethodDesktopSession,
+		SessionID:      session.ID,
+		RequestID:      generateRequestID(),
+		CorrelationID:  "",
+		IsLocalTrusted: true,
+	}
+}
+
 func buildAdminActor(c *gin.Context, authMethod string) *auth.ActorContext {
 	return &auth.ActorContext{
 		ActorType:      auth.ActorTypeAdmin,
@@ -293,7 +331,7 @@ func applyActorToContext(c *gin.Context, actor *auth.ActorContext) {
 func generateRequestID() string {
 	id, err := NewRequestID()
 	if err != nil {
-		return fmt.Sprintf("req_fallback_%d", time.Now().UnixNano())
+		panic(fmt.Sprintf("request ID generation failed: %v", err))
 	}
 	return id
 }

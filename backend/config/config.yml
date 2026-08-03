@@ -5,8 +5,10 @@ server:
 storage:
   dataDir: "data"
 jwt:
-  secret: ""
+  secret: "Am1t1a-L0c4l-D3v-S3cr3t-K3y-2026"
   expireDays: 7
+  issuer: "amitia"
+  audience: "amitia-api"
 security:
   mode: "local_single_user"
   allowRemoteAccess: false

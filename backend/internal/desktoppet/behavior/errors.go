@@ -53,6 +53,7 @@ var (
 	ErrRuntimeOffline       = NewBehaviorError(ErrCodeRuntimeOffline, "runtime is offline")
 	ErrMailboxOverflow      = NewBehaviorError(ErrCodeMailboxOverflow, "behavior mailbox overflow")
 	ErrContextCorrupt       = NewBehaviorError(ErrCodeContextCorrupt, "behavior context corrupt")
+	ErrVersionConflict      = NewBehaviorError("behavior_binding_version_conflict", "绑定版本冲突，请刷新后重试")
 )
 
 func IsBehaviorError(err error) (*BehaviorError, bool) {

@@ -65,23 +65,26 @@ const (
 var globalMessageSeq atomic.Uint64
 
 type Connection struct {
-	sessionID    string
-	runtimeID    string
-	userID       string
-	conn         *websocket.Conn
-	sendCh       chan outboundFrame
-	done         chan struct{}
-	closeOnce    sync.Once
-	seq          atomic.Uint64
-	lastBeatNS   atomic.Int64
-	state        atomic.Value
-	capabilities CapabilitySet
-	config       *DesktopPetRuntimeConfig
-	onResult     func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
-	onEvent      func(msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
-	onHeartbeat  func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
-	onClose      func(sessionID, runtimeID string, code int, reason string)
-	onRegister   func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
+	sessionID      string
+	runtimeID      string
+	deviceID       string
+	userID         string
+	ticketDeviceID  string
+	ticketRuntimeID string
+	conn           *websocket.Conn
+	sendCh         chan outboundFrame
+	done           chan struct{}
+	closeOnce      sync.Once
+	seq            atomic.Uint64
+	lastBeatNS     atomic.Int64
+	state          atomic.Value
+	capabilities   CapabilitySet
+	config         *DesktopPetRuntimeConfig
+	onResult       func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
+	onEvent        func(msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
+	onHeartbeat    func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
+	onClose        func(sessionID, runtimeID string, code int, reason string)
+	onRegister     func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
 }
 
 func NewConnection(wsConn *websocket.Conn, config *DesktopPetRuntimeConfig) *Connection {
@@ -128,6 +131,16 @@ func (c *Connection) readerLoop() {
 }
 
 func (c *Connection) routeMessage(msg *contracts.RuntimeMessage) {
+	if msg.RuntimeID != "" && msg.RuntimeID != c.runtimeID {
+		log.Logger.Warnf("runtime conn: runtimeID mismatch sessionID=%s connRuntimeID=%s msgRuntimeID=%s", c.sessionID, c.runtimeID, msg.RuntimeID)
+		c.Close(4005, "runtimeID mismatch")
+		return
+	}
+	if msg.SessionID != "" && c.sessionID != "" && msg.SessionID != c.sessionID {
+		log.Logger.Warnf("runtime conn: sessionID mismatch connSessionID=%s msgSessionID=%s", c.sessionID, msg.SessionID)
+		c.Close(4006, "sessionID mismatch")
+		return
+	}
 	switch msg.Kind {
 	case contracts.KindResult:
 		var payload contracts.ResultPayload

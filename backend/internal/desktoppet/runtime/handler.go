@@ -156,6 +156,13 @@ func (h *Handler) HandleRegister(conn *Connection, payload *contracts.RegisterPa
 		return nil, NewRuntimeError(ErrCodeRuntimeProtocolError, "deviceId is required", ErrRuntimeProtocolError)
 	}
 
+	if h.bootstrapRepo == nil {
+		return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "runtime bootstrap not configured", ErrRuntimeUnauthorized)
+	}
+	if payload.BootstrapTicket == "" {
+		return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket is required", ErrRuntimeUnauthorized)
+	}
+
 	selectedProtocol, err := negotiateProtocol(payload.ProtocolMin, payload.ProtocolMax)
 	if err != nil {
 		return nil, NewRuntimeError(ErrCodeRuntimeProtocolIncompatible, "protocol negotiation failed", err)
@@ -164,27 +171,28 @@ func (h *Handler) HandleRegister(conn *Connection, payload *contracts.RegisterPa
 	sessionID := "rtsess_" + uuid.New().String()
 	conn.sessionID = sessionID
 	conn.runtimeID = payload.RuntimeID
+	conn.deviceID = payload.DeviceID
 
-	if h.bootstrapRepo != nil && payload.BootstrapTicket != "" {
-		ticket, ticketErr := h.bootstrapRepo.Consume(context.Background(), payload.BootstrapTicket, payload.RuntimeID)
-		if ticketErr != nil {
-			switch ticketErr {
-			case ErrTicketExpired:
-				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket expired", ErrRuntimeUnauthorized)
-			case ErrTicketConsumed:
-				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket already used", ErrRuntimeUnauthorized)
-			case ErrTicketRevoked:
-				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket revoked", ErrRuntimeUnauthorized)
-			case ErrTicketNotFound:
-				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "invalid bootstrap ticket", ErrRuntimeUnauthorized)
-			default:
-				log.Logger.Warnf("runtime handler: bootstrap ticket validation failed err=%v", ticketErr)
-				return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket validation failed", ErrRuntimeUnauthorized)
-			}
+	ticket, ticketErr := h.bootstrapRepo.ConsumeWithValidation(context.Background(), payload.BootstrapTicket, payload.RuntimeID, payload.DeviceID)
+	if ticketErr != nil {
+		switch ticketErr {
+		case ErrTicketExpired:
+			return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket expired", ErrRuntimeUnauthorized)
+		case ErrTicketConsumed:
+			return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket already used", ErrRuntimeUnauthorized)
+		case ErrTicketRevoked:
+			return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket revoked", ErrRuntimeUnauthorized)
+		case ErrTicketNotFound:
+			return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "invalid bootstrap ticket", ErrRuntimeUnauthorized)
+		default:
+			log.Logger.Warnf("runtime handler: bootstrap ticket validation failed err=%v", ticketErr)
+			return nil, NewRuntimeError(ErrCodeRuntimeUnauthorized, "bootstrap ticket validation failed", ErrRuntimeUnauthorized)
 		}
-		conn.userID = ticket.UserID
-		log.Logger.Infof("runtime handler: bootstrap ticket consumed ticketId=%s userID=%s", ticket.ID, ticket.UserID)
 	}
+	conn.userID = ticket.UserID
+	conn.ticketDeviceID = ticket.DeviceID
+	conn.ticketRuntimeID = ticket.RuntimeID
+	log.Logger.Infof("runtime handler: bootstrap ticket consumed ticketId=%s userID=%s deviceID=%s", ticket.ID, ticket.UserID, ticket.DeviceID)
 
 	conn.SetCapabilities(payload.Capabilities)
 

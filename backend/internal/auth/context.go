@@ -12,6 +12,7 @@ type ActorType string
 const (
 	ActorTypeUser          ActorType = "user"
 	ActorTypeLocalUser     ActorType = "local_user"
+	ActorTypeLocalAdmin    ActorType = "local_admin"
 	ActorTypeAdmin         ActorType = "admin"
 	ActorTypeSystemWorker  ActorType = "system_worker"
 	ActorTypeRuntimeClient ActorType = "runtime_client"

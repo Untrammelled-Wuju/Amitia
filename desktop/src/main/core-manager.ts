@@ -336,8 +336,8 @@ async function gracefulShutdown(pid: number): Promise<boolean> {
     return false;
   }
 
-  console.log("[CoreManager] 尝试优雅关闭核心服务...");
-  const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/shutdown", 3000);
+console.log("[CoreManager] 尝试优雅关闭核心服务...");
+const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/shutdown", 3000);
   if (!shutdownOk) {
     console.warn("[CoreManager] 优雅关闭请求失败");
     return false;
@@ -366,22 +366,22 @@ async function gracefulShutdown(pid: number): Promise<boolean> {
 }
 
 function httpShutdown(url: string, timeoutMs: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const req = http.request(
-      url,
-      { method: "POST", timeout: timeoutMs },
-      (res) => {
-        res.resume();
-        resolve(res.statusCode === 200);
-      },
-    );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(false);
-    });
-    req.end();
-  });
+return new Promise((resolve) => {
+const req = http.request(
+url,
+{ method: "POST", timeout: timeoutMs },
+(res) => {
+res.resume();
+resolve(res.statusCode === 200 || res.statusCode === 202);
+},
+);
+req.on("error", () => resolve(false));
+req.on("timeout", () => {
+req.destroy();
+resolve(false);
+});
+req.end();
+});
 }
 
 export function isCoreRunning(): boolean {

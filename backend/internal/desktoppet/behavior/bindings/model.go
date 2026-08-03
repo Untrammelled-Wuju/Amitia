@@ -7,6 +7,30 @@ import (
 	"strings"
 )
 
+type BindingUpdateRequest struct {
+	ID              string  `json:"id" binding:"required"`
+	UserID          string  `json:"userId"`
+	ExpectedVersion int     `json:"expectedVersion"`
+	EventType       *string `json:"eventType,omitempty"`
+	ConditionsJSON  *string `json:"conditions,omitempty"`
+	Semantic        *string `json:"semantic,omitempty"`
+	PreferredAction *string `json:"preferredAction,omitempty"`
+	PriorityOffset  *int    `json:"priorityOffset,omitempty"`
+	CooldownMS      *int64  `json:"cooldownMs,omitempty"`
+	Enabled         *bool   `json:"enabled,omitempty"`
+	Version         int     `json:"-"`
+
+	hasUpdateFields bool
+}
+
+func (r *BindingUpdateRequest) MarkFieldPresent() {
+	r.hasUpdateFields = true
+}
+
+func (r *BindingUpdateRequest) HasUpdates() bool {
+	return r.hasUpdateFields
+}
+
 type BehaviorBindingModel struct {
 	ID              string `gorm:"column:id;primaryKey"`
 	UserID          string `gorm:"column:user_id"`

@@ -5416,3 +5416,15 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_bootstrap_tickets (
 CREATE INDEX IF NOT EXISTS idx_bt_user ON desktop_pet_runtime_bootstrap_tickets(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_bt_device ON desktop_pet_runtime_bootstrap_tickets(device_id);
 CREATE INDEX IF NOT EXISTS idx_bt_status ON desktop_pet_runtime_bootstrap_tickets(status);
+
+---- 来源: desktop_session.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_token_rotation_journal (
+    id TEXT PRIMARY KEY,
+    old_version TEXT NOT NULL DEFAULT '',
+    new_version TEXT NOT NULL DEFAULT '',
+    stage TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_dptrj_stage ON desktop_pet_token_rotation_journal(stage);

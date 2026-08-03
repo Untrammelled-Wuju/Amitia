@@ -3,6 +3,7 @@
 package security
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/auth"
 	"gorm.io/gorm"
 )
 
@@ -23,19 +25,40 @@ const (
 	DesktopSessionStatusRevoked = "revoked"
 	DesktopSessionStatusExpired = "expired"
 
-	DesktopSessionDuration = 15 * time.Minute
+	DesktopSessionDuration      = 15 * time.Minute
 	DesktopSessionRenewalWindow = 2 * time.Minute
 )
 
+const (
+	RotationStagePrepared           = "prepared"
+	RotationStageCredentialSwitched = "credential_switched"
+	RotationStageSessionsRevoked    = "sessions_revoked"
+	RotationStageCompleted          = "completed"
+)
+
+type RotationJournal struct {
+	ID          string     `gorm:"primaryKey;column:id"`
+	OldVersion  string     `gorm:"column:old_version;not null"`
+	NewVersion  string     `gorm:"column:new_version;not null"`
+	Stage       string     `gorm:"column:stage;not null"`
+	CreatedAt   time.Time  `gorm:"column:created_at;not null"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at;not null"`
+	CompletedAt *time.Time `gorm:"column:completed_at"`
+}
+
+func (RotationJournal) TableName() string {
+	return "desktop_pet_token_rotation_journal"
+}
+
 type DesktopSession struct {
-	ID                string    `gorm:"primaryKey;column:id"`
-	UserID            string    `gorm:"column:user_id;not null"`
-	DesktopInstanceID string    `gorm:"column:desktop_instance_id;not null"`
-	TokenHash         string    `gorm:"column:token_hash;not null"`
-	Status            string    `gorm:"column:status;not null;default:active"`
-	CreatedAt         time.Time `gorm:"column:created_at;not null"`
-	ExpiresAt         time.Time `gorm:"column:expires_at;not null"`
-	LastUsedAt        time.Time `gorm:"column:last_used_at"`
+	ID                string     `gorm:"primaryKey;column:id"`
+	UserID            string     `gorm:"column:user_id;not null"`
+	DesktopInstanceID string     `gorm:"column:desktop_instance_id;not null"`
+	TokenHash         string     `gorm:"column:token_hash;not null"`
+	Status            string     `gorm:"column:status;not null;default:active"`
+	CreatedAt         time.Time  `gorm:"column:created_at;not null"`
+	ExpiresAt         time.Time  `gorm:"column:expires_at;not null"`
+	LastUsedAt        time.Time  `gorm:"column:last_used_at"`
 	RevokedAt         *time.Time `gorm:"column:revoked_at"`
 }
 
@@ -44,9 +67,9 @@ func (DesktopSession) TableName() string {
 }
 
 type DesktopSessionService struct {
-	mu          sync.RWMutex
-	db          *gorm.DB
-	dataDir     string
+	mu      sync.RWMutex
+	db      *gorm.DB
+	dataDir string
 }
 
 func NewDesktopSessionService(db *gorm.DB, dataDir string) (*DesktopSessionService, error) {
@@ -64,7 +87,7 @@ func NewDesktopSessionService(db *gorm.DB, dataDir string) (*DesktopSessionServi
 }
 
 func (s *DesktopSessionService) ensureTable() error {
-	return s.db.AutoMigrate(&DesktopSession{})
+	return nil
 }
 
 func (s *DesktopSessionService) resolveLocalToken(userID string) (string, error) {
@@ -98,7 +121,6 @@ func (s *DesktopSessionService) validateLocalToken(token string) (string, error)
 
 type createSessionRequest struct {
 	DesktopInstanceID string `json:"desktopInstanceId" binding:"required"`
-	Challenge         string `json:"challenge"`
 }
 
 type createSessionResponse struct {
@@ -158,7 +180,7 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 	})
 }
 
-func (s *DesktopSessionService) ValidateSession(sessionToken string) (*DesktopSession, error) {
+func (s *DesktopSessionService) ValidateSessionWithContext(ctx context.Context, sessionToken string) (*DesktopSession, error) {
 	if sessionToken == "" {
 		return nil, errors.New("empty session token")
 	}
@@ -167,7 +189,7 @@ func (s *DesktopSessionService) ValidateSession(sessionToken string) (*DesktopSe
 	hashStr := base64.RawURLEncoding.EncodeToString(hash[:])
 
 	var session DesktopSession
-	if err := s.db.Where("token_hash = ? AND status = ?", hashStr, DesktopSessionStatusActive).First(&session).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("token_hash = ? AND status = ?", hashStr, DesktopSessionStatusActive).First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("session not found")
 		}
@@ -175,11 +197,49 @@ func (s *DesktopSessionService) ValidateSession(sessionToken string) (*DesktopSe
 	}
 
 	if time.Now().After(session.ExpiresAt) {
-		_ = s.revokeSession(&session)
+		_ = s.revokeSessionWithContext(ctx, &session)
 		return nil, errors.New("session expired")
 	}
 
 	return &session, nil
+}
+
+func (s *DesktopSessionService) TouchSessionWithContext(ctx context.Context, session *DesktopSession) error {
+	now := time.Now()
+	result := s.db.WithContext(ctx).Model(session).Update("last_used_at", now)
+	return result.Error
+}
+
+func (s *DesktopSessionService) RenewSessionWithContext(ctx context.Context, session *DesktopSession) error {
+	if time.Until(session.ExpiresAt) > DesktopSessionRenewalWindow {
+		return nil
+	}
+	newExpiry := time.Now().Add(DesktopSessionDuration)
+	result := s.db.WithContext(ctx).Model(session).Update("expires_at", newExpiry)
+	return result.Error
+}
+
+func (s *DesktopSessionService) revokeSessionWithContext(ctx context.Context, session *DesktopSession) error {
+	now := time.Now()
+	result := s.db.WithContext(ctx).Model(session).Updates(map[string]interface{}{
+		"status":     DesktopSessionStatusRevoked,
+		"revoked_at": now,
+	})
+	return result.Error
+}
+
+func (s *DesktopSessionService) ValidateSessionWithInstance(ctx context.Context, sessionToken, instanceID string) (*DesktopSession, error) {
+	session, err := s.ValidateSessionWithContext(ctx, sessionToken)
+	if err != nil {
+		return nil, err
+	}
+	if instanceID == "" {
+		return nil, errors.New("instance header required")
+	}
+	if session.DesktopInstanceID != instanceID {
+		return nil, errors.New("instance mismatch")
+	}
+	return session, nil
 }
 
 func (s *DesktopSessionService) TouchSession(session *DesktopSession) error {
@@ -227,21 +287,48 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 		return
 	}
 
-	newToken := make([]byte, 32)
-	if _, err := rand.Read(newToken); err != nil {
+	oldVersion, err := s.resolveLocalToken("")
+	if err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to read current token"})
+		return
+	}
+
+	newToken, err := generateSecureToken()
+	if err != nil {
 		c.JSON(500, gin.H{"code": 500, "msg": "failed to generate token"})
 		return
 	}
 
-	tokenFile := filepath.Join(s.dataDir, "security", "local-token")
-	tmpFile := tokenFile + ".tmp"
-	if err := os.WriteFile(tmpFile, newToken, 0600); err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to write token"})
+	newVersion := newToken
+
+	journal := &RotationJournal{
+		ID:         generateJournalID(),
+		OldVersion: oldVersion,
+		NewVersion: newVersion,
+		Stage:      RotationStagePrepared,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	if err := s.db.Create(journal).Error; err != nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to create rotation journal"})
 		return
 	}
-	if err := os.Rename(tmpFile, tokenFile); err != nil {
-		os.Remove(tmpFile)
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to update token"})
+
+	if err := s.atomicWriteToken(newToken); err != nil {
+		_ = s.db.Delete(journal).Error
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to write new token"})
+		return
+	}
+
+	journal.Stage = RotationStageCredentialSwitched
+	journal.UpdatedAt = time.Now()
+	if err := s.db.Model(journal).Updates(map[string]interface{}{
+		"stage":      RotationStageCredentialSwitched,
+		"updated_at": journal.UpdatedAt,
+	}).Error; err != nil {
+		_ = s.atomicWriteToken(oldVersion)
+		_ = s.db.Delete(journal).Error
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to update journal"})
 		return
 	}
 
@@ -249,11 +336,108 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 		"status":     DesktopSessionStatusRevoked,
 		"revoked_at": time.Now(),
 	}).Error; err != nil {
+		_ = s.atomicWriteToken(oldVersion)
+		_ = s.db.Delete(journal).Error
 		c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke old sessions"})
 		return
 	}
 
+	journal.Stage = RotationStageSessionsRevoked
+	journal.UpdatedAt = time.Now()
+	_ = s.db.Model(journal).Updates(map[string]interface{}{
+		"stage":      RotationStageSessionsRevoked,
+		"updated_at": journal.UpdatedAt,
+	}).Error
+
+	now := time.Now()
+	journal.Stage = RotationStageCompleted
+	journal.UpdatedAt = now
+	journal.CompletedAt = &now
+	_ = s.db.Model(journal).Updates(map[string]interface{}{
+		"stage":        RotationStageCompleted,
+		"updated_at":   now,
+		"completed_at": now,
+	}).Error
+
 	c.JSON(200, gin.H{"code": 200, "msg": "token rotated"})
+}
+
+func (s *DesktopSessionService) RecoverRotationJournals() error {
+	var journals []RotationJournal
+	if err := s.db.Where("stage != ?", RotationStageCompleted).Find(&journals).Error; err != nil {
+		return err
+	}
+	for _, journal := range journals {
+		switch journal.Stage {
+		case RotationStagePrepared:
+			_ = s.db.Delete(&journal).Error
+		case RotationStageCredentialSwitched:
+			_ = s.atomicWriteToken(journal.OldVersion)
+			_ = s.db.Delete(&journal).Error
+		case RotationStageSessionsRevoked:
+			now := time.Now()
+			_ = s.db.Model(&journal).Updates(map[string]interface{}{
+				"stage":        RotationStageCompleted,
+				"updated_at":   now,
+				"completed_at": now,
+			}).Error
+		}
+	}
+	return nil
+}
+
+func generateJournalID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("journal ID generation failed: %v", err))
+	}
+	return "rj_" + base64.RawURLEncoding.EncodeToString(b)
+}
+
+func generateSecureToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "v1." + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func (s *DesktopSessionService) atomicWriteToken(token string) error {
+	tokenFile := filepath.Join(s.dataDir, "security", "local-token")
+
+	dir := filepath.Dir(tokenFile)
+	tmpFile, err := os.CreateTemp(dir, "token-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	defer func() {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+	}()
+
+	if err := tmpFile.Chmod(0600); err != nil {
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+
+	if _, err := tmpFile.WriteString(token); err != nil {
+		return fmt.Errorf("write temp file: %w", err)
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, tokenFile); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+
+	return nil
 }
 
 var sessionIDRand = func() (string, error) {
@@ -267,7 +451,23 @@ var sessionIDRand = func() (string, error) {
 func generateSessionID() string {
 	id, err := sessionIDRand()
 	if err != nil {
-		return fmt.Sprintf("sess_fallback_%d", time.Now().UnixNano())
+		panic(fmt.Sprintf("session ID generation failed: %v", err))
+	}
+	return id
+}
+
+var requestIDRand = func() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "req_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func generateActorRequestID() string {
+	id, err := requestIDRand()
+	if err != nil {
+		panic(fmt.Sprintf("request ID generation failed: %v", err))
 	}
 	return id
 }
@@ -287,17 +487,45 @@ func DesktopSessionAuthMiddleware(sessionSvc *DesktopSessionService) gin.Handler
 			return
 		}
 
-		session, err := sessionSvc.ValidateSession(sessionToken)
+		session, err := sessionSvc.ValidateSessionWithContext(c.Request.Context(), sessionToken)
 		if err != nil {
 			c.JSON(401, gin.H{"code": 401, "msg": "invalid session"})
 			c.Abort()
 			return
 		}
 
-		_ = sessionSvc.TouchSession(session)
+		_ = sessionSvc.TouchSessionWithContext(c.Request.Context(), session)
 
-		c.Set("desktopSession", session)
-		c.Set("actorUserID", session.UserID)
-		c.Next()
+		actor := buildSessionActor(session)
+		applySessionActorToContext(c, actor)
 	}
+}
+
+func buildSessionActor(session *DesktopSession) *auth.ActorContext {
+	perms := auth.DefaultUserPermissions()
+	perms = append(perms, auth.PermDesktopPetRepair)
+
+	return &auth.ActorContext{
+		ActorType:      auth.ActorTypeLocalUser,
+		UserID:         session.UserID,
+		Roles:          []string{"local_user", "user"},
+		Permissions:    perms,
+		AuthMethod:     AuthMethodDesktopSession,
+		SessionID:      session.ID,
+		RequestID:      generateActorRequestID(),
+		CorrelationID:  "",
+		IsLocalTrusted: true,
+	}
+}
+
+func applySessionActorToContext(c *gin.Context, actor *auth.ActorContext) {
+	c.Set("actorContext", actor)
+	c.Set("userId", actor.UserID)
+	c.Set("username", actor.UserID)
+	c.Set("role", actor.Roles[0])
+	c.Set("desktopSession", actor.SessionID)
+	c.Set("actorUserID", actor.UserID)
+	ctx := auth.WithActor(c.Request.Context(), actor)
+	c.Request = c.Request.WithContext(ctx)
+	c.Next()
 }

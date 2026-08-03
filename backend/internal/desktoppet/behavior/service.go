@@ -14,6 +14,7 @@ type AdapterManagerTarget interface {
 type BindingRepository interface {
 	Create(ctx context.Context, binding bindings.BehaviorBinding) error
 	Update(ctx context.Context, id string, updates map[string]interface{}) error
+	UpdateTyped(ctx context.Context, req bindings.BindingUpdateRequest) (*bindings.BehaviorBinding, error)
 	Delete(ctx context.Context, id string) error
 	GetByID(ctx context.Context, id string) (*bindings.BehaviorBinding, error)
 	ListByUserCharacter(ctx context.Context, userID, characterID string) ([]bindings.BehaviorBinding, error)
@@ -206,6 +207,57 @@ func (s *BehaviorService) UpdateBinding(ctx context.Context, id string, updates 
 
 	filtered["updated_at"] = time.Now().Format(time.RFC3339)
 	return s.repo.Update(ctx, id, filtered)
+}
+
+func (s *BehaviorService) UpdateBindingTyped(ctx context.Context, req bindings.BindingUpdateRequest) (*bindings.BehaviorBinding, error) {
+	existing, err := s.repo.GetByID(ctx, req.ID)
+	if err != nil {
+		return nil, err
+	}
+	if existing.UserID != req.UserID {
+		return nil, NewBehaviorError("behavior_binding_not_owned", "无权操作该绑定")
+	}
+
+	if s.compile != nil && s.validateBinding != nil {
+		merged := *existing
+		if req.EventType != nil {
+			merged.EventType = *req.EventType
+		}
+		if req.ConditionsJSON != nil {
+			merged.ConditionsJSON = json.RawMessage(*req.ConditionsJSON)
+		}
+		if req.Semantic != nil {
+			merged.Semantic = *req.Semantic
+		}
+		if req.PreferredAction != nil {
+			merged.PreferredAction = *req.PreferredAction
+		}
+		if req.PriorityOffset != nil {
+			merged.PriorityOffset = *req.PriorityOffset
+		}
+		if req.CooldownMS != nil {
+			merged.CooldownMS = *req.CooldownMS
+		}
+		if req.Enabled != nil {
+			merged.Enabled = *req.Enabled
+		}
+		condition, err := s.compile(merged.ConditionsJSON)
+		if err != nil {
+			return nil, NewBehaviorErrorWithCause(ErrCodeBindingInvalid, "条件编译失败", err)
+		}
+		if err := s.validateBinding(merged, condition); err != nil {
+			return nil, err
+		}
+	}
+
+	updated, err := s.repo.UpdateTyped(ctx, req)
+	if err != nil {
+		if err.Error() == "version conflict" {
+			return nil, ErrVersionConflict
+		}
+		return nil, err
+	}
+	return updated, nil
 }
 
 func (s *BehaviorService) DeleteBinding(ctx context.Context, id string) error {

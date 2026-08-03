@@ -3,24 +3,26 @@
 package runtime
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/u-ai/backend/log"
 )
 
 type Auth struct {
-	config *DesktopPetRuntimeConfig
-	mu     sync.RWMutex
-	token  string
+	config      *DesktopPetRuntimeConfig
+	mu          sync.RWMutex
+	token       string
+	allowLegacy bool
 }
 
 func NewAuth(config *DesktopPetRuntimeConfig) *Auth {
 	return &Auth{
-		config: config,
-		token:  config.Token,
+		config:      config,
+		token:       config.Token,
+		allowLegacy: false,
 	}
 }
 
@@ -37,6 +39,12 @@ func (a *Auth) SetToken(token string) {
 	log.Logger.Info("runtime auth: token rotated")
 }
 
+func (a *Auth) SetAllowLegacy(allow bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.allowLegacy = allow
+}
+
 func (a *Auth) ValidateRequest(r *http.Request) error {
 	if a.config.LoopbackOnly {
 		remoteAddr := r.RemoteAddr
@@ -51,21 +59,22 @@ func (a *Auth) ValidateRequest(r *http.Request) error {
 			return NewRuntimeError(ErrCodeRuntimeForbiddenOrigin, "remote origin rejected", ErrRuntimeForbiddenOrigin)
 		}
 	}
+	origin := r.Header.Get("Origin")
+	if origin != "" && !a.isAllowedOrigin(origin) {
+		return NewRuntimeError(ErrCodeRuntimeForbiddenOrigin, "origin not allowed: "+origin, ErrRuntimeForbiddenOrigin)
+	}
 	token := a.extractToken(r)
 	if token == "" {
 		return NewRuntimeError(ErrCodeRuntimeUnauthorized, "missing runtime token", ErrRuntimeUnauthorized)
 	}
 	a.mu.RLock()
 	currentToken := a.token
+	allowLegacy := a.allowLegacy
 	a.mu.RUnlock()
-	if token != currentToken {
-		return NewRuntimeError(ErrCodeRuntimeUnauthorized, "invalid runtime token", ErrRuntimeUnauthorized)
+	if allowLegacy && subtle.ConstantTimeCompare([]byte(token), []byte(currentToken)) == 1 {
+		return nil
 	}
-	origin := r.Header.Get("Origin")
-	if origin != "" && !a.isAllowedOrigin(origin) {
-		return NewRuntimeError(ErrCodeRuntimeForbiddenOrigin, "origin not allowed: "+origin, ErrRuntimeForbiddenOrigin)
-	}
-	return nil
+	return NewRuntimeError(ErrCodeRuntimeUnauthorized, "invalid runtime token", ErrRuntimeUnauthorized)
 }
 
 func (a *Auth) extractToken(r *http.Request) string {
@@ -122,12 +131,11 @@ func (a *Auth) CheckOrigin(r *http.Request) bool {
 }
 
 type BootstrapTokenInfo struct {
-	SchemaVersion     int       `json:"schemaVersion"`
-	Endpoint          string    `json:"endpoint"`
-	Token             string    `json:"token"`
-	TokenExpiresAt    time.Time `json:"tokenExpiresAt"`
-	Protocol          string    `json:"protocol"`
-	BackendInstanceID string    `json:"backendInstanceId"`
+	SchemaVersion     int    `json:"schemaVersion"`
+	Endpoint          string `json:"endpoint"`
+	Token             string `json:"token"`
+	Protocol          string `json:"protocol"`
+	BackendInstanceID string `json:"backendInstanceId"`
 }
 
 func (a *Auth) BootstrapTokenInfo(endpoint string) BootstrapTokenInfo {
@@ -137,7 +145,6 @@ func (a *Auth) BootstrapTokenInfo(endpoint string) BootstrapTokenInfo {
 		SchemaVersion:     1,
 		Endpoint:          endpoint,
 		Token:             a.token,
-		TokenExpiresAt:    time.Now().Add(24 * time.Hour),
 		Protocol:          "amitia-desktop-pet.v1",
 		BackendInstanceID: a.config.BackendInstanceID,
 	}

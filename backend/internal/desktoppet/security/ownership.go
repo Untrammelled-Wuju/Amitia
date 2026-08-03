@@ -85,6 +85,12 @@ type BehaviorBindingScope struct {
 	InstallationID string
 }
 
+type ActionStreamScope struct {
+	UserID    string
+	StreamID  string
+	CharacterID string
+}
+
 var (
 	ErrUnauthorized = errors.New("desktoppet: unauthorized")
 	ErrForbidden    = errors.New("desktoppet: forbidden")
@@ -96,6 +102,7 @@ type OwnershipGuard interface {
 	RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*GenerationTaskScope, error)
 	RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*ProcessingTaskScope, error)
 	RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*ActionRevisionScope, error)
+	RequireActionStream(ctx context.Context, actor *desktoppetAuth.ActorContext, streamID string) (*ActionStreamScope, error)
 	RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*QualityScope, error)
 	RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*ReleaseScope, error)
 	RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*InstallationScope, error)

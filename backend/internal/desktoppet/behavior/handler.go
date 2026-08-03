@@ -204,29 +204,6 @@ func (h *Handler) GetBinding(c *gin.Context) {
 	util.SuccessResponse(c, existing)
 }
 
-var behaviorUpdateWhitelist = map[string]bool{
-	"event_type":       true,
-	"conditions_json":  true,
-	"semantic":         true,
-	"preferred_action": true,
-	"priority_offset":  true,
-	"cooldown_ms":      true,
-	"enabled":          true,
-}
-
-func filterBehaviorUpdates(updates map[string]interface{}) (map[string]interface{}, []string) {
-	filtered := make(map[string]interface{})
-	var rejected []string
-	for k, v := range updates {
-		if behaviorUpdateWhitelist[k] {
-			filtered[k] = v
-		} else {
-			rejected = append(rejected, k)
-		}
-	}
-	return filtered, rejected
-}
-
 func (h *Handler) UpdateBinding(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -238,31 +215,21 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	existing, err := h.service.GetBinding(c.Request.Context(), id)
-	if err != nil {
-		writeBehaviorError(c, err)
-		return
-	}
-	if existing.UserID != actorID {
-		util.ErrorResponse(c, response.Forbidden, "无权操作该绑定", gin.H{"errorCode": "BINDING_NOT_OWNED"})
-		return
-	}
-	var updates map[string]interface{}
-	if err := c.ShouldBindJSON(&updates); err != nil {
+
+	var req bindings.BindingUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
 		return
 	}
-	filtered, rejected := filterBehaviorUpdates(updates)
-	if len(rejected) > 0 {
-		util.ErrorResponse(c, response.InvalidParams, "包含不允许更新的字段", gin.H{"errorCode": "FIELD_NOT_ALLOWED", "fields": rejected})
-		return
-	}
-	if err := h.service.UpdateBinding(c.Request.Context(), id, filtered); err != nil {
-		writeBehaviorError(c, err)
-		return
-	}
-	updated, err := h.service.GetBinding(c.Request.Context(), id)
+	req.ID = id
+	req.UserID = actorID
+
+	updated, err := h.service.UpdateBindingTyped(c.Request.Context(), req)
 	if err != nil {
+		if errors.Is(err, ErrVersionConflict) {
+			util.ErrorResponse(c, response.InvalidParams, "版本冲突，请刷新后重试", gin.H{"errorCode": "VERSION_CONFLICT"})
+			return
+		}
 		writeBehaviorError(c, err)
 		return
 	}

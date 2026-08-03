@@ -87,35 +87,23 @@ func (r *RuntimeRegistry) GetByUser(userID string) *Connection {
 
 func (r *RuntimeRegistry) SelectRuntime(userID string) (*Connection, error) {
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 
-	var candidate *Connection
-	if userID != "" {
-		if runtimeID, ok := r.userRuntime[userID]; ok {
-			candidate = r.byRuntime[runtimeID]
-		}
+	if userID == "" {
+		return nil, ErrRuntimeOffline
 	}
 
-	ready := make([]*Connection, 0)
-	if candidate == nil {
-		for _, conn := range r.byRuntime {
-			if conn.State() == SessionStateReady {
-				ready = append(ready, conn)
-			}
-		}
-	}
-	r.mu.RUnlock()
-
-	if candidate != nil {
-		return candidate, nil
+	runtimeID, ok := r.userRuntime[userID]
+	if !ok {
+		return nil, ErrRuntimeOffline
 	}
 
-	if len(ready) == 1 {
-		return ready[0], nil
+	candidate, ok := r.byRuntime[runtimeID]
+	if !ok {
+		return nil, ErrRuntimeOffline
 	}
-	if len(ready) > 1 {
-		return nil, ErrRuntimeAmbiguous
-	}
-	return nil, ErrRuntimeOffline
+
+	return candidate, nil
 }
 
 func (r *RuntimeRegistry) ListAll() []*Connection {

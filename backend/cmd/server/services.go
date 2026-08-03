@@ -557,8 +557,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	desktopPetRuntime := runtime.NewService(runtimeConfig, runtimeCmdStore, runtimeStateStore, runtimeSnapshotBuilder, runtimeSinkHolder)
 
-	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
-
 	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir, installation.WithRuntimeNotifier(desktopPetRuntime.Notifier()))
 
 	editingRepo := editing.NewRepository(ctx.DB)

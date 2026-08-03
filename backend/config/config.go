@@ -35,6 +35,8 @@ type StorageConfig struct {
 
 type JWTConfig struct {
 	Secret     string `mapstructure:"secret"`
+	Issuer     string `mapstructure:"issuer"`
+	Audience   string `mapstructure:"audience"`
 	ExpireDays int    `mapstructure:"expireDays"`
 }
 
@@ -171,7 +173,33 @@ func InitConfig(configPath string) {
 		log.Fatalf("配置解析失败: %v", err)
 	}
 
+	if !isStrongSecret(AppCfg.JWT.Secret) {
+		log.Fatalf("JWT Secret 过弱或使用了默认模板值，请在 config.yml 中设置强密钥")
+	}
+
 	v.WatchConfig()
+}
+
+var weakSecretPatterns = []string{
+	"",
+	"u-ai-secret-key-change-me",
+	"secret",
+	"password",
+	"123456",
+	"change-me",
+	"default",
+}
+
+func isStrongSecret(secret string) bool {
+	if len(secret) < 16 {
+		return false
+	}
+	for _, pattern := range weakSecretPatterns {
+		if secret == pattern {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *ServerConfig) Addr() string {

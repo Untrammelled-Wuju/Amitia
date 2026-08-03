@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -54,6 +55,82 @@ func (r *Repository) Update(ctx context.Context, id string, updates map[string]i
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+func (r *Repository) UpdateTyped(ctx context.Context, req BindingUpdateRequest) (*BehaviorBinding, error) {
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var model BehaviorBindingModel
+	if err := tx.Where("id = ? AND user_id = ?", req.ID, req.UserID).First(&model).Error; err != nil {
+		tx.Rollback()
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New("binding not found")
+		}
+		return nil, err
+	}
+
+	if model.Version != req.ExpectedVersion {
+		tx.Rollback()
+		return nil, errors.New("version conflict")
+	}
+
+	updates := map[string]interface{}{
+		"version":    model.Version + 1,
+		"updated_at": time.Now().Format(time.RFC3339),
+	}
+	if req.EventType != nil {
+		updates["event_type"] = *req.EventType
+	}
+	if req.ConditionsJSON != nil {
+		updates["conditions_json"] = *req.ConditionsJSON
+	}
+	if req.Semantic != nil {
+		updates["semantic"] = *req.Semantic
+	}
+	if req.PreferredAction != nil {
+		updates["preferred_action"] = *req.PreferredAction
+	}
+	if req.PriorityOffset != nil {
+		updates["priority_offset"] = *req.PriorityOffset
+	}
+	if req.CooldownMS != nil {
+		updates["cooldown_ms"] = *req.CooldownMS
+	}
+	if req.Enabled != nil {
+		updates["enabled"] = *req.Enabled
+	}
+
+	result := tx.Model(&model).
+		Where("id = ? AND user_id = ? AND version = ?", req.ID, req.UserID, req.ExpectedVersion).
+		Updates(updates)
+	if result.Error != nil {
+		tx.Rollback()
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		tx.Rollback()
+		return nil, errors.New("version conflict")
+	}
+
+	if err := tx.First(&model).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	b := modelToBinding(model)
+	return &b, nil
 }
 
 func (r *Repository) Delete(ctx context.Context, id string) error {

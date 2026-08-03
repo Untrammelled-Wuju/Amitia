@@ -83,22 +83,37 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		c.JSON(200, gin.H{"status": "alive"})
 	})
 
+	readinessSvc := readiness.NewStartupReadinessService(ctx.DB, services.Extension)
+
 	r.GET("/readyz", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ready"})
+		if readinessSvc == nil {
+			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "readiness service not initialized"}})
+			return
+		}
+		snapshot := readinessSvc.Snapshot()
+		result := gin.H{
+			"status":        snapshot.OverallStatus,
+			"blockingCount": snapshot.BlockingCount,
+			"degradedCount": snapshot.DegradedCount,
+			"timestamp":     snapshot.Timestamp,
+		}
+		httpStatus := 200
+		if snapshot.OverallStatus == readiness.StatusBlocked {
+			httpStatus = 503
+		}
+		c.JSON(httpStatus, gin.H{"code": httpStatus, "msg": string(snapshot.OverallStatus), "data": result})
 	})
+
 
 	public := r.Group("/api/public")
 	{
-		public.GET("/auth/status", func(c *gin.Context) {
-			mode := config.AppCfg.Security.Mode
-			c.JSON(200, gin.H{"code": 200, "data": gin.H{"mode": mode, "configured": mode != ""}, "msg": "ok"})
-		})
-		public.POST("/auth/setup", func(c *gin.Context) {
-			c.JSON(501, gin.H{"code": 501, "msg": "setup not implemented"})
-		})
-		public.POST("/auth/login", func(c *gin.Context) {
-			c.JSON(501, gin.H{"code": 501, "msg": "login not implemented"})
-		})
+		userRepo := user.NewRepository(ctx)
+		userSvc := user.NewService(userRepo, ctx)
+		userHandler := user.NewHandler(userSvc)
+
+		public.GET("/auth/status", userHandler.Status)
+		public.POST("/auth/setup", userHandler.Setup)
+		public.POST("/auth/login", userHandler.Login)
 	}
 
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir)
@@ -108,30 +123,34 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 	services.DesktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
-	localTokens.Use(security.AuthenticationMiddleware(security.AuthConfig{
+
+	local := r.Group("/api/local")
+	local.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:           config.AppCfg.Security.Mode,
 		JWTSecret:      config.AppCfg.JWT.Secret,
+		JWTIssuer:      config.AppCfg.JWT.Issuer,
+		JWTAudience:    config.AppCfg.JWT.Audience,
 		LocalToken:     resolveLocalToken(),
 		LocalUserID:    config.AppCfg.Security.LocalUserID,
 		ListenAddress:  config.AppCfg.Server.Host,
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 	}))
 	{
-		localTokens.POST("/sessions", func(c *gin.Context) {
+		local.POST("/sessions", func(c *gin.Context) {
 			if sessionSvc == nil {
 				c.JSON(500, gin.H{"code": 500, "msg": "session service not available"})
 				return
 			}
 			sessionSvc.CreateSession(c)
 		})
-		localTokens.POST("/token/rotate", func(c *gin.Context) {
+		local.POST("/token/rotate", func(c *gin.Context) {
 			if sessionSvc == nil {
 				c.JSON(500, gin.H{"code": 500, "msg": "session service not available"})
 				return
 			}
 			sessionSvc.RotateToken(c)
 		})
-		localTokens.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+		local.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 			actor := security.GetActor(c)
 			if actor == nil || actor.UserID == "" {
 				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
@@ -142,7 +161,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 				c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
 				return
 			}
-			rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, 10*time.Minute)
+			rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, "", 10*time.Minute)
 			if err != nil {
 				log.Error("failed to create bootstrap ticket", "error", err)
 				c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
@@ -160,15 +179,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 				},
 			})
 		})
-		localTokens.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+		local.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 			actor := security.GetActor(c)
 			if actor == nil || actor.UserID == "" {
 				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
 				return
 			}
-			affected, err := bootstrapTicketRepo.RevokeUserTickets(c.Request.Context(), actor.UserID)
+			deviceID := c.Param("deviceId")
+			if deviceID == "" {
+				c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
+				return
+			}
+			affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID, deviceID)
 			if err != nil {
-				log.Error("failed to revoke bootstrap tickets", "error", err)
+				log.Error("failed to revoke device bootstrap tickets", "error", err)
 				c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
 				return
 			}
@@ -180,6 +204,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	localAdmin.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:           config.AppCfg.Security.Mode,
 		JWTSecret:      config.AppCfg.JWT.Secret,
+		JWTIssuer:      config.AppCfg.JWT.Issuer,
+		JWTAudience:    config.AppCfg.JWT.Audience,
 		LocalToken:     resolveLocalToken(),
 		LocalUserID:    config.AppCfg.Security.LocalUserID,
 		ListenAddress:  config.AppCfg.Server.Host,
@@ -203,10 +229,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:           config.AppCfg.Security.Mode,
 		JWTSecret:      config.AppCfg.JWT.Secret,
+		JWTIssuer:      config.AppCfg.JWT.Issuer,
+		JWTAudience:    config.AppCfg.JWT.Audience,
 		LocalToken:     resolveLocalToken(),
 		LocalUserID:    config.AppCfg.Security.LocalUserID,
 		ListenAddress:  config.AppCfg.Server.Host,
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+		SessionService: sessionSvc,
 	}))
 	{
 		user.RegisterUserRouter(apiGroup, ctx)

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -18,6 +19,7 @@ type BootstrapTicket struct {
 	TicketHash        string `gorm:"column:ticket_hash;uniqueIndex" json:"-"`
 	UserID            string `gorm:"column:user_id;index:idx_bt_user" json:"userId"`
 	DeviceID          string `gorm:"column:device_id;index:idx_bt_device" json:"deviceId"`
+	RuntimeID         string `gorm:"column:runtime_id;index:idx_bt_runtime" json:"runtimeId"`
 	Status            string `gorm:"column:status;index:idx_bt_status" json:"status"`
 	ExpiresAt         string `gorm:"column:expires_at" json:"expiresAt"`
 	ConsumedAt        string `gorm:"column:consumed_at" json:"consumedAt"`
@@ -51,7 +53,9 @@ func NewBootstrapTicketRepository(db *gorm.DB) *BootstrapTicketRepository {
 
 func generateTicketID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("ticket ID generation failed: %v", err))
+	}
 	return "rbt_" + hex.EncodeToString(b)
 }
 
@@ -60,7 +64,7 @@ func hashTicket(ticket string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func (r *BootstrapTicketRepository) Create(ctx context.Context, userID, deviceID string, ttl time.Duration) (rawTicket string, ticket *BootstrapTicket, err error) {
+func (r *BootstrapTicketRepository) Create(ctx context.Context, userID, deviceID, runtimeID string, ttl time.Duration) (rawTicket string, ticket *BootstrapTicket, err error) {
 	rawTicket, err = generateRawTicket()
 	if err != nil {
 		return "", nil, err
@@ -71,6 +75,7 @@ func (r *BootstrapTicketRepository) Create(ctx context.Context, userID, deviceID
 		TicketHash: hashTicket(rawTicket),
 		UserID:     userID,
 		DeviceID:   deviceID,
+		RuntimeID:  runtimeID,
 		Status:     BootstrapTicketStatusActive,
 		ExpiresAt:  now.Add(ttl).UTC().Format(time.RFC3339),
 		CreatedAt:  now.UTC().Format(time.RFC3339),
@@ -80,6 +85,106 @@ func (r *BootstrapTicketRepository) Create(ctx context.Context, userID, deviceID
 		return "", nil, err
 	}
 	return rawTicket, ticket, nil
+}
+
+func (r *BootstrapTicketRepository) ConsumeWithValidation(ctx context.Context, rawTicket, runtimeID, deviceID string) (*BootstrapTicket, error) {
+	if rawTicket == "" {
+		return nil, ErrTicketNotFound
+	}
+	hash := hashTicket(rawTicket)
+
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var ticket BootstrapTicket
+	if err := tx.Where("ticket_hash = ?", hash).Take(&ticket).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrTicketNotFound
+		}
+		return nil, err
+	}
+
+	switch ticket.Status {
+	case BootstrapTicketStatusConsumed:
+		tx.Rollback()
+		return nil, ErrTicketConsumed
+	case BootstrapTicketStatusRevoked:
+		tx.Rollback()
+		return nil, ErrTicketRevoked
+	case BootstrapTicketStatusExpired:
+		tx.Rollback()
+		return nil, ErrTicketExpired
+	}
+
+	if ticket.ExpiresAt == "" {
+		tx.Rollback()
+		return nil, ErrTicketExpired
+	}
+	expires, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
+	if err != nil {
+		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
+			"status":     BootstrapTicketStatusExpired,
+			"reason":     "expires_at_corrupted",
+			"updated_at": time.Now().UTC().Format(time.RFC3339),
+		}).Error
+		tx.Commit()
+		return nil, ErrTicketExpired
+	}
+	if time.Now().After(expires) {
+		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
+			"status":     BootstrapTicketStatusExpired,
+			"reason":     "expired",
+			"updated_at": time.Now().UTC().Format(time.RFC3339),
+		}).Error
+		tx.Commit()
+		return nil, ErrTicketExpired
+	}
+
+	if deviceID != "" && ticket.DeviceID != "" && ticket.DeviceID != deviceID {
+		tx.Rollback()
+		return nil, ErrTicketRevoked
+	}
+
+	if ticket.RuntimeID != "" && ticket.RuntimeID != runtimeID {
+		tx.Rollback()
+		return nil, ErrTicketRevoked
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	result := tx.Model(&BootstrapTicket{}).
+		Where("id = ? AND status = ? AND expires_at > ?", ticket.ID, BootstrapTicketStatusActive, now).
+		Updates(map[string]interface{}{
+			"status":              BootstrapTicketStatusConsumed,
+			"consumed_at":         now,
+			"consumed_by_runtime": runtimeID,
+			"updated_at":          now,
+		})
+
+	if result.Error != nil {
+		tx.Rollback()
+		return nil, result.Error
+	}
+	if result.RowsAffected != 1 {
+		tx.Rollback()
+		return nil, ErrTicketConsumed
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	ticket.Status = BootstrapTicketStatusConsumed
+	ticket.ConsumedAt = now
+	ticket.ConsumedByRuntime = runtimeID
+	return &ticket, nil
 }
 
 func generateRawTicket() (string, error) {
@@ -96,8 +201,19 @@ func (r *BootstrapTicketRepository) Consume(ctx context.Context, rawTicket, runt
 	}
 	hash := hashTicket(rawTicket)
 
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
 	var ticket BootstrapTicket
-	if err := r.db.WithContext(ctx).Where("ticket_hash = ?", hash).Take(&ticket).Error; err != nil {
+	if err := tx.Where("ticket_hash = ?", hash).Take(&ticket).Error; err != nil {
+		tx.Rollback()
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrTicketNotFound
 		}
@@ -106,31 +222,63 @@ func (r *BootstrapTicketRepository) Consume(ctx context.Context, rawTicket, runt
 
 	switch ticket.Status {
 	case BootstrapTicketStatusConsumed:
+		tx.Rollback()
 		return nil, ErrTicketConsumed
 	case BootstrapTicketStatusRevoked:
+		tx.Rollback()
 		return nil, ErrTicketRevoked
 	case BootstrapTicketStatusExpired:
+		tx.Rollback()
 		return nil, ErrTicketExpired
 	}
 
-	if ticket.ExpiresAt != "" {
-		expires, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
-		if err == nil && time.Now().After(expires) {
-			_ = r.UpdateStatus(ctx, ticket.ID, BootstrapTicketStatusExpired, "expired")
-			return nil, ErrTicketExpired
-		}
+	if ticket.ExpiresAt == "" {
+		tx.Rollback()
+		return nil, ErrTicketExpired
+	}
+	expires, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
+	if err != nil {
+		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
+			"status":     BootstrapTicketStatusExpired,
+			"reason":     "expires_at_corrupted",
+			"updated_at": time.Now().UTC().Format(time.RFC3339),
+		}).Error
+		tx.Commit()
+		return nil, ErrTicketExpired
+	}
+	if time.Now().After(expires) {
+		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
+			"status":     BootstrapTicketStatusExpired,
+			"reason":     "expired",
+			"updated_at": time.Now().UTC().Format(time.RFC3339),
+		}).Error
+		tx.Commit()
+		return nil, ErrTicketExpired
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	updates := map[string]interface{}{
-		"status":              BootstrapTicketStatusConsumed,
-		"consumed_at":         now,
-		"consumed_by_runtime": runtimeID,
-		"updated_at":          now,
+	result := tx.Model(&BootstrapTicket{}).
+		Where("id = ? AND status = ? AND expires_at > ?", ticket.ID, BootstrapTicketStatusActive, now).
+		Updates(map[string]interface{}{
+			"status":              BootstrapTicketStatusConsumed,
+			"consumed_at":         now,
+			"consumed_by_runtime": runtimeID,
+			"updated_at":          now,
+		})
+
+	if result.Error != nil {
+		tx.Rollback()
+		return nil, result.Error
 	}
-	if err := r.db.WithContext(ctx).Model(&ticket).Updates(updates).Error; err != nil {
+	if result.RowsAffected != 1 {
+		tx.Rollback()
+		return nil, ErrTicketConsumed
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
+
 	ticket.Status = BootstrapTicketStatusConsumed
 	ticket.ConsumedAt = now
 	ticket.ConsumedByRuntime = runtimeID
@@ -180,6 +328,22 @@ func (r *BootstrapTicketRepository) RevokeUserTickets(ctx context.Context, userI
 		Updates(map[string]interface{}{
 			"status":     BootstrapTicketStatusRevoked,
 			"reason":     "user-revoked",
+			"updated_at": now,
+		})
+	return result.RowsAffected, result.Error
+}
+
+func (r *BootstrapTicketRepository) RevokeDeviceTickets(ctx context.Context, userID, deviceID string) (int64, error) {
+	if userID == "" || deviceID == "" {
+		return 0, nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	result := r.db.WithContext(ctx).
+		Model(&BootstrapTicket{}).
+		Where("user_id = ? AND device_id = ? AND status = ?", userID, deviceID, BootstrapTicketStatusActive).
+		Updates(map[string]interface{}{
+			"status":     BootstrapTicketStatusRevoked,
+			"reason":     "device-revoked",
 			"updated_at": now,
 		})
 	return result.RowsAffected, result.Error

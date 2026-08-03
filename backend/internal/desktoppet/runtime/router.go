@@ -51,6 +51,16 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, svc *Service) {
 	})
 
 	runtimeGroup.GET("/metrics", func(c *gin.Context) {
+		userID := middleware.GetUserID(c)
+		if userID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
+			return
+		}
+		actor, err := middleware.GetActorFromContext(c)
+		if err != nil || !actor.HasRole("admin") {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": gin.H{"code": "FORBIDDEN", "message": "需要管理员权限"}})
+			return
+		}
 		snapshot := svc.GetMetrics()
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": snapshot})
 	})

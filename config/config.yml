@@ -7,7 +7,9 @@ storage:
   dataDir: "data"
 
 jwt:
-  secret: "u-ai-secret-key-change-me"
+  secret: ""
+  issuer: "amitia"
+  audience: "amitia-api"
   expireDays: 7
 
 app:
