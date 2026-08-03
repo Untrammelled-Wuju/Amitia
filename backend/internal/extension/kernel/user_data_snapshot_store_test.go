@@ -1,4 +1,4 @@
-﻿package kernel
+package kernel
 
 import (
 	"context"
@@ -221,7 +221,7 @@ func TestUserDataRecordValidationPassesValidRecord(t *testing.T) {
 		SchemaVersion: "1.0.0",
 		ExtensionID:   "ext1",
 		Namespace:     "ext_ext1_data",
-		EntityType:    "entity",
+		EntityType:    "data",
 		EntityID:      "e1",
 		Operation:     "upsert",
 		Payload:       payload,
@@ -246,8 +246,8 @@ func TestUserDataSnapshotImportAndVerify(t *testing.T) {
 	}
 	payload1 := map[string]any{"entity_value": "v1"}
 	payload2 := map[string]any{"entity_value": "v2"}
-	line1 := `{"schemaVersion":"1.0.0","extensionID":"testext","namespace":"ext_testext_restore","entityType":"entity","entityID":"e1","operation":"upsert","payload":{"entity_value":"v1"},"payloadHash":"` + computeUserDataPayloadHash(payload1) + `"}`
-	line2 := `{"schemaVersion":"1.0.0","extensionID":"testext","namespace":"ext_testext_restore","entityType":"entity","entityID":"e2","operation":"upsert","payload":{"entity_value":"v2"},"payloadHash":"` + computeUserDataPayloadHash(payload2) + `"}`
+	line1 := `{"schemaVersion":"1.0.0","extensionID":"testext","namespace":"ext_testext_restore","entityType":"restore","entityID":"e1","operation":"upsert","payload":{"entity_value":"v1"},"payloadHash":"` + computeUserDataPayloadHash(payload1) + `"}`
+	line2 := `{"schemaVersion":"1.0.0","extensionID":"testext","namespace":"ext_testext_restore","entityType":"restore","entityID":"e2","operation":"upsert","payload":{"entity_value":"v2"},"payloadHash":"` + computeUserDataPayloadHash(payload2) + `"}`
 	jsonl := line1 + "\n" + line2 + "\n"
 
 	userState := packageUserDataMigrationState{
@@ -297,8 +297,8 @@ func TestUserDataSnapshotWithFlatRecordImport(t *testing.T) {
 	payload2 := map[string]any{"value": "v2", "category": "c2"}
 	payloadHash1 := computeUserDataPayloadHash(payload1)
 	payloadHash2 := computeUserDataPayloadHash(payload2)
-	line1 := `{"schemaVersion":"1.0.0","extensionID":"flat","namespace":"ext_flat_test","entityType":"entity","entityID":"x1","operation":"upsert","payload":` + mustMarshalJSON(payload1) + `,"payloadHash":"` + payloadHash1 + `"}`
-	line2 := `{"schemaVersion":"1.0.0","extensionID":"flat","namespace":"ext_flat_test","entityType":"entity","entityID":"x2","operation":"upsert","payload":` + mustMarshalJSON(payload2) + `,"payloadHash":"` + payloadHash2 + `"}`
+	line1 := `{"schemaVersion":"1.0.0","extensionID":"flat","namespace":"ext_flat_test","entityType":"test","entityID":"x1","operation":"upsert","payload":` + mustMarshalJSON(payload1) + `,"payloadHash":"` + payloadHash1 + `"}`
+	line2 := `{"schemaVersion":"1.0.0","extensionID":"flat","namespace":"ext_flat_test","entityType":"test","entityID":"x2","operation":"upsert","payload":` + mustMarshalJSON(payload2) + `,"payloadHash":"` + payloadHash2 + `"}`
 	jsonl := line1 + "\n" + line2 + "\n"
 
 	userState := packageUserDataMigrationState{
@@ -350,12 +350,12 @@ func TestComputeContentBoundBatchHashSameCountDifferentContent(t *testing.T) {
 	payloadB1 := map[string]any{"key": "value_b1"}
 	payloadB2 := map[string]any{"key": "value_b2"}
 	batchA := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payloadA1),
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payloadA2),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payloadA1),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payloadA2),
 	)
 	batchB := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payloadB1),
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payloadB2),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payloadB1),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payloadB2),
 	)
 	hashA := computeContentBoundBatchHash(batchA, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
 	hashB := computeContentBoundBatchHash(batchB, "ext1", 0, "", 2, "1.0.0", "ext_ext1_data", "op-test")
@@ -371,12 +371,12 @@ func TestComputeContentBoundBatchHashSameCountDifferentOrder(t *testing.T) {
 	payload1 := map[string]any{"key": "value1"}
 	payload2 := map[string]any{"key": "value2"}
 	batchForward := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payload1),
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payload2),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payload1),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payload2),
 	)
 	batchReversed := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payload2),
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payload1),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payload2),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payload1),
 	)
 	hashForward := computeContentBoundBatchHash(batchForward, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
 	hashReversed := computeContentBoundBatchHash(batchReversed, "ext1", 0, "", 2, "1.0.0", "ext_ext1_data", "op-test")
@@ -391,26 +391,26 @@ func TestComputeContentBoundBatchHashSameCountDifferentOrder(t *testing.T) {
 func TestComputeContentBoundBatchHashSingleFieldChange(t *testing.T) {
 	basePayload := map[string]any{"key": "value"}
 	baseBatch := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", basePayload),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", basePayload),
 	)
 	baseHash := computeContentBoundBatchHash(baseBatch, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
 
 	changeNamespace := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_other", "entity", "e1", "upsert", basePayload),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_other", "other", "e1", "upsert", basePayload),
 	)
 	if computeContentBoundBatchHash(changeNamespace, "ext1", 0, "", 1, "1.0.0", "ext_ext1_other", "op-test") == baseHash {
 		t.Fatalf("namespace change should alter hash")
 	}
 
 	changeOperation := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "delete", basePayload),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "delete", basePayload),
 	)
 	if computeContentBoundBatchHash(changeOperation, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test") == baseHash {
 		t.Fatalf("operation change should alter hash")
 	}
 
 	changeSchemaVersion := wrapRawRecords(
-		makeTestRawLine("2.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", basePayload),
+		makeTestRawLine("2.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", basePayload),
 	)
 	if computeContentBoundBatchHash(changeSchemaVersion, "ext1", 0, "", 1, "2.0.0", "ext_ext1_data", "op-test") == baseHash {
 		t.Fatalf("schemaVersion change should alter hash")
@@ -428,8 +428,8 @@ func TestComputeContentBoundBatchHashStable(t *testing.T) {
 	payload1 := map[string]any{"key": "value1"}
 	payload2 := map[string]any{"key": "value2"}
 	batch := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e1", "upsert", payload1),
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "entity", "e2", "upsert", payload2),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payload1),
+		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payload2),
 	)
 	hash1 := computeContentBoundBatchHash(batch, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
 	hash2 := computeContentBoundBatchHash(batch, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
@@ -456,8 +456,8 @@ func TestRestoreTableStoresContentBoundBatchHash(t *testing.T) {
 	}
 	payload1 := map[string]any{"entity_value": "v1"}
 	payload2 := map[string]any{"entity_value": "v2"}
-	line1 := makeTestRawLine("1.0.0", "shash", "ext_shash_data", "entity", "e1", "upsert", payload1)
-	line2 := makeTestRawLine("1.0.0", "shash", "ext_shash_data", "entity", "e2", "upsert", payload2)
+	line1 := makeTestRawLine("1.0.0", "shash", "ext_shash_data", "data", "e1", "upsert", payload1)
+	line2 := makeTestRawLine("1.0.0", "shash", "ext_shash_data", "data", "e2", "upsert", payload2)
 	jsonl := line1 + "\n" + line2 + "\n"
 
 	userState := packageUserDataMigrationState{
@@ -512,9 +512,9 @@ func TestRestoreTableResumeAfterPartialCommit(t *testing.T) {
 	payload1 := map[string]any{"entity_value": "v1"}
 	payload2 := map[string]any{"entity_value": "v2"}
 	payload3 := map[string]any{"entity_value": "v3"}
-	line1 := makeTestRawLine("1.0.0", "rsm", "ext_rsm_data", "entity", "e1", "upsert", payload1)
-	line2 := makeTestRawLine("1.0.0", "rsm", "ext_rsm_data", "entity", "e2", "upsert", payload2)
-	line3 := makeTestRawLine("1.0.0", "rsm", "ext_rsm_data", "entity", "e3", "upsert", payload3)
+	line1 := makeTestRawLine("1.0.0", "rsm", "ext_rsm_data", "data", "e1", "upsert", payload1)
+	line2 := makeTestRawLine("1.0.0", "rsm", "ext_rsm_data", "data", "e2", "upsert", payload2)
+	line3 := makeTestRawLine("1.0.0", "rsm", "ext_rsm_data", "data", "e3", "upsert", payload3)
 	jsonl := line1 + "\n" + line2 + "\n" + line3 + "\n"
 
 	userState := packageUserDataMigrationState{
@@ -565,8 +565,8 @@ func setupRestoreForVerifyTest(t *testing.T) (*sql.DB, *UserDataSnapshotStore, s
 	}
 	payload1 := map[string]any{"entity_value": "v1"}
 	payload2 := map[string]any{"entity_value": "v2"}
-	line1 := makeTestRawLine("1.0.0", "vsetup", "ext_vsetup_verify_setup", "entity", "e1", "upsert", payload1)
-	line2 := makeTestRawLine("1.0.0", "vsetup", "ext_vsetup_verify_setup", "entity", "e2", "upsert", payload2)
+	line1 := makeTestRawLine("1.0.0", "vsetup", "ext_vsetup_verify_setup", "verify_setup", "e1", "upsert", payload1)
+	line2 := makeTestRawLine("1.0.0", "vsetup", "ext_vsetup_verify_setup", "verify_setup", "e2", "upsert", payload2)
 	jsonl := line1 + "\n" + line2 + "\n"
 
 	userState := packageUserDataMigrationState{
@@ -749,10 +749,10 @@ func TestVerifyPassesAllConsistent(t *testing.T) {
 	payload2 := map[string]any{"entity_value": "v2"}
 	payload3 := map[string]any{"entity_value": "v3"}
 	payload4 := map[string]any{"entity_value": "v4"}
-	line1 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "entity", "a1", "upsert", payload1)
-	line2 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "entity", "a2", "upsert", payload2)
-	line3 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "entity", "a3", "upsert", payload3)
-	line4 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "entity", "a4", "upsert", payload4)
+	line1 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "consistent", "a1", "upsert", payload1)
+	line2 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "consistent", "a2", "upsert", payload2)
+	line3 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "consistent", "a3", "upsert", payload3)
+	line4 := makeTestRawLine("1.0.0", "conz", "ext_conz_consistent", "consistent", "a4", "upsert", payload4)
 	jsonl := line1 + "\n" + line2 + "\n" + line3 + "\n" + line4 + "\n"
 
 	userState := packageUserDataMigrationState{
@@ -833,8 +833,8 @@ func TestRestoreTableRecoveryHashMatchSucceeds(t *testing.T) {
 	}
 	payload1 := map[string]any{"entity_value": "v1"}
 	payload2 := map[string]any{"entity_value": "v2"}
-	line1 := makeTestRawLine("1.0.0", "rok", "ext_rok_data", "entity", "e1", "upsert", payload1)
-	line2 := makeTestRawLine("1.0.0", "rok", "ext_rok_data", "entity", "e2", "upsert", payload2)
+	line1 := makeTestRawLine("1.0.0", "rok", "ext_rok_data", "data", "e1", "upsert", payload1)
+	line2 := makeTestRawLine("1.0.0", "rok", "ext_rok_data", "data", "e2", "upsert", payload2)
 	jsonl := line1 + "\n" + line2 + "\n"
 
 	userState := packageUserDataMigrationState{
@@ -904,7 +904,7 @@ func makeNLines(t *testing.T, extensionID, namespace string, count int, prefix s
 	var lines string
 	for i := 0; i < count; i++ {
 		payload := map[string]any{"entity_value": fmt.Sprintf("%s_v_%d", prefix, i)}
-		line := makeTestRawLine("1.0.0", extensionID, namespace, "entity", fmt.Sprintf("%s_e_%04d", prefix, i), "upsert", payload)
+		line := makeTestRawLine("1.0.0", extensionID, namespace, "data", fmt.Sprintf("%s_e_%04d", prefix, i), "upsert", payload)
 		lines += line + "\n"
 	}
 	return lines
@@ -1241,4 +1241,3 @@ func TestFIV_RepeatedRestoreIsIdempotent(t *testing.T) {
 		t.Fatalf("verify after idempotent calls: %v", err)
 	}
 }
-

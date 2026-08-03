@@ -40,6 +40,61 @@ type UserDataBatchIdentity struct {
 	BatchAlgorithm string
 }
 
+type UserDataNamespaceIdentity struct {
+	SchemaVersion          int    `json:"schemaVersion"`
+	ExtensionID            string `json:"extensionId"`
+	CanonicalTable         string `json:"canonicalTable"`
+	LogicalEntityType      string `json:"logicalEntityType"`
+	NamespacePolicyVersion string `json:"namespacePolicyVersion"`
+}
+
+type UserDataTableIdentity struct {
+	Domain                string `json:"domain"`
+	SchemaVersion         string `json:"schemaVersion"`
+	ExtensionID           string `json:"extensionId"`
+	CanonicalTable        string `json:"canonicalTable"`
+	EntityType            string `json:"entityType"`
+	NamespaceHash         string `json:"namespaceHash"`
+	BatchAlgorithmVersion string `json:"batchAlgorithmVersion"`
+}
+
+func computeUserDataNamespaceHash(identity UserDataNamespaceIdentity) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(fmt.Sprintf("ns-policy:%s|ext:%s|table:%s|logicalType:%s|schemaVer:%d",
+		identity.NamespacePolicyVersion,
+		strings.ToLower(strings.TrimSpace(identity.ExtensionID)),
+		strings.ToLower(strings.TrimSpace(identity.CanonicalTable)),
+		strings.ToLower(strings.TrimSpace(identity.LogicalEntityType)),
+		identity.SchemaVersion)))
+	return "ns:" + hex.EncodeToString(hasher.Sum(nil))
+}
+
+func computeUserDataEmptySetHash(identity UserDataTableIdentity) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(fmt.Sprintf("domain:%s|nsHash:%s|ext:%s|table:%s|entityType:%s|schemaVer:%s|algo:%s",
+		identity.Domain,
+		identity.NamespaceHash,
+		strings.ToLower(strings.TrimSpace(identity.ExtensionID)),
+		strings.ToLower(strings.TrimSpace(identity.CanonicalTable)),
+		strings.ToLower(strings.TrimSpace(identity.EntityType)),
+		strings.ToLower(strings.TrimSpace(identity.SchemaVersion)),
+		identity.BatchAlgorithmVersion)))
+	return "eset:" + hex.EncodeToString(hasher.Sum(nil))
+}
+
+func computeUserDataGenesisHash(identity UserDataTableIdentity) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(fmt.Sprintf("domain:%s|nsHash:%s|ext:%s|table:%s|entityType:%s|schemaVer:%s|algo:%s",
+		identity.Domain,
+		identity.NamespaceHash,
+		strings.ToLower(strings.TrimSpace(identity.ExtensionID)),
+		strings.ToLower(strings.TrimSpace(identity.CanonicalTable)),
+		strings.ToLower(strings.TrimSpace(identity.EntityType)),
+		strings.ToLower(strings.TrimSpace(identity.SchemaVersion)),
+		identity.BatchAlgorithmVersion)))
+	return "gen:" + hex.EncodeToString(hasher.Sum(nil))
+}
+
 func computeUserDataBatchHashFromIdentity(identity UserDataBatchIdentity, operationID string) string {
 	if identity.RecordCount == 0 || identity.ExtensionID == "" {
 		return ""
@@ -352,13 +407,13 @@ func validateUserDataRecord(record userDataRecord, extensionID string) error {
 		return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
 			fmt.Errorf("kernel: user data record namespace %q does not match canonical table %q", record.Namespace, resolver.CanonicalTable))
 	}
-	if record.EntityType == "" {
-		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
-			fmt.Errorf("kernel: user data record entityType is empty"))
-	}
 	if !isValidEntityType(record.EntityType) {
 		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
 			fmt.Errorf("kernel: user data record entityType %q is not a valid identifier", record.EntityType))
+	}
+	if record.EntityType != resolver.LogicalEntityType {
+		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
+			fmt.Errorf("kernel: user data record entityType %q does not match namespace logical entity type %q", record.EntityType, resolver.LogicalEntityType))
 	}
 	if record.Operation != "" && !isValidOperation(record.Operation) {
 		return NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
@@ -372,16 +427,46 @@ func validateUserDataRecord(record userDataRecord, extensionID string) error {
 	return nil
 }
 
+const maxEntityTypeLength = 128
+
+func isASCIIAlpha(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func isASCIIDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+func isReservedEntityType(value string) bool {
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "ext_") {
+		return true
+	}
+	if strings.HasPrefix(lower, "system_") {
+		return true
+	}
+	if strings.HasPrefix(lower, "internal_") {
+		return true
+	}
+	return false
+}
+
 func isValidEntityType(entityType string) bool {
-	if entityType == "" {
+	if entityType == "" || len(entityType) > maxEntityTypeLength {
 		return false
 	}
-	for _, r := range entityType {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+	for i, r := range entityType {
+		if i == 0 {
+			if !isASCIIAlpha(r) && r != '_' {
+				return false
+			}
+			continue
+		}
+		if !isASCIIAlpha(r) && !isASCIIDigit(r) && r != '_' {
 			return false
 		}
 	}
-	return true
+	return !isReservedEntityType(entityType)
 }
 
 func isValidOperation(operation string) bool {
@@ -457,16 +542,31 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 	for et := range entityTypeSet {
 		entityTypes = append(entityTypes, et)
 	}
+	var resolver ExtensionUserDataNamespace
 	if namespace == "" {
-		resolver, resolverErr := ResolveExtensionUserDataNamespace(extensionID, table)
+		var resolverErr error
+		resolver, resolverErr = ResolveExtensionUserDataNamespace(extensionID, table)
 		if resolverErr != nil {
 			return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
 				fmt.Errorf("kernel: resolve namespace for table %s: %w", table, resolverErr))
 		}
 		namespace = resolver.CanonicalTable
 		schemaVersion = "1.0.0"
+	} else {
+		var resolverErr error
+		resolver, resolverErr = ResolveExtensionUserDataNamespace(extensionID, table)
+		if resolverErr != nil {
+			return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+				fmt.Errorf("kernel: resolve namespace for table %s: %w", table, resolverErr))
+		}
 	}
-	expectedNamespaceHash := computeNamespaceHash(extensionID, table, namespace, entityTypes, schemaVersion, "v1")
+	expectedNamespaceHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            extensionID,
+		CanonicalTable:         namespace,
+		LogicalEntityType:      resolver.LogicalEntityType,
+		NamespacePolicyVersion: "v1",
+	})
 	journal, err := s.getOrCreateRestoreJournal(ctx, operationID, extensionID, table, namespace, int64(len(records)), expectedNamespaceHash)
 	if err != nil {
 		return err
@@ -489,6 +589,38 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 			fmt.Errorf("kernel: journal applied_count %d does not match cursor %d", journal.AppliedCount, startCursor))
 	}
 	if len(parsedRecords) == 0 {
+		emptySetHash := computeUserDataEmptySetHash(UserDataTableIdentity{
+			Domain:                "amitia-userdata-empty-set-v1",
+			SchemaVersion:         schemaVersion,
+			ExtensionID:           extensionID,
+			CanonicalTable:        namespace,
+			EntityType:            resolver.LogicalEntityType,
+			NamespaceHash:         expectedNamespaceHash,
+			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		})
+		if emptySetHash == "" {
+			failErr := fmt.Errorf("kernel: compute empty set hash failed for table %s", table)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+			}
+			return failErr
+		}
+		genesisHash := computeUserDataGenesisHash(UserDataTableIdentity{
+			Domain:                "amitia-userdata-batch-genesis-v1",
+			SchemaVersion:         schemaVersion,
+			ExtensionID:           extensionID,
+			CanonicalTable:        namespace,
+			EntityType:            resolver.LogicalEntityType,
+			NamespaceHash:         expectedNamespaceHash,
+			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		})
+		if genesisHash == "" {
+			failErr := fmt.Errorf("kernel: compute genesis hash failed for table %s", table)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+			}
+			return failErr
+		}
 		if err := s.fullTableReplace(ctx, table, records); err != nil {
 			failErr := fmt.Errorf("kernel: empty restore failed to clear table %s: %w", table, err)
 			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
@@ -496,34 +628,43 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 			}
 			return failErr
 		}
-		aggHashFromDB, aggErr := s.computeAggregateHashFromDB(ctx, table)
-		if aggErr != nil {
-			failErr := fmt.Errorf("kernel: compute aggregate hash for empty table %s: %w", table, aggErr)
+		var dbCount int64
+		countErr := s.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quoteIdentifier(table))).Scan(&dbCount)
+		if countErr != nil {
+			failErr := fmt.Errorf("kernel: verify empty table record count for %s: %w", table, countErr)
 			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
 				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
 			}
 			return failErr
 		}
-		if err := s.updateRestoreJournalHashes(ctx, journal, expectedNamespaceHash, aggHashFromDB); err != nil {
-			return fmt.Errorf("kernel: update journal hashes for empty table: %w", err)
-		}
-		emptyIdentity := UserDataBatchIdentity{
-			ExtensionID:    extensionID,
-			TableName:      table,
-			Namespace:      namespace,
-			EntityType:     "",
-			SchemaVersion:  schemaVersion,
-			RecordCount:    0,
-			BatchAlgorithm: userDataBatchHashAlgorithmVersion,
-		}
-		batchIdentityHash := computeUserDataBatchHashFromIdentity(emptyIdentity, operationID)
-		if batchIdentityHash != "" && journal.BatchHash != userBatchEmptySetHash() {
-			if updateErr := s.updateJournalBatchHash(ctx, journal, userBatchEmptySetHash()); updateErr != nil {
-				return fmt.Errorf("kernel: update journal empty set hash for table %s: %w", table, updateErr)
+		if dbCount != 0 {
+			failErr := fmt.Errorf("kernel: empty table %s still has %d records after clear", table, dbCount)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
 			}
+			return failErr
 		}
-		if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreCompleted, ""); err != nil {
-			return fmt.Errorf("kernel: update journal to completed for empty table: %w", err)
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		journal.State = UserDataRestoreCompleted
+		journal.Cursor = "0"
+		journal.ImportedRows = 0
+		journal.AppliedCount = 0
+		journal.BatchIndex = 0
+		journal.BatchHash = genesisHash
+		journal.AggregateHash = emptySetHash
+		journal.TotalRows = 0
+		journal.UpdatedAt = now
+		if _, execErr := s.db.ExecContext(ctx,
+			`UPDATE extension_package_user_data_restore_journal
+			 SET state=?, cursor=?, imported_rows=?, applied_count=?, batch_index=?, batch_hash=?, aggregate_hash=?, total_rows=?, updated_at=?
+			 WHERE operation_id=? AND table_name=?`,
+			string(UserDataRestoreCompleted), "0", 0, 0, 0, genesisHash, emptySetHash, 0, now,
+			journal.OperationID, journal.TableName); execErr != nil {
+			failErr := fmt.Errorf("kernel: update journal to completed for empty table %s: %w", table, execErr)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
+			}
+			return failErr
 		}
 		return nil
 	}
@@ -1402,25 +1543,6 @@ func isValidTableSuffix(name string) bool {
 		}
 	}
 	return true
-}
-
-func computeNamespaceHash(extensionID, table, namespace string, entityTypes []string, schemaVersion, isolationPolicyVersion string) string {
-	hasher := sha256.New()
-	normalizedExtID := strings.ToLower(strings.TrimSpace(extensionID))
-	normalizedTable := strings.ToLower(strings.TrimSpace(table))
-	normalizedNS := strings.ToLower(strings.TrimSpace(namespace))
-	sortedEntityTypes := make([]string, len(entityTypes))
-	copy(sortedEntityTypes, entityTypes)
-	sort.Strings(sortedEntityTypes)
-	normalizedEntityTypes := make([]string, len(sortedEntityTypes))
-	for i, et := range sortedEntityTypes {
-		normalizedEntityTypes[i] = strings.ToLower(strings.TrimSpace(et))
-	}
-	normalizedSchemaVer := strings.ToLower(strings.TrimSpace(schemaVersion))
-	normalizedPolicyVer := strings.ToLower(strings.TrimSpace(isolationPolicyVersion))
-
-	hasher.Write([]byte(normalizedPolicyVer + ":" + normalizedExtID + "|" + normalizedTable + "|" + normalizedNS + "|" + strings.Join(normalizedEntityTypes, ",") + "|" + normalizedSchemaVer))
-	return "ns:" + hex.EncodeToString(hasher.Sum(nil))
 }
 
 func detectIDColumn(records []map[string]interface{}) string {

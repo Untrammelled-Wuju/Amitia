@@ -64,12 +64,19 @@ type packageMigrationStateSnapshot struct {
 }
 
 type packageUserDataMigrationState struct {
-	Mode           string            `json:"mode"`
-	Snapshots      []string          `json:"snapshots,omitempty"`
-	Completed      []string          `json:"completed,omitempty"`
-	AffectedTables []string          `json:"affectedTables,omitempty"`
-	RecordCounts   map[string]int64  `json:"recordCounts,omitempty"`
-	DataExports    map[string]string `json:"dataExports,omitempty"`
+	Mode           string                                   `json:"mode"`
+	Snapshots      []string                                 `json:"snapshots,omitempty"`
+	Completed      []string                                 `json:"completed,omitempty"`
+	AffectedTables []string                                 `json:"affectedTables,omitempty"`
+	RecordCounts   map[string]int64                         `json:"recordCounts,omitempty"`
+	DataExports    map[string]string                        `json:"dataExports,omitempty"`
+	TableManifests map[string]UserDataTableSnapshotManifest `json:"tableManifests,omitempty"`
+}
+
+type UserDataTableSnapshotManifest struct {
+	EmptySetHash  string `json:"emptySetHash"`
+	GenesisHash   string `json:"genesisHash"`
+	NamespaceHash string `json:"namespaceHash"`
 }
 
 type packageSnapshotHashPayload struct {
@@ -186,16 +193,16 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 			if absErr != nil {
 				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resolve resource path %s: %w", resource.ResourceID, absErr))
 			}
-		if validateErr := ValidateResourcePath(absOriginal, absExtRoot); validateErr != nil {
-			return "", "", "", "", "", validateErr
-		}
-		info, statErr := os.Lstat(absOriginal)
-		if statErr != nil {
-			return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s file stat failed: %w", resource.ResourceID, statErr))
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 500, fmt.Errorf("kernel: resource %s path %s is a symlink", resource.ResourceID, absOriginal))
-		}
+			if validateErr := ValidateResourcePath(absOriginal, absExtRoot); validateErr != nil {
+				return "", "", "", "", "", validateErr
+			}
+			info, statErr := os.Lstat(absOriginal)
+			if statErr != nil {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s file stat failed: %w", resource.ResourceID, statErr))
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 500, fmt.Errorf("kernel: resource %s path %s is a symlink", resource.ResourceID, absOriginal))
+			}
 			file, openErr := os.Open(absOriginal)
 			if openErr != nil {
 				return "", "", "", "", "", NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: open resource file %s: %w", resource.ResourceID, openErr))
@@ -267,6 +274,7 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		userState.Mode = "repository"
 		userState.RecordCounts = make(map[string]int64)
 		userState.DataExports = make(map[string]string)
+		userState.TableManifests = make(map[string]UserDataTableSnapshotManifest)
 	}
 	for _, definition := range definitions {
 		for _, dd := range definition.DataDomains {
@@ -307,6 +315,9 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 				if userState.RecordCounts != nil {
 					userState.RecordCounts[table] = exported.count
 				}
+				if userState.TableManifests != nil {
+					userState.TableManifests[table] = exported.manifest
+				}
 			}
 		}
 	}
@@ -328,8 +339,9 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 }
 
 type tableSnapshotResult struct {
-	jsonl string
-	count int64
+	jsonl    string
+	count    int64
+	manifest UserDataTableSnapshotManifest
 }
 
 func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, table string) (tableSnapshotResult, error) {
@@ -423,6 +435,36 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 			return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
 				fmt.Errorf("kernel: table %s capture self-validation failed: %w", table, selfErr))
 		}
+	}
+
+	namespaceHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            extensionID,
+		CanonicalTable:         canonicalTable,
+		LogicalEntityType:      entityType,
+		NamespacePolicyVersion: "v1",
+	})
+
+	result.manifest = UserDataTableSnapshotManifest{
+		NamespaceHash: namespaceHash,
+		EmptySetHash: computeUserDataEmptySetHash(UserDataTableIdentity{
+			Domain:                "amitia-userdata-empty-set-v1",
+			SchemaVersion:         "1.0.0",
+			ExtensionID:           extensionID,
+			CanonicalTable:        canonicalTable,
+			EntityType:            entityType,
+			NamespaceHash:         namespaceHash,
+			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		}),
+		GenesisHash: computeUserDataGenesisHash(UserDataTableIdentity{
+			Domain:                "amitia-userdata-batch-genesis-v1",
+			SchemaVersion:         "1.0.0",
+			ExtensionID:           extensionID,
+			CanonicalTable:        canonicalTable,
+			EntityType:            entityType,
+			NamespaceHash:         namespaceHash,
+			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		}),
 	}
 
 	return result, nil
@@ -1050,12 +1092,12 @@ func ComputeRollbackSnapshotRequirement(input RollbackSnapshotRequirementInput) 
 }
 
 type PackageSnapshotRequirementInput struct {
-	SchemaVersion  int
-	OperationType  string
-	ExtensionID    string
-	SourceVersion  string
+	SchemaVersion    int
+	OperationType    string
+	ExtensionID      string
+	SourceVersion    string
 	SourceGeneration string
-	TargetVersion  string
+	TargetVersion    string
 	TargetGeneration string
 
 	ConfigBeforeHash      string
@@ -1082,10 +1124,10 @@ type PackageSnapshotRequirementInput struct {
 }
 
 type PackageSnapshotRequirement struct {
-	Required   bool   `json:"required"`
-	NoDataChange bool `json:"noDataChange"`
-	Reason     string `json:"reason,omitempty"`
-	Hash       string `json:"hash,omitempty"`
+	Required     bool   `json:"required"`
+	NoDataChange bool   `json:"noDataChange"`
+	Reason       string `json:"reason,omitempty"`
+	Hash         string `json:"hash,omitempty"`
 }
 
 func ComputePackageSnapshotRequirement(input PackageSnapshotRequirementInput) (PackageSnapshotRequirement, error) {
@@ -1280,11 +1322,11 @@ func computeVerifiedResourceTreeHash(resources []domain.ResourceOwnership, absEx
 }
 
 type UninstallSnapshotRequirementInput struct {
-	InstalledPath          string
-	InstalledTreeHash      string
-	ArtifactID             string
-	ExtensionID            string
-	CurrentVersionID       string
+	InstalledPath     string
+	InstalledTreeHash string
+	ArtifactID        string
+	ExtensionID       string
+	CurrentVersionID  string
 }
 
 func ComputeUninstallSnapshotRequirement(input UninstallSnapshotRequirementInput) RollbackSnapshotRequirement {
@@ -1305,7 +1347,7 @@ func ComputeUninstallSnapshotRequirement(input UninstallSnapshotRequirementInput
 func computeUninstallSnapshotRequirementInput(installedPath, installedTreeHash, artifactID, extensionID, currentVersionID string) UninstallSnapshotRequirementInput {
 	return UninstallSnapshotRequirementInput{
 		InstalledPath:     installedPath,
-		InstalledTreeHash:  installedTreeHash,
+		InstalledTreeHash: installedTreeHash,
 		ArtifactID:        artifactID,
 		ExtensionID:       extensionID,
 		CurrentVersionID:  currentVersionID,
@@ -1315,7 +1357,7 @@ func computeUninstallSnapshotRequirementInput(installedPath, installedTreeHash, 
 func computeUninstallSnapshotRequirementFromClaims(claims PackageConfirmationClaims, fromVersion string) RollbackSnapshotRequirement {
 	input := UninstallSnapshotRequirementInput{
 		InstalledPath:     claims.InstalledPath,
-		InstalledTreeHash:  claims.InstalledTreeHash,
+		InstalledTreeHash: claims.InstalledTreeHash,
 		ArtifactID:        claims.ArtifactID,
 		ExtensionID:       claims.ExtensionID,
 		CurrentVersionID:  claims.CurrentVersionID,

@@ -248,7 +248,7 @@ func (s *ResourceSnapshotStore) QuarantineNewResources(ctx context.Context, exte
 			return entries, err
 		}
 
-		if renameErr := os.Rename(absOriginal, quarantinePath); renameErr != nil {
+		if renameErr := safeRename(absOriginal, quarantinePath); renameErr != nil {
 			if copyErr := copyResourceFile(absOriginal, quarantinePath); copyErr != nil {
 				os.Remove(quarantinePath)
 				return entries, fmt.Errorf("kernel: resource %s move to quarantine failed: %w", resource.ResourceID, copyErr)
@@ -355,7 +355,7 @@ func (s *ResourceSnapshotStore) RestoreQuarantinedResources(ctx context.Context,
 			return fmt.Errorf("kernel: resolve original path for resource %s: %w", entry.ResourceID, err)
 		}
 
-		if renameErr := os.Rename(entry.QuarantinePath, absOriginal); renameErr != nil {
+		if renameErr := safeRename(entry.QuarantinePath, absOriginal); renameErr != nil {
 			if copyErr := copyResourceFile(entry.QuarantinePath, absOriginal); copyErr != nil {
 				return fmt.Errorf("kernel: restore quarantined resource %s: %w", entry.ResourceID, copyErr)
 			}
@@ -678,20 +678,95 @@ func copyResourceFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		srcFile.Close()
+		return fmt.Errorf("kernel: stat source file: %w", err)
+	}
+	if !srcInfo.Mode().IsRegular() {
+		srcFile.Close()
+		return fmt.Errorf("kernel: source %s is not a regular file", src)
+	}
 	if mkErr := os.MkdirAll(filepath.Dir(dst), 0755); mkErr != nil {
+		srcFile.Close()
 		return mkErr
 	}
-	dstFile, err := os.Create(dst)
+	dstDir := filepath.Dir(dst)
+	dstInfo, dirErr := os.Lstat(dstDir)
+	if dirErr != nil {
+		srcFile.Close()
+		return fmt.Errorf("kernel: lstat destination dir: %w", dirErr)
+	}
+	if !dstInfo.IsDir() {
+		srcFile.Close()
+		return fmt.Errorf("kernel: destination dir %s is not a directory", dstDir)
+	}
+	if dstInfo.Mode()&os.ModeSymlink != 0 {
+		srcFile.Close()
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: destination dir %s is a symlink, blocked for TOCTOU safety", dstDir))
+	}
+	dstFile, err := safeCreateFile(dst)
 	if err != nil {
+		srcFile.Close()
 		return err
 	}
 	defer dstFile.Close()
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		srcFile.Close()
 		return err
 	}
 	if syncErr := dstFile.Sync(); syncErr != nil {
+		srcFile.Close()
 		return syncErr
+	}
+	srcFile.Close()
+	finalInfo, finalErr := os.Lstat(dst)
+	if finalErr != nil {
+		return fmt.Errorf("kernel: verify written file: %w", finalErr)
+	}
+	if finalInfo.Mode()&os.ModeSymlink != 0 {
+		os.Remove(dst)
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: written file %s became a symlink, blocked for TOCTOU safety", dst))
+	}
+	return nil
+}
+
+func safeCreateFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscallNofollow(), 0600)
+}
+
+func safeRename(src, dst string) error {
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return fmt.Errorf("kernel: lstat source for rename: %w", err)
+	}
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: source %s is a symlink, rename blocked", src))
+	}
+	if _, err := os.Lstat(dst); err == nil {
+		dstInfo, lErr := os.Lstat(dst)
+		if lErr != nil {
+			return fmt.Errorf("kernel: lstat destination for rename: %w", lErr)
+		}
+		if dstInfo.Mode()&os.ModeSymlink != 0 {
+			return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+				fmt.Errorf("kernel: destination %s is a symlink, rename blocked", dst))
+		}
+	}
+	if renameErr := os.Rename(src, dst); renameErr != nil {
+		return renameErr
+	}
+	postInfo, postErr := os.Lstat(dst)
+	if postErr != nil {
+		return fmt.Errorf("kernel: post-rename lstat: %w", postErr)
+	}
+	if postInfo.Mode()&os.ModeSymlink != 0 {
+		os.Remove(dst)
+		return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
+			fmt.Errorf("kernel: post-rename file became symlink, rolled back"))
 	}
 	return nil
 }
@@ -813,6 +888,27 @@ type validatedRestorePath struct {
 	AbsParentDir  string
 }
 
+func findNearestExistingAncestor(path string) string {
+	current := path
+	for {
+		if current == "" || current == "/" || current == "." {
+			return ""
+		}
+		info, err := os.Lstat(current)
+		if err == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return current
+			}
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
+	}
+}
+
 func validateRestoreTargetPathPure(targetPath, extRoot string) (*validatedRestorePath, error) {
 	absExtRoot, err := filepath.Abs(extRoot)
 	if err != nil {
@@ -843,11 +939,24 @@ func validateRestoreTargetPathPure(targetPath, extRoot string) (*validatedRestor
 		return nil, err
 	}
 
-	realParentDir, err := filepath.EvalSymlinks(absParentDir)
+	nearestExisting := findNearestExistingAncestor(absParentDir)
+	if nearestExisting == "" {
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: cannot find existing ancestor for parent dir %s", absParentDir))
+	}
+
+	realNearest, err := filepath.EvalSymlinks(nearestExisting)
 	if err != nil {
 		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: eval symlinks for parent dir: %w", err))
+			fmt.Errorf("kernel: eval symlinks for nearest existing ancestor %s: %w", nearestExisting, err))
 	}
+
+	relFromNearest, err := filepath.Rel(nearestExisting, absParentDir)
+	if err != nil {
+		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
+			fmt.Errorf("kernel: compute relative path from nearest ancestor: %w", err))
+	}
+	realParentDir := filepath.Join(realNearest, relFromNearest)
 
 	relPath, err := filepath.Rel(realExtRoot, realParentDir)
 	if err != nil {
@@ -913,5 +1022,5 @@ func ValidateRestoreTargetPath(targetPath, extRoot string) error {
 	if err := createRestoreDirectoriesSafely(validated.AbsParentDir); err != nil {
 		return err
 	}
-	return nil
+	return validatePathComponentsNoSymlink(extRoot, validated.AbsParentDir)
 }
