@@ -502,8 +502,8 @@ func parseAndValidateOperationConfirmationClaims(operation PackageOperationRecor
 	if err := json.Unmarshal([]byte(operation.ConfirmationClaimsJSON), &claims); err != nil {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: %v", ErrPackageConfirmationClaimsInvalid, err))
 	}
-	if claims.SchemaVersion == 0 {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: schemaVersion required", ErrPackageConfirmationClaimsInvalid))
+	if claims.SchemaVersion != PackageConfirmationClaimsSchemaVersion {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: unsupported claims schemaVersion %d, expected %d", ErrPackageConfirmationClaimsInvalid, claims.SchemaVersion, PackageConfirmationClaimsSchemaVersion))
 	}
 	if claims.OperationType != operation.OperationType {
 		return claims, NewPackageError(PackageErrCodeConfirmationOperationMismatch, 403, ErrPackageConfirmationOperationMismatch)
@@ -513,6 +513,9 @@ func parseAndValidateOperationConfirmationClaims(operation PackageOperationRecor
 	}
 	if claims.ExtensionID != operation.ExtensionID {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: extensionId mismatch", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.ArtifactID != operation.ArtifactID {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: artifactId mismatch", ErrPackageConfirmationClaimsInvalid))
 	}
 	if claims.UserID != operation.UserID {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: userId mismatch", ErrPackageConfirmationClaimsInvalid))

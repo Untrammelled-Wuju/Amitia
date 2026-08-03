@@ -161,6 +161,17 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID}
+	postLeasePreview, previewErr := r.PreviewPackageRollback(ctx, extensionID, version, userID, scopeType, scopeID)
+	if previewErr != nil {
+		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_preview", "PACKAGE_CONFIRMATION_STALE", fmt.Sprintf("post-lease preview failed: %v", previewErr), true, guard)
+		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("post-lease preview unavailable: %w", previewErr)), failErr)
+	}
+	if driftErr := samePackageRollbackPreview(rollbackClaims, postLeasePreview); driftErr != nil {
+		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_preview_drift", "PACKAGE_CONFIRMATION_STALE", fmt.Sprintf("post-lease drift detected: %v", driftErr), true, guard)
+		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("post-lease drift: %w", driftErr)), failErr)
+	}
 	revalidatedCurrent, revalErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
 	if revalErr != nil {
 		return KernelInstallResult{}, fmt.Errorf("kernel: rollback re-preview installation unavailable: %w", revalErr)

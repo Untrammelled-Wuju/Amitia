@@ -1049,6 +1049,116 @@ func ComputeRollbackSnapshotRequirement(input RollbackSnapshotRequirementInput) 
 	return req
 }
 
+type PackageSnapshotRequirementInput struct {
+	SchemaVersion  int
+	OperationType  string
+	ExtensionID    string
+	SourceVersion  string
+	SourceGeneration string
+	TargetVersion  string
+	TargetGeneration string
+
+	ConfigBeforeHash      string
+	ConfigAfterHash       string
+	ConfigEvidencePresent bool
+
+	ResourceBeforeHash      string
+	ResourceAfterHash       string
+	ResourceEvidencePresent bool
+	ResourceAdded           []string
+	ResourceRemoved         []string
+	ResourceChanged         []string
+
+	UserDataBeforeHash      string
+	UserDataAfterHash       string
+	UserDataEvidencePresent bool
+
+	MigrationPlanHash        string
+	MigrationDefinitionHash  string
+	MigrationEvidencePresent bool
+
+	ManifestNoDataChange    bool
+	ManifestEvidencePresent bool
+}
+
+type PackageSnapshotRequirement struct {
+	Required   bool   `json:"required"`
+	NoDataChange bool `json:"noDataChange"`
+	Reason     string `json:"reason,omitempty"`
+	Hash       string `json:"hash,omitempty"`
+}
+
+func ComputePackageSnapshotRequirement(input PackageSnapshotRequirementInput) (PackageSnapshotRequirement, error) {
+	req := PackageSnapshotRequirement{}
+	configMissing := !input.ConfigEvidencePresent
+	resourceMissing := !input.ResourceEvidencePresent
+	userDataMissing := !input.UserDataEvidencePresent
+	manifestMissing := !input.ManifestEvidencePresent
+
+	configHasBefore := input.ConfigBeforeHash != ""
+	configHasAfter := input.ConfigAfterHash != ""
+	resHasBefore := input.ResourceBeforeHash != ""
+	resHasAfter := input.ResourceAfterHash != ""
+	userHasBefore := input.UserDataBeforeHash != ""
+	userHasAfter := input.UserDataAfterHash != ""
+
+	configChanged := configHasBefore && configHasAfter && input.ConfigBeforeHash != input.ConfigAfterHash
+	resourceChanged := (resHasBefore && resHasAfter && input.ResourceBeforeHash != input.ResourceAfterHash) ||
+		len(input.ResourceAdded) > 0 || len(input.ResourceRemoved) > 0 || len(input.ResourceChanged) > 0
+	userDataChanged := (userHasBefore && userHasAfter && input.UserDataBeforeHash != input.UserDataAfterHash)
+
+	migrationPresent := input.MigrationPlanHash != "" || input.MigrationDefinitionHash != ""
+
+	configEvidenceIncomplete := (configHasBefore != configHasAfter) || (!configHasBefore && !configHasAfter && input.OperationType != "uninstall")
+	resEvidenceIncomplete := (resHasBefore != resHasAfter)
+	userEvidenceIncomplete := (userHasBefore != userHasAfter)
+
+	anyMissingEvidence := configMissing || resourceMissing || userDataMissing || manifestMissing ||
+		configEvidenceIncomplete || resEvidenceIncomplete || userEvidenceIncomplete
+
+	configEmptyButExpected := input.OperationType != "uninstall" && (!configHasBefore || !configHasAfter)
+
+	anyChange := configChanged || resourceChanged || userDataChanged || migrationPresent
+
+	req.Required = anyChange || anyMissingEvidence || configEmptyButExpected || !input.ManifestNoDataChange
+	req.NoDataChange = !req.Required
+
+	if req.Required {
+		switch {
+		case anyMissingEvidence:
+			req.Reason = "evidence missing, fail-closed"
+		case migrationPresent:
+			req.Reason = "migration present"
+		case configChanged:
+			req.Reason = "config changed"
+		case resourceChanged:
+			req.Reason = "resources changed"
+		case userDataChanged:
+			req.Reason = "user data changed"
+		default:
+			req.Reason = "changes detected"
+		}
+	} else {
+		req.Reason = "no data change detected"
+	}
+
+	req.Hash = computeUnifiedSnapshotRequirementHash(input, req)
+	return req, nil
+}
+
+func computeUnifiedSnapshotRequirementHash(input PackageSnapshotRequirementInput, req PackageSnapshotRequirement) string {
+	canonical := fmt.Sprintf(`{"sv":"%d","ot":"%s","eid":"%s","sver":"%s","sgen":"%s","tver":"%s","tgen":"%s","ce":%v,"cb":"%s","ca":"%s","re":%v,"rb":"%s","ra":"%s","ue":%v,"ub":"%s","ua":"%s","mh":"%v","me":%v,"mndc":%v,"mnde":%v,"req":%v}`,
+		input.SchemaVersion, input.OperationType, input.ExtensionID,
+		input.SourceVersion, input.SourceGeneration, input.TargetVersion, input.TargetGeneration,
+		input.ConfigEvidencePresent, input.ConfigBeforeHash, input.ConfigAfterHash,
+		input.ResourceEvidencePresent, input.ResourceBeforeHash, input.ResourceAfterHash,
+		input.UserDataEvidencePresent, input.UserDataBeforeHash, input.UserDataAfterHash,
+		input.MigrationEvidencePresent, input.MigrationPlanHash,
+		input.ManifestNoDataChange, input.ManifestEvidencePresent,
+		req.Required)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(canonical)))
+}
+
 func computeRollbackSnapshotRequirementFromPoint(point PackageRollbackPoint) RollbackSnapshotRequirement {
 	input := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
 	corrupt := false

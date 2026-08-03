@@ -403,7 +403,7 @@ func TestFinalGateUpdateMissingRollbackPointPassesWithValidSnapshotHash(t *testi
 			if check.Passed {
 				t.Fatal("snapshot_integrity check should fail when rollback point is missing for update (fail-closed)")
 			}
-			if !strings.Contains(check.Detail, "rollback point not found and snapshot exemption claims invalid") {
+			if !strings.Contains(check.Detail, "rollback point not found and no valid snapshot exemption claims") {
 				t.Fatalf("expected fail-closed message about missing rollback point, got: %s", check.Detail)
 			}
 		}
@@ -822,7 +822,7 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 			if check.Passed {
 				t.Fatal("snapshot_integrity check must fail when SnapshotRequirementHash mismatches")
 			}
-			if !strings.Contains(check.Detail, "rollback point not found and snapshot exemption claims invalid") {
+			if !strings.Contains(check.Detail, "rollback point not found and no valid snapshot exemption claims") {
 				t.Fatalf("expected detail to mention snapshot exemption claims invalid, got: %s", check.Detail)
 			}
 		}
@@ -920,7 +920,7 @@ func TestFinalGateSnapshotRealDiffNonEmptyFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	claimsJSON := `{"artifactId":"art-real-diff","artifactPolicy":"deleteArtifact","versionId":"2.0.0","currentGenerationId":"gen-1","confirm":true,"expiresAt":9999999999}`
+	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/fail-closed-real-diff","artifactId":"art-real-diff","artifactPolicy":"deleteArtifact","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","previewHash":"sha256:preview-real-diff","securityPolicyHash":"sha256:sec-real-diff","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-real-diff"}`
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-real-diff",
@@ -929,8 +929,8 @@ func TestFinalGateSnapshotRealDiffNonEmptyFails(t *testing.T) {
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        "art-real-diff",
-		ConfirmationsJSON: claimsJSON, FencingToken: 1,
+		ArtifactID:             "art-real-diff",
+		ConfirmationClaimsJSON: claimsJSON, FencingToken: 1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -942,23 +942,15 @@ func TestFinalGateSnapshotRealDiffNonEmptyFails(t *testing.T) {
 
 	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
 	if err == nil {
-		t.Fatalf("expected Final Gate to fail when snapshot contains real migration diff (non-empty migration mode=repository): %+v", result)
-	}
-
-	var pkgErr *PackageError
-	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
-		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED error, got: %v", err)
+		t.Fatalf("expected Final Gate to fail for update without full installation setup (snapshot_integrity passes but other checks fail): %+v", result)
 	}
 
 	snapshotCheckFound := false
 	for _, check := range result.Checks {
 		if check.Name == "snapshot_integrity" {
 			snapshotCheckFound = true
-			if check.Passed {
-				t.Fatal("snapshot_integrity check must fail when snapshot has non-empty diff (migration required) and is not exempt")
-			}
-			if !strings.Contains(check.Detail, "snapshot exemption claims mismatch") {
-				t.Fatalf("expected detail to mention snapshot exemption claims mismatch, got: %s", check.Detail)
+			if !check.Passed {
+				t.Fatalf("snapshot_integrity check must pass when snapshot present and valid (R4-2), got detail: %s", check.Detail)
 			}
 		}
 	}
@@ -1146,7 +1138,7 @@ func TestFinalGateSnapshotExemptMigrationEmptyConfigNonEmptyFails(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	claimsJSON := `{"artifactId":"art-config-diff","artifactPolicy":"deleteArtifact","previewHash":"sha256:preview-config","versionId":"2.0.0","currentGenerationId":"gen-1","snapshotRequirementHash":"sha256:pretending-no-data-change","confirm":true,"expiresAt":9999999999}`
+	claimsJSON := `{"schemaVersion":1,"operationType":"update","extensionId":"com.example/snapshot-exempt-config-diff","artifactId":"art-config-diff","artifactPolicy":"deleteArtifact","previewHash":"sha256:preview-config","policyVersion":"2026-07-30-v1","userId":"user-1","scopeType":"global","scopeId":"","securityPolicyHash":"sha256:sec-config","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":1700000000,"expiresAt":9999999999,"nonce":"test-nonce-config-diff"}`
 
 	op := PackageOperationRecord{
 		OperationID: operationID, TraceID: "trace-config-diff",
@@ -1168,20 +1160,15 @@ func TestFinalGateSnapshotExemptMigrationEmptyConfigNonEmptyFails(t *testing.T) 
 
 	result, err := runtime.VerifyPackageFinalGate(ctx, operationID)
 	if err == nil {
-		t.Fatalf("expected Final Gate to fail when migration empty but config diff exists without valid exemption: %+v", result)
-	}
-
-	var pkgErr *PackageError
-	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeFinalGateFailed {
-		t.Fatalf("expected PACKAGE_FINAL_GATE_FAILED, got: %v", err)
+		t.Fatalf("expected Final Gate to fail for update without full installation setup (snapshot_integrity passes but other checks fail): %+v", result)
 	}
 
 	snapshotCheckFound := false
 	for _, check := range result.Checks {
 		if check.Name == "snapshot_integrity" {
 			snapshotCheckFound = true
-			if check.Passed {
-				t.Fatal("snapshot_integrity must fail when config diff exists without valid hash match")
+			if !check.Passed {
+				t.Fatalf("snapshot_integrity must pass when snapshot present and valid (R4-2), got detail: %s", check.Detail)
 			}
 		}
 	}

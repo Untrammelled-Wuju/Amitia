@@ -185,6 +185,37 @@ func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, versi
 	return result, nil
 }
 
+func samePackageRollbackPreview(claims PackageRollbackConfirmationClaims, current PackageRollbackPreviewResult) error {
+	if claims.ExtensionID != current.ExtensionID {
+		return fmt.Errorf("extensionId mismatch: claims=%s current=%s", claims.ExtensionID, current.ExtensionID)
+	}
+	if claims.ArtifactID != current.TargetArtifactID {
+		return fmt.Errorf("artifactId mismatch: claims=%s current=%s", claims.ArtifactID, current.TargetArtifactID)
+	}
+	if claims.SourceVersionID != current.CurrentVersion {
+		return fmt.Errorf("sourceVersionId mismatch: claims=%s current=%s", claims.SourceVersionID, current.CurrentVersion)
+	}
+	if claims.SourceGenerationID != "" && claims.SourceGenerationID != current.GenerationID {
+		return fmt.Errorf("sourceGenerationId mismatch: claims=%s current=%s", claims.SourceGenerationID, current.GenerationID)
+	}
+	if claims.TargetVersionID != current.TargetVersion {
+		return fmt.Errorf("targetVersionId mismatch: claims=%s current=%s", claims.TargetVersionID, current.TargetVersion)
+	}
+	if claims.RollbackPointID != current.RollbackPointID {
+		return fmt.Errorf("rollbackPointId mismatch: claims=%s current=%s", claims.RollbackPointID, current.RollbackPointID)
+	}
+	if claims.SecurityPolicyHash != current.SecurityPolicyHash {
+		return fmt.Errorf("securityPolicyHash mismatch: claims=%s current=%s", claims.SecurityPolicyHash, current.SecurityPolicyHash)
+	}
+	if claims.SnapshotRequirementHash != current.SnapshotRequirementHash {
+		return fmt.Errorf("snapshotRequirementHash mismatch: claims=%s current=%s", claims.SnapshotRequirementHash, current.SnapshotRequirementHash)
+	}
+	if claims.PreviewHash != current.PreviewHash {
+		return fmt.Errorf("previewHash mismatch: claims=%s current=%s", claims.PreviewHash, current.PreviewHash)
+	}
+	return nil
+}
+
 func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRollbackConfirmationRequest) (PackageRollbackConfirmation, error) {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return PackageRollbackConfirmation{}, fmt.Errorf("kernel: package services unavailable")
