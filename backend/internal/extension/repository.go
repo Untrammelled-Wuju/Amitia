@@ -22,6 +22,10 @@ type Repository struct {
 	configCipherErr error
 }
 
+func (r *Repository) DB() *gorm.DB {
+	return r.db
+}
+
 func (r *Repository) ListVersions(ctx context.Context, extensionID string) ([]ExtensionVersionView, error) {
 	var records []extensionVersionRecord
 	if err := r.db.WithContext(ctx).Where("extension_id = ?", extensionID).Order("created_at DESC").Find(&records).Error; err != nil {

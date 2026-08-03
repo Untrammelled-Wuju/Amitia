@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -149,10 +150,7 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
   Widget _buildRunCard(BuildContext context, ExecutionRun run) {
     final color = _statusColor(run.status, context);
     return AmitiaCard(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ExtensionRunDetailPage(runId: run.id)),
-      ),
+      onTap: () => context.push('/extensions/runs/${run.id}'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

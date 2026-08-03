@@ -52,6 +52,14 @@ abstract final class AppRoutes {
   static const settingsDeployment = '/settings/deployment';
   static const settingsAbout = '/settings/about';
   static const settingsToolbox = '/settings/toolbox';
+  static const toolboxFileBrowser = '/settings/toolbox/file-browser';
+  static const toolboxWorkspace = '/settings/toolbox/workspace';
+  static const toolboxTaskLog = '/settings/toolbox/task-log';
+  static const toolboxLog = '/settings/toolbox/log';
+  static const toolboxPromptTrace = '/settings/toolbox/prompt-trace';
+  static const toolboxRuntimeStatus = '/settings/toolbox/runtime-status';
+  static const toolboxDatabaseStatus = '/settings/toolbox/database-status';
+  static const toolboxDeviceStatus = '/settings/toolbox/device-status';
   static const onboarding = '/onboarding';
   static const login = '/login';
   static const privacy = '/privacy';

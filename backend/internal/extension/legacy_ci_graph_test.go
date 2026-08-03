@@ -1,7 +1,9 @@
 package extension
 
 import (
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -133,6 +135,7 @@ func TestProductionDependencyGraphExcludesLegacyMigration(t *testing.T) {
 		"extension_read_model.go",
 		"kernel_lifecycle_proxy.go",
 		"runtime_legacy.go",
+		"production_router_legacy_isolation_test.go",
 	}
 	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -201,14 +204,149 @@ func TestMigrationCLIHasBuildTag(t *testing.T) {
 }
 
 func TestLegacyMigrationCLIEntryCompiles(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "cmd", "legacy-package-migrate"))
+	moduleRoot := findGoModuleRoot(t)
+
+	goExe, err := exec.LookPath("go")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("go executable not found: %v", err)
 	}
-	path := filepath.Join(root, "main.go")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("migration CLI not found: %v", err)
+
+	outputPath := filepath.Join(t.TempDir(), executableName("legacy-package-migrate"))
+
+	cmd := exec.Command(goExe, "build", "-trimpath", "-tags", "legacy_migration", "-o", outputPath, "./cmd/legacy-package-migrate")
+	cmd.Dir = moduleRoot
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("legacy migration CLI failed to compile: %v\n%s", err, string(output))
 	}
+
+	info, err := os.Stat(outputPath)
+	if err != nil {
+		t.Fatalf("compiled CLI not found: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Fatal("compiled CLI is empty")
+	}
+}
+
+func TestLegacyMigrationCLIExcludedFromDefaultBuild(t *testing.T) {
+	moduleRoot := findGoModuleRoot(t)
+
+	cmd := exec.Command("go", "list", "-e", "-json", "./cmd/legacy-package-migrate")
+	cmd.Dir = moduleRoot
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
+
+	output, err := cmd.Output()
+	if err != nil {
+		if strings.Contains(stderrBuf.String(), "build constraints exclude all Go files") {
+			return
+		}
+		t.Fatalf("go list failed: %v\n%s", err, stderrBuf.String())
+	}
+
+	var pkg goListPackage
+	if err := json.Unmarshal(output, &pkg); err != nil {
+		t.Fatalf("parse go list: %v", err)
+	}
+
+	if pkg.Error != nil && strings.Contains(pkg.Error.Err, "build constraints exclude all Go files") {
+		return
+	}
+
+	if len(pkg.GoFiles) > 0 {
+		for _, f := range pkg.GoFiles {
+			if f == "main.go" {
+				t.Fatal("CLI main.go should be excluded from default build (missing legacy_migration tag)")
+			}
+		}
+	}
+
+	mainGoFound := false
+	for _, f := range pkg.IgnoredGoFiles {
+		if f == "main.go" {
+			mainGoFound = true
+			break
+		}
+	}
+	if !mainGoFound {
+		t.Fatal("CLI main.go should be in IgnoredGoFiles for default build")
+	}
+}
+
+func TestLegacyMigrationCLIIncludedWithBuildTag(t *testing.T) {
+	moduleRoot := findGoModuleRoot(t)
+
+	cmd := exec.Command("go", "list", "-e", "-tags", "legacy_migration", "-json", "./cmd/legacy-package-migrate")
+	cmd.Dir = moduleRoot
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
+
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list with tag failed: %v\n%s", err, stderrBuf.String())
+	}
+
+	var pkg goListPackage
+	if err := json.Unmarshal(output, &pkg); err != nil {
+		t.Fatalf("parse go list: %v", err)
+	}
+
+	mainGoFound := false
+	for _, f := range pkg.GoFiles {
+		if f == "main.go" {
+			mainGoFound = true
+			break
+		}
+	}
+	if !mainGoFound {
+		t.Fatal("CLI main.go should be in GoFiles when legacy_migration tag is set")
+	}
+}
+
+func TestLegacyMigrationPackageCompiles(t *testing.T) {
+	moduleRoot := findGoModuleRoot(t)
+
+	cmd := exec.Command("go", "test", "-run", "^$", "-tags", "legacy_migration", "./internal/extension/package_legacy_migration")
+	cmd.Dir = moduleRoot
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("legacy migration package failed to compile: %v\n%s", err, string(output))
+	}
+}
+
+func findGoModuleRoot(t *testing.T) string {
+	t.Helper()
+
+	cmd := exec.Command("go", "env", "GOMOD")
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("resolve go.mod: %v", err)
+	}
+
+	goModPath := strings.TrimSpace(string(output))
+	if goModPath == "" || goModPath == os.DevNull {
+		t.Fatal("go.mod not found")
+	}
+
+	return filepath.Dir(goModPath)
+}
+
+func executableName(base string) string {
+	if os.PathSeparator == '\\' || os.Getenv("GOOS") == "windows" {
+		return base + ".exe"
+	}
+	return base
+}
+
+type goListPackage struct {
+	GoFiles        []string `json:"GoFiles"`
+	IgnoredGoFiles []string `json:"IgnoredGoFiles"`
+	Error          *struct {
+		Err string `json:"Err"`
+	} `json:"Error"`
 }
 
 func TestProductionRuntimeExcludesLegacyDependencies(t *testing.T) {
