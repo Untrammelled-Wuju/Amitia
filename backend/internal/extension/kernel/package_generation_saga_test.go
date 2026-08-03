@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
 
 func TestPackageGenerationInstallPersistsEvidenceAndReadModel(t *testing.T) {
@@ -163,10 +164,15 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	quarantinePath, err := container.PackageGenerationStore.QuarantineGeneration(ctx, stable)
+	stableForQuarantine := stable
+	stableForQuarantine.OperationID = operationID
+	quarantinePath, err := container.PackageGenerationStore.QuarantineGeneration(ctx, stableForQuarantine)
 	if err != nil {
 		t.Fatal(err)
 	}
+	safeExt := safeDirectoryName(installed.ExtensionID)
+	originalCurrentPath := filepath.Join(container.ExtRoot, "installations", safeExt, "current.json")
+	verificationTreeHash := package_security.ComputeDirHash(quarantinePath, container.PackageSecurity.GetHasher())
 	qm := PackageQuarantineMetadata{
 		QuarantineID:             "quarantine-" + operationID,
 		OperationID:              operationID,
@@ -174,9 +180,11 @@ func TestPackageGenerationRecoveryRestoresUninstallQuarantine(t *testing.T) {
 		GenerationQuarantinePath: quarantinePath,
 		CurrentQuarantinePath:    quarantinedCurrent.Path,
 		OriginalGenerationPath:   installed.InstallPath,
-		TreeHash:                 stable.TreeHash,
+		OriginalCurrentPath:      originalCurrentPath,
+		TreeHash:                 verificationTreeHash,
 		ArtifactID:               artifact.ArtifactID,
 		State:                    "active",
+		FencingToken:             1,
 	}
 	if err := container.PackageRepository.PutQuarantineMetadata(ctx, qm, PackageWriteGuard{}); err != nil {
 		t.Fatal(err)

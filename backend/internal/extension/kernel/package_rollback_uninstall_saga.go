@@ -1173,7 +1173,7 @@ func (r *Runtime) restoreQuarantinedGeneration(ctx context.Context, operation Pa
 	}
 	if _, err := os.Stat(qm.OriginalGenerationPath); err == nil {
 		actualHash := package_security.ComputeDirHash(qm.OriginalGenerationPath, r.container.PackageSecurity.GetHasher())
-		if actualHash == qm.TreeHash {
+		if equalTreeHash(actualHash, qm.TreeHash) {
 			return nil
 		}
 		return NewRepositoryError(RepositoryErrorConflict, fmt.Errorf("kernel: generation already exists at original path with different hash"))
@@ -1188,7 +1188,7 @@ func (r *Runtime) restoreQuarantinedGeneration(ctx context.Context, operation Pa
 		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: failed to restore generation: %w", err))
 	}
 	restoredHash := package_security.ComputeDirHash(qm.OriginalGenerationPath, r.container.PackageSecurity.GetHasher())
-	if restoredHash != qm.TreeHash {
+	if !equalTreeHash(restoredHash, qm.TreeHash) {
 		os.RemoveAll(qm.OriginalGenerationPath)
 		return NewRepositoryError(RepositoryErrorCorrupt, fmt.Errorf("kernel: restored generation hash mismatch: expected %s got %s", qm.TreeHash, restoredHash))
 	}
@@ -1202,13 +1202,17 @@ func (r *Runtime) restoreQuarantinedCurrent(ctx context.Context, operation Packa
 	if _, err := os.Stat(qm.OriginalCurrentPath); err == nil {
 		return nil
 	}
-	if _, err := os.Stat(qm.CurrentQuarantinePath); err != nil {
+	currentQuarantineFilePath := qm.CurrentQuarantinePath
+	if fi, statErr := os.Stat(currentQuarantineFilePath); statErr == nil && fi.IsDir() {
+		currentQuarantineFilePath = filepath.Join(currentQuarantineFilePath, "current.json")
+	}
+	if _, err := os.Stat(currentQuarantineFilePath); err != nil {
 		if os.IsNotExist(err) {
 			return NewRepositoryError(RepositoryErrorNotFound, fmt.Errorf("kernel: current quarantine path does not exist"))
 		}
 		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: cannot stat current quarantine path: %w", err))
 	}
-	if err := copyFile(qm.CurrentQuarantinePath, qm.OriginalCurrentPath); err != nil {
+	if err := copyFile(currentQuarantineFilePath, qm.OriginalCurrentPath); err != nil {
 		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: failed to restore current.json: %w", err))
 	}
 	return nil

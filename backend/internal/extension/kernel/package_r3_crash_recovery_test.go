@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func newR3Runtime(t *testing.T) (*Runtime, *Container) {
@@ -21,7 +23,7 @@ func newR3Runtime(t *testing.T) (*Runtime, *Container) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = container.Close() })
+	t.Cleanup(func() { require.NoError(t, container.Close()) })
 	runtime, err := NewRuntime(filepath.Join(root, "extensions"))
 	if err != nil {
 		t.Fatal(err)
@@ -94,22 +96,16 @@ func TestR3_CrashRecovery_LoadQuarantineMetadata_CompletesIdempotently(t *testin
 		t.Fatal(err)
 	}
 	err := runtime.recoverPackageOperation(ctx, op)
-	if err != nil {
-		t.Logf("recovery outcome (load-only partial state): %v", err)
-	}
+	require.Error(t, err, "recovery at partial state (load-only) should fail")
 	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, op.OperationID)
-	if listErr != nil {
-		t.Fatal(listErr)
-	}
+	require.NoError(t, listErr)
 	loadCount := 0
 	for _, s := range steps {
 		if s.StepName == StepUninstallRecoveryLoadQuarantineMetadata && s.Status == StatusCompleted {
 			loadCount++
 		}
 	}
-	if loadCount != 1 {
-		t.Fatalf("load_quarantine_metadata must be completed exactly once, got %d", loadCount)
-	}
+	require.Equal(t, 1, loadCount, "load_quarantine_metadata must be completed exactly once")
 }
 
 func TestR3_CrashRecovery_VerifyQuarantineMetadata_ResumesAfterLoad(t *testing.T) {
@@ -131,22 +127,16 @@ func TestR3_CrashRecovery_VerifyQuarantineMetadata_ResumesAfterLoad(t *testing.T
 		t.Fatal(err)
 	}
 	err := runtime.recoverPackageOperation(ctx, op)
-	if err != nil {
-		t.Logf("recovery outcome (verify-partial): %v", err)
-	}
+	require.Error(t, err, "recovery at partial state (verify-partial) should fail")
 	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, op.OperationID)
-	if listErr != nil {
-		t.Fatal(listErr)
-	}
+	require.NoError(t, listErr)
 	loadCount := 0
 	for _, s := range steps {
 		if s.StepName == StepUninstallRecoveryLoadQuarantineMetadata && s.Status == StatusCompleted {
 			loadCount++
 		}
 	}
-	if loadCount != 1 {
-		t.Fatalf("load step must not be duplicated, got %d", loadCount)
-	}
+	require.Equal(t, 1, loadCount, "load step must not be duplicated")
 }
 
 func TestR3_CrashRecovery_RestoreArtifactReference_PriorStepsNotDuplicated(t *testing.T) {
@@ -178,13 +168,9 @@ func TestR3_CrashRecovery_RestoreArtifactReference_PriorStepsNotDuplicated(t *te
 		}
 	}
 	err := runtime.recoverPackageOperation(ctx, op)
-	if err != nil {
-		t.Logf("recovery outcome (artifact-ref partial chain): %v", err)
-	}
+	require.Error(t, err, "recovery at partial state (artifact-ref) should fail")
 	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, op.OperationID)
-	if listErr != nil {
-		t.Fatal(listErr)
-	}
+	require.NoError(t, listErr)
 	for _, prior := range []string{
 		StepUninstallRecoveryLoadQuarantineMetadata,
 		StepUninstallRecoveryVerifyQuarantineMetadata,

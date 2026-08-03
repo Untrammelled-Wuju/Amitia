@@ -175,6 +175,7 @@ const (
 	PackageErrCodeSnapshotExemptionInvalid             = "PACKAGE_SNAPSHOT_EXEMPTION_INVALID"
 	PackageErrCodeSnapshotEvidenceMissing              = "PACKAGE_SNAPSHOT_EVIDENCE_MISSING"
 	PackageErrCodeFinalGateEvidenceMissing             = "PACKAGE_FINAL_GATE_EVIDENCE_MISSING"
+	PackageErrCodeFinalGateEvidenceInvalid             = "PACKAGE_FINAL_GATE_EVIDENCE_INVALID"
 	PackageErrCodeUserDataEntityIDMissing              = "PACKAGE_USER_DATA_ENTITY_ID_MISSING"
 	PackageErrCodeUserDataRecordInvalid                = "PACKAGE_USER_DATA_RECORD_INVALID"
 	PackageErrCodeUserDataBatchHashMismatch            = "PACKAGE_USER_DATA_BATCH_HASH_MISMATCH"
@@ -188,14 +189,14 @@ const (
 	PackageErrCodeResourceRestoreIncomplete            = "PACKAGE_RESOURCE_RESTORE_INCOMPLETE"
 	PackageErrCodeSnapshotSchemaUnsupported            = "PACKAGE_SNAPSHOT_SCHEMA_UNSUPPORTED"
 	PackageErrCodeSnapshotIntegrityFailed              = "PACKAGE_SNAPSHOT_INTEGRITY_FAILED"
-	PackageErrCodeConfirmationClaimsInvalid             = "PACKAGE_CONFIRMATION_CLAIMS_INVALID"
-	PackageErrCodeConfirmationOperationMismatch         = "PACKAGE_CONFIRMATION_OPERATION_MISMATCH"
-	PackageErrCodeRollbackNotConfirmed                  = "PACKAGE_ROLLBACK_NOT_CONFIRMED"
-	PackageErrCodeRollbackTokenInvalid                  = "PACKAGE_ROLLBACK_TOKEN_INVALID"
-	PackageErrCodeSnapshotRequirementHashMismatch       = "PACKAGE_SNAPSHOT_REQUIREMENT_HASH_MISMATCH"
-	PackageErrCodeArtifactEvidenceInvalid               = "PACKAGE_ARTIFACT_EVIDENCE_INVALID"
-	PackageErrCodeArtifactReferenceMissing              = "PACKAGE_ARTIFACT_REFERENCE_MISSING"
-	PackageErrCodeArtifactReferenceMismatch             = "PACKAGE_ARTIFACT_REFERENCE_MISMATCH"
+	PackageErrCodeConfirmationClaimsInvalid            = "PACKAGE_CONFIRMATION_CLAIMS_INVALID"
+	PackageErrCodeConfirmationOperationMismatch        = "PACKAGE_CONFIRMATION_OPERATION_MISMATCH"
+	PackageErrCodeRollbackNotConfirmed                 = "PACKAGE_ROLLBACK_NOT_CONFIRMED"
+	PackageErrCodeRollbackTokenInvalid                 = "PACKAGE_ROLLBACK_TOKEN_INVALID"
+	PackageErrCodeSnapshotRequirementHashMismatch      = "PACKAGE_SNAPSHOT_REQUIREMENT_HASH_MISMATCH"
+	PackageErrCodeArtifactEvidenceInvalid              = "PACKAGE_ARTIFACT_EVIDENCE_INVALID"
+	PackageErrCodeArtifactReferenceMissing             = "PACKAGE_ARTIFACT_REFERENCE_MISSING"
+	PackageErrCodeArtifactReferenceMismatch            = "PACKAGE_ARTIFACT_REFERENCE_MISMATCH"
 )
 
 type PackageError struct {
@@ -314,6 +315,7 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeSnapshotExemptionInvalid:             409,
 	PackageErrCodeSnapshotEvidenceMissing:              409,
 	PackageErrCodeFinalGateEvidenceMissing:             409,
+	PackageErrCodeFinalGateEvidenceInvalid:             409,
 	PackageErrCodeUserDataEntityIDMissing:              422,
 	PackageErrCodeUserDataRecordInvalid:                422,
 	PackageErrCodeUserDataBatchHashMismatch:            409,
@@ -327,14 +329,14 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeResourceRestoreIncomplete:            409,
 	PackageErrCodeSnapshotSchemaUnsupported:            422,
 	PackageErrCodeSnapshotIntegrityFailed:              409,
-	PackageErrCodeConfirmationClaimsInvalid:             403,
-	PackageErrCodeConfirmationOperationMismatch:         403,
-	PackageErrCodeRollbackNotConfirmed:                  403,
-	PackageErrCodeRollbackTokenInvalid:                  403,
-	PackageErrCodeSnapshotRequirementHashMismatch:       409,
-	PackageErrCodeArtifactEvidenceInvalid:               409,
-	PackageErrCodeArtifactReferenceMissing:              409,
-	PackageErrCodeArtifactReferenceMismatch:             409,
+	PackageErrCodeConfirmationClaimsInvalid:            403,
+	PackageErrCodeConfirmationOperationMismatch:        403,
+	PackageErrCodeRollbackNotConfirmed:                 403,
+	PackageErrCodeRollbackTokenInvalid:                 403,
+	PackageErrCodeSnapshotRequirementHashMismatch:      409,
+	PackageErrCodeArtifactEvidenceInvalid:              409,
+	PackageErrCodeArtifactReferenceMissing:             409,
+	PackageErrCodeArtifactReferenceMismatch:            409,
 }
 
 func PackageErrorHTTPStatus(code string) int {
