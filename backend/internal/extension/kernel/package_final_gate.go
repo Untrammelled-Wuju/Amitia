@@ -20,6 +20,7 @@ type PackageFinalGateResult struct {
 	OperationType               string                    `json:"operationType"`
 	ExtensionID                 string                    `json:"extensionId"`
 	Version                     string                    `json:"version"`
+	Mode                        string                    `json:"mode,omitempty"`
 	ClaimsVerified              bool                      `json:"claimsVerified"`
 	PolicyVersionVerified       bool                      `json:"policyVersionVerified"`
 	ConfirmedItemsVerified      bool                      `json:"confirmedItemsVerified"`
@@ -141,20 +142,19 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 
 	checkClaims := PackageFinalGateCheck{Name: "claims_verified"}
 	{
-		if operation.OperationType == "uninstall" {
-			checkClaims.Passed = true
-			checkClaims.Detail = "uninstall does not require claims verification"
-		} else if operation.ConfirmationClaimsJSON == "" && operation.ConfirmationsJSON == "" {
+		if operation.ConfirmationClaimsJSON == "" && operation.ConfirmationsJSON == "" {
 			checkClaims.Detail = "confirmation claims not persisted"
 		} else {
-			if operation.ConfirmationClaimsJSON != "" {
-				if _, parseErr := parseAndValidateOperationConfirmationClaims(operation, packagePolicyVersion); parseErr != nil {
-					checkClaims.Detail = fmt.Sprintf("claims validation failed: %v", parseErr)
+			claims, parseErr := parseAndValidateOperationConfirmationClaims(operation, packagePolicyVersion)
+			if parseErr != nil {
+				checkClaims.Detail = fmt.Sprintf("claims validation failed: %v", parseErr)
+			} else {
+				claimsRecomputeErr := recomputeAndVerifyRequiredConfirmations(&claims, operation)
+				if claimsRecomputeErr != nil {
+					checkClaims.Detail = fmt.Sprintf("required confirmations incomplete: %v", claimsRecomputeErr)
 				} else {
 					checkClaims.Passed = true
 				}
-			} else {
-				checkClaims.Passed = true
 			}
 		}
 	}
@@ -848,6 +848,55 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 			RecommendedAction: "requires_recovery",
 		}); err != nil {
 			return fmt.Errorf("kernel: persist final gate finding %s: %w", finding.FindingID, err)
+		}
+	}
+	return nil
+}
+
+func recomputeAndVerifyRequiredConfirmations(claims *PackageConfirmationClaims, operation PackageOperationRecord) error {
+	if claims == nil {
+		return errors.New("claims is nil")
+	}
+	if claims.OperationType == "" {
+		claims.OperationType = operation.OperationType
+	}
+	if claims.ExtensionID == "" {
+		claims.ExtensionID = operation.ExtensionID
+	}
+	if claims.ArtifactID == "" {
+		claims.ArtifactID = operation.ArtifactID
+	}
+	if claims.UserID == "" {
+		claims.UserID = operation.UserID
+	}
+	if claims.ScopeType == "" {
+		claims.ScopeType = operation.ScopeType
+	}
+	if claims.ScopeID == "" {
+		claims.ScopeID = operation.ScopeID
+	}
+	seen := make(map[string]bool, len(claims.ConfirmedItems))
+	for _, item := range claims.ConfirmedItems {
+		if item == "" {
+			continue
+		}
+		seen[item] = true
+		if claims.Confirmations == nil {
+			claims.Confirmations = make(map[string]bool)
+		}
+		if !claims.Confirmations[item] {
+			claims.Confirmations[item] = true
+		}
+	}
+	for key, val := range claims.Confirmations {
+		if val && !seen[key] {
+			claims.ConfirmedItems = append(claims.ConfirmedItems, key)
+		}
+	}
+	if len(claims.ConfirmedItems) == 0 && len(claims.Confirmations) == 0 {
+		switch operation.OperationType {
+		case OpInstall, OpUpdate, OpRollback, OpUninstall:
+			return fmt.Errorf("no confirmed items for %s operation", operation.OperationType)
 		}
 	}
 	return nil

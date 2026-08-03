@@ -93,7 +93,10 @@ func TestR3_CrashRecovery_LoadQuarantineMetadata_CompletesIdempotently(t *testin
 	}, PackageWriteGuard{}); err != nil {
 		t.Fatal(err)
 	}
-	_ = runtime.recoverPackageOperation(ctx, op)
+	err := runtime.recoverPackageOperation(ctx, op)
+	if err != nil {
+		t.Logf("recovery outcome (load-only partial state): %v", err)
+	}
 	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, op.OperationID)
 	if listErr != nil {
 		t.Fatal(listErr)
@@ -127,7 +130,10 @@ func TestR3_CrashRecovery_VerifyQuarantineMetadata_ResumesAfterLoad(t *testing.T
 	}, PackageWriteGuard{}); err != nil {
 		t.Fatal(err)
 	}
-	_ = runtime.recoverPackageOperation(ctx, op)
+	err := runtime.recoverPackageOperation(ctx, op)
+	if err != nil {
+		t.Logf("recovery outcome (verify-partial): %v", err)
+	}
 	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, op.OperationID)
 	if listErr != nil {
 		t.Fatal(listErr)
@@ -171,7 +177,10 @@ func TestR3_CrashRecovery_RestoreArtifactReference_PriorStepsNotDuplicated(t *te
 			t.Fatal(err)
 		}
 	}
-	_ = runtime.recoverPackageOperation(ctx, op)
+	err := runtime.recoverPackageOperation(ctx, op)
+	if err != nil {
+		t.Logf("recovery outcome (artifact-ref partial chain): %v", err)
+	}
 	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, op.OperationID)
 	if listErr != nil {
 		t.Fatal(listErr)

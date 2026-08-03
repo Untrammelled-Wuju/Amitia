@@ -161,6 +161,32 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID}
+	revalidatedCurrent, revalErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if revalErr != nil {
+		return KernelInstallResult{}, fmt.Errorf("kernel: rollback re-preview installation unavailable: %w", revalErr)
+	}
+	if revalErr := validatePackageOwner(revalidatedCurrent, userID, scopeType, scopeID); revalErr != nil {
+		return KernelInstallResult{}, fmt.Errorf("kernel: rollback re-preview ownership changed: %w", revalErr)
+	}
+	if revalidatedCurrent.InstalledVersion.String() != current.InstalledVersion.String() {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 409, fmt.Errorf("rollback re-preview: installed version changed since preview"))
+	}
+	revalidatedArtifact, revalArtErr := r.container.PackageRepository.GetArtifact(ctx, point.ArtifactID)
+	if revalArtErr != nil {
+		return KernelInstallResult{}, fmt.Errorf("kernel: rollback re-preview artifact unavailable: %w", revalArtErr)
+	}
+	if revalidatedArtifact.ArtifactID != artifact.ArtifactID {
+		return KernelInstallResult{}, NewPackageError(PackageErrCodeRollbackTokenInvalid, 409, fmt.Errorf("rollback re-preview: artifact identity changed"))
+	}
+	reverifiedPkg, reVerifyErr := r.VerifyStoredPackage(ctx, revalidatedArtifact)
+	if reVerifyErr != nil {
+		return KernelInstallResult{}, fmt.Errorf("kernel: rollback re-preview artifact verification failed: %w", reVerifyErr)
+	}
+	reverifiedDepPreview := InstallPreview{}
+	r.evaluatePackageCompatibilityAndDependencies(ctx, reverifiedPkg, &reverifiedDepPreview)
+	if len(reverifiedDepPreview.Issues) > 0 {
+		return KernelInstallResult{}, fmt.Errorf("kernel: rollback re-preview dependency or compatibility check failed")
+	}
 	forwardPoint, err := r.createPackageRollbackPoint(ctx, op.OperationID, "forward_recovery", current, &currentDefinition, currentModules, currentContributions)
 	if err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "create_forward_recovery_point", "PACKAGE_FORWARD_RECOVERY_POINT_FAILED", err.Error(), true, guard)

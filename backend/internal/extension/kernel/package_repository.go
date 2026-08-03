@@ -777,11 +777,11 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTxWithStep(ctx conte
 	}
 	var leaseOpID string
 	var leaseFencingToken int64
-	var leaseOwnerID string
+	var leaseOwner string
 	var leaseExpiresAt string
 	leaseErr := tx.QueryRowContext(ctx,
-		`SELECT operation_id, fencing_token, owner_id, lease_expires_at FROM extension_package_operation_leases WHERE extension_id=?`,
-		extensionID).Scan(&leaseOpID, &leaseFencingToken, &leaseOwnerID, &leaseExpiresAt)
+		`SELECT operation_id, fencing_token, lease_owner, lease_expires_at FROM extension_package_operation_leases WHERE extension_id=?`,
+		extensionID).Scan(&leaseOpID, &leaseFencingToken, &leaseOwner, &leaseExpiresAt)
 	if errors.Is(leaseErr, sql.ErrNoRows) {
 		return operationStateError(PackageErrCodeLeaseMissing,
 			"extension lease missing: operation cannot finalize without lease", nil)

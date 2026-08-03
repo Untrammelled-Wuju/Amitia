@@ -124,6 +124,24 @@ func (r *PackageRepository) HasArtifactReference(ctx context.Context, artifactID
 	return count > 0, nil
 }
 
+func (r *PackageRepository) AcquireArtifactReferenceOwnershipProof(ctx context.Context, artifactID, referenceType, ownerID string) (bool, string, error) {
+	var actualOwnerID string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT reference_owner_id FROM extension_package_artifact_references
+		WHERE artifact_id=? AND reference_type=? AND reference_owner_id=? AND released_at=''
+		LIMIT 1`, artifactID, referenceType, ownerID).Scan(&actualOwnerID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, "", nil
+		}
+		return false, "", err
+	}
+	if actualOwnerID != ownerID {
+		return false, actualOwnerID, nil
+	}
+	return true, actualOwnerID, nil
+}
+
 func (r *PackageRepository) FindArtifactReference(ctx context.Context, artifactID, referenceType, ownerID string) (*PackageArtifactReference, error) {
 	var ref PackageArtifactReference
 	err := r.db.QueryRowContext(ctx,

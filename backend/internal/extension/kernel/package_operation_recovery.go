@@ -977,7 +977,81 @@ func (rc *UninstallRecoveryContext) crossValidateLoadStep() error {
 	return nil
 }
 
+type PackageFinalGateMode string
+
+const (
+	PackageFinalGateModeOperationCompleted   PackageFinalGateMode = "operation_completed"
+	PackageFinalGateModeUninstallCompensated PackageFinalGateMode = "uninstall_compensated"
+)
+
+func (r *Runtime) prepareUninstallRecoveryOperation(ctx context.Context, operation PackageOperationRecord, guard PackageWriteGuard) (PackageOperationRecord, error) {
+	authoritative, _, err := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	if err != nil {
+		return operation, fmt.Errorf("kernel: read authoritative operation for recovery preparation: %w", err)
+	}
+	if authoritative.OperationType != "uninstall" {
+		return operation, fmt.Errorf("kernel: recovery preparation requires uninstall operation, got %s", authoritative.OperationType)
+	}
+	lease, leaseErr := r.container.PackageRepository.getExtensionLease(ctx, authoritative.ExtensionID)
+	if leaseErr != nil {
+		return operation, fmt.Errorf("kernel: recovery preparation lease proof failed: %w", leaseErr)
+	}
+	if lease.OperationID != authoritative.OperationID {
+		return operation, operationStateError(PackageErrCodeLeaseFenced,
+			fmt.Sprintf("lease held by different operation: lease=%s authoritative=%s", lease.OperationID, authoritative.OperationID), nil)
+	}
+	if lease.FencingToken != guard.FencingToken {
+		return operation, operationStateError(PackageErrCodeLeaseFenced,
+			fmt.Sprintf("lease fencing token mismatch: lease=%d guard=%d", lease.FencingToken, guard.FencingToken), nil)
+	}
+	allowedSourceStates := []PackageOperationStatus{PackageOperationRequiresRecovery, PackageOperationInProgress, PackageOperationFinalizing}
+	if string(authoritative.Status) == string(PackageOperationCompleted) {
+		return authoritative, nil
+	}
+	if string(authoritative.Status) == string(PackageOperationFailed) {
+		return operation, operationStateError(OperationErrRecoveryNotAllowed, "cannot recover failed operation", nil)
+	}
+	isAllowed := false
+	for _, s := range allowedSourceStates {
+		if string(authoritative.Status) == string(s) {
+			isAllowed = true
+			break
+		}
+	}
+	if !isAllowed {
+		return operation, operationStateError(OperationErrRecoveryNotAllowed,
+			fmt.Sprintf("cannot enter recovery from status %s", authoritative.Status), nil)
+	}
+	transitionErr := r.container.PackageRepository.TransitionOperation(ctx,
+		authoritative.OperationID,
+		allowedSourceStates,
+		PackageOperationInProgress,
+		PackageOperationTransition{CurrentStep: "uninstall_recovery_compensating"},
+		guard)
+	if transitionErr != nil {
+		return operation, fmt.Errorf("kernel: CAS transition requires_recovery→in_progress failed: %w", transitionErr)
+	}
+	authoritative, _, err = r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	if err != nil {
+		return operation, fmt.Errorf("kernel: re-read operation after transition: %w", err)
+	}
+	return authoritative, nil
+}
+
 func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, guard PackageWriteGuard) error {
+	preparedOp, prepErr := r.prepareUninstallRecoveryOperation(ctx, operation, guard)
+	if prepErr != nil {
+		return r.requirePackageRecovery(ctx, operation, "recovery preparation failed: "+prepErr.Error(), prepErr, guard)
+	}
+	if string(preparedOp.Status) == string(PackageOperationCompleted) {
+		if verifyErr := r.verifyUninstallFinalizedState(ctx, preparedOp); verifyErr != nil {
+			return r.requirePackageRecovery(ctx, operation, "finalized state verification failed", verifyErr, guard)
+		}
+		leaseGuard := r.newPackageLeaseGuard(preparedOp.ExtensionID, preparedOp.OperationID)
+		leaseGuard.MarkLeaseReleased()
+		return nil
+	}
+	operation = preparedOp
 	rc := &UninstallRecoveryContext{
 		operation: operation,
 		guard:     guard,
@@ -1154,46 +1228,14 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 
 	err = r.runUninstallRecoveryStep(ctx, operation, completed, StepUninstallRecoveryFinalGate, order, guard, func() (string, error) {
 		order++
-		finalGateResult, gateErr := r.verifyPackageFinalGateWithGuard(ctx, operation.OperationID, guard)
+		finalGateResult, gateErr := r.verifyUninstallCompensationFinalGate(ctx, operation, *rc, guard)
 		if gateErr != nil {
 			return "", gateErr
 		}
 		if !finalGateResult.Passed {
-			return "", NewPackageErrorWithRecovery(PackageErrCodeFinalGateFailed, 409, false, true, "Inspect final gate result",
-				fmt.Errorf("final gate not passed for operation %s", operation.OperationID))
+			return "", NewPackageErrorWithRecovery(PackageErrCodeFinalGateFailed, 409, false, true, "Inspect compensation final gate result",
+				fmt.Errorf("compensation final gate not passed for operation %s", operation.OperationID))
 		}
-		releasedQM, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
-		if qmErr != nil {
-			return "", NewPackageErrorWithRecovery(PackageErrCodeQuarantineMetadataMissing, 409, false, true, "Inspect persisted quarantine metadata",
-				fmt.Errorf("released quarantine metadata not found for operation %s: %w", operation.OperationID, qmErr))
-		}
-		if releasedQM.State != "released" {
-			return "", NewPackageErrorWithRecovery(PackageErrCodeQuarantineReleaseFailed, 409, false, true, "Inspect persisted quarantine metadata",
-				fmt.Errorf("quarantine metadata state is not released: %s", releasedQM.State))
-		}
-		if releasedQM.ReleasedAt == "" {
-			return "", NewPackageErrorWithRecovery(PackageErrCodeQuarantineReleaseFailed, 409, false, true, "Inspect persisted quarantine metadata",
-				fmt.Errorf("quarantine metadata released_at is empty after release"))
-		}
-		if releasedQM.TreeHash != "" && finalGateResult.ExtensionID != "" {
-			for _, check := range finalGateResult.Checks {
-				if check.Name == "generation_pointer_consistent" && !check.Passed {
-					return "", NewPackageErrorWithRecovery(PackageErrCodeFinalGateFailed, 409, false, true, "Inspect final gate generation pointer",
-						fmt.Errorf("final gate generation_pointer_consistent check not passed"))
-				}
-			}
-		}
-		finalGateResult.Findings = append(finalGateResult.Findings, PackageFinalGateFinding{
-			FindingID:   "qm-released-" + releasedQM.QuarantineID,
-			OperationID: operation.OperationID,
-			ExtensionID: operation.ExtensionID,
-			FindingType: "quarantine_metadata_released_final_proof",
-			ResourceID:  releasedQM.QuarantineID,
-			Severity:    "info",
-			Actual:      fmt.Sprintf("state=%s released_at=%s tree_hash=%s", releasedQM.State, releasedQM.ReleasedAt, releasedQM.TreeHash),
-			DetectedAt:  time.Now().UTC().Format(time.RFC3339Nano),
-			ResolvedAt:  releasedQM.ReleasedAt,
-		})
 		resultBytes, marshalErr := json.Marshal(finalGateResult)
 		if marshalErr != nil {
 			return "", fmt.Errorf("marshal final gate result: %w", marshalErr)
@@ -1209,6 +1251,189 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 	}
 
 	return nil
+}
+
+func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, operation PackageOperationRecord, rc UninstallRecoveryContext, guard PackageWriteGuard) (PackageFinalGateResult, error) {
+	result := PackageFinalGateResult{
+		OperationID:   operation.OperationID,
+		OperationType: operation.OperationType,
+		ExtensionID:   operation.ExtensionID,
+		Version:       operation.TargetVersion,
+		Mode:          string(PackageFinalGateModeUninstallCompensated),
+		Checks:        make([]PackageFinalGateCheck, 0, 10),
+		VerifiedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	qm := rc.quarantineMetadata
+
+	checkOpType := PackageFinalGateCheck{Name: "operation_type_uninstall"}
+	if operation.OperationType == "uninstall" {
+		checkOpType.Passed = true
+	} else {
+		checkOpType.Detail = fmt.Sprintf("expected uninstall, got %s", operation.OperationType)
+	}
+	result.Checks = append(result.Checks, checkOpType)
+
+	checkOpStatus := PackageFinalGateCheck{Name: "operation_in_progress"}
+	if operation.Status == string(PackageOperationInProgress) || operation.Status == string(PackageOperationFinalizing) {
+		checkOpStatus.Passed = true
+	} else {
+		checkOpStatus.Detail = fmt.Sprintf("status is %s, expected in_progress/finalizing", operation.Status)
+	}
+	result.Checks = append(result.Checks, checkOpStatus)
+
+	checkLease := PackageFinalGateCheck{Name: "lease_proof"}
+	lease, leaseErr := r.container.PackageRepository.getExtensionLease(ctx, operation.ExtensionID)
+	if leaseErr != nil {
+		checkLease.Detail = fmt.Sprintf("lease not found: %v", leaseErr)
+	} else if lease.OperationID != operation.OperationID {
+		checkLease.Detail = fmt.Sprintf("lease held by %s", lease.OperationID)
+	} else if lease.FencingToken != guard.FencingToken {
+		checkLease.Detail = "fencing token mismatch"
+	} else {
+		checkLease.Passed = true
+	}
+	result.Checks = append(result.Checks, checkLease)
+
+	checkInstall := PackageFinalGateCheck{Name: "installation_identity"}
+	installation, installErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
+	if installErr != nil {
+		checkInstall.Detail = fmt.Sprintf("installation unavailable: %v", installErr)
+	} else if installation.ExtensionID != domain.ExtensionID(operation.ExtensionID) {
+		checkInstall.Detail = fmt.Sprintf("extension_id mismatch: %s != %s", string(installation.ExtensionID), operation.ExtensionID)
+	} else if installation.PackageID != operation.ArtifactID {
+		checkInstall.Detail = fmt.Sprintf("artifact_id mismatch: package=%s operation=%s", installation.PackageID, operation.ArtifactID)
+	} else if installation.InstallationState != domain.InstallationStateInstalled {
+		checkInstall.Detail = fmt.Sprintf("state is %s, expected installed", installation.InstallationState)
+	} else {
+		expectedGenerationID := qm.ExpectedGenerationID
+		if expectedGenerationID == "" {
+			expectedGenerationID = operation.TargetGeneration
+		}
+		actualGenerationID, _ := installation.Metadata["generationId"].(string)
+		if actualGenerationID != expectedGenerationID {
+			checkInstall.Detail = fmt.Sprintf("generation_id mismatch: installation=%s expected=%s", actualGenerationID, expectedGenerationID)
+		} else {
+			checkInstall.Passed = true
+		}
+	}
+	result.Checks = append(result.Checks, checkInstall)
+
+	checkVersion := PackageFinalGateCheck{Name: "version_record"}
+	versionRecord, vErr := r.container.PackageRepository.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion)
+	if vErr != nil {
+		checkVersion.Detail = fmt.Sprintf("version record unavailable: %v", vErr)
+	} else if versionRecord.ArtifactID != operation.ArtifactID {
+		checkVersion.Detail = fmt.Sprintf("version artifact mismatch: %s", versionRecord.ArtifactID)
+	} else if versionRecord.GenerationID != qm.ExpectedGenerationID && versionRecord.GenerationID != operation.TargetGeneration {
+		checkVersion.Detail = "version generation mismatch"
+	} else if versionRecord.VersionState != string(PackageVersionStateCurrent) {
+		checkVersion.Detail = fmt.Sprintf("version state is %s, expected current", versionRecord.VersionState)
+	} else {
+		checkVersion.Passed = true
+	}
+	result.Checks = append(result.Checks, checkVersion)
+
+	checkCurrent := PackageFinalGateCheck{Name: "current_pointer"}
+	current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
+	if currentErr != nil {
+		checkCurrent.Detail = fmt.Sprintf("current pointer unavailable: %v", currentErr)
+	} else if current.ExtensionID != operation.ExtensionID {
+		checkCurrent.Detail = fmt.Sprintf("current extension mismatch: %s", current.ExtensionID)
+	} else if current.GenerationID != qm.ExpectedGenerationID && current.GenerationID != operation.TargetGeneration {
+		checkCurrent.Detail = fmt.Sprintf("current generation mismatch: current=%s expected=%s", current.GenerationID, qm.ExpectedGenerationID)
+	} else {
+		checkCurrent.Passed = true
+	}
+	result.Checks = append(result.Checks, checkCurrent)
+
+	checkGenTree := PackageFinalGateCheck{Name: "generation_tree"}
+	expectedGenID := qm.ExpectedGenerationID
+	if expectedGenID == "" {
+		expectedGenID = operation.TargetGeneration
+	}
+	if expectedGenID == "" || r.container.PackageGenerationStore == nil {
+		checkGenTree.Detail = "generation evidence unavailable"
+	} else {
+		genVerifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, PackageGenerationCurrent{
+			ExtensionID: operation.ExtensionID,
+			GenerationID: expectedGenID,
+		})
+		if genVerifyErr != nil {
+			checkGenTree.Detail = fmt.Sprintf("generation tree verification failed: %v", genVerifyErr)
+		} else {
+			checkGenTree.Passed = true
+		}
+	}
+	result.Checks = append(result.Checks, checkGenTree)
+
+	checkArtifact := PackageFinalGateCheck{Name: "artifact_not_deleted"}
+	artifact, artErr := r.container.PackageRepository.GetArtifact(ctx, operation.ArtifactID)
+	if artErr != nil {
+		checkArtifact.Detail = fmt.Sprintf("artifact unavailable: %v", artErr)
+	} else if artifact.RetentionState == "deleted" || artifact.DeletedAt != "" {
+		checkArtifact.Detail = "artifact was deleted during compensation"
+	} else {
+		checkArtifact.Passed = true
+	}
+	result.Checks = append(result.Checks, checkArtifact)
+
+	checkInstallRef := PackageFinalGateCheck{Name: "installation_reference"}
+	hasInstallRef, installRefErr := r.container.PackageRepository.HasArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceInstallation, operation.ExtensionID)
+	if installRefErr != nil {
+		checkInstallRef.Detail = fmt.Sprintf("installation reference query failed: %v", installRefErr)
+	} else if !hasInstallRef {
+		checkInstallRef.Detail = "installation reference missing"
+	} else {
+		checkInstallRef.Passed = true
+	}
+	result.Checks = append(result.Checks, checkInstallRef)
+
+	qmCopy := qm
+	checkQM := PackageFinalGateCheck{Name: "quarantine_released_identity"}
+	if qmCopy.State != "released" {
+		checkQM.Detail = fmt.Sprintf("state is %s, expected released", qmCopy.State)
+	} else if qmCopy.ReleasedAt == "" {
+		checkQM.Detail = "released_at is empty"
+	} else if qmCopy.QuarantineID == "" || qmCopy.OperationID != operation.OperationID || qmCopy.ExtensionID != operation.ExtensionID || qmCopy.ArtifactID != operation.ArtifactID {
+		checkQM.Detail = "quarantine identity mismatch"
+	} else if qmCopy.TreeHash == "" || qmCopy.SnapshotHash == "" {
+		checkQM.Detail = "quarantine hash incomplete"
+	} else if qmCopy.FencingToken <= 0 || qmCopy.FencingToken > guard.FencingToken {
+		checkQM.Detail = fmt.Sprintf("fencing token invalid: %d (guard=%d)", qmCopy.FencingToken, guard.FencingToken)
+	} else {
+		for _, step := range rc.completed {
+			if step.StepName == StepUninstallRecoveryReleaseQuarantineMetadata && step.Status == StatusCompleted && step.ResultJSON != "" {
+				expectedResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(step.ResultJSON)))
+				if expectedResultHash == step.ResultHash {
+					checkQM.Passed = true
+					break
+				}
+			}
+		}
+		if !checkQM.Passed && checkQM.Detail == "" {
+			checkQM.Detail = "release step result_hash mismatch"
+		}
+	}
+	result.Checks = append(result.Checks, checkQM)
+
+	allPassed := true
+	for _, check := range result.Checks {
+		if !check.Passed {
+			allPassed = false
+			result.Findings = append(result.Findings, PackageFinalGateFinding{
+				FindingID:   "comp-gate-finding-" + check.Name,
+				OperationID: operation.OperationID,
+				ExtensionID: operation.ExtensionID,
+				FindingType: check.Name,
+				Severity:    "error",
+				Expected:    "passed",
+				Actual:      check.Detail,
+				DetectedAt:  result.VerifiedAt,
+			})
+		}
+	}
+	result.Passed = allPassed
+	return result, nil
 }
 
 func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, guard PackageWriteGuard) error {
@@ -1277,25 +1502,79 @@ func (r *Runtime) verifyUninstallFinalizedState(ctx context.Context, operation P
 		return fmt.Errorf("verify finalized operation: %w", err)
 	}
 	if string(op.Status) != string(PackageOperationCompleted) {
-		return fmt.Errorf("operation not completed after finalize: status=%s", op.Status)
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+			fmt.Errorf("operation not completed after finalize: status=%s", op.Status))
+	}
+	if op.CompletedAt == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+			fmt.Errorf("operation completed but completed_at is empty"))
 	}
 	steps, listErr := r.container.PackageRepository.ListOperationSteps(ctx, operation.OperationID)
 	if listErr != nil {
 		return fmt.Errorf("list steps for finalize verification: %w", listErr)
 	}
-	hasFinalizeStep := false
+	var finalizeStepPtr *PackageOperationStep
+	var finalGateStepPtr *PackageFinalGateResult
 	for _, step := range steps {
 		if step.StepName == StepUninstallRecoveryFinalize && step.Status == StatusCompleted && step.ResultJSON != "" {
 			expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(step.ResultJSON)))
 			if expectedHash != step.ResultHash {
-				return fmt.Errorf("finalize step result_hash mismatch after completion")
+				return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+					fmt.Errorf("finalize step result_hash mismatch"))
 			}
-			hasFinalizeStep = true
-			break
+			s := step
+			finalizeStepPtr = &s
+		}
+		if step.StepName == StepUninstallRecoveryFinalGate && step.Status == StatusCompleted && step.ResultJSON != "" {
+			var gateResult PackageFinalGateResult
+			if unmarshalErr := json.Unmarshal([]byte(step.ResultJSON), &gateResult); unmarshalErr == nil {
+				finalGateStepPtr = &gateResult
+			}
 		}
 	}
-	if !hasFinalizeStep {
-		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation", fmt.Errorf("operation %s completed but finalize step missing or invalid", operation.OperationID))
+	if finalizeStepPtr == nil {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+			fmt.Errorf("operation %s completed but finalize step missing or invalid", operation.OperationID))
+	}
+	if finalGateStepPtr == nil {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+			fmt.Errorf("operation %s completed but final gate step missing", operation.OperationID))
+	}
+	if !finalGateStepPtr.Passed {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+			fmt.Errorf("operation %s completed but final gate did not pass", operation.OperationID))
+	}
+	_, leaseErr := r.container.PackageRepository.getExtensionLease(ctx, operation.ExtensionID)
+	if leaseErr == nil {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+			fmt.Errorf("operation %s completed but lease still exists", operation.OperationID))
+	}
+	if operation.ArtifactID != "" {
+		hasOpRef, opRefErr := r.container.PackageRepository.HasArtifactReference(ctx, operation.ArtifactID, ArtifactReferenceOperation, operation.OperationID)
+		if opRefErr != nil {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+				fmt.Errorf("operation reference check failed: %w", opRefErr))
+		}
+		if hasOpRef {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+				fmt.Errorf("operation %s completed but operation artifact reference remains", operation.OperationID))
+		}
+	}
+	if operation.ExtensionID != "" && operation.ArtifactID != "" {
+		hasPreviewRef, previewRefErr := r.container.PackageRepository.HasArtifactReference(ctx, operation.ArtifactID, ArtifactReferencePreview, operation.OperationID)
+		if previewRefErr != nil {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+				fmt.Errorf("preview reference check failed: %w", previewRefErr))
+		}
+		if hasPreviewRef {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+				fmt.Errorf("operation %s completed but preview artifact reference remains", operation.OperationID))
+		}
+	}
+	finalizeResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(finalizeStepPtr.ResultJSON)))
+	if finalizeResultHash != finalizeStepPtr.ResultHash {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalizationEvidenceMissing, 409, false, true, "Inspect finalized operation",
+			fmt.Errorf("finalize step result_hash inconsistent"))
 	}
 	return nil
 }

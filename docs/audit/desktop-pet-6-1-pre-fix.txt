@@ -1,0 +1,26 @@
+Amitia Desktop Pet Pre-Fix Static Baseline
+==========================================
+Date: 2026-08-03
+Source: Amitia-develop (6)(1).zip
+
+== Legacy Chain Symbols in Production ==
+
+1. installation.NewInstaller / NewUninstaller / NewService:
+   - backend/cmd/server/services.go lines 537-560
+
+2. editing.NewGenerationAdapter / NewProcessingAdapter / NewQualityAdapter:
+   - services.go line 564: editingGenAdapter := editing.NewGenerationAdapter(ctx)
+   - services.go line 565: editingProcAdapter := editing.NewProcessingAdapter(ctx)
+   - services.go line 566: editingQualAdapter := editing.NewQualityAdapter(ctx)
+3. Static File Directories:
+   - /audio, /exports, /voice, /images, /videos, /avatars, /emote-assets
+
+4. Old Symbols to be removed:
+   - NewInstaller, NewUninstaller, installation.NewService
+   - NewGenerationAdapter, NewProcessingAdapter, NewQualityAdapter
+   - SetRevisionPromoter, PromotionPolicyAlways
+   - NewBehaviorRuntimeEventSink
+   - desktop_pet_releases, desktop_pet_candidates (in security)
+   - _ = sessionID (in editing)
+   - make([]byte, file.Size), io.ReadAll (in editing)
+   - GetUserRuntime(conn.RuntimeID) (in runtime)

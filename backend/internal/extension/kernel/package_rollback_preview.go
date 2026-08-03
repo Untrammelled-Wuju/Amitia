@@ -248,6 +248,7 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		ScopeType:               request.ScopeType,
 		ScopeID:                 request.ScopeID,
 		ConfirmedItems:          confirmedItemsFromMap(confirmed),
+		Confirmations:           confirmed,
 		IssuedAt:                time.Now().UTC().Unix(),
 		ExpiresAt:               tokenExpiry.Unix(),
 		Nonce:                   uuid.NewString(),
