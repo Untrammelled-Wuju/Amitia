@@ -268,12 +268,13 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 						requiredRefType = ArtifactReferenceExportLease
 					}
 					if requiredRefType != "" {
-						refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferencesByType(ctx, operation.ArtifactID, requiredRefType)
+						hasActiveRef, refOwner, refErr := r.container.PackageRepository.AcquireArtifactReferenceOwnershipProof(ctx, operation.ArtifactID, requiredRefType, operation.ExtensionID)
 						if refErr != nil {
 							checkArtifact.Detail = fmt.Sprintf("retain policy: reference proof query failed: %v", refErr)
-						} else if refCount == 0 {
-							checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference found for retained artifact (reference proof required)", requiredRefType)
+						} else if !hasActiveRef {
+							checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference owned by %s for retained artifact (reference proof required)", requiredRefType, operation.ExtensionID)
 						} else {
+							checkArtifact.Detail = fmt.Sprintf("retain policy: verified %s reference owner=%s", requiredRefType, refOwner)
 							checkArtifact.Passed = true
 						}
 					} else {
