@@ -129,6 +129,9 @@ type PackageRollbackPoint struct {
 	ExtensionID                string
 	SourceVersion              string
 	SourceGeneration           int64
+	SourceVersionID            string
+	SourceGenerationID         string
+	SnapshotID                 string
 	ArtifactID                 string
 	DefinitionSnapshotJSON     string
 	ModuleSnapshotJSON         string
@@ -686,14 +689,16 @@ func (r *PackageRepository) PutRollbackPoint(ctx context.Context, p PackageRollb
 	}
 	defer tx.Rollback()
 	_, err = tx.ExecContext(ctx, `INSERT INTO extension_package_rollback_points (
-		rollback_point_id, extension_id, source_version, source_generation, artifact_id,
+		rollback_point_id, extension_id, source_version, source_generation, source_version_id,
+		source_generation_id, snapshot_id, artifact_id,
 		definition_snapshot_json, module_snapshot_json, contribution_snapshot_json,
 		permission_snapshot_json, scope_snapshot_json, config_snapshot_id, config_snapshot_json,
 		secret_refs_json, resource_snapshot_json, migration_state_snapshot_json,
 		user_data_migration_state_json, snapshot_hash, retention_state, retention_until,
 		source_operation_id, installed_path, created_at, expires_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, p.RollbackPointID, p.ExtensionID,
-		p.SourceVersion, p.SourceGeneration, p.ArtifactID, p.DefinitionSnapshotJSON,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, p.RollbackPointID, p.ExtensionID,
+		p.SourceVersion, p.SourceGeneration, p.SourceVersionID, p.SourceGenerationID,
+		p.SnapshotID, p.ArtifactID, p.DefinitionSnapshotJSON,
 		p.ModuleSnapshotJSON, p.ContributionSnapshotJSON, p.PermissionSnapshotJSON,
 		p.ScopeSnapshotJSON, p.ConfigSnapshotID, p.ConfigSnapshotJSON, p.SecretRefsJSON,
 		p.ResourceSnapshotJSON, p.MigrationStateSnapshotJSON, p.UserDataMigrationStateJSON,
@@ -718,7 +723,8 @@ func (r *PackageRepository) PutRollbackPoint(ctx context.Context, p PackageRollb
 func (r *PackageRepository) GetRollbackPoint(ctx context.Context, extensionID, version string) (PackageRollbackPoint, error) {
 	var p PackageRollbackPoint
 	err := r.db.QueryRowContext(ctx, `SELECT rollback_point_id, extension_id, source_version,
-		source_generation, artifact_id, definition_snapshot_json, module_snapshot_json,
+		source_generation, source_version_id, source_generation_id, snapshot_id, artifact_id,
+		definition_snapshot_json, module_snapshot_json,
 		contribution_snapshot_json, permission_snapshot_json, scope_snapshot_json,
 		config_snapshot_id, config_snapshot_json, secret_refs_json, resource_snapshot_json,
 		migration_state_snapshot_json, user_data_migration_state_json, snapshot_hash,
@@ -726,7 +732,8 @@ func (r *PackageRepository) GetRollbackPoint(ctx context.Context, extensionID, v
 		FROM extension_package_rollback_points WHERE extension_id = ? AND source_version = ?
 		AND retention_state IN ('active', 'forward_recovery')
 		ORDER BY created_at DESC LIMIT 1`, extensionID, version).Scan(&p.RollbackPointID, &p.ExtensionID,
-		&p.SourceVersion, &p.SourceGeneration, &p.ArtifactID, &p.DefinitionSnapshotJSON,
+		&p.SourceVersion, &p.SourceGeneration, &p.SourceVersionID, &p.SourceGenerationID,
+		&p.SnapshotID, &p.ArtifactID, &p.DefinitionSnapshotJSON,
 		&p.ModuleSnapshotJSON, &p.ContributionSnapshotJSON, &p.PermissionSnapshotJSON,
 		&p.ScopeSnapshotJSON, &p.ConfigSnapshotID, &p.ConfigSnapshotJSON, &p.SecretRefsJSON,
 		&p.ResourceSnapshotJSON, &p.MigrationStateSnapshotJSON, &p.UserDataMigrationStateJSON,

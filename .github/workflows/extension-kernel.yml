@@ -9,6 +9,7 @@ on:
     branches: [develop]
     paths:
       - 'backend/internal/extension/**'
+      - 'backend/cmd/legacy-package-migrate/**'
       - 'backend/cmd/amitia-ext/**'
       - 'backend/cmd/server/**'
       - 'sdk/plugin-cli/**'
@@ -92,7 +93,7 @@ jobs:
       - name: Run legacy CI graph tests (production dependency scan)
         working-directory: backend
         run: |
-          go test ./internal/extension/ -v -count=1 -run "TestProductionSourceExcludesLegacyWriteImplementations|TestLegacyWriteFilesHaveBuildTag|TestMigrationCLIHasBuildTag|TestProductionDependencyGraphExcludesLegacyMigration|TestLegacyMigrationCLIEntryCompiles|TestProductionRuntimeExcludesLegacyDependencies"
+          go test ./internal/extension/ -v -count=1 -run "TestProductionSourceExcludesLegacyWriteImplementations|TestMigrationCLIHasBuildTag|TestProductionDependencyGraphExcludesLegacyMigration|TestLegacyMigrationCLIEntryCompiles|TestLegacyMigrationCLIExcludedFromDefaultBuild|TestLegacyMigrationCLIIncludedWithBuildTag|TestLegacyMigrationPackageCompiles|TestProductionRuntimeExcludesLegacyDependencies"
       - name: Run legacy final zero tests (production runtime exclusions)
         working-directory: backend
         run: |
@@ -156,11 +157,22 @@ jobs:
       - name: Legacy migration CLI build check
         working-directory: backend
         run: |
-          go build -tags legacy_migration -o legacy-migrate ./cmd/legacy-package-migrate
+          go build -trimpath -tags legacy_migration -ldflags "-X main.version=${GITHUB_SHA}" -o legacy-migrate ./cmd/legacy-package-migrate
+          ./legacy-migrate version
+      - name: Verify retired router test names exist
+        working-directory: backend
+        run: |
+          for name in TestProductionRouterLegacyMethodPathSnapshot TestProductionRouterContainsNoPackageServiceHandlers TestRetiredRouteRegistryContainsNoDuplicateMethodPath TestRetiredRoutesRespondWithGoneWithoutSideEffects; do
+            grep -q "func $name(" ./internal/extension/production_router_legacy_isolation_test.go || { echo "ERROR: missing router isolation test: $name"; exit 1; }
+          done
+      - name: Run retired router isolation tests
+        working-directory: backend
+        run: |
+          go test ./internal/extension/ -v -count=1 -run "TestProductionRouterLegacyMethodPathSnapshot|TestProductionRouterContainsNoPackageServiceHandlers|TestRetiredRouteRegistryContainsNoDuplicateMethodPath|TestRetiredRoutesRespondWithGoneWithoutSideEffects"
       - name: Legacy migration tests
         working-directory: backend
         run: |
-          go test -tags legacy_migration ./internal/extension/package_legacy_migration/... -count=1
+          go test -tags legacy_migration ./internal/extension/package_legacy_migration/... ./internal/extension/kernel/... -run "LegacyMigration" -count=1
 
   backend-race-tests:
     name: Backend race tests (extension kernel)
@@ -175,6 +187,10 @@ jobs:
         working-directory: backend
         run: |
           go test -race -count=1 -skip "TestConcurrentInvoke" ./internal/extension/kernel/...
+      - name: Run tagged legacy migration race tests
+        working-directory: backend
+        run: |
+          go test -race -tags legacy_migration ./internal/extension/package_legacy_migration/... ./internal/extension/kernel/... -run "LegacyMigration" -count=1
 
   extension-unit-tests:
     name: Extension kernel unit tests

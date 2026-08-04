@@ -33,6 +33,20 @@ type MigrationReport struct {
 	PendingExtensions []string
 }
 
+type LegacyMigrationSource interface {
+	BackfillOwnership(
+		ctx context.Context,
+	) error
+
+	ListCandidates(
+		ctx context.Context,
+	) ([]LegacyPackageCandidate, error)
+
+	ListSigners(
+		ctx context.Context,
+	) ([]LegacySignerCandidate, error)
+}
+
 type KernelMigrationTarget interface {
 	Acquire(
 		ctx context.Context,

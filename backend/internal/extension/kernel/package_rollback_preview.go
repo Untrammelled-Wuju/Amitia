@@ -2,8 +2,6 @@ package kernel
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -37,6 +35,7 @@ type PackageRollbackPreviewResult struct {
 	PreviewHash             string   `json:"previewHash,omitempty"`
 	SecurityPolicyHash      string   `json:"securityPolicyHash,omitempty"`
 	SnapshotRequirementHash string   `json:"snapshotRequirementHash,omitempty"`
+	RequiredConfirmationsHash string `json:"requiredConfirmationsHash,omitempty"`
 	RequiredConfirmations   []string `json:"requiredConfirmations,omitempty"`
 	DependenciesHash        string   `json:"dependenciesHash,omitempty"`
 }
@@ -184,13 +183,15 @@ func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, versi
 	reqInputForHash := reqInput
 	reqInputForHash.ManifestNoDataChange = true
 	snapshotReqForHash := ComputeRollbackSnapshotRequirement(reqInputForHash)
-	result.PreviewHash = computeRollbackPreviewHashFromData(extensionID, result.CurrentVersion, version, point.RollbackPointID, point.ArtifactID, point.SnapshotHash, snapshotReqForHash.RequirementHash, result.InstalledPath, result.InstalledHash, scopeType, scopeID, result.SourceGenerationID, result.TargetGenerationID)
 	result.RequiredConfirmations = []string{"confirm.rollback"}
 	hasMigrationPlan := len(reqInput.MigrationOperations) > 0
 	if hasMigrationPlan {
 		result.RequiredConfirmations = append(result.RequiredConfirmations, "confirm.rollback.migration_reverse")
 	}
 	sort.Strings(result.RequiredConfirmations)
+	result.RequiredConfirmationsHash = computePackageRequiredConfirmationsHash(result.RequiredConfirmations)
+	result.DependenciesHash = computePackageDependenciesHash(result.Dependents)
+	result.PreviewHash = computeRollbackPreviewHash(extensionID, result.CurrentVersion, version, point.RollbackPointID, point.ArtifactID, point.SnapshotHash, snapshotReqForHash.RequirementHash, result.RequiredConfirmationsHash, result.InstalledPath, result.InstalledHash, scopeType, scopeID, result.SourceGenerationID, result.TargetGenerationID)
 
 	return result, nil
 }
@@ -225,6 +226,12 @@ func samePackageRollbackPreview(claims PackageRollbackConfirmationClaims, curren
 	}
 	if claims.SnapshotRequirementHash != current.SnapshotRequirementHash {
 		return fmt.Errorf("snapshotRequirementHash mismatch: claims=%s current=%s", claims.SnapshotRequirementHash, current.SnapshotRequirementHash)
+	}
+	if claims.RequiredConfirmationsHash == "" {
+		return fmt.Errorf("%w: claims must bind requiredConfirmationsHash", ErrPackageConfirmationStale)
+	}
+	if claims.RequiredConfirmationsHash != current.RequiredConfirmationsHash {
+		return fmt.Errorf("requiredConfirmationsHash mismatch: claims=%s current=%s", claims.RequiredConfirmationsHash, current.RequiredConfirmationsHash)
 	}
 	if claims.PreviewHash != current.PreviewHash {
 		return fmt.Errorf("previewHash mismatch: claims=%s current=%s", claims.PreviewHash, current.PreviewHash)
@@ -282,7 +289,7 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		return PackageRollbackConfirmation{}, fmt.Errorf("kernel: rollback target version generation unavailable: %w", tvErr)
 	}
 	targetGenerationID := targetVersionRecord.GenerationID
-	previewHash := computeRollbackPreviewHashFromData(request.ExtensionID, current.InstalledVersion.String(), request.TargetVersion, point.RollbackPointID, point.ArtifactID, point.SnapshotHash, snapshotReq.RequirementHash, installedPath, installedTreeHash, request.ScopeType, request.ScopeID, sourceGenerationID, targetGenerationID)
+	previewHash := computeRollbackPreviewHash(request.ExtensionID, current.InstalledVersion.String(), request.TargetVersion, point.RollbackPointID, point.ArtifactID, point.SnapshotHash, snapshotReq.RequirementHash, computePackageRequiredConfirmationsHash(required), installedPath, installedTreeHash, request.ScopeType, request.ScopeID, sourceGenerationID, targetGenerationID)
 	tokenExpiry := time.Now().UTC().Add(10 * time.Minute)
 	rollbackClaims := PackageRollbackConfirmationClaims{
 		SchemaVersion:           PackageRollbackConfirmationClaimsSchemaVersion,
@@ -299,6 +306,7 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		PreviewHash:             previewHash,
 		SecurityPolicyHash:      computeSecurityPolicyHash(),
 		SnapshotRequirementHash: snapshotReq.RequirementHash,
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
 		UserID:                  request.UserID,
 		ScopeType:               request.ScopeType,
 		ScopeID:                 request.ScopeID,
@@ -313,13 +321,6 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		return PackageRollbackConfirmation{}, err
 	}
 	return PackageRollbackConfirmation{ConfirmationToken: token, ExpiresAt: tokenExpiry, PreviewSessionID: request.PreviewSessionID}, nil
-}
-
-func computeRollbackPreviewHashFromData(extensionID, currentVersion, targetVersion, rollbackPointID, artifactID, snapshotHash, snapshotRequirementHash, installedPath, installedTreeHash, scopeType, scopeID, sourceGenerationID, targetGenerationID string) string {
-	canonical := fmt.Sprintf(`{"extensionId":%q,"currentVersion":%q,"targetVersion":%q,"rollbackPointId":%q,"artifactId":%q,"snapshotHash":%q,"snapshotRequirementHash":%q,"installedPath":%q,"installedTreeHash":%q,"sourceGenerationId":%q,"targetGenerationId":%q,"scopeType":%q,"scopeId":%q}`,
-		extensionID, currentVersion, targetVersion, rollbackPointID, artifactID, snapshotHash, snapshotRequirementHash, installedPath, installedTreeHash, sourceGenerationID, targetGenerationID, scopeType, scopeID)
-	h := sha256.Sum256([]byte(canonical))
-	return "sha256:" + hex.EncodeToString(h[:])
 }
 
 type PackageRollbackConfirmationRequest struct {

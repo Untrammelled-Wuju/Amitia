@@ -16,6 +16,43 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
 
+type packageRecoveryFaultHook func(
+	operationID string,
+	faultPoint string,
+) error
+
+type packageRecoveryFaultHookContextKey struct{}
+
+const packageRecoveryFaultPointPostFinalizeCommit = "post_finalize_commit"
+
+func withPackageRecoveryFaultHook(
+	ctx context.Context,
+	hook packageRecoveryFaultHook,
+) context.Context {
+	if hook == nil {
+		return ctx
+	}
+	return context.WithValue(
+		ctx,
+		packageRecoveryFaultHookContextKey{},
+		hook,
+	)
+}
+
+func invokePackageRecoveryFaultHook(
+	ctx context.Context,
+	operationID string,
+	faultPoint string,
+) error {
+	hook, ok := ctx.Value(
+		packageRecoveryFaultHookContextKey{},
+	).(packageRecoveryFaultHook)
+	if !ok || hook == nil {
+		return nil
+	}
+	return hook(operationID, faultPoint)
+}
+
 func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return nil
@@ -34,11 +71,29 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 }
 
 func (r *Runtime) recoverPackageOperation(ctx context.Context, operation PackageOperationRecord) error {
+	if r.container == nil || r.container.PackageRepository == nil {
+		return fmt.Errorf("kernel: package repository unavailable")
+	}
+
 	releaseInProcessLock := r.acquirePackageInProcessLock(operation.ExtensionID + ":" + operation.OperationID)
 	defer releaseInProcessLock()
 
+	authoritative, _, readErr := r.container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	if readErr != nil {
+		return fmt.Errorf("kernel: read authoritative operation before recovery: %w", readErr)
+	}
+	operation = authoritative
+
+	if operation.OperationType == "uninstall" && PackageOperationStatus(operation.Status) == PackageOperationCompleted {
+		return r.verifyUninstallFinalizedState(ctx, operation)
+	}
+
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, operation.ExtensionID, operation.OperationID)
 	if leaseErr != nil {
+		if IsPackageOperationError(leaseErr, OperationErrLeaseConflict) ||
+			IsPackageOperationError(leaseErr, PackageErrCodeLeaseFenced) {
+			return leaseErr
+		}
 		return r.requirePackageRecovery(ctx, operation, "recovery lease acquire failed", leaseErr, PackageWriteGuard{})
 	}
 	guard := packageWriteGuard(lease)
@@ -152,6 +207,9 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 			return err
 		}
 		leaseGuard.MarkLeaseReleased()
+		if err := invokePackageRecoveryFaultHook(ctx, operation.OperationID, packageRecoveryFaultPointPostFinalizeCommit); err != nil {
+			return err
+		}
 		return nil
 	default:
 		return r.requirePackageRecovery(ctx, operation, "unsupported package operation type", nil, guard)
@@ -732,7 +790,7 @@ func (r *Runtime) proveRollbackPackageOperation(ctx context.Context, operation P
 			if restoreOperationID == "" {
 				restoreOperationID = "restore-" + point.RollbackPointID
 			}
-			if err := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID, point.UserDataMigrationStateJSON); err != nil {
+			if err := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID); err != nil {
 				return fmt.Errorf("rollback user data restore verification failed: %w", err)
 			}
 		}
@@ -934,6 +992,9 @@ func (r *Runtime) runUninstallRecoveryStep(ctx context.Context, operation Packag
 		return NewPackageErrorWithRecovery(PackageErrCodeRecoveryStepPersistFailed, 500, false, true, "Retry recovery", fmt.Errorf("put step %s: %w", stepName, err))
 	}
 	completed[stepName] = step
+	if err := invokePackageRecoveryFaultHook(ctx, operation.OperationID, stepName); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -132,9 +132,6 @@ func main() {
 		cleanup()
 		os.Exit(1)
 	}
-	if err := services.DesktopPetRuntime.Start(appCtx); err != nil {
-		log.Logger.Errorf("main: runtime bridge start failed: %v", err)
-	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -207,7 +204,12 @@ func main() {
 
 	killExistingServer(serverAddr)
 
-	r := setupRouter(ctx, services)
+	r, errSetup := setupRouter(ctx, services)
+	if errSetup != nil {
+		log.Error("路由和安全服务初始化失败:", errSetup)
+		cleanup()
+		os.Exit(1)
+	}
 	if result, err := services.UnifiedEntry.RecoverStaleInteractions(context.Background(), time.Now()); err != nil {
 		log.Error("交互启动恢复失败:", err)
 	} else if result.Recovered > 0 || result.Failed > 0 {
@@ -221,7 +223,9 @@ func main() {
 	defer services.DeliveryWorker.Stop()
 
 	desktopBlocked := false
-	if services.Readiness != nil && services.SafeMode != nil {
+	if services.Readiness == nil || services.SafeMode == nil {
+		desktopBlocked = true
+	} else {
 		snap := services.Readiness.Snapshot()
 		if snap.OverallStatus == readiness.StatusBlocked {
 			desktopBlocked = true
@@ -231,6 +235,12 @@ func main() {
 	}
 
 	if !desktopBlocked {
+		if err := services.DesktopPetRuntime.Start(appCtx); err != nil {
+			services.SafeMode.Enter("runtime gateway start failed")
+			log.Error("failed to start desktop pet runtime: ", err)
+			cleanup()
+			os.Exit(1)
+		}
 		services.DesktopPetWorker.Start(appCtx)
 		defer services.DesktopPetWorker.Stop()
 		services.ProcessingWorker.Start(appCtx)
@@ -241,7 +251,10 @@ func main() {
 		defer services.RegenerationWorker.Stop()
 		if services.BehaviorService != nil {
 			if err := services.BehaviorService.Start(appCtx); err != nil {
+				services.SafeMode.Enter("behavior service start failed")
 				log.Error("failed to start behavior service: ", err)
+				cleanup()
+				os.Exit(1)
 			}
 			defer services.BehaviorService.Stop()
 		}

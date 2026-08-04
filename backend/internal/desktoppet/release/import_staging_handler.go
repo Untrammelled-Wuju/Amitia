@@ -20,18 +20,44 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
+type PackageImportPort interface {
+	ImportPackage(
+		ctx context.Context,
+		req map[string]string,
+	) (
+		petID string,
+		releaseID string,
+		operationID string,
+		err error,
+	)
+}
+
 type ImportStagingHandler struct {
 	registry  *security.PathRootRegistry
 	repo      security.ImportStagingRepository
 	ownership security.OwnershipGuard
+	inspector interface {
+		InspectAndMarkReady(ctx context.Context, staging *security.ImportStaging) error
+	}
+	importer PackageImportPort
 }
 
 func NewImportStagingHandler(
 	registry *security.PathRootRegistry,
 	repo security.ImportStagingRepository,
 	ownership security.OwnershipGuard,
+	inspector interface {
+		InspectAndMarkReady(ctx context.Context, staging *security.ImportStaging) error
+	},
+	packageImporter PackageImportPort,
 ) *ImportStagingHandler {
-	return &ImportStagingHandler{registry: registry, repo: repo, ownership: ownership}
+	return &ImportStagingHandler{
+		registry:  registry,
+		repo:      repo,
+		ownership: ownership,
+		inspector: inspector,
+		importer:  packageImporter,
+	}
 }
 
 const (
@@ -120,14 +146,27 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	}
 
 	if err := h.repo.Create(c.Request.Context(), staging); err != nil {
-		_ = security.SafeRemoveTree(path.Dir(quarantinePath))
+		storageKey, cleanErr := h.registry.StorageKeyFromPath(security.RootImportQuarantine, path.Dir(quarantinePath))
+		if cleanErr == nil {
+			_ = security.NewSafeArtifactResponder(h.registry).SafeDelete(
+				security.RootImportQuarantine,
+				storageKey,
+				security.DeleteExpectation{EntityType: "import_staging", EntityID: staging.ID},
+			)
+		}
 		util.ErrorResponse(c, response.InternalError, "暂存记录失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		return
+	}
+
+	if err := h.inspector.InspectAndMarkReady(c.Request.Context(), staging); err != nil {
+		_, _ = h.repo.SetRejected(c.Request.Context(), staging.ID, actorID, err.Error())
+		util.ErrorResponse(c, response.BusinessError, "导入包检查失败", gin.H{"errorCode": "IMPORT_INSPECTION_FAILED"})
 		return
 	}
 
 	util.SuccessMsgResponse(c, "上传成功", gin.H{
 		"stagingId":  staging.ID,
-		"status":     staging.Status,
+		"status":     security.StagingStatusReady,
 		"sourceType": staging.SourceType,
 	})
 }
@@ -199,9 +238,46 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 		return
 	}
 
-	util.SuccessMsgResponse(c, "开始消费", gin.H{
-		"stagingId": payload.StagingID,
-		"kind":      s.RootKind,
+	locked, err := h.repo.GetForUser(c.Request.Context(), payload.StagingID, actorID)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "重新读取暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		return
+	}
+
+	sourcePath, err := h.registry.Resolve(security.RootImportQuarantine, locked.StorageKey)
+	if err != nil {
+		_, _ = h.repo.SetRejected(c.Request.Context(), locked.ID, actorID, "resolve path failed")
+		util.ErrorResponse(c, response.InternalError, "暂存路径解析失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		return
+	}
+
+	petID, releaseID, operationID, err := h.importer.ImportPackage(c.Request.Context(), map[string]string{
+		"userId":          actorID,
+		"importStagingId": locked.ID,
+		"sourceFilePath":  sourcePath,
+		"idempotencyKey":  "import:" + locked.ID,
+	})
+	if err != nil {
+		_, _ = h.repo.SetRejected(c.Request.Context(), locked.ID, actorID, err.Error())
+		util.ErrorResponse(c, response.BusinessError, "导入失败: "+err.Error(), gin.H{"errorCode": "IMPORT_FAILED"})
+		return
+	}
+
+	completed, err := h.repo.CompleteConsumptionCAS(c.Request.Context(), locked.ID, actorID, locked.StateRevision)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "完成消费失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		return
+	}
+	if !completed {
+		util.ErrorResponse(c, response.BusinessError, "暂存状态已变化", gin.H{"errorCode": "STAGING_CONTENTION"})
+		return
+	}
+
+	util.SuccessMsgResponse(c, "导入完成", gin.H{
+		"stagingId":   locked.ID,
+		"petId":       petID,
+		"releaseId":   releaseID,
+		"operationId": operationID,
 	})
 }
 
@@ -230,7 +306,7 @@ func (h *ImportStagingHandler) Reject(c *gin.Context) {
 }
 
 func (h *ImportStagingHandler) listForUser(ctx context.Context, userID string) ([]*security.ImportStaging, error) {
-	return nil, nil
+	return h.repo.ListForUser(ctx, userID)
 }
 
 func classifySourceType(mimeType, filename string) string {

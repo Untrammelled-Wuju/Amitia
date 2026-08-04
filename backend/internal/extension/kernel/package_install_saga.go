@@ -101,34 +101,35 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	claimsNow := time.Now().UTC()
 	confirmationsJSON, _ := json.Marshal(claims.Confirmations)
 	claimsJSON, _ := json.Marshal(PackageConfirmationClaims{
-		SchemaVersion:           PackageConfirmationClaimsSchemaVersion,
-		OperationType:           string(PackageOperationTypeInstall),
-		ExtensionID:             session.ExtensionID,
-		ArtifactID:              session.ArtifactID,
-		PolicyVersion:           session.PolicyVersion,
-		SecurityPolicyHash:      computeSecurityPolicyHash(),
-		DeveloperSessionID:      preview.DeveloperSessionID,
-		MigrationPlanHash:       preview.MigrationPlanHash,
-		PreviewSessionID:        session.SessionID,
-		PreviewHash:             claims.PreviewHash,
-		SnapshotRequirementHash: claims.SnapshotRequirementHash,
-		InstalledPath:           preview.InstalledPath,
-		InstalledTreeHash:       preview.InstalledTreeHash,
-		UserID:                  session.UserID,
-		ScopeType:               session.ScopeType,
-		ScopeID:                 session.ScopeID,
-		ConfirmedItems:          confirmedItemsFromMap(claims.Confirmations),
-		Confirmations:           claims.Confirmations,
-		IssuedAt:                claimsNow.Unix(),
-		ExpiresAt:               claims.ExpiresAt,
-		Nonce:                   uuid.NewString(),
-		ArchiveHash:             session.ArchiveHash,
-		ManifestHash:            session.ManifestHash,
-		ContentTreeHash:         session.ContentTreeHash,
-		TargetVersion:           session.Version,
+		SchemaVersion:             PackageConfirmationClaimsSchemaVersion,
+		OperationType:             string(PackageOperationTypeInstall),
+		ExtensionID:               session.ExtensionID,
+		ArtifactID:                session.ArtifactID,
+		PolicyVersion:             session.PolicyVersion,
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		DeveloperSessionID:        preview.DeveloperSessionID,
+		MigrationPlanHash:         preview.MigrationPlanHash,
+		PreviewSessionID:          session.SessionID,
+		PreviewHash:               claims.PreviewHash,
+		SnapshotRequirementHash:   claims.SnapshotRequirementHash,
+		RequiredConfirmationsHash: claims.RequiredConfirmationsHash,
+		DependenciesHash:          claims.DependenciesHash,
+		InstalledPath:             preview.InstalledPath,
+		InstalledTreeHash:         preview.InstalledTreeHash,
+		UserID:                    session.UserID,
+		ScopeType:                 session.ScopeType,
+		ScopeID:                   session.ScopeID,
+		ConfirmedItems:            confirmedItemsFromMap(claims.Confirmations),
+		Confirmations:             claims.Confirmations,
+		IssuedAt:                  claims.IssuedAt,
+		ExpiresAt:                 claims.ExpiresAt,
+		Nonce:                     claims.Nonce,
+		ArchiveHash:               session.ArchiveHash,
+		ManifestHash:              session.ManifestHash,
+		ContentTreeHash:           session.ContentTreeHash,
+		TargetVersion:             session.Version,
 	})
 	op := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: session.ExtensionID,
@@ -141,7 +142,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 			ArtifactID: artifact.ArtifactID, PreviewSessionID: session.SessionID,
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		}), StartedAt: now, UpdatedAt: now}
-	existing, created, err := r.container.PackageRepository.CreateOrGetOperation(ctx, op)
+	existing, created, err := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, claims.Nonce, confirmationTimestamp(claims.IssuedAt), confirmationTimestamp(claims.ExpiresAt))
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
@@ -178,6 +179,11 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
+	installEvidence := buildConfirmationAuthorityEvidence(operationID, string(PackageOperationTypeInstall), session.SessionID, standardConfirmationClaimsFromLegacy(string(PackageOperationTypeInstall), claims))
+	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, installEvidence, guard); evidenceErr != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", evidenceErr.Error(), true, guard)
+		return KernelInstallResult{}, fmt.Errorf("kernel: persist install authority evidence: %w", evidenceErr)
+	}
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
@@ -415,13 +421,18 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 		tokenExpiry = expiresAt
 	}
 	installReq := ComputeInstallSnapshotRequirement(computeInstallSnapshotRequirementInput(preview.InstalledPath, preview.InstalledTreeHash, artifact.ArtifactID, session.ExtensionID))
+	requiredHash := computePackageRequiredConfirmationsHash(required)
+	dependenciesHash := computePackageDependenciesHash(packageDependencyIdentities(preview))
 	previewHash := computeInstallPreviewHash(session, preview)
 	token, err := signPackageConfirmation(packageConfirmationClaims{SessionID: session.SessionID, ArtifactID: session.ArtifactID,
 		ArchiveHash: session.ArchiveHash, ManifestHash: session.ManifestHash, ContentTreeHash: session.ContentTreeHash,
 		UserID: session.UserID, ScopeType: session.ScopeType, ScopeID: session.ScopeID, PolicyVersion: session.PolicyVersion,
 		SecurityPolicyHash: computeSecurityPolicyHash(), DeveloperSessionID: preview.DeveloperSessionID, MigrationPlanHash: preview.MigrationPlanHash,
-		SnapshotRequirementHash: installReq.RequirementHash, InstalledPath: preview.InstalledPath, InstalledTreeHash: preview.InstalledTreeHash,
-		PreviewHash: previewHash, Confirmations: confirmed, ExpiresAt: tokenExpiry.Unix()})
+		SnapshotRequirementHash:   installReq.RequirementHash,
+		RequiredConfirmationsHash: requiredHash, DependenciesHash: dependenciesHash,
+		InstalledPath: preview.InstalledPath, InstalledTreeHash: preview.InstalledTreeHash,
+		PreviewHash: previewHash, Confirmations: confirmed, IssuedAt: time.Now().UTC().Unix(),
+		Nonce: uuid.NewString(), ExpiresAt: tokenExpiry.Unix()})
 	if err != nil {
 		return PackagePreviewConfirmation{}, err
 	}
@@ -497,10 +508,23 @@ func (r *Runtime) createPackageRollbackPoint(ctx context.Context, sourceOperatio
 	}
 	installedPath, _ := installed.Metadata["installedPath"].(string)
 	artifactID, _ := installed.Metadata["artifactId"].(string)
+	currentVersionRecord, cvrErr := r.container.PackageRepository.GetCurrentPackageVersion(ctx, string(installed.ExtensionID))
+	if cvrErr != nil {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version identity unavailable for rollback point: %w", cvrErr)
+	}
+	if currentVersionRecord.VersionID == "" {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version identity missing for rollback point")
+	}
+	sourceGenerationID := packageGenerationFromInstallation(installed).GenerationID
+	if sourceGenerationID == "" {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current generation identity missing for rollback point")
+	}
 	retentionUntil := time.Now().UTC().Add(30 * 24 * time.Hour).Format(time.RFC3339Nano)
 	point := PackageRollbackPoint{RollbackPointID: "rollback-point-" + uuid.NewString(),
 		ExtensionID: string(installed.ExtensionID), SourceVersion: installed.InstalledVersion.String(),
-		SourceGeneration: installed.Generation, ArtifactID: artifactID,
+		SourceGeneration: installed.Generation, SourceVersionID: currentVersionRecord.VersionID,
+		SourceGenerationID: sourceGenerationID, SnapshotID: "snapshot-" + uuid.NewString(),
+		ArtifactID:             artifactID,
 		DefinitionSnapshotJSON: string(definitionJSON), ModuleSnapshotJSON: string(moduleJSON),
 		ContributionSnapshotJSON: string(contributionJSON), PermissionSnapshotJSON: string(permissionJSON),
 		ScopeSnapshotJSON: string(scopeJSON), ConfigSnapshotJSON: configJSON,

@@ -382,14 +382,7 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	if _, statErr := os.Stat(fullPath); statErr != nil {
-		util.ErrorResponse(c, response.NotFound, "处理帧图片不存在", nil)
-		return
-	}
-	if mimeType != "" {
-		c.Header("Content-Type", mimeType)
-	}
-	h.safeResponder.SafeFileResponse(c, fullPath)
+	h.safeResponder.ResolveAndServe(c, actor, security.RootProcessingRevisions, fullPath, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), mimeType)
 }
 
 func (h *Handler) SourceFrameImage(c *gin.Context) {
@@ -416,14 +409,7 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	if _, statErr := os.Stat(fullPath); statErr != nil {
-		util.ErrorResponse(c, response.NotFound, "源帧图片不存在", nil)
-		return
-	}
-	if mimeType != "" {
-		c.Header("Content-Type", mimeType)
-	}
-	h.safeResponder.SafeFileResponse(c, fullPath)
+	h.safeResponder.ResolveAndServe(c, actor, security.RootProcessingRevisions, fullPath, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), mimeType)
 }
 
 func (h *Handler) ActionPreview(c *gin.Context) {
@@ -445,14 +431,7 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	if _, statErr := os.Stat(fullPath); statErr != nil {
-		util.ErrorResponse(c, response.NotFound, "动作预览图不存在", nil)
-		return
-	}
-	if mimeType != "" {
-		c.Header("Content-Type", mimeType)
-	}
-	h.safeResponder.SafeFileResponse(c, fullPath)
+	h.safeResponder.ResolveAndServe(c, actor, security.RootProcessingRevisions, fullPath, processingTaskID+":"+actionKey, "preview", mimeType)
 }
 
 func writeProcessingError(c *gin.Context, err error) {

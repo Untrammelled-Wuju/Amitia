@@ -1,6 +1,11 @@
 package extension
 
 import (
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,13 +15,23 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/require"
 	"github.com/u-ai/backend/config"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
 )
 
 type productionRouteIdentity struct {
 	Method string
 	Path   string
+}
+
+type productionRouterFixture struct {
+	Engine  *gin.Engine
+	DataDir string
+	SQLDB   *sql.DB
 }
 
 func expectedRetiredProductionRoutes() []productionRouteIdentity {
@@ -61,7 +76,7 @@ func expectedRetiredProductionRoutes() []productionRouteIdentity {
 	return result
 }
 
-func buildProductionExtensionRouter(t *testing.T) *gin.Engine {
+func buildProductionExtensionRouterFixture(t *testing.T) productionRouterFixture {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -70,17 +85,41 @@ func buildProductionExtensionRouter(t *testing.T) *gin.Engine {
 		config.AppCfg = &config.Config{}
 	}
 
-	config.AppCfg.Storage.DataDir = t.TempDir()
+	dataDir := t.TempDir()
+	config.AppCfg.Storage.DataDir = dataDir
+
+	db, err := gorm.Open(
+		sqlite.Open(filepath.Join(dataDir, "router-isolation.db")),
+		&gorm.Config{},
+	)
+	require.NoError(t, err)
+
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
 
 	engine := gin.New()
 
 	RegisterRouter(
 		engine.Group("/api"),
-		&app.AppContext{},
+		app.NewAppContext(db, nil),
 		&Runtime{},
 	)
 
-	return engine
+	return productionRouterFixture{
+		Engine:  engine,
+		DataDir: dataDir,
+		SQLDB:   sqlDB,
+	}
+}
+
+func buildProductionExtensionRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+
+	return buildProductionExtensionRouterFixture(t).Engine
 }
 
 func routeMap(engine *gin.Engine) map[productionRouteIdentity]string {
@@ -113,6 +152,24 @@ func expandRouteParameters(path string) string {
 	return path
 }
 
+func hashFile(t *testing.T, path string) string {
+	t.Helper()
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+
+	if _, err := io.Copy(hasher, file); err != nil {
+		t.Fatal(err)
+	}
+
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+}
+
 func snapshotDirectory(t *testing.T, root string) []string {
 	t.Helper()
 
@@ -128,7 +185,27 @@ func snapshotDirectory(t *testing.T, root string) []string {
 			return err
 		}
 
-		result = append(result, relative)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+
+		contentHash := ""
+
+		if !entry.IsDir() {
+			contentHash = hashFile(t, path)
+		}
+
+		result = append(
+			result,
+			fmt.Sprintf(
+				"%s|%s|%d|%s",
+				relative,
+				info.Mode().String(),
+				info.Size(),
+				contentHash,
+			),
+		)
 
 		return nil
 	})
@@ -138,6 +215,15 @@ func snapshotDirectory(t *testing.T, root string) []string {
 
 	sort.Strings(result)
 	return result
+}
+
+func sqliteTotalChanges(t *testing.T, db *sql.DB) int64 {
+	t.Helper()
+
+	var changes int64
+	require.NoError(t, db.QueryRow(`SELECT total_changes()`).Scan(&changes))
+
+	return changes
 }
 
 func TestProductionRouterLegacyMethodPathSnapshot(t *testing.T) {
@@ -187,6 +273,54 @@ func TestProductionRouterContainsNoPackageServiceHandlers(t *testing.T) {
 	}
 }
 
+func TestRetiredRouteRegistryContainsNoDuplicateMethodPath(t *testing.T) {
+	all := append(
+		append([]retiredLegacyRoute(nil), retiredExtensionLegacyRoutes...),
+		retiredRootLegacyRoutes...,
+	)
+
+	for left := 0; left < len(all); left++ {
+		for right := left + 1; right < len(all); right++ {
+			if all[left].Method == all[right].Method &&
+				all[left].Path == all[right].Path {
+				t.Fatalf(
+					"duplicate retired route in registry: %s %s",
+					all[left].Method,
+					all[left].Path,
+				)
+			}
+		}
+	}
+
+	engine := buildProductionExtensionRouter(t)
+
+	for _, route := range engine.Routes() {
+		if !strings.Contains(route.Handler, "retiredLegacyPackageEndpoint") {
+			continue
+		}
+
+		found := false
+
+		for _, candidate := range all {
+			if route.Method == candidate.Method &&
+				route.Path == "/api/extensions"+candidate.Path ||
+				route.Method == candidate.Method &&
+					route.Path == "/api"+candidate.Path {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Fatalf(
+				"registered retired route missing from registry: %s %s",
+				route.Method,
+				route.Path,
+			)
+		}
+	}
+}
+
 func TestRetiredRoutesRespondWithGone(t *testing.T) {
 	engine := buildProductionExtensionRouter(t)
 
@@ -201,13 +335,35 @@ func TestRetiredRoutesRespondWithGone(t *testing.T) {
 		req := httptest.NewRequest(expected.Method, path, nil)
 		engine.ServeHTTP(recorder, req)
 
-		if recorder.Code == http.StatusNotFound {
-			t.Fatalf("retired route not registered: %s %s", expected.Method, expected.Path)
+		if recorder.Code != http.StatusGone {
+			t.Fatalf("retired route %s %s returned %d instead of 410: %s", expected.Method, expected.Path, recorder.Code, recorder.Body.String())
 		}
 
-		if recorder.Code == http.StatusMethodNotAllowed {
-			continue
+		body := recorder.Body.String()
+		if !strings.Contains(body, "LEGACY_PACKAGE_ENDPOINT_RETIRED") {
+			t.Fatalf("retired route %s %s 410 body missing error_code: %s", expected.Method, expected.Path, body)
 		}
+	}
+}
+
+func TestRetiredRoutesRespondWithGoneWithoutSideEffects(t *testing.T) {
+	fixture := buildProductionExtensionRouterFixture(t)
+
+	beforeChanges := sqliteTotalChanges(t, fixture.SQLDB)
+	beforeCalls := kernelruntime.GlobalLegacyCallCounter().Total()
+	beforePackageWrites := kernelruntime.GlobalLegacyCallCounter().PackageWriteCalls()
+	beforeSnapshot := snapshotDirectory(t, fixture.DataDir)
+
+	uniquePaths := map[string]productionRouteIdentity{}
+	for _, expected := range expectedRetiredProductionRoutes() {
+		uniquePaths[expected.Method+" "+expected.Path] = expected
+	}
+
+	for _, expected := range uniquePaths {
+		path := expandRouteParameters(expected.Path)
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(expected.Method, path, nil)
+		fixture.Engine.ServeHTTP(recorder, req)
 
 		if recorder.Code != http.StatusGone {
 			t.Fatalf("retired route %s %s returned %d instead of 410: %s", expected.Method, expected.Path, recorder.Code, recorder.Body.String())
@@ -217,6 +373,27 @@ func TestRetiredRoutesRespondWithGone(t *testing.T) {
 		if !strings.Contains(body, "LEGACY_PACKAGE_ENDPOINT_RETIRED") {
 			t.Fatalf("retired route %s %s 410 body missing error_code: %s", expected.Method, expected.Path, body)
 		}
+	}
+
+	afterChanges := sqliteTotalChanges(t, fixture.SQLDB)
+	afterCalls := kernelruntime.GlobalLegacyCallCounter().Total()
+	afterPackageWrites := kernelruntime.GlobalLegacyCallCounter().PackageWriteCalls()
+	afterSnapshot := snapshotDirectory(t, fixture.DataDir)
+
+	if afterChanges != beforeChanges {
+		t.Fatalf("retired route requests mutated the database: total_changes %d -> %d", beforeChanges, afterChanges)
+	}
+
+	if afterCalls != beforeCalls {
+		t.Fatalf("retired route requests mutated the legacy call counter: %d -> %d", beforeCalls, afterCalls)
+	}
+
+	if afterPackageWrites != beforePackageWrites {
+		t.Fatalf("retired route requests performed package writes: %d -> %d", beforePackageWrites, afterPackageWrites)
+	}
+
+	if strings.Join(afterSnapshot, "\n") != strings.Join(beforeSnapshot, "\n") {
+		t.Fatalf("retired route requests mutated the data directory")
 	}
 }
 

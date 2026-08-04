@@ -79,6 +79,7 @@ type UserDataTableSnapshotManifest struct {
 
 	ExtensionID    string `json:"extensionId"`
 	CanonicalTable string `json:"canonicalTable"`
+	Namespace      string `json:"namespace,omitempty"`
 	EntityType     string `json:"entityType"`
 	NamespaceHash  string `json:"namespaceHash"`
 
@@ -93,6 +94,8 @@ type UserDataTableSnapshotManifest struct {
 
 	DataExportReference string `json:"dataExportReference,omitempty"`
 }
+
+type UserDataTableManifest = UserDataTableSnapshotManifest
 
 type packageSnapshotHashPayload struct {
 	ExtensionID                string `json:"extensionId"`
@@ -473,8 +476,8 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 	})
 
 	genesisHash := computeUserDataGenesisHash(UserDataTableIdentity{
-		Domain:                "amitia-userdata-batch-genesis-v1",
-		SchemaVersion:         "1.0.0",
+		Domain:                userDataBatchGenesisDomain,
+		SchemaVersion:         userDataRecordSchemaVersion,
 		ExtensionID:           extensionID,
 		CanonicalTable:        canonicalTable,
 		EntityType:            entityType,
@@ -482,27 +485,44 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
 	})
 
-	result.manifest = UserDataTableSnapshotManifest{
-		SchemaVersion:         1,
+	manifestRecordCount := result.count
+	manifestEmptySetHash := computeUserDataEmptySetHash(UserDataTableIdentity{
+		Domain:                userDataEmptySetDomain,
+		SchemaVersion:         userDataRecordSchemaVersion,
 		ExtensionID:           extensionID,
 		CanonicalTable:        canonicalTable,
 		EntityType:            entityType,
 		NamespaceHash:         namespaceHash,
-		RecordCount:           result.count,
-		EmptySetHash: computeUserDataEmptySetHash(UserDataTableIdentity{
-			Domain:                "amitia-userdata-empty-set-v1",
-			SchemaVersion:         "1.0.0",
-			ExtensionID:           extensionID,
-			CanonicalTable:        canonicalTable,
-			EntityType:            entityType,
-			NamespaceHash:         namespaceHash,
-			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-		}),
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+	})
+	manifestAggregateHash := computeUserDataAggregateHash(extensionID, canonicalTable, entityType, userDataRecordSchemaVersion, nil)
+
+	result.manifest = UserDataTableSnapshotManifest{
+		SchemaVersion:         userDataTableManifestSchemaVersion,
+		ExtensionID:           extensionID,
+		CanonicalTable:        canonicalTable,
+		Namespace:             canonicalTable,
+		EntityType:            entityType,
+		NamespaceHash:         namespaceHash,
+		RecordCount:           manifestRecordCount,
+		EmptySetHash:          manifestEmptySetHash,
 		GenesisHash:           genesisHash,
-		AggregateHash:         "",
+		AggregateHash:         manifestAggregateHash,
 		BatchSize:             userDataRestoreBatchSize,
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
 		FinalBatchHash:        genesisHash,
+		DataExportReference:   computeUserDataExportReference("", table, extensionID),
+	}
+
+	if result.manifest.SchemaVersion != userDataTableManifestSchemaVersion ||
+		result.manifest.Namespace == "" ||
+		result.manifest.DataExportReference == "" ||
+		result.manifest.AggregateHash == "" ||
+		result.manifest.RecordCount != int64(len(lines)) {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s manifest completeness check failed: schema=%d namespace=%q exportRef=%q aggHash=%q count=%d lines=%d",
+				table, result.manifest.SchemaVersion, result.manifest.Namespace, result.manifest.DataExportReference,
+				result.manifest.AggregateHash, result.manifest.RecordCount, len(lines)))
 	}
 
 	return result, nil
@@ -1076,6 +1096,7 @@ func hashFileContent(path string) (string, error) {
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
+// Deprecated: kept for tests only, use ComputePackageSnapshotRequirement in production.
 func ComputeRollbackSnapshotRequirement(input RollbackSnapshotRequirementInput) RollbackSnapshotRequirement {
 	req := RollbackSnapshotRequirement{
 		ManifestNoDataChange: input.ManifestNoDataChange,
@@ -1169,11 +1190,9 @@ type PackageSnapshotRequirement struct {
 }
 
 func ComputePackageSnapshotRequirement(input PackageSnapshotRequirementInput) (PackageSnapshotRequirement, error) {
-	req := PackageSnapshotRequirement{}
-	configMissing := !input.ConfigEvidencePresent
-	resourceMissing := !input.ResourceEvidencePresent
-	userDataMissing := !input.UserDataEvidencePresent
-	manifestMissing := !input.ManifestEvidencePresent
+	if input.SchemaVersion == 0 || input.OperationType == "" || input.ExtensionID == "" {
+		return PackageSnapshotRequirement{}, fmt.Errorf("kernel: snapshot requirement identity incomplete")
+	}
 
 	configHasBefore := input.ConfigBeforeHash != ""
 	configHasAfter := input.ConfigAfterHash != ""
@@ -1185,28 +1204,34 @@ func ComputePackageSnapshotRequirement(input PackageSnapshotRequirementInput) (P
 	configChanged := configHasBefore && configHasAfter && input.ConfigBeforeHash != input.ConfigAfterHash
 	resourceChanged := (resHasBefore && resHasAfter && input.ResourceBeforeHash != input.ResourceAfterHash) ||
 		len(input.ResourceAdded) > 0 || len(input.ResourceRemoved) > 0 || len(input.ResourceChanged) > 0
-	userDataChanged := (userHasBefore && userHasAfter && input.UserDataBeforeHash != input.UserDataAfterHash)
+	userDataChanged := userHasBefore && userHasAfter && input.UserDataBeforeHash != input.UserDataAfterHash
 
-	migrationPresent := input.MigrationPlanHash != "" || input.MigrationDefinitionHash != ""
+	migrationPlanPresent := input.MigrationPlanHash != ""
+	migrationDefinitionPresent := input.MigrationDefinitionHash != ""
+	migrationPresent := migrationPlanPresent || migrationDefinitionPresent
 
-	configEvidenceIncomplete := (configHasBefore != configHasAfter) || (!configHasBefore && !configHasAfter && input.OperationType != "uninstall")
-	resEvidenceIncomplete := (resHasBefore != resHasAfter)
-	userEvidenceIncomplete := (userHasBefore != userHasAfter)
+	configEvidenceIncomplete := configHasBefore != configHasAfter
+	resEvidenceIncomplete := resHasBefore != resHasAfter
+	userEvidenceIncomplete := userHasBefore != userHasAfter
 
-	anyMissingEvidence := configMissing || resourceMissing || userDataMissing || manifestMissing ||
-		configEvidenceIncomplete || resEvidenceIncomplete || userEvidenceIncomplete
+	configEvidenceRequired := input.OperationType != "uninstall" && !configHasBefore && !configHasAfter
 
-	configEmptyButExpected := input.OperationType != "uninstall" && (!configHasBefore || !configHasAfter)
+	evidenceIncomplete := !input.ConfigEvidencePresent || !input.ResourceEvidencePresent ||
+		!input.UserDataEvidencePresent || !input.ManifestEvidencePresent || !input.MigrationEvidencePresent ||
+		configEvidenceIncomplete || resEvidenceIncomplete || userEvidenceIncomplete || configEvidenceRequired
 
 	anyChange := configChanged || resourceChanged || userDataChanged || migrationPresent
 
-	req.Required = anyChange || anyMissingEvidence || configEmptyButExpected || !input.ManifestNoDataChange
+	req := PackageSnapshotRequirement{}
+	req.Required = anyChange || evidenceIncomplete || !input.ManifestNoDataChange
 	req.NoDataChange = !req.Required
 
 	if req.Required {
 		switch {
-		case anyMissingEvidence:
-			req.Reason = "evidence missing, fail-closed"
+		case evidenceIncomplete:
+			req.Reason = "snapshot requirement evidence incomplete, fail-closed"
+		case !input.ManifestNoDataChange:
+			req.Reason = "manifest does not declare no-data-change, fail-closed"
 		case migrationPresent:
 			req.Reason = "migration present"
 		case configChanged:
@@ -1227,18 +1252,40 @@ func ComputePackageSnapshotRequirement(input PackageSnapshotRequirementInput) (P
 }
 
 func computeUnifiedSnapshotRequirementHash(input PackageSnapshotRequirementInput, req PackageSnapshotRequirement) string {
-	canonical := fmt.Sprintf(`{"sv":"%d","ot":"%s","eid":"%s","sver":"%s","sgen":"%s","tver":"%s","tgen":"%s","ce":%v,"cb":"%s","ca":"%s","re":%v,"rb":"%s","ra":"%s","ue":%v,"ub":"%s","ua":"%s","mh":"%v","me":%v,"mndc":%v,"mnde":%v,"req":%v}`,
+	canonical := fmt.Sprintf(`{"schemaVersion":%d,"operationType":%q,"extensionId":%q,"sourceVersion":%q,"sourceGeneration":%q,"targetVersion":%q,"targetGeneration":%q,`+
+		`"config":{"evidencePresent":%v,"before":%q,"after":%q},`+
+		`"resource":{"evidencePresent":%v,"before":%q,"after":%q,"added":%s,"removed":%s,"changed":%s},`+
+		`"userData":{"evidencePresent":%v,"before":%q,"after":%q},`+
+		`"migration":{"evidencePresent":%v,"planHash":%q,"definitionHash":%q},`+
+		`"manifest":{"noDataChange":%v,"evidencePresent":%v},`+
+		`"required":%v,"noDataChange":%v,"reason":%q}`,
 		input.SchemaVersion, input.OperationType, input.ExtensionID,
 		input.SourceVersion, input.SourceGeneration, input.TargetVersion, input.TargetGeneration,
 		input.ConfigEvidencePresent, input.ConfigBeforeHash, input.ConfigAfterHash,
 		input.ResourceEvidencePresent, input.ResourceBeforeHash, input.ResourceAfterHash,
+		sortedSnapshotRequirementList(input.ResourceAdded), sortedSnapshotRequirementList(input.ResourceRemoved), sortedSnapshotRequirementList(input.ResourceChanged),
 		input.UserDataEvidencePresent, input.UserDataBeforeHash, input.UserDataAfterHash,
-		input.MigrationEvidencePresent, input.MigrationPlanHash,
+		input.MigrationEvidencePresent, input.MigrationPlanHash, input.MigrationDefinitionHash,
 		input.ManifestNoDataChange, input.ManifestEvidencePresent,
-		req.Required)
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(canonical)))
+		req.Required, req.NoDataChange, req.Reason)
+	h := sha256.Sum256([]byte(canonical))
+	return "sha256:" + hex.EncodeToString(h[:])
 }
 
+func sortedSnapshotRequirementList(items []string) string {
+	if len(items) == 0 {
+		return "[]"
+	}
+	sorted := append([]string(nil), items...)
+	sort.Strings(sorted)
+	raw, err := json.Marshal(sorted)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+// Deprecated: kept for tests only, build PackageSnapshotRequirementInput from the point and use ComputePackageSnapshotRequirement in production.
 func computeRollbackSnapshotRequirementFromPoint(point PackageRollbackPoint) RollbackSnapshotRequirement {
 	input := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
 	corrupt := false

@@ -65,26 +65,26 @@ const (
 var globalMessageSeq atomic.Uint64
 
 type Connection struct {
-	sessionID      string
-	runtimeID      string
-	deviceID       string
-	userID         string
+	sessionID       string
+	runtimeID       string
+	deviceID        string
+	userID          string
 	ticketDeviceID  string
 	ticketRuntimeID string
-	conn           *websocket.Conn
-	sendCh         chan outboundFrame
-	done           chan struct{}
-	closeOnce      sync.Once
-	seq            atomic.Uint64
-	lastBeatNS     atomic.Int64
-	state          atomic.Value
-	capabilities   CapabilitySet
-	config         *DesktopPetRuntimeConfig
-	onResult       func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
-	onEvent        func(conn *Connection, msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
-	onHeartbeat    func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
-	onClose        func(sessionID, runtimeID string, code int, reason string)
-	onRegister     func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
+	conn            *websocket.Conn
+	sendCh          chan outboundFrame
+	done            chan struct{}
+	closeOnce       sync.Once
+	seq             atomic.Uint64
+	lastBeatNS      atomic.Int64
+	state           atomic.Value
+	capabilities    CapabilitySet
+	config          *DesktopPetRuntimeConfig
+	onResult        func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
+	onEvent         func(conn *Connection, msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
+	onHeartbeat     func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
+	onClose         func(sessionID, runtimeID string, code int, reason string)
+	onRegister      func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
 }
 
 func NewConnection(wsConn *websocket.Conn, config *DesktopPetRuntimeConfig) *Connection {

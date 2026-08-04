@@ -5,6 +5,7 @@ package runtime
 import "errors"
 
 const (
+	ErrCodeRuntimeProtocolMismatch     = "RUNTIME_PROTOCOL_MISMATCH"
 	ErrCodeRuntimeDisabled             = "RUNTIME_DISABLED"
 	ErrCodeRuntimeOffline              = "RUNTIME_OFFLINE"
 	ErrCodeRuntimeNotReady             = "RUNTIME_NOT_READY"
@@ -30,6 +31,7 @@ const (
 )
 
 var (
+	ErrRuntimeProtocolMismatch     = errors.New("runtime protocol mismatch")
 	ErrRuntimeDisabled             = errors.New("runtime bridge is disabled")
 	ErrRuntimeOffline              = errors.New("no target runtime online")
 	ErrRuntimeNotReady             = errors.New("runtime connected but not synced")
@@ -95,7 +97,7 @@ func MapRuntimeErrorCodeToHTTP(code string) int {
 		return 504
 	case ErrCodeRuntimeCommandFailed, ErrCodeRuntimeSnapshotInvalid, ErrCodeRuntimeCommandStoreFailed:
 		return 500
-	case ErrCodeRuntimeMessageTooLarge, ErrCodeRuntimeProtocolError:
+	case ErrCodeRuntimeProtocolMismatch, ErrCodeRuntimeProtocolError, ErrCodeRuntimeMessageTooLarge:
 		return 400
 	default:
 		return 500

@@ -43,10 +43,10 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	lease := migrationLock{
-		LockName:       lockName,
+		LockName:        lockName,
 		OwnerInstanceID: l.instance,
 		LeaseExpiresAt:  expires,
-		HeartbeatAt:    now,
+		HeartbeatAt:     now,
 	}
 
 	tx := l.db.Begin()

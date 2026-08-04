@@ -39,8 +39,6 @@ func NewService(
 	snapshot *SnapshotBuilder,
 	eventSink RuntimeEventSink,
 ) *Service {
-	config.EnsureToken()
-
 	auth := NewAuth(config)
 	registry := NewRuntimeRegistry()
 	pending := NewPendingTracker()

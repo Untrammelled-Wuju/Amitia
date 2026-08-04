@@ -2,10 +2,13 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -88,7 +91,7 @@ func TestUserDataRestoreJournalProgressAndStateUpdate(t *testing.T) {
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
 	}
-	journal, err := store.getOrCreateRestoreJournal(ctx, "op-progress", "ext1", "ext_progress_table", "", 100, "")
+	journal, err := store.getOrCreateRestoreJournal(ctx, "op-progress", "ext1", "ext_progress_table", "", 100, "", "")
 	if err != nil {
 		t.Fatalf("create journal: %v", err)
 	}
@@ -120,7 +123,7 @@ func TestUserDataRestoreJournalErrorNotSwallowed(t *testing.T) {
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
 	}
-	journal, err := store.getOrCreateRestoreJournal(ctx, "op-error", "ext1", "ext_error_table", "", 50, "")
+	journal, err := store.getOrCreateRestoreJournal(ctx, "op-error", "ext1", "ext_error_table", "", 50, "", "")
 	if err != nil {
 		t.Fatalf("create journal: %v", err)
 	}
@@ -255,6 +258,9 @@ func TestUserDataSnapshotImportAndVerify(t *testing.T) {
 		AffectedTables: []string{"ext_testext_restore"},
 		RecordCounts:   map[string]int64{"ext_testext_restore": 2},
 		DataExports:    map[string]string{"ext_testext_restore": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_testext_restore": mustBuildManifest(t, "testext", "ext_testext_restore", "restore", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -268,7 +274,7 @@ func TestUserDataSnapshotImportAndVerify(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "testext", "op-verify", string(userStateJSON)); err != nil {
 		t.Fatalf("restore user data: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-verify", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-verify"); err != nil {
 		t.Fatalf("verify restore: %v", err)
 	}
 	var count int
@@ -306,6 +312,9 @@ func TestUserDataSnapshotWithFlatRecordImport(t *testing.T) {
 		AffectedTables: []string{"ext_flat_test"},
 		RecordCounts:   map[string]int64{"ext_flat_test": 2},
 		DataExports:    map[string]string{"ext_flat_test": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_flat_test": mustBuildManifest(t, "flat", "ext_flat_test", "test", jsonl, "id"),
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -319,7 +328,7 @@ func TestUserDataSnapshotWithFlatRecordImport(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "flat", "op-flat", string(userStateJSON)); err != nil {
 		t.Fatalf("restore user data: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-flat", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-flat"); err != nil {
 		t.Fatalf("verify restore: %v", err)
 	}
 	var count int
@@ -465,6 +474,9 @@ func TestRestoreTableStoresContentBoundBatchHash(t *testing.T) {
 		AffectedTables: []string{"ext_shash_data"},
 		RecordCounts:   map[string]int64{"ext_shash_data": 2},
 		DataExports:    map[string]string{"ext_shash_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_shash_data": mustBuildManifest(t, "shash", "ext_shash_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -492,7 +504,7 @@ func TestRestoreTableStoresContentBoundBatchHash(t *testing.T) {
 	if batchHash == staleHash {
 		t.Fatalf("batch hash must not be the stale count-only format: %s", batchHash)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-store-hash", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-store-hash"); err != nil {
 		t.Fatalf("verify restore: %v", err)
 	}
 }
@@ -522,6 +534,9 @@ func TestRestoreTableResumeAfterPartialCommit(t *testing.T) {
 		AffectedTables: []string{"ext_rsm_data"},
 		RecordCounts:   map[string]int64{"ext_rsm_data": 3},
 		DataExports:    map[string]string{"ext_rsm_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_rsm_data": mustBuildManifest(t, "rsm", "ext_rsm_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -545,12 +560,12 @@ func TestRestoreTableResumeAfterPartialCommit(t *testing.T) {
 	if completeHash == "" {
 		t.Fatalf("expected non-empty hash after complete restore")
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-resume", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-resume"); err != nil {
 		t.Fatalf("verify complete restore: %v", err)
 	}
 }
 
-func setupRestoreForVerifyTest(t *testing.T) (*sql.DB, *UserDataSnapshotStore, string, string, string) {
+func setupRestoreForVerifyTest(t *testing.T) (*sql.DB, *UserDataSnapshotStore, string, string) {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "verify-setup.db"))
 	if err != nil {
@@ -574,6 +589,9 @@ func setupRestoreForVerifyTest(t *testing.T) (*sql.DB, *UserDataSnapshotStore, s
 		AffectedTables: []string{"ext_vsetup_verify_setup"},
 		RecordCounts:   map[string]int64{"ext_vsetup_verify_setup": 2},
 		DataExports:    map[string]string{"ext_vsetup_verify_setup": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_vsetup_verify_setup": mustBuildManifest(t, "vsetup", "ext_vsetup_verify_setup", "verify_setup", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -587,21 +605,21 @@ func setupRestoreForVerifyTest(t *testing.T) (*sql.DB, *UserDataSnapshotStore, s
 	if err := store.RestoreUserDataFromSnapshot(ctx, "vsetup", "op-verify-setup", string(userStateJSON)); err != nil {
 		t.Fatalf("initial restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-verify-setup", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-verify-setup"); err != nil {
 		t.Fatalf("baseline verify should pass: %v", err)
 	}
-	return db, store, "op-verify-setup", "ext_vsetup_verify_setup", string(userStateJSON)
+	return db, store, "op-verify-setup", "ext_vsetup_verify_setup"
 }
 
 func TestVerifyFailsOnAppliedCountMismatch(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET applied_count=? WHERE operation_id=? AND table_name=?`,
 		1, opID, table); err != nil {
 		t.Fatalf("tamper applied_count: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for applied_count mismatch, got nil")
 	}
@@ -611,14 +629,14 @@ func TestVerifyFailsOnAppliedCountMismatch(t *testing.T) {
 }
 
 func TestVerifyFailsOnCursorMismatch(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET cursor=? WHERE operation_id=? AND table_name=?`,
 		"1", opID, table); err != nil {
 		t.Fatalf("tamper cursor: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for cursor mismatch, got nil")
 	}
@@ -628,14 +646,14 @@ func TestVerifyFailsOnCursorMismatch(t *testing.T) {
 }
 
 func TestVerifyFailsOnBatchHashEmpty(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET batch_hash=? WHERE operation_id=? AND table_name=?`,
 		"", opID, table); err != nil {
 		t.Fatalf("clear batch_hash: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for empty batch_hash with rows>0, got nil")
 	}
@@ -645,7 +663,7 @@ func TestVerifyFailsOnBatchHashEmpty(t *testing.T) {
 }
 
 func TestVerifyFailsOnAggregateHashMismatch(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	validTamperedHash := "sha256:" + strings.Repeat("aa", 32)
 	if _, err := db.ExecContext(ctx,
@@ -653,7 +671,7 @@ func TestVerifyFailsOnAggregateHashMismatch(t *testing.T) {
 		validTamperedHash, opID, table); err != nil {
 		t.Fatalf("tamper aggregate_hash: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for aggregate hash mismatch, got nil")
 	}
@@ -663,14 +681,14 @@ func TestVerifyFailsOnAggregateHashMismatch(t *testing.T) {
 }
 
 func TestVerifyFailsOnDBExtraRecord(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		fmt.Sprintf(`INSERT INTO %s (entity_id, entity_value) VALUES (?, ?)`, table),
 		"extra_e", "extra_val"); err != nil {
 		t.Fatalf("insert extra row: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for DB extra record, got nil")
 	}
@@ -680,14 +698,14 @@ func TestVerifyFailsOnDBExtraRecord(t *testing.T) {
 }
 
 func TestVerifyFailsOnDBMissingRecord(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		fmt.Sprintf(`DELETE FROM %s WHERE entity_id = ?`, table),
 		"e2"); err != nil {
 		t.Fatalf("delete row: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for DB missing record, got nil")
 	}
@@ -697,14 +715,14 @@ func TestVerifyFailsOnDBMissingRecord(t *testing.T) {
 }
 
 func TestVerifyFailsOnIncompleteJournal(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET state=? WHERE operation_id=? AND table_name=?`,
 		string(UserDataRestoreImporting), opID, table); err != nil {
 		t.Fatalf("set importing state: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for incomplete journal, got nil")
 	}
@@ -724,8 +742,7 @@ func TestVerifyFailsOnNoJournals(t *testing.T) {
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
 	}
-	snapshotJSON := `{"mode":"repository","affectedTables":["users_v1"],"recordCounts":{"users_v1":3},"dataExports":{"users_v1":"[]"},"tableManifests":{"users_v1":{"tableName":"users_v1","recordCount":3,"schemaVersion":1,"extensionID":"com.example/test","canonicalTable":"users_v1","genesisHash":"sha256:aa","emptySetHash":"sha256:bb","batchHash":"sha256:cc","aggregateHash":"sha256:dd","batchAlgorithmVersion":"v1","batchSize":100,"namespaceHash":"sha256:ee"}}}`
-	err = store.VerifyUserDataRestore(ctx, "op-nonexistent", snapshotJSON)
+	err = store.VerifyUserDataRestore(ctx, "op-nonexistent")
 	if err == nil {
 		t.Fatal("expected error for no journals, got nil")
 	}
@@ -761,6 +778,9 @@ func TestVerifyPassesAllConsistent(t *testing.T) {
 		AffectedTables: []string{"ext_conz_consistent"},
 		RecordCounts:   map[string]int64{"ext_conz_consistent": 4},
 		DataExports:    map[string]string{"ext_conz_consistent": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_conz_consistent": mustBuildManifest(t, "conz", "ext_conz_consistent", "consistent", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -774,7 +794,7 @@ func TestVerifyPassesAllConsistent(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "conz", "op-consistent", string(userStateJSON)); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-consistent", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-consistent"); err != nil {
 		t.Fatalf("verify should pass when all consistent: %v", err)
 	}
 	var dbCount int
@@ -787,14 +807,14 @@ func TestVerifyPassesAllConsistent(t *testing.T) {
 }
 
 func TestVerifyFailsOnImportedRowsMismatch(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET imported_rows=? WHERE operation_id=? AND table_name=?`,
 		1, opID, table); err != nil {
 		t.Fatalf("tamper imported_rows: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for imported_rows mismatch, got nil")
 	}
@@ -804,14 +824,14 @@ func TestVerifyFailsOnImportedRowsMismatch(t *testing.T) {
 }
 
 func TestVerifyFailsOnEmptyAggregateHash(t *testing.T) {
-	db, store, opID, table, snapshotJSON := setupRestoreForVerifyTest(t)
+	db, store, opID, table := setupRestoreForVerifyTest(t)
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET aggregate_hash=? WHERE operation_id=? AND table_name=?`,
 		"", opID, table); err != nil {
 		t.Fatalf("clear aggregate_hash: %v", err)
 	}
-	err := store.VerifyUserDataRestore(ctx, opID, snapshotJSON)
+	err := store.VerifyUserDataRestore(ctx, opID)
 	if err == nil {
 		t.Fatal("expected error for empty aggregate_hash, got nil")
 	}
@@ -843,6 +863,9 @@ func TestRestoreTableRecoveryHashMatchSucceeds(t *testing.T) {
 		AffectedTables: []string{"ext_rok_data"},
 		RecordCounts:   map[string]int64{"ext_rok_data": 2},
 		DataExports:    map[string]string{"ext_rok_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_rok_data": mustBuildManifest(t, "rok", "ext_rok_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -881,7 +904,7 @@ func TestRestoreTableRecoveryHashMatchSucceeds(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "rok", "op-recovery-match", string(identicalStateJSON)); err != nil {
 		t.Fatalf("recovery restore with matching hash should succeed: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-recovery-match", string(identicalStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-recovery-match"); err != nil {
 		t.Fatalf("verify restore: %v", err)
 	}
 }
@@ -911,6 +934,106 @@ func makeNLines(t *testing.T, extensionID, namespace string, count int, prefix s
 	return lines
 }
 
+func mustBuildManifest(t *testing.T, extensionID, table, entityType, jsonlData, idColumn string) UserDataTableManifest {
+	t.Helper()
+	rawRecords, parsedRecords, _ := parseAndValidateJSONL(jsonlData, extensionID)
+	recordCount := int64(len(parsedRecords))
+
+	nsHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		ExtensionID:            extensionID,
+		CanonicalTable:         table,
+		LogicalEntityType:      entityType,
+		NamespacePolicyVersion: "",
+	})
+
+	var aggHash string
+	if recordCount == 0 {
+		aggHash = computeUserDataAggregateHashFromRecords(nil)
+	} else {
+		hashes := make([]string, 0, len(rawRecords))
+		for _, rec := range rawRecords {
+			payload := make(map[string]interface{})
+			for k, v := range rec {
+				if strings.HasPrefix(k, "_") {
+					continue
+				}
+				if k == "entity_id" && idColumn == "id" {
+					payload["id"] = v
+				} else {
+					payload[k] = v
+				}
+			}
+			hashes = append(hashes, computeUserDataPayloadHash(payload))
+		}
+		sort.Strings(hashes)
+		hasher := sha256.New()
+		for _, h := range hashes {
+			hasher.Write([]byte(h))
+		}
+		aggHash = "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+	}
+
+	genesisIdentity := UserDataTableIdentity{
+		Domain:                userDataBatchGenesisDomain,
+		SchemaVersion:         fmt.Sprintf("%d", userDataTableManifestSchemaVersion),
+		ExtensionID:           extensionID,
+		CanonicalTable:        table,
+		EntityType:            entityType,
+		NamespaceHash:         nsHash,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+	}
+	genesisHash := computeUserDataGenesisHash(genesisIdentity)
+
+	emptySetIdentity := UserDataTableIdentity{
+		Domain:                userDataBatchGenesisDomain,
+		SchemaVersion:         fmt.Sprintf("%d", userDataTableManifestSchemaVersion),
+		ExtensionID:           extensionID,
+		CanonicalTable:        table,
+		EntityType:            entityType,
+		NamespaceHash:         nsHash,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+	}
+	emptySetHash := computeUserDataEmptySetHash(emptySetIdentity)
+
+	var finalBatchHash string
+	if recordCount > 0 {
+		batchCount := (len(rawRecords) + userDataRestoreBatchSize - 1) / userDataRestoreBatchSize
+		prevHash := genesisHash
+		for b := 0; b < batchCount; b++ {
+			start := b * userDataRestoreBatchSize
+			end := start + userDataRestoreBatchSize
+			if end > len(rawRecords) {
+				end = len(rawRecords)
+			}
+			batch := rawRecords[start:end]
+			cursor := int64(start)
+			batchIdx := b + 1
+			batchHash := computeContentBoundBatchHash(batch, extensionID, cursor, prevHash, batchIdx, fmt.Sprintf("%d", userDataTableManifestSchemaVersion), table, "")
+			if b == batchCount-1 {
+				finalBatchHash = batchHash
+			}
+			prevHash = batchHash
+		}
+	}
+
+	return UserDataTableManifest{
+		SchemaVersion:         userDataTableManifestSchemaVersion,
+		ExtensionID:           extensionID,
+		CanonicalTable:        table,
+		Namespace:             table,
+		EntityType:            entityType,
+		NamespaceHash:         nsHash,
+		RecordCount:           recordCount,
+		AggregateHash:         aggHash,
+		EmptySetHash:          emptySetHash,
+		BatchSize:             userDataRestoreBatchSize,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		GenesisHash:           genesisHash,
+		FinalBatchHash:        finalBatchHash,
+		DataExportReference:   computeUserDataExportReference("test", table, extensionID),
+	}
+}
+
 // TestFIV_CrashBeforeFirstBatch: 第一批提交前崩溃
 // 现象：Journal 尚未有业务批次提交，重启后从头开始完整执行
 func TestFIV_CrashBeforeFirstBatch(t *testing.T) {
@@ -928,6 +1051,9 @@ func TestFIV_CrashBeforeFirstBatch(t *testing.T) {
 		AffectedTables: []string{"ext_fi1_data"},
 		RecordCounts:   map[string]int64{"ext_fi1_data": 5},
 		DataExports:    map[string]string{"ext_fi1_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_fi1_data": mustBuildManifest(t, extFi1, "ext_fi1_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, _ := json.Marshal(userState)
 	store := NewUserDataSnapshotStore(db)
@@ -951,7 +1077,7 @@ func TestFIV_CrashBeforeFirstBatch(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi1, "op-fi1", string(userStateJSON)); err != nil {
 		t.Fatalf("restart restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-fi1", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-fi1"); err != nil {
 		t.Fatalf("verify after restart: %v", err)
 	}
 	var count int
@@ -980,6 +1106,9 @@ func TestFIV_CrashAfterFirstBatchCommits(t *testing.T) {
 		AffectedTables: []string{"ext_fi2_data"},
 		RecordCounts:   map[string]int64{"ext_fi2_data": 250},
 		DataExports:    map[string]string{"ext_fi2_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_fi2_data": mustBuildManifest(t, extFi2, "ext_fi2_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, _ := json.Marshal(userState)
 	store := NewUserDataSnapshotStore(db)
@@ -1000,10 +1129,16 @@ func TestFIV_CrashAfterFirstBatchCommits(t *testing.T) {
 	}
 
 	recordsFi2, parsedFi2, _ := parseAndValidateJSONL(jsonl, extFi2)
-	h0fi2 := computeContentBoundBatchHash(recordsFi2[0:100], extFi2, 0, userBatchGenesisHash(), 1, parsedFi2[0].SchemaVersion, "ext_fi2_data", "op-fi2")
+	var genesisHash string
+	if err := db.QueryRowContext(ctx,
+		`SELECT prev_batch_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
+		"op-fi2", "ext_fi2_data").Scan(&genesisHash); err != nil {
+		t.Fatalf("query genesis hash: %v", err)
+	}
+	h0fi2 := computeContentBoundBatchHash(recordsFi2[0:100], extFi2, 0, genesisHash, 1, parsedFi2[0].SchemaVersion, "ext_fi2_data", "op-fi2")
 	_, err = db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=?, batch_hash=? WHERE operation_id=? AND table_name=?`,
-		userBatchGenesisHash(), h0fi2, "op-fi2", "ext_fi2_data")
+		genesisHash, h0fi2, "op-fi2", "ext_fi2_data")
 	if err != nil {
 		t.Fatalf("set partial progress: %v", err)
 	}
@@ -1015,7 +1150,7 @@ func TestFIV_CrashAfterFirstBatchCommits(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi2, "op-fi2", string(userStateJSON)); err != nil {
 		t.Fatalf("restart restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-fi2", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-fi2"); err != nil {
 		t.Fatalf("verify after resume: %v", err)
 	}
 	var finalCount int
@@ -1044,6 +1179,9 @@ func TestFIV_JournalUpdateFailureRollsBackBatch(t *testing.T) {
 		AffectedTables: []string{"ext_fi3_data"},
 		RecordCounts:   map[string]int64{"ext_fi3_data": 10},
 		DataExports:    map[string]string{"ext_fi3_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_fi3_data": mustBuildManifest(t, extFi3, "ext_fi3_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, _ := json.Marshal(userState)
 	store := NewUserDataSnapshotStore(db)
@@ -1083,6 +1221,9 @@ func TestFIV_MidBatchFailure(t *testing.T) {
 		AffectedTables: []string{"ext_fi4_data"},
 		RecordCounts:   map[string]int64{"ext_fi4_data": 250},
 		DataExports:    map[string]string{"ext_fi4_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_fi4_data": mustBuildManifest(t, extFi4, "ext_fi4_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, _ := json.Marshal(userState)
 	store := NewUserDataSnapshotStore(db)
@@ -1149,6 +1290,9 @@ func TestFIV_RestartExecutesOnlyRemainingBatches(t *testing.T) {
 		AffectedTables: []string{"ext_fi5_data"},
 		RecordCounts:   map[string]int64{"ext_fi5_data": 300},
 		DataExports:    map[string]string{"ext_fi5_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_fi5_data": mustBuildManifest(t, extFi5, "ext_fi5_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, _ := json.Marshal(userState)
 	store := NewUserDataSnapshotStore(db)
@@ -1161,10 +1305,16 @@ func TestFIV_RestartExecutesOnlyRemainingBatches(t *testing.T) {
 		t.Fatalf("first restore: %v", err)
 	}
 	records5, parsed5, _ := parseAndValidateJSONL(jsonl, extFi5)
-	h0fi5 := computeContentBoundBatchHash(records5[0:100], extFi5, 0, userBatchGenesisHash(), 1, parsed5[0].SchemaVersion, "ext_fi5_data", "op-fi5")
+	var genesisHash5 string
+	if err := db.QueryRowContext(ctx,
+		`SELECT prev_batch_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
+		"op-fi5", "ext_fi5_data").Scan(&genesisHash5); err != nil {
+		t.Fatalf("query genesis hash: %v", err)
+	}
+	h0fi5 := computeContentBoundBatchHash(records5[0:100], extFi5, 0, genesisHash5, 1, parsed5[0].SchemaVersion, "ext_fi5_data", "op-fi5")
 	_, err = db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=?, batch_hash=? WHERE operation_id=? AND table_name=?`,
-		userBatchGenesisHash(), h0fi5, "op-fi5", "ext_fi5_data")
+		genesisHash5, h0fi5, "op-fi5", "ext_fi5_data")
 	if err != nil {
 		t.Fatalf("set mid-batch progress: %v", err)
 	}
@@ -1176,7 +1326,7 @@ func TestFIV_RestartExecutesOnlyRemainingBatches(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi5, "op-fi5", string(userStateJSON)); err != nil {
 		t.Fatalf("restart restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-fi5", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-fi5"); err != nil {
 		t.Fatalf("verify after restart: %v", err)
 	}
 	var count int
@@ -1213,6 +1363,9 @@ func TestFIV_RepeatedRestoreIsIdempotent(t *testing.T) {
 		AffectedTables: []string{"ext_fi6_data"},
 		RecordCounts:   map[string]int64{"ext_fi6_data": 20},
 		DataExports:    map[string]string{"ext_fi6_data": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_fi6_data": mustBuildManifest(t, extFi6, "ext_fi6_data", "data", jsonl, "entity_id"),
+		},
 	}
 	userStateJSON, _ := json.Marshal(userState)
 	store := NewUserDataSnapshotStore(db)
@@ -1238,7 +1391,7 @@ func TestFIV_RepeatedRestoreIsIdempotent(t *testing.T) {
 	if count != 20 {
 		t.Fatalf("expected 20 rows (no duplication), got %d", count)
 	}
-	if err := store.VerifyUserDataRestore(ctx, "op-fi6", string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, "op-fi6"); err != nil {
 		t.Fatalf("verify after idempotent calls: %v", err)
 	}
 }

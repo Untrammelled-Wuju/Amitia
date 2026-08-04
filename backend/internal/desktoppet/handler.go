@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
@@ -147,14 +146,7 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	if _, statErr := os.Stat(fullPath); statErr != nil {
-		util.ErrorResponse(c, response.NotFound, "参考图片不存在", nil)
-		return
-	}
-	if mimeType != "" {
-		c.Header("Content-Type", mimeType)
-	}
-	h.safeResponder.SafeFileResponse(c, fullPath)
+	h.safeResponder.ResolveAndServe(c, actor, security.RootGenerationArtifacts, fullPath, taskID, actor.UserID, mimeType)
 }
 
 func (h *Handler) StartTask(c *gin.Context) {
@@ -250,14 +242,7 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 		writeServiceError(c, err)
 		return
 	}
-	if _, statErr := os.Stat(fullPath); statErr != nil {
-		util.ErrorResponse(c, response.NotFound, "帧图片不存在", nil)
-		return
-	}
-	if mimeType != "" {
-		c.Header("Content-Type", mimeType)
-	}
-	h.safeResponder.SafeFileResponse(c, fullPath)
+	h.safeResponder.ResolveAndServe(c, actor, security.RootGenerationArtifacts, fullPath, taskID+":"+actionKey+":"+strconv.Itoa(frameIndex), actor.UserID, mimeType)
 }
 
 func (h *Handler) GetTaskTransitions(c *gin.Context) {

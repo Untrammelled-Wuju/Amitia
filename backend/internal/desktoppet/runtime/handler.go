@@ -98,31 +98,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.auth.ValidateRequest(r); err != nil {
-		if re, ok := err.(*RuntimeError); ok {
-			writeHTTPError(w, MapRuntimeErrorCodeToHTTP(re.Code), re.Code, re.Message)
-			return
-		}
-		writeHTTPError(w, http.StatusUnauthorized, ErrCodeRuntimeUnauthorized, err.Error())
+		writeRuntimeHTTPError(w, err)
 		return
 	}
 
-	subprotocols := websocket.Subprotocols(r)
-	hasRuntimeProtocol := false
-	for _, sp := range subprotocols {
-		if sp == "amitia-desktop-pet.v1" {
-			hasRuntimeProtocol = true
-			break
-		}
-	}
-	if !hasRuntimeProtocol {
-		writeHTTPError(w, http.StatusBadRequest, ErrCodeRuntimeProtocolError, "missing required subprotocol amitia-desktop-pet.v1")
+	conn, err := h.upgrade(w, r)
+	if err != nil {
 		return
 	}
 
+	h.serveConnection(conn)
+}
+
+func (h *Handler) upgrade(w http.ResponseWriter, r *http.Request) (*Connection, error) {
 	wsConn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Logger.Errorf("runtime handler: websocket upgrade failed: %v", err)
-		return
+		return nil, err
 	}
 
 	wsConn.SetReadLimit(int64(h.config.MaxMessageBytes))
@@ -146,9 +138,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Logger.Infof("runtime handler: session closed sessionID=%s runtimeID=%s code=%d reason=%s", sessionID, runtimeID, code, reason)
 	}
 
-	go conn.Start(context.Background())
+	return conn, nil
+}
 
-	log.Logger.Infof("runtime handler: new connection established remoteAddr=%s", r.RemoteAddr)
+func (h *Handler) serveConnection(conn *Connection) {
+	go conn.Start(context.Background())
+	log.Logger.Infof("runtime handler: new connection established")
 }
 
 func (h *Handler) HandleRegister(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error) {
@@ -524,4 +519,12 @@ func writeHTTPError(w http.ResponseWriter, status int, code, message string) {
 			"message": message,
 		},
 	})
+}
+
+func writeRuntimeHTTPError(w http.ResponseWriter, err error) {
+	if re, ok := err.(*RuntimeError); ok {
+		writeHTTPError(w, MapRuntimeErrorCodeToHTTP(re.Code), re.Code, re.Message)
+		return
+	}
+	writeHTTPError(w, http.StatusUnauthorized, ErrCodeRuntimeUnauthorized, err.Error())
 }

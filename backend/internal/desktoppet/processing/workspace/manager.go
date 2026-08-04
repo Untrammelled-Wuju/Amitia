@@ -178,7 +178,7 @@ func (m *WorkspaceManager) AtomicPublish(stagingPath, finalPath string) error {
 
 	if err := os.Rename(stagingPath, finalPath); err != nil {
 		if _, statErr := os.Stat(finalPath); statErr == nil {
-			if rmErr := security.SafeRemoveTree(finalPath); rmErr != nil {
+			if rmErr := security.RemoveDirNoSymlinks(finalPath); rmErr != nil {
 				return fmt.Errorf("workspace: remove existing final path %s: %w", finalPath, rmErr)
 			}
 		}
@@ -196,7 +196,7 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 	}
 	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
-		if err := security.SafeRemoveTree(dir); err != nil {
+		if err := security.RemoveDirNoSymlinks(dir); err != nil {
 			lastErr = err
 			time.Sleep(200 * time.Millisecond)
 			continue

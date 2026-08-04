@@ -29,30 +29,29 @@ const (
 )
 
 var (
-	ErrLegacyMigrationLeaseHeld =
-		errors.New("kernel: legacy migration lease held")
+	ErrLegacyMigrationLeaseHeld = errors.New("kernel: legacy migration lease held")
 
-	ErrLegacyMigrationAlreadyCompleted =
-		errors.New("kernel: legacy migration already completed")
+	ErrLegacyMigrationAlreadyCompleted = errors.New("kernel: legacy migration already completed")
 
-	ErrLegacyMigrationFenced =
-		errors.New("kernel: legacy migration fenced")
+	ErrLegacyMigrationFenced = errors.New("kernel: legacy migration fenced")
 )
 
 type LegacyMigrationCheckpoint struct {
 	MigrationID string
 	ExtensionID string
 
-	SourceHash  string
-	PreviewHash string
-	ArtifactID  string
-	OperationID string
+	SourceHash string
+
+	PreviewHash      string
+	PreviewSessionID string
+	ArtifactID       string
+	OperationID      string
 
 	State       string
 	CurrentStep string
 
-	LeaseOwner    string
-	FencingToken  int64
+	LeaseOwner     string
+	FencingToken   int64
 	LeaseExpiresAt string
 
 	VerificationHash string
@@ -67,9 +66,10 @@ type LegacyMigrationCheckpointUpdate struct {
 	State       string
 	CurrentStep string
 
-	PreviewHash string
-	ArtifactID  string
-	OperationID string
+	PreviewHash      string
+	PreviewSessionID string
+	ArtifactID       string
+	OperationID      string
 
 	LastError string
 }
@@ -145,6 +145,7 @@ func scanLegacyMigrationCheckpoint(
 		&checkpoint.ExtensionID,
 		&checkpoint.SourceHash,
 		&checkpoint.PreviewHash,
+		&checkpoint.PreviewSessionID,
 		&checkpoint.ArtifactID,
 		&checkpoint.OperationID,
 		&checkpoint.State,
@@ -167,6 +168,7 @@ const legacyMigrationCheckpointColumns = `
 	extension_id,
 	source_hash,
 	preview_hash,
+	preview_session_id,
 	artifact_id,
 	operation_id,
 	state,
@@ -385,6 +387,10 @@ func (t *KernelLegacyMigrationTarget) Update(
 				WHEN ?='' THEN preview_hash
 				ELSE ?
 			END,
+			preview_session_id=CASE
+				WHEN ?='' THEN preview_session_id
+				ELSE ?
+			END,
 			artifact_id=CASE
 				WHEN ?='' THEN artifact_id
 				ELSE ?
@@ -403,6 +409,8 @@ func (t *KernelLegacyMigrationTarget) Update(
 		update.CurrentStep,
 		update.PreviewHash,
 		update.PreviewHash,
+		update.PreviewSessionID,
+		update.PreviewSessionID,
 		update.ArtifactID,
 		update.ArtifactID,
 		update.OperationID,
@@ -436,47 +444,129 @@ func (t *KernelLegacyMigrationTarget) Complete(
 	checkpoint LegacyMigrationCheckpoint,
 	verification LegacyMigrationVerification,
 ) error {
-	if strings.TrimSpace(
-		verification.VerificationHash,
-	) == "" {
+	if checkpoint.State !=
+		LegacyMigrationStateVerifying {
 		return fmt.Errorf(
-			"kernel: legacy migration verification hash missing",
+			"kernel: migration checkpoint must be verifying before completion",
 		)
 	}
 
-	now :=
-		time.Now().UTC().
-			Format(time.RFC3339Nano)
-
-	result, err := t.db.ExecContext(
-		ctx,
-		`UPDATE extension_package_legacy_migration_checkpoints
-		 SET
-			state=?,
-			current_step='completed',
-			artifact_id=?,
-			operation_id=?,
-			verification_hash=?,
-			last_error='',
-			lease_owner='',
-			lease_expires_at='',
-			completed_at=?,
-			updated_at=?
-		 WHERE extension_id=?
-		   AND lease_owner=?
-		   AND fencing_token=?
-		   AND state=?`,
-		LegacyMigrationStateCompleted,
-		verification.ArtifactID,
-		verification.OperationID,
-		verification.VerificationHash,
-		now,
-		now,
-		checkpoint.ExtensionID,
+	if strings.TrimSpace(
 		checkpoint.LeaseOwner,
-		checkpoint.FencingToken,
-		LegacyMigrationStateVerifying,
-	)
+	) == "" ||
+		checkpoint.FencingToken <= 0 {
+		return fmt.Errorf(
+			"kernel: migration completion guard incomplete",
+		)
+	}
+
+	if !verification.FinalGatePassed {
+		return fmt.Errorf(
+			"kernel: migration final gate not passed",
+		)
+	}
+
+	if strings.TrimSpace(
+		verification.OperationID,
+	) == "" ||
+		strings.TrimSpace(
+			verification.ArtifactID,
+		) == "" ||
+		strings.TrimSpace(
+			verification.VerificationHash,
+		) == "" {
+		return fmt.Errorf(
+			"kernel: migration verification incomplete",
+		)
+	}
+
+	if verification.ExtensionID !=
+		checkpoint.ExtensionID {
+		return fmt.Errorf(
+			"kernel: migration verification extension mismatch",
+		)
+	}
+
+	if verification.SourceHash !=
+		checkpoint.SourceHash {
+		return fmt.Errorf(
+			"kernel: migration verification source hash mismatch",
+		)
+	}
+
+	if checkpoint.ArtifactID != "" &&
+		checkpoint.ArtifactID !=
+			verification.ArtifactID {
+		return fmt.Errorf(
+			"kernel: migration verification artifact mismatch",
+		)
+	}
+
+	if checkpoint.OperationID != "" &&
+		checkpoint.OperationID !=
+			verification.OperationID {
+		return fmt.Errorf(
+			"kernel: migration verification operation mismatch",
+		)
+	}
+
+	expectedVerificationHash :=
+		hashLegacyMigrationVerification(
+			verification,
+		)
+
+	if expectedVerificationHash !=
+		verification.VerificationHash {
+		return fmt.Errorf(
+			"kernel: migration verification hash mismatch",
+		)
+	}
+
+	tx, err := t.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	now :=
+		time.Now().
+			UTC().
+			Format(
+				time.RFC3339Nano,
+			)
+
+	result, err :=
+		tx.ExecContext(
+			ctx,
+			`UPDATE extension_package_legacy_migration_checkpoints
+			 SET
+				state=?,
+				current_step='completed',
+				artifact_id=?,
+				operation_id=?,
+				verification_hash=?,
+				last_error='',
+				lease_owner='',
+				lease_expires_at='',
+				completed_at=?,
+				updated_at=?
+			 WHERE extension_id=?
+			   AND lease_owner=?
+			   AND fencing_token=?
+			   AND state=?
+			   AND source_hash=?`,
+			LegacyMigrationStateCompleted,
+			verification.ArtifactID,
+			verification.OperationID,
+			verification.VerificationHash,
+			now,
+			now,
+			checkpoint.ExtensionID,
+			checkpoint.LeaseOwner,
+			checkpoint.FencingToken,
+			LegacyMigrationStateVerifying,
+			checkpoint.SourceHash,
+		)
 	if err != nil {
 		return err
 	}
@@ -490,33 +580,36 @@ func (t *KernelLegacyMigrationTarget) Complete(
 		return ErrLegacyMigrationFenced
 	}
 
-	_, err = t.db.ExecContext(
-		ctx,
-		`INSERT INTO extension_package_legacy_migrations (
-			extension_id,
-			migration_status,
-			attempt_count,
-			last_error,
-			legacy_path,
-			artifact_id,
-			updated_at
-		) VALUES (?, ?, 1, '', ?, ?, ?)
-		ON CONFLICT(extension_id) DO UPDATE SET
-			migration_status=excluded.migration_status,
-			attempt_count=
-				extension_package_legacy_migrations.attempt_count+1,
-			last_error='',
-			legacy_path=excluded.legacy_path,
-			artifact_id=excluded.artifact_id,
-			updated_at=excluded.updated_at`,
-		checkpoint.ExtensionID,
-		LegacyMigrationStateCompleted,
-		checkpoint.SourceHash,
-		verification.ArtifactID,
-		now,
-	)
+	_, err =
+		tx.ExecContext(
+			ctx,
+			`INSERT INTO extension_package_legacy_migrations (
+				extension_id,
+				migration_status,
+				attempt_count,
+				last_error,
+				legacy_path,
+				artifact_id,
+				updated_at
+			) VALUES (?, ?, 1, '', '', ?, ?)
+			ON CONFLICT(extension_id) DO UPDATE SET
+				migration_status=excluded.migration_status,
+				attempt_count=
+					extension_package_legacy_migrations.attempt_count+1,
+				last_error='',
+				legacy_path='',
+				artifact_id=excluded.artifact_id,
+				updated_at=excluded.updated_at`,
+			checkpoint.ExtensionID,
+			LegacyMigrationStateCompleted,
+			verification.ArtifactID,
+			now,
+		)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return tx.Commit()
 }
 
 func (t *KernelLegacyMigrationTarget) Release(
@@ -738,6 +831,21 @@ func (t *KernelLegacyMigrationTarget) Verify(
 	LegacyMigrationVerification,
 	error,
 ) {
+	extensionID = strings.TrimSpace(extensionID)
+	artifactID = strings.TrimSpace(artifactID)
+	operationID = strings.TrimSpace(operationID)
+	sourceHash = strings.TrimSpace(sourceHash)
+
+	if extensionID == "" ||
+		artifactID == "" ||
+		operationID == "" ||
+		sourceHash == "" {
+		return LegacyMigrationVerification{},
+			fmt.Errorf(
+				"kernel: legacy migration verification identity incomplete",
+			)
+	}
+
 	installation, err :=
 		t.runtime.Container().
 			InstallationRepository.
@@ -748,8 +856,7 @@ func (t *KernelLegacyMigrationTarget) Verify(
 				),
 			)
 	if err != nil {
-		return LegacyMigrationVerification{},
-			err
+		return LegacyMigrationVerification{}, err
 	}
 
 	if installation.PackageID != artifactID {
@@ -761,56 +868,71 @@ func (t *KernelLegacyMigrationTarget) Verify(
 			)
 	}
 
-	finalGatePassed := false
-
-	if strings.TrimSpace(
-		operationID,
-	) != "" {
-		gate, err :=
-			t.runtime.VerifyPackageFinalGate(
-				ctx,
-				operationID,
+	if installation.InstalledVersion.String() == "" {
+		return LegacyMigrationVerification{},
+			fmt.Errorf(
+				"kernel: migrated installation version missing",
 			)
-		if err != nil {
-			return LegacyMigrationVerification{},
-				err
-			}
+	}
 
-		if !gate.Passed {
-			return LegacyMigrationVerification{},
-				fmt.Errorf(
-					"kernel: migrated operation final gate failed",
-				)
-		}
+	gate, err :=
+		t.runtime.VerifyPackageFinalGate(
+			ctx,
+			operationID,
+		)
+	if err != nil {
+		return LegacyMigrationVerification{}, err
+	}
 
-		if gate.ExtensionID != extensionID {
-			return LegacyMigrationVerification{},
-				fmt.Errorf(
-					"kernel: migrated operation extension mismatch",
-				)
-		}
+	if !gate.Passed {
+		return LegacyMigrationVerification{},
+			fmt.Errorf(
+				"kernel: migrated operation final gate failed",
+			)
+	}
 
-		finalGatePassed = true
+	if gate.OperationID != operationID {
+		return LegacyMigrationVerification{},
+			fmt.Errorf(
+				"kernel: migrated operation final gate operation mismatch",
+			)
+	}
+
+	if gate.ExtensionID != extensionID {
+		return LegacyMigrationVerification{},
+			fmt.Errorf(
+				"kernel: migrated operation extension mismatch",
+			)
+	}
+
+	if gate.OperationType !=
+		string(PackageOperationTypeInstall) {
+		return LegacyMigrationVerification{},
+			fmt.Errorf(
+				"kernel: migrated operation type must be install: %s",
+				gate.OperationType,
+			)
+	}
+
+	if gate.Version !=
+		installation.InstalledVersion.String() {
+		return LegacyMigrationVerification{},
+			fmt.Errorf(
+				"kernel: migrated operation version mismatch: gate=%s installation=%s",
+				gate.Version,
+				installation.InstalledVersion.String(),
+			)
 	}
 
 	verification :=
 		LegacyMigrationVerification{
-			ExtensionID:
-				extensionID,
-			ArtifactID:
-				artifactID,
-			OperationID:
-				operationID,
-			SourceHash:
-				sourceHash,
-			InstalledVersion:
-				installation.
-					InstalledVersion.
-					String(),
-			PackageID:
-				installation.PackageID,
-			FinalGatePassed:
-				finalGatePassed,
+			ExtensionID:      extensionID,
+			ArtifactID:       artifactID,
+			OperationID:      operationID,
+			SourceHash:       sourceHash,
+			InstalledVersion: installation.InstalledVersion.String(),
+			PackageID:        installation.PackageID,
+			FinalGatePassed:  true,
 		}
 
 	verification.VerificationHash =

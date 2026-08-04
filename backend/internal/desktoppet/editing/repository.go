@@ -28,9 +28,9 @@ type Repository interface {
 
 	GetActionStreamByID(streamID string) (*ActionStream, error)
 	GetActionStreamByKey(userID, characterID, actionKey string) (*ActionStream, error)
-	GetActiveActionRevisionBindingByStream(streamID string) (*ActiveActionRevisionBinding, error)
+	GetActiveActionRevisionBindingByStream(userID, streamID string) (*ActiveActionRevisionBinding, error)
 	GetActiveActionRevisionBindingByTask(processingTaskID, actionKey string) (*ActiveActionRevisionBinding, error)
-	ListActionRevisionsByStream(streamID string) ([]ActionRevision, error)
+	ListActionRevisionsByStream(userID, streamID string) ([]ActionRevision, error)
 	ListAllActionStreams(userID string) ([]ActionStream, error)
 
 	CreateFrameAsset(asset *FrameAsset) error
@@ -805,9 +805,9 @@ func (r *repository) GetActionStreamByKey(userID, characterID, actionKey string)
 	return &stream, nil
 }
 
-func (r *repository) GetActiveActionRevisionBindingByStream(streamID string) (*ActiveActionRevisionBinding, error) {
+func (r *repository) GetActiveActionRevisionBindingByStream(userID, streamID string) (*ActiveActionRevisionBinding, error) {
 	var binding ActiveActionRevisionBinding
-	err := r.db.Where("action_stream_id = ?", streamID).First(&binding).Error
+	err := r.db.Where("user_id = ? AND action_stream_id = ?", userID, streamID).First(&binding).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -836,9 +836,9 @@ func (r *repository) GetActiveActionRevisionBindingByTask(processingTaskID, acti
 	return &binding, nil
 }
 
-func (r *repository) ListActionRevisionsByStream(streamID string) ([]ActionRevision, error) {
+func (r *repository) ListActionRevisionsByStream(userID, streamID string) ([]ActionRevision, error) {
 	var revs []ActionRevision
-	err := r.db.Where("action_stream_id = ?", streamID).
+	err := r.db.Where("user_id = ? AND action_stream_id = ?", userID, streamID).
 		Order("revision_number ASC").Find(&revs).Error
 	return revs, err
 }

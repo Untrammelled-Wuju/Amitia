@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	desktoppetAuth "github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -151,7 +152,7 @@ func (h *Handler) GetFrameImage(c *gin.Context) {
 		writeEditError(c, err)
 		return
 	}
-	serveImageFile(h.safeResponder, c, path, mimeType)
+	serveImageFile(h.safeResponder, c, actor, security.RootEditingAssets, path, mimeType, revisionID, frameID)
 }
 
 func (h *Handler) GetFrameThumbnail(c *gin.Context) {
@@ -171,7 +172,7 @@ func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 		writeEditError(c, err)
 		return
 	}
-	serveImageFile(h.safeResponder, c, path, mimeType)
+	serveImageFile(h.safeResponder, c, actor, security.RootEditingAssets, path, mimeType, revisionID, frameID+"-thumb")
 }
 
 func (h *Handler) GetActionEditSummary(c *gin.Context) {
@@ -415,14 +416,18 @@ func (h *Handler) CreateRegenerationJob(c *gin.Context) {
 func (h *Handler) GetRegenerationJob(c *gin.Context) {
 	sessionID := c.Param("sessionId")
 	jobID := c.Param("jobId")
-	_ = sessionID
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireRegenerationJob(c.Request.Context(), actor, jobID); err != nil {
+	scope, err := h.ownershipGuard.RequireRegenerationJob(c.Request.Context(), actor, jobID)
+	if err != nil {
 		writeEditOwnershipError(c, err)
+		return
+	}
+	if scope.SessionID != sessionID {
+		writeEditOwnershipError(c, security.ErrNotFound)
 		return
 	}
 	job, err := h.service.GetRegenerationJob(c.Request.Context(), jobID)
@@ -440,8 +445,13 @@ func (h *Handler) CancelRegenerationJob(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireRegenerationJob(c.Request.Context(), actor, jobID); err != nil {
+	scope, err := h.ownershipGuard.RequireRegenerationJob(c.Request.Context(), actor, jobID)
+	if err != nil {
 		writeEditOwnershipError(c, err)
+		return
+	}
+	if scope.SessionID != c.Param("sessionId") {
+		writeEditOwnershipError(c, security.ErrNotFound)
 		return
 	}
 	userID := actor.UserID
@@ -479,12 +489,12 @@ func (h *Handler) GetRegenerationJobByID(c *gin.Context) {
 func (h *Handler) ListRegenerationJobs(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	_, err := middleware.GetActorFromContext(c)
+	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	jobs, err := h.service.ListRegenerationJobs(c.Request.Context(), limit, offset)
+	jobs, err := h.service.ListRegenerationJobs(c.Request.Context(), actor.UserID, limit, offset)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -502,8 +512,13 @@ func (h *Handler) AcceptCandidate(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireCandidate(c.Request.Context(), actor, candidateID); err != nil {
+	scope, err := h.ownershipGuard.RequireCandidate(c.Request.Context(), actor, candidateID)
+	if err != nil {
 		writeEditOwnershipError(c, err)
+		return
+	}
+	if scope.SessionID != c.Param("sessionId") {
+		writeEditOwnershipError(c, security.ErrNotFound)
 		return
 	}
 	userID := actor.UserID
@@ -526,8 +541,13 @@ func (h *Handler) RejectCandidate(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireCandidate(c.Request.Context(), actor, candidateID); err != nil {
+	scope, err := h.ownershipGuard.RequireCandidate(c.Request.Context(), actor, candidateID)
+	if err != nil {
 		writeEditOwnershipError(c, err)
+		return
+	}
+	if scope.SessionID != c.Param("sessionId") {
+		writeEditOwnershipError(c, security.ErrNotFound)
 		return
 	}
 	userID := actor.UserID
@@ -769,15 +789,14 @@ func (h *Handler) ImportLegacyRevision(c *gin.Context) {
 	util.SuccessResponse(c, resp)
 }
 
-func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, path, mimeType string) {
-	if path == "" {
+func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, actor *desktoppetAuth.ActorContext, rootKind security.StorageRootKind, path, mimeType, artifactID, entityID string) {
+	if path == "" || actor == nil {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	c.Header("Content-Type", mimeType)
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Cache-Control", "private, max-age=300")
-	responder.SafeFileResponse(c, path)
+	responder.ResolveAndServe(c, actor, rootKind, path, artifactID, entityID, mimeType)
 }
 
 func writeEditError(c *gin.Context, err error) {
@@ -859,11 +878,11 @@ func (h *Handler) ListRevisionsByStream(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, streamID); err != nil {
+	if _, err := h.ownershipGuard.RequireActionStream(c.Request.Context(), actor, streamID); err != nil {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	revs, err := h.service.ListRevisionsByStream(c.Request.Context(), streamID)
+	revs, err := h.service.ListRevisionsByStream(c.Request.Context(), actor.UserID, streamID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -882,11 +901,11 @@ func (h *Handler) GetActiveRevisionByStream(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, streamID); err != nil {
+	if _, err := h.ownershipGuard.RequireActionStream(c.Request.Context(), actor, streamID); err != nil {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	detail, err := h.service.GetActiveRevisionByStream(c.Request.Context(), streamID)
+	detail, err := h.service.GetActiveRevisionByStream(c.Request.Context(), actor.UserID, streamID)
 	if err != nil {
 		writeEditError(c, err)
 		return

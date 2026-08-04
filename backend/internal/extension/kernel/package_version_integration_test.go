@@ -19,12 +19,13 @@ func newFinalizationOperation(t *testing.T, runtime *Runtime, container *Contain
 	confirmKey := "confirm." + operationType
 	secHash := computeSecurityPolicyHash()
 	previewHash := "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-	claims := fmt.Sprintf(`{"schemaVersion":1,"operationType":%q,"extensionId":%q,"artifactId":%q,"previewHash":%q,"securityPolicyHash":%q,"policyVersion":%q,"userId":%q,"scopeType":%q,"scopeId":%q,"confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce-%s"}`,
+	nonce := "test-nonce-" + operationID
+	claims := fmt.Sprintf(`{"schemaVersion":1,"operationType":%q,"extensionId":%q,"artifactId":%q,"previewHash":%q,"securityPolicyHash":%q,"policyVersion":%q,"userId":%q,"scopeType":%q,"scopeId":%q,"confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":%q}`,
 		operationType, extensionID, op.ArtifactID, previewHash, secHash, "2026-07-30-v1",
 		op.UserID, op.ScopeType, op.ScopeID, confirmKey, confirmKey,
-		time.Now().Unix(), time.Now().Add(time.Hour).Unix(), operationID)
+		time.Now().Unix(), time.Now().Add(time.Hour).Unix(), nonce)
 	op.ConfirmationClaimsJSON = claims
-	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
+	if _, _, err := container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, nonce, time.Now().UTC().Format(time.RFC3339Nano), time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 	if err := container.PackageRepository.TransitionOperation(ctx, op.OperationID, []PackageOperationStatus{PackageOperationPending}, PackageOperationInProgress, PackageOperationTransition{CurrentStep: "prepared"}, PackageWriteGuard{}); err != nil {

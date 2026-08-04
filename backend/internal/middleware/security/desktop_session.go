@@ -67,19 +67,20 @@ func (DesktopSession) TableName() string {
 }
 
 type DesktopSessionService struct {
-	mu      sync.RWMutex
-	db      *gorm.DB
-	dataDir string
+	mu          sync.RWMutex
+	db          *gorm.DB
+	dataDir     string
+	credentials *LocalCredentialStore
 }
 
-func NewDesktopSessionService(db *gorm.DB, dataDir string) (*DesktopSessionService, error) {
+func NewDesktopSessionService(db *gorm.DB, dataDir string, credentials *LocalCredentialStore) (*DesktopSessionService, error) {
 	if db == nil {
 		return nil, errors.New("db is required")
 	}
 	if dataDir == "" {
 		return nil, errors.New("dataDir is required")
 	}
-	svc := &DesktopSessionService{db: db, dataDir: dataDir}
+	svc := &DesktopSessionService{db: db, dataDir: dataDir, credentials: credentials}
 	if err := svc.ensureTable(); err != nil {
 		return nil, fmt.Errorf("ensure sessions table: %w", err)
 	}
@@ -287,11 +288,12 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 		return
 	}
 
-	oldVersion, err := s.resolveLocalToken("")
-	if err != nil {
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to read current token"})
+	if s.credentials == nil {
+		c.JSON(500, gin.H{"code": 500, "msg": "credential store not initialized"})
 		return
 	}
+
+	oldVersion := s.credentials.Version()
 
 	newToken, err := generateSecureToken()
 	if err != nil {
@@ -299,34 +301,40 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 		return
 	}
 
-	newVersion := newToken
+	newVersion := credentialVersion(newToken)
 
 	journal := &RotationJournal{
 		ID:         generateJournalID(),
 		OldVersion: oldVersion,
 		NewVersion: newVersion,
 		Stage:      RotationStagePrepared,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 	}
 	if err := s.db.Create(journal).Error; err != nil {
 		c.JSON(500, gin.H{"code": 500, "msg": "failed to create rotation journal"})
 		return
 	}
 
-	if err := s.atomicWriteToken(newToken); err != nil {
+	rotatedOldVersion, rotatedNewVersion, err := s.credentials.Rotate(newToken)
+	if err != nil {
 		_ = s.db.Delete(journal).Error
-		c.JSON(500, gin.H{"code": 500, "msg": "failed to write new token"})
+		c.JSON(500, gin.H{"code": 500, "msg": "failed to rotate credential"})
+		return
+	}
+
+	if rotatedOldVersion != oldVersion || rotatedNewVersion != newVersion {
+		_ = s.db.Delete(journal).Error
+		c.JSON(500, gin.H{"code": 500, "msg": "credential rotation version mismatch"})
 		return
 	}
 
 	journal.Stage = RotationStageCredentialSwitched
-	journal.UpdatedAt = time.Now()
+	journal.UpdatedAt = time.Now().UTC()
 	if err := s.db.Model(journal).Updates(map[string]interface{}{
 		"stage":      RotationStageCredentialSwitched,
 		"updated_at": journal.UpdatedAt,
 	}).Error; err != nil {
-		_ = s.atomicWriteToken(oldVersion)
 		_ = s.db.Delete(journal).Error
 		c.JSON(500, gin.H{"code": 500, "msg": "failed to update journal"})
 		return
@@ -334,22 +342,21 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 
 	if err := s.db.Model(&DesktopSession{}).Where("status = ?", DesktopSessionStatusActive).Updates(map[string]interface{}{
 		"status":     DesktopSessionStatusRevoked,
-		"revoked_at": time.Now(),
+		"revoked_at": time.Now().UTC(),
 	}).Error; err != nil {
-		_ = s.atomicWriteToken(oldVersion)
 		_ = s.db.Delete(journal).Error
 		c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke old sessions"})
 		return
 	}
 
 	journal.Stage = RotationStageSessionsRevoked
-	journal.UpdatedAt = time.Now()
+	journal.UpdatedAt = time.Now().UTC()
 	_ = s.db.Model(journal).Updates(map[string]interface{}{
 		"stage":      RotationStageSessionsRevoked,
 		"updated_at": journal.UpdatedAt,
 	}).Error
 
-	now := time.Now()
+	now := time.Now().UTC()
 	journal.Stage = RotationStageCompleted
 	journal.UpdatedAt = now
 	journal.CompletedAt = &now
@@ -362,25 +369,53 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 	c.JSON(200, gin.H{"code": 200, "msg": "token rotated"})
 }
 
-func (s *DesktopSessionService) RecoverRotationJournals() error {
+func (s *DesktopSessionService) RecoverRotationJournals(ctx context.Context) error {
+	if s.credentials == nil {
+		return errors.New("credential store not initialized")
+	}
+	currentVersion := s.credentials.Version()
 	var journals []RotationJournal
-	if err := s.db.Where("stage != ?", RotationStageCompleted).Find(&journals).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("stage != ?", RotationStageCompleted).Find(&journals).Error; err != nil {
 		return err
 	}
 	for _, journal := range journals {
 		switch journal.Stage {
 		case RotationStagePrepared:
-			_ = s.db.Delete(&journal).Error
+			if currentVersion == journal.OldVersion {
+				_ = s.db.WithContext(ctx).Delete(&journal).Error
+			} else {
+				return fmt.Errorf("recovery: prepared journal with mismatched old version")
+			}
 		case RotationStageCredentialSwitched:
-			_ = s.atomicWriteToken(journal.OldVersion)
-			_ = s.db.Delete(&journal).Error
+			if currentVersion == journal.NewVersion {
+				if err := s.db.WithContext(ctx).Model(&DesktopSession{}).Where("status = ?", DesktopSessionStatusActive).Updates(map[string]interface{}{
+					"status":     DesktopSessionStatusRevoked,
+					"revoked_at": time.Now().UTC(),
+				}).Error; err != nil {
+					return fmt.Errorf("recovery: failed to revoke sessions: %w", err)
+				}
+				now := time.Now().UTC()
+				_ = s.db.WithContext(ctx).Model(&journal).Updates(map[string]interface{}{
+					"stage":        RotationStageCompleted,
+					"updated_at":   now,
+					"completed_at": now,
+				}).Error
+			} else {
+				return fmt.Errorf("recovery: credential_switched journal with mismatched new version")
+			}
 		case RotationStageSessionsRevoked:
-			now := time.Now()
-			_ = s.db.Model(&journal).Updates(map[string]interface{}{
-				"stage":        RotationStageCompleted,
-				"updated_at":   now,
-				"completed_at": now,
-			}).Error
+			if currentVersion == journal.NewVersion {
+				now := time.Now().UTC()
+				_ = s.db.WithContext(ctx).Model(&journal).Updates(map[string]interface{}{
+					"stage":        RotationStageCompleted,
+					"updated_at":   now,
+					"completed_at": now,
+				}).Error
+			} else {
+				return fmt.Errorf("recovery: sessions_revoked journal with mismatched new version")
+			}
+		default:
+			return fmt.Errorf("recovery: journal version mismatch, current=%s old=%s new=%s", currentVersion, journal.OldVersion, journal.NewVersion)
 		}
 	}
 	return nil

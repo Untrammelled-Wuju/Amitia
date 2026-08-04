@@ -38,7 +38,6 @@ import (
 	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
 	processingworkspace "github.com/u-ai/backend/internal/desktoppet/processing/workspace"
 	"github.com/u-ai/backend/internal/desktoppet/quality"
-	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
 	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
 	qualityinput "github.com/u-ai/backend/internal/desktoppet/quality/input"
@@ -46,12 +45,15 @@ import (
 	qualityrecovery "github.com/u-ai/backend/internal/desktoppet/quality/recovery"
 	qualityworker "github.com/u-ai/backend/internal/desktoppet/quality/worker"
 	qualitywriteback "github.com/u-ai/backend/internal/desktoppet/quality/writeback"
+	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	releasebuild "github.com/u-ai/backend/internal/desktoppet/release/build"
+	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	releaserepo "github.com/u-ai/backend/internal/desktoppet/release/repository"
 	releasestorage "github.com/u-ai/backend/internal/desktoppet/release/storage"
 	releaseworker "github.com/u-ai/backend/internal/desktoppet/release/worker"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
+	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
@@ -134,6 +136,7 @@ type AppServices struct {
 	OwnershipGuard        security.OwnershipGuard
 	PathRegistry          *security.PathRootRegistry
 	ImportStagingRepo     security.ImportStagingRepository
+	PackageImporter       *importer.PackageImporter
 	Readiness             *readiness.ReadinessService
 	SafeMode              *readiness.SafeModeController
 	MCPRepository         *mcp.Repository
@@ -566,6 +569,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	desktopPetRuntime := runtime.NewService(runtimeConfig, runtimeCmdStore, runtimeStateStore, runtimeSnapshotBuilder, runtimeSinkHolder)
 
+	runtimeStateService := runtimev2.NewActualStateService(ctx.DB)
+	runtimeOutboxSink := runtime.NewOutboxRuntimeEventSink(
+		runtime.NewV2ActualStateEventOutbox(runtimeStateService.AppendDomainEvent),
+	)
+	runtimeSinkHolder.Set(runtimeOutboxSink)
+
 	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir, installation.WithRuntimeNotifier(desktopPetRuntime.Notifier()))
 
 	editingRepo := editing.NewRepository(ctx.DB)
@@ -604,12 +613,62 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 	_ = pathRegistry.Register(security.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
 	importStagingRepo := security.NewImportStagingRepository(ctx.DB)
 
+	ownershipGuard := security.NewSQLiteOwnershipGuard(ctx.DB)
+
 	safeModeCtrl := readiness.NewSafeModeController()
 	var readinessSvc *readiness.ReadinessService
 	if desktopPetRuntime != nil {
-		if svc, err := readiness.NewFullStartupReadinessService(readiness.StartupReadinessDeps{
-			DB:         ctx.DB,
-			Extension:  extensionRuntime,
+		readinessSvc, err = readiness.NewFullStartupReadinessService(readiness.StartupReadinessDeps{
+			DB:        ctx.DB,
+			Extension: extensionRuntime,
+			DesktopSessionReady: func() error {
+				return nil
+			},
+			OwnershipReady: func() error {
+				if ownershipGuard == nil {
+					return errors.New("ownership guard is nil")
+				}
+				return nil
+			},
+			RuntimeTicketReady: func() error {
+				return nil
+			},
+			RuntimeGatewayReady: func() error {
+				if desktopPetRuntime == nil {
+					return errors.New("runtime service is nil")
+				}
+				return nil
+			},
+			PathGuardReady: func() error {
+				return nil
+			},
+			GenerationWorkerReady: func() error {
+				if desktopPetWorker == nil {
+					return errors.New("generation worker is nil")
+				}
+				return nil
+			},
+			ProcessingWorkerReady: func() error {
+				if processingWorker == nil {
+					return errors.New("processing worker is nil")
+				}
+				return nil
+			},
+			QualityWorkerReady: func() error {
+				if qualityWorker == nil {
+					return errors.New("quality worker is nil")
+				}
+				return nil
+			},
+			InstallationWorkerReady: func() error {
+				if installationService == nil {
+					return errors.New("installation service is nil")
+				}
+				return nil
+			},
+			BehaviorWorkerReady: func() error {
+				return nil
+			},
 			MigrationReady: func() error {
 				return nil
 			},
@@ -619,12 +678,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 				}
 				return nil
 			},
-		}); err == nil {
-			readinessSvc = svc
+		})
+		if err != nil {
+			return nil, fmt.Errorf("initialize readiness service: %w", err)
 		}
-	}
-	if readinessSvc == nil {
-		readinessSvc = readiness.NewStartupReadinessService(ctx.DB, extensionRuntime)
 	}
 
 	leaseManager := releasebuild.NewLeaseManager()
@@ -702,9 +759,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 		Emote:                 emoteSvc,
 		Temporal:              temporalSvc,
 		RelTimeCoordinator:    relTimeCoordinator,
-		OwnershipGuard:        security.NewSQLiteOwnershipGuard(ctx.DB),
+		OwnershipGuard:        ownershipGuard,
 		PathRegistry:          pathRegistry,
 		ImportStagingRepo:     importStagingRepo,
+		PackageImporter:       importer.NewPackageImporter(releaseRepo, releaseStoragePort, nil),
 		Readiness:             readinessSvc,
 		SafeMode:              safeModeCtrl,
 		MCPRepository:         mcpRepository,
@@ -1010,7 +1068,7 @@ func (h *runtimeEventSinkHolder) OnRuntimeEvent(ctx context.Context, event runti
 	sink := h.sink
 	h.mu.Unlock()
 	if sink == nil {
-		return nil
+		return errors.New("runtime event sink is not configured")
 	}
 	return sink.OnRuntimeEvent(ctx, event)
 }

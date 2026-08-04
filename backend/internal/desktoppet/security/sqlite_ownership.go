@@ -232,8 +232,8 @@ func (g *SQLiteOwnershipGuard) RequireActionStream(ctx context.Context, actor *d
 		return nil, ErrForbidden
 	}
 	return &ActionStreamScope{
-		UserID:    result.UserID,
-		StreamID:  streamID,
+		UserID:      result.UserID,
+		StreamID:    streamID,
 		CharacterID: result.CharacterID,
 	}, nil
 }
@@ -404,6 +404,42 @@ func (g *SQLiteOwnershipGuard) RequireInstallation(ctx context.Context, actor *d
 	}, nil
 }
 
+func (g *SQLiteOwnershipGuard) RequireInstallationStrict(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*InstallationScope, error) {
+	if actor == nil {
+		return nil, ErrUnauthorized
+	}
+	if installationID == "" {
+		return nil, ErrNotFound
+	}
+	var result struct {
+		UserID   string `gorm:"column:user_id"`
+		DeviceID string `gorm:"column:device_id"`
+	}
+	if err := g.db.WithContext(ctx).Table("desktop_pet_installations").
+		Select("user_id, device_id").
+		Where("id = ?", installationID).
+		Take(&result).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if result.UserID == "" {
+		return nil, ErrNotFound
+	}
+	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+		return nil, ErrForbidden
+	}
+	if deviceID == "" || result.DeviceID == "" || result.DeviceID != deviceID {
+		return nil, ErrNotFound
+	}
+	return &InstallationScope{
+		UserID:         result.UserID,
+		DeviceID:       result.DeviceID,
+		InstallationID: installationID,
+	}, nil
+}
+
 func (g *SQLiteOwnershipGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*EditSessionScope, error) {
 	if actor == nil {
 		return nil, ErrUnauthorized
@@ -476,12 +512,15 @@ func (g *SQLiteOwnershipGuard) RequireCandidate(ctx context.Context, actor *desk
 		return nil, ErrNotFound
 	}
 	var result struct {
-		UserID string `gorm:"column:owner_user_id"`
-		JobID  string `gorm:"column:job_id"`
+		UserID    string `gorm:"column:owner_user_id"`
+		JobID     string `gorm:"column:job_id"`
+		SessionID string `gorm:"column:session_id"`
 	}
-	if err := g.db.WithContext(ctx).Table("desktop_pet_edit_candidates").
-		Select("owner_user_id, job_id").
-		Where("id = ?", candidateID).
+	if err := g.db.WithContext(ctx).
+		Table("desktop_pet_edit_candidates AS c").
+		Select("c.owner_user_id, c.job_id, j.session_id").
+		Joins("JOIN desktop_pet_regeneration_jobs AS j ON j.id = c.job_id").
+		Where("c.id = ?", candidateID).
 		Take(&result).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
@@ -498,6 +537,7 @@ func (g *SQLiteOwnershipGuard) RequireCandidate(ctx context.Context, actor *desk
 		UserID:      result.UserID,
 		CandidateID: candidateID,
 		JobID:       result.JobID,
+		SessionID:   result.SessionID,
 	}, nil
 }
 

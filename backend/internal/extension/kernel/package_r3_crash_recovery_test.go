@@ -12,23 +12,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newR3RuntimeAt(t *testing.T, dbPath string, extensionRoot string) (*Runtime, *Container) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	container, err := NewContainerBuilder().
+		WithDBPath(dbPath).
+		WithExtensionRoot(extensionRoot).
+		Build(ctx)
+	require.NoError(t, err)
+
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA foreign_keys=ON",
+	} {
+		_, err = container.Store.DB().ExecContext(ctx, pragma)
+		require.NoError(t, err, "execute %s", pragma)
+	}
+
+	runtime, err := NewRuntime(extensionRoot)
+	require.NoError(t, err)
+
+	runtime.SetContainer(container)
+
+	return runtime, container
+}
+
 func newR3Runtime(t *testing.T) (*Runtime, *Container) {
 	t.Helper()
-	ctx := context.Background()
+
 	root := t.TempDir()
-	container, err := NewContainerBuilder().
-		WithDBPath(filepath.Join(root, "kernel.db")).
-		WithExtensionRoot(filepath.Join(root, "extensions")).
-		Build(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { require.NoError(t, container.Close()) })
-	runtime, err := NewRuntime(filepath.Join(root, "extensions"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtime.SetContainer(container)
+
+	runtime, container := newR3RuntimeAt(
+		t,
+		filepath.Join(root, "kernel.db"),
+		filepath.Join(root, "extensions"),
+	)
+
+	t.Cleanup(func() {
+		require.NoError(t, container.Close())
+	})
+
 	return runtime, container
 }
 

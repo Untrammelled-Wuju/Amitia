@@ -3,10 +3,12 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
-	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/quality"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
+	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
@@ -56,7 +59,7 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
+func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error) {
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -66,17 +69,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 	}))
 
-	resolveLocalToken := func() string {
-		if config.AppCfg.Security.LocalToken != "" {
-			return config.AppCfg.Security.LocalToken
-		}
-		if config.AppCfg.Security.LocalTokenFile != "" {
-			data, err := os.ReadFile(config.AppCfg.Security.LocalTokenFile)
-			if err == nil {
-				return strings.TrimSpace(string(data))
-			}
-		}
-		return ""
+	tokenPath := filepath.Join(config.AppCfg.Storage.DataDir, "security", "local-token")
+	localCredentialStore, err := security.NewLocalCredentialStore(tokenPath)
+	if err != nil {
+		return nil, fmt.Errorf("initialize local credential store: %w", err)
 	}
 
 	r.GET("/livez", func(c *gin.Context) {
@@ -102,7 +98,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		c.JSON(httpStatus, gin.H{"code": httpStatus, "msg": string(snapshot.OverallStatus), "data": result})
 	})
 
-
 	public := r.Group("/api/public")
 	{
 		userRepo := user.NewRepository(ctx)
@@ -114,40 +109,34 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		public.POST("/auth/login", userHandler.Login)
 	}
 
-	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir)
+	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)
 	if err != nil {
-		log.Error("failed to init session service", "error", err)
+		return nil, fmt.Errorf("initialize desktop session service: %w", err)
+	}
+
+	if err := sessionSvc.RecoverRotationJournals(context.Background()); err != nil {
+		return nil, fmt.Errorf("recover local token rotation: %w", err)
 	}
 
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 	services.DesktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
 
+	installationRepo := installation.NewRepository(ctx.DB, ctx)
+
 	local := r.Group("/api/local")
 	local.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:           config.AppCfg.Security.Mode,
-		JWTSecret:      config.AppCfg.JWT.Secret,
-		JWTIssuer:      config.AppCfg.JWT.Issuer,
-		JWTAudience:    config.AppCfg.JWT.Audience,
-		LocalToken:     resolveLocalToken(),
-		LocalUserID:    config.AppCfg.Security.LocalUserID,
-		ListenAddress:  config.AppCfg.Server.Host,
-		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+		Mode:             config.AppCfg.Security.Mode,
+		JWTSecret:        config.AppCfg.JWT.Secret,
+		JWTIssuer:        config.AppCfg.JWT.Issuer,
+		JWTAudience:      config.AppCfg.JWT.Audience,
+		LocalCredentials: localCredentialStore,
+		LocalUserID:      config.AppCfg.Security.LocalUserID,
+		ListenAddress:    config.AppCfg.Server.Host,
+		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 	}))
 	{
-		local.POST("/sessions", func(c *gin.Context) {
-			if sessionSvc == nil {
-				c.JSON(500, gin.H{"code": 500, "msg": "session service not available"})
-				return
-			}
-			sessionSvc.CreateSession(c)
-		})
-		local.POST("/token/rotate", func(c *gin.Context) {
-			if sessionSvc == nil {
-				c.JSON(500, gin.H{"code": 500, "msg": "session service not available"})
-				return
-			}
-			sessionSvc.RotateToken(c)
-		})
+		local.POST("/sessions", sessionSvc.CreateSession)
+		local.POST("/token/rotate", sessionSvc.RotateToken)
 		local.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 			actor := security.GetActor(c)
 			if actor == nil || actor.UserID == "" {
@@ -159,7 +148,19 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 				c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
 				return
 			}
-			rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, "", 10*time.Minute)
+			var request struct {
+				RuntimeID string `json:"runtimeId"`
+			}
+			if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.RuntimeID) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId is required"})
+				return
+			}
+			runtimeID := strings.TrimSpace(request.RuntimeID)
+			if err := installationRepo.RequireOwnedDevice(c.Request.Context(), actor.UserID, deviceID); err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
+				return
+			}
+			rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, runtimeID, 10*time.Minute)
 			if err != nil {
 				log.Error("failed to create bootstrap ticket", "error", err)
 				c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
@@ -172,6 +173,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 					"ticketId":   ticket.ID,
 					"ticket":     rawTicket,
 					"deviceId":   ticket.DeviceID,
+					"runtimeId":  ticket.RuntimeID,
 					"expiresAt":  ticket.ExpiresAt,
 					"ttlSeconds": 600,
 				},
@@ -199,19 +201,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 	}
 
 	localAdmin := r.Group("/api/local/admin")
-	localAdmin.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:           config.AppCfg.Security.Mode,
-		JWTSecret:      config.AppCfg.JWT.Secret,
-		JWTIssuer:      config.AppCfg.JWT.Issuer,
-		JWTAudience:    config.AppCfg.JWT.Audience,
-		LocalToken:     resolveLocalToken(),
-		LocalUserID:    config.AppCfg.Security.LocalUserID,
-		ListenAddress:  config.AppCfg.Server.Host,
-		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+	localAdmin.Use(security.LocalAdminAuthenticationMiddleware(security.AuthConfig{
+		Mode:             config.AppCfg.Security.Mode,
+		LocalCredentials: localCredentialStore,
+		LocalUserID:      config.AppCfg.Security.LocalUserID,
+		ListenAddress:    config.AppCfg.Server.Host,
+		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 	}))
 	localAdmin.Use(security.RequirePermission("system.shutdown"))
 	localAdmin.POST("/shutdown", func(c *gin.Context) {
 		actor := security.GetActor(c)
+		if actor == nil || actor.AuthMethod != security.AuthMethodLocalAdminToken || !actor.IsLocalTrusted {
+			c.JSON(403, gin.H{"code": 403, "msg": "local admin credential required"})
+			return
+		}
 		log.Info("system.shutdown.requested", "actor", actor.UserID, "method", actor.AuthMethod)
 		c.JSON(202, gin.H{"code": 202, "msg": "shutting down", "shutdownOperationId": generateShutdownOpID()})
 		go func() {
@@ -225,16 +228,17 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 
 	apiGroup := r.Group("/api")
 	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:           config.AppCfg.Security.Mode,
-		JWTSecret:      config.AppCfg.JWT.Secret,
-		JWTIssuer:      config.AppCfg.JWT.Issuer,
-		JWTAudience:    config.AppCfg.JWT.Audience,
-		LocalToken:     resolveLocalToken(),
-		LocalUserID:    config.AppCfg.Security.LocalUserID,
-		ListenAddress:  config.AppCfg.Server.Host,
-		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
-		SessionService: sessionSvc,
+		Mode:             config.AppCfg.Security.Mode,
+		JWTSecret:        config.AppCfg.JWT.Secret,
+		JWTIssuer:        config.AppCfg.JWT.Issuer,
+		JWTAudience:      config.AppCfg.JWT.Audience,
+		LocalCredentials: localCredentialStore,
+		LocalUserID:      config.AppCfg.Security.LocalUserID,
+		ListenAddress:    config.AppCfg.Server.Host,
+		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+		SessionService:   sessionSvc,
 	}))
+	apiGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
@@ -269,7 +273,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		quality.RegisterQualityRouter(apiGroup, services.QualityService, services.OwnershipGuard)
 		installation.RegisterRoutes(apiGroup, services.InstallationService, services.OwnershipGuard)
 		release.RegisterRoutes(apiGroup, services.NewReleaseService, services.OwnershipGuard)
-	release.RegisterImportStagingRoutes(apiGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard)
+		registerImportStagingRoutes(apiGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
 		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
@@ -297,12 +301,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 
 	maintenance := r.Group("/api/maintenance")
 	maintenance.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:           "maintenance",
-		JWTSecret:      config.AppCfg.JWT.Secret,
-		LocalToken:     resolveLocalToken(),
-		LocalUserID:    config.AppCfg.Security.LocalUserID,
-		ListenAddress:  config.AppCfg.Server.Host,
-		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
+		Mode:             "maintenance",
+		JWTSecret:        config.AppCfg.JWT.Secret,
+		LocalCredentials: localCredentialStore,
+		LocalUserID:      config.AppCfg.Security.LocalUserID,
+		ListenAddress:    config.AppCfg.Server.Host,
+		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 	}))
 	{
 		maintenance.GET("/doctor", func(c *gin.Context) {
@@ -322,7 +326,37 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		})
 	}
 
-	return r
+	return r, nil
+}
+
+type packageImportAdapter struct {
+	imp *importer.PackageImporter
+}
+
+func (a *packageImportAdapter) ImportPackage(ctx context.Context, req map[string]string) (string, string, string, error) {
+	result, err := a.imp.ImportPackage(ctx, &importer.ImportPackageRequest{
+		UserID:          req["userId"],
+		ImportStagingID: req["importStagingId"],
+		SourceFilePath:  req["sourceFilePath"],
+		IdempotencyKey:  req["idempotencyKey"],
+	})
+	if err != nil {
+		return "", "", "", err
+	}
+	return result.PetID, result.ReleaseID, result.OperationID, nil
+}
+
+func registerImportStagingRoutes(r *gin.RouterGroup, reg *security.PathRootRegistry, repo security.ImportStagingRepository, guard security.OwnershipGuard, packageImporter *importer.PackageImporter) {
+	inspector := importer.NewImportInspector(reg, repo)
+	handler := release.NewImportStagingHandler(reg, repo, guard, inspector, &packageImportAdapter{imp: packageImporter})
+	g := r.Group("/import-stagings")
+	{
+		g.POST("/upload", handler.Upload)
+		g.GET("/", handler.List)
+		g.GET("/:stagingId", handler.Inspect)
+		g.POST("/consume", handler.Consume)
+		g.POST("/:stagingId/reject", handler.Reject)
+	}
 }
 
 func generateShutdownOpID() string {

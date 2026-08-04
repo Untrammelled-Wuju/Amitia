@@ -93,11 +93,18 @@ func (w *WorkDirectory) Create() error {
 	return nil
 }
 
-func (w *WorkDirectory) Clean() error {
+func (w *WorkDirectory) Clean(deleter security.SafeTreeDeleter) error {
 	if w.RootPath == "" {
 		return fmt.Errorf("artifact: rootPath is empty")
 	}
-	if err := security.SafeRemoveTree(w.RootPath); err != nil {
+	if deleter == nil {
+		return fmt.Errorf("artifact: deleter is nil")
+	}
+	storageKey := w.ProcessingTaskID + "/processed/work/" + w.ExecutionID + "/" + w.ActionKey + "/" + w.RevisionID
+	if err := deleter.SafeDelete(security.RootGenerationArtifacts, storageKey, security.DeleteExpectation{
+		EntityType: "processing_attempt",
+		EntityID:   w.ExecutionID,
+	}); err != nil {
 		return fmt.Errorf("artifact: clean workdir %s: %w", w.RootPath, err)
 	}
 	return nil

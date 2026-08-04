@@ -71,6 +71,7 @@ type CandidateScope struct {
 	UserID      string
 	CandidateID string
 	JobID       string
+	SessionID   string
 }
 
 type RuntimeCommandScope struct {
@@ -87,8 +88,8 @@ type BehaviorBindingScope struct {
 }
 
 type ActionStreamScope struct {
-	UserID    string
-	StreamID  string
+	UserID      string
+	StreamID    string
 	CharacterID string
 }
 
@@ -107,6 +108,7 @@ type OwnershipGuard interface {
 	RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*QualityScope, error)
 	RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*ReleaseScope, error)
 	RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*InstallationScope, error)
+	RequireInstallationStrict(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*InstallationScope, error)
 	RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*EditSessionScope, error)
 	RequireRegenerationJob(ctx context.Context, actor *desktoppetAuth.ActorContext, jobID string) (*RegenerationJobScope, error)
 	RequireCandidate(ctx context.Context, actor *desktoppetAuth.ActorContext, candidateID string) (*CandidateScope, error)

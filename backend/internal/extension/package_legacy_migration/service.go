@@ -19,14 +19,14 @@ import (
 )
 
 type MigrationService struct {
-	source *SourceRepository
+	source LegacyMigrationSource
 	target KernelMigrationTarget
 
 	ownerID string
 }
 
 func NewMigrationService(
-	source *SourceRepository,
+	source LegacyMigrationSource,
 	target KernelMigrationTarget,
 ) (*MigrationService, error) {
 	if source == nil ||
@@ -38,8 +38,8 @@ func NewMigrationService(
 	}
 
 	return &MigrationService{
-		source:  source,
-		target:  target,
+		source: source,
+		target: target,
 		ownerID: "legacy-migration-" +
 			uuid.NewString(),
 	}, nil
@@ -66,8 +66,6 @@ func hashPreview(
 	sort.Strings(required)
 
 	evidence := struct {
-		SessionID string `json:"sessionId"`
-
 		ArtifactID  string `json:"artifactId"`
 		ExtensionID string `json:"extensionId"`
 		Version     string `json:"version"`
@@ -81,26 +79,15 @@ func hashPreview(
 
 		RequiredConfirmations []string `json:"requiredConfirmations"`
 	}{
-		SessionID:
-			preview.SessionID,
-		ArtifactID:
-			preview.ArtifactID,
-		ExtensionID:
-			preview.ExtensionID,
-		Version:
-			preview.Version,
-		ArchiveHash:
-			preview.ArchiveHash,
-		ManifestHash:
-			preview.ManifestHash,
-		ArtifactHash:
-			preview.ArtifactHash,
-		ContentTreeHash:
-			preview.ContentTreeHash,
-		Installable:
-			preview.Installable,
-		RequiredConfirmations:
-			required,
+		ArtifactID:            preview.ArtifactID,
+		ExtensionID:           preview.ExtensionID,
+		Version:               preview.Version,
+		ArchiveHash:           preview.ArchiveHash,
+		ManifestHash:          preview.ManifestHash,
+		ArtifactHash:          preview.ArtifactHash,
+		ContentTreeHash:       preview.ContentTreeHash,
+		Installable:           preview.Installable,
+		RequiredConfirmations: required,
 	}
 
 	raw, err := json.Marshal(evidence)
@@ -159,8 +146,7 @@ func (s *MigrationService) Detect(
 
 	report.Total = len(candidates)
 
-	for _, candidate :=
-		range candidates {
+	for _, candidate := range candidates {
 		candidate =
 			normalizeCandidate(candidate)
 
@@ -230,6 +216,115 @@ func (s *MigrationService) Detect(
 	return report, nil
 }
 
+func applyLegacyCheckpointUpdate(
+	checkpoint *kernel.LegacyMigrationCheckpoint,
+	update kernel.LegacyMigrationCheckpointUpdate,
+) {
+	checkpoint.State =
+		update.State
+
+	checkpoint.CurrentStep =
+		update.CurrentStep
+
+	if update.PreviewHash != "" {
+		checkpoint.PreviewHash =
+			update.PreviewHash
+	}
+
+	if update.PreviewSessionID != "" {
+		checkpoint.PreviewSessionID =
+			update.PreviewSessionID
+	}
+
+	if update.ArtifactID != "" {
+		checkpoint.ArtifactID =
+			update.ArtifactID
+	}
+
+	if update.OperationID != "" {
+		checkpoint.OperationID =
+			update.OperationID
+	}
+
+	checkpoint.LastError =
+		update.LastError
+}
+
+func (s *MigrationService) updateCheckpoint(
+	ctx context.Context,
+	checkpoint *kernel.LegacyMigrationCheckpoint,
+	update kernel.LegacyMigrationCheckpointUpdate,
+) error {
+	if err :=
+		s.target.Update(
+			ctx,
+			*checkpoint,
+			update,
+		); err != nil {
+		return err
+	}
+
+	applyLegacyCheckpointUpdate(
+		checkpoint,
+		update,
+	)
+
+	return nil
+}
+
+func (s *MigrationService) verifyAndComplete(
+	ctx context.Context,
+	checkpoint *kernel.LegacyMigrationCheckpoint,
+) error {
+	if checkpoint.ArtifactID == "" ||
+		checkpoint.OperationID == "" {
+		return fmt.Errorf(
+			"legacy migration: verification checkpoint identity incomplete",
+		)
+	}
+
+	if checkpoint.State !=
+		kernel.LegacyMigrationStateVerifying {
+		if err :=
+			s.updateCheckpoint(
+				ctx,
+				checkpoint,
+				kernel.LegacyMigrationCheckpointUpdate{
+					State:       kernel.LegacyMigrationStateVerifying,
+					CurrentStep: "verify_kernel_install",
+					ArtifactID:  checkpoint.ArtifactID,
+					OperationID: checkpoint.OperationID,
+				},
+			); err != nil {
+			return err
+		}
+	}
+
+	verification, err :=
+		s.target.Verify(
+			ctx,
+			checkpoint.ExtensionID,
+			checkpoint.ArtifactID,
+			checkpoint.OperationID,
+			checkpoint.SourceHash,
+		)
+	if err != nil {
+		return err
+	}
+
+	if !verification.FinalGatePassed {
+		return fmt.Errorf(
+			"legacy migration: final gate was not passed",
+		)
+	}
+
+	return s.target.Complete(
+		ctx,
+		*checkpoint,
+		verification,
+	)
+}
+
 func (s *MigrationService) migrateSigners(
 	ctx context.Context,
 ) error {
@@ -243,8 +338,7 @@ func (s *MigrationService) migrateSigners(
 		time.Now().UTC().
 			Format(time.RFC3339Nano)
 
-	for _, signer :=
-		range signers {
+	for _, signer := range signers {
 		fingerprint :=
 			strings.TrimSpace(
 				signer.Fingerprint,
@@ -280,25 +374,16 @@ func (s *MigrationService) migrateSigners(
 			s.target.PutSigner(
 				ctx,
 				kernel.PackagePublisherKeyRecord{
-					KeyID:
-						keyID,
-					Fingerprint:
+					KeyID:       keyID,
+					Fingerprint: fingerprint,
+					PublicKey:   []byte{},
+					PublisherID: "legacy:" +
 						fingerprint,
-					PublicKey:
-						[]byte{},
-					PublisherID:
-						"legacy:" +
-							fingerprint,
-					TrustSource:
-						"legacy_fingerprint_only",
-					TrustLevel:
-						"unknown",
-					KeyState:
-						"unknown",
-					CreatedAt:
-						createdAt,
-					UpdatedAt:
-						now,
+					TrustSource: "legacy_fingerprint_only",
+					TrustLevel:  "unknown",
+					KeyState:    "unknown",
+					CreatedAt:   createdAt,
+					UpdatedAt:   now,
 				},
 			)
 		if err != nil {
@@ -332,8 +417,7 @@ func (s *MigrationService) MigrateAll(
 		return err
 	}
 
-	for _, candidate :=
-		range candidates {
+	for _, candidate := range candidates {
 		if err :=
 			s.MigrateOne(
 				ctx,
@@ -352,6 +436,11 @@ func (s *MigrationService) MigrateOne(
 	ctx context.Context,
 	candidate LegacyPackageCandidate,
 ) error {
+	candidate =
+		normalizeCandidate(
+			candidate,
+		)
+
 	if candidate.ExtensionID == "" {
 		return fmt.Errorf(
 			"legacy migration: extension id missing",
@@ -392,6 +481,42 @@ func (s *MigrationService) MigrateOne(
 		}
 	}()
 
+	switch checkpoint.State {
+	case kernel.LegacyMigrationStateCompleted:
+		releaseRequired = false
+		return nil
+
+	case kernel.LegacyMigrationStateManualRequired,
+		kernel.LegacyMigrationStateBlocked:
+		return nil
+
+	case kernel.LegacyMigrationStateVerifying:
+		if err :=
+			s.verifyAndComplete(
+				ctx,
+				&checkpoint,
+			); err != nil {
+			return err
+		}
+
+		releaseRequired = false
+		return nil
+
+	case kernel.LegacyMigrationStateMigrating:
+		if checkpoint.OperationID != "" {
+			if err :=
+				s.verifyAndComplete(
+					ctx,
+					&checkpoint,
+				); err != nil {
+				return err
+			}
+
+			releaseRequired = false
+			return nil
+		}
+	}
+
 	exists, err :=
 		s.target.ExtensionExists(
 			ctx,
@@ -402,54 +527,31 @@ func (s *MigrationService) MigrateOne(
 	}
 
 	if exists {
-		artifactID, err :=
-			s.target.InstallationArtifactID(
-				ctx,
-				candidate.ExtensionID,
-			)
-		if err != nil {
-			return err
-		}
+		if checkpoint.OperationID == "" {
+			artifactID, artifactErr :=
+				s.target.InstallationArtifactID(
+					ctx,
+					candidate.ExtensionID,
+				)
+			if artifactErr != nil {
+				return artifactErr
+			}
 
-		if err :=
-			s.target.Update(
+			return s.updateCheckpoint(
 				ctx,
-				checkpoint,
+				&checkpoint,
 				kernel.LegacyMigrationCheckpointUpdate{
-					State:
-						kernel.LegacyMigrationStateVerifying,
-					CurrentStep:
-						"verify_existing_installation",
-					ArtifactID:
-						artifactID,
+					State:       kernel.LegacyMigrationStateManualRequired,
+					CurrentStep: "existing_installation_without_migration_operation",
+					ArtifactID:  artifactID,
+					LastError:   "existing installation has no kernel migration operation and cannot prove final gate",
 				},
-			); err != nil {
-			return err
-		}
-
-		verification, err :=
-			s.target.Verify(
-				ctx,
-				candidate.ExtensionID,
-				artifactID,
-				"",
-				sourceHash,
 			)
-		if err != nil {
-			return err
 		}
 
-		if err :=
-			s.target.Complete(
-				ctx,
-				checkpoint,
-				verification,
-			); err != nil {
-			return err
-		}
-
-		releaseRequired = false
-		return nil
+		return fmt.Errorf(
+			"legacy migration: existing installation reached unexpected checkpoint state",
+		)
 	}
 
 	if len(candidate.PackageBlob) == 0 ||
@@ -462,16 +564,13 @@ func (s *MigrationService) MigrateOne(
 				"legacy package owner is unavailable"
 		}
 
-		return s.target.Update(
+		return s.updateCheckpoint(
 			ctx,
-			checkpoint,
+			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStateManualRequired,
-				CurrentStep:
-					"manual_required",
-				LastError:
-					reason,
+				State:       kernel.LegacyMigrationStateManualRequired,
+				CurrentStep: "manual_required",
+				LastError:   reason,
 			},
 		)
 	}
@@ -480,55 +579,73 @@ func (s *MigrationService) MigrateOne(
 		s.target.Preview(
 			ctx,
 			kernel.PackagePreviewRequest{
-				UserID:
-					candidate.UserID,
-				ScopeType:
-					candidate.ScopeType,
-				ScopeID:
-					candidate.ScopeID,
-				FileName:
-					candidate.ExtensionID +
-						"-" +
-						candidate.Version +
-						".amitiax",
+				UserID:    candidate.UserID,
+				ScopeType: candidate.ScopeType,
+				ScopeID:   candidate.ScopeID,
+				FileName: candidate.ExtensionID +
+					"-" +
+					candidate.Version +
+					".amitiax",
 			},
 			bytes.NewReader(
 				candidate.PackageBlob,
 			),
 		)
 	if err != nil {
-		_ = s.target.Update(
+		_ = s.updateCheckpoint(
 			context.Background(),
-			checkpoint,
+			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStateBlocked,
-				CurrentStep:
-					"preview_failed",
-				LastError:
-					err.Error(),
+				State:       kernel.LegacyMigrationStateBlocked,
+				CurrentStep: "preview_failed",
+				LastError:   err.Error(),
 			},
 		)
 
 		return err
 	}
 
+	if preview.ExtensionID !=
+		candidate.ExtensionID {
+		return s.updateCheckpoint(
+			ctx,
+			&checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:       kernel.LegacyMigrationStateBlocked,
+				CurrentStep: "preview_identity_mismatch",
+				ArtifactID:  preview.ArtifactID,
+				LastError:   "preview extension id does not match legacy candidate",
+			},
+		)
+	}
+
 	previewHash :=
 		hashPreview(preview)
 
-	if err :=
-		s.target.Update(
+	if checkpoint.PreviewHash != "" &&
+		checkpoint.PreviewHash !=
+			previewHash {
+		return s.updateCheckpoint(
 			ctx,
-			checkpoint,
+			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStatePreviewed,
-				CurrentStep:
-					"previewed",
-				PreviewHash:
-					previewHash,
-				ArtifactID:
-					preview.ArtifactID,
+				State:       kernel.LegacyMigrationStateBlocked,
+				CurrentStep: "preview_hash_changed",
+				LastError:   "preview evidence changed while resuming migration",
+			},
+		)
+	}
+
+	if err :=
+		s.updateCheckpoint(
+			ctx,
+			&checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:            kernel.LegacyMigrationStatePreviewed,
+				CurrentStep:      "previewed",
+				PreviewHash:      previewHash,
+				PreviewSessionID: preview.SessionID,
+				ArtifactID:       preview.ArtifactID,
 			},
 		); err != nil {
 		return err
@@ -538,57 +655,30 @@ func (s *MigrationService) MigrateOne(
 		len(
 			preview.RequiredConfirmations,
 		) > 0 {
-		return s.target.Update(
+		return s.updateCheckpoint(
 			ctx,
-			checkpoint,
+			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStateManualRequired,
-				CurrentStep:
-					"manual_confirmation_required",
-				PreviewHash:
-					previewHash,
-				ArtifactID:
-					preview.ArtifactID,
-				LastError:
-					"legacy package requires explicit user confirmation",
-			},
-		)
-	}
-
-	if preview.ExtensionID !=
-		candidate.ExtensionID {
-		return s.target.Update(
-			ctx,
-			checkpoint,
-			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStateBlocked,
-				CurrentStep:
-					"preview_identity_mismatch",
-				PreviewHash:
-					previewHash,
-				ArtifactID:
-					preview.ArtifactID,
-				LastError:
-					"preview extension id does not match legacy candidate",
+				State:            kernel.LegacyMigrationStateManualRequired,
+				CurrentStep:      "manual_confirmation_required",
+				PreviewHash:      previewHash,
+				PreviewSessionID: preview.SessionID,
+				ArtifactID:       preview.ArtifactID,
+				LastError:        "legacy package requires explicit user confirmation",
 			},
 		)
 	}
 
 	if err :=
-		s.target.Update(
+		s.updateCheckpoint(
 			ctx,
-			checkpoint,
+			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStateMigrating,
-				CurrentStep:
-					"kernel_install",
-				PreviewHash:
-					previewHash,
-				ArtifactID:
-					preview.ArtifactID,
+				State:            kernel.LegacyMigrationStateMigrating,
+				CurrentStep:      "kernel_install",
+				PreviewHash:      previewHash,
+				PreviewSessionID: preview.SessionID,
+				ArtifactID:       preview.ArtifactID,
 			},
 		); err != nil {
 		return err
@@ -598,36 +688,26 @@ func (s *MigrationService) MigrateOne(
 		s.target.Install(
 			ctx,
 			kernel.PackageInstallRequest{
-				SessionID:
-					preview.SessionID,
-				UserID:
-					candidate.UserID,
-				ScopeType:
-					candidate.ScopeType,
-				ScopeID:
-					candidate.ScopeID,
-				ExpectedExtensionID:
-					candidate.ExtensionID,
-				IdempotencyKey:
-					"legacy-migration:" +
-						sourceHash,
+				SessionID:           preview.SessionID,
+				UserID:              candidate.UserID,
+				ScopeType:           candidate.ScopeType,
+				ScopeID:             candidate.ScopeID,
+				ExpectedExtensionID: candidate.ExtensionID,
+				IdempotencyKey: "legacy-migration:" +
+					sourceHash,
 			},
 		)
 	if err != nil {
-		_ = s.target.Update(
+		_ = s.updateCheckpoint(
 			context.Background(),
-			checkpoint,
+			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStateBlocked,
-				CurrentStep:
-					"kernel_install_failed",
-				PreviewHash:
-					previewHash,
-				ArtifactID:
-					preview.ArtifactID,
-				LastError:
-					err.Error(),
+				State:            kernel.LegacyMigrationStateBlocked,
+				CurrentStep:      "kernel_install_failed",
+				PreviewHash:      previewHash,
+				PreviewSessionID: preview.SessionID,
+				ArtifactID:       preview.ArtifactID,
+				LastError:        err.Error(),
 			},
 		)
 
@@ -641,43 +721,32 @@ func (s *MigrationService) MigrateOne(
 		)
 	}
 
+	if installResult.OperationID == "" {
+		return fmt.Errorf(
+			"legacy migration: kernel install operation id missing",
+		)
+	}
+
 	if err :=
-		s.target.Update(
+		s.updateCheckpoint(
 			ctx,
-			checkpoint,
+			&checkpoint,
 			kernel.LegacyMigrationCheckpointUpdate{
-				State:
-					kernel.LegacyMigrationStateVerifying,
-				CurrentStep:
-					"verify_kernel_install",
-				PreviewHash:
-					previewHash,
-				ArtifactID:
-					preview.ArtifactID,
-				OperationID:
-					installResult.OperationID,
+				State:            kernel.LegacyMigrationStateVerifying,
+				CurrentStep:      "verify_kernel_install",
+				PreviewHash:      previewHash,
+				PreviewSessionID: preview.SessionID,
+				ArtifactID:       preview.ArtifactID,
+				OperationID:      installResult.OperationID,
 			},
 		); err != nil {
 		return err
 	}
 
-	verification, err :=
-		s.target.Verify(
-			ctx,
-			candidate.ExtensionID,
-			preview.ArtifactID,
-			installResult.OperationID,
-			sourceHash,
-		)
-	if err != nil {
-		return err
-	}
-
 	if err :=
-		s.target.Complete(
+		s.verifyAndComplete(
 			ctx,
-			checkpoint,
-			verification,
+			&checkpoint,
 		); err != nil {
 		return err
 	}

@@ -800,10 +800,10 @@ func TestFinalGateUpdateRequirementHashMismatchFails(t *testing.T) {
 		TargetGeneration: "gen-2",
 		OperationType:    "update", Status: "completed",
 		CurrentStep: "completed", StartedAt: now, UpdatedAt: now,
-		ArtifactID:        "art-reqhash",
+		ArtifactID:              "art-reqhash",
 		SnapshotRequirementHash: "sha256:deadbeef",
-		ConfirmationClaimsJSON: fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"art-reqhash","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"sha256:deadbeef","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, secHash, time.Now().Unix(), time.Now().Add(time.Hour).Unix()),
-		FencingToken: 1,
+		ConfirmationClaimsJSON:  fmt.Sprintf(`{"schemaVersion":1,"operationType":"update","extensionId":%q,"artifactId":"art-reqhash","previewHash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","securityPolicyHash":"%s","policyVersion":"2026-07-30-v1","snapshotRequirementHash":"sha256:deadbeef","userId":"user-1","scopeType":"global","scopeId":"","confirmedItems":["confirm.update"],"confirmations":{"confirm.update":true},"issuedAt":%d,"expiresAt":%d,"nonce":"test-nonce"}`, extensionID, secHash, time.Now().Unix(), time.Now().Add(time.Hour).Unix()),
+		FencingToken:            1,
 	}
 	if err := container.PackageRepository.CreateOperation(ctx, op); err != nil {
 		t.Fatal(err)
@@ -1479,11 +1479,23 @@ func TestComputeRollbackSnapshotRequirementHashDistinguishesEachField(t *testing
 		}
 	}
 	flipBool("ConfigChanged", func(in *RollbackSnapshotRequirementInput) { in.ConfigAfterHash = "sha256:diff" })
-	flipBool("ResourcesChanged", func(in *RollbackSnapshotRequirementInput) { in.ResourceBeforeTreeHash = "sha256:rb"; in.ResourceAfterTreeHash = "sha256:ra" })
-	flipBool("UserDataChanged", func(in *RollbackSnapshotRequirementInput) { in.UserDataBeforeHash = "sha256:ua"; in.UserDataAfterHash = "sha256:ub" })
-	flipBool("MigrationPlanPresent", func(in *RollbackSnapshotRequirementInput) { in.MigrationPlan = &migration.ReversiblePreflight{ExtensionID: "ext"} })
-	flipBool("MigrationDefinitionPresent", func(in *RollbackSnapshotRequirementInput) { in.MigrationDefinitions = []migration.MigrationDefinition{{MigrationID: "m1"}} })
-	flipBool("MigrationOperationPresent", func(in *RollbackSnapshotRequirementInput) { in.MigrationOperations = []migration.MigrationOperation{{OperationID: "op1"}} })
+	flipBool("ResourcesChanged", func(in *RollbackSnapshotRequirementInput) {
+		in.ResourceBeforeTreeHash = "sha256:rb"
+		in.ResourceAfterTreeHash = "sha256:ra"
+	})
+	flipBool("UserDataChanged", func(in *RollbackSnapshotRequirementInput) {
+		in.UserDataBeforeHash = "sha256:ua"
+		in.UserDataAfterHash = "sha256:ub"
+	})
+	flipBool("MigrationPlanPresent", func(in *RollbackSnapshotRequirementInput) {
+		in.MigrationPlan = &migration.ReversiblePreflight{ExtensionID: "ext"}
+	})
+	flipBool("MigrationDefinitionPresent", func(in *RollbackSnapshotRequirementInput) {
+		in.MigrationDefinitions = []migration.MigrationDefinition{{MigrationID: "m1"}}
+	})
+	flipBool("MigrationOperationPresent", func(in *RollbackSnapshotRequirementInput) {
+		in.MigrationOperations = []migration.MigrationOperation{{OperationID: "op1"}}
+	})
 	flipBool("ManifestNoDataChange", func(in *RollbackSnapshotRequirementInput) { in.ManifestNoDataChange = false })
 	flipBool("ResourceSetDiffAdded", func(in *RollbackSnapshotRequirementInput) { in.ResourceSetDiff = ResourceSetDiff{Added: []string{"x"}} })
 }
@@ -1553,9 +1565,9 @@ func TestComputeRollbackSnapshotRequirementEmptyTreeHashesDoNotChange(t *testing
 
 func TestComputeRollbackSnapshotRequirementConfigEqualAfterStillMissingSource(t *testing.T) {
 	input := RollbackSnapshotRequirementInput{
-		ManifestNoDataChange: true,
-		ConfigBeforeHash:     "sha256:x",
-		ConfigAfterHash:      "sha256:x",
+		ManifestNoDataChange:   true,
+		ConfigBeforeHash:       "sha256:x",
+		ConfigAfterHash:        "sha256:x",
 		ResourceBeforeTreeHash: "sha256:only-before",
 	}
 	req := ComputeRollbackSnapshotRequirement(input)
@@ -1623,7 +1635,7 @@ func TestFinalGateUserDataRestoreMismatchBlocksRollback(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "fgext", operationID, string(userStateJSON)); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, operationID); err != nil {
 		t.Fatalf("baseline verify should pass: %v", err)
 	}
 
@@ -1633,7 +1645,7 @@ func TestFinalGateUserDataRestoreMismatchBlocksRollback(t *testing.T) {
 		t.Fatalf("tamper applied_count: %v", err)
 	}
 
-	err = store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON))
+	err = store.VerifyUserDataRestore(ctx, operationID)
 	if err == nil {
 		t.Fatal("expected VerifyUserDataRestore to fail after journal tampering, got nil")
 	}
@@ -1686,7 +1698,7 @@ func TestFinalGateUserDataRestoreAggregateMismatchBlocksRollback(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, "agg", operationID, string(userStateJSON)); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if err := store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON)); err != nil {
+	if err := store.VerifyUserDataRestore(ctx, operationID); err != nil {
 		t.Fatalf("baseline verify should pass: %v", err)
 	}
 
@@ -1697,7 +1709,7 @@ func TestFinalGateUserDataRestoreAggregateMismatchBlocksRollback(t *testing.T) {
 		t.Fatalf("tamper aggregate_hash: %v", err)
 	}
 
-	err = store.VerifyUserDataRestore(ctx, operationID, string(userStateJSON))
+	err = store.VerifyUserDataRestore(ctx, operationID)
 	if err == nil {
 		t.Fatal("expected VerifyUserDataRestore to fail after aggregate_hash tampering, got nil")
 	}

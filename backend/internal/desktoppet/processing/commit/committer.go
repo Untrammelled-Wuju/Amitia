@@ -711,7 +711,7 @@ func validatePipelineResult(result *application.ProcessActionResult) error {
 }
 
 func cleanupStaging(stagingDir string) {
-	_ = security.SafeRemoveTree(stagingDir)
+	_ = security.RemoveDirNoSymlinks(stagingDir)
 }
 
 func copyFileVerified(src, dst string) error {

@@ -313,16 +313,20 @@ func NewStartupReadinessService(db *gorm.DB, ext *extension.Runtime) *ReadinessS
 }
 
 type StartupReadinessDeps struct {
-	DB                  *gorm.DB
-	Extension           *extension.Runtime
-	DesktopSessionReady func() error
-	OwnershipReady      func() error
-	RuntimeTicketReady  func() error
-	RuntimeGatewayReady func() error
-	PathGuardReady      func() error
-	WorkerRegistry      *WorkerRegistry
-	MigrationReady      func() error
-	LegacyChainReady    func() error
+	DB                      *gorm.DB
+	Extension               *extension.Runtime
+	DesktopSessionReady     func() error
+	OwnershipReady          func() error
+	RuntimeTicketReady      func() error
+	RuntimeGatewayReady     func() error
+	PathGuardReady          func() error
+	GenerationWorkerReady   func() error
+	ProcessingWorkerReady   func() error
+	QualityWorkerReady      func() error
+	InstallationWorkerReady func() error
+	BehaviorWorkerReady     func() error
+	MigrationReady          func() error
+	LegacyChainReady        func() error
 }
 
 func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessService, error) {
@@ -360,6 +364,21 @@ func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessServic
 		return nil, err
 	}
 	if err := register("path_guard", true, wrapReadyFunc(deps.PathGuardReady, "path_guard")); err != nil {
+		return nil, err
+	}
+	if err := register("generation_worker", true, wrapReadyFunc(deps.GenerationWorkerReady, "generation_worker")); err != nil {
+		return nil, err
+	}
+	if err := register("processing_worker", true, wrapReadyFunc(deps.ProcessingWorkerReady, "processing_worker")); err != nil {
+		return nil, err
+	}
+	if err := register("quality_worker", true, wrapReadyFunc(deps.QualityWorkerReady, "quality_worker")); err != nil {
+		return nil, err
+	}
+	if err := register("installation_worker", true, wrapReadyFunc(deps.InstallationWorkerReady, "installation_worker")); err != nil {
+		return nil, err
+	}
+	if err := register("behavior_worker", true, wrapReadyFunc(deps.BehaviorWorkerReady, "behavior_worker")); err != nil {
 		return nil, err
 	}
 	if err := register("migration_state", true, wrapReadyFunc(deps.MigrationReady, "migration_state")); err != nil {

@@ -1864,6 +1864,29 @@ var schemaMigrations = []string{
 		artifact_id TEXT NOT NULL DEFAULT '',
 		updated_at TEXT NOT NULL
 	)`,
+	`CREATE TABLE IF NOT EXISTS extension_package_legacy_migration_checkpoints (
+		migration_id TEXT PRIMARY KEY,
+		extension_id TEXT NOT NULL UNIQUE,
+		source_hash TEXT NOT NULL,
+		preview_hash TEXT NOT NULL DEFAULT '',
+		preview_session_id TEXT NOT NULL DEFAULT '',
+		artifact_id TEXT NOT NULL DEFAULT '',
+		operation_id TEXT NOT NULL DEFAULT '',
+		state TEXT NOT NULL,
+		current_step TEXT NOT NULL,
+		lease_owner TEXT NOT NULL DEFAULT '',
+		fencing_token INTEGER NOT NULL DEFAULT 0,
+		lease_expires_at TEXT NOT NULL DEFAULT '',
+		verification_hash TEXT NOT NULL DEFAULT '',
+		last_error TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		completed_at TEXT NOT NULL DEFAULT ''
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_legacy_checkpoint_state
+		ON extension_package_legacy_migration_checkpoints(state, updated_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_legacy_checkpoint_lease
+		ON extension_package_legacy_migration_checkpoints(lease_expires_at, lease_owner)`,
 	`CREATE TABLE IF NOT EXISTS extension_package_exports (
 		export_id TEXT PRIMARY KEY,
 		user_id TEXT NOT NULL,
@@ -2037,7 +2060,7 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_user_data_restore_journal_op ON extension_package_user_data_restore_journal(operation_id)`,
 	`CREATE TABLE IF NOT EXISTS extension_package_confirmation_nonces (
 		nonce TEXT PRIMARY KEY,
-		operation_id TEXT NOT NULL,
+		operation_id TEXT NOT NULL UNIQUE,
 		operation_type TEXT NOT NULL,
 		extension_id TEXT NOT NULL,
 		user_id TEXT NOT NULL,
@@ -2047,6 +2070,7 @@ var schemaMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_op ON extension_package_confirmation_nonces(operation_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_exp ON extension_package_confirmation_nonces(expires_at)`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_op_unique ON extension_package_confirmation_nonces(operation_id)`,
 }
 
 type dbExecutor interface {
@@ -2268,6 +2292,9 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_package_operations", "confirmation_claims_json", "TEXT NOT NULL DEFAULT '{}'"},
 	{"extension_package_rollback_points", "snapshot_requirement_hash", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_package_rollback_points", "snapshot_requirement_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_package_rollback_points", "source_version_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "source_generation_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_rollback_points", "snapshot_id", "TEXT NOT NULL DEFAULT ''"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {

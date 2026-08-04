@@ -92,6 +92,7 @@ var (
 	ErrPackageSnapshotExemptionInvalid             = errors.New("kernel: snapshot exemption invalid")
 	ErrPackageSnapshotEvidenceMissing              = errors.New("kernel: snapshot evidence missing")
 	ErrPackageFinalGateEvidenceMissing             = errors.New("kernel: final gate evidence missing")
+	ErrPackageFinalGateEvidenceInvalid             = errors.New("kernel: final gate evidence invalid")
 	ErrPackageConfirmationClaimsInvalid            = errors.New("kernel: confirmation claims invalid")
 	ErrPackageConfirmationOperationMismatch        = errors.New("kernel: confirmation token operation type mismatch")
 	ErrPackageRollbackNotConfirmed                 = errors.New("kernel: rollback requires confirmation token")
@@ -101,6 +102,7 @@ var (
 	ErrPackageArtifactReferenceMissing             = errors.New("kernel: artifact reference missing")
 	ErrPackageArtifactReferenceMismatch            = errors.New("kernel: artifact reference mismatch")
 	ErrPackageRecoveryExpectedVersionNotFound      = errors.New("kernel: expected version record not found during recovery")
+	ErrPackageExportRetentionUnsupported           = errors.New("kernel: export retention unsupported")
 )
 
 const (
@@ -188,8 +190,8 @@ const (
 	PackageErrCodeResourceSnapshotHashMismatch         = "PACKAGE_RESOURCE_SNAPSHOT_HASH_MISMATCH"
 	PackageErrCodeResourceSnapshotContentMissing       = "PACKAGE_RESOURCE_SNAPSHOT_CONTENT_MISSING"
 	PackageErrCodeResourceRestoreIncomplete            = "PACKAGE_RESOURCE_RESTORE_INCOMPLETE"
-	PackageErrCodeResourceRestorePathRace               = "PACKAGE_RESOURCE_RESTORE_PATH_RACE"
-	PackageErrCodeResourceRestoreReparsePointForbidden  = "PACKAGE_RESOURCE_RESTORE_REPARSE_POINT_FORBIDDEN"
+	PackageErrCodeResourceRestorePathRace              = "PACKAGE_RESOURCE_RESTORE_PATH_RACE"
+	PackageErrCodeResourceRestoreReparsePointForbidden = "PACKAGE_RESOURCE_RESTORE_REPARSE_POINT_FORBIDDEN"
 	PackageErrCodeResourceRestoreTargetChanged         = "PACKAGE_RESOURCE_RESTORE_TARGET_CHANGED"
 	PackageErrCodeSnapshotSchemaUnsupported            = "PACKAGE_SNAPSHOT_SCHEMA_UNSUPPORTED"
 	PackageErrCodeSnapshotIntegrityFailed              = "PACKAGE_SNAPSHOT_INTEGRITY_FAILED"
@@ -201,6 +203,7 @@ const (
 	PackageErrCodeArtifactEvidenceInvalid              = "PACKAGE_ARTIFACT_EVIDENCE_INVALID"
 	PackageErrCodeArtifactReferenceMissing             = "PACKAGE_ARTIFACT_REFERENCE_MISSING"
 	PackageErrCodeArtifactReferenceMismatch            = "PACKAGE_ARTIFACT_REFERENCE_MISMATCH"
+	PackageErrCodeExportRetentionUnsupported           = "PACKAGE_EXPORT_RETENTION_UNSUPPORTED"
 )
 
 type PackageError struct {
@@ -331,8 +334,8 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeResourceSnapshotHashMismatch:         409,
 	PackageErrCodeResourceSnapshotContentMissing:       409,
 	PackageErrCodeResourceRestoreIncomplete:            409,
-	PackageErrCodeResourceRestorePathRace:               409,
-	PackageErrCodeResourceRestoreReparsePointForbidden:  400,
+	PackageErrCodeResourceRestorePathRace:              409,
+	PackageErrCodeResourceRestoreReparsePointForbidden: 400,
 	PackageErrCodeResourceRestoreTargetChanged:         409,
 	PackageErrCodeSnapshotSchemaUnsupported:            422,
 	PackageErrCodeSnapshotIntegrityFailed:              409,
@@ -344,6 +347,7 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeArtifactEvidenceInvalid:              409,
 	PackageErrCodeArtifactReferenceMissing:             409,
 	PackageErrCodeArtifactReferenceMismatch:            409,
+	PackageErrCodeExportRetentionUnsupported:           422,
 }
 
 func PackageErrorHTTPStatus(code string) int {

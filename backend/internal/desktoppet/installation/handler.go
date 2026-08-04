@@ -4,6 +4,7 @@ package installation
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/desktoppet/security"
@@ -19,6 +20,15 @@ type Handler struct {
 
 func NewHandler(svc Service, guard security.OwnershipGuard) *Handler {
 	return &Handler{service: svc, ownershipGuard: guard}
+}
+
+func requireDeviceID(c *gin.Context) (string, bool) {
+	deviceID := strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
+	if deviceID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少设备ID", gin.H{"errorCode": "DEVICE_ID_REQUIRED"})
+		return "", false
+	}
+	return deviceID, true
 }
 
 type installPackagePayload struct {
@@ -90,7 +100,11 @@ func (h *Handler) GetInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
@@ -113,7 +127,11 @@ func (h *Handler) EnableInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
@@ -135,7 +153,11 @@ func (h *Handler) DisableInstallation(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
@@ -157,7 +179,11 @@ func (h *Handler) UpdateDefaultAction(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
@@ -193,7 +219,11 @@ func (h *Handler) UpdateRuntimeSettings(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
@@ -216,7 +246,11 @@ func (h *Handler) Recenter(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
@@ -243,7 +277,11 @@ func (h *Handler) PlayAction(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
@@ -265,7 +303,11 @@ func (h *Handler) Uninstall(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireInstallation(c.Request.Context(), actor, "", installationID); err != nil {
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
 		writeInstallationOwnershipError(c, err)
 		return
 	}

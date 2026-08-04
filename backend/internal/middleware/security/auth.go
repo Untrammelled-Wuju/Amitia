@@ -20,15 +20,16 @@ import (
 )
 
 type AuthConfig struct {
-	Mode           string
-	JWTSecret      string
-	JWTIssuer      string
-	JWTAudience    string
-	LocalToken     string
-	LocalUserID    string
-	ListenAddress  string
-	AllowedOrigins []string
-	SessionService *DesktopSessionService
+	Mode                     string
+	JWTSecret                string
+	JWTIssuer                string
+	JWTAudience              string
+	LocalCredentials         *LocalCredentialStore
+	LocalUserID              string
+	ListenAddress            string
+	AllowedOrigins           []string
+	SessionService           *DesktopSessionService
+	DesktopInstanceValidator func(string) bool
 }
 
 type JWTClaims struct {
@@ -39,9 +40,10 @@ type JWTClaims struct {
 }
 
 const (
-	AuthMethodJWT           = "jwt"
-	AuthMethodLocalToken    = "local_token"
-	AuthMethodDesktopSession = "desktop_session"
+	AuthMethodJWT             = "jwt"
+	AuthMethodLocalToken      = "local_token"
+	AuthMethodDesktopSession  = "desktop_session"
+	AuthMethodLocalAdminToken = "local_admin_token"
 )
 
 var maintenanceAllowedPaths = map[string]bool{
@@ -112,6 +114,46 @@ func AuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 	}
 }
 
+func LocalAdminAuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if cfg.Mode != "local_single_user" {
+			util.ErrorResponse(c, response.Unauthorized, "本地管理接口仅允许本地模式", nil)
+			c.Abort()
+			return
+		}
+
+		if !isLoopback(c.Request.RemoteAddr) || !isLoopback(cfg.ListenAddress) {
+			util.ErrorResponse(c, response.Unauthorized, "本地管理接口仅允许回环访问", nil)
+			c.Abort()
+			return
+		}
+
+		if err := validateOrigin(c, cfg.AllowedOrigins); err != nil {
+			util.ErrorResponse(c, response.Unauthorized, "来源不允许", nil)
+			c.Abort()
+			return
+		}
+
+		instanceID := strings.TrimSpace(c.GetHeader("X-Amitia-Desktop-Instance"))
+		if instanceID == "" || cfg.DesktopInstanceValidator == nil || !cfg.DesktopInstanceValidator(instanceID) {
+			util.ErrorResponse(c, response.Unauthorized, "桌面实例无效", nil)
+			c.Abort()
+			return
+		}
+
+		token := strings.TrimSpace(c.GetHeader("X-Amitia-Local-Token"))
+		if token == "" || cfg.LocalCredentials == nil || !cfg.LocalCredentials.Validate(token) {
+			util.ErrorResponse(c, response.Unauthorized, "本地管理凭据无效", nil)
+			c.Abort()
+			return
+		}
+
+		actor := buildAdminActor(c, AuthMethodLocalAdminToken)
+		actor.IsLocalTrusted = true
+		applyActorToContext(c, actor)
+	}
+}
+
 func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 	tokenStr := extractBearerToken(c)
 	if tokenStr == "" {
@@ -165,7 +207,7 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 		}
 	}
 
-	if token == "" || !secureEqual(token, cfg.LocalToken) {
+	if token == "" || cfg.LocalCredentials == nil || !cfg.LocalCredentials.Validate(token) {
 		util.ErrorResponse(c, response.Unauthorized, "本地令牌无效", nil)
 		c.Abort()
 		return
@@ -190,7 +232,7 @@ func handleMaintenanceAuth(c *gin.Context, cfg AuthConfig) {
 	}
 
 	token := c.GetHeader("X-Amitia-Local-Token")
-	if token != "" && token == cfg.LocalToken {
+	if token != "" && cfg.LocalCredentials != nil && cfg.LocalCredentials.Validate(token) {
 		actor := buildAdminActor(c, AuthMethodLocalToken)
 		applyActorToContext(c, actor)
 		return

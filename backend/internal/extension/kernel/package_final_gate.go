@@ -165,13 +165,10 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 			claims, parseErr := parseAndValidateOperationConfirmationClaims(operation, packagePolicyVersion)
 			if parseErr != nil {
 				checkClaims.Detail = fmt.Sprintf("claims validation failed: %v", parseErr)
+			} else if bindingErr := r.verifyPackageClaimsBinding(ctx, operation, claims); bindingErr != nil {
+				checkClaims.Detail = fmt.Sprintf("claims binding verification failed: %v", bindingErr)
 			} else {
-				claimsRecomputeErr := recomputeAndVerifyRequiredConfirmations(claims, operation)
-				if claimsRecomputeErr != nil {
-					checkClaims.Detail = fmt.Sprintf("required confirmations incomplete: %v", claimsRecomputeErr)
-				} else {
-					checkClaims.Passed = true
-				}
+				checkClaims.Passed = true
 			}
 		}
 	}
@@ -691,8 +688,8 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 					checkSnapshot.Detail = "claims unavailable and no rollback point found (fail-closed)"
 				}
 			} else {
-				requirement := r.computeRollBackSnapshotRequirementFromClaims(ctx, operation, claims)
-				decision.RequirementHash = requirement.RequirementHash
+				requirement := r.computeFinalGateSnapshotRequirement(ctx, operation, claims)
+				decision.RequirementHash = requirement.Hash
 				rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
 				snapshotPresent = rpErr == nil
 				decision.SnapshotPresent = snapshotPresent
@@ -727,10 +724,10 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 					}
 				case !requirement.Required && !snapshotPresent:
 					decision.Required = false
-					if isRollbackSnapshotExempt(requirement, claims) {
+					if isFinalGateSnapshotExempt(requirement, claims, findCheckPassed(result.Checks, "claims_verified")) {
 						decision.ExemptVerified = true
 						checkSnapshot.Passed = true
-						checkSnapshot.Detail = "snapshot exemption verified: no data change, requirement hash and policy hash consistent"
+						checkSnapshot.Detail = "snapshot exemption verified: no data change with complete evidence and consistent claims"
 					} else {
 						decision.Reasons = append(decision.Reasons, "snapshot exemption verification failed: requirement/policy hash mismatch or missing claims")
 						checkSnapshot.Detail = "snapshot not present and exemption verification failed"
@@ -828,7 +825,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 			if restoreOperationID == "" {
 				restoreOperationID = "restore-" + rpUd.RollbackPointID
 			}
-			if verifyUdErr := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID, rpUd.UserDataMigrationStateJSON); verifyUdErr != nil {
+			if verifyUdErr := r.container.UserDataSnapshotStore.VerifyUserDataRestore(ctx, restoreOperationID); verifyUdErr != nil {
 				checkUserDataRestore.Detail = fmt.Sprintf("user data restore verification failed: %v", verifyUdErr)
 			} else {
 				checkUserDataRestore.Passed = true
@@ -940,65 +937,181 @@ func (r *Runtime) recordFinalGateResult(ctx context.Context, operationID string,
 	return nil
 }
 
-func recomputeAndVerifyRequiredConfirmations(claims PackageConfirmationClaims, operation PackageOperationRecord) error {
-	seen := make(map[string]bool, len(claims.ConfirmedItems))
-	for _, item := range claims.ConfirmedItems {
-		if item == "" {
-			continue
-		}
-		seen[item] = true
+func (r *Runtime) verifyPackageClaimsBinding(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) error {
+	if !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
+		return ErrPackageConfirmationItemsMismatch
 	}
-	for key, val := range claims.Confirmations {
-		if val && !seen[key] {
-			return fmt.Errorf("%w: confirmations key %s is not in confirmedItems", ErrPackageConfirmationItemsMismatch, key)
-		}
-		if !val && seen[key] {
-			return fmt.Errorf("%w: confirmedItems contains %s but confirmations[%s] is false", ErrPackageConfirmationItemsMismatch, key, key)
+	if claims.RequiredConfirmationsHash != "" && claims.RequiredConfirmationsHash != computePackageRequiredConfirmationsHash(claims.ConfirmedItems) {
+		return fmt.Errorf("%w: requiredConfirmationsHash does not match confirmedItems", ErrPackageConfirmationItemsMismatch)
+	}
+	if claims.Nonce != "" && r.container.PackageRepository != nil {
+		if nonceErr := r.container.PackageRepository.VerifyConfirmationNonceBinding(ctx, claims.Nonce, operation.OperationID); nonceErr != nil {
+			return fmt.Errorf("confirmation nonce binding failed: %v", nonceErr)
 		}
 	}
-	required := computeRequiredConfirmationsForOperation(operation.OperationType, claims)
-	for _, req := range required {
-		if !seen[req] && !claims.Confirmations[req] {
-			return fmt.Errorf("%w: required confirmation %q not present", ErrPackageConfirmationItemsMissing, req)
-		}
+	evidence, evidenceErr := r.loadPackageConfirmationAuthorityEvidence(ctx, operation.OperationID)
+	if evidenceErr != nil {
+		return nil
 	}
-	return nil
+	if signatureErr := validateConfirmationAuthorityEvidenceSignature(evidence); signatureErr != nil {
+		return signatureErr
+	}
+	return verifyConfirmationAuthorityEvidenceClaims(evidence, claims)
 }
 
-func computeRequiredConfirmationsForOperation(operationType string, claims PackageConfirmationClaims) []string {
-	switch operationType {
-	case OpInstall:
-		required := []string{}
-		if claims.DeveloperSessionID != "" {
-			required = append(required, "confirm.unsigned_dev")
-		}
-		sort.Strings(required)
-		return required
-	case OpUpdate:
-		required := []string{"confirm.update"}
-		if claims.MigrationPlanHash != "" {
-			required = append(required, "confirm.config_migration")
-		}
-		sort.Strings(required)
-		return required
-	case OpRollback:
-		required := []string{"confirm.rollback"}
-		if claims.MigrationPlanHash != "" {
-			required = append(required, "confirm.rollback.migration_reverse")
-		}
-		sort.Strings(required)
-		return required
-	case OpUninstall:
-		return []string{"confirm.uninstall"}
-	default:
-		return []string{}
+func (r *Runtime) computeFinalGateSnapshotRequirement(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) PackageSnapshotRequirement {
+	input := PackageSnapshotRequirementInput{
+		SchemaVersion:           1,
+		OperationType:           operation.OperationType,
+		ExtensionID:             operation.ExtensionID,
+		SourceVersion:           claims.CurrentVersionID,
+		SourceGeneration:        claims.CurrentGenerationID,
+		TargetVersion:           claims.TargetVersionID,
+		TargetGeneration:        claims.TargetGenerationID,
+		ManifestNoDataChange:    false,
+		ManifestEvidencePresent: false,
 	}
+	corrupt := false
+
+	var rollbackPoint *PackageRollbackPoint
+	if r.container.PackageRepository != nil && operation.FromVersion != "" {
+		if rp, err := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion); err == nil {
+			rollbackPoint = &rp
+		}
+	}
+	if rollbackPoint != nil {
+		if rollbackPoint.ConfigSnapshotJSON != "" {
+			input.ConfigBeforeHash = packageSnapshotDigest([]byte(rollbackPoint.ConfigSnapshotJSON))
+			input.ConfigEvidencePresent = true
+		}
+		if rollbackPoint.ResourceSnapshotJSON != "" {
+			input.ResourceBeforeHash = packageSnapshotDigest([]byte(rollbackPoint.ResourceSnapshotJSON))
+			input.ResourceEvidencePresent = true
+		}
+		if rollbackPoint.UserDataMigrationStateJSON != "" {
+			input.UserDataBeforeHash = packageSnapshotDigest([]byte(rollbackPoint.UserDataMigrationStateJSON))
+			input.UserDataEvidencePresent = true
+		}
+		if rollbackPoint.MigrationStateSnapshotJSON != "" {
+			input.MigrationEvidencePresent = true
+			var migrationState packageMigrationStateSnapshot
+			if json.Unmarshal([]byte(rollbackPoint.MigrationStateSnapshotJSON), &migrationState) != nil {
+				corrupt = true
+			} else {
+				if migrationState.Mode != "" && migrationState.Mode != "none" && len(migrationState.Definitions) > 0 {
+					if defsJSON, defsErr := json.Marshal(migrationState.Definitions); defsErr == nil {
+						input.MigrationDefinitionHash = packageSnapshotDigest(defsJSON)
+					}
+				}
+				if len(migrationState.Operations) > 0 {
+					if opsJSON, opsErr := json.Marshal(migrationState.Operations); opsErr == nil {
+						input.MigrationPlanHash = packageSnapshotDigest(opsJSON)
+					}
+				}
+			}
+		}
+	}
+
+	if r.container.ContributionRepository != nil && r.container.PermissionRepository != nil && r.container.ScopeRepository != nil {
+		contributions, _ := r.container.ContributionRepository.ListContributions(ctx, domain.ExtensionID(operation.ExtensionID))
+		requirements, _ := r.container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(operation.ExtensionID))
+		grants, _ := r.container.PermissionRepository.ListGrants(ctx, domain.ExtensionID(operation.ExtensionID))
+		scopeBindings, _ := r.container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(operation.ExtensionID))
+
+		sort.Slice(contributions, func(i, j int) bool { return string(contributions[i].ID) < string(contributions[j].ID) })
+		sort.Slice(requirements, func(i, j int) bool { return requirements[i].PermissionName < requirements[j].PermissionName })
+		sort.Slice(grants, func(i, j int) bool { return grants[i].PermissionName < grants[j].PermissionName })
+		sort.Slice(scopeBindings, func(i, j int) bool {
+			if scopeBindings[i].ScopeType != scopeBindings[j].ScopeType {
+				return scopeBindings[i].ScopeType < scopeBindings[j].ScopeType
+			}
+			return scopeBindings[i].ScopeID < scopeBindings[j].ScopeID
+		})
+
+		afterConfig := packageConfigSnapshot{
+			Contributions: contributions,
+			Permissions: packageConfigPermissionSnapshot{
+				Requirements: requirements,
+				Grants:       grants,
+			},
+			ScopeBindings: scopeBindings,
+			SchemaVersion: packageConfigSnapshotSchemaVersion,
+		}
+		if configJSON, err := json.Marshal(afterConfig); err == nil {
+			input.ConfigAfterHash = packageSnapshotDigest(configJSON)
+		}
+	}
+
+	if r.container.ResourceRepository != nil {
+		resources, _ := r.container.ResourceRepository.ListResources(ctx, domain.ExtensionID(operation.ExtensionID))
+		sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
+		afterResource := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
+		for _, resource := range resources {
+			resource.Metadata, _ = sanitizePackageSnapshotMap(resource.Metadata)
+			originalPath := resource.Reference
+			absOriginal, absErr := filepath.Abs(originalPath)
+			if absErr != nil {
+				continue
+			}
+			info, statErr := os.Lstat(absOriginal)
+			if statErr != nil {
+				continue
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				corrupt = true
+				continue
+			}
+			file, openErr := os.Open(absOriginal)
+			if openErr != nil {
+				continue
+			}
+			hasher := sha256.New()
+			if _, copyErr := io.Copy(hasher, file); copyErr != nil {
+				file.Close()
+				continue
+			}
+			file.Close()
+			afterResource.Entries = append(afterResource.Entries, packageResourceSnapshotEntry{
+				Resource:    resource,
+				ContentHash: "sha256:" + hex.EncodeToString(hasher.Sum(nil)),
+			})
+		}
+		if resourceJSON, err := json.Marshal(afterResource); err == nil {
+			input.ResourceAfterHash = packageSnapshotDigest(resourceJSON)
+		}
+	}
+
+	req, err := ComputePackageSnapshotRequirement(input)
+	if err != nil {
+		return PackageSnapshotRequirement{Required: true, NoDataChange: false, Reason: "snapshot requirement computation failed, fail-closed"}
+	}
+	if corrupt && req.NoDataChange {
+		req.Required = true
+		req.NoDataChange = false
+		req.Reason = "live state validation failure, fail-closed"
+		req.Hash = computeUnifiedSnapshotRequirementHash(input, req)
+	}
+	return req
+}
+
+func isFinalGateSnapshotExempt(req PackageSnapshotRequirement, claims PackageConfirmationClaims, claimsVerified bool) bool {
+	if !claimsVerified || req.Required || !req.NoDataChange {
+		return false
+	}
+	if claims.SnapshotRequirementHash == "" || claims.SnapshotRequirementHash != req.Hash {
+		return false
+	}
+	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return false
+	}
+	return true
 }
 
 func computeRollbackSnapshotRequirement(point PackageRollbackPoint) RollbackSnapshotRequirement {
 	return computeRollbackSnapshotRequirementFromPoint(point)
 }
 
+// Deprecated: kept for tests only, build PackageSnapshotRequirementInput from the rollback point and use ComputePackageSnapshotRequirement in production.
 func (r *Runtime) computeRollBackSnapshotRequirementFromClaims(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) RollbackSnapshotRequirement {
 	input := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
 	corrupt := false
@@ -1114,6 +1227,7 @@ func (r *Runtime) computeRollBackSnapshotRequirementFromClaims(ctx context.Conte
 	return req
 }
 
+// Deprecated: kept for tests only, final gate must not auto-exempt on NoDataChange alone.
 func isRollbackSnapshotExempt(req RollbackSnapshotRequirement, claims PackageConfirmationClaims) bool {
 	if !req.NoDataChange {
 		return false

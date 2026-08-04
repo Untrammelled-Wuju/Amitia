@@ -3,7 +3,10 @@
 package security
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -13,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/auth"
 )
 
 type StorageRootKind string
@@ -98,8 +102,8 @@ func (r *PathRootRegistry) Resolve(kind StorageRootKind, storageKey string) (str
 	return candidate, nil
 }
 
-func (r *PathRootRegistry) Contains(path string) bool {
-	_, err := r.resolve(path)
+func (r *PathRootRegistry) Contains(p string) bool {
+	_, err := r.resolve(p)
 	return err == nil
 }
 
@@ -109,6 +113,22 @@ func (r *PathRootRegistry) ResolvePath(filePath string) (string, error) {
 		return "", err
 	}
 	return resolved, nil
+}
+
+func (r *PathRootRegistry) StorageKeyFromPath(kind StorageRootKind, absolutePath string) (string, error) {
+	abs, err := filepath.Abs(absolutePath)
+	if err != nil {
+		return "", err
+	}
+	root, err := r.Root(kind)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", ErrPathEscape
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 func (r *PathRootRegistry) resolve(filePath string) (string, error) {
@@ -150,6 +170,16 @@ func (r *PathRootRegistry) resolveNonExistent(path string) (string, error) {
 	return "", ErrPathEscape
 }
 
+type ArtifactReference struct {
+	ArtifactID  string
+	OwnerUserID string
+	RootKind    StorageRootKind
+	StorageKey  string
+	ContentHash string
+	ByteSize    int64
+	MIME        string
+}
+
 type SafeArtifactResponder struct {
 	registry *PathRootRegistry
 }
@@ -158,22 +188,71 @@ func NewSafeArtifactResponder(registry *PathRootRegistry) *SafeArtifactResponder
 	return &SafeArtifactResponder{registry: registry}
 }
 
-func (s *SafeArtifactResponder) SafeFileResponse(c *gin.Context, filePath string) {
-	resolved, err := s.registry.ResolvePath(filePath)
+type SafeTreeDeleter interface {
+	SafeDelete(kind StorageRootKind, storageKey string, expectation DeleteExpectation) error
+}
+
+func (s *SafeArtifactResponder) ServeArtifact(c *gin.Context, actor *auth.ActorContext, ref ArtifactReference) {
+	if actor == nil || ref.OwnerUserID == "" || actor.UserID != ref.OwnerUserID {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	resolved, err := s.registry.Resolve(ref.RootKind, ref.StorageKey)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	info, err := os.Stat(resolved)
-	if err != nil {
+	info, err := os.Lstat(resolved)
+	if err != nil || !info.Mode().IsRegular() || info.Size() != ref.ByteSize {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	if info.IsDir() {
-		c.Status(http.StatusForbidden)
+	actualHash, err := hashFileSHA256(resolved)
+	if err != nil || !strings.EqualFold(actualHash, ref.ContentHash) {
+		c.Status(http.StatusNotFound)
 		return
 	}
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Type", ref.MIME)
+	c.Header("ETag", `"`+ref.ContentHash+`"`)
+	c.Header("Cache-Control", "private, max-age=0")
 	http.ServeFile(c.Writer, c.Request, resolved)
+}
+
+func (s *SafeArtifactResponder) BuildAndServe(c *gin.Context, actor *auth.ActorContext, kind StorageRootKind, storageKey string, artifactID string, ownerUserID string, mime string) {
+	resolved, err := s.registry.Resolve(kind, storageKey)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	info, err := os.Lstat(resolved)
+	if err != nil || !info.Mode().IsRegular() {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	hash, err := hashFileSHA256(resolved)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	s.ServeArtifact(c, actor, ArtifactReference{
+		ArtifactID:  artifactID,
+		OwnerUserID: ownerUserID,
+		RootKind:    kind,
+		StorageKey:  storageKey,
+		ContentHash: hash,
+		ByteSize:    info.Size(),
+		MIME:        mime,
+	})
+}
+
+func (s *SafeArtifactResponder) ResolveAndServe(c *gin.Context, actor *auth.ActorContext, kind StorageRootKind, absolutePath string, artifactID string, ownerUserID string, mime string) {
+	storageKey, err := s.registry.StorageKeyFromPath(kind, absolutePath)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	s.BuildAndServe(c, actor, kind, storageKey, artifactID, ownerUserID, mime)
 }
 
 func (s *SafeArtifactResponder) SafeDelete(kind StorageRootKind, storageKey string, expectation DeleteExpectation) error {
@@ -221,6 +300,23 @@ func removeNoSymlinks(path string) error {
 	return os.Remove(path)
 }
 
+func RemoveDirNoSymlinks(root string) error {
+	return removeNoSymlinks(root)
+}
+
+func hashFileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func (s *SafeArtifactResponder) SafeCopyTree(src, dst string) error {
 	srcResolved, err := s.registry.ResolvePath(src)
 	if err != nil {
@@ -231,10 +327,6 @@ func (s *SafeArtifactResponder) SafeCopyTree(src, dst string) error {
 		return err
 	}
 	return copyTreeNoSymlinks(srcResolved, dstResolved)
-}
-
-func SafeRemoveTree(root string) error {
-	return removeNoSymlinks(root)
 }
 
 func copyTreeNoSymlinks(src, dst string) error {

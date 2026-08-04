@@ -68,7 +68,7 @@ type Service interface {
 
 	CreateRegenerationJob(ctx context.Context, sessionID, userID string, req CreateRegenerationJobRequest) (*CreateRegenerationJobResponse, error)
 	GetRegenerationJob(ctx context.Context, jobID string) (*RegenerationJob, error)
-	ListRegenerationJobs(ctx context.Context, limit, offset int) ([]RegenerationJob, error)
+	ListRegenerationJobs(ctx context.Context, userID string, limit, offset int) ([]RegenerationJob, error)
 	CancelRegenerationJob(ctx context.Context, jobID, userID string) error
 	AcceptCandidate(ctx context.Context, candidateID, userID string, req AcceptCandidateRequest) error
 	RejectCandidate(ctx context.Context, candidateID, userID string, req RejectCandidateRequest) error
@@ -90,8 +90,8 @@ type Service interface {
 	ImportLegacyRevision(ctx context.Context, processingTaskID, actionKey, userID string) (*CommitSessionResponse, error)
 
 	ListActionStreams(ctx context.Context, userID string) ([]ActionStreamSummary, error)
-	ListRevisionsByStream(ctx context.Context, streamID string) ([]RevisionSummary, error)
-	GetActiveRevisionByStream(ctx context.Context, streamID string) (*RevisionDetail, error)
+	ListRevisionsByStream(ctx context.Context, userID string, streamID string) ([]RevisionSummary, error)
+	GetActiveRevisionByStream(ctx context.Context, userID string, streamID string) (*RevisionDetail, error)
 }
 
 type service struct {
@@ -1759,16 +1759,15 @@ func (s *service) GetRegenerationJob(ctx context.Context, jobID string) (*Regene
 	return s.repo.GetRegenerationJob(jobID)
 }
 
-func (s *service) ListRegenerationJobs(ctx context.Context, limit, offset int) ([]RegenerationJob, error) {
+func (s *service) ListRegenerationJobs(ctx context.Context, userID string, limit, offset int) ([]RegenerationJob, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	db := s.repo.DB().Model(&RegenerationJob{}).Order("created_at DESC").Limit(limit).Offset(offset)
 	var jobs []RegenerationJob
-	if err := db.Find(&jobs).Error; err != nil {
+	if err := s.repo.DB().Where("user_id = ?", userID).Order("created_at DESC").Limit(limit).Offset(offset).Find(&jobs).Error; err != nil {
 		return nil, err
 	}
 	return jobs, nil
@@ -2163,13 +2162,13 @@ func (s *service) ListActionStreams(ctx context.Context, userID string) ([]Actio
 			UpdatedAt:            stream.UpdatedAt,
 		}
 
-		binding, err := s.repo.GetActiveActionRevisionBindingByStream(stream.ID)
+		binding, err := s.repo.GetActiveActionRevisionBindingByStream(stream.UserID, stream.ID)
 		if err == nil && binding != nil {
 			summary.ActiveRevisionID = binding.ActiveActionRevisionID
 			summary.BindingRevision = binding.BindingRevision
 		}
 
-		revs, err := s.repo.ListActionRevisionsByStream(stream.ID)
+		revs, err := s.repo.ListActionRevisionsByStream(stream.UserID, stream.ID)
 		if err == nil {
 			summary.RevisionCount = len(revs)
 		}
@@ -2179,17 +2178,13 @@ func (s *service) ListActionStreams(ctx context.Context, userID string) ([]Actio
 	return summaries, nil
 }
 
-func (s *service) ListRevisionsByStream(ctx context.Context, streamID string) ([]RevisionSummary, error) {
-	revs, err := s.repo.ListActionRevisionsByStream(streamID)
-	if err != nil {
-		return nil, err
-	}
-	activeBinding, err := s.repo.GetActiveActionRevisionBindingByStream(streamID)
+func (s *service) ListRevisionsByStream(ctx context.Context, userID string, streamID string) ([]RevisionSummary, error) {
+	revs, err := s.repo.ListActionRevisionsByStream(userID, streamID)
 	if err != nil {
 		return nil, err
 	}
 	activeRevisionID := ""
-	if activeBinding != nil {
+	if activeBinding, err := s.repo.GetActiveActionRevisionBindingByStream(userID, streamID); err == nil && activeBinding != nil {
 		activeRevisionID = activeBinding.ActiveActionRevisionID
 	}
 	summaries := make([]RevisionSummary, 0, len(revs))
@@ -2213,8 +2208,8 @@ func (s *service) ListRevisionsByStream(ctx context.Context, streamID string) ([
 	return summaries, nil
 }
 
-func (s *service) GetActiveRevisionByStream(ctx context.Context, streamID string) (*RevisionDetail, error) {
-	binding, err := s.repo.GetActiveActionRevisionBindingByStream(streamID)
+func (s *service) GetActiveRevisionByStream(ctx context.Context, userID string, streamID string) (*RevisionDetail, error) {
+	binding, err := s.repo.GetActiveActionRevisionBindingByStream(userID, streamID)
 	if err != nil {
 		return nil, err
 	}

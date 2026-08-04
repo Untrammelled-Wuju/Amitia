@@ -3,8 +3,6 @@
 package runtime
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
@@ -26,7 +24,6 @@ type DesktopPetRuntimeConfig struct {
 	RetryBaseDelayMs      int
 	RetryMaxDelayMs       int
 	CommandRetentionHours int
-	Token                 string
 	BackendInstanceID     string
 }
 
@@ -69,19 +66,6 @@ func (c *DesktopPetRuntimeConfig) Validate() error {
 		return fmt.Errorf("loopbackOnly and allowRemote cannot both be true")
 	}
 	return nil
-}
-
-func (c *DesktopPetRuntimeConfig) EnsureToken() {
-	if c.Token == "" {
-		b := make([]byte, 32)
-		rand.Read(b)
-		c.Token = hex.EncodeToString(b)
-	}
-	if c.BackendInstanceID == "" {
-		b := make([]byte, 8)
-		rand.Read(b)
-		c.BackendInstanceID = "backend_boot_" + hex.EncodeToString(b)
-	}
 }
 
 func (c *DesktopPetRuntimeConfig) IsLoopbackAddr(remoteAddr string) bool {

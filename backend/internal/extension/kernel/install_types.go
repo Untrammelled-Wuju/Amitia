@@ -215,9 +215,13 @@ type packageConfirmationClaims struct {
 	CurrentVersionID        string          `json:"currentVersionId,omitempty"`
 	CurrentGenerationID     string          `json:"currentGenerationId,omitempty"`
 	SnapshotRequirementHash string          `json:"snapshotRequirementHash,omitempty"`
+	RequiredConfirmationsHash string        `json:"requiredConfirmationsHash,omitempty"`
+	DependenciesHash          string        `json:"dependenciesHash,omitempty"`
 	InstalledPath           string          `json:"installedPath,omitempty"`
 	InstalledTreeHash       string          `json:"installedTreeHash,omitempty"`
 	Confirmations           map[string]bool `json:"confirmations"`
+	IssuedAt                int64           `json:"issuedAt,omitempty"`
+	Nonce                   string          `json:"nonce,omitempty"`
 	ExpiresAt               int64           `json:"expiresAt"`
 }
 
@@ -326,6 +330,8 @@ type PackageConfirmationClaims struct {
 	CurrentGenerationID     string          `json:"currentGenerationId,omitempty"`
 	SecurityPolicyHash      string          `json:"securityPolicyHash,omitempty"`
 	SnapshotRequirementHash string          `json:"snapshotRequirementHash,omitempty"`
+	RequiredConfirmationsHash string        `json:"requiredConfirmationsHash,omitempty"`
+	DependenciesHash          string        `json:"dependenciesHash,omitempty"`
 	PolicyVersion           string          `json:"policyVersion"`
 	UserID                  string          `json:"userId"`
 	ScopeType               string          `json:"scopeType"`
@@ -369,6 +375,7 @@ type PackageRollbackConfirmationClaims struct {
 	PreviewHash             string          `json:"previewHash"`
 	SecurityPolicyHash      string          `json:"securityPolicyHash"`
 	SnapshotRequirementHash string          `json:"snapshotRequirementHash"`
+	RequiredConfirmationsHash string        `json:"requiredConfirmationsHash"`
 	UserID                  string          `json:"userId"`
 	ScopeType               string          `json:"scopeType"`
 	ScopeID                 string          `json:"scopeId"`
@@ -414,6 +421,38 @@ func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmatio
 	}
 	if claims.OperationType != "rollback" {
 		return claims, fmt.Errorf("kernel: rollback confirmation token operation type mismatch")
+	}
+	if claims.SchemaVersion != PackageRollbackConfirmationClaimsSchemaVersion {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: unsupported claims schemaVersion %d, expected %d", ErrPackageConfirmationClaimsInvalid, claims.SchemaVersion, PackageRollbackConfirmationClaimsSchemaVersion))
+	}
+	if claims.PolicyVersion == "" || claims.SecurityPolicyHash == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: policyVersion and securityPolicyHash required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.ExtensionID == "" || claims.ArtifactID == "" || claims.RollbackPointID == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: extensionId, artifactId and rollbackPointId required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.SourceVersionID == "" || claims.SourceGenerationID == "" || claims.TargetVersionID == "" || claims.TargetGenerationID == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: source and target version identities required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.PreviewSessionID == "" || claims.PreviewHash == "" || claims.SnapshotRequirementHash == "" || claims.RequiredConfirmationsHash == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: preview identity required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.UserID == "" || claims.ScopeType == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: user and scope binding required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.IssuedAt == 0 {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: issuedAt required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.Nonce == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: nonce required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if len(claims.ConfirmedItems) == 0 || !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
+		return claims, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
+	}
+	for _, val := range claims.Confirmations {
+		if !val {
+			return claims, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
+		}
 	}
 	return claims, nil
 }

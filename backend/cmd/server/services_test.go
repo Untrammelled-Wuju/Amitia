@@ -29,7 +29,10 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply(migration.DefaultMigrations()); err != nil {
 		t.Fatal(err)
 	}
-	services := NewAppServices(app.NewAppContext(db, nil), nil)
+	services, err := NewAppServices(app.NewAppContext(db, nil), nil)
+	if err != nil {
+		t.Fatalf("new app services: %v", err)
+	}
 	t.Cleanup(func() {
 		_ = services.Extension.Close(context.Background())
 	})

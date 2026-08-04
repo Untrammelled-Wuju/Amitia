@@ -25,15 +25,3 @@ func RegisterRoutes(r *gin.RouterGroup, svc ReleaseService, guard security.Owner
 		g2.GET("/identity", handler.GetPetIdentity)
 	}
 }
-
-func RegisterImportStagingRoutes(r *gin.RouterGroup, reg *security.PathRootRegistry, repo security.ImportStagingRepository, guard security.OwnershipGuard) {
-	handler := NewImportStagingHandler(reg, repo, guard)
-	g := r.Group("/import-stagings")
-	{
-		g.POST("/upload", handler.Upload)
-		g.GET("/", handler.List)
-		g.GET("/:stagingId", handler.Inspect)
-		g.POST("/consume", handler.Consume)
-		g.POST("/:stagingId/reject", handler.Reject)
-	}
-}

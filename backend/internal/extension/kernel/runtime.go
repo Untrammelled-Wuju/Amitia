@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
@@ -40,6 +41,7 @@ type PackageUninstallConfirmationClaims struct {
 	PreviewHash            string         `json:"previewHash"`
 	SecurityPolicyHash     string         `json:"securityPolicyHash"`
 	SnapshotRequirementHash string        `json:"snapshotRequirementHash"`
+	RequiredConfirmationsHash string      `json:"requiredConfirmationsHash"`
 	InstalledPath          string         `json:"installedPath,omitempty"`
 	InstalledTreeHash      string         `json:"installedTreeHash,omitempty"`
 	UserID                 string         `json:"userId"`
@@ -48,7 +50,9 @@ type PackageUninstallConfirmationClaims struct {
 	Confirmations          map[string]bool `json:"confirmations"`
 	ConfirmedItems         []string       `json:"confirmedItems"`
 	PolicyVersion          string         `json:"policyVersion"`
+	IssuedAt               int64          `json:"issuedAt"`
 	ExpiresAt              int64          `json:"expiresAt"`
+	Nonce                  string         `json:"nonce,omitempty"`
 }
 
 func (c PackageUninstallConfirmationClaims) ExpiresAtString() string {
@@ -89,6 +93,32 @@ func (r *Runtime) VerifyUninstallConfirmation(token string) (PackageUninstallCon
 	}
 	if claims.ExpiresAt <= time.Now().UTC().Unix() {
 		return claims, fmt.Errorf("kernel: confirmation token expired")
+	}
+	if claims.PolicyVersion == "" || claims.SecurityPolicyHash == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: policyVersion and securityPolicyHash required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.ExtensionID == "" || claims.ArtifactID == "" || claims.CurrentVersionID == "" || claims.CurrentGenerationID == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: uninstall identity required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.PreviewHash == "" || claims.SnapshotRequirementHash == "" || claims.RequiredConfirmationsHash == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: preview identity required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.UserID == "" || claims.ScopeType == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: user and scope binding required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.IssuedAt == 0 {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: issuedAt required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.Nonce == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: nonce required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if len(claims.ConfirmedItems) == 0 || !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
+		return claims, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
+	}
+	for _, val := range claims.Confirmations {
+		if !val {
+			return claims, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
+		}
 	}
 	return claims, nil
 }
@@ -144,6 +174,7 @@ func (r *Runtime) ConfirmPackageUninstall(ctx context.Context, req ConfirmPackag
 		PreviewHash:             preview.PreviewHash,
 		SecurityPolicyHash:      preview.SecurityPolicyHash,
 		SnapshotRequirementHash: preview.SnapshotRequirementHash,
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
 		InstalledPath:           preview.InstalledPath,
 		InstalledTreeHash:       preview.InstalledHash,
 		UserID:                  req.UserID,
@@ -152,7 +183,9 @@ func (r *Runtime) ConfirmPackageUninstall(ctx context.Context, req ConfirmPackag
 		Confirmations:           confirmed,
 		ConfirmedItems:          confirmedItems,
 		PolicyVersion:           r.PolicyVersion(),
+		IssuedAt:                now.Unix(),
 		ExpiresAt:               now.Add(10 * time.Minute).Unix(),
+		Nonce:                   uuid.NewString(),
 	}
 
 	token, err := r.SignUninstallConfirmation(claims)

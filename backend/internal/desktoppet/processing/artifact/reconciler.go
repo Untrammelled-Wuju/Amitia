@@ -2,10 +2,10 @@ package artifact
 
 import (
 	"fmt"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"os"
 	"path/filepath"
 	"strings"
-	"github.com/u-ai/backend/internal/desktoppet/security"
 	"time"
 )
 
@@ -146,7 +146,7 @@ func (r *Reconciler) CleanOrphanedWorkDirs(maxAge time.Duration) ([]string, erro
 			}
 
 			if journal.IsStageDone("db_committed") {
-				if err := security.SafeRemoveTree(path); err == nil {
+				if err := security.RemoveDirNoSymlinks(path); err == nil {
 					cleaned = append(cleaned, path)
 				}
 				if filepath.Dir(path) != taskWorkRoot {
@@ -156,7 +156,7 @@ func (r *Reconciler) CleanOrphanedWorkDirs(maxAge time.Duration) ([]string, erro
 			}
 
 			if journal.IsStageDone("files_published") && dirModTime.Before(cutoff) {
-				if err := security.SafeRemoveTree(path); err == nil {
+				if err := security.RemoveDirNoSymlinks(path); err == nil {
 					cleaned = append(cleaned, path)
 				}
 				if filepath.Dir(path) != taskWorkRoot {

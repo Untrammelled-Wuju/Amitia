@@ -64,16 +64,6 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, svc *Service) {
 		snapshot := svc.GetMetrics()
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": snapshot})
 	})
-
-	runtimeGroup.GET("/bootstrap-token", func(c *gin.Context) {
-		userID := middleware.GetUserID(c)
-		if userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
-			return
-		}
-		info := svc.auth.BootstrapTokenInfo(svc.Config().Path)
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": info})
-	})
 }
 
 func WriteJSON(c *gin.Context, status int, data interface{}) {

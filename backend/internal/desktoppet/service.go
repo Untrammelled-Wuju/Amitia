@@ -1129,7 +1129,7 @@ func removeAllTaskDir(dir string) error {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			return nil
 		}
-		if err := security.SafeRemoveTree(dir); err != nil {
+		if err := security.RemoveDirNoSymlinks(dir); err != nil {
 			lastErr = err
 		}
 		if _, err := os.Stat(dir); os.IsNotExist(err) {

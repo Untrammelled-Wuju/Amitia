@@ -114,34 +114,17 @@ CustomTransitionPage<T> slideFadePage<T>({
     transitionDuration: const Duration(milliseconds: 350),
     reverseTransitionDuration: const Duration(milliseconds: 300),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final isReverse = secondaryAnimation.status == AnimationStatus.forward;
-
-      final fadeTween = Tween(begin: 0.0, end: 1.0);
-      final enterSlideTween = Tween(begin: const Offset(1.0, 0.0), end: Offset.zero);
-      final exitSlideTween = Tween(begin: Offset.zero, end: const Offset(1.0, 0.0));
-      final reverseEnterSlideTween = Tween(begin: const Offset(-0.3, 0.0), end: Offset.zero);
-
-      final mainSlide = (isReverse ? reverseEnterSlideTween : enterSlideTween)
-          .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-      final mainFade = fadeTween.animate(CurvedAnimation(parent: animation, curve: Curves.easeInOut));
-
-      final secondarySlide = exitSlideTween
-          .animate(CurvedAnimation(parent: secondaryAnimation, curve: Curves.easeInCubic));
-      final secondaryFade = Tween(begin: 1.0, end: 0.0)
-          .animate(CurvedAnimation(parent: secondaryAnimation, curve: Curves.easeInOut));
+      final slide = Tween<Offset>(
+        begin: const Offset(1.0, 0.0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      ));
 
       return SlideTransition(
-        position: secondarySlide,
-        child: FadeTransition(
-          opacity: secondaryFade,
-          child: SlideTransition(
-            position: mainSlide,
-            child: FadeTransition(
-              opacity: mainFade,
-              child: child,
-            ),
-          ),
-        ),
+        position: slide,
+        child: child,
       );
     },
   );

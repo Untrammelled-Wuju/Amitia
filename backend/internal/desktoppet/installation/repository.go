@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
+	desktoppetSecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -61,6 +62,21 @@ func (r *repository) Transaction(fn func(tx *gorm.DB) error) error {
 }
 
 func (r *repository) DB() *gorm.DB { return r.db }
+
+func (r *repository) RequireOwnedDevice(ctx context.Context, userID, deviceID string) error {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("desktop_pet_installations").
+		Where("user_id = ? AND device_id = ?", userID, deviceID).
+		Count(&count).Error
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return desktoppetSecurity.ErrNotFound
+	}
+	return nil
+}
 
 func (r *repository) CreateInstallation(installation *Installation) error {
 	var existing Installation

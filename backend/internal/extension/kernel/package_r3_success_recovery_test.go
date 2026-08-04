@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +17,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
-// packagePipelineInstallResult holds the identifiers set up by setupR3FullInstall.
 type packagePipelineInstallResult struct {
 	ExtensionID  string
 	Version      string
@@ -30,12 +27,15 @@ type packagePipelineInstallResult struct {
 	TreeHash     string
 }
 
-// setupR3FullInstall creates a complete installation state on disk and in the
-// database so that the R3 uninstall-recovery path has material to compensate.
-func setupR3FullInstall(t *testing.T) (*Runtime, *Container, packagePipelineInstallResult) {
+func seedR3FullInstall(
+	t *testing.T,
+	runtime *Runtime,
+	container *Container,
+) packagePipelineInstallResult {
 	t.Helper()
+
 	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
+
 	extID := "com.r3.full/recovery"
 	artifactID := "artifact-r3-full"
 	version := "1.0.0"
@@ -76,24 +76,24 @@ func setupR3FullInstall(t *testing.T) (*Runtime, *Container, packagePipelineInst
 		InstalledAt:       installedAt,
 		UpdatedAt:         installedAt,
 		Metadata: map[string]interface{}{
-			"versionId":    versionID,
-			"generationId": "gen-r3-full",
-			"treeHash":     treeHash,
+			"versionId":     versionID,
+			"generationId":  "gen-r3-full",
+			"treeHash":      treeHash,
 			"installedPath": installPath,
 		},
 	}
 	require.NoError(t, container.InstallationRepository.PutInstallation(ctx, installRecord))
 
 	require.NoError(t, container.PackageRepository.PutPackageVersion(context.Background(), PackageVersionRecord{
-		VersionID:        versionID,
-		ExtensionID:      extID,
-		Version:          version,
-		ArtifactID:       artifactID,
-		IsActive:         true,
-		VersionState:     string(PackageVersionStateCurrent),
-		InstalledAt:      now,
-		GenerationID:     "gen-r3-full",
-		InstalledPath:    installPath,
+		VersionID:         versionID,
+		ExtensionID:       extID,
+		Version:           version,
+		ArtifactID:        artifactID,
+		IsActive:          true,
+		VersionState:      string(PackageVersionStateCurrent),
+		InstalledAt:       now,
+		GenerationID:      "gen-r3-full",
+		InstalledPath:     installPath,
 		InstalledTreeHash: treeHash,
 	}))
 
@@ -112,7 +112,7 @@ func setupR3FullInstall(t *testing.T) (*Runtime, *Container, packagePipelineInst
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(currentFile, currentData, 0o600))
 
-	return runtime, container, packagePipelineInstallResult{
+	return packagePipelineInstallResult{
 		ExtensionID:  extID,
 		Version:      version,
 		ArtifactID:   artifactID,
@@ -123,10 +123,16 @@ func setupR3FullInstall(t *testing.T) (*Runtime, *Container, packagePipelineInst
 	}
 }
 
-// buildR3QuarantineMetadata simulates an uninstall's move_to_quarantine step:
-// it moves the generation dir and current.json into quarantine, captures an
-// installation snapshot, deletes the installation record, and clears the
-// artifact's installed path.
+func setupR3FullInstall(t *testing.T) (*Runtime, *Container, packagePipelineInstallResult) {
+	t.Helper()
+
+	runtime, container := newR3Runtime(t)
+
+	result := seedR3FullInstall(t, runtime, container)
+
+	return runtime, container, result
+}
+
 func buildR3QuarantineMetadata(t *testing.T, ctx context.Context, container *Container, res packagePipelineInstallResult, operationID string) PackageQuarantineMetadata {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -189,7 +195,10 @@ func buildR3QuarantineMetadata(t *testing.T, ctx context.Context, container *Con
 
 func createUninstallRecoveryOp(t *testing.T, ctx context.Context, container *Container, res packagePipelineInstallResult, operationID string) PackageOperationRecord {
 	t.Helper()
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	previewSessionID := "preview-" + operationID
+
 	op := PackageOperationRecord{
 		OperationID:        operationID,
 		TraceID:            "trace-" + operationID,
@@ -201,18 +210,27 @@ func createUninstallRecoveryOp(t *testing.T, ctx context.Context, container *Con
 		Status:             "in_progress",
 		CurrentStep:        "move_to_quarantine",
 		ArtifactID:         res.ArtifactID,
+		PreviewSessionID:   previewSessionID,
 		ConfirmationsJSON:  `{}`,
 		StartedAt:          now,
 		UpdatedAt:          now,
 		StableGeneration:   res.GenerationID,
 		CurrentPointerJSON: fmt.Sprintf(`{"generationId":%q,"extensionId":%q}`, res.GenerationID, res.ExtensionID),
 	}
+
 	require.NoError(t, container.PackageRepository.CreateOperation(ctx, op))
+
+	require.NoError(t, container.PackageRepository.EnsureArtifactReference(
+		ctx,
+		res.ArtifactID,
+		ArtifactReferencePreview,
+		previewSessionID,
+		time.Now().UTC().Add(time.Hour),
+	))
+
 	return op
 }
 
-// completedStep writes a pre-completed step to the repository so that
-// runUninstallRecoveryStep skips it during recoverPackageOperation.
 func completedStep(t *testing.T, ctx context.Context, container *Container, operationID, stepName string, stepOrder int, resultJSON string) {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -226,45 +244,107 @@ func completedStep(t *testing.T, ctx context.Context, container *Container, oper
 	}, PackageWriteGuard{}))
 }
 
-func TestR3RecoveryCompletesFromValidCompensationState(t *testing.T) {
-	ctx := context.Background()
-	runtime, container, res := setupR3FullInstall(t)
-	operationID := fmt.Sprintf("op-r3-complete-%d", time.Now().UnixNano())
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	qm := buildR3QuarantineMetadata(t, ctx, container, res, operationID)
-	op := createUninstallRecoveryOp(t, ctx, container, res, operationID)
-	require.NoError(t, container.PackageRepository.PutQuarantineMetadata(ctx, qm, PackageWriteGuard{}))
+type r3RecoveryFixture struct {
+	DBPath        string
+	ExtensionRoot string
+	Runtime       *Runtime
+	Container     *Container
+	InstallResult packagePipelineInstallResult
+	Operation     PackageOperationRecord
+	Metadata      PackageQuarantineMetadata
+}
 
-	loadResultJSON := fmt.Sprintf(`{"quarantine_id":%q,"state":"active"}`, qm.QuarantineID)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, loadResultJSON)
-	_ = now
+func newR3RecoveryFixture(t *testing.T) *r3RecoveryFixture {
+	t.Helper()
 
-	require.NoError(t, runtime.recoverPackageOperation(ctx, op))
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "kernel.db")
+	extensionRoot := filepath.Join(root, "extensions")
 
-	finalOp, _, err := container.PackageRepository.GetOperation(ctx, "user-1", operationID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", string(finalOp.Status), "recovery must reach completed state")
+	runtime, container := newR3RuntimeAt(t, dbPath, extensionRoot)
 
-	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(res.ExtensionID))
-	require.NoError(t, err)
-	require.Equal(t, domain.InstallationStateInstalled, installation.InstallationState)
+	result := seedR3FullInstall(t, runtime, container)
 
-	current, err := container.PackageGenerationStore.ReadCurrent(res.ExtensionID)
-	require.NoError(t, err)
-	require.Equal(t, res.GenerationID, current.GenerationID)
+	operationID := fmt.Sprintf("op-r3-fixture-%d", time.Now().UnixNano())
 
-	_, statErr := os.Stat(res.InstallPath)
-	require.NoError(t, statErr, "generation must be restored to original path")
+	metadata := buildR3QuarantineMetadata(t, context.Background(), container, result, operationID)
 
-	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, operationID)
-	require.NoError(t, listErr)
-	stepCounts := map[string]int{}
-	for _, s := range steps {
-		if s.Status == StatusCompleted {
-			stepCounts[s.StepName]++
-		}
+	operation := createUninstallRecoveryOp(t, context.Background(), container, result, operationID)
+
+	require.NoError(t, container.PackageRepository.PutQuarantineMetadata(context.Background(), metadata, PackageWriteGuard{}))
+
+	fixture := &r3RecoveryFixture{
+		DBPath:        dbPath,
+		ExtensionRoot: extensionRoot,
+		Runtime:       runtime,
+		Container:     container,
+		InstallResult: result,
+		Operation:     operation,
+		Metadata:      metadata,
 	}
-	for _, sn := range []string{
+
+	t.Cleanup(func() {
+		fixture.Close(t)
+	})
+
+	return fixture
+}
+
+func (f *r3RecoveryFixture) Close(t *testing.T) {
+	t.Helper()
+
+	if f.Container == nil {
+		return
+	}
+
+	require.NoError(t, f.Container.Close())
+
+	f.Container = nil
+	f.Runtime = nil
+}
+
+func (f *r3RecoveryFixture) Restart(t *testing.T) {
+	t.Helper()
+
+	f.Close(t)
+
+	runtime, container := newR3RuntimeAt(t, f.DBPath, f.ExtensionRoot)
+
+	f.Runtime = runtime
+	f.Container = container
+}
+
+func (f *r3RecoveryFixture) ReloadOperation(t *testing.T) PackageOperationRecord {
+	t.Helper()
+
+	operation, _, err := f.Container.PackageRepository.GetOperation(context.Background(), f.Operation.UserID, f.Operation.OperationID)
+	require.NoError(t, err)
+
+	f.Operation = operation
+
+	return operation
+}
+
+func assertR3RecoveryFinalState(
+	t *testing.T,
+	runtime *Runtime,
+	container *Container,
+	result packagePipelineInstallResult,
+	operation PackageOperationRecord,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	finalOperation, steps, err := container.PackageRepository.GetOperation(ctx, operation.UserID, operation.OperationID)
+	require.NoError(t, err)
+
+	require.Equal(t, string(PackageOperationCompleted), string(finalOperation.Status))
+	require.NotEmpty(t, finalOperation.CompletedAt)
+
+	require.NoError(t, runtime.verifyUninstallFinalizedState(ctx, finalOperation))
+
+	expectedSteps := []string{
 		StepUninstallRecoveryLoadQuarantineMetadata,
 		StepUninstallRecoveryVerifyQuarantineMetadata,
 		StepUninstallRecoveryRestoreGeneration,
@@ -277,16 +357,86 @@ func TestR3RecoveryCompletesFromValidCompensationState(t *testing.T) {
 		StepUninstallRecoveryReleaseQuarantineMetadata,
 		StepUninstallRecoveryFinalGate,
 		StepUninstallRecoveryFinalize,
-	} {
-		require.Equal(t, 1, stepCounts[sn], "step %s must be completed exactly once", sn)
 	}
 
-	finalQM, qmErr := container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operationID)
-	require.NoError(t, qmErr)
-	require.Equal(t, "released", finalQM.ReleaseState)
-	require.NotEmpty(t, finalQM.ReleasedAt)
-	require.NotEmpty(t, finalQM.SnapshotJSON)
-	require.NotEmpty(t, finalQM.SnapshotHash)
+	completedCount := make(map[string]int, len(expectedSteps))
+	for _, step := range steps {
+		if step.Status == StatusCompleted {
+			completedCount[step.StepName]++
+		}
+	}
+
+	for _, stepName := range expectedSteps {
+		require.Equal(t, 1, completedCount[stepName], "step %s must be completed exactly once", stepName)
+	}
+
+	_, leaseErr := container.PackageRepository.getExtensionLease(ctx, result.ExtensionID)
+	require.True(t, IsPackageOperationError(leaseErr, OperationErrNotFound), "final Lease must not exist: %v", leaseErr)
+
+	operationReferences, err := container.PackageRepository.ListActiveArtifactReferences(ctx, result.ArtifactID, ArtifactReferenceOperation, operation.OperationID)
+	require.NoError(t, err)
+	require.Empty(t, operationReferences)
+
+	previewReferences, err := container.PackageRepository.ListActiveArtifactReferences(ctx, result.ArtifactID, ArtifactReferencePreview, operation.PreviewSessionID)
+	require.NoError(t, err)
+	require.Empty(t, previewReferences)
+
+	installationReferences, err := container.PackageRepository.ListActiveArtifactReferences(ctx, result.ArtifactID, ArtifactReferenceInstallation, result.ExtensionID)
+	require.NoError(t, err)
+	require.Len(t, installationReferences, 1)
+
+	metadata, err := container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
+	require.NoError(t, err)
+
+	require.Equal(t, "released", metadata.State)
+	require.Equal(t, "released", metadata.ReleaseState)
+	require.NotEmpty(t, metadata.ReleasedAt)
+
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(result.ExtensionID))
+	require.NoError(t, err)
+
+	require.Equal(t, domain.InstallationStateInstalled, installation.InstallationState)
+	require.Equal(t, result.Version, installation.InstalledVersion.String())
+	require.Equal(t, result.ArtifactID, installation.PackageID)
+
+	versionRecord, err := container.PackageRepository.GetPackageVersionByID(ctx, result.ExtensionID, metadata.ExpectedVersionID)
+	require.NoError(t, err)
+
+	require.Equal(t, result.VersionID, versionRecord.VersionID)
+	require.Equal(t, result.GenerationID, versionRecord.GenerationID)
+
+	current, err := container.PackageGenerationStore.ReadCurrent(result.ExtensionID)
+	require.NoError(t, err)
+
+	require.Equal(t, result.GenerationID, current.GenerationID)
+	require.Equal(t, result.Version, current.Version)
+	require.Equal(t, result.ArtifactID, current.ArtifactID)
+
+	actualTreeHash, err := computeGenerationTreeHash(ctx, result.InstallPath)
+	require.NoError(t, err)
+
+	require.Equal(t, result.TreeHash, actualTreeHash)
+	require.Equal(t, actualTreeHash, current.TreeHash)
+	require.Equal(t, actualTreeHash, metadata.TreeHash)
+
+	artifact, err := container.PackageRepository.GetArtifact(ctx, result.ArtifactID)
+	require.NoError(t, err)
+
+	require.Equal(t, result.ExtensionID, artifact.ExtensionID)
+	require.Equal(t, result.InstallPath, artifact.InstalledPath)
+}
+
+func TestR3RecoveryCompletesFromValidCompensationState(t *testing.T) {
+	ctx := context.Background()
+	runtime, container, res := setupR3FullInstall(t)
+	operationID := fmt.Sprintf("op-r3-complete-%d", time.Now().UnixNano())
+	qm := buildR3QuarantineMetadata(t, ctx, container, res, operationID)
+	op := createUninstallRecoveryOp(t, ctx, container, res, operationID)
+	require.NoError(t, container.PackageRepository.PutQuarantineMetadata(ctx, qm, PackageWriteGuard{}))
+
+	require.NoError(t, runtime.recoverPackageOperation(ctx, op))
+
+	assertR3RecoveryFinalState(t, runtime, container, res, op)
 }
 
 func TestR3FinalGateRejectsInstalledVersionMismatch(t *testing.T) {
@@ -329,7 +479,6 @@ func TestR3FinalGateRejectsCurrentTreeHashMismatch(t *testing.T) {
 	completedStep(t, ctx, container, operationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
 	completedStep(t, ctx, container, operationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
 
-	// Tamper with the current pointer tree hash.
 	currentPath := filepath.Join(container.ExtRoot, "installations", safeDirectoryName(res.ExtensionID), "current.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(currentPath), 0o700))
 	tampered, err := json.Marshal(map[string]interface{}{
@@ -504,173 +653,81 @@ func TestR3CrashRecovery_BeforeLoadMetadata_FailsGracefully(t *testing.T) {
 	require.Error(t, err, "recovery with no prior steps must fail")
 }
 
-func TestR3CrashRecovery_AfterLoadBeforeVerify_CompletesIdempotently(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/load-only"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-lo", "artifact-crash-lo")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, op.OperationID)
-	require.NoError(t, listErr)
-	loadCount := 0
-	for _, s := range steps {
-		if s.StepName == StepUninstallRecoveryLoadQuarantineMetadata && s.Status == StatusCompleted {
-			loadCount++
-		}
+var errR3SimulatedProcessCrash = errors.New("r3 simulated process crash")
+
+func TestR3CrashRecoveryResumesFromEveryCommittedStep(t *testing.T) {
+	crashPoints := []string{
+		StepUninstallRecoveryLoadQuarantineMetadata,
+		StepUninstallRecoveryVerifyQuarantineMetadata,
+		StepUninstallRecoveryRestoreGeneration,
+		StepUninstallRecoveryRestoreCurrent,
+		StepUninstallRecoveryRestoreInstallation,
+		StepUninstallRecoveryRestoreVersionState,
+		StepUninstallRecoveryRestoreArtifactPath,
+		StepUninstallRecoveryRestoreArtifactReference,
+		StepUninstallRecoveryVerifyRestoredState,
+		StepUninstallRecoveryReleaseQuarantineMetadata,
+		StepUninstallRecoveryFinalGate,
+		packageRecoveryFaultPointPostFinalizeCommit,
 	}
-	require.Equal(t, 1, loadCount, "load step must not be duplicated on crash recovery resume")
-}
 
-func TestR3CrashRecovery_AfterRestoreGeneration_RestartsCleanly(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/after-gen"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-ag", "artifact-crash-ag")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-}
+	for _, crashPoint := range crashPoints {
+		crashPoint := crashPoint
 
-func TestR3CrashRecovery_AfterRestoreCurrent_RestartsCleanly(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/after-cur"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-ac", "artifact-crash-ac")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreCurrent, 4, `{"current_restored":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-}
+		t.Run(crashPoint, func(t *testing.T) {
+			fixture := newR3RecoveryFixture(t)
 
-func TestR3CrashRecovery_AfterRestoreInstallation_RestartsCleanly(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/after-inst"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-ai", "artifact-crash-ai")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreCurrent, 4, `{"current_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreInstallation, 5, `{"installation_restored":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-}
+			fired := false
 
-func TestR3CrashRecovery_AfterRestoreVersionState_RestartsCleanly(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/after-vs"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-avs", "artifact-crash-avs")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreCurrent, 4, `{"current_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreInstallation, 5, `{"installation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreVersionState, 6, `{"version_state_restored":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-}
+			crashContext := withPackageRecoveryFaultHook(
+				context.Background(),
+				func(operationID string, faultPoint string) error {
+					if operationID != fixture.Operation.OperationID {
+						return nil
+					}
+					if faultPoint != crashPoint {
+						return nil
+					}
+					if fired {
+						return nil
+					}
+					fired = true
+					return errR3SimulatedProcessCrash
+				},
+			)
 
-func TestR3CrashRecovery_AfterRestoreArtifactPath_RestartsCleanly(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/after-ap"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-aap", "artifact-crash-aap")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreCurrent, 4, `{"current_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreInstallation, 5, `{"installation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreVersionState, 6, `{"version_state_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreArtifactPath, 7, `{"artifact_path_restored":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-}
+			firstErr := fixture.Runtime.recoverPackageOperation(crashContext, fixture.Operation)
 
-func TestR3CrashRecovery_AfterVerifyRestoredState_RestartsCleanly(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/after-vrs"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-avrs", "artifact-crash-avrs")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreCurrent, 4, `{"current_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreInstallation, 5, `{"installation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreVersionState, 6, `{"version_state_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreArtifactPath, 7, `{"artifact_path_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreArtifactReference, 8, `{"artifact_reference_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyRestoredState, 9, `{"restored_state_verified":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-}
+			require.Error(t, firstErr)
+			require.ErrorContains(t, firstErr, errR3SimulatedProcessCrash.Error())
+			require.True(t, fired, "fault point %s was not reached", crashPoint)
 
-func TestR3CrashRecovery_AfterRestoreArtifactReference_RestartsCleanly(t *testing.T) {
-	ctx := context.Background()
-	runtime, container := newR3Runtime(t)
-	extID := "com.r3.crash/after-ari"
-	op := makeUninstallRecoveryOperation(t, ctx, container, extID, "gen-crash-ari", "artifact-crash-ari")
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, `{"loaded":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryVerifyQuarantineMetadata, 2, `{"verified":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreGeneration, 3, `{"generation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreCurrent, 4, `{"current_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreInstallation, 5, `{"installation_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreVersionState, 6, `{"version_state_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreArtifactPath, 7, `{"artifact_path_restored":true}`)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryRestoreArtifactReference, 8, `{"artifact_reference_restored":true}`)
-	err := runtime.recoverPackageOperation(ctx, op)
-	require.Error(t, err)
-}
+			fixture.Restart(t)
 
-func TestR3ConcurrentRecoveryFinalizesExactlyOnce(t *testing.T) {
-	ctx := context.Background()
-	runtime, container, res := setupR3FullInstall(t)
-	operationID := fmt.Sprintf("op-r3-concur-%d", time.Now().UnixNano())
-	qm := buildR3QuarantineMetadata(t, ctx, container, res, operationID)
-	op := createUninstallRecoveryOp(t, ctx, container, res, operationID)
-	require.NoError(t, container.PackageRepository.PutQuarantineMetadata(ctx, qm, PackageWriteGuard{}))
+			reloadedOperation := fixture.ReloadOperation(t)
 
-	loadResultJSON := fmt.Sprintf(`{"quarantine_id":%q,"state":"active"}`, qm.QuarantineID)
-	completedStep(t, ctx, container, op.OperationID, StepUninstallRecoveryLoadQuarantineMetadata, 1, loadResultJSON)
+			require.NoError(t, fixture.Runtime.recoverPackageOperation(context.Background(), reloadedOperation))
 
-	var wg sync.WaitGroup
-	errs := make([]error, 2)
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			errs[idx] = runtime.recoverPackageOperation(ctx, op)
-		}(i)
+			assertR3RecoveryFinalState(t, fixture.Runtime, fixture.Container, fixture.InstallResult, reloadedOperation)
+		})
 	}
-	wg.Wait()
-	t.Logf("concurrent recovery results: err[0]=%v, err[1]=%v", errs[0], errs[1])
+}
 
-	finalOp, _, err := container.PackageRepository.GetOperation(ctx, "user-1", operationID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", string(finalOp.Status), "concurrent recovery must reach completed state")
+func TestR3CompletedRecoveryIsReadOnlyAndDoesNotReacquireLease(t *testing.T) {
+	fixture := newR3RecoveryFixture(t)
+	ctx := context.Background()
 
-	steps, listErr := container.PackageRepository.ListOperationSteps(ctx, operationID)
-	require.NoError(t, listErr)
-	finalizeCount := 0
-	for _, s := range steps {
-		if s.StepName == StepUninstallRecoveryFinalize && s.Status == StatusCompleted {
-			finalizeCount++
-		}
-	}
-	require.Equal(t, 1, finalizeCount, "finalize step must be completed exactly once under concurrent recovery")
+	require.NoError(t, fixture.Runtime.recoverPackageOperation(ctx, fixture.Operation))
 
-	installation, instErr := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(res.ExtensionID))
-	if errors.Is(instErr, domain.ErrInvalidExtensionID) {
-		t.Fatal("installation must exist after concurrent recovery")
-	}
-	require.NoError(t, instErr)
-	require.Equal(t, domain.InstallationStateInstalled, installation.InstallationState)
+	completed := fixture.ReloadOperation(t)
+	require.Equal(t, string(PackageOperationCompleted), string(completed.Status))
+
+	require.NoError(t, fixture.Runtime.recoverPackageOperation(ctx, completed))
+
+	_, leaseErr := fixture.Container.PackageRepository.getExtensionLease(ctx, completed.ExtensionID)
+	require.True(t, IsPackageOperationError(leaseErr, OperationErrNotFound))
+
+	assertR3RecoveryFinalState(t, fixture.Runtime, fixture.Container, fixture.InstallResult, completed)
 }
 
 func TestR3FinalGateEvidenceStructRoundTrip(t *testing.T) {
@@ -731,6 +788,3 @@ func TestR3ReleaseStepResultStructRoundTrip(t *testing.T) {
 	require.Equal(t, result.GenerationHash, decoded.GenerationHash)
 	require.Equal(t, result.MetadataHash, decoded.MetadataHash)
 }
-
-// Ensure all 12 step name constants are referenced (compile safeguard).
-var _ = strings.TrimSpace // keep strings import if unused elsewhere

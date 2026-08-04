@@ -13,6 +13,7 @@ import (
 type ImportStagingRepository interface {
 	Create(ctx context.Context, s *ImportStaging) error
 	GetForUser(ctx context.Context, stagingID string, userID string) (*ImportStaging, error)
+	ListForUser(ctx context.Context, userID string) ([]*ImportStaging, error)
 	BeginConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
 	CompleteConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
 	UpdateQuarantinePath(ctx context.Context, stagingID string, userID string, quarantinePath string) (bool, error)
@@ -63,6 +64,15 @@ func (r *importStagingRepository) GetForUser(ctx context.Context, stagingID stri
 	return &s, nil
 }
 
+func (r *importStagingRepository) ListForUser(ctx context.Context, userID string) ([]*ImportStaging, error) {
+	var stagings []*ImportStaging
+	err := r.db.WithContext(ctx).
+		Where("owner_user_id = ?", userID).
+		Order("created_at DESC").
+		Find(&stagings).Error
+	return stagings, err
+}
+
 func (r *importStagingRepository) BeginConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error) {
 	if stagingID == "" || userID == "" {
 		return false, nil
@@ -72,10 +82,10 @@ func (r *importStagingRepository) BeginConsumptionCAS(ctx context.Context, stagi
 		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ? AND expires_at > ?",
 			stagingID, userID, StagingStatusReady, expectedRevision, now).
 		Updates(map[string]interface{}{
-			"status":               StagingStatusConsuming,
+			"status":                 StagingStatusConsuming,
 			"consumption_started_at": now,
-			"state_revision":       expectedRevision + 1,
-			"updated_at":           now,
+			"state_revision":         expectedRevision + 1,
+			"updated_at":             now,
 		})
 	if result.Error != nil {
 		return false, result.Error
@@ -92,10 +102,10 @@ func (r *importStagingRepository) CompleteConsumptionCAS(ctx context.Context, st
 		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ?",
 			stagingID, userID, StagingStatusConsuming, expectedRevision).
 		Updates(map[string]interface{}{
-			"status":             StagingStatusConsumed,
-			"consumed_at":        now,
-			"state_revision":     expectedRevision + 1,
-			"updated_at":         now,
+			"status":         StagingStatusConsumed,
+			"consumed_at":    now,
+			"state_revision": expectedRevision + 1,
+			"updated_at":     now,
 		})
 	if result.Error != nil {
 		return false, result.Error
@@ -131,10 +141,10 @@ func (r *importStagingRepository) UpdateInventory(ctx context.Context, stagingID
 		Where("id = ? AND owner_user_id = ? AND status IN (?, ?, ?)",
 			stagingID, userID, StagingStatusQuarantined, StagingStatusInspecting, StagingStatusReady).
 		Updates(map[string]interface{}{
-			"inventory_json":     inventoryJSON,
-			"inventory_hash":     inventoryHash,
-			"status":             StagingStatusReady,
-			"updated_at":         now,
+			"inventory_json": inventoryJSON,
+			"inventory_hash": inventoryHash,
+			"status":         StagingStatusReady,
+			"updated_at":     now,
 		})
 	if result.Error != nil {
 		return false, result.Error

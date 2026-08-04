@@ -85,17 +85,33 @@ type PackageConfirmationNonceBinding struct {
 }
 
 func (r *PackageRepository) CreateOrGetOperation(ctx context.Context, op PackageOperationRecord) (PackageOperationRecord, bool, error) {
-	return r.createOrGetOperation(ctx, op, "")
+	return r.createOrGetOperation(ctx, op, nil)
 }
 
 func (r *PackageRepository) CreateOrGetOperationWithConfirmationNonce(ctx context.Context, op PackageOperationRecord, nonce string, nonceIssuedAt, nonceExpiresAt string) (PackageOperationRecord, bool, error) {
 	if nonce == "" {
 		return PackageOperationRecord{}, false, operationStateError(OperationErrStorageFailure, "confirmation nonce required", nil)
 	}
-	return r.createOrGetOperation(ctx, op, nonce, nonceIssuedAt, nonceExpiresAt)
+	return r.createOrGetOperation(ctx, op, &PackageConfirmationNonceBinding{Nonce: nonce, IssuedAt: nonceIssuedAt, ExpiresAt: nonceExpiresAt})
 }
 
-func (r *PackageRepository) createOrGetOperation(ctx context.Context, op PackageOperationRecord, nonce string, nonceTimestamps ...string) (PackageOperationRecord, bool, error) {
+func (r *PackageRepository) VerifyConfirmationNonceBinding(ctx context.Context, nonce, operationID string) error {
+	var boundNonce string
+	var boundOperationID string
+	err := r.db.QueryRowContext(ctx, `SELECT nonce, operation_id FROM extension_package_confirmation_nonces WHERE nonce=?`, nonce).Scan(&boundNonce, &boundOperationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce not bound to any operation", nil)
+	}
+	if err != nil {
+		return storageOperationError("verify confirmation nonce binding", err)
+	}
+	if boundNonce != nonce || boundOperationID != operationID {
+		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce bound to different operation", nil)
+	}
+	return nil
+}
+
+func (r *PackageRepository) createOrGetOperation(ctx context.Context, op PackageOperationRecord, nonceBinding *PackageConfirmationNonceBinding) (PackageOperationRecord, bool, error) {
 	if op.UserID == "" || op.IdempotencyKey == "" || op.RequestHash == "" || op.OperationID == "" || op.ExtensionID == "" {
 		return PackageOperationRecord{}, false, operationStateError(OperationErrStorageFailure, "operation authority fields required", nil)
 	}
@@ -117,19 +133,6 @@ func (r *PackageRepository) createOrGetOperation(ctx context.Context, op Package
 		return PackageOperationRecord{}, false, storageOperationError("begin create operation", err)
 	}
 	defer tx.Rollback()
-	if nonce != "" {
-		issuedAt := ""
-		expiresAt := ""
-		if len(nonceTimestamps) > 0 {
-			issuedAt = nonceTimestamps[0]
-		}
-		if len(nonceTimestamps) > 1 {
-			expiresAt = nonceTimestamps[1]
-		}
-		if err := consumePackageConfirmationNonceTx(ctx, tx, nonce, op.OperationID, op.OperationType, op.ExtensionID, op.UserID, issuedAt, expiresAt); err != nil {
-			return PackageOperationRecord{}, false, err
-		}
-	}
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_operations (
 		operation_id, trace_id, user_id, scope_type, scope_id, extension_id, target_version,
 		operation_type, status, current_step, artifact_id, preview_session_id, confirmations_json,
@@ -165,6 +168,17 @@ func (r *PackageRepository) createOrGetOperation(ctx context.Context, op Package
 	if created && op.ArtifactID != "" {
 		if _, err := acquireArtifactReferenceTx(ctx, tx, op.ArtifactID, ArtifactReferenceOperation, op.OperationID, time.Time{}); err != nil {
 			return PackageOperationRecord{}, false, storageOperationError("acquire operation artifact", err)
+		}
+	}
+	if nonceBinding != nil {
+		if created {
+			if err := consumePackageConfirmationNonceTx(ctx, tx, nonceBinding.Nonce, existing.OperationID, existing.OperationType, existing.ExtensionID, existing.UserID, nonceBinding.IssuedAt, nonceBinding.ExpiresAt); err != nil {
+				return PackageOperationRecord{}, false, err
+			}
+		} else {
+			if err := r.verifyConfirmationNonceBindingTx(ctx, tx, nonceBinding.Nonce, existing.OperationID); err != nil {
+				return PackageOperationRecord{}, false, err
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -631,6 +645,11 @@ func IsPackageOperationError(err error, code string) bool {
 	return errors.As(err, &stateErr) && stateErr.Code == code
 }
 
+func IsPackageErrorCode(err error, code string) bool {
+	var pkgErr *PackageError
+	return errors.As(err, &pkgErr) && pkgErr.Code == code
+}
+
 func hashLegacyOperationRequest(op PackageOperationRecord) string {
 	return fmt.Sprintf("legacy:%s:%s:%s:%s:%s", op.OperationType, op.ExtensionID, op.TargetVersion, op.ArtifactID, op.PreviewSessionID)
 }
@@ -653,6 +672,22 @@ func consumePackageConfirmationNonceTx(ctx context.Context, tx *sql.Tx, nonce, o
 	}
 	if rows != 1 {
 		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce replay detected", nil)
+	}
+	return nil
+}
+
+func (r *PackageRepository) verifyConfirmationNonceBindingTx(ctx context.Context, tx *sql.Tx, nonce, operationID string) error {
+	var boundNonce string
+	var boundOperationID string
+	err := tx.QueryRowContext(ctx, `SELECT nonce, operation_id FROM extension_package_confirmation_nonces WHERE nonce=?`, nonce).Scan(&boundNonce, &boundOperationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce not bound to any operation", nil)
+	}
+	if err != nil {
+		return storageOperationError("verify confirmation nonce binding", err)
+	}
+	if boundNonce != nonce || boundOperationID != operationID {
+		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce bound to different operation", nil)
 	}
 	return nil
 }

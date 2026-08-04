@@ -308,6 +308,10 @@ func (s *stubInstallGuard) RequireRelease(ctx context.Context, actor *desktoppet
 func (s *stubInstallGuard) RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
 	return &security.InstallationScope{UserID: actor.UserID}, nil
 }
+
+func (s *stubInstallGuard) RequireInstallationStrict(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
+	return &security.InstallationScope{UserID: actor.UserID}, nil
+}
 func (s *stubInstallGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*security.EditSessionScope, error) {
 	return &security.EditSessionScope{UserID: actor.UserID}, nil
 }
@@ -337,6 +341,7 @@ func doRequest(t *testing.T, r *gin.Engine, method, path string, body interface{
 		req = httptest.NewRequest(method, path, bytes.NewReader(data))
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("X-Amitia-Device-ID", "test-device-1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
@@ -742,6 +747,7 @@ func TestHandler_UpdateDefaultAction_InvalidJSON_InvalidParams(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/desktop-pets/installations/inst_1/default-action", bytes.NewReader([]byte("bad json")))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Amitia-Device-ID", "test-device-1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -829,6 +835,7 @@ func TestHandler_UpdateRuntimeSettings_InvalidJSON_InvalidParams(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/desktop-pets/installations/inst_1/settings", bytes.NewReader([]byte("bad json")))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Amitia-Device-ID", "test-device-1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

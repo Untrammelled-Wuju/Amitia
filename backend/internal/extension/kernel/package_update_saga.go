@@ -70,34 +70,35 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	claimsNow := time.Now().UTC()
 	confirmationsJSON, _ := json.Marshal(confirmed.claims.Confirmations)
 	claimsJSON, _ := json.Marshal(PackageConfirmationClaims{
-		SchemaVersion:           PackageConfirmationClaimsSchemaVersion,
-		OperationType:           string(PackageOperationTypeUpdate),
-		ExtensionID:             confirmed.session.ExtensionID,
-		ArtifactID:              confirmed.artifact.ArtifactID,
-		PolicyVersion:           confirmed.session.PolicyVersion,
-		SecurityPolicyHash:      computeSecurityPolicyHash(),
-		DeveloperSessionID:      confirmed.preview.DeveloperSessionID,
-		MigrationPlanHash:       confirmed.preview.MigrationPlanHash,
-		PreviewSessionID:        confirmed.session.SessionID,
-		PreviewHash:             confirmed.claims.PreviewHash,
-		SnapshotRequirementHash: confirmed.claims.SnapshotRequirementHash,
-		UserID:                  request.UserID,
-		ScopeType:               request.ScopeType,
-		ScopeID:                 request.ScopeID,
-		ConfirmedItems:          confirmedItemsFromMap(confirmed.claims.Confirmations),
-		Confirmations:           confirmed.claims.Confirmations,
-		IssuedAt:                claimsNow.Unix(),
-		ExpiresAt:               confirmed.claims.ExpiresAt,
-		Nonce:                   uuid.NewString(),
-		ArchiveHash:             confirmed.session.ArchiveHash,
-		ManifestHash:            confirmed.session.ManifestHash,
-		ContentTreeHash:         confirmed.session.ContentTreeHash,
-		SourceVersionID:         current.InstalledVersion.String(),
-		TargetVersion:           confirmed.session.Version,
-		TargetVersionID:         confirmed.session.Version,
+		SchemaVersion:             PackageConfirmationClaimsSchemaVersion,
+		OperationType:             string(PackageOperationTypeUpdate),
+		ExtensionID:               confirmed.session.ExtensionID,
+		ArtifactID:                confirmed.artifact.ArtifactID,
+		PolicyVersion:             confirmed.session.PolicyVersion,
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		DeveloperSessionID:        confirmed.preview.DeveloperSessionID,
+		MigrationPlanHash:         confirmed.preview.MigrationPlanHash,
+		PreviewSessionID:          confirmed.session.SessionID,
+		PreviewHash:               confirmed.claims.PreviewHash,
+		SnapshotRequirementHash:   confirmed.claims.SnapshotRequirementHash,
+		RequiredConfirmationsHash: confirmed.claims.RequiredConfirmationsHash,
+		DependenciesHash:          confirmed.claims.DependenciesHash,
+		UserID:                    request.UserID,
+		ScopeType:                 request.ScopeType,
+		ScopeID:                   request.ScopeID,
+		ConfirmedItems:            confirmedItemsFromMap(confirmed.claims.Confirmations),
+		Confirmations:             confirmed.claims.Confirmations,
+		IssuedAt:                  confirmed.claims.IssuedAt,
+		ExpiresAt:                 confirmed.claims.ExpiresAt,
+		Nonce:                     confirmed.claims.Nonce,
+		ArchiveHash:               confirmed.session.ArchiveHash,
+		ManifestHash:              confirmed.session.ManifestHash,
+		ContentTreeHash:           confirmed.session.ContentTreeHash,
+		SourceVersionID:           current.InstalledVersion.String(),
+		TargetVersion:             confirmed.session.Version,
+		TargetVersionID:           confirmed.session.Version,
 	})
 	updateOp := PackageOperationRecord{OperationID: operationID, TraceID: traceID, UserID: request.UserID,
 		ScopeType: request.ScopeType, ScopeID: request.ScopeID, ExtensionID: confirmed.session.ExtensionID,
@@ -111,7 +112,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 			ArtifactID: confirmed.artifact.ArtifactID, PreviewSessionID: confirmed.session.SessionID,
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		}), StartedAt: now, UpdatedAt: now}
-	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperation(ctx, updateOp)
+	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, updateOp, confirmed.claims.Nonce, confirmationTimestamp(confirmed.claims.IssuedAt), confirmationTimestamp(confirmed.claims.ExpiresAt))
 	if createErr != nil {
 		return KernelInstallResult{}, createErr
 	}
@@ -148,6 +149,11 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
+	updateEvidence := buildConfirmationAuthorityEvidence(operationID, string(PackageOperationTypeUpdate), confirmed.session.SessionID, standardConfirmationClaimsFromLegacy(string(PackageOperationTypeUpdate), confirmed.claims))
+	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, updateEvidence, guard); evidenceErr != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", evidenceErr.Error(), true, guard)
+		return KernelInstallResult{}, fmt.Errorf("kernel: persist update authority evidence: %w", evidenceErr)
+	}
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
@@ -433,6 +439,24 @@ func (r *Runtime) validateConfirmedPackageUpdate(ctx context.Context, request Pa
 	}
 	if claims.PreviewHash == "" || claims.SnapshotRequirementHash == "" {
 		return confirmedPackageUpdate{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, ErrPackageConfirmationClaimsInvalid)
+	}
+	if claims.Nonce == "" || claims.IssuedAt == 0 {
+		return confirmedPackageUpdate{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: nonce and issuedAt required", ErrPackageConfirmationClaimsInvalid))
+	}
+	if claims.RequiredConfirmationsHash == "" || claims.RequiredConfirmationsHash != computePackageRequiredConfirmationsHash(required) {
+		return confirmedPackageUpdate{}, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, fmt.Errorf("%w: requiredConfirmationsHash mismatch", ErrPackageConfirmationItemsMismatch))
+	}
+	if claims.DependenciesHash == "" {
+		return confirmedPackageUpdate{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: dependenciesHash required", ErrPackageConfirmationClaimsInvalid))
+	}
+	confirmedItems := confirmedItemsFromMap(claims.Confirmations)
+	if len(confirmedItems) == 0 || !validateConfirmedItemsConsistency(confirmedItems, claims.Confirmations) {
+		return confirmedPackageUpdate{}, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
+	}
+	for _, confirmation := range confirmedItems {
+		if !claims.Confirmations[confirmation] {
+			return confirmedPackageUpdate{}, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
+		}
 	}
 	return confirmedPackageUpdate{session: session, preview: preview, claims: claims, artifact: artifact, pkg: pkg}, nil
 }
