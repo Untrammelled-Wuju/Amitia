@@ -188,8 +188,21 @@ func (s *PackageConfirmationKeyStore) verifyWithKey(entry *confirmationKeyEntry,
 	if err != nil || json.Unmarshal(payload, &claims) != nil {
 		return claims, fmt.Errorf("kernel: confirmation token invalid")
 	}
-	if claims.ExpiresAt <= time.Now().UTC().Unix() {
-		return claims, fmt.Errorf("kernel: confirmation token expired")
+	if err := validatePackageConfirmationTemporalBinding(
+		claims.IssuedAt,
+		claims.ExpiresAt,
+		claims.Nonce,
+		time.Now().UTC(),
+	); err != nil {
+		return claims, err
+	}
+	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return claims,
+			NewPackageError(
+				PackageErrCodeConfirmationPolicyVersionStale,
+				409,
+				fmt.Errorf("%w: security policy changed", ErrPackageConfirmationPolicyVersionStale),
+			)
 	}
 	return claims, nil
 }

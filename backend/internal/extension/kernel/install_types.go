@@ -10,7 +10,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
@@ -277,8 +279,21 @@ func verifyPackageConfirmation(token string) (packageConfirmationClaims, error) 
 	if err != nil || json.Unmarshal(payload, &claims) != nil {
 		return claims, fmt.Errorf("kernel: confirmation token invalid")
 	}
-	if claims.ExpiresAt <= time.Now().UTC().Unix() {
-		return claims, fmt.Errorf("kernel: confirmation token expired")
+	if err := validatePackageConfirmationTemporalBinding(
+		claims.IssuedAt,
+		claims.ExpiresAt,
+		claims.Nonce,
+		time.Now().UTC(),
+	); err != nil {
+		return claims, err
+	}
+	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return claims,
+			NewPackageError(
+				PackageErrCodeConfirmationPolicyVersionStale,
+				409,
+				fmt.Errorf("%w: security policy changed", ErrPackageConfirmationPolicyVersionStale),
+			)
 	}
 	return claims, nil
 }
@@ -309,6 +324,140 @@ type KernelInstallResult struct {
 const PackageConfirmationClaimsSchemaVersion = 1
 
 const PackageConfirmationSnapshotExempt = "confirm.snapshot_exempt"
+
+const (
+	packageConfirmationLifetime      = 10 * time.Minute
+	packageConfirmationClockSkew     = 30 * time.Second
+	packageConfirmationMaxNonceLength = 128
+)
+
+type packageConfirmationTemporalBinding struct {
+	IssuedAt  int64
+	ExpiresAt int64
+	Nonce     string
+}
+
+func newPackageConfirmationTemporalBinding(notAfter time.Time) (packageConfirmationTemporalBinding, error) {
+	now := time.Now().UTC().Truncate(time.Second)
+
+	expiresAt := now.Add(packageConfirmationLifetime)
+
+	if !notAfter.IsZero() {
+		notAfter = notAfter.UTC().Truncate(time.Second)
+
+		if notAfter.Before(expiresAt) {
+			expiresAt = notAfter
+		}
+	}
+
+	if !expiresAt.After(now) {
+		return packageConfirmationTemporalBinding{},
+			NewPackageError(
+				PackageErrCodeConfirmationExpired,
+				403,
+				fmt.Errorf("kernel: confirmation expiration is not after issuance"),
+			)
+	}
+
+	binding := packageConfirmationTemporalBinding{
+		IssuedAt:  now.Unix(),
+		ExpiresAt: expiresAt.Unix(),
+		Nonce:     uuid.NewString(),
+	}
+
+	if err := validatePackageConfirmationTemporalBinding(
+		binding.IssuedAt,
+		binding.ExpiresAt,
+		binding.Nonce,
+		now,
+	); err != nil {
+		return packageConfirmationTemporalBinding{}, err
+	}
+
+	return binding, nil
+}
+
+func validatePackageConfirmationTemporalBinding(
+	issuedAtUnix int64,
+	expiresAtUnix int64,
+	nonce string,
+	now time.Time,
+) error {
+	nonce = strings.TrimSpace(nonce)
+
+	if issuedAtUnix <= 0 {
+		return NewPackageError(
+			PackageErrCodeConfirmationClaimsInvalid,
+			403,
+			fmt.Errorf("%w: issuedAt required", ErrPackageConfirmationClaimsInvalid),
+		)
+	}
+
+	if expiresAtUnix <= 0 {
+		return NewPackageError(
+			PackageErrCodeConfirmationClaimsInvalid,
+			403,
+			fmt.Errorf("%w: expiresAt required", ErrPackageConfirmationClaimsInvalid),
+		)
+	}
+
+	if nonce == "" || len(nonce) > packageConfirmationMaxNonceLength {
+		return NewPackageError(
+			PackageErrCodeConfirmationClaimsInvalid,
+			403,
+			fmt.Errorf("%w: nonce invalid", ErrPackageConfirmationClaimsInvalid),
+		)
+	}
+
+	for _, character := range nonce {
+		if unicode.IsControl(character) || unicode.IsSpace(character) {
+			return NewPackageError(
+				PackageErrCodeConfirmationClaimsInvalid,
+				403,
+				fmt.Errorf("%w: nonce contains forbidden characters", ErrPackageConfirmationClaimsInvalid),
+			)
+		}
+	}
+
+	now = now.UTC().Truncate(time.Second)
+
+	issuedAt := time.Unix(issuedAtUnix, 0).UTC()
+	expiresAt := time.Unix(expiresAtUnix, 0).UTC()
+
+	if issuedAt.After(now.Add(packageConfirmationClockSkew)) {
+		return NewPackageError(
+			PackageErrCodeConfirmationStale,
+			409,
+			fmt.Errorf("%w: issuedAt is in the future", ErrPackageConfirmationStale),
+		)
+	}
+
+	if !expiresAt.After(issuedAt) {
+		return NewPackageError(
+			PackageErrCodeConfirmationClaimsInvalid,
+			403,
+			fmt.Errorf("%w: expiresAt must be later than issuedAt", ErrPackageConfirmationClaimsInvalid),
+		)
+	}
+
+	if expiresAt.Sub(issuedAt) > packageConfirmationLifetime+packageConfirmationClockSkew {
+		return NewPackageError(
+			PackageErrCodeConfirmationClaimsInvalid,
+			403,
+			fmt.Errorf("%w: confirmation lifetime exceeds policy", ErrPackageConfirmationClaimsInvalid),
+		)
+	}
+
+	if !expiresAt.After(now) {
+		return NewPackageError(
+			PackageErrCodeConfirmationExpired,
+			403,
+			fmt.Errorf("kernel: confirmation token expired"),
+		)
+	}
+
+	return nil
+}
 
 type PackageOperationType string
 
@@ -419,8 +568,21 @@ func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmatio
 	if err != nil || json.Unmarshal(payload, &claims) != nil {
 		return claims, fmt.Errorf("kernel: rollback confirmation token invalid")
 	}
-	if claims.ExpiresAt <= time.Now().UTC().Unix() {
-		return claims, fmt.Errorf("kernel: rollback confirmation token expired")
+	if err := validatePackageConfirmationTemporalBinding(
+		claims.IssuedAt,
+		claims.ExpiresAt,
+		claims.Nonce,
+		time.Now().UTC(),
+	); err != nil {
+		return claims, err
+	}
+	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return claims,
+			NewPackageError(
+				PackageErrCodeConfirmationPolicyVersionStale,
+				409,
+				fmt.Errorf("%w: rollback security policy changed", ErrPackageConfirmationPolicyVersionStale),
+			)
 	}
 	if claims.OperationType != "rollback" {
 		return claims, fmt.Errorf("kernel: rollback confirmation token operation type mismatch")
@@ -455,12 +617,6 @@ func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmatio
 	}
 	if claims.UserID == "" || claims.ScopeType == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: user and scope binding required", ErrPackageConfirmationClaimsInvalid))
-	}
-	if claims.IssuedAt == 0 {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: issuedAt required", ErrPackageConfirmationClaimsInvalid))
-	}
-	if claims.Nonce == "" {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: nonce required", ErrPackageConfirmationClaimsInvalid))
 	}
 	if len(claims.ConfirmedItems) == 0 || !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
 		return claims, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)

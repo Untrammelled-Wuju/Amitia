@@ -123,7 +123,10 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 			ArtifactID: artifact.ArtifactID, ScopeType: scopeType, ScopeID: scopeID,
 			PreviewSessionID: rollbackClaims.PreviewSessionID,
 		}), StartedAt: now, UpdatedAt: now}
-	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, rollbackOp, rollbackClaims.Nonce, confirmationTimestamp(rollbackClaims.IssuedAt), confirmationTimestamp(rollbackClaims.ExpiresAt))
+	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, rollbackOp, PackageConfirmationNonceBinding{
+		Nonce: rollbackClaims.Nonce, OperationType: rollbackOp.OperationType, ExtensionID: rollbackOp.ExtensionID, UserID: rollbackOp.UserID,
+		IssuedAt: confirmationTimestamp(rollbackClaims.IssuedAt), ExpiresAt: confirmationTimestamp(rollbackClaims.ExpiresAt),
+	})
 	if createErr != nil {
 		return KernelInstallResult{}, createErr
 	}
@@ -191,8 +194,26 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_snapshot_requirement_drift", PackageErrCodeConfirmationStale, "snapshot requirement hash changed after lease", true, guard)
 		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("snapshot requirement hash changed after lease")), failErr)
 	}
-	rollbackEvidence := buildRollbackConfirmationAuthorityEvidence(rollbackClaims, postLeasePreview.RequiredConfirmations, postLeasePreview.DependenciesHash, postLeasePreview.PreviewSessionID, postLeaseRequirementInput, postLeaseRequirement)
-	rollbackEvidence.OperationID = operationID
+	authorityInput, err := buildRollbackAuthorityInput(postLeasePreview)
+	if err != nil {
+		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "recompute_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
+		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		return KernelInstallResult{}, errors.Join(err, failErr)
+	}
+
+	standardClaims := standardConfirmationClaimsFromRollback(rollbackClaims)
+
+	rollbackEvidence, err := buildPackageConfirmationAuthorityEvidence(op.OperationID, standardClaims, authorityInput)
+	if err != nil {
+		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "validate_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
+		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		return KernelInstallResult{}, errors.Join(err, failErr)
+	}
+
+	rollbackEvidence.SnapshotRequirementInput = &postLeaseRequirementInput
+	rollbackEvidence.SnapshotRequirement = &postLeaseRequirement
+	rollbackEvidence.EvidenceHash = computePackageConfirmationAuthorityEvidenceHash(rollbackEvidence)
+
 	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, rollbackEvidence, guard); evidenceErr != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", fmt.Sprintf("authority evidence persistence failed: %v", evidenceErr), true, guard)
 		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
@@ -552,13 +573,19 @@ func (r *Runtime) PreviewPackageUninstall(ctx context.Context, extensionID, user
 	}
 	result.Dependents = uniquePackageStrings(result.Dependents)
 	result.Installable = !result.Enabled && len(result.Dependents) == 0
-	policy, policyReason, policyErr := r.computeUninstallArtifactPolicy(ctx, result.ArtifactID, extensionID)
+	policy, policyReason, policyErr := r.computeUninstallArtifactPolicy(ctx, result.ArtifactID, extensionID, result.CurrentVersion)
 	if policyErr != nil {
-		if result.ArtifactID == "" {
+		switch {
+		case IsPackageErrorCode(policyErr, PackageErrCodeExportRetentionUnsupported):
 			return result, policyErr
+		case IsPackageErrorCode(policyErr, PackageErrCodeUninstallArtifactPolicyUnproven):
+			return result, policyErr
+		case result.ArtifactID == "":
+			return result, policyErr
+		default:
+			result.ArtifactPolicy = ArtifactPolicyRetainArtifact
+			result.PolicyReason = policyReason
 		}
-		result.ArtifactPolicy = ArtifactPolicyRetainArtifact
-		result.PolicyReason = policyReason
 	} else {
 		result.ArtifactPolicy = policy
 		result.PolicyReason = policyReason
@@ -567,35 +594,142 @@ func (r *Runtime) PreviewPackageUninstall(ctx context.Context, extensionID, user
 	return result, nil
 }
 
-func (r *Runtime) computeUninstallArtifactPolicy(ctx context.Context, artifactID, extensionID string) (ArtifactPolicy, string, error) {
+func (r *Runtime) computeUninstallArtifactPolicy(
+	ctx context.Context,
+	artifactID string,
+	extensionID string,
+	currentVersion string,
+) (ArtifactPolicy, string, error) {
 	if artifactID == "" {
-		return ArtifactPolicyRetainArtifact, "artifact id missing, fail closed to retain", NewPackageError(PackageErrCodeUninstallArtifactMissing, 422, fmt.Errorf("artifact id missing for uninstall"))
+		return ArtifactPolicyRetainArtifact,
+			"artifact id missing, fail closed to retain",
+			NewPackageError(
+				PackageErrCodeUninstallArtifactMissing,
+				422,
+				fmt.Errorf("artifact id missing for uninstall"),
+			)
 	}
-	if r.container.PackageRepository == nil {
-		return ArtifactPolicyRetainArtifact, "repository unavailable, fail closed to retain", NewPackageError(PackageErrCodeQuarantineMetadataUnavailable, 503, fmt.Errorf("package repository unavailable"))
+
+	if r.container == nil ||
+		r.container.PackageRepository == nil {
+		return ArtifactPolicyRetainArtifact,
+			"repository unavailable, fail closed to retain",
+			NewPackageError(
+				PackageErrCodeQuarantineMetadataUnavailable,
+				503,
+				fmt.Errorf("package repository unavailable"),
+			)
 	}
-	hasRollbackRef, rollbackErr := r.container.PackageRepository.HasArtifactReference(ctx, artifactID, ArtifactReferenceRollbackPoint, extensionID)
-	if rollbackErr != nil {
-		return ArtifactPolicyRetainArtifact, fmt.Sprintf("rollback reference check failed: %v, fail closed to retain", rollbackErr), NewPackageError(PackageErrCodeQuarantineMetadataUnavailable, 503, rollbackErr)
+
+	repository := r.container.PackageRepository
+
+	point, pointErr := repository.GetRollbackPoint(
+		ctx,
+		extensionID,
+		currentVersion,
+	)
+
+	if pointErr == nil {
+		_, bindingErr := r.verifyRollbackRetentionBinding(
+			ctx,
+			extensionID,
+			currentVersion,
+			artifactID,
+		)
+
+		if bindingErr != nil {
+			return ArtifactPolicyRetainArtifact,
+				"rollback point exists but its version/generation/snapshot/reference binding is invalid",
+				NewPackageError(
+					PackageErrCodeUninstallArtifactPolicyUnproven,
+					409,
+					bindingErr,
+				)
+		}
+
+		return ArtifactPolicyRetainForRollback,
+			fmt.Sprintf(
+				"artifact retained by verified rollback point %s",
+				point.RollbackPointID,
+			),
+			nil
 	}
-	if hasRollbackRef {
-		return ArtifactPolicyRetainForRollback, "artifact referenced by rollback point", nil
+
+	if !IsRepositoryErrorKind(
+		pointErr,
+		RepositoryErrorNotFound,
+	) {
+		return ArtifactPolicyRetainArtifact,
+			fmt.Sprintf(
+				"rollback point lookup failed: %v",
+				pointErr,
+			),
+			NewPackageError(
+				PackageErrCodeUninstallArtifactPolicyUnproven,
+				503,
+				pointErr,
+			)
 	}
-	hasExportRef, exportErr := r.container.PackageRepository.HasArtifactReference(ctx, artifactID, ArtifactReferenceExportLease, extensionID)
+
+	exportReferenceCount, exportErr := repository.CountActiveArtifactReferencesByType(
+		ctx,
+		artifactID,
+		ArtifactReferenceExportLease,
+	)
+
 	if exportErr != nil {
-		return ArtifactPolicyRetainArtifact, fmt.Sprintf("export reference check failed: %v, fail closed to retain", exportErr), NewPackageError(PackageErrCodeQuarantineMetadataUnavailable, 503, exportErr)
+		return ArtifactPolicyRetainArtifact,
+			fmt.Sprintf(
+				"export reference check failed: %v",
+				exportErr,
+			),
+			NewPackageError(
+				PackageErrCodeQuarantineMetadataUnavailable,
+				503,
+				exportErr,
+			)
 	}
-	if hasExportRef {
-		return ArtifactPolicyRetainArtifact, "export retention unsupported without export model", NewPackageError(PackageErrCodeExportRetentionUnsupported, 422, ErrPackageExportRetentionUnsupported)
+
+	if exportReferenceCount > 0 {
+		return ArtifactPolicyRetainForExport,
+			"export retention requires an authoritative export lifecycle model",
+			NewPackageError(
+				PackageErrCodeExportRetentionUnsupported,
+				422,
+				ErrPackageExportRetentionUnsupported,
+			)
 	}
-	refCount, refErr := r.container.PackageRepository.CountActiveArtifactReferences(ctx, artifactID)
-	if refErr != nil {
-		return ArtifactPolicyRetainArtifact, fmt.Sprintf("reference count check failed: %v, fail closed to retain", refErr), NewPackageError(PackageErrCodeQuarantineMetadataUnavailable, 503, refErr)
+
+	referenceCount, referenceErr := repository.CountActiveArtifactReferences(
+		ctx,
+		artifactID,
+	)
+
+	if referenceErr != nil {
+		return ArtifactPolicyRetainArtifact,
+			fmt.Sprintf(
+				"reference count check failed: %v",
+				referenceErr,
+			),
+			NewPackageError(
+				PackageErrCodeQuarantineMetadataUnavailable,
+				503,
+				referenceErr,
+			)
 	}
-	if refCount > 0 {
-		return ArtifactPolicyRetainArtifact, fmt.Sprintf("artifact has %d remaining references", refCount), nil
+
+	if referenceCount > 0 {
+		return ArtifactPolicyRetainArtifact,
+			fmt.Sprintf(
+				"artifact has %d remaining references",
+				referenceCount,
+			),
+			nil
 	}
-	return ArtifactPolicyDeleteArtifact, "artifact has no rollback, export, or manual references", nil
+
+	return ArtifactPolicyDeleteArtifact,
+		"artifact has no rollback, export, or manual references",
+		nil
 }
 
 func computeUninstallPreviewHash(preview PackageUninstallPreviewResult) string {
@@ -781,6 +915,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		SecurityPolicyHash:        claims.SecurityPolicyHash,
 		SnapshotRequirementHash:   claims.SnapshotRequirementHash,
 		RequiredConfirmationsHash: claims.RequiredConfirmationsHash,
+		DependenciesHash:          claims.DependenciesHash,
 		PolicyVersion:             claims.PolicyVersion,
 		UserID:                    claims.UserID,
 		ScopeType:                 claims.ScopeType,
@@ -814,7 +949,10 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 			ArtifactID: initialPreview.ArtifactID, ScopeType: scopeType, ScopeID: scopeID,
 		}), StartedAt: now, UpdatedAt: now,
 	}
-	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, uninstallOp, claims.Nonce, confirmationTimestamp(claims.IssuedAt), confirmationTimestamp(claims.ExpiresAt))
+	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, uninstallOp, PackageConfirmationNonceBinding{
+		Nonce: claims.Nonce, OperationType: uninstallOp.OperationType, ExtensionID: uninstallOp.ExtensionID, UserID: uninstallOp.UserID,
+		IssuedAt: confirmationTimestamp(claims.IssuedAt), ExpiresAt: confirmationTimestamp(claims.ExpiresAt),
+	})
 	if createErr != nil {
 		return PackageOperationRecord{}, createErr
 	}
@@ -874,7 +1012,18 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recheck_preflight", PackageErrCodeConfirmationStale, "artifact policy changed after confirmation", true, uninstallGuard)
 		return PackageOperationRecord{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, ErrPackageConfirmationStale), persistErr)
 	}
-	uninstallEvidence := buildConfirmationAuthorityEvidence(operationID, string(PackageOperationTypeUninstall), "", standardClaims)
+	authorityInput, err := buildUninstallAuthorityInput(preview)
+	if err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recompute_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, uninstallGuard)
+		return PackageOperationRecord{}, errors.Join(err, persistErr)
+	}
+
+	uninstallEvidence, err := buildPackageConfirmationAuthorityEvidence(operationID, standardClaims, authorityInput)
+	if err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, uninstallGuard)
+		return PackageOperationRecord{}, errors.Join(err, persistErr)
+	}
+
 	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, uninstallEvidence, uninstallGuard); evidenceErr != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", evidenceErr.Error(), true, uninstallGuard)
 		return PackageOperationRecord{}, errors.Join(fmt.Errorf("kernel: persist uninstall authority evidence: %w", evidenceErr), persistErr)

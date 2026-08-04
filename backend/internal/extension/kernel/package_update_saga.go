@@ -112,7 +112,10 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 			ArtifactID: confirmed.artifact.ArtifactID, PreviewSessionID: confirmed.session.SessionID,
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		}), StartedAt: now, UpdatedAt: now}
-	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, updateOp, confirmed.claims.Nonce, confirmationTimestamp(confirmed.claims.IssuedAt), confirmationTimestamp(confirmed.claims.ExpiresAt))
+	existing, created, createErr := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, updateOp, PackageConfirmationNonceBinding{
+		Nonce: confirmed.claims.Nonce, OperationType: updateOp.OperationType, ExtensionID: updateOp.ExtensionID, UserID: updateOp.UserID,
+		IssuedAt: confirmationTimestamp(confirmed.claims.IssuedAt), ExpiresAt: confirmationTimestamp(confirmed.claims.ExpiresAt),
+	})
 	if createErr != nil {
 		return KernelInstallResult{}, createErr
 	}
@@ -149,13 +152,6 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
-	updateEvidence := buildConfirmationAuthorityEvidence(operationID, string(PackageOperationTypeUpdate), confirmed.session.SessionID, standardConfirmationClaimsFromLegacy(string(PackageOperationTypeUpdate), confirmed.claims))
-	updateEvidence.SourceVersionID = current.InstalledVersion.String()
-	updateEvidence.TargetVersionID = confirmed.session.Version
-	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, updateEvidence, guard); evidenceErr != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", evidenceErr.Error(), true, guard)
-		return KernelInstallResult{}, fmt.Errorf("kernel: persist update authority evidence: %w", evidenceErr)
-	}
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
@@ -176,6 +172,28 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_target_version", "PACKAGE_UPDATE_TARGET_UNCHANGED", "update target must have a different version and artifact", true, guard)
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_UPDATE_TARGET_UNCHANGED: update target must have a different version and artifact")
 	}
+
+	var lockedPreview InstallPreview
+	if err := json.Unmarshal([]byte(lockedSession.PreviewResultJSON), &lockedPreview); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "recompute_confirmation_authority", err, nil, guard)
+	}
+
+	authorityInput, err := r.buildInstallUpdateAuthorityInput(ctx, string(PackageOperationTypeUpdate), lockedSession, lockedPreview)
+	if err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "recompute_confirmation_authority", err, nil, guard)
+	}
+
+	standardClaims := standardConfirmationClaimsFromLegacy(string(PackageOperationTypeUpdate), confirmed.claims)
+
+	updateEvidence, err := buildPackageConfirmationAuthorityEvidence(operationID, standardClaims, authorityInput)
+	if err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "validate_confirmation_authority", err, nil, guard)
+	}
+
+	if err := r.persistPackageConfirmationAuthorityEvidence(ctx, updateEvidence, guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(operationID, "persist_authority_evidence", err, nil, guard)
+	}
+
 	currentDefinition, err := r.container.DefinitionRepository.GetExtension(ctx, current.ExtensionID, current.InstalledVersion)
 	if err != nil {
 		return KernelInstallResult{}, err

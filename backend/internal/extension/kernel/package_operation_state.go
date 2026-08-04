@@ -76,7 +76,6 @@ type PackageExtensionLease struct {
 
 type PackageConfirmationNonceBinding struct {
 	Nonce         string
-	OperationID   string
 	OperationType string
 	ExtensionID   string
 	UserID        string
@@ -84,29 +83,156 @@ type PackageConfirmationNonceBinding struct {
 	ExpiresAt     string
 }
 
+type PackageConfirmationNonceRecord struct {
+	Nonce         string
+	OperationID   string
+	OperationType string
+	ExtensionID   string
+	UserID        string
+	IssuedAt      string
+	ExpiresAt     string
+	ConsumedAt    string
+}
+
 func (r *PackageRepository) CreateOrGetOperation(ctx context.Context, op PackageOperationRecord) (PackageOperationRecord, bool, error) {
 	return r.createOrGetOperation(ctx, op, nil)
 }
 
-func (r *PackageRepository) CreateOrGetOperationWithConfirmationNonce(ctx context.Context, op PackageOperationRecord, nonce string, nonceIssuedAt, nonceExpiresAt string) (PackageOperationRecord, bool, error) {
-	if nonce == "" {
-		return PackageOperationRecord{}, false, operationStateError(OperationErrStorageFailure, "confirmation nonce required", nil)
+func (r *PackageRepository) CreateOrGetOperationWithConfirmationNonce(ctx context.Context, op PackageOperationRecord, binding PackageConfirmationNonceBinding) (PackageOperationRecord, bool, error) {
+	if err := validatePackageConfirmationNonceBindingForOperation(op, binding, time.Now().UTC()); err != nil {
+		return PackageOperationRecord{}, false, err
 	}
-	return r.createOrGetOperation(ctx, op, &PackageConfirmationNonceBinding{Nonce: nonce, IssuedAt: nonceIssuedAt, ExpiresAt: nonceExpiresAt})
+	return r.createOrGetOperation(ctx, op, &binding)
 }
 
-func (r *PackageRepository) VerifyConfirmationNonceBinding(ctx context.Context, nonce, operationID string) error {
-	var boundNonce string
-	var boundOperationID string
-	err := r.db.QueryRowContext(ctx, `SELECT nonce, operation_id FROM extension_package_confirmation_nonces WHERE nonce=?`, nonce).Scan(&boundNonce, &boundOperationID)
+func validatePackageConfirmationNonceBindingForOperation(operation PackageOperationRecord, binding PackageConfirmationNonceBinding, now time.Time) error {
+	if strings.TrimSpace(binding.Nonce) == "" {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce required", nil)
+	}
+	if binding.OperationType != operation.OperationType {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce operation type mismatch", nil)
+	}
+	if binding.ExtensionID != operation.ExtensionID {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce extension mismatch", nil)
+	}
+	if binding.UserID != operation.UserID {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce user mismatch", nil)
+	}
+	issuedAt, expiresAt, err := parsePackageConfirmationNonceTimes(binding)
+	if err != nil {
+		return err
+	}
+	return validatePackageConfirmationTemporalBinding(issuedAt.Unix(), expiresAt.Unix(), binding.Nonce, now)
+}
+
+func parsePackageConfirmationNonceTimes(binding PackageConfirmationNonceBinding) (time.Time, time.Time, error) {
+	if strings.TrimSpace(binding.IssuedAt) == "" {
+		return time.Time{}, time.Time{}, operationStateError(OperationErrTokenStale, "confirmation nonce issuedAt missing", nil)
+	}
+	if strings.TrimSpace(binding.ExpiresAt) == "" {
+		return time.Time{}, time.Time{}, operationStateError(OperationErrTokenStale, "confirmation nonce expiresAt missing", nil)
+	}
+	issuedAt, err := time.Parse(time.RFC3339Nano, binding.IssuedAt)
+	if err != nil {
+		return time.Time{}, time.Time{}, operationStateError(OperationErrTokenStale, "confirmation nonce issuedAt invalid", err)
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, binding.ExpiresAt)
+	if err != nil {
+		return time.Time{}, time.Time{}, operationStateError(OperationErrTokenStale, "confirmation nonce expiresAt invalid", err)
+	}
+	issuedAt = issuedAt.UTC().Truncate(time.Second)
+	expiresAt = expiresAt.UTC().Truncate(time.Second)
+	if issuedAt.Format(time.RFC3339Nano) != binding.IssuedAt {
+		return time.Time{}, time.Time{}, operationStateError(OperationErrTokenStale, "confirmation nonce issuedAt is not canonical RFC3339Nano", nil)
+	}
+	if expiresAt.Format(time.RFC3339Nano) != binding.ExpiresAt {
+		return time.Time{}, time.Time{}, operationStateError(OperationErrTokenStale, "confirmation nonce expiresAt is not canonical RFC3339Nano", nil)
+	}
+	return issuedAt, expiresAt, nil
+}
+
+func (r *PackageRepository) VerifyConfirmationNonceBinding(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) error {
+	if r == nil || r.db == nil {
+		return operationStateError(OperationErrStorageFailure, "confirmation nonce repository unavailable", nil)
+	}
+	binding := PackageConfirmationNonceBinding{
+		Nonce:         claims.Nonce,
+		OperationType: claims.OperationType,
+		ExtensionID:   claims.ExtensionID,
+		UserID:        claims.UserID,
+		IssuedAt:      confirmationTimestamp(claims.IssuedAt),
+		ExpiresAt:     confirmationTimestamp(claims.ExpiresAt),
+	}
+	if err := validatePackageConfirmationNonceBindingForOperation(operation, binding, time.Now().UTC()); err != nil {
+		return err
+	}
+	var record PackageConfirmationNonceRecord
+	err := r.db.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE nonce=?`, claims.Nonce).Scan(
+		&record.Nonce, &record.OperationID, &record.OperationType, &record.ExtensionID,
+		&record.UserID, &record.IssuedAt, &record.ExpiresAt, &record.ConsumedAt,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce not bound to any operation", nil)
+		return operationStateError(OperationErrTokenStale, "confirmation nonce binding missing", nil)
 	}
 	if err != nil {
 		return storageOperationError("verify confirmation nonce binding", err)
 	}
-	if boundNonce != nonce || boundOperationID != operationID {
-		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce bound to different operation", nil)
+	return verifyPackageConfirmationNonceRecord(record, operation.OperationID, binding, time.Now().UTC())
+}
+
+func scanPackageConfirmationNonceRecord(row interface{ Scan(dest ...any) error }) (PackageConfirmationNonceRecord, error) {
+	var record PackageConfirmationNonceRecord
+	err := row.Scan(
+		&record.Nonce, &record.OperationID, &record.OperationType, &record.ExtensionID,
+		&record.UserID, &record.IssuedAt, &record.ExpiresAt, &record.ConsumedAt,
+	)
+	return record, err
+}
+
+func getPackageConfirmationNonceRecordByNonceTx(ctx context.Context, tx *sql.Tx, nonce string) (PackageConfirmationNonceRecord, error) {
+	return scanPackageConfirmationNonceRecord(tx.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE nonce=?`, nonce))
+}
+
+func getPackageConfirmationNonceRecordByOperationTx(ctx context.Context, tx *sql.Tx, operationID string) (PackageConfirmationNonceRecord, error) {
+	return scanPackageConfirmationNonceRecord(tx.QueryRowContext(ctx, `SELECT nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at FROM extension_package_confirmation_nonces WHERE operation_id=?`, operationID))
+}
+
+func verifyPackageConfirmationNonceRecord(record PackageConfirmationNonceRecord, operationID string, binding PackageConfirmationNonceBinding, now time.Time) error {
+	if record.Nonce != binding.Nonce {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce mismatch", nil)
+	}
+	if record.OperationID != operationID {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce bound to different operation", nil)
+	}
+	if record.OperationType != binding.OperationType {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce operation type mismatch", nil)
+	}
+	if record.ExtensionID != binding.ExtensionID {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce extension mismatch", nil)
+	}
+	if record.UserID != binding.UserID {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce user mismatch", nil)
+	}
+	if record.IssuedAt != binding.IssuedAt {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce issuedAt mismatch", nil)
+	}
+	if record.ExpiresAt != binding.ExpiresAt {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce expiresAt mismatch", nil)
+	}
+	issuedAt, expiresAt, err := parsePackageConfirmationNonceTimes(binding)
+	if err != nil {
+		return err
+	}
+	consumedAt, err := time.Parse(time.RFC3339Nano, record.ConsumedAt)
+	if err != nil {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce consumedAt invalid", err)
+	}
+	consumedAt = consumedAt.UTC().Truncate(time.Second)
+	if consumedAt.Before(issuedAt) || consumedAt.After(expiresAt) {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce consumed outside valid window", nil)
+	}
+	if err := validatePackageConfirmationTemporalBinding(issuedAt.Unix(), expiresAt.Unix(), binding.Nonce, now); err != nil {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce is no longer valid", err)
 	}
 	return nil
 }
@@ -171,12 +297,16 @@ func (r *PackageRepository) createOrGetOperation(ctx context.Context, op Package
 		}
 	}
 	if nonceBinding != nil {
+		binding := *nonceBinding
+		if err := validatePackageConfirmationNonceBindingForOperation(existing, binding, time.Now().UTC()); err != nil {
+			return PackageOperationRecord{}, false, err
+		}
 		if created {
-			if err := consumePackageConfirmationNonceTx(ctx, tx, nonceBinding.Nonce, existing.OperationID, existing.OperationType, existing.ExtensionID, existing.UserID, nonceBinding.IssuedAt, nonceBinding.ExpiresAt); err != nil {
+			if err := consumePackageConfirmationNonceTx(ctx, tx, existing.OperationID, binding); err != nil {
 				return PackageOperationRecord{}, false, err
 			}
 		} else {
-			if err := r.verifyConfirmationNonceBindingTx(ctx, tx, nonceBinding.Nonce, existing.OperationID); err != nil {
+			if err := verifyConfirmationNonceBindingTx(ctx, tx, existing, binding); err != nil {
 				return PackageOperationRecord{}, false, err
 			}
 		}
@@ -654,40 +784,58 @@ func hashLegacyOperationRequest(op PackageOperationRecord) string {
 	return fmt.Sprintf("legacy:%s:%s:%s:%s:%s", op.OperationType, op.ExtensionID, op.TargetVersion, op.ArtifactID, op.PreviewSessionID)
 }
 
-func consumePackageConfirmationNonceTx(ctx context.Context, tx *sql.Tx, nonce, operationID, operationType, extensionID, userID, issuedAt, expiresAt string) error {
-	if issuedAt == "" {
-		issuedAt = time.Now().UTC().Format(time.RFC3339Nano)
+func consumePackageConfirmationNonceTx(ctx context.Context, tx *sql.Tx, operationID string, binding PackageConfirmationNonceBinding) error {
+	if strings.TrimSpace(operationID) == "" {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce operation id missing", nil)
 	}
-	consumedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_confirmation_nonces (
-		nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		nonce, operationID, operationType, extensionID, userID, issuedAt, expiresAt, consumedAt)
+	issuedAt, expiresAt, err := parsePackageConfirmationNonceTimes(binding)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := validatePackageConfirmationTemporalBinding(issuedAt.Unix(), expiresAt.Unix(), binding.Nonce, now); err != nil {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce time window invalid", err)
+	}
+	if now.Before(issuedAt) || now.After(expiresAt) {
+		return operationStateError(OperationErrTokenStale, "confirmation nonce consumed outside valid window", nil)
+	}
+	consumedAt := now.Format(time.RFC3339Nano)
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_confirmation_nonces (nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		binding.Nonce, operationID, binding.OperationType, binding.ExtensionID, binding.UserID, binding.IssuedAt, binding.ExpiresAt, consumedAt)
 	if err != nil {
 		return storageOperationError("consume confirmation nonce", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return storageOperationError("inspect nonce insert", err)
+		return storageOperationError("inspect confirmation nonce insert", err)
 	}
-	if rows != 1 {
-		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce replay detected", nil)
+	if rows == 1 {
+		return nil
 	}
-	return nil
+	record, recordErr := getPackageConfirmationNonceRecordByNonceTx(ctx, tx, binding.Nonce)
+	if recordErr == nil {
+		return verifyPackageConfirmationNonceRecord(record, operationID, binding, now)
+	}
+	if !errors.Is(recordErr, sql.ErrNoRows) {
+		return recordErr
+	}
+	record, recordErr = getPackageConfirmationNonceRecordByOperationTx(ctx, tx, operationID)
+	if recordErr == nil {
+		return operationStateError(OperationErrTokenStale, fmt.Sprintf("operation already bound to different nonce %s", record.Nonce), nil)
+	}
+	if !errors.Is(recordErr, sql.ErrNoRows) {
+		return recordErr
+	}
+	return operationStateError(OperationErrTokenStale, "confirmation nonce uniqueness conflict", nil)
 }
 
-func (r *PackageRepository) verifyConfirmationNonceBindingTx(ctx context.Context, tx *sql.Tx, nonce, operationID string) error {
-	var boundNonce string
-	var boundOperationID string
-	err := tx.QueryRowContext(ctx, `SELECT nonce, operation_id FROM extension_package_confirmation_nonces WHERE nonce=?`, nonce).Scan(&boundNonce, &boundOperationID)
+func verifyConfirmationNonceBindingTx(ctx context.Context, tx *sql.Tx, operation PackageOperationRecord, binding PackageConfirmationNonceBinding) error {
+	record, err := getPackageConfirmationNonceRecordByNonceTx(ctx, tx, binding.Nonce)
 	if errors.Is(err, sql.ErrNoRows) {
-		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce not bound to any operation", nil)
+		return operationStateError(OperationErrTokenStale, "confirmation nonce not bound to operation", nil)
 	}
 	if err != nil {
 		return storageOperationError("verify confirmation nonce binding", err)
 	}
-	if boundNonce != nonce || boundOperationID != operationID {
-		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce bound to different operation", nil)
-	}
-	return nil
+	return verifyPackageConfirmationNonceRecord(record, operation.OperationID, binding, time.Now().UTC())
 }

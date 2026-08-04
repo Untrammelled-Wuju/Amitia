@@ -346,8 +346,11 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		return PackageRollbackConfirmation{}, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 400, fmt.Errorf("kernel: rollback preview session id missing"))
 	}
 
-	issuedAt := time.Now().UTC()
-	expiresAt := issuedAt.Add(10 * time.Minute)
+	temporal, err := newPackageConfirmationTemporalBinding(time.Time{})
+	if err != nil {
+		return PackageRollbackConfirmation{}, err
+	}
+	expiresAt := time.Unix(temporal.ExpiresAt, 0).UTC()
 
 	claims := PackageRollbackConfirmationClaims{
 		SchemaVersion:             PackageRollbackConfirmationClaimsSchemaVersion,
@@ -371,9 +374,9 @@ func (r *Runtime) ConfirmPackageRollback(ctx context.Context, request PackageRol
 		ScopeID:                   request.ScopeID,
 		ConfirmedItems:            confirmedItemsFromMap(confirmed),
 		Confirmations:             confirmed,
-		IssuedAt:                  issuedAt.Unix(),
-		ExpiresAt:                 expiresAt.Unix(),
-		Nonce:                     uuid.NewString(),
+		IssuedAt:                  temporal.IssuedAt,
+		ExpiresAt:                 temporal.ExpiresAt,
+		Nonce:                     temporal.Nonce,
 	}
 
 	token, err := signPackageRollbackConfirmation(claims)

@@ -11,7 +11,8 @@ import (
 )
 
 func TestPackageConfirmationTokenRejectsTamperAndExpiry(t *testing.T) {
-	claims := packageConfirmationClaims{SessionID: "preview-1", ArtifactID: "artifact-1", ArchiveHash: "sha256:a", ManifestHash: "sha256:m", ContentTreeHash: "sha256:t", UserID: "user-1", ScopeType: "global", PolicyVersion: packagePolicyVersion, MigrationPlanHash: "sha256:migration-plan", Confirmations: map[string]bool{"confirm.scripts": true}, ExpiresAt: time.Now().UTC().Add(time.Minute).Unix()}
+	required := []string{"confirm.scripts"}
+	claims := packageConfirmationClaims{SessionID: "preview-1", ArtifactID: "artifact-1", ArchiveHash: "sha256:a", ManifestHash: "sha256:m", ContentTreeHash: "sha256:t", UserID: "user-1", ScopeType: "global", PolicyVersion: packagePolicyVersion, MigrationPlanHash: "sha256:migration-plan", SecurityPolicyHash: computeSecurityPolicyHash(), SnapshotRequirementHash: "sha256:snap-req", RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required), DependenciesHash: computePackageDependenciesHash(nil), Confirmations: map[string]bool{"confirm.scripts": true}, IssuedAt: time.Now().UTC().Unix(), Nonce: "nonce-1", ExpiresAt: time.Now().UTC().Add(time.Minute).Unix()}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
 		t.Fatal(err)
@@ -34,18 +35,24 @@ func TestPackageConfirmationTokenRejectsTamperAndExpiry(t *testing.T) {
 }
 
 func TestUninstallConfirmationTokenBindsRequiredClaims(t *testing.T) {
+	required := []string{"confirm.delete"}
 	claims := packageConfirmationClaims{
-		ArtifactID:          "artifact-1",
-		ArtifactPolicy:      "retainArtifact",
-		PreviewHash:         "sha256:preview",
-		CurrentVersionID:    "version-id-1",
-		CurrentGenerationID: "gen-id-1",
-		UserID:              "user-1",
-		ScopeType:           "global",
-		ScopeID:             "",
-		SecurityPolicyHash:  "sha256:security-policy",
-		Confirmations:       map[string]bool{"confirm.delete": true},
-		ExpiresAt:           time.Now().UTC().Add(time.Minute).Unix(),
+		ArtifactID:                "artifact-1",
+		ArtifactPolicy:            "retainArtifact",
+		PreviewHash:               "sha256:preview",
+		CurrentVersionID:          "version-id-1",
+		CurrentGenerationID:       "gen-id-1",
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		ScopeID:                   "",
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		SnapshotRequirementHash:   "sha256:snap-req",
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+		DependenciesHash:          computePackageDependenciesHash(nil),
+		Confirmations:             map[string]bool{"confirm.delete": true},
+		IssuedAt:                  time.Now().UTC().Unix(),
+		Nonce:                     "nonce-uninstall",
+		ExpiresAt:                 time.Now().UTC().Add(time.Minute).Unix(),
 	}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
@@ -90,18 +97,24 @@ func TestUninstallConfirmationTokenBindsRequiredClaims(t *testing.T) {
 }
 
 func TestUninstallRetainForRollbackClaimBindsPolicy(t *testing.T) {
+	required := []string{"confirm.delete"}
 	claims := packageConfirmationClaims{
-		ArtifactID:              "artifact-retain-rollback",
-		ArtifactPolicy:          "retainForRollback",
-		PreviewHash:             "sha256:preview-retain-rollback",
-		CurrentVersionID:        "version-id-rb",
-		CurrentGenerationID:     "gen-rb-1",
-		SnapshotRequirementHash: "sha256:snap-req-rb",
-		UserID:                  "user-1",
-		ScopeType:               "global",
-		PolicyVersion:           packagePolicyVersion,
-		Confirmations:           map[string]bool{"confirm.delete": true},
-		ExpiresAt:               time.Now().UTC().Add(time.Minute).Unix(),
+		ArtifactID:                "artifact-retain-rollback",
+		ArtifactPolicy:            "retainForRollback",
+		PreviewHash:               "sha256:preview-retain-rollback",
+		CurrentVersionID:          "version-id-rb",
+		CurrentGenerationID:       "gen-rb-1",
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		SnapshotRequirementHash:   "sha256:snap-req-rb",
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+		DependenciesHash:          computePackageDependenciesHash(nil),
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		PolicyVersion:             packagePolicyVersion,
+		Confirmations:             map[string]bool{"confirm.delete": true},
+		IssuedAt:                  time.Now().UTC().Unix(),
+		Nonce:                     "nonce-rb",
+		ExpiresAt:                 time.Now().UTC().Add(time.Minute).Unix(),
 	}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
@@ -123,17 +136,24 @@ func TestUninstallRetainForRollbackClaimBindsPolicy(t *testing.T) {
 }
 
 func TestUninstallRetainForExportClaimBindsPolicy(t *testing.T) {
+	required := []string{"confirm.delete"}
 	claims := packageConfirmationClaims{
-		ArtifactID:          "artifact-retain-export",
-		ArtifactPolicy:      "retainForExport",
-		PreviewHash:         "sha256:preview-retain-export",
-		CurrentVersionID:    "version-id-exp",
-		CurrentGenerationID: "gen-exp-1",
-		UserID:              "user-1",
-		ScopeType:           "global",
-		PolicyVersion:       packagePolicyVersion,
-		Confirmations:       map[string]bool{"confirm.delete": true},
-		ExpiresAt:           time.Now().UTC().Add(time.Minute).Unix(),
+		ArtifactID:                "artifact-retain-export",
+		ArtifactPolicy:            "retainForExport",
+		PreviewHash:               "sha256:preview-retain-export",
+		CurrentVersionID:          "version-id-exp",
+		CurrentGenerationID:       "gen-exp-1",
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		PolicyVersion:             packagePolicyVersion,
+		SnapshotRequirementHash:   "sha256:snap-req",
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+		DependenciesHash:          computePackageDependenciesHash(nil),
+		Confirmations:             map[string]bool{"confirm.delete": true},
+		IssuedAt:                  time.Now().UTC().Unix(),
+		Nonce:                     "nonce-exp",
+		ExpiresAt:                 time.Now().UTC().Add(time.Minute).Unix(),
 	}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
@@ -149,17 +169,24 @@ func TestUninstallRetainForExportClaimBindsPolicy(t *testing.T) {
 }
 
 func TestConfirmationRejectsPreviewHashDrift(t *testing.T) {
+	required := []string{"confirm.delete"}
 	claims := packageConfirmationClaims{
-		ArtifactID:          "artifact-drift",
-		ArtifactPolicy:      "deleteArtifact",
-		PreviewHash:         "sha256:preview-orig",
-		CurrentVersionID:    "v-1",
-		CurrentGenerationID: "gen-1",
-		UserID:              "user-1",
-		ScopeType:           "global",
-		PolicyVersion:       packagePolicyVersion,
-		Confirmations:       map[string]bool{"confirm.delete": true},
-		ExpiresAt:           time.Now().UTC().Add(time.Minute).Unix(),
+		ArtifactID:                "artifact-drift",
+		ArtifactPolicy:            "deleteArtifact",
+		PreviewHash:               "sha256:preview-orig",
+		CurrentVersionID:          "v-1",
+		CurrentGenerationID:       "gen-1",
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		PolicyVersion:             packagePolicyVersion,
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		SnapshotRequirementHash:   "sha256:snap-req",
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+		DependenciesHash:          computePackageDependenciesHash(nil),
+		Confirmations:             map[string]bool{"confirm.delete": true},
+		IssuedAt:                  time.Now().UTC().Unix(),
+		Nonce:                     "nonce-drift",
+		ExpiresAt:                 time.Now().UTC().Add(time.Minute).Unix(),
 	}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
@@ -192,17 +219,23 @@ func TestConfirmationRejectsPreviewHashDrift(t *testing.T) {
 }
 
 func TestConfirmationRejectsRequirementHashDrift(t *testing.T) {
+	required := []string{"confirm.delete"}
 	claims := packageConfirmationClaims{
-		ArtifactID:              "artifact-req-drift",
-		ArtifactPolicy:          "deleteArtifact",
-		SnapshotRequirementHash: "sha256:req-orig",
-		CurrentVersionID:        "v-2",
-		CurrentGenerationID:     "gen-2",
-		UserID:                  "user-1",
-		ScopeType:               "global",
-		PolicyVersion:           packagePolicyVersion,
-		Confirmations:           map[string]bool{"confirm.delete": true},
-		ExpiresAt:               time.Now().UTC().Add(time.Minute).Unix(),
+		ArtifactID:                "artifact-req-drift",
+		ArtifactPolicy:            "deleteArtifact",
+		SnapshotRequirementHash:   "sha256:req-orig",
+		CurrentVersionID:          "v-2",
+		CurrentGenerationID:       "gen-2",
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		PolicyVersion:             packagePolicyVersion,
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+		DependenciesHash:          computePackageDependenciesHash(nil),
+		Confirmations:             map[string]bool{"confirm.delete": true},
+		IssuedAt:                  time.Now().UTC().Unix(),
+		Nonce:                     "nonce-req",
+		ExpiresAt:                 time.Now().UTC().Add(time.Minute).Unix(),
 	}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
@@ -229,16 +262,23 @@ func TestConfirmationRejectsRequirementHashDrift(t *testing.T) {
 }
 
 func TestConfirmationRejectsGenerationIDDrift(t *testing.T) {
+	required := []string{"confirm.delete"}
 	claims := packageConfirmationClaims{
-		ArtifactID:          "artifact-gen-drift",
-		ArtifactPolicy:      "deleteArtifact",
-		CurrentVersionID:    "v-1",
-		CurrentGenerationID: "gen-original",
-		UserID:              "user-1",
-		ScopeType:           "global",
-		PolicyVersion:       packagePolicyVersion,
-		Confirmations:       map[string]bool{"confirm.delete": true},
-		ExpiresAt:           time.Now().UTC().Add(time.Minute).Unix(),
+		ArtifactID:                "artifact-gen-drift",
+		ArtifactPolicy:            "deleteArtifact",
+		CurrentVersionID:          "v-1",
+		CurrentGenerationID:       "gen-original",
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		PolicyVersion:             packagePolicyVersion,
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		SnapshotRequirementHash:   "sha256:snap-req",
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+		DependenciesHash:          computePackageDependenciesHash(nil),
+		Confirmations:             map[string]bool{"confirm.delete": true},
+		IssuedAt:                  time.Now().UTC().Unix(),
+		Nonce:                     "nonce-gen",
+		ExpiresAt:                 time.Now().UTC().Add(time.Minute).Unix(),
 	}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
@@ -272,18 +312,24 @@ func TestConfirmationRejectsGenerationIDDrift(t *testing.T) {
 }
 
 func TestUninstallConfirmationBindingIncludesSecurityPolicyHash(t *testing.T) {
+	required := []string{"confirm.delete"}
 	claims := packageConfirmationClaims{
-		ArtifactID:          "artifact-sec",
-		ArtifactPolicy:      "retainForRollback",
-		PreviewHash:         "sha256:preview-sec",
-		CurrentVersionID:    "v-sec",
-		CurrentGenerationID: "gen-sec",
-		UserID:              "user-1",
-		ScopeType:           "global",
-		SecurityPolicyHash:  "sha256:security-policy-v1",
-		PolicyVersion:       packagePolicyVersion,
-		Confirmations:       map[string]bool{"confirm.delete": true},
-		ExpiresAt:           time.Now().UTC().Add(time.Minute).Unix(),
+		ArtifactID:                "artifact-sec",
+		ArtifactPolicy:            "retainForRollback",
+		PreviewHash:               "sha256:preview-sec",
+		CurrentVersionID:          "v-sec",
+		CurrentGenerationID:       "gen-sec",
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		SecurityPolicyHash:        computeSecurityPolicyHash(),
+		SnapshotRequirementHash:   "sha256:snap-req",
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+		DependenciesHash:          computePackageDependenciesHash(nil),
+		PolicyVersion:             packagePolicyVersion,
+		Confirmations:             map[string]bool{"confirm.delete": true},
+		IssuedAt:                  time.Now().UTC().Unix(),
+		Nonce:                     "nonce-sec",
+		ExpiresAt:                 time.Now().UTC().Add(time.Minute).Unix(),
 	}
 	token, err := signPackageConfirmation(claims)
 	if err != nil {
@@ -293,7 +339,7 @@ func TestUninstallConfirmationBindingIncludesSecurityPolicyHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("valid token rejected: %v", err)
 	}
-	if verified.SecurityPolicyHash != "sha256:security-policy-v1" {
+	if verified.SecurityPolicyHash != computeSecurityPolicyHash() {
 		t.Fatalf("expected security policy hash bound to claims, got %q", verified.SecurityPolicyHash)
 	}
 	if verified.ArtifactPolicy != ArtifactPolicyRetainForRollback {

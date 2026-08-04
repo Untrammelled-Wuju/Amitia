@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
@@ -170,23 +171,29 @@ func TestPackageUninstallRechecksPreflightInsideLock(t *testing.T) {
 		requiredMap["confirm.uninstall.data_change"] = true
 		requiredItems = append(requiredItems, "confirm.uninstall.data_change")
 	}
+	confirmationsHash := computePackageRequiredConfirmationsHash(requiredItems)
+	depsHash := computePackageDependenciesHash(uninstallPreview.Dependents)
 	uninstallClaims := PackageUninstallConfirmationClaims{
-		ExtensionID:             installed.ExtensionID,
-		CurrentVersion:          uninstallPreview.CurrentVersion,
-		CurrentVersionID:        uninstallPreview.CurrentVersionID,
-		CurrentGenerationID:     uninstallPreview.CurrentGenerationID,
-		ArtifactID:              uninstallPreview.ArtifactID,
-		ArtifactPolicy:          string(uninstallPreview.ArtifactPolicy),
-		PreviewHash:             uninstallPreview.PreviewHash,
-		SecurityPolicyHash:      uninstallPreview.SecurityPolicyHash,
-		SnapshotRequirementHash: uninstallPreview.SnapshotRequirementHash,
-		UserID:                  "user-1",
-		ScopeType:               "global",
-		ScopeID:                 "",
-		PolicyVersion:           packagePolicyVersion,
-		Confirmations:           requiredMap,
-		ConfirmedItems:          requiredItems,
-		ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
+		ExtensionID:               installed.ExtensionID,
+		CurrentVersion:            uninstallPreview.CurrentVersion,
+		CurrentVersionID:          uninstallPreview.CurrentVersionID,
+		CurrentGenerationID:       uninstallPreview.CurrentGenerationID,
+		ArtifactID:                uninstallPreview.ArtifactID,
+		ArtifactPolicy:            string(uninstallPreview.ArtifactPolicy),
+		PreviewHash:               uninstallPreview.PreviewHash,
+		SecurityPolicyHash:        uninstallPreview.SecurityPolicyHash,
+		SnapshotRequirementHash:   uninstallPreview.SnapshotRequirementHash,
+		RequiredConfirmationsHash: confirmationsHash,
+		DependenciesHash:          depsHash,
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		ScopeID:                   "",
+		PolicyVersion:             packagePolicyVersion,
+		Confirmations:             requiredMap,
+		ConfirmedItems:            requiredItems,
+		IssuedAt:                  time.Now().UTC().Unix(),
+		ExpiresAt:                 time.Now().UTC().Add(10 * time.Minute).Unix(),
+		Nonce:                     uuid.NewString(),
 	}
 	uninstallToken, err := runtime.SignUninstallConfirmation(uninstallClaims)
 	if err != nil {

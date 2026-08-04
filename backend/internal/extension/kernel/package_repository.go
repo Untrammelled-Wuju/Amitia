@@ -676,12 +676,18 @@ func (r *PackageRepository) GetCompletedOperationByPreview(ctx context.Context, 
 	return *operation, nil
 }
 
-func (r *PackageRepository) PutRollbackPoint(ctx context.Context, p PackageRollbackPoint) error {
-	if p.RetentionState == "" {
-		p.RetentionState = "active"
+func (r *PackageRepository) PutRollbackPoint(ctx context.Context, point PackageRollbackPoint) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("kernel: package repository unavailable")
 	}
-	if p.RetentionUntil == "" {
-		p.RetentionUntil = p.ExpiresAt
+	if point.RetentionState == "" {
+		point.RetentionState = "active"
+	}
+	if point.RetentionUntil == "" {
+		point.RetentionUntil = point.ExpiresAt
+	}
+	if err := validatePackageSnapshot(point); err != nil {
+		return NewPackageError(PackageErrCodeRollbackSnapshotCorrupted, 422, fmt.Errorf("kernel: refuse invalid rollback point persistence: %w", err))
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -696,25 +702,25 @@ func (r *PackageRepository) PutRollbackPoint(ctx context.Context, p PackageRollb
 		secret_refs_json, resource_snapshot_json, migration_state_snapshot_json,
 		user_data_migration_state_json, snapshot_hash, retention_state, retention_until,
 		source_operation_id, installed_path, created_at, expires_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, p.RollbackPointID, p.ExtensionID,
-		p.SourceVersion, p.SourceGeneration, p.SourceVersionID, p.SourceGenerationID,
-		p.SnapshotID, p.ArtifactID, p.DefinitionSnapshotJSON,
-		p.ModuleSnapshotJSON, p.ContributionSnapshotJSON, p.PermissionSnapshotJSON,
-		p.ScopeSnapshotJSON, p.ConfigSnapshotID, p.ConfigSnapshotJSON, p.SecretRefsJSON,
-		p.ResourceSnapshotJSON, p.MigrationStateSnapshotJSON, p.UserDataMigrationStateJSON,
-		p.SnapshotHash, p.RetentionState, p.RetentionUntil, p.SourceOperationID,
-		p.InstalledPath, p.CreatedAt, p.ExpiresAt)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, point.RollbackPointID, point.ExtensionID,
+		point.SourceVersion, point.SourceGeneration, point.SourceVersionID, point.SourceGenerationID,
+		point.SnapshotID, point.ArtifactID, point.DefinitionSnapshotJSON,
+		point.ModuleSnapshotJSON, point.ContributionSnapshotJSON, point.PermissionSnapshotJSON,
+		point.ScopeSnapshotJSON, point.ConfigSnapshotID, point.ConfigSnapshotJSON, point.SecretRefsJSON,
+		point.ResourceSnapshotJSON, point.MigrationStateSnapshotJSON, point.UserDataMigrationStateJSON,
+		point.SnapshotHash, point.RetentionState, point.RetentionUntil, point.SourceOperationID,
+		point.InstalledPath, point.CreatedAt, point.ExpiresAt)
 	if err != nil {
 		return err
 	}
 	expiresAt := time.Time{}
-	if p.ExpiresAt != "" {
-		expiresAt, err = time.Parse(time.RFC3339Nano, p.ExpiresAt)
+	if point.ExpiresAt != "" {
+		expiresAt, err = time.Parse(time.RFC3339Nano, point.ExpiresAt)
 		if err != nil {
 			return err
 		}
 	}
-	if _, err := acquireArtifactReferenceTx(ctx, tx, p.ArtifactID, ArtifactReferenceRollbackPoint, p.RollbackPointID, expiresAt); err != nil {
+	if _, err := acquireArtifactReferenceTx(ctx, tx, point.ArtifactID, ArtifactReferenceRollbackPoint, point.RollbackPointID, expiresAt); err != nil {
 		return err
 	}
 	return tx.Commit()

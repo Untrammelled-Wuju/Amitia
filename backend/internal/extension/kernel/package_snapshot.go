@@ -98,15 +98,20 @@ type UserDataTableSnapshotManifest struct {
 type UserDataTableManifest = UserDataTableSnapshotManifest
 
 type packageSnapshotHashPayload struct {
+	RollbackPointID            string `json:"rollbackPointId"`
 	ExtensionID                string `json:"extensionId"`
 	SourceVersion              string `json:"sourceVersion"`
+	SourceVersionID            string `json:"sourceVersionId"`
 	SourceGeneration           int64  `json:"sourceGeneration"`
+	SourceGenerationID         string `json:"sourceGenerationId"`
+	SnapshotID                 string `json:"snapshotId"`
 	ArtifactID                 string `json:"artifactId"`
 	DefinitionSnapshotJSON     string `json:"definitionSnapshotJson"`
 	ModuleSnapshotJSON         string `json:"moduleSnapshotJson"`
 	ContributionSnapshotJSON   string `json:"contributionSnapshotJson"`
 	PermissionSnapshotJSON     string `json:"permissionSnapshotJson"`
 	ScopeSnapshotJSON          string `json:"scopeSnapshotJson"`
+	ConfigSnapshotID           string `json:"configSnapshotId"`
 	ConfigSnapshotJSON         string `json:"configSnapshotJson"`
 	SecretRefsJSON             string `json:"secretRefsJson"`
 	ResourceSnapshotJSON       string `json:"resourceSnapshotJson"`
@@ -566,7 +571,29 @@ func extractResourceInt64Field(resource domain.ResourceOwnership, field string) 
 }
 
 func computePackageSnapshotHash(point PackageRollbackPoint) (string, error) {
-	payload := packageSnapshotHashPayload{ExtensionID: point.ExtensionID, SourceVersion: point.SourceVersion, SourceGeneration: point.SourceGeneration, ArtifactID: point.ArtifactID, DefinitionSnapshotJSON: point.DefinitionSnapshotJSON, ModuleSnapshotJSON: point.ModuleSnapshotJSON, ContributionSnapshotJSON: point.ContributionSnapshotJSON, PermissionSnapshotJSON: point.PermissionSnapshotJSON, ScopeSnapshotJSON: point.ScopeSnapshotJSON, ConfigSnapshotJSON: point.ConfigSnapshotJSON, SecretRefsJSON: point.SecretRefsJSON, ResourceSnapshotJSON: point.ResourceSnapshotJSON, MigrationStateSnapshotJSON: point.MigrationStateSnapshotJSON, UserDataMigrationStateJSON: point.UserDataMigrationStateJSON, InstalledPath: point.InstalledPath, SourceOperationID: point.SourceOperationID}
+	payload := packageSnapshotHashPayload{
+		RollbackPointID:            point.RollbackPointID,
+		ExtensionID:                point.ExtensionID,
+		SourceVersion:              point.SourceVersion,
+		SourceVersionID:            point.SourceVersionID,
+		SourceGeneration:           point.SourceGeneration,
+		SourceGenerationID:         point.SourceGenerationID,
+		SnapshotID:                 point.SnapshotID,
+		ArtifactID:                 point.ArtifactID,
+		DefinitionSnapshotJSON:     point.DefinitionSnapshotJSON,
+		ModuleSnapshotJSON:         point.ModuleSnapshotJSON,
+		ContributionSnapshotJSON:   point.ContributionSnapshotJSON,
+		PermissionSnapshotJSON:     point.PermissionSnapshotJSON,
+		ScopeSnapshotJSON:          point.ScopeSnapshotJSON,
+		ConfigSnapshotID:           point.ConfigSnapshotID,
+		ConfigSnapshotJSON:         point.ConfigSnapshotJSON,
+		SecretRefsJSON:             point.SecretRefsJSON,
+		ResourceSnapshotJSON:       point.ResourceSnapshotJSON,
+		MigrationStateSnapshotJSON: point.MigrationStateSnapshotJSON,
+		UserDataMigrationStateJSON: point.UserDataMigrationStateJSON,
+		InstalledPath:              point.InstalledPath,
+		SourceOperationID:          point.SourceOperationID,
+	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -575,19 +602,63 @@ func computePackageSnapshotHash(point PackageRollbackPoint) (string, error) {
 }
 
 func validatePackageSnapshot(point PackageRollbackPoint) error {
+	switch {
+	case point.RollbackPointID == "":
+		return fmt.Errorf("kernel: rollback point id missing")
+	case point.ExtensionID == "":
+		return fmt.Errorf("kernel: rollback point extension id missing")
+	case point.SourceVersion == "":
+		return fmt.Errorf("kernel: rollback point source version missing")
+	case point.SourceVersionID == "":
+		return fmt.Errorf("kernel: rollback point source version id missing")
+	case point.SourceGenerationID == "":
+		return fmt.Errorf("kernel: rollback point source generation id missing")
+	case point.SnapshotID == "":
+		return fmt.Errorf("kernel: rollback point snapshot id missing")
+	case point.ArtifactID == "":
+		return fmt.Errorf("kernel: rollback point artifact id missing")
+	case point.ConfigSnapshotID == "":
+		return fmt.Errorf("kernel: rollback point config snapshot id missing")
+	case point.DefinitionSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point definition snapshot missing")
+	case point.ModuleSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point module snapshot missing")
+	case point.ContributionSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point contribution snapshot missing")
+	case point.PermissionSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point permission snapshot missing")
+	case point.ScopeSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point scope snapshot missing")
+	case point.ConfigSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point config snapshot missing")
+	case point.ResourceSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point resource snapshot missing")
+	case point.MigrationStateSnapshotJSON == "":
+		return fmt.Errorf("kernel: rollback point migration snapshot missing")
+	case point.UserDataMigrationStateJSON == "":
+		return fmt.Errorf("kernel: rollback point user-data snapshot missing")
+	}
+
 	if point.RetentionState != "active" && point.RetentionState != "forward_recovery" {
 		return fmt.Errorf("kernel: rollback point retention state %s", point.RetentionState)
 	}
+
 	retention := point.RetentionUntil
 	if retention == "" {
 		retention = point.ExpiresAt
 	}
-	if retention != "" {
-		expiresAt, err := time.Parse(time.RFC3339Nano, retention)
-		if err != nil || !time.Now().UTC().Before(expiresAt) {
-			return fmt.Errorf("kernel: rollback point expired")
-		}
+	if retention == "" {
+		return fmt.Errorf("kernel: rollback point retention expiration missing")
 	}
+
+	expiresAt, err := time.Parse(time.RFC3339Nano, retention)
+	if err != nil {
+		return fmt.Errorf("kernel: rollback point retention expiration invalid: %w", err)
+	}
+	if !time.Now().UTC().Before(expiresAt) {
+		return fmt.Errorf("kernel: rollback point expired")
+	}
+
 	expected, err := computePackageSnapshotHash(point)
 	if err != nil {
 		return err

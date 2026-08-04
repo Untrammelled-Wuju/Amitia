@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -347,25 +348,31 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	for _, item := range requiredUninstallItems {
 		uninstallConfirmations[item] = true
 	}
+	confirmationsHash := computePackageRequiredConfirmationsHash(requiredUninstallItems)
+	depsHash := computePackageDependenciesHash(uninstallPreview.Dependents)
 	uninstallClaims := PackageUninstallConfirmationClaims{
-		ExtensionID:             preview.ExtensionID,
-		CurrentVersion:          uninstallPreview.CurrentVersion,
-		CurrentVersionID:        uninstallPreview.CurrentVersionID,
-		CurrentGenerationID:     uninstallPreview.CurrentGenerationID,
-		ArtifactID:              uninstallPreview.ArtifactID,
-		ArtifactPolicy:          string(uninstallPreview.ArtifactPolicy),
-		PreviewHash:             uninstallPreview.PreviewHash,
-		SecurityPolicyHash:      uninstallPreview.SecurityPolicyHash,
-		SnapshotRequirementHash: uninstallPreview.SnapshotRequirementHash,
-		InstalledPath:           uninstallPreview.InstalledPath,
-		InstalledTreeHash:       uninstallPreview.InstalledHash,
-		UserID:                  "user-1",
-		ScopeType:               "global",
-		ScopeID:                 "",
-		PolicyVersion:           packagePolicyVersion,
-		Confirmations:           uninstallConfirmations,
-		ConfirmedItems:          requiredUninstallItems,
-		ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
+		ExtensionID:               preview.ExtensionID,
+		CurrentVersion:            uninstallPreview.CurrentVersion,
+		CurrentVersionID:          uninstallPreview.CurrentVersionID,
+		CurrentGenerationID:       uninstallPreview.CurrentGenerationID,
+		ArtifactID:                uninstallPreview.ArtifactID,
+		ArtifactPolicy:            string(uninstallPreview.ArtifactPolicy),
+		PreviewHash:               uninstallPreview.PreviewHash,
+		SecurityPolicyHash:        uninstallPreview.SecurityPolicyHash,
+		SnapshotRequirementHash:   uninstallPreview.SnapshotRequirementHash,
+		RequiredConfirmationsHash: confirmationsHash,
+		DependenciesHash:          depsHash,
+		InstalledPath:             uninstallPreview.InstalledPath,
+		InstalledTreeHash:         uninstallPreview.InstalledHash,
+		UserID:                    "user-1",
+		ScopeType:                 "global",
+		ScopeID:                   "",
+		PolicyVersion:             packagePolicyVersion,
+		Confirmations:             uninstallConfirmations,
+		ConfirmedItems:            requiredUninstallItems,
+		IssuedAt:                  time.Now().UTC().Unix(),
+		ExpiresAt:                 time.Now().UTC().Add(10 * time.Minute).Unix(),
+		Nonce:                     uuid.NewString(),
 	}
 	uninstallToken, err := runtime.SignUninstallConfirmation(uninstallClaims)
 	if err != nil {

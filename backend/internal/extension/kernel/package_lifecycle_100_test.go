@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
@@ -67,22 +68,22 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 			if err != nil || repeatedUpdate.OperationID != updated.OperationID {
 				t.Fatalf("update idempotency failed: first=%s repeated=%s err=%v", updated.OperationID, repeatedUpdate.OperationID, err)
 			}
-		rollbackConfirm, err := runtimeInstance.ConfirmPackageRollback(ctx, PackageRollbackConfirmationRequest{
-			ExtensionID:   firstPreview.ExtensionID,
-			TargetVersion: "1.0.0",
-			UserID:        "user-1",
-			ScopeType:     "global",
-			ScopeID:       "",
-			Confirmations: map[string]bool{"confirm.rollback": true, PackageConfirmationSnapshotExempt: true},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		rolledBack, err := runtimeInstance.ExecutePackageRollback(ctx, firstPreview.ExtensionID, "1.0.0", "user-1", "global", "", rollbackConfirm.ConfirmationToken)
-		if err != nil || rolledBack.Version != "1.0.0" {
-			t.Fatalf("rollback failed: result=%+v err=%v", rolledBack, err)
-		}
-		installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(firstPreview.ExtensionID))
+			rollbackConfirm, err := runtimeInstance.ConfirmPackageRollback(ctx, PackageRollbackConfirmationRequest{
+				ExtensionID:   firstPreview.ExtensionID,
+				TargetVersion: "1.0.0",
+				UserID:        "user-1",
+				ScopeType:     "global",
+				ScopeID:       "",
+				Confirmations: map[string]bool{"confirm.rollback": true, PackageConfirmationSnapshotExempt: true},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rolledBack, err := runtimeInstance.ExecutePackageRollback(ctx, firstPreview.ExtensionID, "1.0.0", "user-1", "global", "", rollbackConfirm.ConfirmationToken)
+			if err != nil || rolledBack.Version != "1.0.0" {
+				t.Fatalf("rollback failed: result=%+v err=%v", rolledBack, err)
+			}
+			installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(firstPreview.ExtensionID))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -95,20 +96,26 @@ func TestPackageLifecycle100CanonicalCycles(t *testing.T) {
 				t.Fatalf("uninstall preflight failed: %+v %v", uninstallPreview, err)
 			}
 			uninstallClaims := PackageUninstallConfirmationClaims{
-				ExtensionID:             firstPreview.ExtensionID,
-				CurrentVersion:          uninstallPreview.CurrentVersion,
-				CurrentVersionID:        uninstallPreview.CurrentVersionID,
-				CurrentGenerationID:     uninstallPreview.CurrentGenerationID,
-				ArtifactID:              uninstallPreview.ArtifactID,
-				ArtifactPolicy:          string(uninstallPreview.ArtifactPolicy),
-				PreviewHash:             uninstallPreview.PreviewHash,
-				SecurityPolicyHash:      uninstallPreview.SecurityPolicyHash,
-				SnapshotRequirementHash: uninstallPreview.SnapshotRequirementHash,
-				UserID:                  "user-1",
-				ScopeType:               "global",
-				ScopeID:                 "",
-				Confirmations:           map[string]bool{"confirm.uninstall.delete": true},
-				ExpiresAt:               time.Now().UTC().Add(10 * time.Minute).Unix(),
+				ExtensionID:               firstPreview.ExtensionID,
+				CurrentVersion:            uninstallPreview.CurrentVersion,
+				CurrentVersionID:          uninstallPreview.CurrentVersionID,
+				CurrentGenerationID:       uninstallPreview.CurrentGenerationID,
+				ArtifactID:                uninstallPreview.ArtifactID,
+				ArtifactPolicy:            string(uninstallPreview.ArtifactPolicy),
+				PreviewHash:               uninstallPreview.PreviewHash,
+				SecurityPolicyHash:        uninstallPreview.SecurityPolicyHash,
+				SnapshotRequirementHash:   uninstallPreview.SnapshotRequirementHash,
+				RequiredConfirmationsHash: computePackageRequiredConfirmationsHash([]string{"confirm.uninstall.delete"}),
+				DependenciesHash:          computePackageDependenciesHash(uninstallPreview.Dependents),
+				UserID:                    "user-1",
+				ScopeType:                 "global",
+				ScopeID:                   "",
+				Confirmations:             map[string]bool{"confirm.uninstall.delete": true},
+				ConfirmedItems:            []string{"confirm.uninstall.delete"},
+				ExpiresAt:                 time.Now().UTC().Add(10 * time.Minute).Unix(),
+				IssuedAt:                  time.Now().UTC().Unix(),
+				PolicyVersion:             packagePolicyVersion,
+				Nonce:                     uuid.NewString(),
 			}
 			uninstallToken, err := runtimeInstance.SignUninstallConfirmation(uninstallClaims)
 			if err != nil {

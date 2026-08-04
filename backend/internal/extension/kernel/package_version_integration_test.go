@@ -25,7 +25,7 @@ func newFinalizationOperation(t *testing.T, runtime *Runtime, container *Contain
 		op.UserID, op.ScopeType, op.ScopeID, confirmKey, confirmKey,
 		time.Now().Unix(), time.Now().Add(time.Hour).Unix(), nonce)
 	op.ConfirmationClaimsJSON = claims
-	if _, _, err := container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, nonce, time.Now().UTC().Format(time.RFC3339Nano), time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
+	if _, _, err := container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, PackageConfirmationNonceBinding{Nonce: nonce}); err != nil {
 		t.Fatal(err)
 	}
 	if err := container.PackageRepository.TransitionOperation(ctx, op.OperationID, []PackageOperationStatus{PackageOperationPending}, PackageOperationInProgress, PackageOperationTransition{CurrentStep: "prepared"}, PackageWriteGuard{}); err != nil {

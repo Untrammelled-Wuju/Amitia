@@ -142,7 +142,10 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 			ArtifactID: artifact.ArtifactID, PreviewSessionID: session.SessionID,
 			ScopeType: request.ScopeType, ScopeID: request.ScopeID,
 		}), StartedAt: now, UpdatedAt: now}
-	existing, created, err := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, claims.Nonce, confirmationTimestamp(claims.IssuedAt), confirmationTimestamp(claims.ExpiresAt))
+	existing, created, err := r.container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, PackageConfirmationNonceBinding{
+		Nonce: claims.Nonce, OperationType: op.OperationType, ExtensionID: op.ExtensionID, UserID: op.UserID,
+		IssuedAt: confirmationTimestamp(claims.IssuedAt), ExpiresAt: confirmationTimestamp(claims.ExpiresAt),
+	})
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
@@ -179,11 +182,6 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}()
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
-	installEvidence := buildConfirmationAuthorityEvidence(operationID, string(PackageOperationTypeInstall), session.SessionID, standardConfirmationClaimsFromLegacy(string(PackageOperationTypeInstall), claims))
-	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, installEvidence, guard); evidenceErr != nil {
-		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", evidenceErr.Error(), true, guard)
-		return KernelInstallResult{}, fmt.Errorf("kernel: persist install authority evidence: %w", evidenceErr)
-	}
 	lockedSession, err := r.container.PackageRepository.GetPreview(ctx, request.SessionID, request.UserID, request.ScopeType, request.ScopeID)
 	if err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "lock_preview_session", "PACKAGE_PREVIEW_SESSION_LOCK_FAILED", err.Error(), true, guard)
@@ -200,6 +198,32 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "check_already_installed", "PACKAGE_ALREADY_INSTALLED", fmt.Sprintf("extension %s is already installed", session.ExtensionID), true, guard)
 		return KernelInstallResult{}, fmt.Errorf("PACKAGE_ALREADY_INSTALLED: extension %s is already installed", session.ExtensionID)
 	}
+
+	var lockedPreview InstallPreview
+	if err := json.Unmarshal([]byte(lockedSession.PreviewResultJSON), &lockedPreview); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recompute_confirmation_authority", "PACKAGE_AUTHORITY_PREVIEW_INVALID", err.Error(), true, guard)
+		return KernelInstallResult{}, fmt.Errorf("kernel: locked preview corrupt: %w", err)
+	}
+
+	authorityInput, err := r.buildInstallUpdateAuthorityInput(ctx, string(PackageOperationTypeInstall), lockedSession, lockedPreview)
+	if err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "recompute_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
+		return KernelInstallResult{}, err
+	}
+
+	standardClaims := standardConfirmationClaimsFromLegacy(string(PackageOperationTypeInstall), claims)
+
+	installEvidence, err := buildPackageConfirmationAuthorityEvidence(operationID, standardClaims, authorityInput)
+	if err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "validate_confirmation_authority", PackageErrCodeConfirmationStale, err.Error(), true, guard)
+		return KernelInstallResult{}, err
+	}
+
+	if err := r.persistPackageConfirmationAuthorityEvidence(ctx, installEvidence, guard); err != nil {
+		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", err.Error(), true, guard)
+		return KernelInstallResult{}, fmt.Errorf("kernel: persist install authority evidence: %w", err)
+	}
+
 	stableGeneration := PackageGenerationCurrent{}
 	targetGeneration := PackagePreparedGeneration{}
 	currentSwitched := false
@@ -416,10 +440,11 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 	if err != nil {
 		return PackagePreviewConfirmation{}, fmt.Errorf("kernel: artifact unavailable: %w", err)
 	}
-	tokenExpiry := time.Now().UTC().Add(10 * time.Minute)
-	if expiresAt.Before(tokenExpiry) {
-		tokenExpiry = expiresAt
+	temporal, err := newPackageConfirmationTemporalBinding(expiresAt)
+	if err != nil {
+		return PackagePreviewConfirmation{}, err
 	}
+	tokenExpiry := time.Unix(temporal.ExpiresAt, 0).UTC()
 	installReq := ComputeInstallSnapshotRequirement(computeInstallSnapshotRequirementInput(preview.InstalledPath, preview.InstalledTreeHash, artifact.ArtifactID, session.ExtensionID))
 	requiredHash := computePackageRequiredConfirmationsHash(required)
 	dependenciesHash := computePackageDependenciesHash(packageDependencyIdentities(preview))
@@ -432,8 +457,8 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 		SnapshotRequirementHash:   installReq.RequirementHash,
 		RequiredConfirmationsHash: requiredHash, DependenciesHash: dependenciesHash,
 		InstalledPath: preview.InstalledPath, InstalledTreeHash: preview.InstalledTreeHash,
-		PreviewHash: previewHash, Confirmations: confirmed, IssuedAt: time.Now().UTC().Unix(),
-		Nonce: uuid.NewString(), ExpiresAt: tokenExpiry.Unix()})
+		PreviewHash: previewHash, Confirmations: confirmed, IssuedAt: temporal.IssuedAt,
+		Nonce: temporal.Nonce, ExpiresAt: temporal.ExpiresAt})
 	if err != nil {
 		return PackagePreviewConfirmation{}, err
 	}
@@ -507,36 +532,84 @@ func (r *Runtime) createPackageRollbackPoint(ctx context.Context, sourceOperatio
 	if string(definitionJSON) == "" || string(moduleJSON) == "" || string(contributionJSON) == "" || string(permissionJSON) == "" || string(scopeJSON) == "" {
 		return PackageRollbackPoint{}, fmt.Errorf("kernel: rollback point requires complete package snapshots (definition/module/contribution/permission/scope)")
 	}
-	installedPath, _ := installed.Metadata["installedPath"].(string)
-	artifactID, _ := installed.Metadata["artifactId"].(string)
-	currentVersionRecord, cvrErr := r.container.PackageRepository.GetCurrentPackageVersion(ctx, string(installed.ExtensionID))
-	if cvrErr != nil {
-		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version identity unavailable for rollback point: %w", cvrErr)
+	currentVersionRecord, currentVersionErr := r.container.PackageRepository.GetCurrentPackageVersion(ctx, string(installed.ExtensionID))
+	if currentVersionErr != nil {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version identity unavailable for rollback point: %w", currentVersionErr)
 	}
-	if currentVersionRecord.VersionID == "" {
-		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version identity missing for rollback point")
-	}
+	installedVersion := installed.InstalledVersion.String()
 	sourceGenerationID := packageGenerationFromInstallation(installed).GenerationID
-	if sourceGenerationID == "" {
+	installedPath, _ := installed.Metadata["installedPath"].(string)
+	installedTreeHash, _ := installed.Metadata["installedTreeHash"].(string)
+	artifactID, _ := installed.Metadata["artifactId"].(string)
+	switch {
+	case currentVersionRecord.VersionID == "":
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version id missing for rollback point")
+	case currentVersionRecord.ExtensionID != string(installed.ExtensionID):
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version extension mismatch")
+	case currentVersionRecord.Version != installedVersion:
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version label mismatch: record=%s installation=%s", currentVersionRecord.Version, installedVersion)
+	case artifactID == "":
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current artifact id missing for rollback point")
+	case currentVersionRecord.ArtifactID != artifactID:
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version artifact mismatch")
+	case sourceGenerationID == "":
 		return PackageRollbackPoint{}, fmt.Errorf("kernel: current generation identity missing for rollback point")
+	case currentVersionRecord.GenerationID == "":
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: version record generation identity missing")
+	case currentVersionRecord.GenerationID != sourceGenerationID:
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version generation mismatch: record=%s installation=%s", currentVersionRecord.GenerationID, sourceGenerationID)
+	case installedPath == "":
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: installed path missing for rollback point")
+	case installedTreeHash == "":
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: installed tree hash missing for rollback point")
+	}
+	if currentVersionRecord.InstalledPath != "" && currentVersionRecord.InstalledPath != installedPath {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version installed path mismatch")
+	}
+	if currentVersionRecord.InstalledTreeHash != "" && currentVersionRecord.InstalledTreeHash != installedTreeHash {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current version installed tree hash mismatch")
+	}
+	artifact, artifactErr := r.container.PackageRepository.GetArtifact(ctx, artifactID)
+	if artifactErr != nil {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current artifact unavailable for rollback point: %w", artifactErr)
+	}
+	if artifact.ExtensionID != string(installed.ExtensionID) || artifact.Version != installedVersion {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: current artifact identity does not match installation")
 	}
 	retentionUntil := time.Now().UTC().Add(30 * 24 * time.Hour).Format(time.RFC3339Nano)
-	point := PackageRollbackPoint{RollbackPointID: "rollback-point-" + uuid.NewString(),
-		ExtensionID: string(installed.ExtensionID), SourceVersion: installed.InstalledVersion.String(),
-		SourceGeneration: installed.Generation, SourceVersionID: currentVersionRecord.VersionID,
-		SourceGenerationID: sourceGenerationID, SnapshotID: "snapshot-" + uuid.NewString(),
-		ArtifactID:             artifactID,
-		DefinitionSnapshotJSON: string(definitionJSON), ModuleSnapshotJSON: string(moduleJSON),
-		ContributionSnapshotJSON: string(contributionJSON), PermissionSnapshotJSON: string(permissionJSON),
-		ScopeSnapshotJSON: string(scopeJSON), ConfigSnapshotJSON: configJSON,
-		SecretRefsJSON: secretRefsJSON, ResourceSnapshotJSON: resourceJSON,
-		MigrationStateSnapshotJSON: migrationJSON, UserDataMigrationStateJSON: userDataMigrationJSON,
-		RetentionState: retentionState, RetentionUntil: retentionUntil, ExpiresAt: retentionUntil,
-		SourceOperationID: sourceOperationID, InstalledPath: installedPath,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	point := PackageRollbackPoint{
+		RollbackPointID:            "rollback-point-" + uuid.NewString(),
+		ExtensionID:                string(installed.ExtensionID),
+		SourceVersion:              installedVersion,
+		SourceGeneration:           installed.Generation,
+		SourceVersionID:            currentVersionRecord.VersionID,
+		SourceGenerationID:         currentVersionRecord.GenerationID,
+		SnapshotID:                 "snapshot-" + uuid.NewString(),
+		ArtifactID:                 artifactID,
+		DefinitionSnapshotJSON:     string(definitionJSON),
+		ModuleSnapshotJSON:         string(moduleJSON),
+		ContributionSnapshotJSON:   string(contributionJSON),
+		PermissionSnapshotJSON:     string(permissionJSON),
+		ScopeSnapshotJSON:          string(scopeJSON),
+		ConfigSnapshotID:           "config-snapshot-" + uuid.NewString(),
+		ConfigSnapshotJSON:         configJSON,
+		SecretRefsJSON:             secretRefsJSON,
+		ResourceSnapshotJSON:       resourceJSON,
+		MigrationStateSnapshotJSON: migrationJSON,
+		UserDataMigrationStateJSON: userDataMigrationJSON,
+		RetentionState:             retentionState,
+		RetentionUntil:             retentionUntil,
+		ExpiresAt:                  retentionUntil,
+		SourceOperationID:          sourceOperationID,
+		InstalledPath:              installedPath,
+		CreatedAt:                  time.Now().UTC().Format(time.RFC3339Nano),
+	}
 	point.SnapshotHash, err = computePackageSnapshotHash(point)
 	if err != nil {
 		return PackageRollbackPoint{}, err
+	}
+	if err := validatePackageSnapshot(point); err != nil {
+		return PackageRollbackPoint{}, fmt.Errorf("kernel: generated rollback point failed self-validation: %w", err)
 	}
 	if err := r.container.PackageRepository.PutRollbackPoint(ctx, point); err != nil {
 		return PackageRollbackPoint{}, err

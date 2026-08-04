@@ -323,12 +323,12 @@ func TestValidateQuarantineMetadataFence_TokenScenarios(t *testing.T) {
 func TestCreateOrGetOperationWithConfirmationNonce_RejectsReplay(t *testing.T) {
 	repository := newOperationStateTestRepository(t)
 	op := operationFixture("operation-nonce-1", "user-1", "request-nonce", "sha256:nonce-first", "extension-1")
-	_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, "nonce-value-1", "", "")
+	_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, PackageConfirmationNonceBinding{Nonce: "nonce-value-1"})
 	if err != nil || !created {
 		t.Fatalf("first create should succeed: created=%v err=%v", created, err)
 	}
 	op2 := operationFixture("operation-nonce-2", "user-1", "request-nonce-2", "sha256:nonce-second", "extension-1")
-	_, _, err = repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op2, "nonce-value-1", "", "")
+	_, _, err = repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op2, PackageConfirmationNonceBinding{Nonce: "nonce-value-1"})
 	if !IsPackageOperationError(err, OperationErrIdempotencyConflict) {
 		t.Fatalf("reused nonce should be rejected: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestCreateOrGetOperationWithConfirmationNonce_ConcurrentRejectsReplay(t *te
 		go func(i int) {
 			defer wait.Done()
 			op := operationFixture(fmt.Sprintf("operation-concurrent-%03d", i), "user-concurrent", fmt.Sprintf("request-concurrent-%03d", i), fmt.Sprintf("sha256:concurrent-%03d", i), "extension-concurrent")
-			_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, "shared-nonce-id", "", "")
+			_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, PackageConfirmationNonceBinding{Nonce: "shared-nonce-id"})
 			if err != nil {
 				errorsSeen <- err
 				return

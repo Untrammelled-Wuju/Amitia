@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
@@ -32,27 +31,28 @@ type InstalledExtension struct {
 }
 
 type PackageUninstallConfirmationClaims struct {
-	ExtensionID            string         `json:"extensionId"`
-	CurrentVersion         string         `json:"currentVersion"`
-	CurrentVersionID       string         `json:"currentVersionId"`
-	CurrentGenerationID    string         `json:"currentGenerationId"`
-	ArtifactID             string         `json:"artifactId"`
-	ArtifactPolicy         string         `json:"artifactPolicy"`
-	PreviewHash            string         `json:"previewHash"`
-	SecurityPolicyHash     string         `json:"securityPolicyHash"`
-	SnapshotRequirementHash string        `json:"snapshotRequirementHash"`
-	RequiredConfirmationsHash string      `json:"requiredConfirmationsHash"`
-	InstalledPath          string         `json:"installedPath,omitempty"`
-	InstalledTreeHash      string         `json:"installedTreeHash,omitempty"`
-	UserID                 string         `json:"userId"`
-	ScopeType              string         `json:"scopeType"`
-	ScopeID                string         `json:"scopeId"`
-	Confirmations          map[string]bool `json:"confirmations"`
-	ConfirmedItems         []string       `json:"confirmedItems"`
-	PolicyVersion          string         `json:"policyVersion"`
-	IssuedAt               int64          `json:"issuedAt"`
-	ExpiresAt              int64          `json:"expiresAt"`
-	Nonce                  string         `json:"nonce,omitempty"`
+	ExtensionID               string          `json:"extensionId"`
+	CurrentVersion            string          `json:"currentVersion"`
+	CurrentVersionID          string          `json:"currentVersionId"`
+	CurrentGenerationID       string          `json:"currentGenerationId"`
+	ArtifactID                string          `json:"artifactId"`
+	ArtifactPolicy            string          `json:"artifactPolicy"`
+	PreviewHash               string          `json:"previewHash"`
+	SecurityPolicyHash        string          `json:"securityPolicyHash"`
+	SnapshotRequirementHash   string          `json:"snapshotRequirementHash"`
+	RequiredConfirmationsHash string          `json:"requiredConfirmationsHash"`
+	DependenciesHash          string          `json:"dependenciesHash"`
+	InstalledPath             string          `json:"installedPath,omitempty"`
+	InstalledTreeHash         string          `json:"installedTreeHash,omitempty"`
+	UserID                    string          `json:"userId"`
+	ScopeType                 string          `json:"scopeType"`
+	ScopeID                   string          `json:"scopeId"`
+	Confirmations             map[string]bool `json:"confirmations"`
+	ConfirmedItems            []string        `json:"confirmedItems"`
+	PolicyVersion             string          `json:"policyVersion"`
+	IssuedAt                  int64           `json:"issuedAt"`
+	ExpiresAt                 int64           `json:"expiresAt"`
+	Nonce                     string          `json:"nonce,omitempty"`
 }
 
 func (c PackageUninstallConfirmationClaims) ExpiresAtString() string {
@@ -91,26 +91,41 @@ func (r *Runtime) VerifyUninstallConfirmation(token string) (PackageUninstallCon
 	if err != nil || json.Unmarshal(payload, &claims) != nil {
 		return claims, fmt.Errorf("kernel: confirmation token invalid")
 	}
-	if claims.ExpiresAt <= time.Now().UTC().Unix() {
-		return claims, fmt.Errorf("kernel: confirmation token expired")
+	if err := validatePackageConfirmationTemporalBinding(
+		claims.IssuedAt,
+		claims.ExpiresAt,
+		claims.Nonce,
+		time.Now().UTC(),
+	); err != nil {
+		return claims, err
 	}
-	if claims.PolicyVersion == "" || claims.SecurityPolicyHash == "" {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: policyVersion and securityPolicyHash required", ErrPackageConfirmationClaimsInvalid))
+	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
+		return claims,
+			NewPackageError(
+				PackageErrCodeConfirmationPolicyVersionStale,
+				409,
+				fmt.Errorf("%w: uninstall security policy changed", ErrPackageConfirmationPolicyVersionStale),
+			)
+	}
+	if claims.PolicyVersion == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: policyVersion required", ErrPackageConfirmationClaimsInvalid))
 	}
 	if claims.ExtensionID == "" || claims.ArtifactID == "" || claims.CurrentVersionID == "" || claims.CurrentGenerationID == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: uninstall identity required", ErrPackageConfirmationClaimsInvalid))
 	}
-	if claims.PreviewHash == "" || claims.SnapshotRequirementHash == "" || claims.RequiredConfirmationsHash == "" {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: preview identity required", ErrPackageConfirmationClaimsInvalid))
+	if claims.PreviewHash == "" || claims.SnapshotRequirementHash == "" || claims.RequiredConfirmationsHash == "" || claims.DependenciesHash == "" {
+		return claims,
+			NewPackageError(
+				PackageErrCodeConfirmationClaimsInvalid,
+				403,
+				fmt.Errorf(
+					"%w: preview authority identity required",
+					ErrPackageConfirmationClaimsInvalid,
+				),
+			)
 	}
 	if claims.UserID == "" || claims.ScopeType == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: user and scope binding required", ErrPackageConfirmationClaimsInvalid))
-	}
-	if claims.IssuedAt == 0 {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: issuedAt required", ErrPackageConfirmationClaimsInvalid))
-	}
-	if claims.Nonce == "" {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: nonce required", ErrPackageConfirmationClaimsInvalid))
 	}
 	if len(claims.ConfirmedItems) == 0 || !validateConfirmedItemsConsistency(claims.ConfirmedItems, claims.Confirmations) {
 		return claims, NewPackageError(PackageErrCodeConfirmationItemsMismatch, 403, ErrPackageConfirmationItemsMismatch)
@@ -132,8 +147,8 @@ type ConfirmPackageUninstallRequest struct {
 }
 
 type ConfirmPackageUninstallResult struct {
-	Token             string
-	ExpiresAt         time.Time
+	Token                 string
+	ExpiresAt             time.Time
 	RequiredConfirmations []string
 }
 
@@ -163,29 +178,34 @@ func (r *Runtime) ConfirmPackageUninstall(ctx context.Context, req ConfirmPackag
 			ErrPackageConfirmationItemsMismatch)
 	}
 
-	now := time.Now().UTC()
+	temporal, err := newPackageConfirmationTemporalBinding(time.Time{})
+	if err != nil {
+		return ConfirmPackageUninstallResult{}, err
+	}
+
 	claims := PackageUninstallConfirmationClaims{
-		ExtensionID:             preview.ExtensionID,
-		CurrentVersion:          preview.CurrentVersion,
-		CurrentVersionID:        preview.CurrentVersionID,
-		CurrentGenerationID:     preview.CurrentGenerationID,
-		ArtifactID:              preview.ArtifactID,
-		ArtifactPolicy:          string(preview.ArtifactPolicy),
-		PreviewHash:             preview.PreviewHash,
-		SecurityPolicyHash:      preview.SecurityPolicyHash,
-		SnapshotRequirementHash: preview.SnapshotRequirementHash,
+		ExtensionID:               preview.ExtensionID,
+		CurrentVersion:            preview.CurrentVersion,
+		CurrentVersionID:          preview.CurrentVersionID,
+		CurrentGenerationID:       preview.CurrentGenerationID,
+		ArtifactID:                preview.ArtifactID,
+		ArtifactPolicy:            string(preview.ArtifactPolicy),
+		PreviewHash:               preview.PreviewHash,
+		SecurityPolicyHash:        preview.SecurityPolicyHash,
+		SnapshotRequirementHash:   preview.SnapshotRequirementHash,
 		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
-		InstalledPath:           preview.InstalledPath,
-		InstalledTreeHash:       preview.InstalledHash,
-		UserID:                  req.UserID,
-		ScopeType:               req.ScopeType,
-		ScopeID:                 req.ScopeID,
-		Confirmations:           confirmed,
-		ConfirmedItems:          confirmedItems,
-		PolicyVersion:           r.PolicyVersion(),
-		IssuedAt:                now.Unix(),
-		ExpiresAt:               now.Add(10 * time.Minute).Unix(),
-		Nonce:                   uuid.NewString(),
+		DependenciesHash:          computePackageDependenciesHash(preview.Dependents),
+		InstalledPath:             preview.InstalledPath,
+		InstalledTreeHash:         preview.InstalledHash,
+		UserID:                    req.UserID,
+		ScopeType:                 req.ScopeType,
+		ScopeID:                   req.ScopeID,
+		Confirmations:             confirmed,
+		ConfirmedItems:            confirmedItems,
+		PolicyVersion:             r.PolicyVersion(),
+		IssuedAt:                  temporal.IssuedAt,
+		ExpiresAt:                 temporal.ExpiresAt,
+		Nonce:                     temporal.Nonce,
 	}
 
 	token, err := r.SignUninstallConfirmation(claims)
@@ -195,7 +215,7 @@ func (r *Runtime) ConfirmPackageUninstall(ctx context.Context, req ConfirmPackag
 
 	return ConfirmPackageUninstallResult{
 		Token:                 token,
-		ExpiresAt:             time.Unix(claims.ExpiresAt, 0).UTC(),
+		ExpiresAt:             time.Unix(temporal.ExpiresAt, 0).UTC(),
 		RequiredConfirmations: required,
 	}, nil
 }
