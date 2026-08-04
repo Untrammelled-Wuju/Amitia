@@ -108,6 +108,12 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	storageKey, err := h.registry.StorageKeyFromPath(security.RootImportQuarantine, quarantinePath)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "暂存存储键生成失败", gin.H{"errorCode": "INTERNAL_ERROR"})
+		return
+	}
+
 	r := io.LimitReader(file, MaxImportUploadSize+1)
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -139,6 +145,7 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 		SourceContentHash: contentHash,
 		SourceBytes:       int64(len(data)),
 		RootKind:          string(security.RootImportQuarantine),
+		StorageKey:        storageKey,
 		Status:            security.StagingStatusQuarantined,
 		CorrelationID:     c.GetHeader("X-Correlation-Id"),
 		ExpiresAt:         time.Now().UTC().Add(ImportStagingTTL).Format(time.RFC3339Nano),

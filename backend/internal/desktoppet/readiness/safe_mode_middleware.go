@@ -4,6 +4,7 @@ package readiness
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,17 +25,26 @@ func RejectWritesWhenSafeMode(
 			return
 		}
 
-		active, reason, _ :=
-			controller.IsInSafeMode()
+		method := c.Request.Method
+		isWrite := method == http.MethodPost ||
+			method == http.MethodPut ||
+			method == http.MethodPatch ||
+			method == http.MethodDelete
 
-		if active {
+		if !isWrite {
+			c.Next()
+			return
+		}
+
+		if active, reason, enteredAt := controller.IsInSafeMode(); active {
 			c.JSON(
 				http.StatusServiceUnavailable,
 				gin.H{
 					"code": 503,
 					"msg":  "desktop pet safe mode",
 					"data": gin.H{
-						"reason": reason,
+						"reason":    reason,
+						"enteredAt": enteredAt.Format(time.RFC3339),
 					},
 				},
 			)

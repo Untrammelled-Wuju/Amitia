@@ -22,6 +22,8 @@ import (
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
+	"github.com/u-ai/backend/internal/desktoppet/device"
+	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/doctor"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
@@ -75,6 +77,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		return nil, fmt.Errorf("initialize local credential store: %w", err)
 	}
 
+	if services.DesktopInstanceStore == nil {
+		return nil, fmt.Errorf("desktop instance store is not initialized")
+	}
+
 	r.GET("/livez", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "alive"})
 	})
@@ -121,8 +127,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 	services.DesktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
 
-	installationRepo := installation.NewRepository(ctx.DB, ctx)
-
 	local := r.Group("/api/local")
 	local.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:             config.AppCfg.Security.Mode,
@@ -156,7 +160,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				return
 			}
 			runtimeID := strings.TrimSpace(request.RuntimeID)
-			if err := installationRepo.RequireOwnedDevice(c.Request.Context(), actor.UserID, deviceID); err != nil {
+			if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID, deviceID); err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
 				return
 			}
@@ -178,6 +182,40 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					"ttlSeconds": 600,
 				},
 			})
+		})
+		local.POST("/devices/register", func(c *gin.Context) {
+			actor := security.GetActor(c)
+			if actor == nil || actor.UserID == "" {
+				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
+				return
+			}
+			var request struct {
+				DeviceID          string `json:"deviceId" binding:"required"`
+				DesktopInstanceID string `json:"desktopInstanceId"`
+				Platform          string `json:"platform"`
+				AppVersion        string `json:"appVersion"`
+			}
+			if err := c.ShouldBindJSON(&request); err != nil {
+				c.JSON(400, gin.H{"code": 400, "msg": err.Error()})
+				return
+			}
+			if request.DesktopInstanceID != "" && request.DesktopInstanceID != c.GetHeader("X-Amitia-Desktop-Instance") {
+				c.JSON(400, gin.H{"code": 400, "msg": "desktopInstanceId mismatch"})
+				return
+			}
+			err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
+				UserID:            actor.UserID,
+				DeviceID:          request.DeviceID,
+				DesktopInstanceID: request.DesktopInstanceID,
+				Platform:          request.Platform,
+				AppVersion:        request.AppVersion,
+			})
+			if err != nil {
+				log.Error("failed to register device identity", "error", err)
+				c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
+				return
+			}
+			c.JSON(200, gin.H{"code": 200, "msg": "ok"})
 		})
 		local.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 			actor := security.GetActor(c)
@@ -202,11 +240,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 
 	localAdmin := r.Group("/api/local/admin")
 	localAdmin.Use(security.LocalAdminAuthenticationMiddleware(security.AuthConfig{
-		Mode:             config.AppCfg.Security.Mode,
-		LocalCredentials: localCredentialStore,
-		LocalUserID:      config.AppCfg.Security.LocalUserID,
-		ListenAddress:    config.AppCfg.Server.Host,
-		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+		Mode:                     config.AppCfg.Security.Mode,
+		LocalCredentials:         localCredentialStore,
+		LocalUserID:              config.AppCfg.Security.LocalUserID,
+		ListenAddress:            config.AppCfg.Server.Host,
+		AllowedOrigins:           config.AppCfg.Security.AllowedOrigins,
+		DesktopInstanceValidator: services.DesktopInstanceStore.Validate,
 	}))
 	localAdmin.Use(security.RequirePermission("system.shutdown"))
 	localAdmin.POST("/shutdown", func(c *gin.Context) {
@@ -346,7 +385,7 @@ func (a *packageImportAdapter) ImportPackage(ctx context.Context, req map[string
 	return result.PetID, result.ReleaseID, result.OperationID, nil
 }
 
-func registerImportStagingRoutes(r *gin.RouterGroup, reg *security.PathRootRegistry, repo security.ImportStagingRepository, guard security.OwnershipGuard, packageImporter *importer.PackageImporter) {
+func registerImportStagingRoutes(r *gin.RouterGroup, reg *desktoppetsecurity.PathRootRegistry, repo desktoppetsecurity.ImportStagingRepository, guard desktoppetsecurity.OwnershipGuard, packageImporter *importer.PackageImporter) {
 	inspector := importer.NewImportInspector(reg, repo)
 	handler := release.NewImportStagingHandler(reg, repo, guard, inspector, &packageImportAdapter{imp: packageImporter})
 	g := r.Group("/import-stagings")

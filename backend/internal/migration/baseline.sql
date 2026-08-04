@@ -5530,3 +5530,21 @@ CREATE TABLE IF NOT EXISTS desktop_pet_token_rotation_journal (
     completed_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dptrj_stage ON desktop_pet_token_rotation_journal(stage);
+
+
+
+CREATE TABLE IF NOT EXISTS desktop_pet_devices (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    desktop_instance_id TEXT NOT NULL,
+    platform TEXT NOT NULL DEFAULT '',
+    app_version TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    revoked_at TEXT NOT NULL DEFAULT '',
+    UNIQUE(user_id, device_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dpd_user_device ON desktop_pet_devices(user_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_dpd_status ON desktop_pet_devices(status);

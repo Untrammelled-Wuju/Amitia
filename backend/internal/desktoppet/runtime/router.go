@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -11,7 +12,33 @@ import (
 )
 
 func RegisterInternalRoutes(r *gin.Engine, svc *Service) {
-	r.GET(svc.Config().Path, gin.WrapH(svc.Handler()))
+	internalGroup := r.Group("/internal")
+	internalGroup.Use(InternalOriginMiddleware(svc))
+	path := svc.Config().Path
+	if path == "" {
+		path = "/internal/desktop-pet/runtime/ws"
+	}
+	internalGroup.GET(path, gin.WrapH(svc.Handler()))
+}
+
+func InternalOriginMiddleware(svc *Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if svc == nil || svc.Config() == nil {
+			c.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
+		if svc.Config().LoopbackOnly {
+			host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+			if err != nil {
+				host = c.Request.RemoteAddr
+			}
+			if host != "127.0.0.1" && host != "::1" && host != "localhost" {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+		}
+		c.Next()
+	}
 }
 
 func RegisterUserRoutes(apiGroup *gin.RouterGroup, svc *Service) {

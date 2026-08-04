@@ -45,7 +45,11 @@ import { DragController } from "./drag-controller";
 import type { DragEvent, DragState } from "./drag-controller";
 import { ClickThroughController } from "./click-through-controller";
 import { PetLogger } from "./logger";
-import { RuntimeBridgeClient } from "./runtime-bridge-client";
+import {
+  RuntimeBridgeClient,
+  getRuntimeId,
+  getDeviceId,
+} from "./runtime-bridge-client";
 import type {
   RuntimeBridgeConfig,
   RuntimeBridgeCallbacks,
@@ -56,6 +60,7 @@ import type {
   RuntimeMessage,
   WelcomePayload,
 } from "./runtime-bridge-client";
+import { getBackendSessionClient } from "../backend-session-client";
 import type {
   ClickPayload,
   DragPayload,
@@ -2064,13 +2069,17 @@ export class DesktopPetManager {
     body?: unknown,
   ): Promise<T> {
     const url = new URL(`http://${this.coreHost}:${this.corePort}${path}`);
+
+    const sessionClient = getBackendSessionClient();
+    const authHeaders = await sessionClient.getMainProcessAuthHeaders();
+
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Amitia-Device-ID": getDeviceId(),
+      ...authHeaders,
     };
-    if (this.authToken) {
-      headers.Authorization = `Bearer ${this.authToken}`;
-    }
+
     const bodyStr = body !== undefined ? JSON.stringify(body) : undefined;
     if (bodyStr !== undefined) {
       headers["Content-Length"] = Buffer.byteLength(bodyStr).toString();
@@ -2093,47 +2102,55 @@ export class DesktopPetManager {
             data += chunk;
           });
           res.on("end", () => {
-            if (res.statusCode === undefined) {
-              reject(new Error("无 HTTP 状态码"));
+            const statusCode = res.statusCode ?? 500;
+            if (statusCode < 200 || statusCode >= 300) {
+              if (statusCode === 401) {
+                sessionClient.invalidateSession();
+              }
+              reject(
+                new Error(`desktop pet api failed: ${statusCode} ${data}`),
+              );
               return;
             }
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              if (!data) {
-                resolve(undefined as T);
-                return;
-              }
-              try {
-                const parsed = JSON.parse(data) as ApiEnvelope<T>;
-                if (
-                  parsed &&
-                  typeof parsed === "object" &&
-                  "code" in parsed &&
-                  typeof parsed.code === "number"
-                ) {
-                  if (parsed.code !== 200) {
-                    reject(
-                      new Error(
-                        `API 错误 ${parsed.code}: ${parsed.msg ?? "unknown"}`,
-                      ),
-                    );
-                    return;
-                  }
-                  resolve(parsed.data as T);
+            if (!data) {
+              resolve(undefined as T);
+              return;
+            }
+            try {
+              const parsed = JSON.parse(data) as ApiEnvelope<T>;
+              if (
+                parsed &&
+                typeof parsed === "object" &&
+                "code" in parsed &&
+                typeof parsed.code === "number"
+              ) {
+                if (parsed.code < 200 || parsed.code >= 300) {
+                  reject(
+                    new Error(
+                      `desktop pet api failed: ${parsed.code} ${parsed.msg ?? ""}`,
+                    ),
+                  );
                   return;
                 }
-                resolve(parsed as T);
-              } catch (err) {
-                reject(new Error(`JSON 解析失败: ${this.errorMessage(err)}`));
+                resolve(parsed.data as T);
+                return;
               }
-              return;
+              resolve(parsed as unknown as T);
+            } catch (error) {
+              reject(
+                new Error(
+                  `desktop pet api parse failed: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                ),
+              );
             }
-            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
           });
         },
       );
-      req.on("error", (err: Error) => reject(err));
+      req.on("error", reject);
       req.on("timeout", () => {
-        req.destroy(new Error("请求超时"));
+        req.destroy(new Error("desktop pet api timeout"));
       });
       if (bodyStr !== undefined) {
         req.write(bodyStr);
@@ -2175,13 +2192,8 @@ export class DesktopPetManager {
     const endpoint =
       `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
 
-    const runtimeId =
-      this.bridgeClient?.getRuntimeId() ??
-      `rt_${randomUUID()}`;
-
-    const deviceId =
-      this.bridgeClient?.getDeviceId() ??
-      `dev_${randomUUID()}`;
+    const runtimeId = getRuntimeId();
+    const deviceId = getDeviceId();
 
     let ticket: string;
     try {
@@ -2210,6 +2222,14 @@ export class DesktopPetManager {
     const callbacks = this.buildBridgeCallbacks();
     this.bridgeClient = new RuntimeBridgeClient(config, callbacks);
     this.bridgeClient.connect();
+    try {
+      await this.registerDeviceIdentity();
+    } catch (error) {
+      console.warn(
+        "[DesktopPetManager] device identity registration failed:",
+        this.errorMessage(error),
+      );
+    }
   }
 
   private scheduleBridgeReconnect(): void {
@@ -2224,6 +2244,15 @@ export class DesktopPetManager {
     if (typeof this.bridgeReconnectTimer.unref === "function") {
       this.bridgeReconnectTimer.unref();
     }
+  }
+
+  private async registerDeviceIdentity(): Promise<void> {
+    await this.request("POST", "/api/local/devices/register", {
+      deviceId: getDeviceId(),
+      desktopInstanceId: getBackendSessionClient().getDesktopInstanceID(),
+      platform: process.platform,
+      appVersion: app.getVersion(),
+    });
   }
 
   private buildBridgeCallbacks(): RuntimeBridgeCallbacks {

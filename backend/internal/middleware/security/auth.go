@@ -54,6 +54,8 @@ var maintenanceAllowedPaths = map[string]bool{
 	"/api/export":    true,
 }
 
+var ErrNotFound = errors.New("not found")
+
 func isMaintenanceAllowedPath(path string) bool {
 	for prefix := range maintenanceAllowedPaths {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") {

@@ -54,7 +54,9 @@ import (
 	releaseworker "github.com/u-ai/backend/internal/desktoppet/release/worker"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
-	"github.com/u-ai/backend/internal/desktoppet/security"
+	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
+	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -133,9 +135,9 @@ type AppServices struct {
 	Emote                 *emote.Service
 	Temporal              *temporal.Service
 	RelTimeCoordinator    *temporal.RelationshipTimeCoordinator
-	OwnershipGuard        security.OwnershipGuard
-	PathRegistry          *security.PathRootRegistry
-	ImportStagingRepo     security.ImportStagingRepository
+	OwnershipGuard        desktoppetsecurity.OwnershipGuard
+	PathRegistry          *desktoppetsecurity.PathRootRegistry
+	ImportStagingRepo     desktoppetsecurity.ImportStagingRepository
 	PackageImporter       *importer.PackageImporter
 	Readiness             *readiness.ReadinessService
 	SafeMode              *readiness.SafeModeController
@@ -148,7 +150,9 @@ type AppServices struct {
 	MCPFeatures           *mcpfeatures.Service
 	MCPHost               *mcphost.Service
 	MCPInteractions       *mcphost.Broker
-	MCPDependencies       *mcpdependency.Service
+	MCPDependencies              *mcpdependency.Service
+	DesktopInstanceStore         *security.DesktopInstanceStore
+	DeviceRepository             *device.Repository
 }
 
 type defaultCharacterProvider struct {
@@ -609,11 +613,17 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
 
-	pathRegistry := security.NewPathRootRegistry()
-	_ = pathRegistry.Register(security.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
-	importStagingRepo := security.NewImportStagingRepository(ctx.DB)
+	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
+	_ = pathRegistry.Register(desktoppetsecurity.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
+	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
+	deviceRepo := device.NewRepository(ctx.DB)
 
-	ownershipGuard := security.NewSQLiteOwnershipGuard(ctx.DB)
+	desktopInstanceStore, err := security.NewDesktopInstanceStore(config.AppCfg.Storage.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("initialize desktop instance store: %w", err)
+	}
+
+	ownershipGuard := desktoppetsecurity.NewSQLiteOwnershipGuard(ctx.DB)
 
 	safeModeCtrl := readiness.NewSafeModeController()
 	var readinessSvc *readiness.ReadinessService
@@ -762,7 +772,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 		OwnershipGuard:        ownershipGuard,
 		PathRegistry:          pathRegistry,
 		ImportStagingRepo:     importStagingRepo,
-		PackageImporter:       importer.NewPackageImporter(releaseRepo, releaseStoragePort, nil),
+		PackageImporter:       importer.NewPackageImporter(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo)),
 		Readiness:             readinessSvc,
 		SafeMode:              safeModeCtrl,
 		MCPRepository:         mcpRepository,
@@ -775,6 +785,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 		MCPHost:               hostService,
 		MCPInteractions:       interactionBroker,
 		MCPDependencies:       dependencyService,
+		DesktopInstanceStore:  desktopInstanceStore,
+		DeviceRepository:      deviceRepo,
 	}, nil
 }
 
