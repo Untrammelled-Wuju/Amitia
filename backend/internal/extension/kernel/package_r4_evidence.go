@@ -235,6 +235,18 @@ func computeRollbackPreviewHash(input PackageRollbackPreviewHashInput) string {
 	return "sha256:" + hex.EncodeToString(hash[:])
 }
 
+func clonePackageSnapshotRequirementInput(
+	input PackageSnapshotRequirementInput,
+) PackageSnapshotRequirementInput {
+	cloned := input
+
+	cloned.ResourceAdded = append([]string(nil), input.ResourceAdded...)
+	cloned.ResourceRemoved = append([]string(nil), input.ResourceRemoved...)
+	cloned.ResourceChanged = append([]string(nil), input.ResourceChanged...)
+
+	return cloned
+}
+
 func buildPackageConfirmationAuthorityEvidence(
 	operationID string,
 	claims PackageConfirmationClaims,
@@ -1343,6 +1355,189 @@ func evidenceRequiredConfirmationsForRollback(required []string) []string {
 
 var errConfirmationEvidenceSignature = errors.New("kernel: confirmation authority evidence validation failed")
 
+func validateSnapshotRequirementEvidenceBinding(
+	evidence PackageConfirmationAuthorityEvidence,
+) error {
+	if evidence.OperationType != string(PackageOperationTypeRollback) {
+		if evidence.SnapshotRequirementInput != nil || evidence.SnapshotRequirement != nil {
+			return fmt.Errorf(
+				"%w: snapshot requirement evidence is only valid for rollback",
+				errConfirmationEvidenceSignature,
+			)
+		}
+		return nil
+	}
+
+	if evidence.SnapshotRequirementInput == nil {
+		return fmt.Errorf(
+			"%w: rollback snapshotRequirementInput missing",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if evidence.SnapshotRequirement == nil {
+		return fmt.Errorf(
+			"%w: rollback snapshotRequirement result missing",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	input := clonePackageSnapshotRequirementInput(*evidence.SnapshotRequirementInput)
+	persisted := *evidence.SnapshotRequirement
+
+	if input.SchemaVersion != 1 {
+		return fmt.Errorf(
+			"%w: rollback snapshot requirement schema unsupported: %d",
+			errConfirmationEvidenceSignature,
+			input.SchemaVersion,
+		)
+	}
+
+	if input.OperationType != string(PackageOperationTypeRollback) {
+		return fmt.Errorf(
+			"%w: rollback snapshot requirement operation type mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if input.OperationType != evidence.OperationType {
+		return fmt.Errorf(
+			"%w: snapshot requirement operation type differs from evidence",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if input.ExtensionID == "" || input.ExtensionID != evidence.ExtensionID {
+		return fmt.Errorf(
+			"%w: snapshot requirement extension identity mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if input.SourceVersion == "" || input.SourceVersion != evidence.SourceVersionID {
+		return fmt.Errorf(
+			"%w: snapshot requirement source version mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if input.SourceGeneration == "" || input.SourceGeneration != evidence.SourceGenerationID {
+		return fmt.Errorf(
+			"%w: snapshot requirement source generation mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if input.TargetVersion == "" || input.TargetVersion != evidence.TargetVersionID {
+		return fmt.Errorf(
+			"%w: snapshot requirement target version mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if input.TargetGeneration == "" || input.TargetGeneration != evidence.TargetGenerationID {
+		return fmt.Errorf(
+			"%w: snapshot requirement target generation mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	recomputed, err := ComputePackageSnapshotRequirement(input)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: recompute rollback snapshot requirement: %v",
+			errConfirmationEvidenceSignature,
+			err,
+		)
+	}
+
+	if recomputed.Hash == "" {
+		return fmt.Errorf(
+			"%w: recomputed snapshot requirement hash missing",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if persisted.Hash == "" {
+		return fmt.Errorf(
+			"%w: persisted snapshot requirement hash missing",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if persisted.Hash != recomputed.Hash {
+		return fmt.Errorf(
+			"%w: snapshot requirement result hash mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if persisted.Required != recomputed.Required {
+		return fmt.Errorf(
+			"%w: snapshot requirement Required decision mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if persisted.NoDataChange != recomputed.NoDataChange {
+		return fmt.Errorf(
+			"%w: snapshot requirement NoDataChange decision mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if persisted.Reason != recomputed.Reason {
+		return fmt.Errorf(
+			"%w: snapshot requirement reason mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if evidence.SnapshotRequirementHash == "" || evidence.SnapshotRequirementHash != recomputed.Hash {
+		return fmt.Errorf(
+			"%w: top-level snapshotRequirementHash mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	if evidence.AuthorityInput.SnapshotRequirementHash == "" || evidence.AuthorityInput.SnapshotRequirementHash != recomputed.Hash {
+		return fmt.Errorf(
+			"%w: authority input snapshotRequirementHash mismatch",
+			errConfirmationEvidenceSignature,
+		)
+	}
+
+	return nil
+}
+
+func finalizeRollbackSnapshotRequirementEvidence(
+	evidence PackageConfirmationAuthorityEvidence,
+	requirementInput PackageSnapshotRequirementInput,
+	requirement PackageSnapshotRequirement,
+) (
+	PackageConfirmationAuthorityEvidence,
+	error,
+) {
+	if evidence.OperationType != string(PackageOperationTypeRollback) {
+		return PackageConfirmationAuthorityEvidence{},
+			fmt.Errorf("kernel: snapshot requirement evidence can only finalize rollback authority")
+	}
+
+	inputCopy := clonePackageSnapshotRequirementInput(requirementInput)
+	requirementCopy := requirement
+
+	evidence.SnapshotRequirementInput = &inputCopy
+	evidence.SnapshotRequirement = &requirementCopy
+	evidence.EvidenceHash = computePackageConfirmationAuthorityEvidenceHash(evidence)
+
+	if err := validateConfirmationAuthorityEvidenceSignature(evidence); err != nil {
+		return PackageConfirmationAuthorityEvidence{},
+			fmt.Errorf("kernel: finalize rollback snapshot requirement evidence: %w", err)
+	}
+
+	return evidence, nil
+}
+
 func validateConfirmationAuthorityEvidenceSignature(
 	evidence PackageConfirmationAuthorityEvidence,
 ) error {
@@ -1476,6 +1671,10 @@ func validateConfirmationAuthorityEvidenceSignature(
 			"%w: evidence authority fields mismatch",
 			errConfirmationEvidenceSignature,
 		)
+	}
+
+	if err := validateSnapshotRequirementEvidenceBinding(evidence); err != nil {
+		return err
 	}
 
 	if evidence.Nonce == "" ||

@@ -2,6 +2,8 @@ package kernel
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,51 +11,272 @@ import (
 	"time"
 )
 
-func newFinalizationOperation(t *testing.T, runtime *Runtime, container *Container, operationID, extensionID, operationType string) (PackageOperationRecord, PackageWriteGuard) {
+func newFinalizationOperation(
+	t *testing.T,
+	runtime *Runtime,
+	container *Container,
+	operationID string,
+	extensionID string,
+	operationType string,
+) (
+	PackageOperationRecord,
+	PackageWriteGuard,
+) {
 	t.Helper()
+
 	ctx := context.Background()
-	op := operationFixture(operationID, "user-1", "finalize-"+operationID, "sha256:"+operationID, extensionID)
-	op.OperationType = operationType
-	op.TargetVersion = ""
-	op.FromVersion = ""
-	confirmKey := "confirm." + operationType
-	secHash := computeSecurityPolicyHash()
-	previewHash := "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-	nonce := "test-nonce-" + operationID
-	claims := fmt.Sprintf(`{"schemaVersion":1,"operationType":%q,"extensionId":%q,"artifactId":%q,"previewHash":%q,"securityPolicyHash":%q,"policyVersion":%q,"userId":%q,"scopeType":%q,"scopeId":%q,"confirmedItems":[%q],"confirmations":{%q:true},"issuedAt":%d,"expiresAt":%d,"nonce":%q}`,
-		operationType, extensionID, op.ArtifactID, previewHash, secHash, "2026-07-30-v1",
-		op.UserID, op.ScopeType, op.ScopeID, confirmKey, confirmKey,
-		time.Now().Unix(), time.Now().Add(time.Hour).Unix(), nonce)
-	op.ConfirmationClaimsJSON = claims
-	if _, _, err := container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(ctx, op, PackageConfirmationNonceBinding{Nonce: nonce}); err != nil {
-		t.Fatal(err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	operation := operationFixture(
+		operationID,
+		"user-1",
+		"finalize-"+operationID,
+		"sha256:"+operationID,
+		extensionID,
+	)
+
+	operation.OperationType = operationType
+
+	operation.TargetVersion = ""
+	operation.TargetGeneration = ""
+	operation.FromVersion = ""
+	operation.ArtifactID = "artifact-" + operationID
+	operation.PreviewSessionID = ""
+	operation.SnapshotRequirementHash = "sha256:snapshot-requirement-" + operationID
+
+	requiredConfirmations := []string{}
+	dependencies := []string{}
+
+	artifactPolicy := ArtifactPolicy("")
+
+	if operationType == string(PackageOperationTypeUninstall) {
+		artifactPolicy = ArtifactPolicyRetainArtifact
 	}
-	if err := container.PackageRepository.TransitionOperation(ctx, op.OperationID, []PackageOperationStatus{PackageOperationPending}, PackageOperationInProgress, PackageOperationTransition{CurrentStep: "prepared"}, PackageWriteGuard{}); err != nil {
-		t.Fatal(err)
+
+	claims := PackageConfirmationClaims{
+		SchemaVersion:           PackageConfirmationClaimsSchemaVersion,
+		OperationType:           operation.OperationType,
+		ExtensionID:             operation.ExtensionID,
+		ArtifactID:              operation.ArtifactID,
+		ArtifactPolicy:          artifactPolicy,
+		PreviewSessionID:        operation.PreviewSessionID,
+		PreviewHash:             "sha256:preview-" + operationID,
+		SecurityPolicyHash:      computeSecurityPolicyHash(),
+		SnapshotRequirementHash: operation.SnapshotRequirementHash,
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(
+			requiredConfirmations,
+		),
+		DependenciesHash: computePackageDependenciesHash(
+			dependencies,
+		),
+		PolicyVersion:  packagePolicyVersion,
+		UserID:         operation.UserID,
+		ScopeType:      operation.ScopeType,
+		ScopeID:        operation.ScopeID,
+		ConfirmedItems: requiredConfirmations,
+		Confirmations:  map[string]bool{},
+		IssuedAt:       now.Unix(),
+		ExpiresAt:      now.Add(5 * time.Minute).Unix(),
+		Nonce:          "test-nonce-" + operationID,
 	}
-	lease, err := container.PackageRepository.AcquireExtensionLease(ctx, extensionID, operationID, "worker-1", 10*time.Minute)
+
+	claimsJSON, err := json.Marshal(claims)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("marshal finalization claims: %v", err)
 	}
-	return op, PackageWriteGuard{ExtensionID: extensionID, FencingToken: lease.FencingToken}
+
+	operation.ConfirmationClaimsJSON = string(claimsJSON)
+	operation.ConfirmationsJSON = "{}"
+
+	if err := container.PackageRepository.PutArtifact(
+		ctx,
+		PackageArtifact{
+			ArtifactID:     operation.ArtifactID,
+			ExtensionID:    operation.ExtensionID,
+			Version:        "1.0.0",
+			RetentionState: "active",
+			CreatedAt:      now.Format(time.RFC3339Nano),
+		},
+	); err != nil {
+		t.Fatalf("put finalization artifact: %v", err)
+	}
+
+	binding := validTestConfirmationNonceBinding(
+		operation,
+		claims.Nonce,
+		now,
+	)
+
+	existing, created, err := container.PackageRepository.CreateOrGetOperationWithConfirmationNonce(
+		ctx,
+		operation,
+		binding,
+	)
+	if err != nil {
+		t.Fatalf("create finalization operation with nonce: %v", err)
+	}
+
+	if !created {
+		t.Fatal("finalization fixture unexpectedly reused operation")
+	}
+
+	if existing.OperationID != operation.OperationID {
+		t.Fatalf(
+			"unexpected authoritative operation: got=%s want=%s",
+			existing.OperationID,
+			operation.OperationID,
+		)
+	}
+
+	if err := container.PackageRepository.TransitionOperation(
+		ctx,
+		operation.OperationID,
+		[]PackageOperationStatus{PackageOperationPending},
+		PackageOperationInProgress,
+		PackageOperationTransition{
+			CurrentStep: "prepared",
+		},
+		PackageWriteGuard{},
+	); err != nil {
+		t.Fatalf("transition finalization operation: %v", err)
+	}
+
+	lease, err := container.PackageRepository.AcquireExtensionLease(
+		ctx,
+		extensionID,
+		operationID,
+		"worker-1",
+		10*time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("acquire finalization lease: %v", err)
+	}
+
+	guard := PackageWriteGuard{
+		ExtensionID:  extensionID,
+		FencingToken: lease.FencingToken,
+	}
+
+	authorityInput := PackageConfirmationAuthorityInput{
+		SchemaVersion:           packageConfirmationAuthorityInputSchemaVersion,
+		Source:                  packageConfirmationAuthoritySourcePostLeasePreview,
+		OperationType:           operation.OperationType,
+		ExtensionID:             operation.ExtensionID,
+		ArtifactID:              operation.ArtifactID,
+		PreviewSessionID:        operation.PreviewSessionID,
+		PreviewHash:             claims.PreviewHash,
+		SecurityPolicyHash:      claims.SecurityPolicyHash,
+		SnapshotRequirementHash: claims.SnapshotRequirementHash,
+		ArtifactPolicy:          claims.ArtifactPolicy,
+		Dependencies:            dependencies,
+		RequiredConfirmations:   requiredConfirmations,
+		CapturedAt:              now.Format(time.RFC3339Nano),
+	}
+
+	evidence, err := buildPackageConfirmationAuthorityEvidence(
+		operation.OperationID,
+		claims,
+		authorityInput,
+	)
+	if err != nil {
+		t.Fatalf("build finalization authority evidence: %v", err)
+	}
+
+	if err := runtime.persistPackageConfirmationAuthorityEvidence(
+		ctx,
+		evidence,
+		guard,
+	); err != nil {
+		t.Fatalf("persist finalization authority evidence: %v", err)
+	}
+
+	authoritative, _, err := container.PackageRepository.GetOperation(
+		ctx,
+		operation.UserID,
+		operation.OperationID,
+	)
+	if err != nil {
+		t.Fatalf("reload authoritative finalization operation: %v", err)
+	}
+
+	if authoritative.FencingToken != lease.FencingToken {
+		t.Fatalf(
+			"operation fencing token mismatch: operation=%d lease=%d",
+			authoritative.FencingToken,
+			lease.FencingToken,
+		)
+	}
+
+	return authoritative, guard
 }
 
-func addFinalizationUninstallStep(t *testing.T, container *Container, op PackageOperationRecord, guard PackageWriteGuard) {
+func addFinalizationUninstallStep(
+	t *testing.T,
+	container *Container,
+	operation PackageOperationRecord,
+	guard PackageWriteGuard,
+) {
 	t.Helper()
+
+	ctx := context.Background()
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	step := PackageOperationStep{
-		StepID:       "step-" + op.OperationID,
-		OperationID:  op.OperationID,
+
+	cleanupResultJSON := "{}"
+	cleanupResultHash := sha256.Sum256([]byte(cleanupResultJSON))
+
+	cleanupStep := PackageOperationStep{
+		StepID:       "step-cleanup-" + operation.OperationID,
+		OperationID:  operation.OperationID,
 		StepName:     "cleanup_kernel_repositories",
 		StepOrder:    3,
-		Status:       "completed",
+		Status:       StatusCompleted,
 		AttemptCount: 1,
-		ResultJSON:   "{}",
+		ResultJSON:   cleanupResultJSON,
+		ResultHash:   fmt.Sprintf("%x", cleanupResultHash),
 		StartedAt:    now,
 		CompletedAt:  now,
 	}
-	if err := container.PackageRepository.PutStep(context.Background(), step, guard); err != nil {
-		t.Fatal(err)
+
+	if err := container.PackageRepository.PutStep(ctx, cleanupStep, guard); err != nil {
+		t.Fatalf("put cleanup step: %v", err)
+	}
+
+	removeResult := RemoveArtifactStepResult{
+		ArtifactID:     operation.ArtifactID,
+		ExtensionID:    operation.ExtensionID,
+		ArtifactPolicy: ArtifactPolicyRetainArtifact,
+		Deleted:        false,
+		Retained:       true,
+		RetentionState: "active",
+		RemainingRefs:  0,
+	}
+
+	removeResult.EvidenceHash = computeArtifactStepEvidenceHash(removeResult)
+
+	removeResultJSON, err := json.Marshal(removeResult)
+	if err != nil {
+		t.Fatalf("marshal remove artifact step: %v", err)
+	}
+
+	removeResultHash := sha256.Sum256(removeResultJSON)
+
+	removeStep := PackageOperationStep{
+		StepID:       "step-remove-artifact-" + operation.OperationID,
+		OperationID:  operation.OperationID,
+		StepName:     StepRemoveArtifact,
+		StepOrder:    31,
+		Status:       StatusCompleted,
+		AttemptCount: 1,
+		ResultJSON:   string(removeResultJSON),
+		ResultHash:   fmt.Sprintf("%x", removeResultHash),
+		StartedAt:    now,
+		CompletedAt:  now,
+	}
+
+	if err := container.PackageRepository.PutStep(ctx, removeStep, guard); err != nil {
+		t.Fatalf("put remove artifact step: %v", err)
 	}
 }
 
@@ -253,5 +476,118 @@ func TestFinalizePackageOperationReleasePendingPersistenceFailureReturnsCombined
 	record := finalizationOperationRecord(t, container, op.OperationID)
 	if record.Status != string(PackageOperationFinalizing) {
 		t.Fatalf("unexpected operation state: %+v", record)
+	}
+}
+
+func TestFinalizationUninstallFixturePassesFinalGate(t *testing.T) {
+	ctx := context.Background()
+
+	runtime, container := newPackagePipelineRuntime(t)
+
+	operation, guard := newFinalizationOperation(
+		t,
+		runtime,
+		container,
+		"op-finalize-fixture-validation",
+		"com.example/finalize-fixture-validation",
+		string(PackageOperationTypeUninstall),
+	)
+
+	addFinalizationUninstallStep(t, container, operation, guard)
+
+	result, err := runtime.VerifyPackageFinalGate(ctx, operation.OperationID)
+	if err != nil {
+		t.Fatalf("valid uninstall finalization fixture rejected: %v; checks=%+v", err, result.Checks)
+	}
+
+	if !result.Passed {
+		t.Fatalf("valid uninstall finalization fixture did not pass: %+v", result.Checks)
+	}
+
+	requiredChecks := map[string]bool{
+		"claims_verified":          false,
+		"artifact_path_absent":     false,
+		"valid_lease":              false,
+		"step_result_integrity":    false,
+		"operation_steps_complete": false,
+	}
+
+	for _, check := range result.Checks {
+		if check.Passed {
+			if _, exists := requiredChecks[check.Name]; exists {
+				requiredChecks[check.Name] = true
+			}
+		}
+	}
+
+	for name, passed := range requiredChecks {
+		if !passed {
+			t.Fatalf("required Final Gate check %s did not pass: %+v", name, result.Checks)
+		}
+	}
+}
+
+func TestFinalizationFixturePersistsCompleteNonceBinding(t *testing.T) {
+	runtime, container := newPackagePipelineRuntime(t)
+
+	operation, _ := newFinalizationOperation(
+		t,
+		runtime,
+		container,
+		"op-finalize-nonce-binding",
+		"com.example/finalize-nonce-binding",
+		string(PackageOperationTypeInstall),
+	)
+
+	claims, err := parseOperationConfirmationClaims(operation)
+	if err != nil {
+		t.Fatalf("parse finalization claims: %v", err)
+	}
+
+	var record PackageConfirmationNonceRecord
+
+	err = container.PackageRepository.DB().QueryRow(
+		`SELECT
+			nonce,
+			operation_id,
+			operation_type,
+			extension_id,
+			user_id,
+			issued_at,
+			expires_at,
+			consumed_at
+		 FROM extension_package_confirmation_nonces
+		 WHERE operation_id=?`,
+		operation.OperationID,
+	).Scan(
+		&record.Nonce,
+		&record.OperationID,
+		&record.OperationType,
+		&record.ExtensionID,
+		&record.UserID,
+		&record.IssuedAt,
+		&record.ExpiresAt,
+		&record.ConsumedAt,
+	)
+
+	if err != nil {
+		t.Fatalf("query finalization nonce binding: %v", err)
+	}
+
+	if record.Nonce != claims.Nonce ||
+		record.OperationID != operation.OperationID ||
+		record.OperationType != operation.OperationType ||
+		record.ExtensionID != operation.ExtensionID ||
+		record.UserID != operation.UserID {
+		t.Fatalf("finalization nonce identity mismatch: %+v", record)
+	}
+
+	if record.IssuedAt != confirmationTimestamp(claims.IssuedAt) ||
+		record.ExpiresAt != confirmationTimestamp(claims.ExpiresAt) {
+		t.Fatalf("finalization nonce temporal mismatch: %+v", record)
+	}
+
+	if record.ConsumedAt == "" {
+		t.Fatal("finalization nonce consumedAt missing")
 	}
 }

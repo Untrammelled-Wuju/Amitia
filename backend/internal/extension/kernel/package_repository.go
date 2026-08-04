@@ -175,7 +175,7 @@ func NewPackageRepository(db *sql.DB) *PackageRepository {
 const packageOperationSelectColumns = `operation_id, trace_id, user_id, scope_type, scope_id,
 	extension_id, target_version, operation_type, status, current_step, artifact_id,
 	preview_session_id, confirmations_json, confirmation_claims_json, error_code, error_detail, started_at, updated_at,
-	completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash`
+	completed_at, stable_generation, target_generation, current_pointer_json, snapshot_requirement_hash, fencing_token`
 
 type sqlScanner interface {
 	Scan(dest ...any) error
@@ -207,6 +207,7 @@ func scanPackageOperation(scanner sqlScanner) (*PackageOperationRecord, error) {
 		&op.TargetGeneration,
 		&op.CurrentPointerJSON,
 		&op.SnapshotRequirementHash,
+		&op.FencingToken,
 	); err != nil {
 		return nil, err
 	}
@@ -633,7 +634,7 @@ func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationI
 		&op.TargetVersion, &op.OperationType, &op.Status, &op.CurrentStep, &op.ArtifactID,
 		&op.PreviewSessionID, &op.ConfirmationsJSON, &op.ConfirmationClaimsJSON, &op.ErrorCode, &op.ErrorDetail,
 		&op.StartedAt, &op.UpdatedAt, &op.CompletedAt, &op.StableGeneration, &op.TargetGeneration,
-		&op.CurrentPointerJSON, &op.SnapshotRequirementHash,
+		&op.CurrentPointerJSON, &op.SnapshotRequirementHash, &op.FencingToken,
 	)
 	if err != nil {
 		return op, nil, err

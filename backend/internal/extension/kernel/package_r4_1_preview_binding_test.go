@@ -146,7 +146,7 @@ func TestR41SameRollbackPreviewRejectsDependenciesHashDrift(t *testing.T) {
 }
 
 func TestR41RollbackConfirmationRejectsMissingDependenciesHash(t *testing.T) {
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 
 	required := []string{"confirm.rollback"}
 
@@ -175,7 +175,7 @@ func TestR41RollbackConfirmationRejectsMissingDependenciesHash(t *testing.T) {
 
 		PreviewHash: "sha256:preview",
 
-		SecurityPolicyHash: "sha256:security",
+		SecurityPolicyHash: computeSecurityPolicyHash(),
 
 		SnapshotRequirementHash: "sha256:requirement",
 
@@ -187,6 +187,8 @@ func TestR41RollbackConfirmationRejectsMissingDependenciesHash(t *testing.T) {
 
 		ScopeType: "global",
 
+		ScopeID: "",
+
 		ConfirmedItems: required,
 
 		Confirmations: map[string]bool{
@@ -195,14 +197,14 @@ func TestR41RollbackConfirmationRejectsMissingDependenciesHash(t *testing.T) {
 
 		IssuedAt: now.Unix(),
 
-		ExpiresAt: now.Add(10 * time.Minute).Unix(),
+		ExpiresAt: now.Add(packageConfirmationLifetime).Unix(),
 
-		Nonce: "nonce-r4",
+		Nonce: "nonce-r41-missing-dependencies",
 	}
 
 	token, err := signPackageRollbackConfirmation(claims)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("sign rollback confirmation: %v", err)
 	}
 
 	_, err = verifyPackageRollbackConfirmation(token)
@@ -211,8 +213,90 @@ func TestR41RollbackConfirmationRejectsMissingDependenciesHash(t *testing.T) {
 		t.Fatal("missing dependenciesHash must be rejected")
 	}
 
+	if !IsPackageErrorCode(err, PackageErrCodeConfirmationClaimsInvalid) {
+		t.Fatalf("expected %s, got: %v", PackageErrCodeConfirmationClaimsInvalid, err)
+	}
+
 	if !strings.Contains(err.Error(), "dependenciesHash") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("expected dependenciesHash validation error, got: %v", err)
+	}
+
+	if strings.Contains(err.Error(), "security policy changed") {
+		t.Fatalf("test fixture failed before dependenciesHash validation: %v", err)
+	}
+}
+
+func TestR41RollbackConfirmationAcceptsCurrentDependenciesHash(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+
+	required := []string{"confirm.rollback"}
+
+	dependenciesHash := computePackageDependenciesHash([]string{"com.example/dependent-a"})
+
+	claims := PackageRollbackConfirmationClaims{
+		SchemaVersion: PackageRollbackConfirmationClaimsSchemaVersion,
+
+		OperationType: string(PackageOperationTypeRollback),
+
+		PolicyVersion: packagePolicyVersion,
+
+		ExtensionID: "com.example/r4",
+
+		ArtifactID: "artifact-r4",
+
+		SourceVersionID: "2.0.0",
+
+		SourceGenerationID: "generation-2",
+
+		TargetVersionID: "1.0.0",
+
+		TargetGenerationID: "generation-1",
+
+		RollbackPointID: "rollback-point-r4",
+
+		PreviewSessionID: "rollback-preview-r4",
+
+		PreviewHash: "sha256:preview",
+
+		SecurityPolicyHash: computeSecurityPolicyHash(),
+
+		SnapshotRequirementHash: "sha256:requirement",
+
+		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(required),
+
+		DependenciesHash: dependenciesHash,
+
+		UserID: "user-1",
+
+		ScopeType: "global",
+
+		ScopeID: "",
+
+		ConfirmedItems: required,
+
+		Confirmations: map[string]bool{
+			"confirm.rollback": true,
+		},
+
+		IssuedAt: now.Unix(),
+
+		ExpiresAt: now.Add(packageConfirmationLifetime).Unix(),
+
+		Nonce: "nonce-r41-valid-dependencies",
+	}
+
+	token, err := signPackageRollbackConfirmation(claims)
+	if err != nil {
+		t.Fatalf("sign rollback confirmation: %v", err)
+	}
+
+	verified, err := verifyPackageRollbackConfirmation(token)
+	if err != nil {
+		t.Fatalf("valid dependenciesHash rejected: %v", err)
+	}
+
+	if verified.DependenciesHash != dependenciesHash {
+		t.Fatalf("dependenciesHash changed after token verification: expected=%s actual=%s", dependenciesHash, verified.DependenciesHash)
 	}
 }
 

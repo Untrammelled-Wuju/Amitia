@@ -355,22 +355,40 @@ func TestR44UninstallIncludesDependenciesHash(t *testing.T) {
 
 func TestR44RollbackEvidencePreservesSnapshotRequirement(t *testing.T) {
 	input := r44AuthorityInputRollback()
-	requirement := &PackageSnapshotRequirementInput{
-		SchemaVersion:    1,
-		OperationType:    string(PackageOperationTypeRollback),
-		ExtensionID:      input.ExtensionID,
-		SourceVersion:    "version-source-r44",
-		TargetVersion:    "version-target-r44",
-		SourceGeneration: "generation-source-r44",
-		TargetGeneration: "generation-target-r44",
-	}
-	snapshotReq := &PackageSnapshotRequirement{
-		Required:     true,
-		NoDataChange: false,
-		Reason:       "rollback requires snapshot",
-		Hash:         "sha256:rollback-snapshot-hash",
-	}
 	claims := r44ClaimsRollback()
+
+	requirementInput := PackageSnapshotRequirementInput{
+		SchemaVersion:            1,
+		OperationType:            string(PackageOperationTypeRollback),
+		ExtensionID:              input.ExtensionID,
+		SourceVersion:            claims.SourceVersionID,
+		SourceGeneration:         claims.SourceGenerationID,
+		TargetVersion:            claims.TargetVersionID,
+		TargetGeneration:         claims.TargetGenerationID,
+		ConfigBeforeHash:         "sha256:r44-config-before",
+		ConfigAfterHash:          "sha256:r44-config-after",
+		ConfigEvidencePresent:    true,
+		ResourceBeforeHash:       "sha256:r44-resource",
+		ResourceAfterHash:        "sha256:r44-resource",
+		ResourceEvidencePresent:  true,
+		ResourceAdded:            []string{},
+		ResourceRemoved:          []string{},
+		ResourceChanged:          []string{},
+		UserDataBeforeHash:       "sha256:r44-user-data",
+		UserDataAfterHash:        "sha256:r44-user-data",
+		UserDataEvidencePresent:  true,
+		MigrationEvidencePresent: true,
+		ManifestNoDataChange:     false,
+		ManifestEvidencePresent:  true,
+	}
+
+	requirement, err := ComputePackageSnapshotRequirement(requirementInput)
+	if err != nil {
+		t.Fatalf("compute snapshot requirement: %v", err)
+	}
+
+	input.SnapshotRequirementHash = requirement.Hash
+	claims.SnapshotRequirementHash = requirement.Hash
 
 	evidence, err := buildPackageConfirmationAuthorityEvidence(
 		"operation-r44-rollback",
@@ -378,23 +396,32 @@ func TestR44RollbackEvidencePreservesSnapshotRequirement(t *testing.T) {
 		input,
 	)
 	if err != nil {
-		t.Fatalf("failed to build rollback authority evidence: %v", err)
+		t.Fatalf("build rollback authority evidence: %v", err)
 	}
-	evidence.SnapshotRequirementInput = requirement
-	evidence.SnapshotRequirement = snapshotReq
-	evidence.EvidenceHash = computePackageConfirmationAuthorityEvidenceHash(evidence)
+
+	evidence, err = finalizeRollbackSnapshotRequirementEvidence(
+		evidence,
+		requirementInput,
+		requirement,
+	)
+	if err != nil {
+		t.Fatalf("finalize rollback requirement evidence: %v", err)
+	}
 
 	if evidence.SnapshotRequirementInput == nil {
 		t.Fatal("rollback evidence must preserve snapshotRequirementInput")
 	}
 	if evidence.SnapshotRequirement == nil {
-		t.Fatal("rollback evidence must preserve snapshotRequirement")
+		t.Fatal("rollback evidence must preserve snapshotRequirement result")
 	}
-	if evidence.SnapshotRequirement.Hash != snapshotReq.Hash {
-		t.Fatalf("snapshot requirement hash mismatch: got %s, expected %s", evidence.SnapshotRequirement.Hash, snapshotReq.Hash)
+	if evidence.SnapshotRequirement.Hash != requirement.Hash {
+		t.Fatalf("snapshot requirement hash mismatch: got=%s expected=%s", evidence.SnapshotRequirement.Hash, requirement.Hash)
+	}
+	if evidence.SnapshotRequirementHash != requirement.Hash {
+		t.Fatalf("top-level snapshot requirement hash mismatch: got=%s expected=%s", evidence.SnapshotRequirementHash, requirement.Hash)
 	}
 	if err := validateConfirmationAuthorityEvidenceSignature(evidence); err != nil {
-		t.Fatalf("rollback evidence signature validation failed after preserving snapshot requirement: %v", err)
+		t.Fatalf("valid rollback requirement evidence rejected: %v", err)
 	}
 }
 

@@ -210,9 +210,29 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		return KernelInstallResult{}, errors.Join(err, failErr)
 	}
 
-	rollbackEvidence.SnapshotRequirementInput = &postLeaseRequirementInput
-	rollbackEvidence.SnapshotRequirement = &postLeaseRequirement
-	rollbackEvidence.EvidenceHash = computePackageConfirmationAuthorityEvidenceHash(rollbackEvidence)
+	rollbackEvidence, err = finalizeRollbackSnapshotRequirementEvidence(
+		rollbackEvidence,
+		postLeaseRequirementInput,
+		postLeaseRequirement,
+	)
+	if err != nil {
+		failErr := r.container.PackageRepository.SetOperation(
+			context.Background(),
+			op.OperationID,
+			"failed",
+			"validate_snapshot_requirement_evidence",
+			PackageErrCodeConfirmationStale,
+			err.Error(),
+			true,
+			guard,
+		)
+		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
+		return KernelInstallResult{},
+			errors.Join(
+				NewPackageError(PackageErrCodeConfirmationStale, 409, err),
+				failErr,
+			)
+	}
 
 	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, rollbackEvidence, guard); evidenceErr != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", fmt.Sprintf("authority evidence persistence failed: %v", evidenceErr), true, guard)

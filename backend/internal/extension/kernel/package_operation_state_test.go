@@ -322,54 +322,108 @@ func TestValidateQuarantineMetadataFence_TokenScenarios(t *testing.T) {
 
 func TestCreateOrGetOperationWithConfirmationNonce_RejectsReplay(t *testing.T) {
 	repository := newOperationStateTestRepository(t)
-	op := operationFixture("operation-nonce-1", "user-1", "request-nonce", "sha256:nonce-first", "extension-1")
-	_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, PackageConfirmationNonceBinding{Nonce: "nonce-value-1"})
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	firstOperation := operationFixture("operation-nonce-1", "user-1", "request-nonce", "sha256:nonce-first", "extension-1")
+
+	binding := validTestConfirmationNonceBinding(firstOperation, "nonce-value-1", now)
+
+	_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), firstOperation, binding)
 	if err != nil || !created {
 		t.Fatalf("first create should succeed: created=%v err=%v", created, err)
 	}
-	op2 := operationFixture("operation-nonce-2", "user-1", "request-nonce-2", "sha256:nonce-second", "extension-1")
-	_, _, err = repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op2, PackageConfirmationNonceBinding{Nonce: "nonce-value-1"})
-	if !IsPackageOperationError(err, OperationErrIdempotencyConflict) {
-		t.Fatalf("reused nonce should be rejected: %v", err)
+
+	secondOperation := operationFixture("operation-nonce-2", "user-1", "request-nonce-2", "sha256:nonce-second", "extension-1")
+
+	_, _, err = repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), secondOperation, binding)
+
+	if !IsPackageOperationError(err, OperationErrTokenStale) {
+		t.Fatalf("reused nonce across operations must return TOKEN_STALE: %v", err)
+	}
+
+	if IsPackageOperationError(err, OperationErrIdempotencyConflict) {
+		t.Fatalf("nonce replay must not be reported as generic idempotency conflict: %v", err)
 	}
 }
 
 func TestCreateOrGetOperationWithConfirmationNonce_ConcurrentRejectsReplay(t *testing.T) {
 	repository := newOperationStateTestRepository(t)
+
 	const workers = 50
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	template := operationFixture("operation-concurrent-template", "user-concurrent", "request-concurrent-template", "sha256:concurrent-template", "extension-concurrent")
+
+	binding := validTestConfirmationNonceBinding(template, "shared-nonce-id", now)
+
 	var wait sync.WaitGroup
+
 	errorsSeen := make(chan error, workers)
+
 	results := make(chan bool, workers)
-	for i := 0; i < workers; i++ {
+
+	for index := 0; index < workers; index++ {
 		wait.Add(1)
-		go func(i int) {
+
+		go func(worker int) {
 			defer wait.Done()
-			op := operationFixture(fmt.Sprintf("operation-concurrent-%03d", i), "user-concurrent", fmt.Sprintf("request-concurrent-%03d", i), fmt.Sprintf("sha256:concurrent-%03d", i), "extension-concurrent")
-			_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, PackageConfirmationNonceBinding{Nonce: "shared-nonce-id"})
+
+			operation := operationFixture(
+				fmt.Sprintf("operation-concurrent-%03d", worker),
+				"user-concurrent",
+				fmt.Sprintf("request-concurrent-%03d", worker),
+				fmt.Sprintf("sha256:concurrent-%03d", worker),
+				"extension-concurrent",
+			)
+
+			_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), operation, binding)
 			if err != nil {
 				errorsSeen <- err
 				return
 			}
+
 			results <- created
-		}(i)
+		}(index)
 	}
+
 	wait.Wait()
+
 	close(errorsSeen)
 	close(results)
+
 	successCount := 0
+
+	nonCreatedSuccessCount := 0
+
 	for created := range results {
 		if created {
 			successCount++
+		} else {
+			nonCreatedSuccessCount++
 		}
 	}
+
 	if successCount != 1 {
-		t.Fatalf("expected exactly one successful creation, got %d", successCount)
+		t.Fatalf("expected exactly one successful nonce consumer, got %d", successCount)
 	}
-	conflictCount := 0
-	for range errorsSeen {
-		conflictCount++
+
+	if nonCreatedSuccessCount != 0 {
+		t.Fatalf("different operations must not receive nil error with created=false; got %d", nonCreatedSuccessCount)
 	}
-	if conflictCount != workers-1 {
-		t.Fatalf("expected %d conflicts, got %d", workers-1, conflictCount)
+
+	staleCount := 0
+
+	for err := range errorsSeen {
+		if !IsPackageOperationError(err, OperationErrTokenStale) {
+			t.Fatalf("nonce replay loser must return TOKEN_STALE, got: %v", err)
+		}
+
+		staleCount++
+	}
+
+	if staleCount != workers-1 {
+		t.Fatalf("expected %d TOKEN_STALE results, got %d", workers-1, staleCount)
 	}
 }

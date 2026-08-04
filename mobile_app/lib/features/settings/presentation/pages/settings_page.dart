@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_motion.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -19,13 +20,20 @@ class SettingsPage extends ConsumerWidget {
     final groups = MockData.mainSettings;
     final isDevMode = ref.watch(isDeveloperModeProvider);
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '设置', navigation: AmitiaAppBarNavigation.back),
+      appBar: AmitiaAppBar(
+        title: '设置',
+        navigation: AmitiaAppBarNavigation.back,
+      ),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: _UserInfoCard(onTap: () => context.push(AppRoutes.settingsUser)),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.pagePadding,
+            ),
+            child: _UserInfoCard(
+              onTap: () => context.push(AppRoutes.settingsUser),
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           for (int i = 0; i < groups.length; i++) ...[
@@ -37,13 +45,15 @@ class SettingsPage extends ConsumerWidget {
                       child: _DevModeToggle(
                         isDevMode: isDevMode,
                         onTap: () {
-                          ref.read(isDeveloperModeProvider.notifier).state = !isDevMode;
+                          ref.read(isDeveloperModeProvider.notifier).state =
+                              !isDevMode;
                         },
                       ),
                     )
                   : null,
             ),
-            if (i < groups.length - 1) const SizedBox(height: AppSpacing.sectionGap),
+            if (i < groups.length - 1)
+              const SizedBox(height: AppSpacing.sectionGap),
           ],
           const SizedBox(height: AppSpacing.xl),
         ],
@@ -78,10 +88,7 @@ class _UserInfoCard extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    context.accentPrimary,
-                    context.accentSecondary,
-                  ],
+                  colors: [context.accentPrimary, context.accentSecondary],
                 ),
               ),
               child: const Center(
@@ -134,11 +141,7 @@ class _UserInfoCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              size: 20,
-              color: context.textTertiary,
-            ),
+            Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
           ],
         ),
       ),
@@ -159,13 +162,19 @@ class _DevModeToggle extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isDevMode ? context.accentPrimary.withValues(alpha: 0.12) : context.surfacePrimary,
+          color: isDevMode
+              ? context.accentPrimary.withValues(alpha: 0.12)
+              : context.surfacePrimary,
           borderRadius: AppRadius.brMedium,
           border: Border.all(color: context.borderPrimary, width: 0.5),
         ),
         child: Row(
           children: [
-            Icon(Icons.developer_mode, size: 20, color: isDevMode ? context.accentPrimary : context.textTertiary),
+            Icon(
+              Icons.developer_mode,
+              size: 20,
+              color: isDevMode ? context.accentPrimary : context.textTertiary,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -173,7 +182,9 @@ class _DevModeToggle extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: isDevMode ? context.accentPrimary : context.textPrimary,
+                  color: isDevMode
+                      ? context.accentPrimary
+                      : context.textPrimary,
                 ),
               ),
             ),
@@ -181,13 +192,17 @@ class _DevModeToggle extends StatelessWidget {
               width: 36,
               height: 20,
               decoration: BoxDecoration(
-                color: isDevMode ? context.accentPrimary : context.borderPrimary,
+                color: isDevMode
+                    ? context.accentPrimary
+                    : context.borderPrimary,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: AnimatedAlign(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                alignment: isDevMode ? Alignment.centerRight : Alignment.centerLeft,
+                duration: AppMotion.standard,
+                curve: AppMotion.standardCurve,
+                alignment: isDevMode
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
                 child: Container(
                   width: 16,
                   height: 16,
@@ -228,7 +243,9 @@ class _SettingGroup extends StatelessWidget {
           child: Text(group.title, style: AppTypography.caption(context)),
         ),
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          margin: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pagePadding,
+          ),
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: AppRadius.brMedium,
@@ -302,10 +319,7 @@ class _SettingTile extends StatelessWidget {
               ),
             ),
             if (item.value != null) ...[
-              Text(
-                item.value!,
-                style: AppTypography.caption(context),
-              ),
+              Text(item.value!, style: AppTypography.caption(context)),
               const SizedBox(width: 4),
             ],
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
