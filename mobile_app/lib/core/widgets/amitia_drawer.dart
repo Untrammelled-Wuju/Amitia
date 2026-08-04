@@ -90,11 +90,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   void _navigateTo(String route) {
     final router = GoRouter.of(context);
     final currentRoute = router.routerDelegate.currentConfiguration.fullPath;
-    if (currentRoute == AppRoutes.chat) {
-      router.push(route);
-    } else {
-      router.pushReplacement(route);
-    }
+    Navigator.of(context).pop();
+    if (currentRoute == route) return;
+    router.push(route);
   }
 
   _CharInfo _getCharacter(String id) {

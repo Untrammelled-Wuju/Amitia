@@ -1299,26 +1299,27 @@ func verifyConfirmationAuthorityEvidenceClaims(evidence PackageConfirmationAutho
 		)
 	}
 
-	if evidence.TargetVersionID !=
-		claims.TargetVersionID ||
-		evidence.TargetGenerationID !=
-			claims.TargetGenerationID {
-		return fmt.Errorf(
-			"%w: evidence target identity mismatch",
-			ErrPackageConfirmationClaimsInvalid,
-		)
-	}
-
 	if evidence.OperationType ==
 		string(
 			PackageOperationTypeRollback,
-		) &&
-		evidence.RollbackPointID !=
+		) {
+		if evidence.TargetVersionID !=
+			claims.TargetVersionID ||
+			evidence.TargetGenerationID !=
+				claims.TargetGenerationID {
+			return fmt.Errorf(
+				"%w: evidence target identity mismatch",
+				ErrPackageConfirmationClaimsInvalid,
+			)
+		}
+
+		if evidence.RollbackPointID !=
 			claims.RollbackPointID {
-		return fmt.Errorf(
-			"%w: evidence rollback point mismatch",
-			ErrPackageConfirmationClaimsInvalid,
-		)
+			return fmt.Errorf(
+				"%w: evidence rollback point mismatch",
+				ErrPackageConfirmationClaimsInvalid,
+			)
+		}
 	}
 
 	if evidence.OperationType ==

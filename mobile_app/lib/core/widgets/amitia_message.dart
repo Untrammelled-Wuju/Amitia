@@ -1373,121 +1373,116 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
-          decoration: BoxDecoration(
-            color: context.surfaceSecondary,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: _isInputFocused
-                  ? context.accentPrimary
-                  : context.borderPrimary,
-              width: _isInputFocused ? 1.2 : 0.8,
-            ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: AnimatedContainer(
+        key: const ValueKey('chat-composer-surface'),
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
+        decoration: BoxDecoration(
+          color: context.surfaceSecondary,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: _isInputFocused
+                ? context.accentPrimary
+                : context.borderPrimary,
+            width: _isInputFocused ? 1.2 : 0.8,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _controller,
-                focusNode: _inputFocusNode,
-                minLines: 1,
-                maxLines: 4,
-                textCapitalization: TextCapitalization.sentences,
-                onChanged: (value) =>
-                    setState(() => _hasText = value.trim().isNotEmpty),
-                onSubmitted: (_) => _send(),
-                style: AppTypography.bodySmall(context).copyWith(fontSize: 16),
-                decoration: InputDecoration(
-                  hintText: '有什么可以帮忙的？',
-                  hintStyle: TextStyle(
-                    color: context.textTertiary,
-                    fontSize: 16,
-                  ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  disabledBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  focusedErrorBorder: InputBorder.none,
-                  fillColor: Colors.transparent,
-                  focusColor: Colors.transparent,
-                  hoverColor: Colors.transparent,
-                ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _controller,
+              focusNode: _inputFocusNode,
+              minLines: 1,
+              maxLines: 4,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (value) =>
+                  setState(() => _hasText = value.trim().isNotEmpty),
+              onSubmitted: (_) => _send(),
+              style: AppTypography.bodySmall(context).copyWith(fontSize: 16),
+              decoration: InputDecoration(
+                hintText: '有什么可以帮忙的？',
+                hintStyle: TextStyle(color: context.textTertiary, fontSize: 16),
+                isDense: true,
+                contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                fillColor: Colors.transparent,
+                focusColor: Colors.transparent,
+                hoverColor: Colors.transparent,
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: '添加内容',
-                      onPressed: _showComposerTools,
-                      icon: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: context.backgroundPrimary,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: context.borderPrimary),
-                        ),
-                        child: Icon(
-                          Icons.add,
-                          size: 19,
-                          color: context.textPrimary,
-                        ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: '添加内容',
+                    onPressed: _showComposerTools,
+                    icon: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: context.backgroundPrimary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: context.borderPrimary),
                       ),
-                    ),
-                    _ClaudeStyleAgentChip(
-                      isEnabled: widget.isAgentMode,
-                      onTap: () =>
-                          widget.onAgentModeChanged?.call(!widget.isAgentMode),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: '开始语音输入',
-                      onPressed: _showVoiceSheet,
-                      icon: Icon(
-                        Icons.mic_none_outlined,
-                        size: 23,
+                      child: Icon(
+                        Icons.add,
+                        size: 19,
                         color: context.textPrimary,
                       ),
                     ),
-                    IconButton(
-                      tooltip: '发送消息',
-                      onPressed: _hasText ? _send : null,
-                      icon: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: _hasText
-                              ? context.accentPrimary
-                              : context.borderPrimary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.arrow_upward_rounded,
-                          size: 19,
-                          color: _hasText
-                              ? context.surfacePrimary
-                              : context.textTertiary,
-                        ),
+                  ),
+                  _ClaudeStyleAgentChip(
+                    isEnabled: widget.isAgentMode,
+                    onTap: () =>
+                        widget.onAgentModeChanged?.call(!widget.isAgentMode),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '开始语音输入',
+                    onPressed: _showVoiceSheet,
+                    icon: Icon(
+                      Icons.mic_none_outlined,
+                      size: 23,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '发送消息',
+                    onPressed: _hasText ? _send : null,
+                    icon: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _hasText
+                            ? context.accentPrimary
+                            : context.borderPrimary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.arrow_upward_rounded,
+                        size: 19,
+                        color: _hasText
+                            ? context.surfacePrimary
+                            : context.textTertiary,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

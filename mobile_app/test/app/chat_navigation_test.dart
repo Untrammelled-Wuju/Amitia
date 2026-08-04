@@ -1,0 +1,299 @@
+import 'package:amitia_app/app/app.dart';
+import 'package:amitia_app/core/widgets/amitia_drawer.dart';
+import 'package:amitia_app/features/agent/presentation/pages/agent_page.dart';
+import 'package:amitia_app/features/chat/presentation/pages/chat_page.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets(
+    'chat composer follows raw keyboard insets without a final jump',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.viewPadding = const FakeViewPadding(bottom: 24);
+      tester.view.padding = const FakeViewPadding(bottom: 24);
+      tester.view.viewInsets = FakeViewPadding.zero;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetViewPadding);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewInsets);
+
+      await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+      await tester.pumpAndSettle();
+
+      final composerSurface = find.byKey(
+        const ValueKey('chat-composer-surface'),
+      );
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 8);
+      tester.view.padding = const FakeViewPadding(bottom: 16);
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 20);
+      tester.view.padding = const FakeViewPadding(bottom: 4);
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 60);
+      tester.view.padding = FakeViewPadding.zero;
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(728, 0.01));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 120);
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(668, 0.01));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(528, 0.01));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 120);
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(668, 0.01));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 20);
+      tester.view.padding = const FakeViewPadding(bottom: 4);
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+
+      tester.view.viewInsets = FakeViewPadding.zero;
+      tester.view.padding = const FakeViewPadding(bottom: 24);
+      await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
+    },
+  );
+
+  testWidgets('drawer destination overlays chat and back reveals chat root', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatPage), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('任务'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AgentPage), findsOneWidget);
+    expect(find.byIcon(Icons.menu_rounded), findsNothing);
+    expect(find.byType(AmitiaDrawer), findsNothing);
+
+    final exitingRoute = ModalRoute.of(tester.element(find.byType(AgentPage)))!;
+    final targetRoute = ModalRoute.of(
+      tester.element(find.byType(ChatPage, skipOffstage: false)),
+    )!;
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 110));
+
+    expect(exitingRoute.animation!.value, inExclusiveRange(0, 1));
+    expect(targetRoute.secondaryAnimation!.value, inExclusiveRange(0, 1));
+    expect(find.byType(CupertinoPageTransition), findsWidgets);
+
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(find.byType(AgentPage), findsNothing);
+    expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
+    final shellScaffold = find.byWidgetPredicate(
+      (widget) => widget is Scaffold && widget.drawer is AmitiaDrawer,
+    );
+    expect(shellScaffold, findsOneWidget);
+    expect(tester.state<ScaffoldState>(shellScaffold).isDrawerOpen, isFalse);
+  });
+
+  testWidgets('system back from drawer destination reveals chat root', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('任务'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AgentPage), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(find.byType(AgentPage), findsNothing);
+  });
+
+  testWidgets('edge swipe follows the finger and can be cancelled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('任务'));
+    await tester.pumpAndSettle();
+
+    final route = ModalRoute.of(tester.element(find.byType(AgentPage)));
+    expect((route as PageRoute).popGestureEnabled, isTrue);
+    final targetRoute = ModalRoute.of(
+      tester.element(find.byType(ChatPage, skipOffstage: false)),
+    )!;
+    final size = tester.view.physicalSize / tester.view.devicePixelRatio;
+    final gesture = await tester.startGesture(Offset(5, size.height / 2));
+
+    await gesture.moveBy(const Offset(20, 0));
+    await tester.pump();
+    expect(route.navigator!.userGestureInProgress, isTrue);
+
+    await gesture.moveBy(Offset(size.width * 0.3, 0));
+    await tester.pump();
+
+    final forwardValue = route.animation!.value;
+    expect(forwardValue, closeTo(0.7, 0.03));
+    expect(targetRoute.secondaryAnimation!.value, closeTo(forwardValue, 0.001));
+    expect(find.byType(ChatPage, skipOffstage: false), findsOneWidget);
+    expect(find.byType(AgentPage), findsOneWidget);
+
+    await gesture.moveBy(Offset(size.width * -0.2, 0));
+    await tester.pump();
+
+    expect(route.animation!.value, greaterThan(forwardValue));
+    expect(
+      targetRoute.secondaryAnimation!.value,
+      closeTo(route.animation!.value, 0.001),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AgentPage), findsOneWidget);
+    expect(find.byType(ChatPage), findsNothing);
+  });
+
+  testWidgets('edge swipe pops only after release beyond the threshold', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('任务'));
+    await tester.pumpAndSettle();
+
+    final route = ModalRoute.of(tester.element(find.byType(AgentPage)))!;
+    final targetRoute = ModalRoute.of(
+      tester.element(find.byType(ChatPage, skipOffstage: false)),
+    )!;
+    final size = tester.view.physicalSize / tester.view.devicePixelRatio;
+    final gesture = await tester.startGesture(Offset(5, size.height / 2));
+
+    await gesture.moveBy(const Offset(20, 0));
+    await tester.pump();
+    expect(route.navigator!.userGestureInProgress, isTrue);
+
+    await gesture.moveBy(Offset(size.width * 0.7, 0));
+    await tester.pump();
+
+    expect(route.animation!.value, closeTo(0.3, 0.03));
+    expect(
+      targetRoute.secondaryAnimation!.value,
+      closeTo(route.animation!.value, 0.001),
+    );
+    expect(find.byType(ChatPage, skipOffstage: false), findsOneWidget);
+    expect(find.byType(AgentPage), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(find.byType(AgentPage), findsNothing);
+  });
+
+  testWidgets('android predictive back is progress driven and cancellable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('任务'));
+    await tester.pumpAndSettle();
+
+    final route = ModalRoute.of(tester.element(find.byType(AgentPage)))!;
+    final targetRoute = ModalRoute.of(
+      tester.element(find.byType(ChatPage, skipOffstage: false)),
+    )!;
+
+    route.handleStartBackGesture();
+    route.handleUpdateBackGestureProgress(progress: 0.35);
+    await tester.pump();
+
+    expect(route.navigator!.userGestureInProgress, isTrue);
+    expect(route.animation!.value, closeTo(0.35, 0.001));
+    expect(
+      targetRoute.secondaryAnimation!.value,
+      closeTo(route.animation!.value, 0.001),
+    );
+    expect(find.byType(ChatPage, skipOffstage: false), findsOneWidget);
+    expect(find.byType(AgentPage), findsOneWidget);
+
+    route.handleCancelBackGesture();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AgentPage), findsOneWidget);
+    expect(find.byType(ChatPage), findsNothing);
+  });
+
+  testWidgets('chat root exits only after two consecutive system backs', (
+    tester,
+  ) async {
+    var exitCalls = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemNavigator.pop') {
+          exitCalls++;
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
+    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(exitCalls, 0);
+    expect(find.text('再按一次退出应用'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(exitCalls, 1);
+  });
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -9,6 +10,7 @@ import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../shared/models/models.dart';
 import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../app/app_routes.dart';
 
 class ChatLogsPage extends ConsumerStatefulWidget {
   const ChatLogsPage({super.key});
@@ -57,6 +59,11 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
         title: '聊天记录',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
+          AmitiaIconButton(
+            icon: Icons.download_outlined,
+            tooltip: '导入聊天记录',
+            onPressed: () => context.push(AppRoutes.chatImport),
+          ),
           AmitiaIconButton(
             icon: Icons.summarize_outlined,
             tooltip: '会话摘要',

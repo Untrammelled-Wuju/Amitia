@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/widgets/amitia_drawer.dart';
@@ -103,43 +105,23 @@ import '../features/developer/presentation/pages/dev_console_page.dart';
 import '../features/developer/presentation/pages/migrations_page.dart';
 import '../features/developer/presentation/pages/dev_mode_page.dart';
 
-CustomTransitionPage<T> slideFadePage<T>({
+Page<T> slideFadePage<T>({
   required BuildContext context,
   required GoRouterState state,
   required Widget child,
 }) {
-  return CustomTransitionPage<T>(
-    key: state.pageKey,
-    child: child,
-    transitionDuration: const Duration(milliseconds: 260),
-    reverseTransitionDuration: const Duration(milliseconds: 220),
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final incomingAnimation = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      final outgoingAnimation = CurvedAnimation(
-        parent: secondaryAnimation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      final slide = Tween<Offset>(
-        begin: const Offset(1.0, 0.0),
-        end: Offset.zero,
-      ).animate(incomingAnimation);
+  return CupertinoPage<T>(key: state.pageKey, child: child);
+}
 
-      final page = FadeTransition(
-        opacity: incomingAnimation,
-        child: SlideTransition(position: slide, child: child),
-      );
+Page<T> drawerSlideFadePage<T>({
+  required GoRouterState state,
+  required Widget child,
+}) {
+  return CupertinoPage<T>(key: state.pageKey, child: child);
+}
 
-      return FadeTransition(
-        opacity: Tween<double>(begin: 1, end: 0).animate(outgoingAnimation),
-        child: page,
-      );
-    },
-  );
+Page<T> chatRootPage<T>({required GoRouterState state, required Widget child}) {
+  return CupertinoPage<T>(key: state.pageKey, child: child);
 }
 
 final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
@@ -156,15 +138,65 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  DateTime? _lastBackPress;
+
+  @override
+  void didUpdateWidget(AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentRoute != widget.currentRoute) {
+      _lastBackPress = null;
+    }
+  }
+
+  void _handleChatBack() {
+    final now = DateTime.now();
+    if (_lastBackPress != null &&
+        now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
+      _lastBackPress = null;
+      SystemNavigator.pop();
+      return;
+    }
+    _lastBackPress = now;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('再按一次退出应用'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ShellDrawerScope(
-      openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-      child: Scaffold(
-        key: _scaffoldKey,
-        drawerEnableOpenDragGesture: true,
-        drawer: AmitiaDrawer(currentRoute: widget.currentRoute),
-        body: widget.child,
+    final isChatRoute = widget.currentRoute == AppRoutes.chat;
+    final router = GoRouter.of(context);
+    return PopScope(
+      canPop: !isChatRoute && router.canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (isChatRoute) {
+          _handleChatBack();
+        } else {
+          router.go(AppRoutes.chat);
+        }
+      },
+      child: ShellDrawerScope(
+        openDrawer: () {
+          if (isChatRoute) {
+            _scaffoldKey.currentState?.openDrawer();
+          }
+        },
+        child: Scaffold(
+          key: _scaffoldKey,
+          resizeToAvoidBottomInset: !isChatRoute,
+          drawerEnableOpenDragGesture: false,
+          drawer: isChatRoute
+              ? const AmitiaDrawer(currentRoute: AppRoutes.chat)
+              : null,
+          body: widget.child,
+        ),
       ),
     );
   }
@@ -189,117 +221,795 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         case MockStartupStage.privacyRequired:
           if (location != '/privacy') return '/privacy';
         case MockStartupStage.ready:
-          if (location == '/onboarding' || location == '/login' || location == '/privacy') return '/chat';
+          if (location == '/onboarding' ||
+              location == '/login' ||
+              location == '/privacy') {
+            return '/chat';
+          }
       }
 
       return null;
     },
-    errorBuilder: (context, state) => NotFoundPage(attemptedPath: state.uri.toString()),
+    errorBuilder: (context, state) =>
+        NotFoundPage(attemptedPath: state.uri.toString()),
     routes: [
       GoRoute(path: '/', redirect: (context, state) => AppRoutes.chat),
-      GoRoute(path: '/onboarding', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const OnboardingPage())),
-      GoRoute(path: '/login', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const LoginPage())),
-      GoRoute(path: '/privacy', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const PrivacyPage())),
+      GoRoute(
+        path: '/onboarding',
+        pageBuilder: (context, state) => slideFadePage(
+          context: context,
+          state: state,
+          child: const OnboardingPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) => slideFadePage(
+          context: context,
+          state: state,
+          child: const LoginPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/privacy',
+        pageBuilder: (context, state) => slideFadePage(
+          context: context,
+          state: state,
+          child: const PrivacyPage(),
+        ),
+      ),
       ShellRoute(
         builder: (context, state, child) {
           return AppShell(currentRoute: state.matchedLocation, child: child);
         },
         routes: [
-          GoRoute(path: '/chat', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ChatPage())),
-          GoRoute(path: '/conversations', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ConversationListPage())),
-          GoRoute(path: '/dashboard', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DashboardPage())),
-          GoRoute(path: '/channels', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ChannelCenterPage())),
-          GoRoute(path: '/channels/wechat', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const WechatPage())),
-          GoRoute(path: '/channels/qq', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const QqPage())),
-          GoRoute(path: '/agent', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const AgentPage())),
-          GoRoute(path: '/agent/task/:id', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: AgentTaskDetailPage(taskId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const CharacterListPage())),
-          GoRoute(path: '/characters/create', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const CharacterCreatePage())),
-          GoRoute(path: '/characters/:id', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterDetailPage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters/:id/life-rules', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterLifeRulesPage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters/:id/voice', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterVoicePage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters/:id/memory', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterMemoryPage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters/:id/timeline', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterTimelinePage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters/:id/proactive', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterProactivePage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters/:id/psyche', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterPsychePage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/characters/:id/debug', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: CharacterDebugPage(characterId: state.pathParameters['id']!))),
-          GoRoute(path: '/memory', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const MemoryPage())),
-          GoRoute(path: '/memory/manager', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const MemoryManagerPage())),
-          GoRoute(path: '/memory/episodic', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const EpisodicMemoryPage())),
-          GoRoute(path: '/memory/graph', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const MemoryGraphPage())),
-          GoRoute(path: '/memory/timeline', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const MemoryTimelinePage())),
-          GoRoute(path: '/memory/profiles', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const UserProfilesPage())),
-          GoRoute(path: '/memory/world-book', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const WorldBookPage())),
-          GoRoute(path: '/reminders', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const RemindersPage())),
-          GoRoute(path: '/emotes', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const EmotesPage())),
-          GoRoute(path: '/chat-logs', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ChatLogsPage())),
-          GoRoute(path: '/chat-import', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ChatImportPage())),
-          GoRoute(path: '/extensions', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ExtensionCenterPage())),
-          GoRoute(path: '/extensions/packages', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ExtensionPackagesPage())),
-          GoRoute(path: '/extensions/mcp', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const McpListPage())),
-          GoRoute(path: '/extensions/mcp/new', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const McpEditPage(mcpId: 'new'))),
-          GoRoute(path: '/extensions/mcp/:id', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: McpDetailPage(mcpId: state.pathParameters['id']!))),
-          GoRoute(path: '/extensions/mcp/:id/edit', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: McpEditPage(mcpId: state.pathParameters['id']!))),
-          GoRoute(path: '/extensions/agent-skills', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const AgentSkillsPage())),
-          GoRoute(path: '/extensions/skills', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const CompatibleSkillsPage())),
-          GoRoute(path: '/extensions/skills/:id', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: SkillDetailPage(skillId: state.pathParameters['id']!))),
-          GoRoute(path: '/extensions/plugins', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const SystemPluginsPage())),
-          GoRoute(path: '/extensions/plugins/:id', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: PluginDetailPage(pluginId: state.pathParameters['id']!))),
-          GoRoute(path: '/extensions/runs', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ExecutionRunsPage())),
-          GoRoute(path: '/extensions/runs/:id', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: ExtensionRunDetailPage(runId: state.pathParameters['id']!))),
-          GoRoute(path: '/extension/page/:pageId', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: ExtensionPageHostPage(pageId: state.pathParameters['pageId']!))),
-          GoRoute(path: '/game-center', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const GameCenterPage())),
-          GoRoute(path: '/desktop-pet', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DesktopPetPage())),
-          GoRoute(path: '/workshop', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const WorkshopHomePage())),
-          GoRoute(path: '/workshop/skills', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const SkillWorkshopPage())),
-          GoRoute(path: '/workshop/skills/:id/editor', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: SkillDraftEditorPage(draftId: state.pathParameters['id']!))),
-          GoRoute(path: '/workshop/pet', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const PetCenterPage())),
-          GoRoute(path: '/workshop/pet/create', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const PetCreatePage())),
-          GoRoute(path: '/workshop/pet/tasks', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const PetTasksPage())),
-          GoRoute(path: '/workshop/pet/processing/:taskId', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: PetProcessingPage(taskId: state.pathParameters['taskId']!))),
-          GoRoute(path: '/workshop/pet/processing/:taskId/actions/:actionKey/editor', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: PetActionEditorPage(taskId: state.pathParameters['taskId']!, actionKey: state.pathParameters['actionKey']!))),
-          GoRoute(path: '/workshop/pet/installations', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const PetInstallationsPage())),
-          GoRoute(path: '/settings', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const SettingsPage())),
-          GoRoute(path: '/settings/models', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ModelSettingsPage())),
-          GoRoute(path: '/settings/models/:modelType', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: ModelConfigPage(modelType: state.pathParameters['modelType']!))),
-          GoRoute(path: '/settings/appearance', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const AppearanceSettingsPage())),
-          GoRoute(path: '/settings/runtime', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const RuntimePage())),
-          GoRoute(path: '/settings/permissions', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const PermissionsPage())),
-          GoRoute(path: '/settings/backup', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const BackupPage())),
-          GoRoute(path: '/settings/ai', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const AiConfigPage())),
-          GoRoute(path: '/settings/deployment', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DeploymentPage())),
-          GoRoute(path: '/settings/system', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const SystemSettingsPage())),
-          GoRoute(path: '/settings/temporal', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const TemporalSettingsPage())),
-          GoRoute(path: '/settings/safety', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const SafetyPage())),
-          GoRoute(path: '/settings/maintenance', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const MaintenancePage())),
-          GoRoute(path: '/settings/theme', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ThemeSettingsPage())),
-          GoRoute(path: '/settings/storage', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const StoragePage())),
-          GoRoute(path: '/settings/user', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const UserSettingsPage())),
-          GoRoute(path: '/settings/devices', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DevicesPage())),
-          GoRoute(path: '/settings/privacy-scan', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const PrivacyScanPage())),
-          GoRoute(path: '/settings/about', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const AboutPageNew())),
-          GoRoute(path: '/settings/toolbox', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxPage())),
-          GoRoute(path: '/settings/toolbox/file-browser', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxFileBrowserPage())),
-          GoRoute(path: '/settings/toolbox/workspace', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxWorkspacePage())),
-          GoRoute(path: '/settings/toolbox/task-log', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxTaskLogPage())),
-          GoRoute(path: '/settings/toolbox/log', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxLogPage())),
-          GoRoute(path: '/settings/toolbox/prompt-trace', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxPromptTracePage())),
-          GoRoute(path: '/settings/toolbox/runtime-status', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxRuntimeStatusPage())),
-          GoRoute(path: '/settings/toolbox/database-status', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxDatabaseStatusPage())),
-          GoRoute(path: '/settings/toolbox/device-status', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const ToolboxDeviceStatusPage())),
-          GoRoute(path: '/developer', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DeveloperHomePage())),
-          GoRoute(path: '/developer/kernel', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const KernelHomePage())),
-          GoRoute(path: '/developer/kernel/wasm', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const WasmPage())),
-          GoRoute(path: '/developer/kernel/hooks', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const HooksPage())),
-          GoRoute(path: '/developer/kernel/trusted-services', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const TrustedServicesPage())),
-          GoRoute(path: '/developer/kernel/tasks', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const KernelTasksPage())),
-          GoRoute(path: '/developer/kernel/events', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const EventsPage())),
-          GoRoute(path: '/developer/kernel/schedules', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const SchedulesPage())),
-          GoRoute(path: '/developer/kernel/desktop', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DesktopContributionsPage())),
-          GoRoute(path: '/developer/kernel/updates', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const UpdatesPage())),
-          GoRoute(path: '/developer/kernel/dev-console', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DevConsolePage())),
-          GoRoute(path: '/developer/kernel/migrations', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const MigrationsPage())),
-          GoRoute(path: '/developer/kernel/dev-mode', pageBuilder: (context, state) => slideFadePage(context: context, state: state, child: const DevModePage())),
+          GoRoute(
+            path: '/chat',
+            pageBuilder: (context, state) =>
+                chatRootPage(state: state, child: const ChatPage()),
+          ),
+          GoRoute(
+            path: '/conversations',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const ConversationListPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/dashboard',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const DashboardPage()),
+          ),
+          GoRoute(
+            path: '/channels',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const ChannelCenterPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/channels/wechat',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const WechatPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/channels/qq',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const QqPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/agent',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const AgentPage()),
+          ),
+          GoRoute(
+            path: '/agent/task/:id',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: AgentTaskDetailPage(taskId: state.pathParameters['id']!),
+            ),
+          ),
+          GoRoute(
+            path: '/characters',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const CharacterListPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/create',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const CharacterCreatePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterDetailPage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id/life-rules',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterLifeRulesPage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id/voice',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterVoicePage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id/memory',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterMemoryPage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id/timeline',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterTimelinePage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id/proactive',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterProactivePage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id/psyche',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterPsychePage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/characters/:id/debug',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: CharacterDebugPage(
+                characterId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/memory',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const MemoryPage()),
+          ),
+          GoRoute(
+            path: '/memory/manager',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const MemoryManagerPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/memory/episodic',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const EpisodicMemoryPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/memory/graph',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const MemoryGraphPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/memory/timeline',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const MemoryTimelinePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/memory/profiles',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const UserProfilesPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/memory/world-book',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const WorldBookPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/reminders',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const RemindersPage()),
+          ),
+          GoRoute(
+            path: '/emotes',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const EmotesPage()),
+          ),
+          GoRoute(
+            path: '/chat-logs',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const ChatLogsPage()),
+          ),
+          GoRoute(
+            path: '/chat-import',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const ChatImportPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const ExtensionCenterPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/packages',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ExtensionPackagesPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/mcp',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const McpListPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/mcp/new',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const McpEditPage(mcpId: 'new'),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/mcp/:id',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: McpDetailPage(mcpId: state.pathParameters['id']!),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/mcp/:id/edit',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: McpEditPage(mcpId: state.pathParameters['id']!),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/agent-skills',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const AgentSkillsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/skills',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const CompatibleSkillsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/skills/:id',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: SkillDetailPage(skillId: state.pathParameters['id']!),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/plugins',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const SystemPluginsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/plugins/:id',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: PluginDetailPage(pluginId: state.pathParameters['id']!),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/runs',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ExecutionRunsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/extensions/runs/:id',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: ExtensionRunDetailPage(runId: state.pathParameters['id']!),
+            ),
+          ),
+          GoRoute(
+            path: '/extension/page/:pageId',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: ExtensionPageHostPage(
+                pageId: state.pathParameters['pageId']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/game-center',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const GameCenterPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/desktop-pet',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const DesktopPetPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const WorkshopHomePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/skills',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const SkillWorkshopPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/skills/:id/editor',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: SkillDraftEditorPage(draftId: state.pathParameters['id']!),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/pet',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const PetCenterPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/pet/create',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const PetCreatePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/pet/tasks',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const PetTasksPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/pet/processing/:taskId',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: PetProcessingPage(taskId: state.pathParameters['taskId']!),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/pet/processing/:taskId/actions/:actionKey/editor',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: PetActionEditorPage(
+                taskId: state.pathParameters['taskId']!,
+                actionKey: state.pathParameters['actionKey']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/workshop/pet/installations',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const PetInstallationsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const SettingsPage()),
+          ),
+          GoRoute(
+            path: '/settings/models',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ModelSettingsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/models/:modelType',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: ModelConfigPage(
+                modelType: state.pathParameters['modelType']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/appearance',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const AppearanceSettingsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/runtime',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const RuntimePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/permissions',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const PermissionsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/backup',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const BackupPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/ai',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const AiConfigPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/deployment',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const DeploymentPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/system',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const SystemSettingsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/temporal',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const TemporalSettingsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/safety',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const SafetyPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/maintenance',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const MaintenancePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/theme',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ThemeSettingsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/storage',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const StoragePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/user',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const UserSettingsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/devices',
+            pageBuilder: (context, state) =>
+                drawerSlideFadePage(state: state, child: const DevicesPage()),
+          ),
+          GoRoute(
+            path: '/settings/privacy-scan',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const PrivacyScanPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/about',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const AboutPageNew(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/file-browser',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxFileBrowserPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/workspace',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxWorkspacePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/task-log',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxTaskLogPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/log',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxLogPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/prompt-trace',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxPromptTracePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/runtime-status',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxRuntimeStatusPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/database-status',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxDatabaseStatusPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings/toolbox/device-status',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const ToolboxDeviceStatusPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer',
+            pageBuilder: (context, state) => drawerSlideFadePage(
+              state: state,
+              child: const DeveloperHomePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const KernelHomePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/wasm',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const WasmPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/hooks',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const HooksPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/trusted-services',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const TrustedServicesPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/tasks',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const KernelTasksPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/events',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const EventsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/schedules',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const SchedulesPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/desktop',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const DesktopContributionsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/updates',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const UpdatesPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/dev-console',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const DevConsolePage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/migrations',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const MigrationsPage(),
+            ),
+          ),
+          GoRoute(
+            path: '/developer/kernel/dev-mode',
+            pageBuilder: (context, state) => slideFadePage(
+              context: context,
+              state: state,
+              child: const DevModePage(),
+            ),
+          ),
         ],
       ),
     ],
