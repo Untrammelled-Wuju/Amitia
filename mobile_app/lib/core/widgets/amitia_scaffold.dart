@@ -66,11 +66,13 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
     final currentLocation = router.routerDelegate.currentConfiguration.fullPath;
     final isChatPage = currentLocation == AppRoutes.chat;
     final isTopLevelPage = currentLocation == '/onboarding' || currentLocation == '/login' || currentLocation == '/privacy';
+    final canPop = router.canPop();
 
     return PopScope(
-      canPop: false,
+      canPop: canPop,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
+        if (canPop) return;
         if (isChatPage || isTopLevelPage) {
           final now = DateTime.now();
           if (_lastBackPress != null && now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
@@ -134,14 +136,11 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () {
-            final currentLocation = GoRouter.of(context).routerDelegate.currentConfiguration.fullPath;
-            if (currentLocation == AppRoutes.chat ||
-                currentLocation == '/onboarding' ||
-                currentLocation == '/login' ||
-                currentLocation == '/privacy') {
-              Navigator.of(context).maybePop();
+            final router = GoRouter.of(context);
+            if (router.canPop()) {
+              router.pop();
             } else {
-              GoRouter.of(context).go(AppRoutes.chat);
+              router.go(fallbackRoute);
             }
           },
         );

@@ -27,6 +27,10 @@ type PackageConfirmationAuthorityEvidence struct {
 	PreviewHash               string   `json:"previewHash"`
 	SecurityPolicyHash        string   `json:"securityPolicyHash"`
 	SnapshotRequirementHash   string   `json:"snapshotRequirementHash"`
+
+	SnapshotRequirementInput *PackageSnapshotRequirementInput `json:"snapshotRequirementInput,omitempty"`
+	SnapshotRequirement      *PackageSnapshotRequirement      `json:"snapshotRequirement,omitempty"`
+
 	RequiredConfirmations     []string `json:"requiredConfirmations"`
 	RequiredConfirmationsHash string   `json:"requiredConfirmationsHash"`
 	DependenciesHash          string   `json:"dependenciesHash"`
@@ -54,11 +58,56 @@ func computePackageDependenciesHash(items []string) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
-func computeRollbackPreviewHash(extensionID, currentVersion, targetVersion, rollbackPointID, artifactID, snapshotHash, snapshotRequirementHash, requiredConfirmationsHash, installedPath, installedTreeHash, scopeType, scopeID, sourceGenerationID, targetGenerationID string) string {
-	canonical := fmt.Sprintf(`{"extensionId":%q,"currentVersion":%q,"targetVersion":%q,"rollbackPointId":%q,"artifactId":%q,"snapshotHash":%q,"snapshotRequirementHash":%q,"requiredConfirmationsHash":%q,"installedPath":%q,"installedTreeHash":%q,"sourceGenerationId":%q,"targetGenerationId":%q,"scopeType":%q,"scopeId":%q}`,
-		extensionID, currentVersion, targetVersion, rollbackPointID, artifactID, snapshotHash, snapshotRequirementHash, requiredConfirmationsHash, installedPath, installedTreeHash, sourceGenerationID, targetGenerationID, scopeType, scopeID)
-	h := sha256.Sum256([]byte(canonical))
-	return "sha256:" + hex.EncodeToString(h[:])
+type PackageRollbackPreviewHashInput struct {
+	ExtensionID string `json:"extensionId"`
+
+	CurrentVersion string `json:"currentVersion"`
+	TargetVersion  string `json:"targetVersion"`
+
+	RollbackPointID string `json:"rollbackPointId"`
+	ArtifactID      string `json:"artifactId"`
+	SnapshotHash    string `json:"snapshotHash"`
+
+	SnapshotRequirementHash   string `json:"snapshotRequirementHash"`
+	RequiredConfirmationsHash string `json:"requiredConfirmationsHash"`
+	DependenciesHash          string `json:"dependenciesHash"`
+	SecurityPolicyHash        string `json:"securityPolicyHash"`
+
+	InstalledPath     string `json:"installedPath"`
+	InstalledTreeHash string `json:"installedTreeHash"`
+
+	SourceGenerationID string `json:"sourceGenerationId"`
+	TargetGenerationID string `json:"targetGenerationId"`
+
+	ScopeType string `json:"scopeType"`
+	ScopeID   string `json:"scopeId"`
+}
+
+func computeRollbackPreviewHash(input PackageRollbackPreviewHashInput) string {
+	if input.ExtensionID == "" ||
+		input.CurrentVersion == "" ||
+		input.TargetVersion == "" ||
+		input.RollbackPointID == "" ||
+		input.ArtifactID == "" ||
+		input.SnapshotHash == "" ||
+		input.SnapshotRequirementHash == "" ||
+		input.RequiredConfirmationsHash == "" ||
+		input.DependenciesHash == "" ||
+		input.SecurityPolicyHash == "" ||
+		input.SourceGenerationID == "" ||
+		input.TargetGenerationID == "" ||
+		input.ScopeType == "" {
+		return ""
+	}
+
+	raw, err := json.Marshal(input)
+	if err != nil {
+		panic(err)
+	}
+
+	hash := sha256.Sum256(raw)
+
+	return "sha256:" + hex.EncodeToString(hash[:])
 }
 
 func buildConfirmationAuthorityEvidence(operationID, operationType, previewSessionID string, claims PackageConfirmationClaims) PackageConfirmationAuthorityEvidence {
@@ -106,8 +155,10 @@ func standardConfirmationClaimsFromLegacy(operationType string, claims packageCo
 	}
 }
 
-func buildRollbackConfirmationAuthorityEvidence(claims PackageRollbackConfirmationClaims, required []string, dependenciesHash string, previewSessionID string) PackageConfirmationAuthorityEvidence {
+func buildRollbackConfirmationAuthorityEvidence(claims PackageRollbackConfirmationClaims, required []string, dependenciesHash string, previewSessionID string, requirementInput PackageSnapshotRequirementInput, requirement PackageSnapshotRequirement) PackageConfirmationAuthorityEvidence {
 	normalizedRequired := normalizeConfirmedItems(required)
+	inputCopy := requirementInput
+	requirementCopy := requirement
 	return PackageConfirmationAuthorityEvidence{
 		SchemaVersion:             1,
 		OperationType:             string(PackageOperationTypeRollback),
@@ -116,7 +167,9 @@ func buildRollbackConfirmationAuthorityEvidence(claims PackageRollbackConfirmati
 		PreviewSessionID:          previewSessionID,
 		PreviewHash:               claims.PreviewHash,
 		SecurityPolicyHash:        claims.SecurityPolicyHash,
-		SnapshotRequirementHash:   claims.SnapshotRequirementHash,
+		SnapshotRequirementHash:   requirement.Hash,
+		SnapshotRequirementInput:  &inputCopy,
+		SnapshotRequirement:       &requirementCopy,
 		RequiredConfirmations:     normalizedRequired,
 		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(normalizedRequired),
 		DependenciesHash:          dependenciesHash,
@@ -210,6 +263,16 @@ func verifyConfirmationAuthorityEvidenceClaims(evidence PackageConfirmationAutho
 	if evidence.SecurityPolicyHash != claims.SecurityPolicyHash {
 		return fmt.Errorf("%w: evidence securityPolicyHash mismatch", ErrPackageConfirmationClaimsInvalid)
 	}
+	if evidence.DependenciesHash == "" ||
+		claims.DependenciesHash == "" {
+		return fmt.Errorf(
+			"%w: dependenciesHash missing",
+			ErrPackageConfirmationClaimsInvalid,
+		)
+	}
+	if evidence.DependenciesHash != claims.DependenciesHash {
+		return fmt.Errorf("%w: evidence dependenciesHash mismatch", ErrPackageConfirmationClaimsInvalid)
+	}
 	if evidence.SnapshotRequirementHash != claims.SnapshotRequirementHash {
 		return fmt.Errorf("%w: evidence snapshotRequirementHash mismatch", ErrPackageSnapshotRequirementHashMismatch)
 	}
@@ -258,7 +321,7 @@ func validateConfirmationAuthorityEvidenceSignature(evidence PackageConfirmation
 	if evidence.OperationID == "" || evidence.OperationType == "" || evidence.ExtensionID == "" {
 		return fmt.Errorf("%w: evidence identity incomplete", errConfirmationEvidenceSignature)
 	}
-	if evidence.ArtifactID == "" || evidence.PreviewHash == "" || evidence.SecurityPolicyHash == "" {
+	if evidence.ArtifactID == "" || evidence.PreviewHash == "" || evidence.SecurityPolicyHash == "" || evidence.DependenciesHash == "" {
 		return fmt.Errorf("%w: evidence preview identity incomplete", errConfirmationEvidenceSignature)
 	}
 	if len(evidence.RequiredConfirmations) == 0 || evidence.RequiredConfirmationsHash == "" {
@@ -270,6 +333,31 @@ func validateConfirmationAuthorityEvidenceSignature(evidence PackageConfirmation
 	if evidence.RequiredConfirmationsHash != computePackageRequiredConfirmationsHash(evidence.RequiredConfirmations) {
 		return fmt.Errorf("%w: evidence requiredConfirmationsHash inconsistent", errConfirmationEvidenceSignature)
 	}
+
+	if evidence.OperationType == string(PackageOperationTypeRollback) {
+		if evidence.SnapshotRequirementInput == nil {
+			return fmt.Errorf("%w: rollback snapshot requirement input missing", errConfirmationEvidenceSignature)
+		}
+		if evidence.SnapshotRequirement == nil {
+			return fmt.Errorf("%w: rollback snapshot requirement result missing", errConfirmationEvidenceSignature)
+		}
+		recomputed, err := ComputePackageSnapshotRequirement(*evidence.SnapshotRequirementInput)
+		if err != nil {
+			return fmt.Errorf("%w: rollback snapshot requirement recompute failed: %v", errConfirmationEvidenceSignature, err)
+		}
+		if evidence.SnapshotRequirement.Hash == "" || evidence.SnapshotRequirement.Hash != recomputed.Hash {
+			return fmt.Errorf("%w: rollback snapshot requirement result hash mismatch", errConfirmationEvidenceSignature)
+		}
+		if evidence.SnapshotRequirementHash != recomputed.Hash {
+			return fmt.Errorf("%w: rollback snapshotRequirementHash mismatch", errConfirmationEvidenceSignature)
+		}
+		if evidence.SnapshotRequirement.Required != recomputed.Required ||
+			evidence.SnapshotRequirement.NoDataChange != recomputed.NoDataChange ||
+			evidence.SnapshotRequirement.Reason != recomputed.Reason {
+			return fmt.Errorf("%w: rollback snapshot requirement decision mismatch", errConfirmationEvidenceSignature)
+		}
+	}
+
 	return nil
 }
 

@@ -16,7 +16,7 @@ class DeveloperHomePage extends ConsumerWidget {
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
         title: '开发者模式',
-        navigation: AmitiaAppBarNavigation.drawer,
+        showBackButton: true,
       ),
       body: SafeArea(
         top: false,

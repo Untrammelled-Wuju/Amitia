@@ -196,33 +196,33 @@ type RemoveArtifactStepResult struct {
 }
 
 type packageConfirmationClaims struct {
-	SessionID               string          `json:"sessionId"`
-	ArtifactID              string          `json:"artifactId"`
-	ArchiveHash             string          `json:"archiveHash"`
-	ManifestHash            string          `json:"manifestHash"`
-	ContentTreeHash         string          `json:"contentTreeHash"`
-	UserID                  string          `json:"userId"`
-	ScopeType               string          `json:"scopeType"`
-	ScopeID                 string          `json:"scopeId"`
-	ExtensionID             string          `json:"extensionId"`
-	PolicyVersion           string          `json:"policyVersion"`
-	SecurityPolicyHash      string          `json:"securityPolicyHash,omitempty"`
-	KeyID                   string          `json:"kid,omitempty"`
-	DeveloperSessionID      string          `json:"developerSessionId,omitempty"`
-	MigrationPlanHash       string          `json:"migrationPlanHash,omitempty"`
-	ArtifactPolicy          ArtifactPolicy  `json:"artifactPolicy,omitempty"`
-	PreviewHash             string          `json:"previewHash,omitempty"`
-	CurrentVersionID        string          `json:"currentVersionId,omitempty"`
-	CurrentGenerationID     string          `json:"currentGenerationId,omitempty"`
-	SnapshotRequirementHash string          `json:"snapshotRequirementHash,omitempty"`
-	RequiredConfirmationsHash string        `json:"requiredConfirmationsHash,omitempty"`
-	DependenciesHash          string        `json:"dependenciesHash,omitempty"`
-	InstalledPath           string          `json:"installedPath,omitempty"`
-	InstalledTreeHash       string          `json:"installedTreeHash,omitempty"`
-	Confirmations           map[string]bool `json:"confirmations"`
-	IssuedAt                int64           `json:"issuedAt,omitempty"`
-	Nonce                   string          `json:"nonce,omitempty"`
-	ExpiresAt               int64           `json:"expiresAt"`
+	SessionID                 string          `json:"sessionId"`
+	ArtifactID                string          `json:"artifactId"`
+	ArchiveHash               string          `json:"archiveHash"`
+	ManifestHash              string          `json:"manifestHash"`
+	ContentTreeHash           string          `json:"contentTreeHash"`
+	UserID                    string          `json:"userId"`
+	ScopeType                 string          `json:"scopeType"`
+	ScopeID                   string          `json:"scopeId"`
+	ExtensionID               string          `json:"extensionId"`
+	PolicyVersion             string          `json:"policyVersion"`
+	SecurityPolicyHash        string          `json:"securityPolicyHash,omitempty"`
+	KeyID                     string          `json:"kid,omitempty"`
+	DeveloperSessionID        string          `json:"developerSessionId,omitempty"`
+	MigrationPlanHash         string          `json:"migrationPlanHash,omitempty"`
+	ArtifactPolicy            ArtifactPolicy  `json:"artifactPolicy,omitempty"`
+	PreviewHash               string          `json:"previewHash,omitempty"`
+	CurrentVersionID          string          `json:"currentVersionId,omitempty"`
+	CurrentGenerationID       string          `json:"currentGenerationId,omitempty"`
+	SnapshotRequirementHash   string          `json:"snapshotRequirementHash,omitempty"`
+	RequiredConfirmationsHash string          `json:"requiredConfirmationsHash,omitempty"`
+	DependenciesHash          string          `json:"dependenciesHash,omitempty"`
+	InstalledPath             string          `json:"installedPath,omitempty"`
+	InstalledTreeHash         string          `json:"installedTreeHash,omitempty"`
+	Confirmations             map[string]bool `json:"confirmations"`
+	IssuedAt                  int64           `json:"issuedAt,omitempty"`
+	Nonce                     string          `json:"nonce,omitempty"`
+	ExpiresAt                 int64           `json:"expiresAt"`
 }
 
 var packageConfirmationKey = func() []byte {
@@ -318,72 +318,73 @@ const (
 )
 
 type PackageConfirmationClaims struct {
-	SchemaVersion           int             `json:"schemaVersion"`
-	OperationType           string          `json:"operationType"`
-	ExtensionID             string          `json:"extensionId"`
-	ArtifactID              string          `json:"artifactId"`
-	ArtifactPolicy          ArtifactPolicy  `json:"artifactPolicy,omitempty"`
-	PolicyReason            string          `json:"policyReason,omitempty"`
-	PreviewSessionID        string          `json:"previewSessionId,omitempty"`
-	PreviewHash             string          `json:"previewHash,omitempty"`
-	CurrentVersionID        string          `json:"currentVersionId,omitempty"`
-	CurrentGenerationID     string          `json:"currentGenerationId,omitempty"`
-	SecurityPolicyHash      string          `json:"securityPolicyHash,omitempty"`
-	SnapshotRequirementHash string          `json:"snapshotRequirementHash,omitempty"`
-	RequiredConfirmationsHash string        `json:"requiredConfirmationsHash,omitempty"`
-	DependenciesHash          string        `json:"dependenciesHash,omitempty"`
-	PolicyVersion           string          `json:"policyVersion"`
-	UserID                  string          `json:"userId"`
-	ScopeType               string          `json:"scopeType"`
-	ScopeID                 string          `json:"scopeId"`
-	ConfirmedItems          []string        `json:"confirmedItems"`
-	Confirmations           map[string]bool `json:"confirmations"`
-	IssuedAt                int64           `json:"issuedAt"`
-	ExpiresAt               int64           `json:"expiresAt"`
-	Nonce                   string          `json:"nonce"`
-	ArchiveHash             string          `json:"archiveHash,omitempty"`
-	ManifestHash            string          `json:"manifestHash,omitempty"`
-	ContentTreeHash         string          `json:"contentTreeHash,omitempty"`
-	KeyID                   string          `json:"kid,omitempty"`
-	DeveloperSessionID      string          `json:"developerSessionId,omitempty"`
-	MigrationPlanHash       string          `json:"migrationPlanHash,omitempty"`
-	InstalledPath           string          `json:"installedPath,omitempty"`
-	InstalledTreeHash       string          `json:"installedTreeHash,omitempty"`
-	SourceVersionID         string          `json:"sourceVersionId,omitempty"`
-	SourceGenerationID      string          `json:"sourceGenerationId,omitempty"`
-	TargetVersionID         string          `json:"targetVersionId,omitempty"`
-	TargetGenerationID      string          `json:"targetGenerationId,omitempty"`
-	RollbackPointID         string          `json:"rollbackPointId,omitempty"`
-	CurrentVersion          string          `json:"currentVersion,omitempty"`
-	TargetVersion           string          `json:"targetVersion,omitempty"`
-	SourceGeneration        int64           `json:"sourceGeneration,omitempty"`
-	TargetGeneration        int64           `json:"targetGeneration,omitempty"`
+	SchemaVersion             int             `json:"schemaVersion"`
+	OperationType             string          `json:"operationType"`
+	ExtensionID               string          `json:"extensionId"`
+	ArtifactID                string          `json:"artifactId"`
+	ArtifactPolicy            ArtifactPolicy  `json:"artifactPolicy,omitempty"`
+	PolicyReason              string          `json:"policyReason,omitempty"`
+	PreviewSessionID          string          `json:"previewSessionId,omitempty"`
+	PreviewHash               string          `json:"previewHash,omitempty"`
+	CurrentVersionID          string          `json:"currentVersionId,omitempty"`
+	CurrentGenerationID       string          `json:"currentGenerationId,omitempty"`
+	SecurityPolicyHash        string          `json:"securityPolicyHash,omitempty"`
+	SnapshotRequirementHash   string          `json:"snapshotRequirementHash,omitempty"`
+	RequiredConfirmationsHash string          `json:"requiredConfirmationsHash,omitempty"`
+	DependenciesHash          string          `json:"dependenciesHash,omitempty"`
+	PolicyVersion             string          `json:"policyVersion"`
+	UserID                    string          `json:"userId"`
+	ScopeType                 string          `json:"scopeType"`
+	ScopeID                   string          `json:"scopeId"`
+	ConfirmedItems            []string        `json:"confirmedItems"`
+	Confirmations             map[string]bool `json:"confirmations"`
+	IssuedAt                  int64           `json:"issuedAt"`
+	ExpiresAt                 int64           `json:"expiresAt"`
+	Nonce                     string          `json:"nonce"`
+	ArchiveHash               string          `json:"archiveHash,omitempty"`
+	ManifestHash              string          `json:"manifestHash,omitempty"`
+	ContentTreeHash           string          `json:"contentTreeHash,omitempty"`
+	KeyID                     string          `json:"kid,omitempty"`
+	DeveloperSessionID        string          `json:"developerSessionId,omitempty"`
+	MigrationPlanHash         string          `json:"migrationPlanHash,omitempty"`
+	InstalledPath             string          `json:"installedPath,omitempty"`
+	InstalledTreeHash         string          `json:"installedTreeHash,omitempty"`
+	SourceVersionID           string          `json:"sourceVersionId,omitempty"`
+	SourceGenerationID        string          `json:"sourceGenerationId,omitempty"`
+	TargetVersionID           string          `json:"targetVersionId,omitempty"`
+	TargetGenerationID        string          `json:"targetGenerationId,omitempty"`
+	RollbackPointID           string          `json:"rollbackPointId,omitempty"`
+	CurrentVersion            string          `json:"currentVersion,omitempty"`
+	TargetVersion             string          `json:"targetVersion,omitempty"`
+	SourceGeneration          int64           `json:"sourceGeneration,omitempty"`
+	TargetGeneration          int64           `json:"targetGeneration,omitempty"`
 }
 
 type PackageRollbackConfirmationClaims struct {
-	SchemaVersion           int             `json:"schemaVersion"`
-	OperationType           string          `json:"operationType"`
-	PolicyVersion           string          `json:"policyVersion"`
-	ExtensionID             string          `json:"extensionId"`
-	ArtifactID              string          `json:"artifactId"`
-	SourceVersionID         string          `json:"sourceVersionId,omitempty"`
-	SourceGenerationID      string          `json:"sourceGenerationId,omitempty"`
-	TargetVersionID         string          `json:"targetVersionId,omitempty"`
-	TargetGenerationID      string          `json:"targetGenerationId,omitempty"`
-	RollbackPointID         string          `json:"rollbackPointId"`
-	PreviewSessionID        string          `json:"previewSessionId"`
-	PreviewHash             string          `json:"previewHash"`
-	SecurityPolicyHash      string          `json:"securityPolicyHash"`
-	SnapshotRequirementHash string          `json:"snapshotRequirementHash"`
-	RequiredConfirmationsHash string        `json:"requiredConfirmationsHash"`
-	UserID                  string          `json:"userId"`
-	ScopeType               string          `json:"scopeType"`
-	ScopeID                 string          `json:"scopeId"`
-	ConfirmedItems          []string        `json:"confirmedItems"`
-	Confirmations           map[string]bool `json:"confirmations"`
-	IssuedAt                int64           `json:"issuedAt"`
-	ExpiresAt               int64           `json:"expiresAt"`
-	Nonce                   string          `json:"nonce"`
+	SchemaVersion             int             `json:"schemaVersion"`
+	OperationType             string          `json:"operationType"`
+	PolicyVersion             string          `json:"policyVersion"`
+	ExtensionID               string          `json:"extensionId"`
+	ArtifactID                string          `json:"artifactId"`
+	SourceVersionID           string          `json:"sourceVersionId,omitempty"`
+	SourceGenerationID        string          `json:"sourceGenerationId,omitempty"`
+	TargetVersionID           string          `json:"targetVersionId,omitempty"`
+	TargetGenerationID        string          `json:"targetGenerationId,omitempty"`
+	RollbackPointID           string          `json:"rollbackPointId"`
+	PreviewSessionID          string          `json:"previewSessionId"`
+	PreviewHash               string          `json:"previewHash"`
+	SecurityPolicyHash        string          `json:"securityPolicyHash"`
+	SnapshotRequirementHash   string          `json:"snapshotRequirementHash"`
+	RequiredConfirmationsHash string          `json:"requiredConfirmationsHash"`
+	DependenciesHash          string          `json:"dependenciesHash"`
+	UserID                    string          `json:"userId"`
+	ScopeType                 string          `json:"scopeType"`
+	ScopeID                   string          `json:"scopeId"`
+	ConfirmedItems            []string        `json:"confirmedItems"`
+	Confirmations             map[string]bool `json:"confirmations"`
+	IssuedAt                  int64           `json:"issuedAt"`
+	ExpiresAt                 int64           `json:"expiresAt"`
+	Nonce                     string          `json:"nonce"`
 }
 
 const PackageRollbackConfirmationClaimsSchemaVersion = 1
@@ -425,8 +426,8 @@ func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmatio
 	if claims.SchemaVersion != PackageRollbackConfirmationClaimsSchemaVersion {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: unsupported claims schemaVersion %d, expected %d", ErrPackageConfirmationClaimsInvalid, claims.SchemaVersion, PackageRollbackConfirmationClaimsSchemaVersion))
 	}
-	if claims.PolicyVersion == "" || claims.SecurityPolicyHash == "" {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: policyVersion and securityPolicyHash required", ErrPackageConfirmationClaimsInvalid))
+	if claims.PolicyVersion == "" {
+		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: policyVersion required", ErrPackageConfirmationClaimsInvalid))
 	}
 	if claims.ExtensionID == "" || claims.ArtifactID == "" || claims.RollbackPointID == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: extensionId, artifactId and rollbackPointId required", ErrPackageConfirmationClaimsInvalid))
@@ -434,8 +435,21 @@ func verifyPackageRollbackConfirmation(token string) (PackageRollbackConfirmatio
 	if claims.SourceVersionID == "" || claims.SourceGenerationID == "" || claims.TargetVersionID == "" || claims.TargetGenerationID == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: source and target version identities required", ErrPackageConfirmationClaimsInvalid))
 	}
-	if claims.PreviewSessionID == "" || claims.PreviewHash == "" || claims.SnapshotRequirementHash == "" || claims.RequiredConfirmationsHash == "" {
-		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: preview identity required", ErrPackageConfirmationClaimsInvalid))
+	if claims.PreviewSessionID == "" ||
+		claims.PreviewHash == "" ||
+		claims.SecurityPolicyHash == "" ||
+		claims.SnapshotRequirementHash == "" ||
+		claims.RequiredConfirmationsHash == "" ||
+		claims.DependenciesHash == "" {
+		return claims,
+			NewPackageError(
+				PackageErrCodeConfirmationClaimsInvalid,
+				403,
+				fmt.Errorf(
+					"%w: previewHash, securityPolicyHash, snapshotRequirementHash, requiredConfirmationsHash and dependenciesHash required",
+					ErrPackageConfirmationClaimsInvalid,
+				),
+			)
 	}
 	if claims.UserID == "" || claims.ScopeType == "" {
 		return claims, NewPackageError(PackageErrCodeConfirmationClaimsInvalid, 403, fmt.Errorf("%w: user and scope binding required", ErrPackageConfirmationClaimsInvalid))

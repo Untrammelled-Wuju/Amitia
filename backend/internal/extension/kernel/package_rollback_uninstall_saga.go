@@ -172,7 +172,26 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		_ = r.releasePackageExtensionLease(context.Background(), extensionID, operationID)
 		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("post-lease drift: %w", driftErr)), failErr)
 	}
-	rollbackEvidence := buildRollbackConfirmationAuthorityEvidence(rollbackClaims, postLeasePreview.RequiredConfirmations, postLeasePreview.DependenciesHash, postLeasePreview.PreviewSessionID)
+	postLeaseCurrent, err := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return KernelInstallResult{}, fmt.Errorf("kernel: post-lease installation unavailable: %w", err)
+	}
+	postLeaseTargetVersion, err := r.container.PackageRepository.GetPackageVersion(ctx, extensionID, version)
+	if err != nil {
+		return KernelInstallResult{}, fmt.Errorf("kernel: post-lease target version unavailable: %w", err)
+	}
+	postLeaseRequirementInput, postLeaseRequirement, err := r.buildRollbackPackageSnapshotRequirement(ctx, postLeaseCurrent, point, postLeaseTargetVersion)
+	if err != nil {
+		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_snapshot_requirement", PackageErrCodeConfirmationStale, err.Error(), true, guard)
+		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("post-lease snapshot requirement unavailable: %w", err)), failErr)
+	}
+	if postLeaseRequirement.Hash != postLeasePreview.SnapshotRequirementHash ||
+		postLeaseRequirement.Hash != rollbackClaims.SnapshotRequirementHash ||
+		postLeaseRequirement.Hash != rollbackOp.SnapshotRequirementHash {
+		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "post_lease_snapshot_requirement_drift", PackageErrCodeConfirmationStale, "snapshot requirement hash changed after lease", true, guard)
+		return KernelInstallResult{}, errors.Join(NewPackageError(PackageErrCodeConfirmationStale, 409, fmt.Errorf("snapshot requirement hash changed after lease")), failErr)
+	}
+	rollbackEvidence := buildRollbackConfirmationAuthorityEvidence(rollbackClaims, postLeasePreview.RequiredConfirmations, postLeasePreview.DependenciesHash, postLeasePreview.PreviewSessionID, postLeaseRequirementInput, postLeaseRequirement)
 	rollbackEvidence.OperationID = operationID
 	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, rollbackEvidence, guard); evidenceErr != nil {
 		failErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", fmt.Sprintf("authority evidence persistence failed: %v", evidenceErr), true, guard)

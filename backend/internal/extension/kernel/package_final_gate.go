@@ -688,7 +688,32 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 					checkSnapshot.Detail = "claims unavailable and no rollback point found (fail-closed)"
 				}
 			} else {
-				requirement := r.computeFinalGateSnapshotRequirement(ctx, operation, claims)
+				var requirement PackageSnapshotRequirement
+				var requirementErr error
+
+				switch operation.OperationType {
+				case string(PackageOperationTypeRollback):
+					requirement, requirementErr = r.loadRollbackFinalGateSnapshotRequirement(ctx, operation, claims)
+				case string(PackageOperationTypeUpdate):
+					requirement = r.computeFinalGateSnapshotRequirement(ctx, operation, claims)
+				default:
+					requirementErr = fmt.Errorf("unsupported snapshot final gate operation type %s", operation.OperationType)
+				}
+
+				if requirementErr != nil {
+					decision.Required = true
+
+					decision.Reasons = append(decision.Reasons, requirementErr.Error())
+
+					checkSnapshot.Detail = fmt.Sprintf("snapshot requirement verification failed: %v", requirementErr)
+
+					result.SnapshotDecision = decision
+
+					result.Checks = append(result.Checks, checkSnapshot)
+
+					goto snapshotCheckComplete
+				}
+
 				decision.RequirementHash = requirement.Hash
 				rollbackPoint, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
 				snapshotPresent = rpErr == nil
@@ -737,6 +762,7 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 		}
 		result.SnapshotDecision = decision
 		result.Checks = append(result.Checks, checkSnapshot)
+	snapshotCheckComplete:
 	}
 
 	checkVersion := PackageFinalGateCheck{Name: "version_record_consistent"}
@@ -1094,145 +1120,60 @@ func (r *Runtime) computeFinalGateSnapshotRequirement(ctx context.Context, opera
 	return req
 }
 
+func (r *Runtime) loadRollbackFinalGateSnapshotRequirement(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) (PackageSnapshotRequirement, error) {
+	evidence, err := r.loadPackageConfirmationAuthorityEvidence(ctx, operation.OperationID)
+	if err != nil {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot authority evidence unavailable: %w", err)
+	}
+	if err := validateConfirmationAuthorityEvidenceSignature(evidence); err != nil {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot authority evidence validation failed: %w", err)
+	}
+	if operation.OperationType != string(PackageOperationTypeRollback) {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot authority operation type mismatch")
+	}
+	if evidence.OperationID != operation.OperationID || evidence.ExtensionID != operation.ExtensionID || evidence.ArtifactID != operation.ArtifactID {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot authority identity mismatch")
+	}
+	if evidence.SnapshotRequirementInput == nil || evidence.SnapshotRequirement == nil {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot authority requirement evidence incomplete")
+	}
+	input := evidence.SnapshotRequirementInput
+	if input.SchemaVersion != 1 || input.OperationType != string(PackageOperationTypeRollback) || input.ExtensionID != operation.ExtensionID {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot requirement operation identity mismatch")
+	}
+	if input.SourceVersion != operation.FromVersion || input.TargetVersion != operation.TargetVersion {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot requirement operation identity mismatch")
+	}
+	if input.SourceGeneration != claims.SourceGenerationID || input.TargetGeneration != claims.TargetGenerationID {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot requirement generation identity mismatch")
+	}
+	requirement, computeErr := ComputePackageSnapshotRequirement(*input)
+	if computeErr != nil {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback snapshot requirement recomputation failed: %w", computeErr)
+	}
+	if requirement.Hash != evidence.SnapshotRequirement.Hash ||
+		requirement.Required != evidence.SnapshotRequirement.Required ||
+		requirement.NoDataChange != evidence.SnapshotRequirement.NoDataChange ||
+		requirement.Reason != evidence.SnapshotRequirement.Reason {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback persisted snapshot requirement does not match recomputation")
+	}
+	if evidence.SnapshotRequirementHash != evidence.SnapshotRequirement.Hash {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback authority snapshotRequirementHash mismatch")
+	}
+	if claims.SnapshotRequirementHash != evidence.SnapshotRequirement.Hash {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback claims snapshotRequirementHash mismatch")
+	}
+	if operation.SnapshotRequirementHash != evidence.SnapshotRequirement.Hash {
+		return PackageSnapshotRequirement{}, fmt.Errorf("rollback operation snapshotRequirementHash mismatch")
+	}
+	return *evidence.SnapshotRequirement, nil
+}
+
 func isFinalGateSnapshotExempt(req PackageSnapshotRequirement, claims PackageConfirmationClaims, claimsVerified bool) bool {
 	if !claimsVerified || req.Required || !req.NoDataChange {
 		return false
 	}
 	if claims.SnapshotRequirementHash == "" || claims.SnapshotRequirementHash != req.Hash {
-		return false
-	}
-	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
-		return false
-	}
-	return true
-}
-
-func computeRollbackSnapshotRequirement(point PackageRollbackPoint) RollbackSnapshotRequirement {
-	return computeRollbackSnapshotRequirementFromPoint(point)
-}
-
-// Deprecated: kept for tests only, build PackageSnapshotRequirementInput from the rollback point and use ComputePackageSnapshotRequirement in production.
-func (r *Runtime) computeRollBackSnapshotRequirementFromClaims(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) RollbackSnapshotRequirement {
-	input := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
-	corrupt := false
-
-	var rollbackPoint *PackageRollbackPoint
-	if r.container.PackageRepository != nil && operation.FromVersion != "" {
-		if rp, err := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion); err == nil {
-			rollbackPoint = &rp
-		}
-	}
-
-	if rollbackPoint != nil {
-		if rollbackPoint.ConfigSnapshotJSON != "" {
-			input.ConfigBeforeHash = packageSnapshotDigest([]byte(rollbackPoint.ConfigSnapshotJSON))
-		}
-		if rollbackPoint.ResourceSnapshotJSON != "" {
-			input.ResourceBeforeTreeHash = packageSnapshotDigest([]byte(rollbackPoint.ResourceSnapshotJSON))
-		}
-		if rollbackPoint.UserDataMigrationStateJSON != "" {
-			input.UserDataBeforeHash = packageSnapshotDigest([]byte(rollbackPoint.UserDataMigrationStateJSON))
-		}
-		if rollbackPoint.MigrationStateSnapshotJSON != "" {
-			var migrationState packageMigrationStateSnapshot
-			if json.Unmarshal([]byte(rollbackPoint.MigrationStateSnapshotJSON), &migrationState) != nil {
-				corrupt = true
-			} else {
-				if migrationState.Mode != "" && migrationState.Mode != "none" {
-					input.MigrationDefinitions = migrationState.Definitions
-				}
-				for i := range migrationState.Operations {
-					input.MigrationOperations = append(input.MigrationOperations, migrationState.Operations[i].Operation)
-				}
-			}
-		}
-	}
-
-	if r.container.ContributionRepository != nil && r.container.PermissionRepository != nil && r.container.ScopeRepository != nil {
-		contributions, _ := r.container.ContributionRepository.ListContributions(ctx, domain.ExtensionID(operation.ExtensionID))
-		requirements, _ := r.container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(operation.ExtensionID))
-		grants, _ := r.container.PermissionRepository.ListGrants(ctx, domain.ExtensionID(operation.ExtensionID))
-		scopeBindings, _ := r.container.ScopeRepository.ListBindings(ctx, domain.ExtensionID(operation.ExtensionID))
-
-		sort.Slice(contributions, func(i, j int) bool { return string(contributions[i].ID) < string(contributions[j].ID) })
-		sort.Slice(requirements, func(i, j int) bool { return requirements[i].PermissionName < requirements[j].PermissionName })
-		sort.Slice(grants, func(i, j int) bool { return grants[i].PermissionName < grants[j].PermissionName })
-		sort.Slice(scopeBindings, func(i, j int) bool {
-			if scopeBindings[i].ScopeType != scopeBindings[j].ScopeType {
-				return scopeBindings[i].ScopeType < scopeBindings[j].ScopeType
-			}
-			return scopeBindings[i].ScopeID < scopeBindings[j].ScopeID
-		})
-
-		afterConfig := packageConfigSnapshot{
-			Contributions: contributions,
-			Permissions: packageConfigPermissionSnapshot{
-				Requirements: requirements,
-				Grants:       grants,
-			},
-			ScopeBindings: scopeBindings,
-			SchemaVersion: packageConfigSnapshotSchemaVersion,
-		}
-		if configJSON, err := json.Marshal(afterConfig); err == nil {
-			input.ConfigAfterHash = packageSnapshotDigest(configJSON)
-		}
-	}
-
-	if r.container.ResourceRepository != nil {
-		resources, _ := r.container.ResourceRepository.ListResources(ctx, domain.ExtensionID(operation.ExtensionID))
-		sort.Slice(resources, func(i, j int) bool { return resources[i].ResourceID < resources[j].ResourceID })
-		afterResource := packageResourceSnapshot{Entries: make([]packageResourceSnapshotEntry, 0, len(resources))}
-		for _, resource := range resources {
-			resource.Metadata, _ = sanitizePackageSnapshotMap(resource.Metadata)
-			originalPath := resource.Reference
-			absOriginal, absErr := filepath.Abs(originalPath)
-			if absErr != nil {
-				continue
-			}
-			info, statErr := os.Lstat(absOriginal)
-			if statErr != nil {
-				continue
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				corrupt = true
-				continue
-			}
-			file, openErr := os.Open(absOriginal)
-			if openErr != nil {
-				continue
-			}
-			hasher := sha256.New()
-			if _, copyErr := io.Copy(hasher, file); copyErr != nil {
-				file.Close()
-				continue
-			}
-			file.Close()
-			afterResource.Entries = append(afterResource.Entries, packageResourceSnapshotEntry{
-				Resource:    resource,
-				ContentHash: "sha256:" + hex.EncodeToString(hasher.Sum(nil)),
-			})
-		}
-		if resourceJSON, err := json.Marshal(afterResource); err == nil {
-			input.ResourceAfterTreeHash = packageSnapshotDigest(resourceJSON)
-		}
-	}
-
-	req := ComputeRollbackSnapshotRequirement(input)
-	if corrupt && req.NoDataChange {
-		req.Required = true
-		req.NoDataChange = false
-		req.Reason = "live state validation failure, fail-closed"
-		req.RequirementHash = computeSnapshotRequirementHash(req)
-	}
-	return req
-}
-
-// Deprecated: kept for tests only, final gate must not auto-exempt on NoDataChange alone.
-func isRollbackSnapshotExempt(req RollbackSnapshotRequirement, claims PackageConfirmationClaims) bool {
-	if !req.NoDataChange {
-		return false
-	}
-	if claims.SnapshotRequirementHash == "" || claims.SnapshotRequirementHash != req.RequirementHash {
 		return false
 	}
 	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {

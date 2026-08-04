@@ -291,6 +291,29 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rollbackClaims, err := verifyPackageRollbackConfirmation(rollbackConfirm.ConfirmationToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollbackPreview, err := runtime.PreviewPackageRollback(ctx, preview.ExtensionID, "1.0.0", "user-1", "global", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rollbackClaims.DependenciesHash == "" {
+		t.Fatal("rollback claims dependenciesHash missing")
+	}
+	if rollbackClaims.DependenciesHash != rollbackPreview.DependenciesHash {
+		t.Fatalf("rollback dependenciesHash mismatch: claims=%s preview=%s", rollbackClaims.DependenciesHash, rollbackPreview.DependenciesHash)
+	}
+	if rollbackClaims.SecurityPolicyHash != rollbackPreview.SecurityPolicyHash {
+		t.Fatalf("rollback securityPolicyHash mismatch: claims=%s preview=%s", rollbackClaims.SecurityPolicyHash, rollbackPreview.SecurityPolicyHash)
+	}
+	if rollbackClaims.RequiredConfirmationsHash != rollbackPreview.RequiredConfirmationsHash {
+		t.Fatalf("rollback requiredConfirmationsHash mismatch: claims=%s preview=%s", rollbackClaims.RequiredConfirmationsHash, rollbackPreview.RequiredConfirmationsHash)
+	}
+	if rollbackClaims.PreviewHash != rollbackPreview.PreviewHash {
+		t.Fatalf("rollback PreviewHash mismatch: claims=%s preview=%s", rollbackClaims.PreviewHash, rollbackPreview.PreviewHash)
+	}
 	rolledBack, err := runtime.ExecutePackageRollback(ctx, preview.ExtensionID, "1.0.0", "user-1", "global", "", rollbackConfirm.ConfirmationToken)
 	if err != nil {
 		t.Fatal(err)

@@ -1096,90 +1096,37 @@ func hashFileContent(path string) (string, error) {
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// Deprecated: kept for tests only, use ComputePackageSnapshotRequirement in production.
-func ComputeRollbackSnapshotRequirement(input RollbackSnapshotRequirementInput) RollbackSnapshotRequirement {
-	req := RollbackSnapshotRequirement{
-		ManifestNoDataChange: input.ManifestNoDataChange,
-	}
-
-	req.ConfigChanged = input.ConfigBeforeHash != "" && input.ConfigAfterHash != "" && input.ConfigBeforeHash != input.ConfigAfterHash
-	req.ResourcesChanged = (input.ResourceBeforeTreeHash != "" && input.ResourceAfterTreeHash != "" && input.ResourceBeforeTreeHash != input.ResourceAfterTreeHash) ||
-		len(input.ResourceSetDiff.Added) > 0 || len(input.ResourceSetDiff.Removed) > 0 || len(input.ResourceSetDiff.Changed) > 0
-	req.UserDataChanged = input.UserDataBeforeHash != "" && input.UserDataAfterHash != "" && input.UserDataBeforeHash != input.UserDataAfterHash
-	req.MigrationPlanPresent = input.MigrationPlan != nil
-	req.MigrationDefinitionPresent = len(input.MigrationDefinitions) > 0
-	req.MigrationOperationPresent = len(input.MigrationOperations) > 0
-
-	configSourceMissing := (input.ConfigBeforeHash != "") != (input.ConfigAfterHash != "")
-	resourceSourceMissing := (input.ResourceBeforeTreeHash != "") != (input.ResourceAfterTreeHash != "")
-	userDataSourceMissing := (input.UserDataBeforeHash != "") != (input.UserDataAfterHash != "")
-	missingSource := configSourceMissing || resourceSourceMissing || userDataSourceMissing
-
-	anyChange := req.ConfigChanged || req.ResourcesChanged || req.UserDataChanged ||
-		req.MigrationPlanPresent || req.MigrationDefinitionPresent || req.MigrationOperationPresent
-
-	req.Required = anyChange || missingSource || !input.ManifestNoDataChange
-	req.NoDataChange = !req.Required
-
-	if req.Required {
-		switch {
-		case missingSource:
-			req.Reason = "before/after evidence count mismatch, fail-closed"
-		case !input.ManifestNoDataChange:
-			req.Reason = "manifest does not declare no-data-change, fail-closed"
-		case req.MigrationPlanPresent:
-			req.Reason = "migration plan present"
-		case req.MigrationDefinitionPresent:
-			req.Reason = "migration definitions present"
-		case req.MigrationOperationPresent:
-			req.Reason = "migration operations present"
-		case req.ConfigChanged:
-			req.Reason = "config changed"
-		case req.ResourcesChanged:
-			req.Reason = "resources changed"
-		case req.UserDataChanged:
-			req.Reason = "user data changed"
-		default:
-			req.Reason = "changes detected"
-		}
-	} else {
-		req.Reason = "no data change detected"
-	}
-
-	req.RequirementHash = computeSnapshotRequirementHash(req)
-	return req
-}
-
 type PackageSnapshotRequirementInput struct {
-	SchemaVersion    int
-	OperationType    string
-	ExtensionID      string
-	SourceVersion    string
-	SourceGeneration string
-	TargetVersion    string
-	TargetGeneration string
+	SchemaVersion int    `json:"schemaVersion"`
+	OperationType string `json:"operationType"`
+	ExtensionID   string `json:"extensionId"`
 
-	ConfigBeforeHash      string
-	ConfigAfterHash       string
-	ConfigEvidencePresent bool
+	SourceVersion    string `json:"sourceVersion"`
+	SourceGeneration string `json:"sourceGeneration"`
+	TargetVersion    string `json:"targetVersion"`
+	TargetGeneration string `json:"targetGeneration"`
 
-	ResourceBeforeHash      string
-	ResourceAfterHash       string
-	ResourceEvidencePresent bool
-	ResourceAdded           []string
-	ResourceRemoved         []string
-	ResourceChanged         []string
+	ConfigBeforeHash      string `json:"configBeforeHash"`
+	ConfigAfterHash       string `json:"configAfterHash"`
+	ConfigEvidencePresent bool   `json:"configEvidencePresent"`
 
-	UserDataBeforeHash      string
-	UserDataAfterHash       string
-	UserDataEvidencePresent bool
+	ResourceBeforeHash      string   `json:"resourceBeforeHash"`
+	ResourceAfterHash       string   `json:"resourceAfterHash"`
+	ResourceEvidencePresent bool     `json:"resourceEvidencePresent"`
+	ResourceAdded           []string `json:"resourceAdded"`
+	ResourceRemoved         []string `json:"resourceRemoved"`
+	ResourceChanged         []string `json:"resourceChanged"`
 
-	MigrationPlanHash        string
-	MigrationDefinitionHash  string
-	MigrationEvidencePresent bool
+	UserDataBeforeHash      string `json:"userDataBeforeHash"`
+	UserDataAfterHash       string `json:"userDataAfterHash"`
+	UserDataEvidencePresent bool   `json:"userDataEvidencePresent"`
 
-	ManifestNoDataChange    bool
-	ManifestEvidencePresent bool
+	MigrationPlanHash        string `json:"migrationPlanHash"`
+	MigrationDefinitionHash  string `json:"migrationDefinitionHash"`
+	MigrationEvidencePresent bool   `json:"migrationEvidencePresent"`
+
+	ManifestNoDataChange    bool `json:"manifestNoDataChange"`
+	ManifestEvidencePresent bool `json:"manifestEvidencePresent"`
 }
 
 type PackageSnapshotRequirement struct {
@@ -1189,66 +1136,263 @@ type PackageSnapshotRequirement struct {
 	Hash         string `json:"hash,omitempty"`
 }
 
+type packageSnapshotRequirementState struct {
+	Version    string
+	Generation string
+
+	ConfigJSON    string
+	ResourceJSON  string
+	UserDataJSON  string
+	MigrationJSON string
+}
+
+type packageMigrationRequirementEvidence struct {
+	DefinitionHash string
+	OperationHash  string
+
+	HasMigration bool
+}
+
+func computeStablePackageConfigSnapshotHash(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("kernel: config snapshot evidence missing")
+	}
+	var snapshot packageConfigSnapshot
+	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+		return "", fmt.Errorf("kernel: config snapshot evidence corrupt: %w", err)
+	}
+	snapshot.CapturedAt = ""
+	canonical, err := json.Marshal(snapshot)
+	if err != nil {
+		return "", fmt.Errorf("kernel: canonicalize config snapshot: %w", err)
+	}
+	return packageSnapshotDigest(canonical), nil
+}
+
+func parsePackageMigrationRequirementEvidence(raw string) (packageMigrationRequirementEvidence, error) {
+	var result packageMigrationRequirementEvidence
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return result, fmt.Errorf("kernel: migration snapshot evidence missing")
+	}
+	var snapshot packageMigrationStateSnapshot
+	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+		return result, fmt.Errorf("kernel: migration snapshot evidence corrupt: %w", err)
+	}
+	definitions := append([]migration.MigrationDefinition(nil), snapshot.Definitions...)
+	sort.Slice(definitions, func(left, right int) bool {
+		return definitions[left].MigrationID < definitions[right].MigrationID
+	})
+	operations := append([]packageMigrationOperationSnapshot(nil), snapshot.Operations...)
+	sort.Slice(operations, func(left, right int) bool {
+		return operations[left].Operation.OperationID < operations[right].Operation.OperationID
+	})
+	definitionJSON, err := json.Marshal(definitions)
+	if err != nil {
+		return result, err
+	}
+	operationJSON, err := json.Marshal(operations)
+	if err != nil {
+		return result, err
+	}
+	result.DefinitionHash = packageSnapshotDigest(definitionJSON)
+	result.OperationHash = packageSnapshotDigest(operationJSON)
+	result.HasMigration = (snapshot.Mode != "" && snapshot.Mode != "none") || len(definitions) > 0 || len(operations) > 0
+	return result, nil
+}
+
+func computePackageSnapshotPairHash(domain, before, after string) string {
+	payload := struct {
+		Domain string `json:"domain"`
+		Before string `json:"before"`
+		After  string `json:"after"`
+	}{
+		Domain: domain,
+		Before: before,
+		After:  after,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return packageSnapshotDigest(raw)
+}
+
+func (r *Runtime) buildRollbackPackageSnapshotRequirement(ctx context.Context, current domain.ExtensionInstallation, point PackageRollbackPoint, targetVersion PackageVersionRecord) (PackageSnapshotRequirementInput, PackageSnapshotRequirement, error) {
+	var emptyInput PackageSnapshotRequirementInput
+	var emptyRequirement PackageSnapshotRequirement
+	if strings.TrimSpace(point.SnapshotHash) == "" {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: rollback point snapshot hash missing")
+	}
+	if point.SourceVersion != targetVersion.Version {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: rollback point version mismatch: point=%s versionRecord=%s", point.SourceVersion, targetVersion.Version)
+	}
+	if point.ArtifactID != targetVersion.ArtifactID {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: rollback point artifact mismatch")
+	}
+	currentGeneration := packageGenerationFromInstallation(current)
+	if currentGeneration.GenerationID == "" {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: current generation identity missing")
+	}
+	if targetVersion.GenerationID == "" {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: target generation identity missing")
+	}
+	currentConfigJSON, _, currentResourceJSON, currentMigrationJSON, currentUserDataJSON, err := r.capturePackageStateSnapshots(ctx, current)
+	if err != nil {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: capture current snapshot requirement evidence: %w", err)
+	}
+	source := packageSnapshotRequirementState{
+		Version:       current.InstalledVersion.String(),
+		Generation:    currentGeneration.GenerationID,
+		ConfigJSON:    currentConfigJSON,
+		ResourceJSON:  currentResourceJSON,
+		UserDataJSON:  currentUserDataJSON,
+		MigrationJSON: currentMigrationJSON,
+	}
+	target := packageSnapshotRequirementState{
+		Version:       point.SourceVersion,
+		Generation:    targetVersion.GenerationID,
+		ConfigJSON:    point.ConfigSnapshotJSON,
+		ResourceJSON:  point.ResourceSnapshotJSON,
+		UserDataJSON:  point.UserDataMigrationStateJSON,
+		MigrationJSON: point.MigrationStateSnapshotJSON,
+	}
+	sourceConfigHash, err := computeStablePackageConfigSnapshotHash(source.ConfigJSON)
+	if err != nil {
+		return emptyInput, emptyRequirement, err
+	}
+	targetConfigHash, err := computeStablePackageConfigSnapshotHash(target.ConfigJSON)
+	if err != nil {
+		return emptyInput, emptyRequirement, err
+	}
+	if strings.TrimSpace(source.ResourceJSON) == "" || strings.TrimSpace(target.ResourceJSON) == "" {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: resource snapshot requirement evidence incomplete")
+	}
+	if strings.TrimSpace(source.UserDataJSON) == "" || strings.TrimSpace(target.UserDataJSON) == "" {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: user data snapshot requirement evidence incomplete")
+	}
+	sourceResourceHash := packageSnapshotDigest([]byte(source.ResourceJSON))
+	targetResourceHash := packageSnapshotDigest([]byte(target.ResourceJSON))
+	sourceUserDataHash := packageSnapshotDigest([]byte(source.UserDataJSON))
+	targetUserDataHash := packageSnapshotDigest([]byte(target.UserDataJSON))
+	sourceMigration, err := parsePackageMigrationRequirementEvidence(source.MigrationJSON)
+	if err != nil {
+		return emptyInput, emptyRequirement, err
+	}
+	targetMigration, err := parsePackageMigrationRequirementEvidence(target.MigrationJSON)
+	if err != nil {
+		return emptyInput, emptyRequirement, err
+	}
+	migrationPresent := sourceMigration.HasMigration || targetMigration.HasMigration
+	migrationDefinitionHash := ""
+	migrationPlanHash := ""
+	if migrationPresent {
+		migrationDefinitionHash = computePackageSnapshotPairHash("migration-definitions", sourceMigration.DefinitionHash, targetMigration.DefinitionHash)
+		migrationPlanHash = computePackageSnapshotPairHash("migration-operations", sourceMigration.OperationHash, targetMigration.OperationHash)
+	}
+	allEvidencePresent := source.Version != "" &&
+		source.Generation != "" &&
+		target.Version != "" &&
+		target.Generation != "" &&
+		sourceConfigHash != "" &&
+		targetConfigHash != "" &&
+		sourceResourceHash != "" &&
+		targetResourceHash != "" &&
+		sourceUserDataHash != "" &&
+		targetUserDataHash != ""
+	provenNoDataChange := allEvidencePresent &&
+		sourceConfigHash == targetConfigHash &&
+		sourceResourceHash == targetResourceHash &&
+		sourceUserDataHash == targetUserDataHash &&
+		!migrationPresent
+	input := PackageSnapshotRequirementInput{
+		SchemaVersion:           1,
+		OperationType:           string(PackageOperationTypeRollback),
+		ExtensionID:             string(current.ExtensionID),
+		SourceVersion:           source.Version,
+		SourceGeneration:        source.Generation,
+		TargetVersion:           target.Version,
+		TargetGeneration:        target.Generation,
+		ConfigBeforeHash:        sourceConfigHash,
+		ConfigAfterHash:         targetConfigHash,
+		ConfigEvidencePresent:   true,
+		ResourceBeforeHash:      sourceResourceHash,
+		ResourceAfterHash:       targetResourceHash,
+		ResourceEvidencePresent: true,
+		ResourceAdded:           []string{},
+		ResourceRemoved:         []string{},
+		ResourceChanged:         []string{},
+		UserDataBeforeHash:      sourceUserDataHash,
+		UserDataAfterHash:       targetUserDataHash,
+		UserDataEvidencePresent: true,
+		MigrationPlanHash:       migrationPlanHash,
+		MigrationDefinitionHash: migrationDefinitionHash,
+		MigrationEvidencePresent: true,
+		ManifestNoDataChange:    provenNoDataChange,
+		ManifestEvidencePresent: allEvidencePresent,
+	}
+	requirement, err := ComputePackageSnapshotRequirement(input)
+	if err != nil {
+		return emptyInput, emptyRequirement, err
+	}
+	if requirement.Hash == "" {
+		return emptyInput, emptyRequirement, fmt.Errorf("kernel: unified snapshot requirement hash missing")
+	}
+	return input, requirement, nil
+}
+
 func ComputePackageSnapshotRequirement(input PackageSnapshotRequirementInput) (PackageSnapshotRequirement, error) {
-	if input.SchemaVersion == 0 || input.OperationType == "" || input.ExtensionID == "" {
+	if input.SchemaVersion != 1 {
+		return PackageSnapshotRequirement{}, fmt.Errorf("kernel: snapshot requirement schema unsupported: %d", input.SchemaVersion)
+	}
+	if input.OperationType == "" || input.ExtensionID == "" {
 		return PackageSnapshotRequirement{}, fmt.Errorf("kernel: snapshot requirement identity incomplete")
 	}
-
-	configHasBefore := input.ConfigBeforeHash != ""
-	configHasAfter := input.ConfigAfterHash != ""
-	resHasBefore := input.ResourceBeforeHash != ""
-	resHasAfter := input.ResourceAfterHash != ""
-	userHasBefore := input.UserDataBeforeHash != ""
-	userHasAfter := input.UserDataAfterHash != ""
-
-	configChanged := configHasBefore && configHasAfter && input.ConfigBeforeHash != input.ConfigAfterHash
-	resourceChanged := (resHasBefore && resHasAfter && input.ResourceBeforeHash != input.ResourceAfterHash) ||
-		len(input.ResourceAdded) > 0 || len(input.ResourceRemoved) > 0 || len(input.ResourceChanged) > 0
-	userDataChanged := userHasBefore && userHasAfter && input.UserDataBeforeHash != input.UserDataAfterHash
-
-	migrationPlanPresent := input.MigrationPlanHash != ""
-	migrationDefinitionPresent := input.MigrationDefinitionHash != ""
-	migrationPresent := migrationPlanPresent || migrationDefinitionPresent
-
-	configEvidenceIncomplete := configHasBefore != configHasAfter
-	resEvidenceIncomplete := resHasBefore != resHasAfter
-	userEvidenceIncomplete := userHasBefore != userHasAfter
-
-	configEvidenceRequired := input.OperationType != "uninstall" && !configHasBefore && !configHasAfter
-
-	evidenceIncomplete := !input.ConfigEvidencePresent || !input.ResourceEvidencePresent ||
-		!input.UserDataEvidencePresent || !input.ManifestEvidencePresent || !input.MigrationEvidencePresent ||
-		configEvidenceIncomplete || resEvidenceIncomplete || userEvidenceIncomplete || configEvidenceRequired
-
-	anyChange := configChanged || resourceChanged || userDataChanged || migrationPresent
-
-	req := PackageSnapshotRequirement{}
-	req.Required = anyChange || evidenceIncomplete || !input.ManifestNoDataChange
-	req.NoDataChange = !req.Required
-
-	if req.Required {
-		switch {
-		case evidenceIncomplete:
-			req.Reason = "snapshot requirement evidence incomplete, fail-closed"
-		case !input.ManifestNoDataChange:
-			req.Reason = "manifest does not declare no-data-change, fail-closed"
-		case migrationPresent:
-			req.Reason = "migration present"
-		case configChanged:
-			req.Reason = "config changed"
-		case resourceChanged:
-			req.Reason = "resources changed"
-		case userDataChanged:
-			req.Reason = "user data changed"
-		default:
-			req.Reason = "changes detected"
+	switch input.OperationType {
+	case string(PackageOperationTypeUpdate), string(PackageOperationTypeRollback):
+		if input.SourceVersion == "" || input.SourceGeneration == "" || input.TargetVersion == "" || input.TargetGeneration == "" {
+			return PackageSnapshotRequirement{}, fmt.Errorf("kernel: snapshot requirement version identity incomplete")
 		}
-	} else {
-		req.Reason = "no data change detected"
 	}
-
-	req.Hash = computeUnifiedSnapshotRequirementHash(input, req)
-	return req, nil
+	configEvidenceIncomplete := !input.ConfigEvidencePresent || input.ConfigBeforeHash == "" || input.ConfigAfterHash == ""
+	resourceEvidenceIncomplete := !input.ResourceEvidencePresent || input.ResourceBeforeHash == "" || input.ResourceAfterHash == ""
+	userDataEvidenceIncomplete := !input.UserDataEvidencePresent || input.UserDataBeforeHash == "" || input.UserDataAfterHash == ""
+	migrationEvidenceIncomplete := !input.MigrationEvidencePresent
+	manifestEvidenceIncomplete := !input.ManifestEvidencePresent
+	evidenceIncomplete := configEvidenceIncomplete || resourceEvidenceIncomplete || userDataEvidenceIncomplete || migrationEvidenceIncomplete || manifestEvidenceIncomplete
+	configChanged := !configEvidenceIncomplete && input.ConfigBeforeHash != input.ConfigAfterHash
+	resourceChanged := !resourceEvidenceIncomplete && input.ResourceBeforeHash != input.ResourceAfterHash
+	resourceSetChanged := len(input.ResourceAdded) > 0 || len(input.ResourceRemoved) > 0 || len(input.ResourceChanged) > 0
+	userDataChanged := !userDataEvidenceIncomplete && input.UserDataBeforeHash != input.UserDataAfterHash
+	migrationPresent := input.MigrationPlanHash != "" || input.MigrationDefinitionHash != ""
+	anyChange := configChanged || resourceChanged || resourceSetChanged || userDataChanged || migrationPresent
+	provenNoDataChange := !evidenceIncomplete && !anyChange
+	manifestClaimContradiction := input.ManifestNoDataChange != provenNoDataChange
+	requirement := PackageSnapshotRequirement{
+		Required: evidenceIncomplete || anyChange || !input.ManifestNoDataChange || manifestClaimContradiction,
+	}
+	requirement.NoDataChange = !requirement.Required
+	switch {
+	case evidenceIncomplete:
+		requirement.Reason = "snapshot requirement evidence incomplete, fail-closed"
+	case manifestClaimContradiction:
+		requirement.Reason = "manifest no-data-change claim contradicts evidence, fail-closed"
+	case migrationPresent:
+		requirement.Reason = "migration present"
+	case configChanged:
+		requirement.Reason = "config changed"
+	case resourceChanged || resourceSetChanged:
+		requirement.Reason = "resources changed"
+	case userDataChanged:
+		requirement.Reason = "user data changed"
+	case !input.ManifestNoDataChange:
+		requirement.Reason = "manifest does not prove no data change, fail-closed"
+	default:
+		requirement.Reason = "no data change detected"
+	}
+	requirement.Hash = computeUnifiedSnapshotRequirementHash(input, requirement)
+	return requirement, nil
 }
 
 func computeUnifiedSnapshotRequirementHash(input PackageSnapshotRequirementInput, req PackageSnapshotRequirement) string {
@@ -1283,51 +1427,6 @@ func sortedSnapshotRequirementList(items []string) string {
 		return "[]"
 	}
 	return string(raw)
-}
-
-// Deprecated: kept for tests only, build PackageSnapshotRequirementInput from the point and use ComputePackageSnapshotRequirement in production.
-func computeRollbackSnapshotRequirementFromPoint(point PackageRollbackPoint) RollbackSnapshotRequirement {
-	input := RollbackSnapshotRequirementInput{ManifestNoDataChange: true}
-	corrupt := false
-	if point.ConfigSnapshotJSON != "" {
-		input.ConfigBeforeHash = packageSnapshotDigest([]byte(point.ConfigSnapshotJSON))
-	}
-	if point.ResourceSnapshotJSON != "" {
-		input.ResourceBeforeTreeHash = packageSnapshotDigest([]byte(point.ResourceSnapshotJSON))
-	}
-	if point.UserDataMigrationStateJSON != "" {
-		input.UserDataBeforeHash = packageSnapshotDigest([]byte(point.UserDataMigrationStateJSON))
-	}
-	if point.MigrationStateSnapshotJSON != "" {
-		var migrationState packageMigrationStateSnapshot
-		if json.Unmarshal([]byte(point.MigrationStateSnapshotJSON), &migrationState) != nil {
-			corrupt = true
-		} else {
-			if migrationState.Mode != "" && migrationState.Mode != "none" {
-				input.MigrationDefinitions = migrationState.Definitions
-			}
-			for i := range migrationState.Operations {
-				input.MigrationOperations = append(input.MigrationOperations, migrationState.Operations[i].Operation)
-			}
-		}
-	}
-	req := ComputeRollbackSnapshotRequirement(input)
-	if corrupt && req.NoDataChange {
-		req.Required = true
-		req.NoDataChange = false
-		req.Reason = "migration state snapshot corrupt, fail-closed"
-		req.RequirementHash = computeSnapshotRequirementHash(req)
-	}
-	return req
-}
-
-func computeSnapshotRequirementHash(req RollbackSnapshotRequirement) string {
-	canonical := fmt.Sprintf(`{"required":%v,"configChanged":%v,"resourcesChanged":%v,"userDataChanged":%v,"migrationPlanPresent":%v,"migrationDefinitionPresent":%v,"migrationOperationPresent":%v,"migrationStateUnverified":%v,"manifestNoDataChange":%v,"noDataChange":%v}`,
-		req.Required, req.ConfigChanged, req.ResourcesChanged, req.UserDataChanged,
-		req.MigrationPlanPresent, req.MigrationDefinitionPresent, req.MigrationOperationPresent,
-		req.MigrationStateUnverified, req.ManifestNoDataChange, req.NoDataChange)
-	h := sha256.Sum256([]byte(canonical))
-	return "sha256:" + hex.EncodeToString(h[:])
 }
 
 func computeVerifiedResourceTreeHash(resources []domain.ResourceOwnership, absExtRoot string) (string, error) {
