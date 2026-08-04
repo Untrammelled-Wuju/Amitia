@@ -27,7 +27,6 @@ func registerExtensionPackageRoutes(group *gin.RouterGroup, runtime *Runtime) {
 		}
 		c.JSON(http.StatusOK, runtime.Kernel.List())
 	})
-	group.POST("/packages/install", retiredPackageInstallEndpoint)
 	group.POST("/packages/artifacts", func(c *gin.Context) { createPackageArtifactPreview(c, runtime) })
 	group.POST("/packages/previews", func(c *gin.Context) { createPackageArtifactPreview(c, runtime) })
 	group.POST("/packages/previews/:sessionId/confirm", func(c *gin.Context) { confirmPackagePreview(c, runtime) })

@@ -56,7 +56,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '记忆',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
             icon: _searchVisible ? Icons.close : Icons.search,

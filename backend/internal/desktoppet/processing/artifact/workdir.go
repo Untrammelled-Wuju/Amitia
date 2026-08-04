@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
 type WorkDirectory struct {
@@ -95,7 +97,7 @@ func (w *WorkDirectory) Clean() error {
 	if w.RootPath == "" {
 		return fmt.Errorf("artifact: rootPath is empty")
 	}
-	if err := os.RemoveAll(w.RootPath); err != nil {
+	if err := security.SafeRemoveTree(w.RootPath); err != nil {
 		return fmt.Errorf("artifact: clean workdir %s: %w", w.RootPath, err)
 	}
 	return nil

@@ -18,6 +18,7 @@ export const IPC_CHANNELS = {
   clipboardWriteText: "amitia:clipboard:write-text",
   setAuthToken: "amitia:auth:set-token",
   uiNavigate: "amitia:ui:navigate",
+  getBackendAuthHeaders: "amitia:backend-auth:get-headers",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

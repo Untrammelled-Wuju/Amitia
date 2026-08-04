@@ -18,7 +18,7 @@ class ChannelCenterPage extends ConsumerWidget {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '渠道中心',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
       ),
       body: SafeArea(
         top: false,

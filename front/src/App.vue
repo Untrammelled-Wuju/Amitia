@@ -86,7 +86,7 @@ onMounted(async () => {
     }
 
     try {
-      const authRes = await apiClient.get("/api/auth/status");
+      const authRes = await apiClient.get("/api/public/auth/status");
       const authData = authRes.data?.data || authRes.data;
 
       if (!authData?.hasAdmin) {
@@ -100,7 +100,7 @@ onMounted(async () => {
       }
 
       try {
-        const meRes = await apiClient.get("/api/auth/me");
+        const meRes = await apiClient.get("/api/public/auth/me");
         const userData = meRes.data?.data || meRes.data;
         if (!userData?.id) {
           localStorage.removeItem(TOKEN_KEY);
@@ -113,7 +113,7 @@ onMounted(async () => {
     } catch {
       if (token) {
         try {
-          const meRes = await apiClient.get("/api/auth/me");
+          const meRes = await apiClient.get("/api/public/auth/me");
           const userData = meRes.data?.data || meRes.data;
           if (!userData?.id) {
             localStorage.removeItem(TOKEN_KEY);

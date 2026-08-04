@@ -19,7 +19,7 @@ class SettingsPage extends ConsumerWidget {
     final groups = MockData.mainSettings;
     final isDevMode = ref.watch(isDeveloperModeProvider);
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '设置', navigation: AmitiaAppBarNavigation.drawer),
+      appBar: AmitiaAppBar(title: '设置', navigation: AmitiaAppBarNavigation.back),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [

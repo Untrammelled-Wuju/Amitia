@@ -3,6 +3,8 @@
 package processing
 
 import (
+	"path/filepath"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/desktoppet/security"
@@ -13,7 +15,7 @@ func RegisterProcessingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	repo := NewRepository(ctx.DB, ctx)
 	svc := NewService(repo, ctx.DB, ctx, config.AppCfg.Storage.DataDir)
 	registry := security.NewPathRootRegistry()
-	_ = registry.Register(config.AppCfg.Storage.DataDir)
+	_ = registry.Register(security.RootProcessingRevisions, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "processing", "revisions"))
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	handler := NewHandler(svc, responder, guard)

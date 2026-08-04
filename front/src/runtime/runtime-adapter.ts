@@ -63,11 +63,16 @@ export async function resolveWebSocketUrl(path: string): Promise<string> {
 export async function createAuthorizedRequestInit(
   init?: RequestInit,
 ): Promise<RequestInit> {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const deployment = await getDeploymentConfig();
   const headers: Record<string, string> = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+
+  if (deployment.mode === "local" && window.amitiaDesktop) {
+    Object.assign(headers, await getBackendAuthHeaders());
+  } else {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
+
   return {
     ...init,
     headers: {
@@ -75,6 +80,14 @@ export async function createAuthorizedRequestInit(
       ...((init?.headers as Record<string, string>) || {}),
     },
   };
+}
+
+export async function getBackendAuthHeaders(): Promise<
+  Record<string, string>
+> {
+  const api = window.amitiaDesktop;
+  if (!api) return {};
+  return api.getBackendAuthHeaders();
 }
 
 export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {

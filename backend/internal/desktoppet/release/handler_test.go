@@ -30,6 +30,9 @@ func (s *stubOwnershipGuard) RequireProcessingTask(ctx context.Context, actor *d
 func (s *stubOwnershipGuard) RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*security.ActionRevisionScope, error) {
 	return &security.ActionRevisionScope{UserID: actor.UserID, RevisionID: revisionID}, nil
 }
+func (s *stubOwnershipGuard) RequireActionStream(ctx context.Context, actor *desktoppetAuth.ActorContext, streamID string) (*security.ActionStreamScope, error) {
+	return &security.ActionStreamScope{UserID: actor.UserID}, nil
+}
 func (s *stubOwnershipGuard) RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*security.QualityScope, error) {
 	return &security.QualityScope{UserID: actor.UserID, EvaluationID: evaluationID}, nil
 }

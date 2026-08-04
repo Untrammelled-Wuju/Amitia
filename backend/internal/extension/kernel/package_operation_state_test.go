@@ -319,3 +319,57 @@ func TestValidateQuarantineMetadataFence_TokenScenarios(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateOrGetOperationWithConfirmationNonce_RejectsReplay(t *testing.T) {
+	repository := newOperationStateTestRepository(t)
+	op := operationFixture("operation-nonce-1", "user-1", "request-nonce", "sha256:nonce-first", "extension-1")
+	_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, "nonce-value-1", "", "")
+	if err != nil || !created {
+		t.Fatalf("first create should succeed: created=%v err=%v", created, err)
+	}
+	op2 := operationFixture("operation-nonce-2", "user-1", "request-nonce-2", "sha256:nonce-second", "extension-1")
+	_, _, err = repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op2, "nonce-value-1", "", "")
+	if !IsPackageOperationError(err, OperationErrIdempotencyConflict) {
+		t.Fatalf("reused nonce should be rejected: %v", err)
+	}
+}
+
+func TestCreateOrGetOperationWithConfirmationNonce_ConcurrentRejectsReplay(t *testing.T) {
+	repository := newOperationStateTestRepository(t)
+	const workers = 50
+	var wait sync.WaitGroup
+	errorsSeen := make(chan error, workers)
+	results := make(chan bool, workers)
+	for i := 0; i < workers; i++ {
+		wait.Add(1)
+		go func(i int) {
+			defer wait.Done()
+			op := operationFixture(fmt.Sprintf("operation-concurrent-%03d", i), "user-concurrent", fmt.Sprintf("request-concurrent-%03d", i), fmt.Sprintf("sha256:concurrent-%03d", i), "extension-concurrent")
+			_, created, err := repository.CreateOrGetOperationWithConfirmationNonce(context.Background(), op, "shared-nonce-id", "", "")
+			if err != nil {
+				errorsSeen <- err
+				return
+			}
+			results <- created
+		}(i)
+	}
+	wait.Wait()
+	close(errorsSeen)
+	close(results)
+	successCount := 0
+	for created := range results {
+		if created {
+			successCount++
+		}
+	}
+	if successCount != 1 {
+		t.Fatalf("expected exactly one successful creation, got %d", successCount)
+	}
+	conflictCount := 0
+	for range errorsSeen {
+		conflictCount++
+	}
+	if conflictCount != workers-1 {
+		t.Fatalf("expected %d conflicts, got %d", workers-1, conflictCount)
+	}
+}

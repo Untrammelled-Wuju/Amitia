@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,6 +38,7 @@ import (
 	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
 	processingworkspace "github.com/u-ai/backend/internal/desktoppet/processing/workspace"
 	"github.com/u-ai/backend/internal/desktoppet/quality"
+	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
 	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
 	qualityinput "github.com/u-ai/backend/internal/desktoppet/quality/input"
@@ -130,6 +132,10 @@ type AppServices struct {
 	Temporal              *temporal.Service
 	RelTimeCoordinator    *temporal.RelationshipTimeCoordinator
 	OwnershipGuard        security.OwnershipGuard
+	PathRegistry          *security.PathRootRegistry
+	ImportStagingRepo     security.ImportStagingRepository
+	Readiness             *readiness.ReadinessService
+	SafeMode              *readiness.SafeModeController
 	MCPRepository         *mcp.Repository
 	MCPConnections        *mcpmanager.Manager
 	MCPAuth               *mcpauth.Manager
@@ -178,7 +184,7 @@ func (a reflectionMemoryServiceAdapter) CreateReflectionMemory(req interaction.R
 	return err
 }
 
-func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
+func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, error) {
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
 	}
@@ -529,7 +535,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		MeasurementEngine: qualityMeasurementEngine,
 	})
 	if err != nil {
-		log.Error("failed to create quality service: ", err)
+		return nil, fmt.Errorf("create quality service: %w", err)
+	}
+	if qualitySvc == nil {
+		return nil, errors.New("quality service is nil")
 	}
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
 
@@ -585,62 +594,38 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 30*time.Second)
 	go bridgeRecoveryWorker.Start(context.Background())
 
-	processingWorker.SetRevisionPromoter(func(processingTaskID, actionKey, userID string) error {
-		task, taskErr := processingRepo.GetProcessingTask(processingTaskID)
-		if taskErr != nil {
-			return fmt.Errorf("获取ProcessingTask失败: %w", taskErr)
-		}
-		action, actErr := processingRepo.GetProcessingActionByActionKey(processingTaskID, actionKey)
-		if actErr != nil {
-			return fmt.Errorf("获取ProcessingAction失败: %w", actErr)
-		}
-		procRev, revErr := processingRepo.GetActiveRevision(action.ID)
-		if revErr != nil {
-			return fmt.Errorf("获取ActiveRevision失败: %w", revErr)
-		}
-		if procRev == nil {
-			return fmt.Errorf("ProcessingRevision不存在: actionId=%s", action.ID)
-		}
-
-		characterID := task.CharacterID
-		if characterID == "" {
-			characterID = task.UserID
-		}
-
-		anchorJSON := ""
-		if action.AnchorType != "" {
-			anchorJSON = fmt.Sprintf(`{"x":%g,"y":%g,"space":"normalized_canvas"}`, action.AnchorX, action.AnchorY)
-		}
-
-		eventID := fmt.Sprintf("prc-%s-%s", procRev.ID, actionKey)
-		payload := revisioncommit.InboxEntryPayload{
-			UserID:               userID,
-			CharacterID:          characterID,
-			ProcessingTaskID:     processingTaskID,
-			ProcessingActionID:   action.ID,
-			ProcessingAttemptID:  procRev.ProcessingAttemptID,
-			ProcessingRevisionID: procRev.ID,
-			ActionKey:            actionKey,
-			ActionConfigJSON:     procRev.ConfigSnapshot,
-			ActionConfigHash:     procRev.ConfigHash,
-			ActionSpecVersion:    "",
-			ActionSpecHash:       "",
-			PlaybackMode:         action.LoopType,
-			FPS:                  action.FPS,
-			FrameDurationMS:      action.FrameDurationMS,
-			LoopType:             action.LoopType,
-			AnchorJSON:           anchorJSON,
-			PromotionPolicy:      baseline.PromotionPolicyAlways,
-			CreatedBy:            userID,
-		}
-		return bridgeProcessor.SubmitToInbox(context.Background(), eventID, payload)
-	})
-
 	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
 	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
 	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
+
+	pathRegistry := security.NewPathRootRegistry()
+	_ = pathRegistry.Register(security.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
+	importStagingRepo := security.NewImportStagingRepository(ctx.DB)
+
+	safeModeCtrl := readiness.NewSafeModeController()
+	var readinessSvc *readiness.ReadinessService
+	if desktopPetRuntime != nil {
+		if svc, err := readiness.NewFullStartupReadinessService(readiness.StartupReadinessDeps{
+			DB:         ctx.DB,
+			Extension:  extensionRuntime,
+			MigrationReady: func() error {
+				return nil
+			},
+			LegacyChainReady: func() error {
+				if !desktoppet.LegacyPackageWritesDisabled {
+					return errors.New("legacy package writes not disabled")
+				}
+				return nil
+			},
+		}); err == nil {
+			readinessSvc = svc
+		}
+	}
+	if readinessSvc == nil {
+		readinessSvc = readiness.NewStartupReadinessService(ctx.DB, extensionRuntime)
+	}
 
 	leaseManager := releasebuild.NewLeaseManager()
 	journalManager := releasebuild.NewPublishJournalManager(releaseRepo)
@@ -663,7 +648,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		log.Error("failed to assemble behavior engine: ", assembleErr)
 	} else {
 		behaviorSvc = behaviorAssembled.Service
-		runtimeSinkHolder.Set(NewBehaviorRuntimeEventSink(installationRepo, behaviorAssembled.Engine))
 	}
 
 	var adapterManager *adapters.AdapterManager
@@ -719,6 +703,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		Temporal:              temporalSvc,
 		RelTimeCoordinator:    relTimeCoordinator,
 		OwnershipGuard:        security.NewSQLiteOwnershipGuard(ctx.DB),
+		PathRegistry:          pathRegistry,
+		ImportStagingRepo:     importStagingRepo,
+		Readiness:             readinessSvc,
+		SafeMode:              safeModeCtrl,
 		MCPRepository:         mcpRepository,
 		MCPConnections:        connectionManager,
 		MCPAuth:               oauthManager,
@@ -729,7 +717,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) *AppServices {
 		MCPHost:               hostService,
 		MCPInteractions:       interactionBroker,
 		MCPDependencies:       dependencyService,
-	}
+	}, nil
 }
 
 func mcpDataDirectory(ctx *app.AppContext) string {

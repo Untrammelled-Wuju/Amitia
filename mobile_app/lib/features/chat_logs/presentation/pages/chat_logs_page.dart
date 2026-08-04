@@ -55,7 +55,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '聊天记录',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
             icon: Icons.summarize_outlined,

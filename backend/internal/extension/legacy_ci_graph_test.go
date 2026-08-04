@@ -25,32 +25,14 @@ func TestProductionSourceExcludesLegacyWriteImplementations(t *testing.T) {
 		"legacyUninstallPackage(",
 	}
 	exemptFiles := map[string]bool{
-		"package_legacy_writer.go":          true,
-		"package_legacy_lifecycle.go":       true,
-		"package_recovery.go":               true,
-		"package_manager_test.go":           true,
-		"package_baseline_test.go":          true,
-		"legacy_ci_graph_test.go":           true,
-		"legacy_final_zero_test.go":         true,
-		"openapi_routes_test.go":            true,
-		"package_service.go":                true,
-		"package_handler.go":                true,
-		"package_installer.go":              true,
-		"package_lifecycle.go":              true,
-		"package_repository.go":             true,
-		"package_parser.go":                 true,
-		"package_archive.go":                true,
-		"package_protocol.go":               true,
-		"package_kernel_facade.go":          true,
-		"package_test_runner.go":            true,
-		"legacy_bridge.go":                  true,
-		"legacy_exports.go":                 true,
-		"package_kernel_migration_write.go": true,
-		"lifecycle_service.go":              true,
-		"legacy_tool_adapter.go":            true,
-		"extension_read_model.go":           true,
-		"kernel_lifecycle_proxy.go":         true,
-		"runtime_legacy.go":                 true,
+		"legacy_ci_graph_test.go":   true,
+		"legacy_final_zero_test.go": true,
+		"openapi_routes_test.go":    true,
+		"legacy_tool_adapter.go":    true,
+		"legacy_tool_snapshot_test.go": true,
+		"package_kernel_migration.go": true,
+		"retired_legacy_routes.go":  true,
+		"production_router_legacy_isolation_test.go": true,
 	}
 	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -83,36 +65,6 @@ func TestProductionSourceExcludesLegacyWriteImplementations(t *testing.T) {
 	}
 }
 
-func TestLegacyWriteFilesHaveBuildTag(t *testing.T) {
-	legacyFiles := []string{
-		"package_legacy_writer.go",
-		"package_legacy_lifecycle.go",
-		"package_recovery.go",
-		"package_service.go",
-		"package_installer.go",
-		"package_lifecycle.go",
-		"legacy_bridge.go",
-		"extension_read_model.go",
-		"kernel_lifecycle_proxy.go",
-		"runtime_legacy.go",
-	}
-	root, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range legacyFiles {
-		path := filepath.Join(root, name)
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("legacy file not found: %s", name)
-		}
-		source := string(raw)
-		if !strings.Contains(source, "//go:build legacy_migration") {
-			t.Fatalf("legacy file %s missing //go:build legacy_migration tag", name)
-		}
-	}
-}
-
 func TestProductionDependencyGraphExcludesLegacyMigration(t *testing.T) {
 	root, err := filepath.Abs(".")
 	if err != nil {
@@ -126,15 +78,6 @@ func TestProductionDependencyGraphExcludesLegacyMigration(t *testing.T) {
 		"MigrateLegacyPackageData",
 	}
 	forbiddenFiles := []string{
-		"package_service.go",
-		"package_installer.go",
-		"package_lifecycle.go",
-		"package_handler.go",
-		"package_kernel_facade.go",
-		"legacy_bridge.go",
-		"extension_read_model.go",
-		"kernel_lifecycle_proxy.go",
-		"runtime_legacy.go",
 		"production_router_legacy_isolation_test.go",
 	}
 	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
@@ -168,22 +111,6 @@ func TestProductionDependencyGraphExcludesLegacyMigration(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestPackageHandlerIsolatedToLegacyMigration(t *testing.T) {
-	root, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(root, "package_handler.go")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := string(raw)
-	if !strings.Contains(source, "//go:build legacy_migration") {
-		t.Fatal("package_handler.go must have //go:build legacy_migration tag (HTTP write endpoints isolated)")
 	}
 }
 

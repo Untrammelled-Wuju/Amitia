@@ -8,17 +8,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	legacymigration "github.com/u-ai/backend/internal/extension/package_legacy_migration"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/database/mysql"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
+
+var version = "dev"
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `amitia-legacy-migrate - Legacy Package Migration CLI
@@ -30,6 +34,7 @@ Commands:
   detect     Detect legacy packages and print report
   migrate    Execute full legacy package migration to kernel
   status     Show migration status for all legacy packages
+  version    Print migration tool version
   help       Show this help message
 
 Flags:
@@ -71,11 +76,17 @@ func parseArgs(args []string) cliOptions {
 
 func main() {
 	opts := parseArgs(os.Args[1:])
+	if opts.command == "version" {
+		fmt.Println(version)
+		return
+	}
 	if opts.command == "help" || opts.command == "--help" || opts.command == "-h" {
 		usage()
 		os.Exit(0)
 	}
-	if opts.command != "detect" && opts.command != "migrate" && opts.command != "status" {
+	if opts.command != "detect" &&
+		opts.command != "migrate" &&
+		opts.command != "status" {
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", opts.command)
 		usage()
 		os.Exit(1)
@@ -146,22 +157,31 @@ func main() {
 		log.Warn("kernel recovery warning: ", err)
 	}
 
-	kernelProxy := extension.NewKernelLifecycleProxy(extRuntime.Kernel)
-	if err := extRuntime.AttachPackageKernelProxy(kernelProxy); err != nil {
-		fmt.Fprintf(os.Stderr, "kernel proxy attach failed: %v\n", err)
+	sourceRepository, err := legacymigration.NewSourceRepository(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "legacy source repository init failed: %v\n", err)
 		os.Exit(1)
 	}
-	if err := extRuntime.RunPackageStartupCleanup(rootCtx); err != nil {
-		log.Warn("package startup cleanup warning: ", err)
+
+	migrationTarget, err := kernel.NewKernelLegacyMigrationTarget(extRuntime.Kernel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "legacy migration target init failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	migrationService, err := legacymigration.NewMigrationService(sourceRepository, migrationTarget)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "legacy migration service init failed: %v\n", err)
+		os.Exit(1)
 	}
 
 	switch opts.command {
 	case "detect":
-		runDetect(rootCtx, extRuntime)
+		runDetect(rootCtx, migrationService)
 	case "migrate":
-		runMigrate(rootCtx, extRuntime, opts.yes)
+		runMigrate(rootCtx, migrationService, opts.yes)
 	case "status":
-		runStatus(rootCtx, extRuntime)
+		runStatus(rootCtx, migrationService)
 	}
 }
 
@@ -193,8 +213,8 @@ func applyMigrations(db *gorm.DB) error {
 	return nil
 }
 
-func runDetect(ctx context.Context, extRuntime *extension.Runtime) {
-	report, err := extRuntime.DetectLegacyPackagesReadOnly(ctx)
+func runDetect(ctx context.Context, service *legacymigration.MigrationService) {
+	report, err := service.Detect(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "legacy package detection failed: %v\n", err)
 		os.Exit(1)
@@ -204,6 +224,7 @@ func runDetect(ctx context.Context, extRuntime *extension.Runtime) {
 	fmt.Printf("Total extensions:     %d\n", report.Total)
 	fmt.Printf("Completed migrations: %d\n", report.Completed)
 	fmt.Printf("Pending manual:       %d\n", report.PendingManual)
+	fmt.Printf("Blocked:              %d\n", report.Blocked)
 	if len(report.PendingExtensions) > 0 {
 		fmt.Printf("\nPending extensions:\n")
 		for _, extID := range report.PendingExtensions {
@@ -216,8 +237,8 @@ func runDetect(ctx context.Context, extRuntime *extension.Runtime) {
 	}
 }
 
-func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm bool) {
-	report, err := extRuntime.DetectLegacyPackagesReadOnly(ctx)
+func runMigrate(ctx context.Context, service *legacymigration.MigrationService, skipConfirm bool) {
+	report, err := service.Detect(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pre-migration detection failed: %v\n", err)
 		os.Exit(1)
@@ -227,6 +248,7 @@ func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm 
 	fmt.Printf("Total extensions:     %d\n", report.Total)
 	fmt.Printf("Completed migrations: %d\n", report.Completed)
 	fmt.Printf("Pending manual:       %d\n", report.PendingManual)
+	fmt.Printf("Blocked:              %d\n", report.Blocked)
 	if len(report.PendingExtensions) > 0 {
 		fmt.Printf("\nExtensions to migrate:\n")
 		for _, extID := range report.PendingExtensions {
@@ -249,12 +271,12 @@ func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm 
 	}
 	fmt.Printf("\nStarting migration at %s...\n", time.Now().Format(time.RFC3339))
 	startTime := time.Now()
-	if err := extRuntime.MigrateLegacyPackages(ctx); err != nil {
+	if err := service.MigrateAll(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "migration execution failed: %v\n", err)
 		os.Exit(1)
 	}
 	elapsed := time.Since(startTime)
-	finalReport, _ := extRuntime.DetectLegacyPackagesReadOnly(ctx)
+	finalReport, _ := service.Detect(ctx)
 	fmt.Printf("\nMigration completed in %s\n", elapsed)
 	fmt.Printf("Completed: %d / %d\n", finalReport.Completed, finalReport.Total)
 	fmt.Printf("Pending:   %d\n", finalReport.PendingManual)
@@ -264,32 +286,37 @@ func runMigrate(ctx context.Context, extRuntime *extension.Runtime, skipConfirm 
 	}
 }
 
-func runStatus(ctx context.Context, extRuntime *extension.Runtime) {
-	metrics := extRuntime.LegacyPackageMetrics()
-	fmt.Printf("Legacy Migration Status\n")
-	fmt.Printf("=======================\n\n")
-	fmt.Printf("Metrics:\n")
-	for key, value := range metrics {
-		fmt.Printf("  %-35s %d\n", key+":", value)
-	}
-	fmt.Printf("\nDetection:\n")
-	report, err := extRuntime.DetectLegacyPackagesReadOnly(ctx)
+func runStatus(ctx context.Context, service *legacymigration.MigrationService) {
+	report, err := service.Detect(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "detection failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("  Total extensions:     %d\n", report.Total)
-	fmt.Printf("  Completed migrations: %d\n", report.Completed)
-	fmt.Printf("  Pending manual:       %d\n", report.PendingManual)
-	if len(report.PendingExtensions) > 0 {
-		fmt.Printf("\nPending extensions:\n")
-		for _, extID := range report.PendingExtensions {
-			fmt.Printf("  - %s\n", extID)
-		}
+
+	checkpoints, err := service.Checkpoints(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "checkpoint query failed: %v\n", err)
+		os.Exit(1)
 	}
-	legacyWriteCalls := metrics["package_legacy_write_calls"]
-	legacyWriteAttempts := metrics["legacy_write_attempts"]
-	if legacyWriteCalls > 0 || legacyWriteAttempts > 0 {
-		fmt.Printf("\nWARNING: Legacy write calls detected (%d calls, %d attempts)\n", legacyWriteCalls, legacyWriteAttempts)
+
+	fmt.Printf("Legacy Migration Status\n")
+	fmt.Printf("=======================\n\n")
+	fmt.Printf("Total extensions:     %d\n", report.Total)
+	fmt.Printf("Completed migrations: %d\n", report.Completed)
+	fmt.Printf("Pending manual:       %d\n", report.PendingManual)
+	fmt.Printf("Blocked:              %d\n", report.Blocked)
+
+	sort.Slice(checkpoints, func(i, j int) bool {
+		return checkpoints[i].ExtensionID < checkpoints[j].ExtensionID
+	})
+
+	fmt.Printf("\nCheckpoints:\n")
+	for _, checkpoint := range checkpoints {
+		fmt.Printf("  %-40s %-20s step=%s fencing=%d\n",
+			checkpoint.ExtensionID,
+			checkpoint.State,
+			checkpoint.CurrentStep,
+			checkpoint.FencingToken,
+		)
 	}
 }

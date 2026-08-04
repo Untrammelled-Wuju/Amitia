@@ -46,7 +46,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '日程提醒',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
             icon: Icons.add,

@@ -96,11 +96,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, conn *Connection) error {
 			log.Logger.Errorf("runtime reconciler: sync failed runtimeID=%s status=%s err=%v", runtimeID, result.Status, result.Err)
 			return result.Err
 		}
-		if result.Status == contracts.ResultApplied || result.Status == contracts.ResultAccepted {
+		if result.Status == contracts.ResultApplied {
 			log.Logger.Infof("runtime reconciler: sync applied runtimeID=%s appliedRev=%d", runtimeID, result.AppliedRev)
 			r.updateActualStateFromSync(runtimeID, sessionID, result)
 			conn.SetState(SessionStateReady)
 			r.cleanupSupersededCommands(ctx, runtimeID, desired.DesiredRevision)
+			return nil
+		}
+		if result.Status == contracts.ResultAccepted {
+			log.Logger.Infof("runtime reconciler: sync accepted runtimeID=%s", runtimeID)
+			conn.SetState(SessionStateSyncing)
 			return nil
 		}
 		if result.Status == contracts.ResultDuplicate {

@@ -46,7 +46,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '桌宠中心',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
       ),
       body: SafeArea(
         top: false,

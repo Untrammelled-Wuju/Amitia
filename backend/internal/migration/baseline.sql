@@ -5160,19 +5160,31 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands_v2 (
   runtime_id TEXT NOT NULL DEFAULT '',
   runtime_session_id TEXT NOT NULL DEFAULT '',
   command_type TEXT NOT NULL DEFAULT '',
+  durability TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT '',
   revision INTEGER NOT NULL DEFAULT 0,
+  desired_revision INTEGER NOT NULL DEFAULT 0,
+  settings_revision INTEGER NOT NULL DEFAULT 0,
   device_sequence INTEGER NOT NULL DEFAULT 0,
   idempotency_key TEXT NOT NULL DEFAULT '',
+  coalesce_key TEXT NOT NULL DEFAULT '',
   runtime_correlation_id TEXT NOT NULL DEFAULT '',
   runtime_playback_id TEXT NOT NULL DEFAULT '',
   payload TEXT NOT NULL DEFAULT '{}',
+  payload_json TEXT NOT NULL DEFAULT '{}',
   payload_hash TEXT NOT NULL DEFAULT '',
+  payload_schema_version INTEGER NOT NULL DEFAULT 0,
   hash_code INTEGER NOT NULL DEFAULT 0,
   attempt INTEGER NOT NULL DEFAULT 0,
+  installation_id TEXT NOT NULL DEFAULT '',
+  pet_id TEXT NOT NULL DEFAULT '',
+  release_id TEXT NOT NULL DEFAULT '',
+  expires_at TEXT NOT NULL DEFAULT '',
+  last_attempt_id TEXT NOT NULL DEFAULT '',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
   inserted_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
   updated_at TEXT DEFAULT (datetime('now')),
   dispatch_at TEXT NOT NULL DEFAULT '',
   transport_dispatched_at TEXT NOT NULL DEFAULT '',
@@ -5183,11 +5195,94 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands_v2 (
   completed_at TEXT NOT NULL DEFAULT '',
   superseded_at TEXT NOT NULL DEFAULT '',
   superseded_by TEXT NOT NULL DEFAULT '',
+  superseded_by_command_id TEXT NOT NULL DEFAULT '',
   UNIQUE(user_id, device_id, idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_type ON desktop_pet_runtime_commands_v2(user_id, device_id, command_type);
 CREATE INDEX IF NOT EXISTS idx_rtcv2_status ON desktop_pet_runtime_commands_v2(status, inserted_at);
 CREATE INDEX IF NOT EXISTS idx_rtcv2_device_seq ON desktop_pet_runtime_commands_v2(user_id, device_id, device_sequence);
+CREATE INDEX IF NOT EXISTS idx_rtcv2_user_device_runtime_status ON desktop_pet_runtime_commands_v2(user_id, device_id, runtime_id, status);
+
+--- 来源: desktop_pet_import_stagings.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_import_stagings (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL,
+  source_filename TEXT NOT NULL DEFAULT '',
+  source_type TEXT NOT NULL DEFAULT '',
+  source_content_hash TEXT NOT NULL DEFAULT '',
+  source_bytes INTEGER NOT NULL DEFAULT 0,
+  root_kind TEXT NOT NULL DEFAULT '',
+  storage_key TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  quarantine_path TEXT NOT NULL DEFAULT '',
+  inventory_hash TEXT NOT NULL DEFAULT '',
+  inventory_json TEXT NOT NULL DEFAULT '[]',
+  state_revision INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumption_started_at TEXT NOT NULL DEFAULT '',
+  consumed_at TEXT NOT NULL DEFAULT '',
+  rejected_reason TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_dpis_owner_status ON desktop_pet_import_stagings(owner_user_id, status);
+
+--- 来源: desktop_pet_migration_control.go ---
+CREATE TABLE IF NOT EXISTS desktop_pet_migration_operations (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  metadata TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS desktop_pet_migration_checkpoints (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL,
+  step_name TEXT NOT NULL,
+  last_primary_key TEXT NOT NULL DEFAULT '',
+  processed_count INTEGER NOT NULL DEFAULT 0,
+  input_hash TEXT NOT NULL DEFAULT '',
+  output_hash TEXT NOT NULL DEFAULT '',
+  conflict_count INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS desktop_pet_migration_conflicts (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL,
+  entity_kind TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  conflict_reason TEXT NOT NULL,
+  detected_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS desktop_pet_migration_locks (
+  lock_name TEXT PRIMARY KEY,
+  owner_instance_id TEXT NOT NULL,
+  lease_expires_at TEXT NOT NULL,
+  heartbeat_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS desktop_pet_read_cutovers (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL,
+  step_name TEXT NOT NULL,
+  cutover_at TEXT NOT NULL,
+  verified INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS desktop_pet_write_cutovers (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL,
+  step_name TEXT NOT NULL,
+  cutover_at TEXT NOT NULL,
+  verified INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_dpmc_operation ON desktop_pet_migration_checkpoints(operation_id);
+CREATE INDEX IF NOT EXISTS idx_dpmc_conflict_op ON desktop_pet_migration_conflicts(operation_id);
+CREATE INDEX IF NOT EXISTS idx_dpmc_lock_expiry ON desktop_pet_migration_locks(lease_expires_at);
+CREATE INDEX IF NOT EXISTS idx_dprc_operation ON desktop_pet_read_cutovers(operation_id);
+CREATE INDEX IF NOT EXISTS idx_dpmc_write_op ON desktop_pet_write_cutovers(operation_id);
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (
@@ -5410,6 +5505,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_bootstrap_tickets (
     ticket_hash TEXT UNIQUE NOT NULL,
     user_id TEXT NOT NULL DEFAULT '',
     device_id TEXT NOT NULL DEFAULT '',
+    runtime_id TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
     expires_at TEXT NOT NULL DEFAULT '',
     consumed_at TEXT NOT NULL DEFAULT '',
@@ -5421,6 +5517,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_bootstrap_tickets (
 CREATE INDEX IF NOT EXISTS idx_bt_user ON desktop_pet_runtime_bootstrap_tickets(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_bt_device ON desktop_pet_runtime_bootstrap_tickets(device_id);
 CREATE INDEX IF NOT EXISTS idx_bt_status ON desktop_pet_runtime_bootstrap_tickets(status);
+CREATE INDEX IF NOT EXISTS idx_dprbt_runtime ON desktop_pet_runtime_bootstrap_tickets(runtime_id);
 
 ---- 来源: desktop_session.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_token_rotation_journal (

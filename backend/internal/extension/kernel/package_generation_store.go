@@ -302,6 +302,23 @@ func (s *PackageGenerationStore) VerifyGeneration(ctx context.Context, current P
 	return nil
 }
 
+func (s *PackageGenerationStore) ComputeGenerationTreeHash(ctx context.Context, extensionID, generationID string) (string, error) {
+	if err := s.validateRoot(); err != nil {
+		return "", err
+	}
+	if err := validatePathSegment("extension ID", extensionID, true); err != nil {
+		return "", err
+	}
+	if err := validatePathSegment("generation ID", generationID, false); err != nil {
+		return "", err
+	}
+	generation := filepath.Join(s.root, "installations", safeDirectoryName(extensionID), "generations", generationID)
+	if !pathWithin(generation, filepath.Join(s.root, "installations")) {
+		return "", ErrPackageGenerationUnsafe
+	}
+	return computeGenerationTreeHash(ctx, generation)
+}
+
 func (s *PackageGenerationStore) QuarantineGeneration(ctx context.Context, current PackageGenerationCurrent) (string, error) {
 	if err := validateCurrent(current); err != nil {
 		return "", err

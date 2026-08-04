@@ -377,7 +377,12 @@ export function useImmersiveOnboarding() {
   async function checkAdminExists() {
     try {
       const apiBase = await getApiBaseURL();
-      const res = await fetch(`${apiBase}/api/auth/status`);
+      const res = await fetch(`${apiBase}/api/public/auth/status`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
       if (!res.ok) return;
       const json = await res.json();
       hasAdmin.value = !!(json?.data?.hasAdmin || json?.hasAdmin);
@@ -399,7 +404,7 @@ export function useImmersiveOnboarding() {
 
       if (!data.isLogin) {
         try {
-          await post("/api/auth/setup", {
+          await post("/api/public/auth/setup", {
             username: data.username,
             password: data.password,
           });
@@ -412,7 +417,7 @@ export function useImmersiveOnboarding() {
         }
       }
 
-      const loginRes = await post<any>("/api/auth/login", {
+      const loginRes = await post<any>("/api/public/auth/login", {
         username: data.username,
         password: data.password,
       });

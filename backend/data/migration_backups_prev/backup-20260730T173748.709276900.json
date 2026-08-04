@@ -1,0 +1,38 @@
+{
+  "id": "backup-20260730T173748.709276900",
+  "created_at": "2026-07-30T17:37:48Z",
+  "source_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\app.db",
+  "backup_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\migration_backups\\backup-20260730T173748.709276900.db",
+  "components": [
+    {
+      "role": "main",
+      "source_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\app.db",
+      "backup_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\migration_backups\\backup-20260730T173748.709276900.db",
+      "restore_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\app.db",
+      "size": 3272704,
+      "checksum": "56f7c5215a4bda57a69c9c33f82574d571eacad340b75a274637dad2dc4822ed",
+      "optional": false,
+      "source_exists": true
+    },
+    {
+      "role": "wal",
+      "source_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\app.db-wal",
+      "backup_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\migration_backups\\backup-20260730T173748.709276900.db-wal",
+      "restore_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\app.db-wal",
+      "size": 0,
+      "checksum": "",
+      "optional": true,
+      "source_exists": false
+    },
+    {
+      "role": "shm",
+      "source_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\app.db-shm",
+      "backup_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\migration_backups\\backup-20260730T173748.709276900.db-shm",
+      "restore_path": "D:\\桌面\\跟进项目\\U-Ai\\backend\\data\\app.db-shm",
+      "size": 0,
+      "checksum": "",
+      "optional": true,
+      "source_exists": false
+    }
+  ]
+}

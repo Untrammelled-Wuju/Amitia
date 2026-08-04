@@ -22,7 +22,7 @@ class ShellDrawerScope extends InheritedWidget {
   bool updateShouldNotify(ShellDrawerScope oldWidget) => openDrawer != oldWidget.openDrawer;
 }
 
-class AmitiaScaffold extends StatelessWidget {
+class AmitiaScaffold extends StatefulWidget {
   final Widget? body;
   final PreferredSizeWidget? appBar;
   final Widget? floatingActionButton;
@@ -43,15 +43,58 @@ class AmitiaScaffold extends StatelessWidget {
   });
 
   @override
+  State<AmitiaScaffold> createState() => _AmitiaScaffoldState();
+}
+
+class _AmitiaScaffoldState extends State<AmitiaScaffold> {
+  DateTime? _lastBackPress;
+
+  void _showToast(String msg) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: body,
-      appBar: appBar,
-      floatingActionButton: floatingActionButton,
-      bottomNavigationBar: bottomNavigationBar,
-      drawer: drawer,
-      backgroundColor: backgroundColor ?? context.backgroundPrimary,
-      resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+    final router = GoRouter.of(context);
+    final currentLocation = router.routerDelegate.currentConfiguration.fullPath;
+    final isChatPage = currentLocation == AppRoutes.chat;
+    final isTopLevelPage = currentLocation == '/onboarding' || currentLocation == '/login' || currentLocation == '/privacy';
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (isChatPage || isTopLevelPage) {
+          final now = DateTime.now();
+          if (_lastBackPress != null && now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
+            _lastBackPress = null;
+            Navigator.of(context).maybePop();
+          } else {
+            _lastBackPress = now;
+            _showToast('再按一次退出应用');
+          }
+        } else if (currentLocation != '/') {
+          router.go(AppRoutes.chat);
+        } else {
+          Navigator.of(context).maybePop();
+        }
+      },
+      child: Scaffold(
+        body: widget.body,
+        appBar: widget.appBar,
+        floatingActionButton: widget.floatingActionButton,
+        bottomNavigationBar: widget.bottomNavigationBar,
+        drawer: widget.drawer,
+        backgroundColor: widget.backgroundColor ?? context.backgroundPrimary,
+        resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
+      ),
     );
   }
 }
@@ -91,10 +134,14 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () {
-            if (context.canPop()) {
-              context.pop();
+            final currentLocation = GoRouter.of(context).routerDelegate.currentConfiguration.fullPath;
+            if (currentLocation == AppRoutes.chat ||
+                currentLocation == '/onboarding' ||
+                currentLocation == '/login' ||
+                currentLocation == '/privacy') {
+              Navigator.of(context).maybePop();
             } else {
-              context.go(fallbackRoute);
+              GoRouter.of(context).go(AppRoutes.chat);
             }
           },
         );

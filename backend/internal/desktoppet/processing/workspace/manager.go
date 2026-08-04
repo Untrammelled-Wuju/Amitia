@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/processing/artifact"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
 type WorkspaceManager struct {
@@ -177,7 +178,7 @@ func (m *WorkspaceManager) AtomicPublish(stagingPath, finalPath string) error {
 
 	if err := os.Rename(stagingPath, finalPath); err != nil {
 		if _, statErr := os.Stat(finalPath); statErr == nil {
-			if rmErr := os.RemoveAll(finalPath); rmErr != nil {
+			if rmErr := security.SafeRemoveTree(finalPath); rmErr != nil {
 				return fmt.Errorf("workspace: remove existing final path %s: %w", finalPath, rmErr)
 			}
 		}
@@ -195,7 +196,7 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 	}
 	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
-		if err := os.RemoveAll(dir); err != nil {
+		if err := security.SafeRemoveTree(dir); err != nil {
 			lastErr = err
 			time.Sleep(200 * time.Millisecond)
 			continue

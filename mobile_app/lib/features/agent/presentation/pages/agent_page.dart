@@ -209,7 +209,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       appBar: AmitiaAppBar(
         title: 'Agent',
         centerTitle: true,
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
             icon: Icons.add_task_outlined,
@@ -256,44 +256,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                     },
                   ),
           ),
-          _buildQuickTasks(),
         ],
-      ),
-    );
-  }
-
-  Widget _buildQuickTasks() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: context.surfacePrimary,
-        border: Border(top: BorderSide(color: context.borderSecondary, width: 1)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('快捷任务', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.md),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: AppSpacing.sm,
-                crossAxisSpacing: AppSpacing.sm,
-                childAspectRatio: 2.8,
-              ),
-              itemCount: MockData.quickTasks.length,
-              itemBuilder: (context, index) {
-                final task = MockData.quickTasks[index];
-                return _QuickTaskItem(task: task, onTap: () => _showCreateTaskSheet());
-              },
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -513,59 +476,6 @@ class _TaskCard extends StatelessWidget {
   }
 }
 
-class _QuickTaskItem extends StatelessWidget {
-  final QuickTask task;
-  final VoidCallback onTap;
-
-  const _QuickTaskItem({required this.task, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: context.surfaceSecondary,
-          borderRadius: AppRadius.brMedium,
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: context.accentSoft,
-                borderRadius: AppRadius.brSmall,
-              ),
-              child: Icon(task.icon, size: 18, color: context.accentPrimary),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      task.title,
-                      style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(task.category, style: AppTypography.label(context)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 const List<String> _abilityOptions = [
   '文件系统',
   'Web 搜索',
@@ -576,6 +486,15 @@ const List<String> _abilityOptions = [
   '数据库',
   '通知读取',
 ];
+
+const Map<String, List<String>> _quickTaskAbilities = {
+  '控制手机': ['系统操作', '通知读取'],
+  '处理文件': ['文件系统'],
+  '打开工作区': ['文件系统', '系统操作'],
+  '新建工作流': ['代码执行', '系统操作'],
+  '数据分析': ['数据分析', '文本生成'],
+  '信息搜索': ['Web 搜索'],
+};
 
 class _CreateTaskSheet extends StatefulWidget {
   final void Function(String title, String description, List<String> abilities, int stepCount) onCreate;
@@ -591,6 +510,7 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
   final _descCtrl = TextEditingController();
   final List<String> _abilities = [];
   int _stepCount = 3;
+  QuickTask? _selectedQuickTask;
 
   @override
   void dispose() {
@@ -609,6 +529,28 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
     });
   }
 
+  void _selectQuickTask(QuickTask task) {
+    final abilities = _quickTaskAbilities[task.title] ?? ['文件系统'];
+    setState(() {
+      _selectedQuickTask = task;
+      _titleCtrl.text = task.title;
+      _descCtrl.text = '执行${task.title}任务';
+      _abilities.clear();
+      _abilities.addAll(abilities);
+      _stepCount = 3;
+    });
+  }
+
+  void _clearQuickTask() {
+    setState(() {
+      _selectedQuickTask = null;
+      _titleCtrl.clear();
+      _descCtrl.clear();
+      _abilities.clear();
+      _stepCount = 3;
+    });
+  }
+
   void _submit() {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
@@ -618,6 +560,102 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
     final desc = _descCtrl.text.trim();
     final abilities = _abilities.isEmpty ? ['文件系统'] : List<String>.from(_abilities);
     widget.onCreate(title, desc, abilities, _stepCount);
+  }
+
+  Widget _buildQuickTaskSelector() {
+    if (_selectedQuickTask != null) {
+      final task = _selectedQuickTask!;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: context.accentSoft,
+          borderRadius: AppRadius.brMedium,
+        ),
+        child: Row(
+          children: [
+            Icon(task.icon, size: 20, color: context.accentPrimary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(task.title, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600, color: context.accentPrimary)),
+                  Text(task.category, style: AppTypography.label(context)),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: _clearQuickTask,
+              child: Icon(Icons.close, size: 18, color: context.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('快捷任务', style: AppTypography.sectionTitle(context)),
+        const SizedBox(height: 8),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 2.5,
+          ),
+          itemCount: MockData.quickTasks.length,
+          itemBuilder: (context, index) {
+            final task = MockData.quickTasks[index];
+            return GestureDetector(
+              onTap: () => _selectQuickTask(task),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: context.surfaceSecondary,
+                  borderRadius: AppRadius.brMedium,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: context.accentSoft,
+                        borderRadius: AppRadius.brSmall,
+                      ),
+                      child: Icon(task.icon, size: 18, color: context.accentPrimary),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              task.title,
+                              style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(task.category, style: AppTypography.label(context)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
   @override
@@ -643,6 +681,8 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
               ),
               const SizedBox(height: 16),
               Text('新建任务', style: AppTypography.pageTitle(context)),
+              const SizedBox(height: 16),
+              _buildQuickTaskSelector(),
               const SizedBox(height: 16),
               Text('任务名称', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),

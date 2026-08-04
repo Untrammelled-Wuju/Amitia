@@ -21,6 +21,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/referenceasset"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/specs"
 	"github.com/u-ai/backend/internal/desktoppet/taskstate"
 	"github.com/u-ai/backend/internal/imageprovider"
@@ -1128,7 +1129,7 @@ func removeAllTaskDir(dir string) error {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			return nil
 		}
-		if err := os.RemoveAll(dir); err != nil {
+		if err := security.SafeRemoveTree(dir); err != nil {
 			lastErr = err
 		}
 		if _, err := os.Stat(dir); os.IsNotExist(err) {

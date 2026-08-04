@@ -83,14 +83,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		c.JSON(200, gin.H{"status": "alive"})
 	})
 
-	readinessSvc := readiness.NewStartupReadinessService(ctx.DB, services.Extension)
-
 	r.GET("/readyz", func(c *gin.Context) {
-		if readinessSvc == nil {
+		if services.Readiness == nil {
 			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "readiness service not initialized"}})
 			return
 		}
-		snapshot := readinessSvc.Snapshot()
+		snapshot := services.Readiness.Snapshot()
 		result := gin.H{
 			"status":        snapshot.OverallStatus,
 			"blockingCount": snapshot.BlockingCount,
@@ -271,6 +269,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) *gin.Engine {
 		quality.RegisterQualityRouter(apiGroup, services.QualityService, services.OwnershipGuard)
 		installation.RegisterRoutes(apiGroup, services.InstallationService, services.OwnershipGuard)
 		release.RegisterRoutes(apiGroup, services.NewReleaseService, services.OwnershipGuard)
+	release.RegisterImportStagingRoutes(apiGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard)
 		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)

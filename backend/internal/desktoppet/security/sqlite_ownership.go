@@ -525,12 +525,19 @@ func (g *SQLiteOwnershipGuard) RequireRuntimeCommand(ctx context.Context, actor 
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
+	if result.DeviceID == "" {
+		return nil, ErrNotFound
+	}
+	if result.RuntimeID == "" {
+		return nil, ErrNotFound
+	}
 	if result.UserID != actor.UserID && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &RuntimeCommandScope{
 		UserID:    result.UserID,
 		DeviceID:  result.DeviceID,
+		RuntimeID: result.RuntimeID,
 		CommandID: commandID,
 	}, nil
 }

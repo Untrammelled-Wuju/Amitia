@@ -59,19 +59,72 @@ func NewReadinessService() *ReadinessService {
 	}
 }
 
-func (s *ReadinessService) Register(checker ReadinessChecker) {
+func (s *ReadinessService) Register(checker ReadinessChecker) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, existing := range s.checkers {
+		if existing.Name() == checker.Name() {
+			return fmt.Errorf("duplicate readiness checker: %s", checker.Name())
+		}
+	}
 	s.checkers = append(s.checkers, checker)
+	return nil
+}
+
+func (s *ReadinessService) checkerNames() map[string]bool {
+	names := make(map[string]bool, len(s.checkers))
+	for _, c := range s.checkers {
+		names[c.Name()] = true
+	}
+	return names
+}
+
+var RequiredCheckerNames = []string{
+	"sqlite",
+	"surrealdb",
+	"qdrant",
+	"extension",
+	"desktop_session",
+	"ownership_guard",
+	"runtime_ticket",
+	"runtime_gateway",
+	"path_guard",
+	"generation_worker",
+	"processing_worker",
+	"quality_worker",
+	"installation_worker",
+	"behavior_worker",
+	"migration_state",
+	"legacy_chain",
 }
 
 func (s *ReadinessService) Snapshot() ReadinessSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	checks := make(map[string]CheckResult)
+	registered := make(map[string]bool, len(s.checkers))
 	var blocking, degraded int
 	overall := StatusReady
+
+	if len(s.checkers) == 0 {
+		overall = StatusBlocked
+		checks["_meta"] = CheckResult{
+			Name:     "_meta",
+			Status:   StatusBlocked,
+			Required: true,
+			Message:  "zero checkers registered",
+		}
+		return ReadinessSnapshot{
+			OverallStatus: overall,
+			Checks:        checks,
+			BlockingCount: 1,
+			DegradedCount: 0,
+			Timestamp:     s.nowFn().UTC().Format(time.RFC3339Nano),
+		}
+	}
+
 	for _, c := range s.checkers {
+		registered[c.Name()] = true
 		start := s.nowFn()
 		status, message := c.Evaluate()
 		duration := s.nowFn().Sub(start).Milliseconds()
@@ -94,6 +147,19 @@ func (s *ReadinessService) Snapshot() ReadinessSnapshot {
 			degraded++
 		}
 	}
+
+	for _, name := range RequiredCheckerNames {
+		if !registered[name] {
+			blocking++
+			checks[name] = CheckResult{
+				Name:     name,
+				Status:   StatusBlocked,
+				Required: true,
+				Message:  "required checker is not registered",
+			}
+		}
+	}
+
 	if blocking > 0 {
 		overall = StatusBlocked
 	} else if degraded > 0 {
@@ -239,11 +305,82 @@ func (c *ComponentChecker) Evaluate() (SystemStatus, string) { return c.evaluate
 
 func NewStartupReadinessService(db *gorm.DB, ext *extension.Runtime) *ReadinessService {
 	svc := NewReadinessService()
-	svc.Register(NewComponentChecker("sqlite", true, makeSQLitePingChecker(db)))
-	svc.Register(NewComponentChecker("surrealdb", true, makeSurrealPingChecker()))
-	svc.Register(NewComponentChecker("qdrant", true, makeQdrantPingChecker()))
-	svc.Register(NewComponentChecker("extension", true, makeExtensionPingChecker(ext)))
+	_ = svc.Register(NewComponentChecker("sqlite", true, makeSQLitePingChecker(db)))
+	_ = svc.Register(NewComponentChecker("surrealdb", true, makeSurrealPingChecker()))
+	_ = svc.Register(NewComponentChecker("qdrant", true, makeQdrantPingChecker()))
+	_ = svc.Register(NewComponentChecker("extension", true, makeExtensionPingChecker(ext)))
 	return svc
+}
+
+type StartupReadinessDeps struct {
+	DB                  *gorm.DB
+	Extension           *extension.Runtime
+	DesktopSessionReady func() error
+	OwnershipReady      func() error
+	RuntimeTicketReady  func() error
+	RuntimeGatewayReady func() error
+	PathGuardReady      func() error
+	WorkerRegistry      *WorkerRegistry
+	MigrationReady      func() error
+	LegacyChainReady    func() error
+}
+
+func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessService, error) {
+	svc := NewReadinessService()
+	register := func(name string, required bool, fn func() (SystemStatus, string)) error {
+		return svc.Register(NewComponentChecker(name, required, fn))
+	}
+	if err := register("sqlite", true, makeSQLitePingChecker(deps.DB)); err != nil {
+		return nil, err
+	}
+	if err := register("surrealdb", true, makeSurrealPingChecker()); err != nil {
+		return nil, err
+	}
+	if err := register("qdrant", true, makeQdrantPingChecker()); err != nil {
+		return nil, err
+	}
+	if err := register("extension", true, func() (SystemStatus, string) {
+		if deps.Extension == nil {
+			return StatusBlocked, "extension: runtime is not initialized"
+		}
+		return StatusReady, "extension: runtime is operational"
+	}); err != nil {
+		return nil, err
+	}
+	if err := register("desktop_session", true, wrapReadyFunc(deps.DesktopSessionReady, "desktop_session")); err != nil {
+		return nil, err
+	}
+	if err := register("ownership_guard", true, wrapReadyFunc(deps.OwnershipReady, "ownership_guard")); err != nil {
+		return nil, err
+	}
+	if err := register("runtime_ticket", true, wrapReadyFunc(deps.RuntimeTicketReady, "runtime_ticket")); err != nil {
+		return nil, err
+	}
+	if err := register("runtime_gateway", true, wrapReadyFunc(deps.RuntimeGatewayReady, "runtime_gateway")); err != nil {
+		return nil, err
+	}
+	if err := register("path_guard", true, wrapReadyFunc(deps.PathGuardReady, "path_guard")); err != nil {
+		return nil, err
+	}
+	if err := register("migration_state", true, wrapReadyFunc(deps.MigrationReady, "migration_state")); err != nil {
+		return nil, err
+	}
+	if err := register("legacy_chain", true, wrapReadyFunc(deps.LegacyChainReady, "legacy_chain")); err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
+
+func wrapReadyFunc(fn func() error, name string) func() (SystemStatus, string) {
+	return func() (SystemStatus, string) {
+		if fn == nil {
+			return StatusBlocked, name + ": ready checker not provided"
+		}
+		if err := fn(); err != nil {
+			return StatusBlocked, name + ": " + err.Error()
+		}
+		return StatusReady, name + ": ready"
+	}
 }
 
 func makeSQLitePingChecker(db *gorm.DB) func() (SystemStatus, string) {

@@ -118,7 +118,7 @@ async function handleLogin() {
 
   loading.value = true;
   try {
-    const res = await apiClient.post("/api/auth/login", {
+    const res = await apiClient.post("/api/public/auth/login", {
       username: name,
       password: pw,
     });

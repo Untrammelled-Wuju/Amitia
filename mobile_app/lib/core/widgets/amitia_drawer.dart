@@ -88,8 +88,11 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   }
 
   void _navigateTo(String route) {
-    GoRouter.of(context).go(route);
-    Navigator.of(context).pop();
+    Navigator.pop(context);
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      GoRouter.of(context).go(route);
+    });
   }
 
   _CharInfo _getCharacter(String id) {

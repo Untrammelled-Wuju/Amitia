@@ -16,6 +16,9 @@ import (
 
 type RuntimeDomainEvent struct {
 	EventType      string
+	RuntimeID      string
+	SessionID      string
+	DeviceID       string
 	InstallationID string
 	UserID         string
 	CharacterID    string
@@ -43,7 +46,7 @@ type Handler struct {
 	upgrader      websocket.Upgrader
 	onRegister    func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
 	onResult      func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
-	onEvent       func(msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
+	onEvent       func(conn *Connection, msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
 	onHeartbeat   func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
 }
 
@@ -79,7 +82,7 @@ func (h *Handler) SetBootstrapRepo(repo *BootstrapTicketRepository) {
 func (h *Handler) SetCallbacks(
 	onRegister func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error),
 	onResult func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload),
-	onEvent func(msg *contracts.RuntimeMessage, payload *contracts.EventPayload),
+	onEvent func(conn *Connection, msg *contracts.RuntimeMessage, payload *contracts.EventPayload),
 	onHeartbeat func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload),
 ) {
 	h.onRegister = onRegister
@@ -245,6 +248,11 @@ func (h *Handler) HandleRegister(conn *Connection, payload *contracts.RegisterPa
 }
 
 func (h *Handler) HandleResult(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload) {
+	if payload.Status == contracts.ResultAccepted {
+		log.Logger.Infof("runtime handler: command accepted commandId=%s runtimeID=%s", payload.CommandID, msg.RuntimeID)
+		return
+	}
+
 	result := &PendingResult{
 		CommandID:      payload.CommandID,
 		Status:         payload.Status,
@@ -262,6 +270,10 @@ func (h *Handler) HandleResult(msg *contracts.RuntimeMessage, payload *contracts
 		}
 	}
 	h.pending.Complete(result)
+
+	if payload.Status != contracts.ResultApplied {
+		return
+	}
 
 	if payload.ActualState != nil && msg.RuntimeID != "" && h.state != nil {
 		actual := payload.ActualState
@@ -289,7 +301,41 @@ func (h *Handler) HandleResult(msg *contracts.RuntimeMessage, payload *contracts
 	}
 }
 
-func (h *Handler) HandleEvent(msg *contracts.RuntimeMessage, payload *contracts.EventPayload) {
+func validateConnectionEnvelope(
+	conn *Connection,
+	msg *contracts.RuntimeMessage,
+) error {
+	if msg.RuntimeID != "" &&
+		msg.RuntimeID != conn.RuntimeID() {
+		return ErrRuntimeProtocolError
+	}
+	if msg.SessionID != "" &&
+		msg.SessionID != conn.SessionID() {
+		return ErrRuntimeProtocolError
+	}
+	if msg.UserID != "" &&
+		msg.UserID != conn.UserID() {
+		return ErrRuntimeProtocolError
+	}
+	if msg.DeviceID != "" &&
+		msg.DeviceID != conn.DeviceID() {
+		return ErrRuntimeProtocolError
+	}
+	return nil
+}
+
+func (h *Handler) HandleEvent(
+	conn *Connection,
+	msg *contracts.RuntimeMessage,
+	payload *contracts.EventPayload,
+) {
+	if conn != nil && validateConnectionEnvelope(conn, msg) != nil {
+		conn.Close(
+			websocket.ClosePolicyViolation,
+			"runtime identity mismatch",
+		)
+		return
+	}
 	log.Logger.Debugf("runtime event: type=%s petInstance=%s", payload.EventType, payload.PetInstanceID)
 
 	var summary contracts.PetInstanceSummary
@@ -309,12 +355,12 @@ func (h *Handler) HandleEvent(msg *contracts.RuntimeMessage, payload *contracts.
 		summary.PetInstanceID = payload.PetInstanceID
 	}
 
-	if h.state != nil && msg.RuntimeID != "" && payload.PetInstanceID != "" {
+	if h.state != nil && conn != nil && payload.PetInstanceID != "" {
 		state := &RuntimeActualState{
-			RuntimeID:        msg.RuntimeID,
+			RuntimeID:        conn.RuntimeID(),
 			InstallationID:   summary.InstallationID,
 			PetInstanceID:    summary.PetInstanceID,
-			SessionID:        msg.SessionID,
+			SessionID:        conn.SessionID(),
 			Visible:          boolToInt(summary.Visible),
 			CurrentActionKey: summary.CurrentActionKey,
 			PositionX:        summary.PositionX,
@@ -325,14 +371,14 @@ func (h *Handler) HandleEvent(msg *contracts.RuntimeMessage, payload *contracts.
 			ObservedAt:       time.Now().Format(runtimeTimeFormat),
 		}
 		if err := h.state.UpsertActualState(state); err != nil {
-			log.Logger.Errorf("runtime handler: upsert actual state from event failed runtimeID=%s err=%v", msg.RuntimeID, err)
+			log.Logger.Errorf("runtime handler: upsert actual state from event failed runtimeID=%s err=%v", conn.RuntimeID(), err)
 		}
 	}
 
-	h.dispatchEvent(msg, payload, summary)
+	h.dispatchEvent(conn, msg, payload, summary)
 }
 
-func (h *Handler) dispatchEvent(msg *contracts.RuntimeMessage, payload *contracts.EventPayload, summary contracts.PetInstanceSummary) {
+func (h *Handler) dispatchEvent(conn *Connection, msg *contracts.RuntimeMessage, payload *contracts.EventPayload, summary contracts.PetInstanceSummary) {
 	if h.eventSink == nil {
 		return
 	}
@@ -347,7 +393,10 @@ func (h *Handler) dispatchEvent(msg *contracts.RuntimeMessage, payload *contract
 	event := RuntimeDomainEvent{
 		EventType:      standardType,
 		InstallationID: summary.InstallationID,
-		UserID:         msg.UserID,
+		UserID:         conn.UserID(),
+		RuntimeID:      conn.RuntimeID(),
+		SessionID:      conn.SessionID(),
+		DeviceID:       conn.DeviceID(),
 		Timestamp:      time.Now(),
 		Payload:        payload.Data,
 	}

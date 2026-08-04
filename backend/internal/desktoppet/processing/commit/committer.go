@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/processing/measurement"
 	"github.com/u-ai/backend/internal/desktoppet/processing/source"
 	"github.com/u-ai/backend/internal/desktoppet/processing/workspace"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
 )
 
@@ -710,7 +711,7 @@ func validatePipelineResult(result *application.ProcessActionResult) error {
 }
 
 func cleanupStaging(stagingDir string) {
-	_ = os.RemoveAll(stagingDir)
+	_ = security.SafeRemoveTree(stagingDir)
 }
 
 func copyFileVerified(src, dst string) error {

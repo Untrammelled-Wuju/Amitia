@@ -2035,6 +2035,18 @@ var schemaMigrations = []string{
 		PRIMARY KEY (operation_id, table_name)
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_user_data_restore_journal_op ON extension_package_user_data_restore_journal(operation_id)`,
+	`CREATE TABLE IF NOT EXISTS extension_package_confirmation_nonces (
+		nonce TEXT PRIMARY KEY,
+		operation_id TEXT NOT NULL,
+		operation_type TEXT NOT NULL,
+		extension_id TEXT NOT NULL,
+		user_id TEXT NOT NULL,
+		issued_at TEXT NOT NULL,
+		expires_at TEXT NOT NULL,
+		consumed_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_op ON extension_package_confirmation_nonces(operation_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_exp ON extension_package_confirmation_nonces(expires_at)`,
 }
 
 type dbExecutor interface {

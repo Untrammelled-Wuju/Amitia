@@ -4,28 +4,57 @@ import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
 import type { AxiosError } from "axios";
 import { ref } from "vue";
 import type { ApiResponse } from "@/types";
-import { getRuntimeConnection } from "@/runtime/runtime-adapter";
+import { getRuntimeConnection, getDeploymentConfig, getBackendAuthHeaders } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { classifyError, displayError } from "./request";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 const TOKEN_KEY = "ai-companion-token";
 
+const PUBLIC_AUTH_PATHS = new Set([
+  "/api/public/auth/status",
+  "/api/public/auth/setup",
+  "/api/public/auth/login",
+]);
+
 export const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
 });
 
-// Request interceptor: attach auth token
 apiClient.interceptors.request.use(async (config) => {
   const runtime = await getRuntimeConnection();
+  const deployment = await getDeploymentConfig();
   config.baseURL = runtime.apiBaseURL;
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+
+  config.headers = config.headers ?? {};
+
+  const requestPath = String(config.url ?? "");
+  if (PUBLIC_AUTH_PATHS.has(requestPath)) {
+    delete config.headers.Authorization;
+    delete config.headers["X-Amitia-Desktop-Session"];
+    delete config.headers["X-Amitia-Desktop-Instance"];
+    return config;
   }
+
+  if (deployment.mode === "local" && window.amitiaDesktop) {
+    const desktopHeaders = await getBackendAuthHeaders();
+    for (const [key, value] of Object.entries(desktopHeaders)) {
+      config.headers[key] = value;
+    }
+    delete config.headers.Authorization;
+  } else {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+
   const deviceTimezone = getDeviceTimezone();
-  if (deviceTimezone) config.headers["X-Device-Timezone"] = deviceTimezone;
+  if (deviceTimezone) {
+    config.headers["X-Device-Timezone"] = deviceTimezone;
+  }
+
   return config;
 });
 

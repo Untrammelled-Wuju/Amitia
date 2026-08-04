@@ -188,6 +188,9 @@ const (
 	PackageErrCodeResourceSnapshotHashMismatch         = "PACKAGE_RESOURCE_SNAPSHOT_HASH_MISMATCH"
 	PackageErrCodeResourceSnapshotContentMissing       = "PACKAGE_RESOURCE_SNAPSHOT_CONTENT_MISSING"
 	PackageErrCodeResourceRestoreIncomplete            = "PACKAGE_RESOURCE_RESTORE_INCOMPLETE"
+	PackageErrCodeResourceRestorePathRace               = "PACKAGE_RESOURCE_RESTORE_PATH_RACE"
+	PackageErrCodeResourceRestoreReparsePointForbidden  = "PACKAGE_RESOURCE_RESTORE_REPARSE_POINT_FORBIDDEN"
+	PackageErrCodeResourceRestoreTargetChanged         = "PACKAGE_RESOURCE_RESTORE_TARGET_CHANGED"
 	PackageErrCodeSnapshotSchemaUnsupported            = "PACKAGE_SNAPSHOT_SCHEMA_UNSUPPORTED"
 	PackageErrCodeSnapshotIntegrityFailed              = "PACKAGE_SNAPSHOT_INTEGRITY_FAILED"
 	PackageErrCodeConfirmationClaimsInvalid            = "PACKAGE_CONFIRMATION_CLAIMS_INVALID"
@@ -328,6 +331,9 @@ var packageErrorHTTPStatus = map[string]int{
 	PackageErrCodeResourceSnapshotHashMismatch:         409,
 	PackageErrCodeResourceSnapshotContentMissing:       409,
 	PackageErrCodeResourceRestoreIncomplete:            409,
+	PackageErrCodeResourceRestorePathRace:               409,
+	PackageErrCodeResourceRestoreReparsePointForbidden:  400,
+	PackageErrCodeResourceRestoreTargetChanged:         409,
 	PackageErrCodeSnapshotSchemaUnsupported:            422,
 	PackageErrCodeSnapshotIntegrityFailed:              409,
 	PackageErrCodeConfirmationClaimsInvalid:            403,

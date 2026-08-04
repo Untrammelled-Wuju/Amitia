@@ -109,6 +109,7 @@ type RuntimeMessage struct {
 	RuntimeID       string          `json:"runtimeId,omitempty"`
 	SessionID       string          `json:"sessionId,omitempty"`
 	UserID          string          `json:"userId,omitempty"`
+	DeviceID        string          `json:"deviceId,omitempty"`
 	InstallationID  string          `json:"installationId,omitempty"`
 	PetInstanceID   string          `json:"petInstanceId,omitempty"`
 	Sequence        uint64          `json:"sequence,omitempty"`

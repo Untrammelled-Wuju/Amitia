@@ -3,6 +3,8 @@
 package desktoppet
 
 import (
+	"path/filepath"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/desktoppet/security"
@@ -13,7 +15,10 @@ func RegisterDesktopPetRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	repo := NewRepository(ctx.DB, ctx)
 	svc := NewService(repo, ctx.DB)
 	registry := security.NewPathRootRegistry()
-	_ = registry.Register(config.AppCfg.Storage.DataDir)
+	_ = registry.Register(security.RootGenerationArtifacts, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "generation-artifacts"))
+	_ = registry.Register(security.RootQualityReports, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "quality-reports"))
+	_ = registry.Register(security.RootReleasePublished, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "releases"))
+	_ = registry.Register(security.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	handler := NewHandler(svc, responder, guard)

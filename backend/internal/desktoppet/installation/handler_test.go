@@ -296,6 +296,9 @@ func (s *stubInstallGuard) RequireProcessingTask(ctx context.Context, actor *des
 func (s *stubInstallGuard) RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*security.ActionRevisionScope, error) {
 	return &security.ActionRevisionScope{UserID: actor.UserID}, nil
 }
+func (s *stubInstallGuard) RequireActionStream(ctx context.Context, actor *desktoppetAuth.ActorContext, streamID string) (*security.ActionStreamScope, error) {
+	return &security.ActionStreamScope{UserID: actor.UserID}, nil
+}
 func (s *stubInstallGuard) RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*security.QualityScope, error) {
 	return &security.QualityScope{UserID: actor.UserID}, nil
 }

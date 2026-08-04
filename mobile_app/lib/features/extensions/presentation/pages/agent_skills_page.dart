@@ -46,7 +46,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       appBar: AmitiaAppBar(
         title: 'Agent Skills',
         showBackButton: true,
-        fallbackRoute: AppRoutes.extensions,
       ),
       body: SafeArea(
         top: false,

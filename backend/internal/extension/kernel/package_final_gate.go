@@ -19,23 +19,25 @@ import (
 )
 
 type PackageFinalGateResult struct {
-	Passed                      bool                        `json:"passed"`
-	OperationID                 string                      `json:"operationId"`
-	OperationType               string                      `json:"operationType"`
-	ExtensionID                 string                      `json:"extensionId"`
-	Version                     string                      `json:"version"`
-	Mode                        string                      `json:"mode,omitempty"`
-	ClaimsVerified              bool                        `json:"claimsVerified"`
-	PolicyVersionVerified       bool                        `json:"policyVersionVerified"`
-	ConfirmedItemsVerified      bool                        `json:"confirmedItemsVerified"`
-	PreviewIdentityVerified     bool                        `json:"previewIdentityVerified"`
-	ArtifactPolicyVerified      bool                        `json:"artifactPolicyVerified"`
-	SnapshotRequirementVerified bool                        `json:"snapshotRequirementVerified"`
-	StepIntegrityVerified       bool                        `json:"stepIntegrityVerified"`
-	SnapshotDecision            *PackageSnapshotFinalGateDecision `json:"snapshotDecision,omitempty"`
-	Checks                      []PackageFinalGateCheck     `json:"checks"`
-	Findings                    []PackageFinalGateFinding   `json:"findings,omitempty"`
-	VerifiedAt                  string                      `json:"verifiedAt"`
+	Passed                       bool                               `json:"passed"`
+	OperationID                  string                             `json:"operationId"`
+	OperationType                string                             `json:"operationType"`
+	ExtensionID                  string                             `json:"extensionId"`
+	Version                      string                             `json:"version"`
+	Mode                         string                             `json:"mode,omitempty"`
+	ClaimsVerified               bool                               `json:"claimsVerified"`
+	PolicyVersionVerified        bool                               `json:"policyVersionVerified"`
+	ConfirmedItemsVerified       bool                               `json:"confirmedItemsVerified"`
+	PreviewIdentityVerified      bool                               `json:"previewIdentityVerified"`
+	ArtifactPolicyVerified       bool                               `json:"artifactPolicyVerified"`
+	SnapshotRequirementVerified  bool                               `json:"snapshotRequirementVerified"`
+	StepIntegrityVerified        bool                               `json:"stepIntegrityVerified"`
+	SnapshotDecision             *PackageSnapshotFinalGateDecision  `json:"snapshotDecision,omitempty"`
+	RestoredIdentityEvidence     *UninstallRestoredIdentityEvidence `json:"restoredIdentityEvidence,omitempty"`
+	RestoredIdentityEvidenceHash string                             `json:"restoredIdentityEvidenceHash,omitempty"`
+	Checks                       []PackageFinalGateCheck            `json:"checks"`
+	Findings                     []PackageFinalGateFinding          `json:"findings,omitempty"`
+	VerifiedAt                   string                             `json:"verifiedAt"`
 }
 
 type PackageFinalGateCheck struct {
@@ -58,13 +60,13 @@ type PackageFinalGateFinding struct {
 }
 
 type PackageSnapshotFinalGateDecision struct {
-	Required             bool     `json:"required"`
-	SnapshotPresent      bool     `json:"snapshotPresent"`
-	SnapshotVerified     bool     `json:"snapshotVerified"`
-	ExemptVerified       bool     `json:"exemptVerified"`
-	RequirementHash      string   `json:"requirementHash,omitempty"`
-	SnapshotHash         string   `json:"snapshotHash,omitempty"`
-	Reasons              []string `json:"reasons,omitempty"`
+	Required         bool     `json:"required"`
+	SnapshotPresent  bool     `json:"snapshotPresent"`
+	SnapshotVerified bool     `json:"snapshotVerified"`
+	ExemptVerified   bool     `json:"exemptVerified"`
+	RequirementHash  string   `json:"requirementHash,omitempty"`
+	SnapshotHash     string   `json:"snapshotHash,omitempty"`
+	Reasons          []string `json:"reasons,omitempty"`
 }
 
 func (r *PackageRepository) ListOperationSteps(ctx context.Context, operationID string) ([]PackageOperationStep, error) {
@@ -282,51 +284,51 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 						case ArtifactPolicyRetainForExport:
 							requiredRefType = ArtifactReferenceExportLease
 						}
-					if requiredRefType != "" {
-						var refOwnerID string
-						var refDetail string
-						if requiredRefType == ArtifactReferenceRollbackPoint {
-							rp, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.TargetVersion)
-							if rpErr != nil {
-								checkArtifact.Detail = fmt.Sprintf("retain policy: cannot resolve rollback point for reference: %v", rpErr)
+						if requiredRefType != "" {
+							var refOwnerID string
+							var refDetail string
+							if requiredRefType == ArtifactReferenceRollbackPoint {
+								rp, rpErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.TargetVersion)
+								if rpErr != nil {
+									checkArtifact.Detail = fmt.Sprintf("retain policy: cannot resolve rollback point for reference: %v", rpErr)
+									break
+								}
+								if rp.ArtifactID != operation.ArtifactID {
+									checkArtifact.Detail = fmt.Sprintf("retain policy: rollback point artifact_id mismatch: point=%s operation=%s", rp.ArtifactID, operation.ArtifactID)
+									break
+								}
+								refOwnerID = rp.RollbackPointID
+								refDetail = fmt.Sprintf("rollbackPoint=%s", refOwnerID)
+							} else if requiredRefType == ArtifactReferenceExportLease {
+								checkArtifact.Detail = "PACKAGE_EXPORT_RETENTION_UNSUPPORTED: export retention not supported without export model"
 								break
-							}
-							if rp.ArtifactID != operation.ArtifactID {
-								checkArtifact.Detail = fmt.Sprintf("retain policy: rollback point artifact_id mismatch: point=%s operation=%s", rp.ArtifactID, operation.ArtifactID)
-								break
-							}
-							refOwnerID = rp.RollbackPointID
-							refDetail = fmt.Sprintf("rollbackPoint=%s", refOwnerID)
-						} else if requiredRefType == ArtifactReferenceExportLease {
-							checkArtifact.Detail = "PACKAGE_EXPORT_RETENTION_UNSUPPORTED: export retention not supported without export model"
-							break
-						} else {
-							refOwnerID = operation.ExtensionID
-							refDetail = fmt.Sprintf("owner=%s", refOwnerID)
-						}
-						refs, listErr := r.container.PackageRepository.ListActiveArtifactReferences(ctx, operation.ArtifactID, requiredRefType, refOwnerID)
-						if listErr != nil {
-							checkArtifact.Detail = fmt.Sprintf("retain policy: list active references failed: %v", listErr)
-						} else if len(refs) == 0 {
-							checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference with %s (reference proof required)", requiredRefType, refDetail)
-						} else if len(refs) > 1 {
-							checkArtifact.Detail = fmt.Sprintf("retain policy: expected exactly 1 active %s reference, found %d (integrity error)", requiredRefType, len(refs))
-						} else {
-							ref := refs[0]
-							if ref.ArtifactID != operation.ArtifactID || ref.ReferenceType != requiredRefType || ref.ReferenceOwnerID != refOwnerID {
-								checkArtifact.Detail = "retain policy: reference identity mismatch"
-							} else if ref.ReleasedAt != "" {
-								checkArtifact.Detail = "retain policy: reference has been released"
-							} else if ref.ExpiresAt != "" && ref.ExpiresAt < time.Now().UTC().Format(time.RFC3339Nano) {
-								checkArtifact.Detail = "retain policy: reference expired"
 							} else {
-								checkArtifact.Detail = fmt.Sprintf("retain policy: verified exactly 1 active %s reference %s", requiredRefType, refDetail)
-								checkArtifact.Passed = true
+								refOwnerID = operation.ExtensionID
+								refDetail = fmt.Sprintf("owner=%s", refOwnerID)
 							}
+							refs, listErr := r.container.PackageRepository.ListActiveArtifactReferences(ctx, operation.ArtifactID, requiredRefType, refOwnerID)
+							if listErr != nil {
+								checkArtifact.Detail = fmt.Sprintf("retain policy: list active references failed: %v", listErr)
+							} else if len(refs) == 0 {
+								checkArtifact.Detail = fmt.Sprintf("retain policy: no active %s reference with %s (reference proof required)", requiredRefType, refDetail)
+							} else if len(refs) > 1 {
+								checkArtifact.Detail = fmt.Sprintf("retain policy: expected exactly 1 active %s reference, found %d (integrity error)", requiredRefType, len(refs))
+							} else {
+								ref := refs[0]
+								if ref.ArtifactID != operation.ArtifactID || ref.ReferenceType != requiredRefType || ref.ReferenceOwnerID != refOwnerID {
+									checkArtifact.Detail = "retain policy: reference identity mismatch"
+								} else if ref.ReleasedAt != "" {
+									checkArtifact.Detail = "retain policy: reference has been released"
+								} else if ref.ExpiresAt != "" && ref.ExpiresAt < time.Now().UTC().Format(time.RFC3339Nano) {
+									checkArtifact.Detail = "retain policy: reference expired"
+								} else {
+									checkArtifact.Detail = fmt.Sprintf("retain policy: verified exactly 1 active %s reference %s", requiredRefType, refDetail)
+									checkArtifact.Passed = true
+								}
+							}
+						} else {
+							checkArtifact.Passed = true
 						}
-					} else {
-						checkArtifact.Passed = true
-					}
 					}
 				default:
 					checkArtifact.Detail = fmt.Sprintf("unknown artifact policy in claims: %s", expectedPolicy)

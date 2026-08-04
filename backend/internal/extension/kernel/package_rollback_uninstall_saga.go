@@ -1205,7 +1205,10 @@ func (r *Runtime) restoreQuarantinedGeneration(ctx context.Context, operation Pa
 		return fmt.Errorf("kernel: quarantine metadata missing generation paths")
 	}
 	if _, err := os.Stat(qm.OriginalGenerationPath); err == nil {
-		actualHash := package_security.ComputeDirHash(qm.OriginalGenerationPath, r.container.PackageSecurity.GetHasher())
+		actualHash, hashErr := computeGenerationTreeHash(ctx, qm.OriginalGenerationPath)
+		if hashErr != nil {
+			return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: failed to compute existing generation hash: %w", hashErr))
+		}
 		if equalTreeHash(actualHash, qm.TreeHash) {
 			return nil
 		}
@@ -1220,7 +1223,11 @@ func (r *Runtime) restoreQuarantinedGeneration(ctx context.Context, operation Pa
 	if err := copyDirContents(qm.GenerationQuarantinePath, qm.OriginalGenerationPath); err != nil {
 		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: failed to restore generation: %w", err))
 	}
-	restoredHash := package_security.ComputeDirHash(qm.OriginalGenerationPath, r.container.PackageSecurity.GetHasher())
+	restoredHash, hashErr := computeGenerationTreeHash(ctx, qm.OriginalGenerationPath)
+	if hashErr != nil {
+		os.RemoveAll(qm.OriginalGenerationPath)
+		return NewRepositoryError(RepositoryErrorUnavailable, fmt.Errorf("kernel: failed to compute restored generation hash: %w", hashErr))
+	}
 	if !equalTreeHash(restoredHash, qm.TreeHash) {
 		os.RemoveAll(qm.OriginalGenerationPath)
 		return NewRepositoryError(RepositoryErrorCorrupt, fmt.Errorf("kernel: restored generation hash mismatch: expected %s got %s", qm.TreeHash, restoredHash))
@@ -1482,8 +1489,11 @@ func (r *Runtime) filePackageTreeMatches(ctx context.Context, path, expectedHash
 	if path == "" || expectedHash == "" {
 		return false
 	}
-	actualHash := package_security.ComputeDirHash(path, r.container.PackageSecurity.GetHasher())
-	return actualHash != "" && actualHash == expectedHash
+	actualHash, hashErr := computeGenerationTreeHash(ctx, path)
+	if hashErr != nil {
+		return false
+	}
+	return actualHash != "" && equalTreeHash(actualHash, expectedHash)
 }
 
 func (r *Runtime) completeSimplePackageStep(ctx context.Context, operationID, name string, order int, guard PackageWriteGuard) error {

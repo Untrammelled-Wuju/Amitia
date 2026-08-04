@@ -1,6 +1,8 @@
 package editing
 
 import (
+	"path/filepath"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/desktoppet/security"
@@ -16,7 +18,7 @@ func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	qualAdapter := NewQualityAdapter(ctx)
 	svc := NewService(repo, assetStore, genAdapter, procAdapter, qualAdapter, ctx.DB, dataDir)
 	registry := security.NewPathRootRegistry()
-	_ = registry.Register(dataDir)
+	_ = registry.Register(security.RootEditingAssets, filepath.Join(dataDir, "desktop-pets", "editing", "assets"))
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	registerRoutes(r, svc, responder, guard)
@@ -24,7 +26,7 @@ func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard security.OwnershipGuard) {
 	registry := security.NewPathRootRegistry()
-	_ = registry.Register(config.AppCfg.Storage.DataDir)
+	_ = registry.Register(security.RootEditingAssets, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "editing", "assets"))
 	responder := security.NewSafeArtifactResponder(registry)
 	registerRoutes(r, svc, responder, guard)
 }

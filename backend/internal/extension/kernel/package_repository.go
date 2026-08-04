@@ -636,7 +636,8 @@ func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationI
 		return op, nil, err
 	}
 	rows, err := r.db.QueryContext(ctx, `SELECT step_id, operation_id, step_name, step_order, status,
-		attempt_count, result_json, error_code, started_at, completed_at, stable_generation, target_generation, current_pointer_json
+		attempt_count, result_json, error_code, started_at, completed_at, stable_generation, target_generation, current_pointer_json,
+		input_hash, result_hash
 		FROM extension_package_operation_steps WHERE operation_id = ? ORDER BY step_order`, operationID)
 	if err != nil {
 		return op, nil, err
@@ -647,7 +648,8 @@ func (r *PackageRepository) GetOperation(ctx context.Context, userID, operationI
 		var step PackageOperationStep
 		if err := rows.Scan(&step.StepID, &step.OperationID, &step.StepName, &step.StepOrder,
 			&step.Status, &step.AttemptCount, &step.ResultJSON, &step.ErrorCode,
-			&step.StartedAt, &step.CompletedAt, &step.StableGeneration, &step.TargetGeneration, &step.CurrentPointerJSON); err != nil {
+			&step.StartedAt, &step.CompletedAt, &step.StableGeneration, &step.TargetGeneration, &step.CurrentPointerJSON,
+			&step.InputHash, &step.ResultHash); err != nil {
 			return op, nil, err
 		}
 		steps = append(steps, step)

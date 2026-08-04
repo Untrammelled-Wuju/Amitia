@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -126,11 +125,8 @@ func (qm PackageQuarantineMetadata) snapshotVerified() bool {
 	if qm.SnapshotJSON == "" || qm.SnapshotHash == "" {
 		return false
 	}
-	var snapshot packageInstallationSnapshot
-	if err := json.Unmarshal([]byte(qm.SnapshotJSON), &snapshot); err != nil {
-		return false
-	}
-	return snapshot.computeHash() == qm.SnapshotHash
+	recomputed := fmt.Sprintf("%x", sha256.Sum256([]byte(qm.SnapshotJSON)))
+	return recomputed == qm.SnapshotHash
 }
 
 type packageInstallationSnapshot struct {
@@ -144,24 +140,6 @@ type packageInstallationSnapshot struct {
 	Enabled           bool           `json:"enabled"`
 	Metadata          map[string]any `json:"metadata"`
 	CapturedAt        string         `json:"capturedAt"`
-}
-
-func (s packageInstallationSnapshot) computeHash() string {
-	hasher := sha256.New()
-	hasher.Write([]byte(s.PackageID))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(s.InstalledVersion))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(s.InstalledPath))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(s.InstalledTreeHash))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(fmt.Sprintf("%d", s.Generation)))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(s.GenerationID))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(s.CapturedAt))
-	return "sha256:" + hex.EncodeToString(hasher.Sum(nil))
 }
 
 func captureInstallationSnapshot(installation domain.ExtensionInstallation, preview PackageUninstallPreviewResult) (string, string, string, error) {
@@ -181,7 +159,7 @@ func captureInstallationSnapshot(installation domain.ExtensionInstallation, prev
 	if err != nil {
 		return "", "", "", fmt.Errorf("marshal installation snapshot: %w", err)
 	}
-	verifiedHash := snapshot.computeHash()
+	verifiedHash := fmt.Sprintf("%x", sha256.Sum256(jsonBytes))
 	return string(jsonBytes), verifiedHash, snapshot.GenerationID, nil
 }
 
@@ -299,7 +277,7 @@ func (r *PackageRepository) ReleaseQuarantineMetadata(ctx context.Context, quara
 	if err := verifyFencingTokenTx(ctx, tx, guard); err != nil {
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE package_quarantine_metadata SET state='released', released_at=? WHERE quarantine_id=? AND state IN ('active', 'finalized', 'restored')`,
+	result, err := tx.ExecContext(ctx, `UPDATE package_quarantine_metadata SET state='released', release_state='released', released_at=? WHERE quarantine_id=? AND state IN ('active', 'finalized', 'restored')`,
 		time.Now().UTC().Format(time.RFC3339Nano), quarantineID)
 	if err != nil {
 		return storageOperationError("release quarantine metadata", err)

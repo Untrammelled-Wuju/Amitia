@@ -118,7 +118,7 @@ const rules = {
 // Check if setup is allowed before showing page
 onMounted(async () => {
   try {
-    const res = await apiClient.get("/api/auth/status");
+    const res = await apiClient.get("/api/public/auth/status");
     const data = res.data?.data || res.data;
     // If already set up and user is logged in, redirect
     if (data?.hasAdmin) {
@@ -140,7 +140,7 @@ async function handleSetup() {
 
   loading.value = true;
   try {
-    const res = await apiClient.post("/api/auth/setup", {
+    const res = await apiClient.post("/api/public/auth/setup", {
       username: form.username,
       password: form.password,
     });

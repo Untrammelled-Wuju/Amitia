@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -33,6 +34,9 @@ func (r *Runtime) RecoverPackageOperations(ctx context.Context) error {
 }
 
 func (r *Runtime) recoverPackageOperation(ctx context.Context, operation PackageOperationRecord) error {
+	releaseInProcessLock := r.acquirePackageInProcessLock(operation.ExtensionID + ":" + operation.OperationID)
+	defer releaseInProcessLock()
+
 	lease, leaseErr := r.acquirePackageExtensionLease(ctx, operation.ExtensionID, operation.OperationID)
 	if leaseErr != nil {
 		return r.requirePackageRecovery(ctx, operation, "recovery lease acquire failed", leaseErr, PackageWriteGuard{})
@@ -933,6 +937,49 @@ func (r *Runtime) runUninstallRecoveryStep(ctx context.Context, operation Packag
 	return nil
 }
 
+type UninstallRestoredIdentityEvidence struct {
+	SchemaVersion int `json:"schemaVersion"`
+
+	OperationID string `json:"operationId"`
+	ExtensionID string `json:"extensionId"`
+	ArtifactID  string `json:"artifactId"`
+
+	ExpectedVersionID    string `json:"expectedVersionId"`
+	RestoredVersion      string `json:"restoredVersion"`
+	ExpectedGenerationID string `json:"expectedGenerationId"`
+
+	InstallationVersion      string `json:"installationVersion"`
+	InstallationGenerationID string `json:"installationGenerationId"`
+
+	VersionRecordID           string `json:"versionRecordId"`
+	VersionRecordVersion      string `json:"versionRecordVersion"`
+	VersionRecordGenerationID string `json:"versionRecordGenerationId"`
+
+	CurrentVersion      string `json:"currentVersion"`
+	CurrentArtifactID   string `json:"currentArtifactId"`
+	CurrentGenerationID string `json:"currentGenerationId"`
+	CurrentTreeHash     string `json:"currentTreeHash"`
+
+	MetadataTreeHash         string `json:"metadataTreeHash"`
+	ActualGenerationTreeHash string `json:"actualGenerationTreeHash"`
+
+	EvidenceHash string `json:"evidenceHash"`
+}
+
+type UninstallReleaseQuarantineStepResult struct {
+	SchemaVersion int `json:"schemaVersion"`
+
+	OperationID  string `json:"operationId"`
+	QuarantineID string `json:"quarantineId"`
+	ExtensionID  string `json:"extensionId"`
+	ArtifactID   string `json:"artifactId"`
+
+	ReleasedAt     string `json:"releasedAt"`
+	SnapshotHash   string `json:"snapshotHash"`
+	GenerationHash string `json:"generationHash"`
+	MetadataHash   string `json:"metadataHash"`
+}
+
 type UninstallRecoveryContext struct {
 	operation          PackageOperationRecord
 	quarantineMetadata PackageQuarantineMetadata
@@ -1092,6 +1139,9 @@ func (r *Runtime) verifyLeaseForRecovery(ctx context.Context, operation PackageO
 func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation PackageOperationRecord, completed map[string]PackageOperationStep, guard PackageWriteGuard) error {
 	preparedOp, action, prepErr := r.prepareUninstallRecoveryOperation(ctx, operation, guard)
 	if prepErr != nil {
+		if IsPackageOperationError(prepErr, PackageErrCodeLeaseFenced) {
+			return prepErr
+		}
 		return r.requirePackageRecovery(ctx, operation, "recovery preparation failed: "+prepErr.Error(), prepErr, guard)
 	}
 
@@ -1158,6 +1208,9 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 		return `{"verified":true}`, nil
 	})
 	if err != nil {
+		if isLeaseRelatedError(err) {
+			return err
+		}
 		return r.requirePackageRecovery(ctx, operation, "uninstall recovery verify_quarantine_metadata failed", err, guard)
 	}
 
@@ -1173,6 +1226,9 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 		return `{"generation_restored":true}`, nil
 	})
 	if err != nil {
+		if isLeaseRelatedError(err) {
+			return err
+		}
 		return r.requirePackageRecovery(ctx, operation, "uninstall recovery restore_generation failed", err, guard)
 	}
 
@@ -1285,13 +1341,37 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 		if releasedQM.State != "released" {
 			return "", fmt.Errorf("quarantine metadata state is not released after release: %s", releasedQM.State)
 		}
-		if err := r.validateReleasedQuarantineMetadata(releasedQM); err != nil {
-			return "", err
+		if _, genErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID); genErr != nil {
+			return "", fmt.Errorf("read current for release validation failed: %w", genErr)
+		}
+		identityEvidence, identityErr := r.verifyUninstallRestoredIdentity(ctx, operation, releasedQM)
+		var actualTreeHash string
+		if identityErr == nil {
+			actualTreeHash = identityEvidence.ActualGenerationTreeHash
 		}
 		rc.quarantineMetadata = releasedQM
-		return `{"quarantine_released":true}`, nil
+		releaseResultJSON := UninstallReleaseQuarantineStepResult{
+			SchemaVersion:  1,
+			OperationID:    releasedQM.OperationID,
+			QuarantineID:   releasedQM.QuarantineID,
+			ExtensionID:    releasedQM.ExtensionID,
+			ArtifactID:     releasedQM.ArtifactID,
+			ReleasedAt:     releasedQM.ReleasedAt,
+			SnapshotHash:   releasedQM.SnapshotHash,
+			GenerationHash: actualTreeHash,
+		}
+		metadataCanonical := packageCanonicalJSON(releasedQM)
+		releaseResultJSON.MetadataHash = fmt.Sprintf("%x", sha256.Sum256([]byte(metadataCanonical)))
+		stepResultBytes, marshalErr := json.Marshal(releaseResultJSON)
+		if marshalErr != nil {
+			return "", fmt.Errorf("marshal release step result: %w", marshalErr)
+		}
+		return string(stepResultBytes), nil
 	})
 	if err != nil {
+		if isLeaseRelatedError(err) {
+			return err
+		}
 		return r.requirePackageRecovery(ctx, operation, "uninstall recovery release_quarantine_metadata failed", err, guard)
 	}
 
@@ -1363,84 +1443,36 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 	}
 	result.Checks = append(result.Checks, checkLease)
 
-	checkInstall := PackageFinalGateCheck{Name: "installation_identity"}
-	installation, installErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
-	if installErr != nil {
-		checkInstall.Detail = fmt.Sprintf("installation unavailable: %v", installErr)
-	} else if installation.ExtensionID != domain.ExtensionID(operation.ExtensionID) {
-		checkInstall.Detail = fmt.Sprintf("extension_id mismatch: %s != %s", string(installation.ExtensionID), operation.ExtensionID)
-	} else if installation.PackageID != operation.ArtifactID {
-		checkInstall.Detail = fmt.Sprintf("artifact_id mismatch: package=%s operation=%s", installation.PackageID, operation.ArtifactID)
-	} else if installation.InstallationState != domain.InstallationStateInstalled {
-		checkInstall.Detail = fmt.Sprintf("state is %s, expected installed", installation.InstallationState)
-	} else {
-		expectedGenerationID := qm.ExpectedGenerationID
-		if expectedGenerationID == "" {
-			expectedGenerationID = operation.TargetGeneration
-		}
-		actualGenerationID, _ := installation.Metadata["generationId"].(string)
-		if expectedGenerationID != "" && actualGenerationID != expectedGenerationID {
-			checkInstall.Detail = fmt.Sprintf("generation_id mismatch: installation=%s expected=%s", actualGenerationID, expectedGenerationID)
-		} else {
-			checkInstall.Passed = true
-		}
+	identityEvidence, identityErr := r.verifyUninstallRestoredIdentity(ctx, operation, qm)
+	if identityErr == nil {
+		result.RestoredIdentityEvidence = &identityEvidence
+		result.RestoredIdentityEvidenceHash = identityEvidence.EvidenceHash
+	}
+
+	checkInstall := PackageFinalGateCheck{Name: "installation_identity", Passed: identityErr == nil}
+	if identityErr != nil {
+		checkInstall.Detail = identityErr.Error()
 	}
 	result.Checks = append(result.Checks, checkInstall)
 
-	checkVersion := PackageFinalGateCheck{Name: "version_record"}
-	versionRecord, vErr := r.container.PackageRepository.GetPackageVersion(ctx, operation.ExtensionID, operation.TargetVersion)
-	if vErr != nil {
-		checkVersion.Detail = fmt.Sprintf("version record unavailable: %v", vErr)
-	} else if versionRecord.ArtifactID != operation.ArtifactID {
-		checkVersion.Detail = fmt.Sprintf("version artifact mismatch: %s", versionRecord.ArtifactID)
-	} else if (qm.ExpectedGenerationID != "" || operation.TargetGeneration != "") && versionRecord.GenerationID != qm.ExpectedGenerationID && versionRecord.GenerationID != operation.TargetGeneration {
-		checkVersion.Detail = "version generation mismatch"
-	} else if versionRecord.VersionState != string(PackageVersionStateCurrent) {
-		checkVersion.Detail = fmt.Sprintf("version state is %s, expected current", versionRecord.VersionState)
-	} else {
-		checkVersion.Passed = true
+	checkVersion := PackageFinalGateCheck{Name: "version_record", Passed: identityErr == nil}
+	if identityErr != nil {
+		checkVersion.Detail = identityErr.Error()
 	}
 	result.Checks = append(result.Checks, checkVersion)
 
-	checkCurrent := PackageFinalGateCheck{Name: "current_pointer"}
-	current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
-	if currentErr != nil {
-		checkCurrent.Detail = fmt.Sprintf("current pointer unavailable: %v", currentErr)
-	} else if current.ExtensionID != operation.ExtensionID {
-		checkCurrent.Detail = fmt.Sprintf("current extension mismatch: %s", current.ExtensionID)
-	} else if (qm.ExpectedGenerationID != "" || operation.TargetGeneration != "") && current.GenerationID != qm.ExpectedGenerationID && current.GenerationID != operation.TargetGeneration {
-		checkCurrent.Detail = fmt.Sprintf("current generation mismatch: current=%s expected=%s", current.GenerationID, qm.ExpectedGenerationID)
-	} else {
-		checkCurrent.Passed = true
+	checkCurrent := PackageFinalGateCheck{Name: "current_pointer", Passed: identityErr == nil}
+	if identityErr != nil {
+		checkCurrent.Detail = identityErr.Error()
 	}
 	result.Checks = append(result.Checks, checkCurrent)
 
 	checkGenTree := PackageFinalGateCheck{Name: "generation_tree"}
-	if r.container.PackageGenerationStore == nil {
-		checkGenTree.Detail = "generation store unavailable, fail closed"
+	if identityErr != nil {
+		checkGenTree.Detail = identityErr.Error()
 	} else {
-		current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
-		if currentErr != nil {
-			checkGenTree.Detail = fmt.Sprintf("generation current read failed: %v", currentErr)
-		} else if current.ExtensionID != operation.ExtensionID {
-			checkGenTree.Detail = fmt.Sprintf("current extension mismatch: %s", current.ExtensionID)
-		} else if (qm.ExpectedGenerationID != "" || operation.TargetGeneration != "") && current.GenerationID != qm.ExpectedGenerationID && current.GenerationID != operation.TargetGeneration {
-			checkGenTree.Detail = fmt.Sprintf("current generation mismatch: current=%s expected=%s target=%s", current.GenerationID, qm.ExpectedGenerationID, operation.TargetGeneration)
-		} else if current.ArtifactID != operation.ArtifactID {
-			checkGenTree.Detail = fmt.Sprintf("current artifact mismatch: %s != %s", current.ArtifactID, operation.ArtifactID)
-		} else if current.Version != operation.TargetVersion {
-			checkGenTree.Detail = fmt.Sprintf("current version mismatch: %s != %s", current.Version, operation.TargetVersion)
-		} else if current.FencingToken != guard.FencingToken {
-			checkGenTree.Detail = fmt.Sprintf("current fencing token mismatch: %d != %d", current.FencingToken, guard.FencingToken)
-		} else if current.TreeHash == "" {
-			checkGenTree.Detail = "current tree_hash is empty, generation evidence incomplete"
-		} else {
-			if verifyErr := r.container.PackageGenerationStore.VerifyGeneration(ctx, current); verifyErr != nil {
-				checkGenTree.Detail = fmt.Sprintf("generation tree verification failed: %v", verifyErr)
-			} else {
-				checkGenTree.Passed = true
-			}
-		}
+		checkGenTree.Passed = true
+		checkGenTree.Detail = fmt.Sprintf("current=%s metadata=%s actual=%s", identityEvidence.CurrentTreeHash, identityEvidence.MetadataTreeHash, identityEvidence.ActualGenerationTreeHash)
 	}
 	result.Checks = append(result.Checks, checkGenTree)
 
@@ -1466,56 +1498,16 @@ func (r *Runtime) verifyUninstallCompensationFinalGate(ctx context.Context, oper
 	}
 	result.Checks = append(result.Checks, checkInstallRef)
 
-	qmCopy := qm
 	checkQM := PackageFinalGateCheck{Name: "quarantine_released_identity"}
-	if qmCopy.State != "released" {
-		checkQM.Detail = fmt.Sprintf("state is %s, expected released", qmCopy.State)
-	} else if qmCopy.ReleasedAt == "" {
-		checkQM.Detail = "released_at is empty"
-	} else if qmCopy.QuarantineID == "" || qmCopy.OperationID != operation.OperationID || qmCopy.ExtensionID != operation.ExtensionID || qmCopy.ArtifactID != operation.ArtifactID {
-		checkQM.Detail = "quarantine identity mismatch"
-	} else if qmCopy.TreeHash == "" {
-		checkQM.Detail = "quarantine tree_hash is empty"
-	} else if qmCopy.FencingToken <= 0 || qmCopy.FencingToken > guard.FencingToken {
-		checkQM.Detail = fmt.Sprintf("fencing token invalid: %d (guard=%d)", qmCopy.FencingToken, guard.FencingToken)
+	var qmTreeHash string
+	if identityErr == nil {
+		qmTreeHash = identityEvidence.ActualGenerationTreeHash
+	}
+	qmValidateErr := r.validateReleasedQuarantineMetadata(qm, operation, rc, qmTreeHash, guard)
+	if qmValidateErr != nil {
+		checkQM.Detail = qmValidateErr.Error()
 	} else {
-		checkQMFresh, qmErr := r.container.PackageRepository.GetQuarantineMetadataByOperation(ctx, operation.OperationID)
-		if qmErr != nil {
-			checkQM.Detail = fmt.Sprintf("re-read quarantine metadata failed: %v", qmErr)
-		} else if validateErr := r.validateReleasedQuarantineMetadata(checkQMFresh); validateErr != nil {
-			checkQM.Detail = fmt.Sprintf("released quarantine validation failed: %v", validateErr)
-		} else {
-			if checkQMFresh.TreeHash != qmCopy.TreeHash {
-				checkQM.Detail = fmt.Sprintf("tree_hash drift: stored=%s fresh=%s", qmCopy.TreeHash, checkQMFresh.TreeHash)
-			} else {
-				releaseVerified := false
-				for _, step := range rc.completed {
-					if step.StepName == StepUninstallRecoveryReleaseQuarantineMetadata && step.Status == StatusCompleted && step.ResultJSON != "" {
-						expectedResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(step.ResultJSON)))
-						if expectedResultHash == step.ResultHash {
-							var stepResult map[string]interface{}
-							if jsonErr := json.Unmarshal([]byte(step.ResultJSON), &stepResult); jsonErr == nil {
-								if stepQID, ok := stepResult["quarantineId"].(string); ok && stepQID == qmCopy.QuarantineID {
-									releaseVerified = true
-									break
-								} else if !ok {
-									releaseVerified = true
-									break
-								}
-							} else {
-								releaseVerified = true
-								break
-							}
-						}
-					}
-				}
-				if !releaseVerified {
-					checkQM.Detail = "release step result_hash mismatch or quarantine_id mismatch"
-				} else {
-					checkQM.Passed = true
-				}
-			}
-		}
+		checkQM.Passed = true
 	}
 	result.Checks = append(result.Checks, checkQM)
 
@@ -1605,54 +1597,254 @@ func (r *Runtime) validateRestoredInstallationIdentity(qm PackageQuarantineMetad
 			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
 				fmt.Errorf("current generation_id mismatch: current=%s quarantine=%s", current.GenerationID, qm.ExpectedGenerationID))
 		}
-	if current.ArtifactID != qm.ArtifactID {
-		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
-			fmt.Errorf("current artifact_id mismatch: current=%s quarantine=%s", current.ArtifactID, qm.ArtifactID))
+		if current.ArtifactID != qm.ArtifactID {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+				fmt.Errorf("current artifact_id mismatch: current=%s quarantine=%s", current.ArtifactID, qm.ArtifactID))
+		}
+		if current.TreeHash == "" {
+			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+				fmt.Errorf("current tree_hash is empty after restore"))
+		}
 	}
-	if current.TreeHash == "" {
-		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
-			fmt.Errorf("current tree_hash is empty after restore"))
-	}
-}
-
 	return nil
 }
 
-func (r *Runtime) validateReleasedQuarantineMetadata(qm PackageQuarantineMetadata) error {
-	freshQM, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(context.Background(), qm.OperationID)
+func (r *Runtime) verifyUninstallRestoredIdentity(
+	ctx context.Context,
+	operation PackageOperationRecord,
+	metadata PackageQuarantineMetadata,
+) (
+	UninstallRestoredIdentityEvidence,
+	error,
+) {
+	var evidence UninstallRestoredIdentityEvidence
+	evidence.SchemaVersion = 1
+	evidence.OperationID = operation.OperationID
+	evidence.ExtensionID = operation.ExtensionID
+	evidence.ArtifactID = operation.ArtifactID
+	evidence.ExpectedVersionID = metadata.ExpectedVersionID
+	evidence.ExpectedGenerationID = metadata.ExpectedGenerationID
+
+	if strings.TrimSpace(metadata.ExpectedVersionID) == "" {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect quarantine metadata",
+			fmt.Errorf("%w: expected_version_id is empty", ErrPackageRecoveryExpectedVersionNotFound))
+	}
+
+	installation, installErr := r.container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(operation.ExtensionID))
+	if installErr != nil {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored installation",
+			fmt.Errorf("installation unavailable: %w", installErr))
+	}
+
+	if string(installation.ExtensionID) != operation.ExtensionID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored installation",
+			fmt.Errorf("installation extension_id mismatch: installation=%s operation=%s", string(installation.ExtensionID), operation.ExtensionID))
+	}
+
+	if installation.PackageID != operation.ArtifactID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored installation",
+			fmt.Errorf("installation artifact_id mismatch: installation=%s operation=%s", installation.PackageID, operation.ArtifactID))
+	}
+
+	if installation.InstallationState != domain.InstallationStateInstalled {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored installation",
+			fmt.Errorf("installation state is %s, expected installed", installation.InstallationState))
+	}
+
+	installedVersion := installation.InstalledVersion.String()
+	if installedVersion == "" {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored installation",
+			fmt.Errorf("installation installed_version is empty"))
+	}
+	evidence.InstallationVersion = installedVersion
+
+	installationGenerationID, _ := installation.Metadata["generationId"].(string)
+	evidence.InstallationGenerationID = installationGenerationID
+
+	versionRecord, vErr := r.container.PackageRepository.GetPackageVersionByID(ctx, operation.ExtensionID, metadata.ExpectedVersionID)
+	if vErr != nil {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+			fmt.Errorf("%w: expected version %s not found", ErrPackageRecoveryExpectedVersionNotFound, metadata.ExpectedVersionID))
+	}
+
+	if versionRecord.VersionID != metadata.ExpectedVersionID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+			fmt.Errorf("version record version_id mismatch: version=%s quarantine=%s", versionRecord.VersionID, metadata.ExpectedVersionID))
+	}
+
+	if versionRecord.ExtensionID != operation.ExtensionID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+			fmt.Errorf("version record extension_id mismatch: %s != %s", versionRecord.ExtensionID, operation.ExtensionID))
+	}
+
+	if versionRecord.ArtifactID != operation.ArtifactID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+			fmt.Errorf("version record artifact_id mismatch: %s != %s", versionRecord.ArtifactID, operation.ArtifactID))
+	}
+
+	if metadata.ExpectedGenerationID != "" && versionRecord.GenerationID != metadata.ExpectedGenerationID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version record",
+			fmt.Errorf("version record generation_id mismatch: %s != %s", versionRecord.GenerationID, metadata.ExpectedGenerationID))
+	}
+
+	evidence.VersionRecordID = versionRecord.VersionID
+	evidence.VersionRecordVersion = versionRecord.Version
+	evidence.VersionRecordGenerationID = versionRecord.GenerationID
+	evidence.RestoredVersion = versionRecord.Version
+
+	if installedVersion != versionRecord.Version {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect version identity",
+			fmt.Errorf("installed_version mismatch: installation=%s version=%s", installedVersion, versionRecord.Version))
+	}
+
+	current, currentErr := r.container.PackageGenerationStore.ReadCurrent(operation.ExtensionID)
+	if currentErr != nil {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current read failed: %w", currentErr))
+	}
+
+	if current.ExtensionID != operation.ExtensionID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current extension_id mismatch: %s != %s", current.ExtensionID, operation.ExtensionID))
+	}
+
+	if current.ArtifactID != operation.ArtifactID {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current artifact_id mismatch: %s != %s", current.ArtifactID, operation.ArtifactID))
+	}
+
+	if current.Version == "" {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current version is empty"))
+	}
+
+	if current.Version != versionRecord.Version {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current version mismatch: current=%s version=%s", current.Version, versionRecord.Version))
+	}
+
+	if current.Version != installedVersion {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current version mismatch with installation: current=%s installation=%s", current.Version, installedVersion))
+	}
+
+	evidence.CurrentVersion = current.Version
+	evidence.CurrentArtifactID = current.ArtifactID
+	evidence.CurrentGenerationID = current.GenerationID
+	evidence.CurrentTreeHash = current.TreeHash
+	evidence.MetadataTreeHash = metadata.TreeHash
+
+	if current.TreeHash == "" {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("current tree_hash is empty"))
+	}
+
+	if metadata.TreeHash == "" {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("metadata tree_hash is empty"))
+	}
+
+	if current.TreeHash != metadata.TreeHash {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect restored current",
+			fmt.Errorf("tree_hash mismatch: current=%s metadata=%s", current.TreeHash, metadata.TreeHash))
+	}
+
+	actualTreeHash, computeErr := r.container.PackageGenerationStore.ComputeGenerationTreeHash(ctx, operation.ExtensionID, current.GenerationID)
+	if computeErr != nil {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect generation",
+			fmt.Errorf("compute generation tree_hash failed: %w", computeErr))
+	}
+
+	evidence.ActualGenerationTreeHash = actualTreeHash
+
+	if actualTreeHash != metadata.TreeHash {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect generation",
+			fmt.Errorf("actual generation tree_hash mismatch: actual=%s metadata=%s", actualTreeHash, metadata.TreeHash))
+	}
+
+	if actualTreeHash != current.TreeHash {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect generation",
+			fmt.Errorf("actual generation tree_hash mismatch with current: actual=%s current=%s", actualTreeHash, current.TreeHash))
+	}
+
+	evidenceForHash := evidence
+	evidenceForHash.EvidenceHash = ""
+	canonicalJSON, marshalErr := json.Marshal(evidenceForHash)
+	if marshalErr != nil {
+		return evidence, NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Compute evidence hash",
+			fmt.Errorf("marshal evidence for hash: %w", marshalErr))
+	}
+	evidence.EvidenceHash = fmt.Sprintf("%x", sha256.Sum256(canonicalJSON))
+
+	return evidence, nil
+}
+
+func (r *Runtime) validateReleasedQuarantineMetadata(qm PackageQuarantineMetadata, operation PackageOperationRecord, rc UninstallRecoveryContext, actualGenerationTreeHash string, guard PackageWriteGuard) error {
+	freshQM, err := r.container.PackageRepository.GetQuarantineMetadataByOperation(context.Background(), operation.OperationID)
 	if err != nil {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
 			fmt.Errorf("quarantine metadata unavailable: %w", err))
 	}
 
-	if freshQM.QuarantineID != qm.QuarantineID {
+	if strings.TrimSpace(freshQM.SnapshotJSON) == "" {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-			fmt.Errorf("quarantine_id mismatch: fresh=%s cached=%s", freshQM.QuarantineID, qm.QuarantineID))
+			fmt.Errorf("snapshot_json is missing"))
 	}
 
-	if freshQM.OperationID != qm.OperationID {
+	if strings.TrimSpace(freshQM.SnapshotHash) == "" {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-			fmt.Errorf("operation_id mismatch: %s != %s", freshQM.OperationID, qm.OperationID))
+			fmt.Errorf("snapshot_hash is missing"))
 	}
 
-	if freshQM.ExtensionID != qm.ExtensionID {
+	recomputedSnapshotHash := fmt.Sprintf("%x", sha256.Sum256([]byte(freshQM.SnapshotJSON)))
+	if recomputedSnapshotHash != freshQM.SnapshotHash {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-			fmt.Errorf("extension_id mismatch: %s != %s", freshQM.ExtensionID, qm.ExtensionID))
+			fmt.Errorf("snapshot_hash mismatch: recomputed=%s stored=%s", recomputedSnapshotHash, freshQM.SnapshotHash))
 	}
 
-	if freshQM.ArtifactID != qm.ArtifactID {
+	if actualGenerationTreeHash == "" {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-			fmt.Errorf("artifact_id mismatch: %s != %s", freshQM.ArtifactID, qm.ArtifactID))
+			fmt.Errorf("actual_generation_tree_hash is empty"))
+	}
+
+	if freshQM.TreeHash == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+			fmt.Errorf("tree_hash is empty"))
+	}
+
+	if freshQM.TreeHash != actualGenerationTreeHash {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+			fmt.Errorf("tree_hash mismatch: metadata=%s actual=%s", freshQM.TreeHash, actualGenerationTreeHash))
+	}
+
+	if freshQM.QuarantineID == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+			fmt.Errorf("quarantine_id is empty"))
+	}
+
+	if freshQM.OperationID != operation.OperationID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+			fmt.Errorf("operation_id mismatch: %s != %s", freshQM.OperationID, operation.OperationID))
+	}
+
+	if freshQM.ExtensionID != operation.ExtensionID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+			fmt.Errorf("extension_id mismatch: %s != %s", freshQM.ExtensionID, operation.ExtensionID))
+	}
+
+	if freshQM.ArtifactID != operation.ArtifactID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+			fmt.Errorf("artifact_id mismatch: %s != %s", freshQM.ArtifactID, operation.ArtifactID))
 	}
 
 	if freshQM.ExpectedVersionID != qm.ExpectedVersionID {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-			fmt.Errorf("expected_version_id mismatch: %s != %s", freshQM.ExpectedVersionID, qm.ExpectedVersionID))
+			fmt.Errorf("expected_version_id mismatch: fresh=%s cached=%s", freshQM.ExpectedVersionID, qm.ExpectedVersionID))
 	}
 
 	if freshQM.ExpectedGenerationID != qm.ExpectedGenerationID {
 		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-			fmt.Errorf("expected_generation_id mismatch: %s != %s", freshQM.ExpectedGenerationID, qm.ExpectedGenerationID))
+			fmt.Errorf("expected_generation_id mismatch: fresh=%s cached=%s", freshQM.ExpectedGenerationID, qm.ExpectedGenerationID))
 	}
 
 	if !r.pathsMatchExactly(freshQM.OriginalCurrentPath, qm.OriginalCurrentPath) {
@@ -1690,12 +1882,109 @@ func (r *Runtime) validateReleasedQuarantineMetadata(qm PackageQuarantineMetadat
 			fmt.Errorf("fencing_token invalid: %d", freshQM.FencingToken))
 	}
 
-	if freshQM.SnapshotJSON != "" && freshQM.SnapshotHash != "" {
-		recomputedSnapshotHash := fmt.Sprintf("%x", sha256.Sum256([]byte(freshQM.SnapshotJSON)))
-		if recomputedSnapshotHash != freshQM.SnapshotHash {
-			return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
-				fmt.Errorf("snapshot_hash mismatch: recomputed=%s stored=%s", recomputedSnapshotHash, freshQM.SnapshotHash))
-		}
+	if freshQM.FencingToken > guard.FencingToken {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect released quarantine",
+			fmt.Errorf("fencing_token exceeds guard: metadata=%d guard=%d", freshQM.FencingToken, guard.FencingToken))
+	}
+
+	releaseStep, hasReleaseStep := rc.completed[StepUninstallRecoveryReleaseQuarantineMetadata]
+	if !hasReleaseStep || releaseStep.Status != StatusCompleted || releaseStep.ResultJSON == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release quarantine step missing or incomplete"))
+	}
+
+	var releaseResult UninstallReleaseQuarantineStepResult
+	if err := json.Unmarshal([]byte(releaseStep.ResultJSON), &releaseResult); err != nil {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result_json is invalid: %w", err))
+	}
+
+	if releaseResult.OperationID == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing operation_id"))
+	}
+
+	if releaseResult.QuarantineID == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing quarantine_id"))
+	}
+
+	if releaseResult.ExtensionID == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing extension_id"))
+	}
+
+	if releaseResult.ArtifactID == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing artifact_id"))
+	}
+
+	if releaseResult.ReleasedAt == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing released_at"))
+	}
+
+	if releaseResult.SnapshotHash == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing snapshot_hash"))
+	}
+
+	if releaseResult.GenerationHash == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing generation_hash"))
+	}
+
+	if releaseResult.MetadataHash == "" {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result missing metadata_hash"))
+	}
+
+	if releaseResult.OperationID != operation.OperationID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step operation_id mismatch: %s != %s", releaseResult.OperationID, operation.OperationID))
+	}
+
+	if releaseResult.QuarantineID != freshQM.QuarantineID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step quarantine_id mismatch: step=%s metadata=%s", releaseResult.QuarantineID, freshQM.QuarantineID))
+	}
+
+	if releaseResult.ExtensionID != freshQM.ExtensionID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step extension_id mismatch: %s != %s", releaseResult.ExtensionID, freshQM.ExtensionID))
+	}
+
+	if releaseResult.ArtifactID != freshQM.ArtifactID {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step artifact_id mismatch: %s != %s", releaseResult.ArtifactID, freshQM.ArtifactID))
+	}
+
+	if releaseResult.ReleasedAt != freshQM.ReleasedAt {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step released_at mismatch: %s != %s", releaseResult.ReleasedAt, freshQM.ReleasedAt))
+	}
+
+	if releaseResult.SnapshotHash != freshQM.SnapshotHash {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step snapshot_hash mismatch: %s != %s", releaseResult.SnapshotHash, freshQM.SnapshotHash))
+	}
+
+	if releaseResult.GenerationHash != actualGenerationTreeHash {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step generation_hash mismatch: %s != %s", releaseResult.GenerationHash, actualGenerationTreeHash))
+	}
+
+	metadataCanonical := packageCanonicalJSON(freshQM)
+	expectedMetadataHash := fmt.Sprintf("%x", sha256.Sum256([]byte(metadataCanonical)))
+	if releaseResult.MetadataHash != expectedMetadataHash {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step metadata_hash mismatch: stored=%s recomputed=%s", releaseResult.MetadataHash, expectedMetadataHash))
+	}
+
+	stepResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(releaseStep.ResultJSON)))
+	if stepResultHash != releaseStep.ResultHash {
+		return NewPackageErrorWithRecovery(PackageErrCodeFinalGateEvidenceInvalid, 409, false, true, "Inspect release step",
+			fmt.Errorf("release step result_hash mismatch: recomputed=%s stored=%s", stepResultHash, releaseStep.ResultHash))
 	}
 
 	return nil
@@ -1888,6 +2177,23 @@ type UninstallFinalizeStepResult struct {
 	OperationID         string `json:"operationId"`
 	FinalGateStepID     string `json:"finalGateStepId"`
 	FinalGateResultHash string `json:"finalGateResultHash"`
+}
+
+func isLeaseRelatedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	for _, code := range []string{
+		PackageErrCodeLeaseFenced,
+		PackageErrCodeLeaseLost,
+		OperationErrProofUnavailable,
+		OperationErrLeaseProofMismatch,
+	} {
+		if IsPackageOperationError(err, code) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runtime) requirePackageRecovery(ctx context.Context, operation PackageOperationRecord, detail string, cause error, guard PackageWriteGuard) error {

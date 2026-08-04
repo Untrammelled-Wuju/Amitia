@@ -33,7 +33,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '角色',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
       ),
       body: SafeArea(
         top: false,

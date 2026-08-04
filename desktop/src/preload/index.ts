@@ -69,6 +69,9 @@ const api = {
   setAuthToken(token: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.setAuthToken, token);
   },
+  getBackendAuthHeaders(): Promise<Record<string, string>> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getBackendAuthHeaders);
+  },
   onUINavigate(callback: (target: string) => void): () => void {
     const listener = (
       _event: Electron.IpcRendererEvent,

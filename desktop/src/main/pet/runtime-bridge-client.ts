@@ -95,6 +95,7 @@ export interface HeartbeatPayload {
 export interface RegisterPayload {
   runtimeId: string;
   deviceId: string;
+  bootstrapTicket: string;
   processInstanceId: string;
   appVersion: string;
   platform: string;
@@ -170,9 +171,9 @@ export interface CommandResultPayload {
 
 export interface RuntimeBridgeConfig {
   endpoint: string;
-  token: string;
-  runtimeId?: string;
-  deviceId?: string;
+  bootstrapTicket: string;
+  runtimeId: string;
+  deviceId: string;
   appVersion?: string;
   capabilities?: string[];
 }
@@ -407,7 +408,7 @@ export class RuntimeBridgeClient {
   private doConnect(): void {
     if (this.intentionallyClosed) return;
 
-    const subprotocols = [SUBPROTOCOL, `amitia-runtime.${this.config.token}`];
+    const subprotocols = [SUBPROTOCOL];
     try {
       this.ws = new WebSocket(this.config.endpoint, subprotocols);
     } catch (err) {
@@ -445,6 +446,7 @@ export class RuntimeBridgeClient {
     const payload: RegisterPayload = {
       runtimeId: this.runtimeId,
       deviceId: this.deviceId,
+      bootstrapTicket: this.config.bootstrapTicket,
       processInstanceId: process.pid.toString(),
       appVersion: this.config.appVersion || app.getVersion(),
       platform: process.platform,
@@ -1035,21 +1037,8 @@ export class RuntimeBridgeClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-    }
-    this.reconnectAttempts += 1;
-    const delay = Math.min(
-      RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1),
-      RECONNECT_MAX_DELAY_MS,
-    );
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.doConnect();
-    }, delay);
-    if (typeof (this.reconnectTimer as NodeJS.Timeout).unref === "function") {
-      (this.reconnectTimer as NodeJS.Timeout).unref();
-    }
+    if (this.intentionallyClosed) return;
+    this.callbacks.onDisconnected?.("ticket refresh required");
   }
 
   private cleanupTimers(): void {

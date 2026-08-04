@@ -56,7 +56,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '扩展',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
       ),
       body: SafeArea(
         top: false,

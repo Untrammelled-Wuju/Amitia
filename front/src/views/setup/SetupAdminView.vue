@@ -131,7 +131,7 @@ async function handleSetup() {
 
   loading.value = true;
   try {
-    const res = await apiClient.post("/api/auth/setup", {
+    const res = await apiClient.post("/api/public/auth/setup", {
       username: form.username,
       password: form.password,
     });

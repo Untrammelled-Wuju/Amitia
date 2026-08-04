@@ -81,7 +81,7 @@ type Connection struct {
 	capabilities   CapabilitySet
 	config         *DesktopPetRuntimeConfig
 	onResult       func(msg *contracts.RuntimeMessage, payload *contracts.ResultPayload)
-	onEvent        func(msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
+	onEvent        func(conn *Connection, msg *contracts.RuntimeMessage, payload *contracts.EventPayload)
 	onHeartbeat    func(runtimeID, sessionID string, payload *contracts.HeartbeatPayload)
 	onClose        func(sessionID, runtimeID string, code int, reason string)
 	onRegister     func(conn *Connection, payload *contracts.RegisterPayload) (*contracts.WelcomePayload, error)
@@ -141,6 +141,16 @@ func (c *Connection) routeMessage(msg *contracts.RuntimeMessage) {
 		c.Close(4006, "sessionID mismatch")
 		return
 	}
+	if msg.UserID != "" && msg.UserID != c.userID {
+		log.Logger.Warnf("runtime conn: userID mismatch sessionID=%s connUserID=%s msgUserID=%s", c.sessionID, c.userID, msg.UserID)
+		c.Close(4007, "userID mismatch")
+		return
+	}
+	if msg.DeviceID != "" && msg.DeviceID != c.deviceID {
+		log.Logger.Warnf("runtime conn: deviceID mismatch sessionID=%s connDeviceID=%s msgDeviceID=%s", c.sessionID, c.deviceID, msg.DeviceID)
+		c.Close(4008, "deviceID mismatch")
+		return
+	}
 	switch msg.Kind {
 	case contracts.KindResult:
 		var payload contracts.ResultPayload
@@ -162,7 +172,7 @@ func (c *Connection) routeMessage(msg *contracts.RuntimeMessage) {
 			}
 		}
 		if c.onEvent != nil {
-			c.onEvent(msg, &payload)
+			c.onEvent(c, msg, &payload)
 		}
 	case contracts.KindControl:
 		c.routeControl(msg)
@@ -336,6 +346,10 @@ func (c *Connection) RuntimeID() string {
 
 func (c *Connection) UserID() string {
 	return c.userID
+}
+
+func (c *Connection) DeviceID() string {
+	return c.deviceID
 }
 
 func (c *Connection) State() SessionState {

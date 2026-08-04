@@ -8,6 +8,7 @@ import { ConfigStore } from "./config-store";
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
 import { setAuthToken } from "./auth-token-store";
+import { getDesktopAuthHeaders } from "./backend-session-client";
 
 export function registerIpcHandlers(
   configStore: ConfigStore,
@@ -262,5 +263,9 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.setAuthToken, async (_event, token: string) => {
     setAuthToken(token || null);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async () => {
+    return getDesktopAuthHeaders();
   });
 }

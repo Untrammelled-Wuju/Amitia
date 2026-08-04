@@ -4,9 +4,8 @@ package migration
 
 func RotationJournalMigration() Migration {
 	return Migration{
-		Version:           "202608030002",
-		Name:              "add_desktop_pet_token_rotation_journal",
-		AcceptedChecksums: []string{"f6c410b699f28586500c40a7d612a294647e035ef0008c4a699da22302b40203"},
+		Version: "202608030003",
+		Name:    "add_desktop_pet_token_rotation_journal",
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_token_rotation_journal (
 				id TEXT PRIMARY KEY,

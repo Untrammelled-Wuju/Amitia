@@ -136,6 +136,10 @@ func DefaultMigrations() []Migration {
 		DesktopPetBehaviorV2ColumnsMigration(),
 		DesktopPetLocalSessionMigration(),
 		RuntimeBootstrapTicketMigration(),
+		RuntimeBootstrapTicketRuntimeIDForwardFix(),
 		RotationJournalMigration(),
-	}
+		DesktopPetRuntimeV2CommandForwardFixMigration(),
+	DesktopPetImportStagingsMigration(),
+	DesktopPetMigrationControlMigration(),
+}
 }

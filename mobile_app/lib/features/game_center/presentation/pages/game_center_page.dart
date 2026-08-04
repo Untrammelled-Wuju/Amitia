@@ -46,7 +46,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '游戏中心',
-        navigation: AmitiaAppBarNavigation.drawer,
+        navigation: AmitiaAppBarNavigation.back,
       ),
       body: SafeArea(
         top: false,

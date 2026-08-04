@@ -31,6 +31,7 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/migration"
 )
 
@@ -125,7 +126,12 @@ func main() {
 	surrealdbDB.StartSurrealMonitor()
 
 	graphSvc := initGraph()
-	services := NewAppServices(ctx, graphSvc)
+	services, err := NewAppServices(ctx, graphSvc)
+	if err != nil {
+		log.Error("应用服务初始化失败:", err)
+		cleanup()
+		os.Exit(1)
+	}
 	if err := services.DesktopPetRuntime.Start(appCtx); err != nil {
 		log.Logger.Errorf("main: runtime bridge start failed: %v", err)
 	}
@@ -213,19 +219,32 @@ func main() {
 	defer services.OutboxWorker.Stop()
 	services.DeliveryWorker.Start(appCtx)
 	defer services.DeliveryWorker.Stop()
-	services.DesktopPetWorker.Start(appCtx)
-	defer services.DesktopPetWorker.Stop()
-	services.ProcessingWorker.Start(appCtx)
-	defer services.ProcessingWorker.Stop()
-	services.QualityWorker.Start(appCtx)
-	defer services.QualityWorker.Stop()
-	services.RegenerationWorker.Start(appCtx)
-	defer services.RegenerationWorker.Stop()
-	if services.BehaviorService != nil {
-		if err := services.BehaviorService.Start(appCtx); err != nil {
-			log.Error("failed to start behavior service: ", err)
+
+	desktopBlocked := false
+	if services.Readiness != nil && services.SafeMode != nil {
+		snap := services.Readiness.Snapshot()
+		if snap.OverallStatus == readiness.StatusBlocked {
+			desktopBlocked = true
+			services.SafeMode.Enter("startup readiness blocked")
+			log.Error("startup readiness blocked, entering safe mode: blocking=", snap.BlockingCount)
 		}
-		defer services.BehaviorService.Stop()
+	}
+
+	if !desktopBlocked {
+		services.DesktopPetWorker.Start(appCtx)
+		defer services.DesktopPetWorker.Stop()
+		services.ProcessingWorker.Start(appCtx)
+		defer services.ProcessingWorker.Stop()
+		services.QualityWorker.Start(appCtx)
+		defer services.QualityWorker.Stop()
+		services.RegenerationWorker.Start(appCtx)
+		defer services.RegenerationWorker.Stop()
+		if services.BehaviorService != nil {
+			if err := services.BehaviorService.Start(appCtx); err != nil {
+				log.Error("failed to start behavior service: ", err)
+			}
+			defer services.BehaviorService.Stop()
+		}
 	}
 
 	selfHeal := startSelfHealMonitor(appCtx, db)

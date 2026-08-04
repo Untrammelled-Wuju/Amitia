@@ -76,6 +76,7 @@ type CandidateScope struct {
 type RuntimeCommandScope struct {
 	UserID    string
 	DeviceID  string
+	RuntimeID string
 	CommandID string
 }
 

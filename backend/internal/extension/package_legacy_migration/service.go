@@ -3,112 +3,691 @@
 package package_legacy_migration
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"sort"
-	"sync"
-	"sync/atomic"
+	"strings"
+	"time"
 
-	"github.com/u-ai/backend/internal/extension"
-	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/extension/kernel"
 )
 
 type MigrationService struct {
-	repository        *extension.Repository
-	registry          *extension.Registry
-	validator         *extension.SchemaValidator
-	compiler          *extension.WorkflowCompiler
-	workflowInstaller *extension.WorkshopInstaller
-	agentSkills       *extension.AgentSkillService
-	limits            extension.PackageLimits
-	locks             sync.Map
-	metrics           sync.Map
-	kernel            *extensionkernel.Runtime
-	kernelProxy       *extension.KernelLifecycleProxy
-	readModel         *extension.ExtensionReadModelService
+	source *SourceRepository
+	target KernelMigrationTarget
+
+	ownerID string
 }
 
-func NewMigrationService(repository *extension.Repository, registry *extension.Registry, validator *extension.SchemaValidator, compiler *extension.WorkflowCompiler, workflowInstaller *extension.WorkshopInstaller, agentSkills *extension.AgentSkillService) *MigrationService {
-	service := &MigrationService{repository: repository, registry: registry, validator: validator, compiler: compiler, workflowInstaller: workflowInstaller, agentSkills: agentSkills, limits: extension.DefaultPackageLimits()}
-	for _, name := range []string{"extension_package_import_total", "extension_package_import_failure_total", "extension_package_export_total", "extension_package_upgrade_total", "extension_package_upgrade_failure_total", "extension_package_rollback_total", "extension_package_uninstall_total", "extension_package_checksum_failure_total", "extension_package_signature_invalid_total", "extension_package_secret_detected_total", "extension_package_conflict_total", "extension_package_cleanup_failure_total", "package_preview_total", "package_preview_rejected_total", "package_install_total", "package_install_failed_total", "package_operation_requires_recovery", "package_signature_invalid_total", "package_signer_unknown_total", "package_unsigned_confirmed_total", "package_integrity_failed_total", "package_legacy_read_calls", "package_legacy_write_calls", "package_blob_bytes", "package_staging_orphans", "package_artifact_missing", "package_definition_file_mismatch", "legacy_data_detected", "legacy_migration_required", "legacy_write_attempts"} {
-		service.metrics.Store(name, new(uint64))
+func NewMigrationService(
+	source *SourceRepository,
+	target KernelMigrationTarget,
+) (*MigrationService, error) {
+	if source == nil ||
+		target == nil {
+		return nil,
+			fmt.Errorf(
+				"legacy migration: service dependencies unavailable",
+			)
 	}
-	return service
+
+	return &MigrationService{
+		source:  source,
+		target:  target,
+		ownerID: "legacy-migration-" +
+			uuid.NewString(),
+	}, nil
 }
 
-func (s *MigrationService) AttachKernel(kernel *extensionkernel.Runtime) error {
-	if kernel == nil {
+func hashBytes(
+	value []byte,
+) string {
+	sum := sha256.Sum256(value)
+
+	return "sha256:" +
+		hex.EncodeToString(sum[:])
+}
+
+func hashPreview(
+	preview kernel.InstallPreview,
+) string {
+	required :=
+		append(
+			[]string(nil),
+			preview.RequiredConfirmations...,
+		)
+
+	sort.Strings(required)
+
+	evidence := struct {
+		SessionID string `json:"sessionId"`
+
+		ArtifactID  string `json:"artifactId"`
+		ExtensionID string `json:"extensionId"`
+		Version     string `json:"version"`
+
+		ArchiveHash     string `json:"archiveHash"`
+		ManifestHash    string `json:"manifestHash"`
+		ArtifactHash    string `json:"artifactHash"`
+		ContentTreeHash string `json:"contentTreeHash"`
+
+		Installable bool `json:"installable"`
+
+		RequiredConfirmations []string `json:"requiredConfirmations"`
+	}{
+		SessionID:
+			preview.SessionID,
+		ArtifactID:
+			preview.ArtifactID,
+		ExtensionID:
+			preview.ExtensionID,
+		Version:
+			preview.Version,
+		ArchiveHash:
+			preview.ArchiveHash,
+		ManifestHash:
+			preview.ManifestHash,
+		ArtifactHash:
+			preview.ArtifactHash,
+		ContentTreeHash:
+			preview.ContentTreeHash,
+		Installable:
+			preview.Installable,
+		RequiredConfirmations:
+			required,
+	}
+
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		panic(err)
+	}
+
+	return hashBytes(raw)
+}
+
+func normalizeCandidate(
+	candidate LegacyPackageCandidate,
+) LegacyPackageCandidate {
+	candidate.ExtensionID =
+		strings.TrimSpace(
+			candidate.ExtensionID,
+		)
+
+	candidate.Version =
+		strings.TrimSpace(
+			candidate.Version,
+		)
+
+	candidate.UserID =
+		strings.TrimSpace(
+			candidate.UserID,
+		)
+
+	candidate.ScopeType =
+		strings.TrimSpace(
+			candidate.ScopeType,
+		)
+
+	candidate.ScopeID =
+		strings.TrimSpace(
+			candidate.ScopeID,
+		)
+
+	if candidate.ScopeType == "" {
+		candidate.ScopeType = "global"
+	}
+
+	return candidate
+}
+
+func (s *MigrationService) Detect(
+	ctx context.Context,
+) (MigrationReport, error) {
+	var report MigrationReport
+
+	candidates, err :=
+		s.source.ListCandidates(ctx)
+	if err != nil {
+		return report, err
+	}
+
+	report.Total = len(candidates)
+
+	for _, candidate :=
+		range candidates {
+		candidate =
+			normalizeCandidate(candidate)
+
+		checkpoint,
+			found,
+			err :=
+			s.target.Status(
+				ctx,
+				candidate.ExtensionID,
+			)
+		if err != nil {
+			return report, err
+		}
+
+		if found {
+			switch checkpoint.State {
+			case kernel.LegacyMigrationStateCompleted:
+				report.Completed++
+				continue
+
+			case kernel.LegacyMigrationStateManualRequired:
+				report.PendingManual++
+				report.PendingExtensions =
+					append(
+						report.PendingExtensions,
+						candidate.ExtensionID,
+					)
+				continue
+
+			case kernel.LegacyMigrationStateBlocked:
+				report.Blocked++
+				report.PendingExtensions =
+					append(
+						report.PendingExtensions,
+						candidate.ExtensionID,
+					)
+				continue
+			}
+		}
+
+		exists, err :=
+			s.target.ExtensionExists(
+				ctx,
+				candidate.ExtensionID,
+			)
+		if err != nil {
+			return report, err
+		}
+
+		if exists {
+			report.Completed++
+			continue
+		}
+
+		report.PendingManual++
+		report.PendingExtensions =
+			append(
+				report.PendingExtensions,
+				candidate.ExtensionID,
+			)
+	}
+
+	sort.Strings(
+		report.PendingExtensions,
+	)
+
+	return report, nil
+}
+
+func (s *MigrationService) migrateSigners(
+	ctx context.Context,
+) error {
+	signers, err :=
+		s.source.ListSigners(ctx)
+	if err != nil {
+		return err
+	}
+
+	now :=
+		time.Now().UTC().
+			Format(time.RFC3339Nano)
+
+	for _, signer :=
+		range signers {
+		fingerprint :=
+			strings.TrimSpace(
+				signer.Fingerprint,
+			)
+
+		if fingerprint == "" {
+			continue
+		}
+
+		keyID :=
+			"legacy-" +
+				strings.TrimPrefix(
+					strings.ReplaceAll(
+						fingerprint,
+						":",
+						"-",
+					),
+					"sha256-",
+				)
+
+		if len(keyID) > 96 {
+			keyID = keyID[:96]
+		}
+
+		createdAt :=
+			signer.CreatedAt
+
+		if createdAt == "" {
+			createdAt = now
+		}
+
+		err :=
+			s.target.PutSigner(
+				ctx,
+				kernel.PackagePublisherKeyRecord{
+					KeyID:
+						keyID,
+					Fingerprint:
+						fingerprint,
+					PublicKey:
+						[]byte{},
+					PublisherID:
+						"legacy:" +
+							fingerprint,
+					TrustSource:
+						"legacy_fingerprint_only",
+					TrustLevel:
+						"unknown",
+					KeyState:
+						"unknown",
+					CreatedAt:
+						createdAt,
+					UpdatedAt:
+						now,
+				},
+			)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *MigrationService) MigrateAll(
+	ctx context.Context,
+) error {
+	if err :=
+		s.source.BackfillOwnership(
+			ctx,
+		); err != nil {
+		return err
+	}
+
+	if err :=
+		s.migrateSigners(
+			ctx,
+		); err != nil {
+		return err
+	}
+
+	candidates, err :=
+		s.source.ListCandidates(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, candidate :=
+		range candidates {
+		if err :=
+			s.MigrateOne(
+				ctx,
+				normalizeCandidate(
+					candidate,
+				),
+			); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *MigrationService) MigrateOne(
+	ctx context.Context,
+	candidate LegacyPackageCandidate,
+) error {
+	if candidate.ExtensionID == "" {
+		return fmt.Errorf(
+			"legacy migration: extension id missing",
+		)
+	}
+
+	sourceHash :=
+		hashBytes(
+			candidate.PackageBlob,
+		)
+
+	checkpoint, err :=
+		s.target.Acquire(
+			ctx,
+			candidate.ExtensionID,
+			sourceHash,
+			s.ownerID,
+			5*time.Minute,
+		)
+	if errors.Is(
+		err,
+		kernel.ErrLegacyMigrationAlreadyCompleted,
+	) {
 		return nil
 	}
-	s.kernel = kernel
-	s.readModel = extension.NewExtensionReadModelService(kernel, s.repository)
-	return kernel.RecoverPackageOperations(context.Background())
-}
-
-func (s *MigrationService) metric(name string) {
-	if value, ok := s.metrics.Load(name); ok {
-		atomic.AddUint64(value.(*uint64), 1)
+	if err != nil {
+		return err
 	}
-}
 
-func (s *MigrationService) Metrics() map[string]uint64 {
-	result := map[string]uint64{}
-	s.metrics.Range(func(key, value interface{}) bool {
-		result[key.(string)] = atomic.LoadUint64(value.(*uint64))
-		return true
-	})
-	result["package_legacy_read_calls"] = uint64(extensionkernel.GlobalLegacyReadCounter().PackageReadCallsFallbacks())
-	result["package_legacy_write_calls"] = uint64(extensionkernel.GlobalLegacyCallCounter().PackageWriteCalls())
-	result["legacy_write_attempts"] = 0
-	if s.repository != nil && s.repository.DB() != nil && s.repository.DB().Migrator().HasTable("extension_package_legacy_migrations") {
-		var legacyDetected int64
-		s.repository.DB().Raw(`SELECT COUNT(*) FROM extension_package_legacy_migrations WHERE migration_status NOT IN ('completed')`).Scan(&legacyDetected)
-		result["legacy_data_detected"] = uint64(legacyDetected)
-		var migrationRequired int64
-		s.repository.DB().Raw(`SELECT COUNT(*) FROM extension_package_legacy_migrations WHERE migration_status IN ('manual_required', 'pending_manual_migration')`).Scan(&migrationRequired)
-		result["legacy_migration_required"] = uint64(migrationRequired)
-	}
-	if s.repository != nil && s.repository.DB() != nil && s.repository.DB().Migrator().HasTable("extension_artifacts") {
-		var blobBytes int64
-		if s.repository.DB().Raw(`SELECT COALESCE(SUM(LENGTH(content_blob)), 0) FROM extension_artifacts`).Scan(&blobBytes).Error == nil && blobBytes > 0 {
-			result["package_blob_bytes"] = uint64(blobBytes)
+	releaseRequired := true
+
+	defer func() {
+		if releaseRequired {
+			_ = s.target.Release(
+				context.Background(),
+				checkpoint,
+			)
 		}
+	}()
+
+	exists, err :=
+		s.target.ExtensionExists(
+			ctx,
+			candidate.ExtensionID,
+		)
+	if err != nil {
+		return err
 	}
-	if s.kernel != nil && s.kernel.Container() != nil {
-		report := &extensionkernel.FinalGateReport{Metrics: map[string]int64{}, Details: []extensionkernel.FinalGateIssue{}, Errors: []string{}}
-		extensionkernel.NewFinalGateProbe(s.kernel.Container()).ProbePackageReleaseGate(context.Background(), report)
-		if len(report.Errors) == 0 {
-			result["package_operation_requires_recovery"] = uint64(report.Metrics["requires_recovery_operations"])
-			result["package_staging_orphans"] = uint64(report.Metrics["orphan_staging_directories"])
-			result["package_artifact_missing"] = uint64(report.Metrics["missing_artifact_rows"])
-			result["package_definition_file_mismatch"] = uint64(report.Metrics["installation_without_files"] + report.Metrics["files_without_installation"])
+
+	if exists {
+		artifactID, err :=
+			s.target.InstallationArtifactID(
+				ctx,
+				candidate.ExtensionID,
+			)
+		if err != nil {
+			return err
 		}
+
+		if err :=
+			s.target.Update(
+				ctx,
+				checkpoint,
+				kernel.LegacyMigrationCheckpointUpdate{
+					State:
+						kernel.LegacyMigrationStateVerifying,
+					CurrentStep:
+						"verify_existing_installation",
+					ArtifactID:
+						artifactID,
+				},
+			); err != nil {
+			return err
+		}
+
+		verification, err :=
+			s.target.Verify(
+				ctx,
+				candidate.ExtensionID,
+				artifactID,
+				"",
+				sourceHash,
+			)
+		if err != nil {
+			return err
+		}
+
+		if err :=
+			s.target.Complete(
+				ctx,
+				checkpoint,
+				verification,
+			); err != nil {
+			return err
+		}
+
+		releaseRequired = false
+		return nil
 	}
-	return result
-}
 
-func (s *MigrationService) lockExtension(id string) (func(), bool) {
-	_, loaded := s.locks.LoadOrStore(id, struct{}{})
-	if loaded {
-		return nil, false
+	if len(candidate.PackageBlob) == 0 ||
+		candidate.UserID == "" {
+		reason :=
+			"legacy package blob is unavailable"
+
+		if candidate.UserID == "" {
+			reason =
+				"legacy package owner is unavailable"
+		}
+
+		return s.target.Update(
+			ctx,
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStateManualRequired,
+				CurrentStep:
+					"manual_required",
+				LastError:
+					reason,
+			},
+		)
 	}
-	return func() { s.locks.Delete(id) }, true
-}
 
-func sortedPackageCapabilities(values []string) []string {
-	result := append([]string(nil), values...)
-	sort.Strings(result)
-	return result
-}
+	preview, err :=
+		s.target.Preview(
+			ctx,
+			kernel.PackagePreviewRequest{
+				UserID:
+					candidate.UserID,
+				ScopeType:
+					candidate.ScopeType,
+				ScopeID:
+					candidate.ScopeID,
+				FileName:
+					candidate.ExtensionID +
+						"-" +
+						candidate.Version +
+						".amitiax",
+			},
+			bytes.NewReader(
+				candidate.PackageBlob,
+			),
+		)
+	if err != nil {
+		_ = s.target.Update(
+			context.Background(),
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStateBlocked,
+				CurrentStep:
+					"preview_failed",
+				LastError:
+					err.Error(),
+			},
+		)
 
-func (s *MigrationService) MigrateLegacyPackageData(ctx context.Context) error {
-	if err := s.repository.DB().WithContext(ctx).Exec(`UPDATE extensions SET owner_user_id = (SELECT user_id FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_type = COALESCE((SELECT scope_type FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_type), scope_id = COALESCE((SELECT scope_id FROM extension_agent_skill_metadata WHERE extension_agent_skill_metadata.extension_id = extensions.extension_id), scope_id) WHERE source = 'instructions' AND owner_user_id = ''`).Error; err != nil {
 		return err
 	}
-	if err := s.repository.DB().WithContext(ctx).Exec(`UPDATE extensions SET owner_user_id = COALESCE((SELECT ws.user_id FROM extension_artifacts ea JOIN extension_workshop_sessions ws ON ws.id = ea.session_id WHERE ea.extension_id = extensions.extension_id AND ea.extension_version = extensions.current_version LIMIT 1), owner_user_id), scope_type = CASE WHEN COALESCE((SELECT ws.character_id FROM extension_artifacts ea JOIN extension_workshop_sessions ws ON ws.id = ea.session_id WHERE ea.extension_id = extensions.extension_id AND ea.extension_version = extensions.current_version LIMIT 1), '') = '' THEN 'global' ELSE 'character' END, scope_id = COALESCE((SELECT ws.character_id FROM extension_artifacts ea JOIN extension_workshop_sessions ws ON ws.id = ea.session_id WHERE ea.extension_id = extensions.extension_id AND ea.extension_version = extensions.current_version LIMIT 1), scope_id) WHERE source = 'workflow' AND owner_user_id = ''`).Error; err != nil {
+
+	previewHash :=
+		hashPreview(preview)
+
+	if err :=
+		s.target.Update(
+			ctx,
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStatePreviewed,
+				CurrentStep:
+					"previewed",
+				PreviewHash:
+					previewHash,
+				ArtifactID:
+					preview.ArtifactID,
+			},
+		); err != nil {
 		return err
 	}
-	if err := s.repository.DB().WithContext(ctx).Exec(`UPDATE extension_versions SET artifact_id = COALESCE((SELECT artifact_id FROM extension_artifacts WHERE extension_artifacts.extension_id = extension_versions.extension_id AND extension_artifacts.extension_version = extension_versions.version LIMIT 1), artifact_id), artifact_hash = CASE WHEN artifact_hash = '' THEN checksum ELSE artifact_hash END, package_hash = CASE WHEN package_hash = '' THEN checksum ELSE package_hash END, source = CASE WHEN source = '' THEN COALESCE((SELECT source FROM extension_artifacts WHERE extension_artifacts.extension_id = extension_versions.extension_id AND extension_artifacts.extension_version = extension_versions.version LIMIT 1), '') ELSE source END, compatibility_status = CASE WHEN compatibility_status = '' THEN 'compatible' ELSE compatibility_status END, capabilities_json = CASE WHEN capabilities_json = '' THEN '[]' ELSE capabilities_json END, validation_status = CASE WHEN validation_status = '' THEN 'valid' ELSE validation_status END`).Error; err != nil {
+
+	if !preview.Installable ||
+		len(
+			preview.RequiredConfirmations,
+		) > 0 {
+		return s.target.Update(
+			ctx,
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStateManualRequired,
+				CurrentStep:
+					"manual_confirmation_required",
+				PreviewHash:
+					previewHash,
+				ArtifactID:
+					preview.ArtifactID,
+				LastError:
+					"legacy package requires explicit user confirmation",
+			},
+		)
+	}
+
+	if preview.ExtensionID !=
+		candidate.ExtensionID {
+		return s.target.Update(
+			ctx,
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStateBlocked,
+				CurrentStep:
+					"preview_identity_mismatch",
+				PreviewHash:
+					previewHash,
+				ArtifactID:
+					preview.ArtifactID,
+				LastError:
+					"preview extension id does not match legacy candidate",
+			},
+		)
+	}
+
+	if err :=
+		s.target.Update(
+			ctx,
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStateMigrating,
+				CurrentStep:
+					"kernel_install",
+				PreviewHash:
+					previewHash,
+				ArtifactID:
+					preview.ArtifactID,
+			},
+		); err != nil {
 		return err
 	}
+
+	installResult, err :=
+		s.target.Install(
+			ctx,
+			kernel.PackageInstallRequest{
+				SessionID:
+					preview.SessionID,
+				UserID:
+					candidate.UserID,
+				ScopeType:
+					candidate.ScopeType,
+				ScopeID:
+					candidate.ScopeID,
+				ExpectedExtensionID:
+					candidate.ExtensionID,
+				IdempotencyKey:
+					"legacy-migration:" +
+						sourceHash,
+			},
+		)
+	if err != nil {
+		_ = s.target.Update(
+			context.Background(),
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStateBlocked,
+				CurrentStep:
+					"kernel_install_failed",
+				PreviewHash:
+					previewHash,
+				ArtifactID:
+					preview.ArtifactID,
+				LastError:
+					err.Error(),
+			},
+		)
+
+		return err
+	}
+
+	if installResult.ExtensionID !=
+		candidate.ExtensionID {
+		return fmt.Errorf(
+			"legacy migration: installed extension mismatch",
+		)
+	}
+
+	if err :=
+		s.target.Update(
+			ctx,
+			checkpoint,
+			kernel.LegacyMigrationCheckpointUpdate{
+				State:
+					kernel.LegacyMigrationStateVerifying,
+				CurrentStep:
+					"verify_kernel_install",
+				PreviewHash:
+					previewHash,
+				ArtifactID:
+					preview.ArtifactID,
+				OperationID:
+					installResult.OperationID,
+			},
+		); err != nil {
+		return err
+	}
+
+	verification, err :=
+		s.target.Verify(
+			ctx,
+			candidate.ExtensionID,
+			preview.ArtifactID,
+			installResult.OperationID,
+			sourceHash,
+		)
+	if err != nil {
+		return err
+	}
+
+	if err :=
+		s.target.Complete(
+			ctx,
+			checkpoint,
+			verification,
+		); err != nil {
+		return err
+	}
+
+	releaseRequired = false
 	return nil
+}
+
+func (s *MigrationService) Checkpoints(
+	ctx context.Context,
+) ([]kernel.LegacyMigrationCheckpoint, error) {
+	return s.target.List(ctx)
 }

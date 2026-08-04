@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,67 +15,104 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type StorageRootKind string
+
+const (
+	RootGenerationArtifacts StorageRootKind = "generation_artifacts"
+	RootProcessingRevisions StorageRootKind = "processing_revisions"
+	RootEditingAssets       StorageRootKind = "editing_assets"
+	RootQualityReports      StorageRootKind = "quality_reports"
+	RootReleasePublished    StorageRootKind = "release_published"
+	RootInstallations       StorageRootKind = "installations"
+	RootImportQuarantine    StorageRootKind = "import_quarantine"
+	RootStorageTrash        StorageRootKind = "storage_trash"
+)
+
+type DeleteExpectation struct {
+	EntityType string
+	EntityID   string
+}
+
 type PathRootRegistry struct {
 	mu    sync.RWMutex
-	roots map[string]struct{}
+	roots map[StorageRootKind]string
 }
 
 func NewPathRootRegistry() *PathRootRegistry {
-	return &PathRootRegistry{roots: make(map[string]struct{})}
+	return &PathRootRegistry{roots: make(map[StorageRootKind]string)}
 }
 
-func (r *PathRootRegistry) Register(roots ...string) error {
+func (r *PathRootRegistry) Register(kind StorageRootKind, root string) error {
+	if kind == "" {
+		return fmt.Errorf("pathguard: root kind required")
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if os.IsNotExist(err) {
+		resolved = abs
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, root := range roots {
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			return fmt.Errorf("pathguard: failed to resolve root %q: %w", root, err)
-		}
-		resolved, err := filepath.EvalSymlinks(abs)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return fmt.Errorf("pathguard: failed to resolve root symlinks %q: %w", root, err)
-			}
-			resolved = abs
-		}
-		r.roots[resolved] = struct{}{}
+	if _, exists := r.roots[kind]; exists {
+		return fmt.Errorf("pathguard: root kind already registered: %s", kind)
 	}
+	r.roots[kind] = resolved
 	return nil
 }
 
-func (r *PathRootRegistry) Contains(path string) bool {
-	resolved, err := r.resolve(path)
-	if err != nil {
-		return false
-	}
+func (r *PathRootRegistry) Root(kind StorageRootKind) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for root := range r.roots {
-		if resolved == root || strings.HasPrefix(resolved, root+string(filepath.Separator)) {
-			return true
-		}
+	root, ok := r.roots[kind]
+	if !ok {
+		return "", ErrPathEscape
 	}
-	return false
+	return root, nil
 }
 
-func (r *PathRootRegistry) Resolve(path string) (string, error) {
-	resolved, err := r.resolve(path)
+func (r *PathRootRegistry) Resolve(kind StorageRootKind, storageKey string) (string, error) {
+	if storageKey == "" || filepath.IsAbs(storageKey) || strings.Contains(storageKey, `\`) {
+		return "", ErrUnsafePath
+	}
+	clean := path.Clean(storageKey)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", ErrPathEscape
+	}
+	r.mu.RLock()
+	root, ok := r.roots[kind]
+	r.mu.RUnlock()
+	if !ok {
+		return "", ErrPathEscape
+	}
+	candidate := filepath.Join(root, filepath.FromSlash(clean))
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", ErrPathEscape
+	}
+	return candidate, nil
+}
+
+func (r *PathRootRegistry) Contains(path string) bool {
+	_, err := r.resolve(path)
+	return err == nil
+}
+
+func (r *PathRootRegistry) ResolvePath(filePath string) (string, error) {
+	resolved, err := r.resolve(filePath)
 	if err != nil {
 		return "", err
 	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for root := range r.roots {
-		if resolved == root || strings.HasPrefix(resolved, root+string(filepath.Separator)) {
-			return resolved, nil
-		}
-	}
-	return "", ErrPathEscape
+	return resolved, nil
 }
 
-func (r *PathRootRegistry) resolve(path string) (string, error) {
-	abs, err := filepath.Abs(path)
+func (r *PathRootRegistry) resolve(filePath string) (string, error) {
+	abs, err := filepath.Abs(filePath)
 	if err != nil {
 		return "", err
 	}
@@ -85,7 +123,14 @@ func (r *PathRootRegistry) resolve(path string) (string, error) {
 		}
 		return "", err
 	}
-	return resolved, nil
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, root := range r.roots {
+		if resolved == root || strings.HasPrefix(resolved, root+string(filepath.Separator)) {
+			return resolved, nil
+		}
+	}
+	return "", ErrPathEscape
 }
 
 func (r *PathRootRegistry) resolveNonExistent(path string) (string, error) {
@@ -97,7 +142,7 @@ func (r *PathRootRegistry) resolveNonExistent(path string) (string, error) {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for root := range r.roots {
+	for _, root := range r.roots {
 		if resolvedDir == root || strings.HasPrefix(resolvedDir, root+string(filepath.Separator)) {
 			return filepath.Join(resolvedDir, base), nil
 		}
@@ -114,7 +159,7 @@ func NewSafeArtifactResponder(registry *PathRootRegistry) *SafeArtifactResponder
 }
 
 func (s *SafeArtifactResponder) SafeFileResponse(c *gin.Context, filePath string) {
-	resolved, err := s.registry.Resolve(filePath)
+	resolved, err := s.registry.ResolvePath(filePath)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
@@ -131,15 +176,26 @@ func (s *SafeArtifactResponder) SafeFileResponse(c *gin.Context, filePath string
 	http.ServeFile(c.Writer, c.Request, resolved)
 }
 
-func (s *SafeArtifactResponder) SafeDelete(path string) error {
-	abs, err := filepath.Abs(path)
+func (s *SafeArtifactResponder) SafeDelete(kind StorageRootKind, storageKey string, expectation DeleteExpectation) error {
+	if strings.TrimSpace(expectation.EntityType) == "" || strings.TrimSpace(expectation.EntityID) == "" {
+		return ErrUnsafePath
+	}
+	resolved, err := s.registry.Resolve(kind, storageKey)
 	if err != nil {
 		return err
 	}
-	if !s.registry.Contains(abs) {
-		return ErrPathEscape
+	root, err := s.registry.Root(kind)
+	if err != nil {
+		return err
 	}
-	return removeNoSymlinks(abs)
+	if resolved == root {
+		return ErrUnsafePath
+	}
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil || !strings.Contains(filepath.ToSlash(rel), expectation.EntityID) {
+		return ErrUnsafePath
+	}
+	return removeNoSymlinks(resolved)
 }
 
 func removeNoSymlinks(path string) error {
@@ -166,15 +222,19 @@ func removeNoSymlinks(path string) error {
 }
 
 func (s *SafeArtifactResponder) SafeCopyTree(src, dst string) error {
-	srcResolved, err := s.registry.Resolve(src)
+	srcResolved, err := s.registry.ResolvePath(src)
 	if err != nil {
 		return err
 	}
-	dstResolved, err := s.registry.Resolve(dst)
+	dstResolved, err := s.registry.ResolvePath(dst)
 	if err != nil {
 		return err
 	}
 	return copyTreeNoSymlinks(srcResolved, dstResolved)
+}
+
+func SafeRemoveTree(root string) error {
+	return removeNoSymlinks(root)
 }
 
 func copyTreeNoSymlinks(src, dst string) error {

@@ -172,7 +172,7 @@ router.beforeEach(async (to, _from, next) => {
     } catch {}
 
     try {
-      const res = await apiClient.get("/api/auth/status")
+      const res = await apiClient.get("/api/public/auth/status")
       const authData = res.data?.data || res.data
       if (!authData?.hasAdmin) {
         return next("/setup")
@@ -183,7 +183,7 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   try {
-    const res = await apiClient.get("/api/auth/me")
+    const res = await apiClient.get("/api/public/auth/me")
     const userData = res.data?.data || res.data
     if (!userData?.id) {
       localStorage.removeItem(TOKEN_KEY)

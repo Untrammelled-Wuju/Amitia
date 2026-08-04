@@ -74,7 +74,28 @@ type PackageExtensionLease struct {
 	FencingToken   int64
 }
 
+type PackageConfirmationNonceBinding struct {
+	Nonce         string
+	OperationID   string
+	OperationType string
+	ExtensionID   string
+	UserID        string
+	IssuedAt      string
+	ExpiresAt     string
+}
+
 func (r *PackageRepository) CreateOrGetOperation(ctx context.Context, op PackageOperationRecord) (PackageOperationRecord, bool, error) {
+	return r.createOrGetOperation(ctx, op, "")
+}
+
+func (r *PackageRepository) CreateOrGetOperationWithConfirmationNonce(ctx context.Context, op PackageOperationRecord, nonce string, nonceIssuedAt, nonceExpiresAt string) (PackageOperationRecord, bool, error) {
+	if nonce == "" {
+		return PackageOperationRecord{}, false, operationStateError(OperationErrStorageFailure, "confirmation nonce required", nil)
+	}
+	return r.createOrGetOperation(ctx, op, nonce, nonceIssuedAt, nonceExpiresAt)
+}
+
+func (r *PackageRepository) createOrGetOperation(ctx context.Context, op PackageOperationRecord, nonce string, nonceTimestamps ...string) (PackageOperationRecord, bool, error) {
 	if op.UserID == "" || op.IdempotencyKey == "" || op.RequestHash == "" || op.OperationID == "" || op.ExtensionID == "" {
 		return PackageOperationRecord{}, false, operationStateError(OperationErrStorageFailure, "operation authority fields required", nil)
 	}
@@ -96,6 +117,19 @@ func (r *PackageRepository) CreateOrGetOperation(ctx context.Context, op Package
 		return PackageOperationRecord{}, false, storageOperationError("begin create operation", err)
 	}
 	defer tx.Rollback()
+	if nonce != "" {
+		issuedAt := ""
+		expiresAt := ""
+		if len(nonceTimestamps) > 0 {
+			issuedAt = nonceTimestamps[0]
+		}
+		if len(nonceTimestamps) > 1 {
+			expiresAt = nonceTimestamps[1]
+		}
+		if err := consumePackageConfirmationNonceTx(ctx, tx, nonce, op.OperationID, op.OperationType, op.ExtensionID, op.UserID, issuedAt, expiresAt); err != nil {
+			return PackageOperationRecord{}, false, err
+		}
+	}
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_operations (
 		operation_id, trace_id, user_id, scope_type, scope_id, extension_id, target_version,
 		operation_type, status, current_step, artifact_id, preview_session_id, confirmations_json,
@@ -599,4 +633,26 @@ func IsPackageOperationError(err error, code string) bool {
 
 func hashLegacyOperationRequest(op PackageOperationRecord) string {
 	return fmt.Sprintf("legacy:%s:%s:%s:%s:%s", op.OperationType, op.ExtensionID, op.TargetVersion, op.ArtifactID, op.PreviewSessionID)
+}
+
+func consumePackageConfirmationNonceTx(ctx context.Context, tx *sql.Tx, nonce, operationID, operationType, extensionID, userID, issuedAt, expiresAt string) error {
+	if issuedAt == "" {
+		issuedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	consumedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO extension_package_confirmation_nonces (
+		nonce, operation_id, operation_type, extension_id, user_id, issued_at, expires_at, consumed_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		nonce, operationID, operationType, extensionID, userID, issuedAt, expiresAt, consumedAt)
+	if err != nil {
+		return storageOperationError("consume confirmation nonce", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return storageOperationError("inspect nonce insert", err)
+	}
+	if rows != 1 {
+		return operationStateError(OperationErrIdempotencyConflict, "confirmation nonce replay detected", nil)
+	}
+	return nil
 }

@@ -25,19 +25,26 @@ const (
 )
 
 type ImportStaging struct {
-	ID                string        `json:"id"`
-	OwnerUserID       string        `json:"ownerUserId"`
-	SourceFilename    string        `json:"sourceFilename"`
-	SourceType        string        `json:"sourceType"`
-	SourceContentHash string        `json:"sourceContentHash"`
-	SourceBytes       int64         `json:"sourceBytes"`
-	StorageKey        string        `json:"storageKey"`
-	Status            StagingStatus `json:"status"`
-	InventoryHash     string        `json:"inventoryHash"`
-	CreatedAt         string        `json:"createdAt"`
-	ExpiresAt         string        `json:"expiresAt"`
-	ConsumedAt        string        `json:"consumedAt,omitempty"`
-	CorrelationID     string        `json:"correlationId,omitempty"`
+	ID                   string        `gorm:"column:id;primaryKey" json:"id"`
+	OwnerUserID          string        `gorm:"column:owner_user_id" json:"ownerUserId"`
+	SourceFilename       string        `gorm:"column:source_filename" json:"sourceFilename"`
+	SourceType           string        `gorm:"column:source_type" json:"sourceType"`
+	SourceContentHash    string        `gorm:"column:source_content_hash" json:"sourceContentHash"`
+	SourceBytes          int64         `gorm:"column:source_bytes" json:"sourceBytes"`
+	RootKind             string        `gorm:"column:root_kind" json:"rootKind"`
+	StorageKey           string        `gorm:"column:storage_key" json:"storageKey"`
+	Status               StagingStatus `gorm:"column:status" json:"status"`
+	QuarantinePath       string        `gorm:"column:quarantine_path" json:"quarantinePath"`
+	InventoryHash        string        `gorm:"column:inventory_hash" json:"inventoryHash"`
+	InventoryJSON        string        `gorm:"column:inventory_json" json:"inventoryJson"`
+	StateRevision        int64         `gorm:"column:state_revision" json:"stateRevision"`
+	CreatedAt            string        `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt            string        `gorm:"column:updated_at" json:"updatedAt"`
+	ExpiresAt            string        `gorm:"column:expires_at" json:"expiresAt"`
+	ConsumptionStartedAt string        `gorm:"column:consumption_started_at" json:"consumptionStartedAt"`
+	ConsumedAt           string        `gorm:"column:consumed_at" json:"consumedAt,omitempty"`
+	RejectedReason       string        `gorm:"column:rejected_reason" json:"rejectedReason"`
+	CorrelationID        string        `gorm:"column:correlation_id" json:"correlationId,omitempty"`
 }
 
 func NewImportStaging(ownerUserID, sourceFilename, sourceType string) (*ImportStaging, error) {
@@ -112,6 +119,8 @@ func (s *ImportStaging) CompleteConsumption() error {
 	s.Status = StagingStatusConsumed
 	return nil
 }
+
+func (ImportStaging) TableName() string { return "desktop_pet_import_stagings" }
 
 func (s *ImportStaging) MarkRejected() {
 	s.Status = StagingStatusRejected

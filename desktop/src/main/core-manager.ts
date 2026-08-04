@@ -11,6 +11,7 @@ import {
 } from "./path-manager";
 import { validateCorePrerequisites } from "./core-prereq";
 import type { CorePrerequisiteResult } from "./core-prereq";
+import { getLocalAdminHeaders } from "./backend-session-client";
 
 export type { CorePrerequisiteResult };
 
@@ -337,7 +338,7 @@ async function gracefulShutdown(pid: number): Promise<boolean> {
   }
 
 console.log("[CoreManager] 尝试优雅关闭核心服务...");
-const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/shutdown", 3000);
+const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/shutdown", 3000, getLocalAdminHeaders());
   if (!shutdownOk) {
     console.warn("[CoreManager] 优雅关闭请求失败");
     return false;
@@ -365,11 +366,22 @@ const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/sh
   return false;
 }
 
-function httpShutdown(url: string, timeoutMs: number): Promise<boolean> {
+function httpShutdown(
+url: string,
+timeoutMs: number,
+headers: Record<string, string>,
+): Promise<boolean> {
 return new Promise((resolve) => {
 const req = http.request(
 url,
-{ method: "POST", timeout: timeoutMs },
+{
+method: "POST",
+timeout: timeoutMs,
+headers: {
+Accept: "application/json",
+...headers,
+},
+},
 (res) => {
 res.resume();
 resolve(res.statusCode === 200 || res.statusCode === 202);

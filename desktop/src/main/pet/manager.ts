@@ -12,6 +12,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import http from "node:http";
 import { URL } from "node:url";
 import { getAmitiaDataDir } from "../path-manager";
+import { createRuntimeBootstrapTicket } from "../backend-session-client";
 import { ResourceLoader } from "./resource-loader";
 import type {
   LoadedInstallation,
@@ -107,7 +108,6 @@ const RECOVERY_REASON_POWER_RESUME = "power-resume";
 const RECOVERY_REASON_DISPLAY_CHANGED = "display-changed";
 
 const RUNTIME_BRIDGE_WS_PATH = "/internal/desktop-pet/runtime/ws";
-const RUNTIME_BRIDGE_TOKEN_PATH = "/api/desktop-pets/runtime/bootstrap-token";
 const BRIDGE_RECONNECT_DELAY_MS = 2000;
 
 const HASH_EXCLUDED_FILES = new Set(["metadata.json", "integrity.json"]);
@@ -346,7 +346,6 @@ export class DesktopPetManager {
   private clickThroughController: ClickThroughController | null = null;
 
   private bridgeClient: RuntimeBridgeClient | null = null;
-  private bridgeToken: string | null = null;
   private bridgeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private bridgeStarted = false;
   private currentActionKey: string | null = null;
@@ -2148,22 +2147,6 @@ export class DesktopPetManager {
     return String(err);
   }
 
-  private async fetchBootstrapToken(): Promise<string | null> {
-    try {
-      const data = await this.request<{ token: string; endpoint: string }>(
-        "GET",
-        RUNTIME_BRIDGE_TOKEN_PATH,
-      );
-      return data?.token ?? null;
-    } catch (err) {
-      console.warn(
-        "[DesktopPetManager] 获取 runtime bridge token 失败:",
-        this.errorMessage(err),
-      );
-      return null;
-    }
-  }
-
   private startBridge(): void {
     if (this.bridgeStarted) return;
     this.bridgeStarted = true;
@@ -2184,24 +2167,46 @@ export class DesktopPetManager {
       }
       this.bridgeClient = null;
     }
-    this.bridgeToken = null;
   }
 
   private async connectBridge(): Promise<void> {
     if (!this.bridgeStarted) return;
-    if (!this.bridgeToken) {
-      this.bridgeToken = await this.fetchBootstrapToken();
-      if (!this.bridgeToken) {
-        this.scheduleBridgeReconnect();
-        return;
-      }
+
+    const endpoint =
+      `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
+
+    const runtimeId =
+      this.bridgeClient?.getRuntimeId() ??
+      `rt_${randomUUID()}`;
+
+    const deviceId =
+      this.bridgeClient?.getDeviceId() ??
+      `dev_${randomUUID()}`;
+
+    let ticket: string;
+    try {
+      const issued = await createRuntimeBootstrapTicket(
+        deviceId,
+        runtimeId,
+      );
+      ticket = issued.ticket;
+    } catch (error) {
+      console.warn(
+        "[DesktopPetManager] runtime ticket 获取失败:",
+        this.errorMessage(error),
+      );
+      this.scheduleBridgeReconnect();
+      return;
     }
-    const endpoint = `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
+
     const config: RuntimeBridgeConfig = {
       endpoint,
-      token: this.bridgeToken,
+      bootstrapTicket: ticket,
+      runtimeId,
+      deviceId,
       appVersion: app.getVersion(),
     };
+
     const callbacks = this.buildBridgeCallbacks();
     this.bridgeClient = new RuntimeBridgeClient(config, callbacks);
     this.bridgeClient.connect();

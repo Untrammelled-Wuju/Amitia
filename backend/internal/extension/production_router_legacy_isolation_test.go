@@ -3,7 +3,9 @@ package extension
 import (
 	"net/http"
 	"net/http/httptest"
-	"regexp"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -12,156 +14,250 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-var forbiddenHandlerPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`PackageHandler\.`),
-	regexp.MustCompile(`\.Preview$`),
-	regexp.MustCompile(`\.PreviewUpgrade$`),
-	regexp.MustCompile(`\.Install$`),
-	regexp.MustCompile(`\.Upgrade$`),
-	regexp.MustCompile(`\.Export$`),
-	regexp.MustCompile(`\.Download$`),
-	regexp.MustCompile(`\.Rollback$`),
-	regexp.MustCompile(`\.Uninstall$`),
-	regexp.MustCompile(`\.PreviewUninstall$`),
-	regexp.MustCompile(`\.PreviewRollback$`),
-	regexp.MustCompile(`\.ConfirmRollback$`),
-	regexp.MustCompile(`\.VerifyFinalGate$`),
-	regexp.MustCompile(`\.Sessions$`),
-	regexp.MustCompile(`\.CancelSession$`),
-	regexp.MustCompile(`\.Operation$`),
-	regexp.MustCompile(`\.Operations$`),
-	regexp.MustCompile(`\.Signers$`),
-	regexp.MustCompile(`\.TrustSigner$`),
-	regexp.MustCompile(`\.UntrustSigner$`),
-	regexp.MustCompile(`\.Versions$`),
-	regexp.MustCompile(`\.Compare$`),
-	regexp.MustCompile(`\.Dependencies$`),
+type productionRouteIdentity struct {
+	Method string
+	Path   string
 }
 
-var retiredLegacyWritePaths = map[string]struct{}{
-	"POST /packages/import/preview":                {},
-	"POST /packages/import/install":               {},
-	"GET /packages/import/sessions/:sessionId":     {},
-	"DELETE /packages/import/sessions/:sessionId":  {},
-	"GET /packages/metrics":                        {},
-	"GET /package-operations":                      {},
-	"GET /package-operations/:operationId":         {},
-	"GET /package-operations/:operationId/final-gate": {},
-	"GET /signers":                                 {},
-	"POST /signers/:fingerprint/trust":             {},
-	"POST /signers/:fingerprint/untrust":           {},
-	"GET /:id/exports/:exportId":                   {},
-	"POST /:id/export":                             {},
-	"POST /:id/upgrade/preview":                    {},
-	"POST /:id/upgrade":                            {},
-	"GET /:id/versions":                            {},
-	"GET /:id/versions/compare":                    {},
-	"POST /:id/versions/:version/rollback":         {},
-	"GET /:id/versions/:version/rollback/preview":  {},
-	"POST /:id/versions/:version/rollback/preview": {},
-	"GET /:id/dependencies":                        {},
-	"GET /:id/uninstall/preview":                   {},
-	"POST /:id/uninstall/preview":                  {},
-	"POST /:id/uninstall":                          {},
-	"DELETE /:id":                                  {},
+func expectedRetiredProductionRoutes() []productionRouteIdentity {
+	result :=
+		make(
+			[]productionRouteIdentity,
+			0,
+			len(retiredExtensionLegacyRoutes)+
+				len(retiredRootLegacyRoutes),
+		)
+
+	for _, route := range retiredExtensionLegacyRoutes {
+		result = append(
+			result,
+			productionRouteIdentity{
+				Method: route.Method,
+				Path:   "/api/extensions" + route.Path,
+			},
+		)
+	}
+
+	for _, route := range retiredRootLegacyRoutes {
+		result = append(
+			result,
+			productionRouteIdentity{
+				Method: route.Method,
+				Path:   "/api" + route.Path,
+			},
+		)
+	}
+
+	sort.Slice(
+		result,
+		func(left, right int) bool {
+			if result[left].Path == result[right].Path {
+				return result[left].Method < result[right].Method
+			}
+			return result[left].Path < result[right].Path
+		},
+	)
+
+	return result
 }
 
-func TestProductionRouterExcludesLegacyWriteRoutes(t *testing.T) {
+func buildProductionExtensionRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+
 	gin.SetMode(gin.TestMode)
-	ensureTestConfig()
+
+	if config.AppCfg == nil {
+		config.AppCfg = &config.Config{}
+	}
+
+	config.AppCfg.Storage.DataDir = t.TempDir()
+
 	engine := gin.New()
-	RegisterRouter(engine.Group("/api"), &app.AppContext{}, &Runtime{})
 
-	routes := engine.Routes()
-	for _, route := range routes {
-		handlerName := route.Handler
-		for _, pattern := range forbiddenHandlerPatterns {
-			if pattern.MatchString(handlerName) {
-				t.Fatalf("production route %s %s uses legacy write handler: %s", route.Method, route.Path, handlerName)
-			}
-		}
-	}
+	RegisterRouter(
+		engine.Group("/api"),
+		&app.AppContext{},
+		&Runtime{},
+	)
+
+	return engine
 }
 
-func TestRetiredPackageEndpointsReturnGone(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+func routeMap(engine *gin.Engine) map[productionRouteIdentity]string {
+	result := make(map[productionRouteIdentity]string, 128)
 
-	cases := []struct {
-		name    string
-		handler func(c *gin.Context)
-		method  string
-		path    string
-	}{
-		{"PackagePreviewEndpoint", retiredPackagePreviewEndpoint, http.MethodPost, "/packages/import/preview"},
-		{"PackageInstallEndpoint", retiredPackageInstallEndpoint, http.MethodPost, "/packages/install"},
-		{"LegacyPackageEndpoint", retiredLegacyPackageEndpoint, http.MethodGet, "/packages/metrics"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			ctx, _ := gin.CreateTestContext(recorder)
-			ctx.Request = httptest.NewRequest(tc.method, tc.path, nil)
-			tc.handler(ctx)
-
-			if recorder.Code != http.StatusGone {
-				t.Fatalf("expected 410, got %d", recorder.Code)
-			}
-
-			body := recorder.Body.String()
-			if !strings.Contains(body, "RETIRED") {
-				t.Fatalf("response should include RETIRED, got: %s", body)
-			}
-		})
-	}
-}
-
-func TestRetiredLegacyRoutesHaveActiveRetiredPathsRegistered(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ensureTestConfig()
-	engine := gin.New()
-	RegisterRouter(engine.Group("/api"), &app.AppContext{}, &Runtime{})
-
-	routeMap := map[string]string{}
 	for _, route := range engine.Routes() {
-		key := route.Method + " " + strings.TrimPrefix(route.Path, "/api")
-		routeMap[key] = route.Handler
+		result[productionRouteIdentity{
+			Method: route.Method,
+			Path:   route.Path,
+		}] = route.Handler
 	}
 
-	for retiredPath := range retiredLegacyWritePaths {
-		handlerName, exists := routeMap[retiredPath]
-		if !exists {
-			continue
+	return result
+}
+
+func expandRouteParameters(path string) string {
+	replacements := map[string]string{
+		":sessionId":   "session-test",
+		":operationId": "operation-test",
+		":fingerprint": "fingerprint-test",
+		":exportId":    "export-test",
+		":version":     "1.0.0",
+		":id":          "extension-test",
+	}
+
+	for parameter, value := range replacements {
+		path = strings.ReplaceAll(path, parameter, value)
+	}
+
+	return path
+}
+
+func snapshotDirectory(t *testing.T, root string) []string {
+	t.Helper()
+
+	var result []string
+
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		if !strings.Contains(handlerName, "retired") {
-			t.Fatalf("legacy path %s registered with non-retired handler: %s", retiredPath, handlerName)
+
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+
+		result = append(result, relative)
+
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sort.Strings(result)
+	return result
+}
+
+func TestProductionRouterLegacyMethodPathSnapshot(t *testing.T) {
+	engine := buildProductionExtensionRouter(t)
+
+	actual := routeMap(engine)
+
+	for _, expected := range expectedRetiredProductionRoutes() {
+		handler, exists := actual[expected]
+
+		if !exists {
+			t.Fatalf(
+				"retired legacy route missing: %s %s",
+				expected.Method,
+				expected.Path,
+			)
+		}
+
+		if !strings.Contains(handler, "retiredLegacyPackageEndpoint") {
+			t.Fatalf(
+				"legacy route uses non-retired handler: %s %s → %s",
+				expected.Method,
+				expected.Path,
+				handler,
+			)
 		}
 	}
 }
 
 func TestProductionRouterContainsNoPackageServiceHandlers(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ensureTestConfig()
-	engine := gin.New()
-	RegisterRouter(engine.Group("/api"), &app.AppContext{}, &Runtime{})
+	engine := buildProductionExtensionRouter(t)
 
-	routes := engine.Routes()
-	for _, route := range routes {
+	for _, route := range engine.Routes() {
 		handlerName := route.Handler
-		if strings.Contains(handlerName, "PackageHandler") {
-			t.Fatalf("production router contains PackageHandler reference: %s for %s %s", handlerName, route.Method, route.Path)
+
+		if strings.Contains(handlerName, "previewPackageInstall(") {
+			t.Fatalf("production router references legacy install package function: %s %s", route.Method, route.Path)
 		}
-		if strings.Contains(handlerName, "packageHandler") {
-			t.Fatalf("production router contains packageHandler reference: %s for %s %s", handlerName, route.Method, route.Path)
+
+		if strings.Contains(handlerName, "installPackage(") {
+			t.Fatalf("production router references legacy install package: %s %s", route.Method, route.Path)
 		}
-		if strings.Contains(handlerName, "NewPackageHandler") {
-			t.Fatalf("production router references NewPackageHandler")
+
+		if strings.Contains(handlerName, "PackageService") {
+			t.Fatalf("production router contains PackageService reference: %s for %s %s", handlerName, route.Method, route.Path)
 		}
 	}
 }
 
-func ensureTestConfig() {
-	if config.AppCfg == nil {
-		config.AppCfg = &config.Config{}
+func TestRetiredRoutesRespondWithGone(t *testing.T) {
+	engine := buildProductionExtensionRouter(t)
+
+	uniquePaths := map[string]productionRouteIdentity{}
+	for _, expected := range expectedRetiredProductionRoutes() {
+		uniquePaths[expected.Method+" "+expected.Path] = expected
+	}
+
+	for _, expected := range uniquePaths {
+		path := expandRouteParameters(expected.Path)
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(expected.Method, path, nil)
+		engine.ServeHTTP(recorder, req)
+
+		if recorder.Code == http.StatusNotFound {
+			t.Fatalf("retired route not registered: %s %s", expected.Method, expected.Path)
+		}
+
+		if recorder.Code == http.StatusMethodNotAllowed {
+			continue
+		}
+
+		if recorder.Code != http.StatusGone {
+			t.Fatalf("retired route %s %s returned %d instead of 410: %s", expected.Method, expected.Path, recorder.Code, recorder.Body.String())
+		}
+
+		body := recorder.Body.String()
+		if !strings.Contains(body, "LEGACY_PACKAGE_ENDPOINT_RETIRED") {
+			t.Fatalf("retired route %s %s 410 body missing error_code: %s", expected.Method, expected.Path, body)
+		}
+	}
+}
+
+func TestSkillRoutesRemainActive(t *testing.T) {
+	engine := buildProductionExtensionRouter(t)
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/extensions/skills", nil)
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for /extensions/skills (auth required), got %d. body: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestOpenAPIRouteRemainsActive(t *testing.T) {
+	engine := buildProductionExtensionRouter(t)
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/extensions/openapi.json", nil)
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for /extensions/openapi.json, got %d", recorder.Code)
+	}
+}
+
+func TestRouterRouteSnapshotDuplicatedHandler(t *testing.T) {
+	_ = snapshotDirectory
+	engine := buildProductionExtensionRouter(t)
+
+	routes := engine.Routes()
+	retiredCount := 0
+	for _, route := range routes {
+		if strings.Contains(route.Handler, "retired") {
+			retiredCount++
+		}
+	}
+
+	expectedCount := len(retiredExtensionLegacyRoutes) + len(retiredRootLegacyRoutes)
+	if retiredCount != expectedCount {
+		t.Fatalf("expected %d retired routes, got %d", expectedCount, retiredCount)
 	}
 }
