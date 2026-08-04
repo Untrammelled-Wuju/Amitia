@@ -64,9 +64,14 @@ type PackageSnapshotFinalGateDecision struct {
 	SnapshotPresent  bool     `json:"snapshotPresent"`
 	SnapshotVerified bool     `json:"snapshotVerified"`
 	ExemptVerified   bool     `json:"exemptVerified"`
-	RequirementHash  string   `json:"requirementHash,omitempty"`
-	SnapshotHash     string   `json:"snapshotHash,omitempty"`
-	Reasons          []string `json:"reasons,omitempty"`
+
+	ExemptionConfirmationRequired bool `json:"exemptionConfirmationRequired"`
+	ExemptionConfirmationPresent  bool `json:"exemptionConfirmationPresent"`
+	ExemptionAuthorityVerified    bool `json:"exemptionAuthorityVerified"`
+
+	RequirementHash string   `json:"requirementHash,omitempty"`
+	SnapshotHash    string   `json:"snapshotHash,omitempty"`
+	Reasons         []string `json:"reasons,omitempty"`
 }
 
 func (r *PackageRepository) ListOperationSteps(ctx context.Context, operationID string) ([]PackageOperationStep, error) {
@@ -719,45 +724,177 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 				snapshotPresent = rpErr == nil
 				decision.SnapshotPresent = snapshotPresent
 
-				switch {
-				case requirement.Required:
-					decision.Required = true
-					if rpErr != nil {
-						decision.Reasons = append(decision.Reasons, "snapshot required but rollback point not found")
-						checkSnapshot.Detail = "snapshot required but rollback point not found (fail-closed)"
-					} else if snapshotPresent {
-						decision.SnapshotHash = rollbackPoint.SnapshotHash
-						if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
-							decision.Reasons = append(decision.Reasons, fmt.Sprintf("snapshot validation failed: %v", validateErr))
-							checkSnapshot.Detail = fmt.Sprintf("snapshot present but validation failed: %v", validateErr)
-						} else {
-							decision.SnapshotVerified = true
-							checkSnapshot.Passed = true
-							checkSnapshot.Detail = fmt.Sprintf("snapshot present and verified: hash=%s", rollbackPoint.SnapshotHash)
-						}
-					}
-				case !requirement.Required && snapshotPresent:
-					decision.Required = false
-					decision.SnapshotHash = rollbackPoint.SnapshotHash
-					if validateErr := validatePackageSnapshot(rollbackPoint); validateErr != nil {
-						decision.Reasons = append(decision.Reasons, fmt.Sprintf("optional snapshot validation failed: %v", validateErr))
-						checkSnapshot.Detail = fmt.Sprintf("optional snapshot present but validation failed: %v", validateErr)
-					} else {
-						decision.SnapshotVerified = true
-						checkSnapshot.Passed = true
-						checkSnapshot.Detail = fmt.Sprintf("optional snapshot present and verified: hash=%s", rollbackPoint.SnapshotHash)
-					}
-				case !requirement.Required && !snapshotPresent:
-					decision.Required = false
-					if isFinalGateSnapshotExempt(requirement, claims, findCheckPassed(result.Checks, "claims_verified")) {
-						decision.ExemptVerified = true
-						checkSnapshot.Passed = true
-						checkSnapshot.Detail = "snapshot exemption verified: no data change with complete evidence and consistent claims"
-					} else {
-						decision.Reasons = append(decision.Reasons, "snapshot exemption verification failed: requirement/policy hash mismatch or missing claims")
-						checkSnapshot.Detail = "snapshot not present and exemption verification failed"
-					}
+			switch {
+			case requirement.Required:
+				decision.Required = true
+
+				decision.ExemptionConfirmationRequired = false
+
+				if rpErr != nil {
+					decision.Reasons = append(
+						decision.Reasons,
+						"snapshot required but rollback point not found",
+					)
+
+					checkSnapshot.Detail = "snapshot required but rollback point not found (fail-closed)"
+
+					break
 				}
+
+				decision.SnapshotPresent = true
+
+				decision.SnapshotHash = rollbackPoint.SnapshotHash
+
+				if validateErr := validatePackageSnapshot(
+					rollbackPoint,
+				); validateErr != nil {
+					decision.Reasons = append(
+						decision.Reasons,
+						fmt.Sprintf(
+							"required snapshot validation failed: %v",
+							validateErr,
+						),
+					)
+
+					checkSnapshot.Detail = fmt.Sprintf(
+						"required snapshot present but invalid: %v",
+						validateErr,
+					)
+
+					break
+				}
+
+				decision.SnapshotVerified = true
+
+				checkSnapshot.Passed = true
+
+				checkSnapshot.Detail = fmt.Sprintf(
+					"required snapshot present and verified: hash=%s",
+					rollbackPoint.SnapshotHash,
+				)
+
+			case !requirement.Required &&
+				snapshotPresent:
+				decision.Required = false
+
+				decision.ExemptionConfirmationRequired = false
+
+				decision.SnapshotPresent = true
+
+				decision.SnapshotHash = rollbackPoint.SnapshotHash
+
+				if validateErr := validatePackageSnapshot(
+					rollbackPoint,
+				); validateErr != nil {
+					decision.Reasons = append(
+						decision.Reasons,
+						fmt.Sprintf(
+							"optional snapshot validation failed: %v",
+							validateErr,
+						),
+					)
+
+					checkSnapshot.Detail = fmt.Sprintf(
+						"optional snapshot present but invalid: %v",
+						validateErr,
+					)
+
+					break
+				}
+
+				decision.SnapshotVerified = true
+
+				checkSnapshot.Passed = true
+
+				checkSnapshot.Detail = fmt.Sprintf(
+					"optional snapshot present and verified: hash=%s",
+					rollbackPoint.SnapshotHash,
+				)
+
+			case !requirement.Required &&
+				!snapshotPresent:
+				decision.Required = false
+
+				decision.SnapshotPresent = false
+
+				if operation.OperationType ==
+					string(PackageOperationTypeInstall) {
+					decision.ExemptVerified = true
+
+					checkSnapshot.Passed = true
+
+					checkSnapshot.Detail = "snapshot not required for fresh install"
+
+					break
+				}
+
+				decision.ExemptionConfirmationRequired = true
+
+				decision.ExemptionConfirmationPresent = packageConfirmationContains(
+					claims.ConfirmedItems,
+					claims.Confirmations,
+					PackageConfirmationSnapshotExempt,
+				)
+
+				evidence, exemptionErr := r.verifyFinalGateSnapshotExemption(
+					ctx,
+					operation,
+					requirement,
+					claims,
+					findCheckPassed(
+						result.Checks,
+						"claims_verified",
+					),
+				)
+
+				if exemptionErr != nil {
+					decision.Reasons = append(
+						decision.Reasons,
+						fmt.Sprintf(
+							"snapshot exemption rejected: %v",
+							exemptionErr,
+						),
+					)
+
+					checkSnapshot.Detail = fmt.Sprintf(
+						"snapshot not present and explicit exemption verification failed: %v",
+						exemptionErr,
+					)
+
+					break
+				}
+
+				decision.ExemptionAuthorityVerified = evidenceRequiresConfirmation(
+					evidence,
+					PackageConfirmationSnapshotExempt,
+				)
+
+				if !decision.ExemptionConfirmationPresent ||
+					!decision.ExemptionAuthorityVerified {
+					decision.Reasons = append(
+						decision.Reasons,
+						"snapshot exemption confirmation evidence incomplete",
+					)
+
+					checkSnapshot.Detail = "snapshot exemption confirmation evidence incomplete"
+
+					break
+				}
+
+				decision.ExemptVerified = true
+
+				checkSnapshot.Passed = true
+
+				checkSnapshot.Detail = "snapshot absent; explicit snapshot exemption confirmation and no-data-change authority verified"
+
+			default:
+				decision.Reasons = append(
+					decision.Reasons,
+					"snapshot state did not match required, optional or exempt contract",
+				)
+
+				checkSnapshot.Detail = "snapshot state contract invalid (fail-closed)"
+			}
 			}
 		}
 		result.SnapshotDecision = decision
@@ -840,6 +977,9 @@ func (r *Runtime) verifyPackageFinalGateWithGuard(ctx context.Context, operation
 		checkUserDataRestore.Detail = "user data snapshot store unavailable"
 	} else if r.container.PackageRepository == nil {
 		checkUserDataRestore.Detail = "package repository unavailable"
+	} else if operation.OperationType != string(PackageOperationTypeRollback) {
+		checkUserDataRestore.Passed = true
+		checkUserDataRestore.Detail = "user data restore integrity not applicable for " + operation.OperationType
 	} else {
 		rpUd, rpUdErr := r.container.PackageRepository.GetRollbackPoint(ctx, operation.ExtensionID, operation.FromVersion)
 		if rpUdErr != nil {
@@ -1120,6 +1260,78 @@ func (r *Runtime) computeFinalGateSnapshotRequirement(ctx context.Context, opera
 	return req
 }
 
+func (r *Runtime) verifyFinalGateSnapshotExemption(
+	ctx context.Context,
+	operation PackageOperationRecord,
+	requirement PackageSnapshotRequirement,
+	claims PackageConfirmationClaims,
+	claimsVerified bool,
+) (
+	PackageConfirmationAuthorityEvidence,
+	error,
+) {
+	var empty PackageConfirmationAuthorityEvidence
+
+	if operation.OperationType !=
+		string(
+			PackageOperationTypeUpdate,
+		) &&
+		operation.OperationType !=
+			string(
+				PackageOperationTypeRollback,
+			) {
+		return empty,
+			fmt.Errorf(
+				"kernel: snapshot exemption is unsupported for operation %s",
+				operation.OperationType,
+			)
+	}
+
+	evidence, err := r.loadPackageConfirmationAuthorityEvidence(
+		ctx,
+		operation.OperationID,
+	)
+
+	if err != nil {
+		return empty,
+			fmt.Errorf(
+				"kernel: snapshot exemption authority evidence unavailable: %w",
+				err,
+			)
+	}
+
+	if err := validateConfirmationAuthorityEvidenceSignature(
+		evidence,
+	); err != nil {
+		return empty, err
+	}
+
+	if evidence.OperationID !=
+		operation.OperationID ||
+		evidence.OperationType !=
+			operation.OperationType ||
+		evidence.ExtensionID !=
+			operation.ExtensionID ||
+		evidence.ArtifactID !=
+			operation.ArtifactID {
+		return empty,
+			fmt.Errorf(
+				"kernel: snapshot exemption authority identity mismatch",
+			)
+	}
+
+	if err := verifySnapshotExemptionAuthority(
+		requirement,
+		claims,
+		evidence,
+		claimsVerified,
+	); err != nil {
+		return empty, err
+	}
+
+	return evidence, nil
+}
+
 func (r *Runtime) loadRollbackFinalGateSnapshotRequirement(ctx context.Context, operation PackageOperationRecord, claims PackageConfirmationClaims) (PackageSnapshotRequirement, error) {
 	evidence, err := r.loadPackageConfirmationAuthorityEvidence(ctx, operation.OperationID)
 	if err != nil {
@@ -1167,19 +1379,6 @@ func (r *Runtime) loadRollbackFinalGateSnapshotRequirement(ctx context.Context, 
 		return PackageSnapshotRequirement{}, fmt.Errorf("rollback operation snapshotRequirementHash mismatch")
 	}
 	return *evidence.SnapshotRequirement, nil
-}
-
-func isFinalGateSnapshotExempt(req PackageSnapshotRequirement, claims PackageConfirmationClaims, claimsVerified bool) bool {
-	if !claimsVerified || req.Required || !req.NoDataChange {
-		return false
-	}
-	if claims.SnapshotRequirementHash == "" || claims.SnapshotRequirementHash != req.Hash {
-		return false
-	}
-	if claims.SecurityPolicyHash == "" || claims.SecurityPolicyHash != computeSecurityPolicyHash() {
-		return false
-	}
-	return true
 }
 
 func parseOperationConfirmationClaims(operation PackageOperationRecord) (PackageConfirmationClaims, error) {

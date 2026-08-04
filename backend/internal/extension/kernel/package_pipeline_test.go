@@ -286,7 +286,7 @@ func TestPackagePipelinePreviewInstallIsolationAndIdempotency(t *testing.T) {
 		UserID:        "user-1",
 		ScopeType:     "global",
 		ScopeID:       "",
-		Confirmations: map[string]bool{"confirm.rollback": true},
+		Confirmations: map[string]bool{"confirm.rollback": true, PackageConfirmationSnapshotExempt: true},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -3,7 +3,6 @@ package kernel
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -164,13 +163,13 @@ func (r *Runtime) PreviewPackageRollback(ctx context.Context, extensionID, versi
 	}
 
 	result.SnapshotRequirementHash = requirement.Hash
-	result.RequiredConfirmations = []string{"confirm.rollback"}
+	result.RequiredConfirmations = []string{"confirm.rollback", PackageConfirmationSnapshotExempt}
 
 	hasMigrationPlan := requirementInput.MigrationPlanHash != "" || requirementInput.MigrationDefinitionHash != ""
 	if hasMigrationPlan {
 		result.RequiredConfirmations = append(result.RequiredConfirmations, "confirm.rollback.migration_reverse")
 	}
-	sort.Strings(result.RequiredConfirmations)
+	result.RequiredConfirmations = normalizeConfirmedItems(result.RequiredConfirmations)
 	result.RequiredConfirmationsHash = computePackageRequiredConfirmationsHash(result.RequiredConfirmations)
 	result.DependenciesHash = computePackageDependenciesHash(result.Dependents)
 

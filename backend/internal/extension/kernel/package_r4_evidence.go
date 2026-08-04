@@ -361,6 +361,140 @@ func validateConfirmationAuthorityEvidenceSignature(evidence PackageConfirmation
 	return nil
 }
 
+func evidenceRequiresConfirmation(
+	evidence PackageConfirmationAuthorityEvidence,
+	required string,
+) bool {
+	required = strings.TrimSpace(required)
+
+	if required == "" {
+		return false
+	}
+
+	normalized := normalizeConfirmedItems(
+		evidence.RequiredConfirmations,
+	)
+
+	index := sort.SearchStrings(
+		normalized,
+		required,
+	)
+
+	return index < len(normalized) &&
+		normalized[index] == required
+}
+
+func verifySnapshotExemptionAuthority(
+	requirement PackageSnapshotRequirement,
+	claims PackageConfirmationClaims,
+	evidence PackageConfirmationAuthorityEvidence,
+	claimsVerified bool,
+) error {
+	if !claimsVerified {
+		return fmt.Errorf(
+			"kernel: snapshot exemption requires verified claims",
+		)
+	}
+
+	if requirement.Required {
+		return fmt.Errorf(
+			"kernel: required snapshot cannot be exempted",
+		)
+	}
+
+	if !requirement.NoDataChange {
+		return fmt.Errorf(
+			"kernel: snapshot exemption requires proven no-data-change",
+		)
+	}
+
+	if strings.TrimSpace(
+		requirement.Hash,
+	) == "" {
+		return fmt.Errorf(
+			"kernel: snapshot exemption requirement hash missing",
+		)
+	}
+
+	if claims.SnapshotRequirementHash !=
+		requirement.Hash {
+		return fmt.Errorf(
+			"kernel: snapshot exemption claims requirement hash mismatch",
+		)
+	}
+
+	if evidence.SnapshotRequirementHash !=
+		requirement.Hash {
+		return fmt.Errorf(
+			"kernel: snapshot exemption authority requirement hash mismatch",
+		)
+	}
+
+	if claims.SecurityPolicyHash == "" ||
+		claims.SecurityPolicyHash !=
+			computeSecurityPolicyHash() {
+		return fmt.Errorf(
+			"kernel: snapshot exemption security policy mismatch",
+		)
+	}
+
+	if evidence.SecurityPolicyHash !=
+		claims.SecurityPolicyHash {
+		return fmt.Errorf(
+			"kernel: snapshot exemption authority security policy mismatch",
+		)
+	}
+
+	if !packageConfirmationContains(
+		claims.ConfirmedItems,
+		claims.Confirmations,
+		PackageConfirmationSnapshotExempt,
+	) {
+		return fmt.Errorf(
+			"kernel: explicit snapshot exemption confirmation missing",
+		)
+	}
+
+	if !evidenceRequiresConfirmation(
+		evidence,
+		PackageConfirmationSnapshotExempt,
+	) {
+		return fmt.Errorf(
+			"kernel: snapshot exemption is not present in authority requirements",
+		)
+	}
+
+	if evidence.RequiredConfirmationsHash == "" ||
+		evidence.RequiredConfirmationsHash !=
+			computePackageRequiredConfirmationsHash(
+				evidence.RequiredConfirmations,
+			) {
+		return fmt.Errorf(
+			"kernel: snapshot exemption authority confirmation hash invalid",
+		)
+	}
+
+	if claims.RequiredConfirmationsHash == "" ||
+		claims.RequiredConfirmationsHash !=
+			evidence.RequiredConfirmationsHash {
+		return fmt.Errorf(
+			"kernel: snapshot exemption required confirmation hash mismatch",
+		)
+	}
+
+	if err := verifyExactRequiredConfirmations(
+		claims.ConfirmedItems,
+		evidence.RequiredConfirmations,
+	); err != nil {
+		return fmt.Errorf(
+			"kernel: snapshot exemption confirmation set mismatch: %w",
+			err,
+		)
+	}
+
+	return nil
+}
+
 func sortedConfirmationStrings(values []string) []string {
 	sorted := make([]string, len(values))
 	copy(sorted, values)

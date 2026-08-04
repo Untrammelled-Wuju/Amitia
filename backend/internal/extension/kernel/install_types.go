@@ -308,6 +308,8 @@ type KernelInstallResult struct {
 
 const PackageConfirmationClaimsSchemaVersion = 1
 
+const PackageConfirmationSnapshotExempt = "confirm.snapshot_exempt"
+
 type PackageOperationType string
 
 const (
@@ -521,6 +523,32 @@ func validateConfirmedItemsConsistency(items []string, m map[string]bool) bool {
 		}
 	}
 	return true
+}
+
+func packageConfirmationContains(
+	items []string,
+	confirmations map[string]bool,
+	required string,
+) bool {
+	required = strings.TrimSpace(required)
+
+	if required == "" {
+		return false
+	}
+
+	if confirmations == nil || !confirmations[required] {
+		return false
+	}
+
+	normalized := normalizeConfirmedItems(items)
+
+	index := sort.SearchStrings(
+		normalized,
+		required,
+	)
+
+	return index < len(normalized) &&
+		normalized[index] == required
 }
 
 func validateRequiredConfirmations(confirmed []string, required []string) error {

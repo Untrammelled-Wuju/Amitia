@@ -150,6 +150,8 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	ctx = sagaCtx
 	guard := packageWriteGuard(lease)
 	updateEvidence := buildConfirmationAuthorityEvidence(operationID, string(PackageOperationTypeUpdate), confirmed.session.SessionID, standardConfirmationClaimsFromLegacy(string(PackageOperationTypeUpdate), confirmed.claims))
+	updateEvidence.SourceVersionID = current.InstalledVersion.String()
+	updateEvidence.TargetVersionID = confirmed.session.Version
 	if evidenceErr := r.persistPackageConfirmationAuthorityEvidence(ctx, updateEvidence, guard); evidenceErr != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "failed", "persist_authority_evidence", "PACKAGE_EVIDENCE_PERSIST_FAILED", evidenceErr.Error(), true, guard)
 		return KernelInstallResult{}, fmt.Errorf("kernel: persist update authority evidence: %w", evidenceErr)

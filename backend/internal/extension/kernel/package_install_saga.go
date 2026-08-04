@@ -425,6 +425,7 @@ func (r *Runtime) ConfirmPackagePreview(ctx context.Context, request PackagePrev
 	dependenciesHash := computePackageDependenciesHash(packageDependencyIdentities(preview))
 	previewHash := computeInstallPreviewHash(session, preview)
 	token, err := signPackageConfirmation(packageConfirmationClaims{SessionID: session.SessionID, ArtifactID: session.ArtifactID,
+		ExtensionID: session.ExtensionID,
 		ArchiveHash: session.ArchiveHash, ManifestHash: session.ManifestHash, ContentTreeHash: session.ContentTreeHash,
 		UserID: session.UserID, ScopeType: session.ScopeType, ScopeID: session.ScopeID, PolicyVersion: session.PolicyVersion,
 		SecurityPolicyHash: computeSecurityPolicyHash(), DeveloperSessionID: preview.DeveloperSessionID, MigrationPlanHash: preview.MigrationPlanHash,
