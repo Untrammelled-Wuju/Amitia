@@ -1,8 +1,8 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'theme/app_motion.dart';
 import '../core/widgets/amitia_drawer.dart';
 import '../core/widgets/amitia_scaffold.dart';
 import '../app/app_routes.dart';
@@ -105,23 +105,106 @@ import '../features/developer/presentation/pages/dev_console_page.dart';
 import '../features/developer/presentation/pages/migrations_page.dart';
 import '../features/developer/presentation/pages/dev_mode_page.dart';
 
-Page<T> slideFadePage<T>({
+Widget backTargetTransition({
+  required Animation<double> secondaryAnimation,
+  required Widget child,
+}) {
+  final transition = CurvedAnimation(
+    parent: ReverseAnimation(secondaryAnimation),
+    curve: AppMotion.enterCurve,
+    reverseCurve: AppMotion.exitCurve,
+  );
+  final slide = Tween<Offset>(
+    begin: const Offset(-0.08, 0),
+    end: Offset.zero,
+  ).animate(transition);
+  return FadeTransition(
+    opacity: transition,
+    child: SlideTransition(position: slide, child: child),
+  );
+}
+
+CustomTransitionPage<T> slideFadePage<T>({
   required BuildContext context,
   required GoRouterState state,
   required Widget child,
 }) {
-  return CupertinoPage<T>(key: state.pageKey, child: child);
+  return CustomTransitionPage<T>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: AppMotion.pageEnter,
+    reverseTransitionDuration: AppMotion.pageExit,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final incomingAnimation = CurvedAnimation(
+        parent: animation,
+        curve: AppMotion.enterCurve,
+        reverseCurve: AppMotion.exitCurve,
+      );
+      final slide = Tween<Offset>(
+        begin: const Offset(1.0, 0.0),
+        end: Offset.zero,
+      ).animate(incomingAnimation);
+
+      final page = FadeTransition(
+        opacity: incomingAnimation,
+        child: SlideTransition(position: slide, child: child),
+      );
+
+      return backTargetTransition(
+        secondaryAnimation: secondaryAnimation,
+        child: page,
+      );
+    },
+  );
 }
 
-Page<T> drawerSlideFadePage<T>({
+CustomTransitionPage<T> drawerSlideFadePage<T>({
   required GoRouterState state,
   required Widget child,
 }) {
-  return CupertinoPage<T>(key: state.pageKey, child: child);
+  return CustomTransitionPage<T>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: AppMotion.pageEnter,
+    reverseTransitionDuration: AppMotion.pageExit,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final transition = CurvedAnimation(
+        parent: animation,
+        curve: AppMotion.enterCurve,
+        reverseCurve: AppMotion.exitCurve,
+      );
+      final slide = Tween<Offset>(
+        begin: const Offset(0.16, 0),
+        end: Offset.zero,
+      ).animate(transition);
+      final page = FadeTransition(
+        opacity: transition,
+        child: SlideTransition(position: slide, child: child),
+      );
+      return backTargetTransition(
+        secondaryAnimation: secondaryAnimation,
+        child: page,
+      );
+    },
+  );
 }
 
-Page<T> chatRootPage<T>({required GoRouterState state, required Widget child}) {
-  return CupertinoPage<T>(key: state.pageKey, child: child);
+CustomTransitionPage<T> chatRootPage<T>({
+  required GoRouterState state,
+  required Widget child,
+}) {
+  return CustomTransitionPage<T>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: Duration.zero,
+    reverseTransitionDuration: Duration.zero,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return backTargetTransition(
+        secondaryAnimation: secondaryAnimation,
+        child: child,
+      );
+    },
+  );
 }
 
 final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
@@ -190,8 +273,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         },
         child: Scaffold(
           key: _scaffoldKey,
-          resizeToAvoidBottomInset: !isChatRoute,
-          drawerEnableOpenDragGesture: false,
+          resizeToAvoidBottomInset: true,
           drawer: isChatRoute
               ? const AmitiaDrawer(currentRoute: AppRoutes.chat)
               : null,

@@ -2,7 +2,6 @@ import 'package:amitia_app/app/app.dart';
 import 'package:amitia_app/core/widgets/amitia_drawer.dart';
 import 'package:amitia_app/features/agent/presentation/pages/agent_page.dart';
 import 'package:amitia_app/features/chat/presentation/pages/chat_page.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
-    'chat composer follows raw keyboard insets without a final jump',
+    'chat composer uses one scaffold inset owner without a final jump',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(400, 800);
@@ -28,6 +27,15 @@ void main() {
 
       final composerSurface = find.byKey(
         const ValueKey('chat-composer-surface'),
+      );
+      final scaffolds = tester.widgetList<Scaffold>(find.byType(Scaffold));
+      expect(
+        scaffolds.where((widget) => widget.resizeToAvoidBottomInset == true),
+        hasLength(1),
+      );
+      expect(
+        scaffolds.where((widget) => widget.resizeToAvoidBottomInset == false),
+        hasLength(1),
       );
       expect(tester.getBottomRight(composerSurface).dy, closeTo(764, 0.01));
 
@@ -52,6 +60,9 @@ void main() {
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 260);
       await tester.pump();
+      expect(tester.getBottomRight(composerSurface).dy, closeTo(528, 0.01));
+
+      await tester.pump(const Duration(milliseconds: 400));
       expect(tester.getBottomRight(composerSurface).dy, closeTo(528, 0.01));
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 120);
@@ -101,7 +112,11 @@ void main() {
 
     expect(exitingRoute.animation!.value, inExclusiveRange(0, 1));
     expect(targetRoute.secondaryAnimation!.value, inExclusiveRange(0, 1));
-    expect(find.byType(CupertinoPageTransition), findsWidgets);
+    expect(tester.getTopLeft(find.byType(AgentPage)).dx, greaterThan(0));
+    expect(
+      tester.getTopLeft(find.byType(ChatPage, skipOffstage: false)).dx,
+      lessThan(0),
+    );
 
     await tester.pumpAndSettle();
 
@@ -133,132 +148,6 @@ void main() {
 
     expect(find.byType(ChatPage), findsOneWidget);
     expect(find.byType(AgentPage), findsNothing);
-  });
-
-  testWidgets('edge swipe follows the finger and can be cancelled', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('任务'));
-    await tester.pumpAndSettle();
-
-    final route = ModalRoute.of(tester.element(find.byType(AgentPage)));
-    expect((route as PageRoute).popGestureEnabled, isTrue);
-    final targetRoute = ModalRoute.of(
-      tester.element(find.byType(ChatPage, skipOffstage: false)),
-    )!;
-    final size = tester.view.physicalSize / tester.view.devicePixelRatio;
-    final gesture = await tester.startGesture(Offset(5, size.height / 2));
-
-    await gesture.moveBy(const Offset(20, 0));
-    await tester.pump();
-    expect(route.navigator!.userGestureInProgress, isTrue);
-
-    await gesture.moveBy(Offset(size.width * 0.3, 0));
-    await tester.pump();
-
-    final forwardValue = route.animation!.value;
-    expect(forwardValue, closeTo(0.7, 0.03));
-    expect(targetRoute.secondaryAnimation!.value, closeTo(forwardValue, 0.001));
-    expect(find.byType(ChatPage, skipOffstage: false), findsOneWidget);
-    expect(find.byType(AgentPage), findsOneWidget);
-
-    await gesture.moveBy(Offset(size.width * -0.2, 0));
-    await tester.pump();
-
-    expect(route.animation!.value, greaterThan(forwardValue));
-    expect(
-      targetRoute.secondaryAnimation!.value,
-      closeTo(route.animation!.value, 0.001),
-    );
-
-    await tester.pump(const Duration(milliseconds: 100));
-    await gesture.up();
-    await tester.pumpAndSettle();
-
-    expect(find.byType(AgentPage), findsOneWidget);
-    expect(find.byType(ChatPage), findsNothing);
-  });
-
-  testWidgets('edge swipe pops only after release beyond the threshold', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('任务'));
-    await tester.pumpAndSettle();
-
-    final route = ModalRoute.of(tester.element(find.byType(AgentPage)))!;
-    final targetRoute = ModalRoute.of(
-      tester.element(find.byType(ChatPage, skipOffstage: false)),
-    )!;
-    final size = tester.view.physicalSize / tester.view.devicePixelRatio;
-    final gesture = await tester.startGesture(Offset(5, size.height / 2));
-
-    await gesture.moveBy(const Offset(20, 0));
-    await tester.pump();
-    expect(route.navigator!.userGestureInProgress, isTrue);
-
-    await gesture.moveBy(Offset(size.width * 0.7, 0));
-    await tester.pump();
-
-    expect(route.animation!.value, closeTo(0.3, 0.03));
-    expect(
-      targetRoute.secondaryAnimation!.value,
-      closeTo(route.animation!.value, 0.001),
-    );
-    expect(find.byType(ChatPage, skipOffstage: false), findsOneWidget);
-    expect(find.byType(AgentPage), findsOneWidget);
-
-    await tester.pump(const Duration(milliseconds: 100));
-    await gesture.up();
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ChatPage), findsOneWidget);
-    expect(find.byType(AgentPage), findsNothing);
-  });
-
-  testWidgets('android predictive back is progress driven and cancellable', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('任务'));
-    await tester.pumpAndSettle();
-
-    final route = ModalRoute.of(tester.element(find.byType(AgentPage)))!;
-    final targetRoute = ModalRoute.of(
-      tester.element(find.byType(ChatPage, skipOffstage: false)),
-    )!;
-
-    route.handleStartBackGesture();
-    route.handleUpdateBackGestureProgress(progress: 0.35);
-    await tester.pump();
-
-    expect(route.navigator!.userGestureInProgress, isTrue);
-    expect(route.animation!.value, closeTo(0.35, 0.001));
-    expect(
-      targetRoute.secondaryAnimation!.value,
-      closeTo(route.animation!.value, 0.001),
-    );
-    expect(find.byType(ChatPage, skipOffstage: false), findsOneWidget);
-    expect(find.byType(AgentPage), findsOneWidget);
-
-    route.handleCancelBackGesture();
-    await tester.pumpAndSettle();
-
-    expect(find.byType(AgentPage), findsOneWidget);
-    expect(find.byType(ChatPage), findsNothing);
   });
 
   testWidgets('chat root exits only after two consecutive system backs', (

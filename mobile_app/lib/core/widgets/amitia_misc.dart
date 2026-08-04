@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
+import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
@@ -48,13 +49,12 @@ class AmitiaStatusBadge extends StatelessWidget {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: AppRadius.brTag,
-      ),
+      decoration: BoxDecoration(color: bgColor, borderRadius: AppRadius.brTag),
       child: Text(
         label,
-        style: AppTypography.statusLabel(context).copyWith(color: fgColor, fontSize: fontSize),
+        style: AppTypography.statusLabel(
+          context,
+        ).copyWith(color: fgColor, fontSize: fontSize),
       ),
     );
   }
@@ -115,7 +115,11 @@ class AmitiaEmptyState extends StatelessWidget {
             Text(title, style: AppTypography.cardTitle(context)),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
-              Text(subtitle!, style: AppTypography.caption(context), textAlign: TextAlign.center),
+              Text(
+                subtitle!,
+                style: AppTypography.caption(context),
+                textAlign: TextAlign.center,
+              ),
             ],
             if (actionText != null && onAction != null) ...[
               const SizedBox(height: AppSpacing.lg),
@@ -144,7 +148,14 @@ class AmitiaButtonOutline extends StatelessWidget {
           border: Border.all(color: context.accentPrimary, width: 1.5),
           borderRadius: AppRadius.brMedium,
         ),
-        child: Text(label, style: TextStyle(color: context.accentPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: context.accentPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
@@ -161,7 +172,10 @@ class AmitiaLoadingState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(strokeWidth: 2.5, color: context.accentPrimary),
+          CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: context.accentPrimary,
+          ),
           if (message != null) ...[
             const SizedBox(height: AppSpacing.md),
             Text(message!, style: AppTypography.caption(context)),
@@ -188,7 +202,11 @@ class AmitiaErrorState extends StatelessWidget {
           children: [
             Icon(Icons.error_outline, size: 48, color: context.error),
             const SizedBox(height: AppSpacing.md),
-            Text(message, style: AppTypography.body(context), textAlign: TextAlign.center),
+            Text(
+              message,
+              style: AppTypography.body(context),
+              textAlign: TextAlign.center,
+            ),
             if (onRetry != null) ...[
               const SizedBox(height: AppSpacing.lg),
               AmitiaButton(label: '重试', onPressed: onRetry),
@@ -217,7 +235,10 @@ class AmitiaSwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: 4,
+      ),
       child: Row(
         children: [
           Expanded(
@@ -267,14 +288,22 @@ class AmitiaSegmentedControl extends StatelessWidget {
             child: GestureDetector(
               onTap: () => onChanged(i),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
+                duration: AppMotion.standard,
+                curve: AppMotion.standardCurve,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? context.surfacePrimary : Colors.transparent,
+                  color: isSelected
+                      ? context.surfacePrimary
+                      : Colors.transparent,
                   borderRadius: AppRadius.brSmall,
                   boxShadow: isSelected
-                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 1))]
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
                       : null,
                 ),
                 child: Text(
@@ -283,7 +312,9 @@ class AmitiaSegmentedControl extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected ? context.accentPrimary : context.textSecondary,
+                    color: isSelected
+                        ? context.accentPrimary
+                        : context.textSecondary,
                   ),
                 ),
               ),

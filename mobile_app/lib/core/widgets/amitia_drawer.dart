@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
+import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
@@ -13,18 +14,21 @@ final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 final currentCharacterIdProvider = StateProvider<String>((ref) => 'c1');
 final isAgentModeProvider = StateProvider<bool>((ref) => false);
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
-final mockStartupStageProvider = StateProvider<MockStartupStage>((ref) => MockStartupStage.ready);
+final mockStartupStageProvider = StateProvider<MockStartupStage>(
+  (ref) => MockStartupStage.ready,
+);
 
-enum MockStartupStage {
-  firstLaunch,
-  needsLogin,
-  privacyRequired,
-  ready,
-}
+enum MockStartupStage { firstLaunch, needsLogin, privacyRequired, ready }
 
 class _CharInfo {
   final String name, status, description, avatarInitial, avatarColor;
-  _CharInfo(this.name, this.status, this.description, this.avatarInitial, this.avatarColor);
+  _CharInfo(
+    this.name,
+    this.status,
+    this.description,
+    this.avatarInitial,
+    this.avatarColor,
+  );
 }
 
 class AmitiaDrawer extends ConsumerStatefulWidget {
@@ -47,7 +51,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     super.initState();
     _routeState = resolveDrawerRouteState(widget.currentRoute);
     _currentPanel = _routeState.initialPanel;
-    _pageController = PageController(initialPage: _routeState.initialPanel == DrawerPanel.more ? 1 : 0);
+    _pageController = PageController(
+      initialPage: _routeState.initialPanel == DrawerPanel.more ? 1 : 0,
+    );
     _pageInitialized = true;
   }
 
@@ -62,7 +68,8 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       }
       if (_pageInitialized) {
         final targetPage = targetPanel == DrawerPanel.more ? 1 : 0;
-        if (_pageController.hasClients && (_pageController.page?.round() ?? 0) != targetPage) {
+        if (_pageController.hasClients &&
+            (_pageController.page?.round() ?? 0) != targetPage) {
           _pageController.jumpToPage(targetPage);
         }
       }
@@ -78,13 +85,21 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   void _goToMorePanel() {
     if (_currentPanel == DrawerPanel.more) return;
     _currentPanel = DrawerPanel.more;
-    _pageController.animateToPage(1, duration: const Duration(milliseconds: 260), curve: Curves.easeInOutCubic);
+    _pageController.animateToPage(
+      1,
+      duration: AppMotion.panel,
+      curve: AppMotion.panelCurve,
+    );
   }
 
   void _backToMainPanel() {
     if (_currentPanel == DrawerPanel.main) return;
     _currentPanel = DrawerPanel.main;
-    _pageController.animateToPage(0, duration: const Duration(milliseconds: 260), curve: Curves.easeInOutCubic);
+    _pageController.animateToPage(
+      0,
+      duration: AppMotion.panel,
+      curve: AppMotion.panelCurve,
+    );
   }
 
   void _navigateTo(String route) {
@@ -124,7 +139,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
         color: context.surfacePrimary,
         child: SafeArea(
           child: SizedBox(
-            width: MediaQuery.sizeOf(context).width * 0.82 > 340 ? 340 : MediaQuery.sizeOf(context).width * 0.82,
+            width: MediaQuery.sizeOf(context).width * 0.82 > 340
+                ? 340
+                : MediaQuery.sizeOf(context).width * 0.82,
             child: Column(
               children: [
                 Expanded(
@@ -132,7 +149,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                     controller: _pageController,
                     physics: const NeverScrollableScrollPhysics(),
                     onPageChanged: (index) {
-                      final nextPanel = index == 0 ? DrawerPanel.main : DrawerPanel.more;
+                      final nextPanel = index == 0
+                          ? DrawerPanel.main
+                          : DrawerPanel.more;
                       if (_currentPanel != nextPanel) {
                         setState(() {
                           _currentPanel = nextPanel;
@@ -145,7 +164,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                         routeState: _routeState,
                         isDark: isDark,
                         onToggleTheme: () {
-                          ref.read(themeModeProvider.notifier).state = isDark ? ThemeMode.light : ThemeMode.dark;
+                          ref.read(themeModeProvider.notifier).state = isDark
+                              ? ThemeMode.light
+                              : ThemeMode.dark;
                         },
                         onSearchTap: () => _navigateTo(AppRoutes.conversations),
                         onMoreTap: _goToMorePanel,
@@ -274,9 +295,7 @@ class _DrawerMorePanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Row(
-            children: [
-              Text('更多', style: AppTypography.pageTitle(context)),
-            ],
+            children: [Text('更多', style: AppTypography.pageTitle(context))],
           ),
         ),
         const Divider(height: 1),
@@ -284,22 +303,87 @@ class _DrawerMorePanel extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             children: [
-              _MoreGroup(label: '能力与扩展', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
-                _MoreItemData(icon: Icons.extension_outlined, label: '扩展中心', route: AppRoutes.extensions, item: MoreDrawerItem.extensions),
-                _MoreItemData(icon: Icons.brush_outlined, label: '创意工坊', route: AppRoutes.workshop, item: MoreDrawerItem.workshop),
-              ]),
-              _MoreGroup(label: '连接与体验', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
-                _MoreItemData(icon: Icons.sports_esports_outlined, label: '游戏中心', route: AppRoutes.gameCenter, item: MoreDrawerItem.gameCenter),
-                _MoreItemData(icon: Icons.sync_alt, label: '渠道中心', route: AppRoutes.channels, item: MoreDrawerItem.channels),
-                _MoreItemData(icon: Icons.pets_outlined, label: '桌宠中心', route: AppRoutes.desktopPet, item: MoreDrawerItem.desktopPet),
-                _MoreItemData(icon: Icons.notifications_active_outlined, label: '日程与提醒', route: AppRoutes.reminders, item: MoreDrawerItem.reminders),
-              ]),
-              _MoreGroup(label: '数据与内容', onNavigate: onNavigate, selectedItem: routeState.moreItem, items: [
-                _MoreItemData(icon: Icons.dashboard_outlined, label: '数据概览', route: AppRoutes.dashboard, item: MoreDrawerItem.dashboard),
-                _MoreItemData(icon: Icons.history_edu_outlined, label: '聊天记录', route: AppRoutes.chatLogs, item: MoreDrawerItem.chatLogs),
-                _MoreItemData(icon: Icons.file_download_outlined, label: '聊天记录导入', route: AppRoutes.chatImport, item: MoreDrawerItem.chatImport),
-                _MoreItemData(icon: Icons.emoji_emotions_outlined, label: '表情包', route: AppRoutes.emotes, item: MoreDrawerItem.emotes),
-              ]),
+              _MoreGroup(
+                label: '能力与扩展',
+                onNavigate: onNavigate,
+                selectedItem: routeState.moreItem,
+                items: [
+                  _MoreItemData(
+                    icon: Icons.extension_outlined,
+                    label: '扩展中心',
+                    route: AppRoutes.extensions,
+                    item: MoreDrawerItem.extensions,
+                  ),
+                  _MoreItemData(
+                    icon: Icons.brush_outlined,
+                    label: '创意工坊',
+                    route: AppRoutes.workshop,
+                    item: MoreDrawerItem.workshop,
+                  ),
+                ],
+              ),
+              _MoreGroup(
+                label: '连接与体验',
+                onNavigate: onNavigate,
+                selectedItem: routeState.moreItem,
+                items: [
+                  _MoreItemData(
+                    icon: Icons.sports_esports_outlined,
+                    label: '游戏中心',
+                    route: AppRoutes.gameCenter,
+                    item: MoreDrawerItem.gameCenter,
+                  ),
+                  _MoreItemData(
+                    icon: Icons.sync_alt,
+                    label: '渠道中心',
+                    route: AppRoutes.channels,
+                    item: MoreDrawerItem.channels,
+                  ),
+                  _MoreItemData(
+                    icon: Icons.pets_outlined,
+                    label: '桌宠中心',
+                    route: AppRoutes.desktopPet,
+                    item: MoreDrawerItem.desktopPet,
+                  ),
+                  _MoreItemData(
+                    icon: Icons.notifications_active_outlined,
+                    label: '日程与提醒',
+                    route: AppRoutes.reminders,
+                    item: MoreDrawerItem.reminders,
+                  ),
+                ],
+              ),
+              _MoreGroup(
+                label: '数据与内容',
+                onNavigate: onNavigate,
+                selectedItem: routeState.moreItem,
+                items: [
+                  _MoreItemData(
+                    icon: Icons.dashboard_outlined,
+                    label: '数据概览',
+                    route: AppRoutes.dashboard,
+                    item: MoreDrawerItem.dashboard,
+                  ),
+                  _MoreItemData(
+                    icon: Icons.history_edu_outlined,
+                    label: '聊天记录',
+                    route: AppRoutes.chatLogs,
+                    item: MoreDrawerItem.chatLogs,
+                  ),
+                  _MoreItemData(
+                    icon: Icons.file_download_outlined,
+                    label: '聊天记录导入',
+                    route: AppRoutes.chatImport,
+                    item: MoreDrawerItem.chatImport,
+                  ),
+                  _MoreItemData(
+                    icon: Icons.emoji_emotions_outlined,
+                    label: '表情包',
+                    route: AppRoutes.emotes,
+                    item: MoreDrawerItem.emotes,
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -315,7 +399,12 @@ class _MoreGroup extends StatelessWidget {
   final ValueChanged<String> onNavigate;
   final MoreDrawerItem selectedItem;
 
-  const _MoreGroup({required this.label, required this.items, required this.onNavigate, required this.selectedItem});
+  const _MoreGroup({
+    required this.label,
+    required this.items,
+    required this.onNavigate,
+    required this.selectedItem,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -326,12 +415,14 @@ class _MoreGroup extends StatelessWidget {
           padding: const EdgeInsets.only(left: 20, top: 12, bottom: 4),
           child: Text(label, style: AppTypography.label(context)),
         ),
-        ...items.map((item) => _MainMenuItem(
-              icon: item.icon,
-              label: item.label,
-              isSelected: item.item == selectedItem,
-              onTap: () => onNavigate(item.route),
-            )),
+        ...items.map(
+          (item) => _MainMenuItem(
+            icon: item.icon,
+            label: item.label,
+            isSelected: item.item == selectedItem,
+            onTap: () => onNavigate(item.route),
+          ),
+        ),
       ],
     );
   }
@@ -343,7 +434,12 @@ class _MoreItemData {
   final String route;
   final MoreDrawerItem item;
 
-  const _MoreItemData({required this.icon, required this.label, required this.route, required this.item});
+  const _MoreItemData({
+    required this.icon,
+    required this.label,
+    required this.route,
+    required this.item,
+  });
 }
 
 class _DrawerBottomArea extends StatelessWidget {
@@ -437,7 +533,9 @@ class _DrawerBottomArea extends StatelessWidget {
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF4F9B6B).withValues(alpha: 0.2),
+                                    color: const Color(
+                                      0xFF4F9B6B,
+                                    ).withValues(alpha: 0.2),
                                     blurRadius: 4,
                                     spreadRadius: 1,
                                   ),
@@ -497,7 +595,11 @@ class _DrawerBackBottomArea extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.arrow_back_ios_new, size: 17, color: context.textSecondary),
+                  Icon(
+                    Icons.arrow_back_ios_new,
+                    size: 17,
+                    color: context.textSecondary,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '返回主菜单',
@@ -516,7 +618,6 @@ class _DrawerBackBottomArea extends StatelessWidget {
     );
   }
 }
-
 
 class _DrawerHeader extends StatelessWidget {
   final String name;
@@ -551,7 +652,10 @@ class _DrawerHeader extends StatelessWidget {
             visualDensity: VisualDensity.compact,
           ),
           IconButton(
-            icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, size: 22),
+            icon: Icon(
+              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              size: 22,
+            ),
             onPressed: onToggleTheme,
             visualDensity: VisualDensity.compact,
           ),
@@ -584,8 +688,8 @@ class _MainMenuItem extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
+          duration: AppMotion.standard,
+          curve: AppMotion.standardCurve,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
             color: isSelected ? context.accentSoft : Colors.transparent,
@@ -593,19 +697,31 @@ class _MainMenuItem extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, size: 20, color: isSelected ? context.accentPrimary : context.textSecondary),
+              Icon(
+                icon,
+                size: 20,
+                color: isSelected
+                    ? context.accentPrimary
+                    : context.textSecondary,
+              ),
               const SizedBox(width: 14),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                  color: isSelected ? context.accentPrimary : context.textPrimary,
+                  color: isSelected
+                      ? context.accentPrimary
+                      : context.textPrimary,
                 ),
               ),
               const Spacer(),
               if (showArrow)
-                Icon(Icons.chevron_right, color: context.textTertiary, size: 22),
+                Icon(
+                  Icons.chevron_right,
+                  color: context.textTertiary,
+                  size: 22,
+                ),
             ],
           ),
         ),
@@ -638,7 +754,9 @@ class AmitiaCharacterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(int.parse('FF${avatarColor.replaceAll('#', '')}', radix: 16));
+    final color = Color(
+      int.parse('FF${avatarColor.replaceAll('#', '')}', radix: 16),
+    );
     final isOnline = status == '在线';
     return GestureDetector(
       onTap: onTap,
@@ -656,9 +774,19 @@ class AmitiaCharacterCard extends StatelessWidget {
                 Container(
                   width: 52,
                   height: 52,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
                   child: Center(
-                    child: Text(avatarInitial, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      avatarInitial,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
                 if (isOnline)
@@ -671,7 +799,10 @@ class AmitiaCharacterCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: context.success,
                         shape: BoxShape.circle,
-                        border: Border.all(color: context.surfacePrimary, width: 2),
+                        border: Border.all(
+                          color: context.surfacePrimary,
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -767,28 +898,51 @@ class AmitiaExtensionCard extends StatelessWidget {
                     Text(name, style: AppTypography.cardTitle(context)),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: context.borderSecondary,
                         borderRadius: AppRadius.brTag,
                       ),
-                      child: Text(typeLabel, style: TextStyle(fontSize: 10, color: context.textTertiary)),
+                      child: Text(
+                        typeLabel,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: context.textTertiary,
+                        ),
+                      ),
                     ),
                     if (isRecommended) ...[
                       const SizedBox(width: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: context.accentSoft,
                           borderRadius: AppRadius.brTag,
                         ),
-                        child: Text('推荐', style: TextStyle(fontSize: 10, color: context.accentPrimary)),
+                        child: Text(
+                          '推荐',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: context.accentPrimary,
+                          ),
+                        ),
                       ),
                     ],
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(description, style: AppTypography.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(
+                  description,
+                  style: AppTypography.caption(context),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
@@ -806,12 +960,22 @@ class AmitiaExtensionCard extends StatelessWidget {
             GestureDetector(
               onTap: onAction,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: context.accentPrimary,
                   borderRadius: AppRadius.brTag,
                 ),
-                child: Text('安装', style: TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500)),
+                child: Text(
+                  '安装',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
             ),
         ],

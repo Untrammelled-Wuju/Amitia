@@ -1,10 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_motion.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_message.dart';
@@ -42,8 +41,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
+          duration: AppMotion.extended,
+          curve: AppMotion.standardCurve,
         );
       }
     });
@@ -58,8 +57,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
       _scrollController.animateTo(
         target,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+        duration: AppMotion.extended,
+        curve: AppMotion.standardCurve,
       );
     });
   }
@@ -352,10 +351,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
-    final bottomSystemInset = math.max(
-      MediaQuery.viewInsetsOf(context).bottom,
-      MediaQuery.viewPaddingOf(context).bottom,
-    );
     final characterId = ref.watch(currentCharacterIdProvider);
     final character = MockData.characters.firstWhere(
       (c) => c.id == characterId,
@@ -364,96 +359,93 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     return AmitiaScaffold(
       resizeToAvoidBottomInset: false,
-      body: Padding(
-        padding: EdgeInsets.only(bottom: bottomSystemInset),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: SafeArea(
-                bottom: false,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(vertical: 32),
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              final message = _messages[index];
-                              final isAgentTask =
-                                  message.type == MessageType.agentTask;
-                              return AmitiaMessageBubble(
-                                message: message,
-                                showAvatar: _shouldShowAvatar(index),
-                                avatarInitial: character.avatarInitial,
-                                avatarColor: character.avatarColor,
-                                characterName: character.name,
-                                onRetry: message.status == MessageStatus.error
-                                    ? () => _retryMessage(index)
-                                    : null,
-                                onAgentTaskTap: isAgentTask
-                                    ? () => context.push(
-                                        AppRoutes.agentTask('t1'),
-                                      )
-                                    : null,
-                                onPauseAgentTask: isAgentTask
-                                    ? () => _pauseAgentTask(index)
-                                    : null,
-                                onResumeAgentTask: isAgentTask
-                                    ? () => _resumeAgentTask(index)
-                                    : null,
-                                agentTaskStatusLabel: isAgentTask
-                                    ? (_agentTaskStatus[message.id] ?? '运行中')
-                                    : null,
-                              );
-                            },
-                          ),
-                          _ChatScrollFade(
-                            alignment: Alignment.topCenter,
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            color: context.backgroundPrimary,
-                            height: _chatTopBarHeight,
-                          ),
-                          _ChatScrollFade(
-                            alignment: Alignment.bottomCenter,
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            color: context.backgroundPrimary,
-                          ),
-                        ],
-                      ),
+      body: Stack(
+        key: const ValueKey('ime-single-scaffold-20260805-0325'),
+        children: [
+          Positioned.fill(
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(vertical: 32),
+                          itemCount: _messages.length,
+                          itemBuilder: (context, index) {
+                            final message = _messages[index];
+                            final isAgentTask =
+                                message.type == MessageType.agentTask;
+                            return AmitiaMessageBubble(
+                              message: message,
+                              showAvatar: _shouldShowAvatar(index),
+                              avatarInitial: character.avatarInitial,
+                              avatarColor: character.avatarColor,
+                              characterName: character.name,
+                              onRetry: message.status == MessageStatus.error
+                                  ? () => _retryMessage(index)
+                                  : null,
+                              onAgentTaskTap: isAgentTask
+                                  ? () =>
+                                        context.push(AppRoutes.agentTask('t1'))
+                                  : null,
+                              onPauseAgentTask: isAgentTask
+                                  ? () => _pauseAgentTask(index)
+                                  : null,
+                              onResumeAgentTask: isAgentTask
+                                  ? () => _resumeAgentTask(index)
+                                  : null,
+                              agentTaskStatusLabel: isAgentTask
+                                  ? (_agentTaskStatus[message.id] ?? '运行中')
+                                  : null,
+                            );
+                          },
+                        ),
+                        _ChatScrollFade(
+                          alignment: Alignment.topCenter,
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          color: context.backgroundPrimary,
+                          height: _chatTopBarHeight,
+                        ),
+                        _ChatScrollFade(
+                          alignment: Alignment.bottomCenter,
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          color: context.backgroundPrimary,
+                        ),
+                      ],
                     ),
-                    AmitiaChatInput(
-                      onSend: _onSend,
-                      isAgentMode: isAgentMode,
-                      onAgentModeChanged: (value) {
-                        ref.read(isAgentModeProvider.notifier).state = value;
-                      },
-                      onSendFile: _onSendFile,
-                      onSendImage: _onSendImage,
-                      onSendCode: _onSendCode,
-                      onSendVoice: _onSendVoice,
-                      onSendEmote: _onSendEmote,
-                    ),
-                  ],
-                ),
+                  ),
+                  AmitiaChatInput(
+                    onSend: _onSend,
+                    isAgentMode: isAgentMode,
+                    onAgentModeChanged: (value) {
+                      ref.read(isAgentModeProvider.notifier).state = value;
+                    },
+                    onSendFile: _onSendFile,
+                    onSendImage: _onSendImage,
+                    onSendCode: _onSendCode,
+                    onSendVoice: _onSendVoice,
+                    onSendEmote: _onSendEmote,
+                  ),
+                ],
               ),
             ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: _ChatTopBar(
-                onOpenDrawer: () => _openDrawer(context),
-                onNewConversation: () => context.go(AppRoutes.chat),
-                onMore: () => _showChatActionsSheet(context),
-              ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _ChatTopBar(
+              onOpenDrawer: () => _openDrawer(context),
+              onNewConversation: () => context.go(AppRoutes.chat),
+              onMore: () => _showChatActionsSheet(context),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
