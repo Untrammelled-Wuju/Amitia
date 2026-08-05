@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -346,11 +347,12 @@ func (s *ResourceSnapshotStore) RestoreQuarantinedResources(ctx context.Context,
 			return verifyErr
 		}
 
-		if validateErr := ValidateRestoreTargetPath(entry.OriginalPath, absExtRoot); validateErr != nil {
-			return validateErr
+		validated, prepareErr := prepareRestoreTargetPath(entry.OriginalPath, absExtRoot)
+		if prepareErr != nil {
+			return prepareErr
 		}
 
-		if err := restoreQuarantinedFileSafely(entry); err != nil {
+		if err := restoreQuarantinedFileSafely(entry, validated); err != nil {
 			return fmt.Errorf("kernel: restore quarantined resource %s: %w", entry.ResourceID, err)
 		}
 
@@ -664,53 +666,8 @@ func (s *ResourceSnapshotStore) RecoverPreparingQuarantine(ctx context.Context, 
 	return rows.Err()
 }
 
-func publishRestoreFileNoReplace(quarantinePath, targetPath string) error {
-	if err := validateReparsePoint(quarantinePath); err != nil {
-		return err
-	}
-	if err := validateReparsePoint(targetPath); err != nil {
-		return err
-	}
-	if err := os.Link(quarantinePath, targetPath); err != nil {
-		if os.IsExist(err) {
-			if removeErr := os.Remove(targetPath); removeErr != nil {
-				return fmt.Errorf("kernel: remove stale target %s: %w", targetPath, removeErr)
-			}
-			if linkErr := os.Link(quarantinePath, targetPath); linkErr != nil {
-				return fmt.Errorf("kernel: hard link after remove %s -> %s: %w", quarantinePath, targetPath, linkErr)
-			}
-			return nil
-		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			return fmt.Errorf("kernel: create parent dir for %s: %w", targetPath, err)
-		}
-		if linkErr := os.Link(quarantinePath, targetPath); linkErr != nil {
-			return fmt.Errorf("kernel: hard link %s -> %s: %w", quarantinePath, targetPath, linkErr)
-		}
-		return nil
-	}
-	if err := validateReparsePoint(targetPath); err != nil {
-		os.Remove(targetPath)
-		return err
-	}
-	if removeErr := os.Remove(quarantinePath); removeErr != nil {
-		return fmt.Errorf("kernel: remove quarantine after hard link: %w", removeErr)
-	}
-	return nil
-}
-
-func restoreQuarantinedFileSafely(entry ResourceQuarantineEntry) error {
-	absOriginal, err := filepath.Abs(entry.OriginalPath)
-	if err != nil {
-		return fmt.Errorf("kernel: resolve original path for resource %s: %w", entry.ResourceID, err)
-	}
-	if err := validateReparsePoint(absOriginal); err != nil {
-		return err
-	}
-	if err := validateReparsePoint(entry.QuarantinePath); err != nil {
-		return err
-	}
-	return publishRestoreFileNoReplace(entry.QuarantinePath, absOriginal)
+func restoreQuarantinedFileSafely(entry ResourceQuarantineEntry, validated *validatedRestorePath) error {
+	return publishRestoreFileNoReplace(entry.QuarantinePath, validated, entry.ContentHash)
 }
 
 func copyFileAndRemove(src, dst string) error {
@@ -726,10 +683,7 @@ func copyFileAndRemove(src, dst string) error {
 	if !srcInfo.Mode().IsRegular() {
 		return fmt.Errorf("kernel: source %s is not a regular file", src)
 	}
-	if mkErr := os.MkdirAll(filepath.Dir(dst), 0755); mkErr != nil {
-		return mkErr
-	}
-	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscallNofollow(), 0600)
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscallNofollow(), 0600)
 	if err != nil {
 		return err
 	}
@@ -860,143 +814,1034 @@ func validatePathComponentsNoSymlink(absExtRoot, targetPath string) error {
 }
 
 type validatedRestorePath struct {
+	AbsoluteRoot string
+	RealRoot     string
+
 	AbsTargetPath string
 	AbsParentDir  string
+
+	ExistingAncestor string
+	RealAncestor     string
+
+	MissingComponents []string
+
+	RootInfo     os.FileInfo
+	AncestorInfo os.FileInfo
 }
 
-func findNearestExistingAncestor(path string) string {
-	current := path
+func pathIsWithinRoot(root string, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+
+	relative = filepath.Clean(relative)
+
+	if relative == "." {
+		return true
+	}
+
+	if relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(relative) {
+		return false
+	}
+
+	return true
+}
+
+func findNearestExistingAncestor(parentPath string, absoluteRoot string) (string, []string, error) {
+	parentPath = filepath.Clean(parentPath)
+	absoluteRoot = filepath.Clean(absoluteRoot)
+
+	if !pathIsWithinRoot(absoluteRoot, parentPath) {
+		return "", nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: restore parent %s is outside root %s", parentPath, absoluteRoot),
+		)
+	}
+
+	current := parentPath
+	missingReversed := make([]string, 0, 8)
+
 	for {
-		if current == "" || current == "/" || current == "." {
-			return ""
-		}
 		info, err := os.Lstat(current)
 		if err == nil {
 			if info.Mode()&os.ModeSymlink != 0 {
-				return current
+				return "", nil, NewPackageError(
+					PackageErrCodeResourceSnapshotSymlinkForbidden,
+					400,
+					fmt.Errorf("kernel: existing ancestor %s is a symlink", current),
+				)
 			}
-			return current
+
+			if err := validateReparsePoint(current); err != nil {
+				return "", nil, NewPackageError(
+					PackageErrCodeResourceRestorePathRace,
+					409,
+					err,
+				)
+			}
+
+			if !info.IsDir() {
+				return "", nil, NewPackageError(
+					PackageErrCodeResourceSnapshotPathInvalid,
+					400,
+					fmt.Errorf("kernel: existing ancestor %s is not a directory", current),
+				)
+			}
+
+			missing := make([]string, len(missingReversed))
+			for index := range missingReversed {
+				missing[index] = missingReversed[len(missingReversed)-1-index]
+			}
+
+			return current, missing, nil
 		}
+
+		if !os.IsNotExist(err) {
+			return "", nil, NewPackageError(
+				PackageErrCodeResourceSnapshotPathInvalid,
+				400,
+				fmt.Errorf("kernel: lstat restore ancestor %s: %w", current, err),
+			)
+		}
+
+		if current == absoluteRoot {
+			return "", nil, NewPackageError(
+				PackageErrCodeResourceSnapshotPathInvalid,
+				400,
+				fmt.Errorf("kernel: restore root %s does not exist", absoluteRoot),
+			)
+		}
+
+		component := filepath.Base(current)
+
+		if err := validatePlatformPathComponent(component); err != nil {
+			return "", nil, err
+		}
+
+		missingReversed = append(missingReversed, component)
+
 		parent := filepath.Dir(current)
-		if parent == current {
-			return ""
+
+		if parent == current || !pathIsWithinRoot(absoluteRoot, parent) {
+			return "", nil, NewPackageError(
+				PackageErrCodeResourceSnapshotPathInvalid,
+				400,
+				fmt.Errorf("kernel: cannot find existing ancestor under root for %s", parentPath),
+			)
 		}
+
 		current = parent
 	}
 }
 
-func validateRestoreTargetPathPure(targetPath, extRoot string) (*validatedRestorePath, error) {
-	absExtRoot, err := filepath.Abs(extRoot)
+func validateRestoreTargetPathPure(targetPath string, extRoot string) (*validatedRestorePath, error) {
+	absoluteRoot, err := filepath.Abs(extRoot)
 	if err != nil {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: resolve ext root: %w", err))
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: resolve ext root: %w", err),
+		)
 	}
 
-	realExtRoot, err := filepath.EvalSymlinks(absExtRoot)
+	absoluteRoot = filepath.Clean(absoluteRoot)
+
+	realRoot, err := filepath.EvalSymlinks(absoluteRoot)
 	if err != nil {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: eval symlinks for ext root: %w", err))
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: eval ext root: %w", err),
+		)
+	}
+
+	realRoot = filepath.Clean(realRoot)
+
+	rootInfo, err := os.Stat(realRoot)
+	if err != nil {
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: stat real ext root: %w", err),
+		)
+	}
+
+	if !rootInfo.IsDir() {
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: ext root %s is not a directory", realRoot),
+		)
 	}
 
 	absTargetPath, err := filepath.Abs(targetPath)
 	if err != nil {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: resolve target path: %w", err))
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: resolve restore target: %w", err),
+		)
 	}
 
-	absParentDir := filepath.Dir(absTargetPath)
-	absParentDir, err = filepath.Abs(absParentDir)
-	if err != nil {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: resolve parent directory: %w", err))
+	absTargetPath = filepath.Clean(absTargetPath)
+
+	if !pathIsWithinRoot(absoluteRoot, absTargetPath) {
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: restore target %s escapes root %s", absTargetPath, absoluteRoot),
+		)
 	}
 
-	if err := validatePathComponentsNoSymlink(absExtRoot, absParentDir); err != nil {
+	if absTargetPath == absoluteRoot {
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: restore target cannot equal extension root"),
+		)
+	}
+
+	targetBase := filepath.Base(absTargetPath)
+
+	if err := validatePlatformPathComponent(targetBase); err != nil {
 		return nil, err
 	}
 
-	nearestExisting := findNearestExistingAncestor(absParentDir)
-	if nearestExisting == "" {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: cannot find existing ancestor for parent dir %s", absParentDir))
+	absParentDir := filepath.Clean(filepath.Dir(absTargetPath))
+
+	if !pathIsWithinRoot(absoluteRoot, absParentDir) {
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: restore parent %s escapes root %s", absParentDir, absoluteRoot),
+		)
 	}
 
-	realNearest, err := filepath.EvalSymlinks(nearestExisting)
+	existingAncestor, missingComponents, err := findNearestExistingAncestor(absParentDir, absoluteRoot)
 	if err != nil {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: eval symlinks for nearest existing ancestor %s: %w", nearestExisting, err))
+		return nil, err
 	}
 
-	relFromNearest, err := filepath.Rel(nearestExisting, absParentDir)
+	existingInfo, err := os.Lstat(existingAncestor)
 	if err != nil {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: compute relative path from nearest ancestor: %w", err))
+		return nil, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: existing ancestor changed during validation: %w", err),
+		)
 	}
-	realParentDir := filepath.Join(realNearest, relFromNearest)
 
-	relPath, err := filepath.Rel(realExtRoot, realParentDir)
+	if existingInfo.Mode()&os.ModeSymlink != 0 || !existingInfo.IsDir() {
+		return nil, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: existing ancestor %s changed type during validation", existingAncestor),
+		)
+	}
+
+	if err := validateReparsePoint(existingAncestor); err != nil {
+		return nil, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			err,
+		)
+	}
+
+	realAncestor, err := filepath.EvalSymlinks(existingAncestor)
 	if err != nil {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-			fmt.Errorf("kernel: compute relative path for parent: %w", err))
+		return nil, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: eval existing ancestor %s: %w", existingAncestor, err),
+		)
 	}
 
-	cleanRel := filepath.Clean(relPath)
-	if cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) || filepath.IsAbs(cleanRel) {
-		return nil, NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
-			fmt.Errorf("kernel: restore target parent %s escapes ext root (rel: %s)", absParentDir, cleanRel))
+	realAncestor = filepath.Clean(realAncestor)
+
+	if !pathIsWithinRoot(realRoot, realAncestor) {
+		return nil, NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: real ancestor %s escapes real root %s", realAncestor, realRoot),
+		)
+	}
+
+	ancestorInfo, err := os.Stat(realAncestor)
+	if err != nil {
+		return nil, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: stat real ancestor: %w", err),
+		)
+	}
+
+	if targetInfo, targetErr := os.Lstat(absTargetPath); targetErr == nil {
+		if targetInfo.Mode()&os.ModeSymlink != 0 {
+			return nil, NewPackageError(
+				PackageErrCodeResourceSnapshotSymlinkForbidden,
+				400,
+				fmt.Errorf("kernel: restore target %s is a symlink", absTargetPath),
+			)
+		}
+
+		if err := validateReparsePoint(absTargetPath); err != nil {
+			return nil, NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				err,
+			)
+		}
+
+		if !targetInfo.Mode().IsRegular() {
+			return nil, NewPackageError(
+				PackageErrCodeResourceRestoreTargetChanged,
+				409,
+				fmt.Errorf("kernel: restore target %s exists but is not a regular file", absTargetPath),
+			)
+		}
+	} else if !os.IsNotExist(targetErr) {
+		return nil, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: lstat restore target %s: %w", absTargetPath, targetErr),
+		)
 	}
 
 	return &validatedRestorePath{
+		AbsoluteRoot: absoluteRoot,
+
+		RealRoot: realRoot,
+
 		AbsTargetPath: absTargetPath,
-		AbsParentDir:  absParentDir,
+
+		AbsParentDir: absParentDir,
+
+		ExistingAncestor: existingAncestor,
+
+		RealAncestor: realAncestor,
+
+		MissingComponents: append([]string(nil), missingComponents...),
+
+		RootInfo: rootInfo,
+
+		AncestorInfo: ancestorInfo,
 	}, nil
 }
 
-func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
-	if validated == nil || validated.AbsParentDir == "" {
-		return nil
-	}
-	info, err := os.Lstat(validated.AbsParentDir)
-	if err == nil {
-		if info.IsDir() {
-			return nil
-		}
-		return fmt.Errorf("kernel: %s exists but is not a directory", validated.AbsParentDir)
-	}
-	if !os.IsNotExist(err) {
-		return fmt.Errorf("kernel: stat %s: %w", validated.AbsParentDir, err)
+func revalidateRestorePathProof(validated *validatedRestorePath, requireParent bool) error {
+	if validated == nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore path proof missing"),
+		)
 	}
 
-	parent := filepath.Dir(validated.AbsParentDir)
-	if parent != validated.AbsParentDir {
-		if err := createRestoreDirectoriesSafely(&validatedRestorePath{AbsParentDir: parent}); err != nil {
+	currentRealRoot, err := filepath.EvalSymlinks(validated.AbsoluteRoot)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: ext root changed after validation: %w", err),
+		)
+	}
+
+	currentRealRoot = filepath.Clean(currentRealRoot)
+
+	if currentRealRoot != validated.RealRoot {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: ext root real path changed: expected=%s actual=%s", validated.RealRoot, currentRealRoot),
+		)
+	}
+
+	currentRootInfo, err := os.Stat(currentRealRoot)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: stat current real root: %w", err),
+		)
+	}
+
+	if validated.RootInfo == nil || !os.SameFile(validated.RootInfo, currentRootInfo) {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: extension root filesystem identity changed"),
+		)
+	}
+
+	ancestorLstat, err := os.Lstat(validated.ExistingAncestor)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: existing ancestor disappeared: %w", err),
+		)
+	}
+
+	if ancestorLstat.Mode()&os.ModeSymlink != 0 || !ancestorLstat.IsDir() {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: existing ancestor changed type"),
+		)
+	}
+
+	if err := validateReparsePoint(validated.ExistingAncestor); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			err,
+		)
+	}
+
+	currentRealAncestor, err := filepath.EvalSymlinks(validated.ExistingAncestor)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: existing ancestor changed: %w", err),
+		)
+	}
+
+	currentRealAncestor = filepath.Clean(currentRealAncestor)
+
+	if currentRealAncestor != validated.RealAncestor {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: real ancestor changed: expected=%s actual=%s", validated.RealAncestor, currentRealAncestor),
+		)
+	}
+
+	currentAncestorInfo, err := os.Stat(currentRealAncestor)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			err,
+		)
+	}
+
+	if validated.AncestorInfo == nil || !os.SameFile(validated.AncestorInfo, currentAncestorInfo) {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: existing ancestor filesystem identity changed"),
+		)
+	}
+
+	current := validated.ExistingAncestor
+
+	for _, component := range validated.MissingComponents {
+		if err := validatePlatformPathComponent(component); err != nil {
 			return err
 		}
-	}
 
-	if info, err := os.Lstat(validated.AbsParentDir); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return NewPackageError(PackageErrCodeResourceSnapshotSymlinkForbidden, 400,
-				fmt.Errorf("kernel: parent directory %s is a symlink, symlinks are not allowed for restore targets", validated.AbsParentDir))
+		current = filepath.Join(current, component)
+
+		info, statErr := os.Lstat(current)
+
+		if os.IsNotExist(statErr) {
+			if requireParent {
+				return NewPackageError(
+					PackageErrCodeResourceRestorePathRace,
+					409,
+					fmt.Errorf("kernel: required restore directory %s disappeared", current),
+				)
+			}
+
+			break
+		}
+
+		if statErr != nil {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: lstat restore component %s: %w", current, statErr),
+			)
+		}
+
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: restore component %s changed type", current),
+			)
+		}
+
+		if err := validateReparsePoint(current); err != nil {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				err,
+			)
+		}
+
+		realCurrent, err := filepath.EvalSymlinks(current)
+		if err != nil {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: eval restore component %s: %w", current, err),
+			)
+		}
+
+		if !pathIsWithinRoot(validated.RealRoot, realCurrent) {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: restore component %s escaped real root", current),
+			)
 		}
 	}
 
-	if mkErr := os.Mkdir(validated.AbsParentDir, 0o700); mkErr != nil {
-		if !os.IsExist(mkErr) {
-			return NewPackageError(PackageErrCodeResourceSnapshotPathInvalid, 400,
-				fmt.Errorf("kernel: create directory %s: %w", validated.AbsParentDir, mkErr))
-		}
+	if requireParent && filepath.Clean(current) != validated.AbsParentDir {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restored parent chain ended at %s, expected %s", current, validated.AbsParentDir),
+		)
 	}
+
 	return nil
 }
 
-func ValidateRestoreTargetPath(targetPath, extRoot string) error {
+func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
+	if validated == nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore path proof missing"),
+		)
+	}
+
+	if err := revalidateRestorePathProof(validated, false); err != nil {
+		return err
+	}
+
+	current := validated.ExistingAncestor
+
+	for _, component := range validated.MissingComponents {
+		if err := revalidateRestorePathProof(validated, false); err != nil {
+			return err
+		}
+
+		next := filepath.Join(current, component)
+
+		if !pathIsWithinRoot(validated.AbsoluteRoot, next) ||
+			!pathIsWithinRoot(validated.ExistingAncestor, next) {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: restore directory candidate %s escaped validated chain", next),
+			)
+		}
+
+		mkdirErr := os.Mkdir(next, 0o700)
+
+		if mkdirErr != nil && !os.IsExist(mkdirErr) {
+			return NewPackageError(
+				PackageErrCodeResourceSnapshotPathInvalid,
+				400,
+				fmt.Errorf("kernel: create restore directory %s: %w", next, mkdirErr),
+			)
+		}
+
+		info, err := os.Lstat(next)
+		if err != nil {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: inspect restore directory %s after create: %w", next, err),
+			)
+		}
+
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: restore directory %s was replaced during creation", next),
+			)
+		}
+
+		if err := validateReparsePoint(next); err != nil {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				err,
+			)
+		}
+
+		realNext, err := filepath.EvalSymlinks(next)
+		if err != nil {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: eval created directory %s: %w", next, err),
+			)
+		}
+
+		if !pathIsWithinRoot(validated.RealRoot, realNext) {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: created restore directory %s escaped real root", next),
+			)
+		}
+
+		if err := fsyncDir(current); err != nil {
+			return NewPackageError(
+				PackageErrCodeResourceRestoreIncomplete,
+				409,
+				fmt.Errorf("kernel: fsync parent after creating %s: %w", next, err),
+			)
+		}
+
+		current = next
+	}
+
+	return revalidateRestorePathProof(validated, true)
+}
+
+func prepareRestoreTargetPath(targetPath string, extRoot string) (*validatedRestorePath, error) {
 	validated, err := validateRestoreTargetPathPure(targetPath, extRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := createRestoreDirectoriesSafely(validated); err != nil {
+		return nil, err
+	}
+
+	if err := revalidateRestorePathProof(validated, true); err != nil {
+		return nil, err
+	}
+
+	return validated, nil
+}
+
+func ValidateRestoreTargetPath(targetPath string, extRoot string) error {
+	_, err := prepareRestoreTargetPath(targetPath, extRoot)
+	return err
+}
+
+func inspectRestoreTarget(validated *validatedRestorePath, expectedHash string) (bool, error) {
+	if err := revalidateRestorePathProof(validated, true); err != nil {
+		return false, err
+	}
+
+	info, err := os.Lstat(validated.AbsTargetPath)
+
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: inspect restore target %s: %w", validated.AbsTargetPath, err),
+		)
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false, NewPackageError(
+			PackageErrCodeResourceSnapshotSymlinkForbidden,
+			400,
+			fmt.Errorf("kernel: restore target %s is a symlink", validated.AbsTargetPath),
+		)
+	}
+
+	if err := validateReparsePoint(validated.AbsTargetPath); err != nil {
+		return false, NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			err,
+		)
+	}
+
+	if !info.Mode().IsRegular() {
+		return false, NewPackageError(
+			PackageErrCodeResourceRestoreTargetChanged,
+			409,
+			fmt.Errorf("kernel: restore target %s is not a regular file", validated.AbsTargetPath),
+		)
+	}
+
+	actualHash, err := computeFileContentHash(validated.AbsTargetPath)
+	if err != nil {
+		return false, NewPackageError(
+			PackageErrCodeResourceSnapshotHashComputeFailed,
+			500,
+			fmt.Errorf("kernel: hash existing restore target: %w", err),
+		)
+	}
+
+	if actualHash != expectedHash {
+		return false, NewPackageError(
+			PackageErrCodeResourceRestoreTargetChanged,
+			409,
+			fmt.Errorf("kernel: restore target %s already exists with different content: expected=%s actual=%s", validated.AbsTargetPath, expectedHash, actualHash),
+		)
+	}
+
+	return true, nil
+}
+
+func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader, expectedHash string) (string, error) {
+	if err := revalidateRestorePathProof(validated, true); err != nil {
+		return "", err
+	}
+
+	tempFile, err := os.CreateTemp(validated.AbsParentDir, ".amitia-restore-*.tmp")
+	if err != nil {
+		return "", NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			500,
+			fmt.Errorf("kernel: create restore temp in %s: %w", validated.AbsParentDir, err),
+		)
+	}
+
+	tempPath := tempFile.Name()
+
+	cleanup := func() {
+		_ = tempFile.Close()
+		_ = os.Remove(tempPath)
+	}
+
+	if filepath.Clean(filepath.Dir(tempPath)) != validated.AbsParentDir {
+		cleanup()
+		return "", NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore temp escaped validated parent"),
+		)
+	}
+
+	if err := validateReparsePoint(tempPath); err != nil {
+		cleanup()
+		return "", NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			err,
+		)
+	}
+
+	hasher := sha256.New()
+
+	_, err = io.Copy(io.MultiWriter(tempFile, hasher), source)
+
+	if err != nil {
+		cleanup()
+		return "", NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			500,
+			fmt.Errorf("kernel: write restore temp: %w", err),
+		)
+	}
+
+	actualHash := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+
+	if actualHash != expectedHash {
+		cleanup()
+		return "", NewPackageError(
+			PackageErrCodeResourceSnapshotHashMismatch,
+			409,
+			fmt.Errorf("kernel: restore temp hash mismatch: expected=%s actual=%s", expectedHash, actualHash),
+		)
+	}
+
+	if err := tempFile.Sync(); err != nil {
+		cleanup()
+		return "", NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			500,
+			fmt.Errorf("kernel: sync restore temp: %w", err),
+		)
+	}
+
+	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return "", NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			500,
+			fmt.Errorf("kernel: close restore temp: %w", err),
+		)
+	}
+
+	tempInfo, err := os.Lstat(tempPath)
+	if err != nil || !tempInfo.Mode().IsRegular() || tempInfo.Mode()&os.ModeSymlink != 0 {
+		_ = os.Remove(tempPath)
+		return "", NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore temp changed after close: %v", err),
+		)
+	}
+
+	if err := revalidateRestorePathProof(validated, true); err != nil {
+		_ = os.Remove(tempPath)
+		return "", err
+	}
+
+	return tempPath, nil
+}
+
+func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPath string, expectedHash string) error {
+	if validated == nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore path proof missing"),
+		)
+	}
+
+	if filepath.Clean(filepath.Dir(tempPath)) != validated.AbsParentDir {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore temp is outside validated parent"),
+		)
+	}
+
+	defer os.Remove(tempPath)
+
+	tempHash, err := computeFileContentHash(tempPath)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceSnapshotHashComputeFailed,
+			500,
+			fmt.Errorf("kernel: hash restore temp before publish: %w", err),
+		)
+	}
+
+	if tempHash != expectedHash {
+		return NewPackageError(
+			PackageErrCodeResourceSnapshotHashMismatch,
+			409,
+			fmt.Errorf("kernel: restore temp changed before publish"),
+		)
+	}
+
+	alreadyPresent, err := inspectRestoreTarget(validated, expectedHash)
 	if err != nil {
 		return err
 	}
-	if err := createRestoreDirectoriesSafely(validated); err != nil {
+
+	if alreadyPresent {
+		return nil
+	}
+
+	if err := revalidateRestorePathProof(validated, true); err != nil {
 		return err
 	}
-	return validatePathComponentsNoSymlink(extRoot, validated.AbsParentDir)
+
+	linkErr := os.Link(tempPath, validated.AbsTargetPath)
+
+	if linkErr != nil {
+		if os.IsExist(linkErr) {
+			alreadyPresent, inspectErr := inspectRestoreTarget(validated, expectedHash)
+			if inspectErr != nil {
+				return inspectErr
+			}
+
+			if alreadyPresent {
+				return nil
+			}
+
+			return NewPackageError(
+				PackageErrCodeResourceRestoreTargetChanged,
+				409,
+				fmt.Errorf("kernel: restore target appeared during no-replace publish"),
+			)
+		}
+
+		return NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			500,
+			fmt.Errorf("kernel: no-replace hard link %s -> %s: %w", tempPath, validated.AbsTargetPath, linkErr),
+		)
+	}
+
+	targetInfo, err := os.Lstat(validated.AbsTargetPath)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: published restore target disappeared: %w", err),
+		)
+	}
+
+	tempInfo, err := os.Lstat(tempPath)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore temp disappeared after link: %w", err),
+		)
+	}
+
+	if targetInfo.Mode()&os.ModeSymlink != 0 || !targetInfo.Mode().IsRegular() {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: published restore target changed type"),
+		)
+	}
+
+	if !os.SameFile(tempInfo, targetInfo) {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: published target is not the prepared temp inode"),
+		)
+	}
+
+	if err := validateReparsePoint(validated.AbsTargetPath); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			err,
+		)
+	}
+
+	targetHash, err := computeFileContentHash(validated.AbsTargetPath)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceSnapshotHashComputeFailed,
+			500,
+			fmt.Errorf("kernel: hash published restore target: %w", err),
+		)
+	}
+
+	if targetHash != expectedHash {
+		return NewPackageError(
+			PackageErrCodeResourceSnapshotHashMismatch,
+			409,
+			fmt.Errorf("kernel: published restore target hash mismatch"),
+		)
+	}
+
+	if err := fsyncDir(validated.AbsParentDir); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			409,
+			fmt.Errorf("kernel: fsync restore parent after publish: %w", err),
+		)
+	}
+
+	if err := os.Remove(tempPath); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			409,
+			fmt.Errorf("kernel: remove restore temp after publish: %w", err),
+		)
+	}
+
+	if err := fsyncDir(validated.AbsParentDir); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			409,
+			fmt.Errorf("kernel: fsync restore parent after temp removal: %w", err),
+		)
+	}
+
+	if err := revalidateRestorePathProof(validated, true); err != nil {
+		return err
+	}
+
+	alreadyPresent, err = inspectRestoreTarget(validated, expectedHash)
+	if err != nil {
+		return err
+	}
+
+	if !alreadyPresent {
+		return NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			409,
+			fmt.Errorf("kernel: restore target missing after successful publish"),
+		)
+	}
+
+	return nil
+}
+
+func publishRestoreBytesNoReplace(validated *validatedRestorePath, data []byte, expectedHash string) error {
+	tempPath, err := createPreparedRestoreTemp(validated, bytes.NewReader(data), expectedHash)
+	if err != nil {
+		return err
+	}
+
+	return publishPreparedRestoreTempNoReplace(validated, tempPath, expectedHash)
+}
+
+func publishRestoreFileNoReplace(sourcePath string, validated *validatedRestorePath, expectedHash string) error {
+	if validated == nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore path proof missing"),
+		)
+	}
+
+	if err := validateReparsePoint(sourcePath); err != nil {
+		return err
+	}
+
+	sourceInfo, err := os.Lstat(sourcePath)
+	if err != nil {
+		return fmt.Errorf("kernel: lstat restore source %s: %w", sourcePath, err)
+	}
+
+	if sourceInfo.Mode()&os.ModeSymlink != 0 || !sourceInfo.Mode().IsRegular() {
+		return fmt.Errorf("kernel: restore source %s is not a regular file", sourcePath)
+	}
+
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("kernel: open restore source: %w", err)
+	}
+
+	tempPath, tempErr := createPreparedRestoreTemp(validated, source, expectedHash)
+
+	closeErr := source.Close()
+
+	if tempErr != nil {
+		return tempErr
+	}
+
+	if closeErr != nil {
+		_ = os.Remove(tempPath)
+		return closeErr
+	}
+
+	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, expectedHash); err != nil {
+		return err
+	}
+
+	if err := os.Remove(sourcePath); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			409,
+			fmt.Errorf("kernel: target published but source cleanup failed: %w", err),
+		)
+	}
+
+	if err := fsyncDir(filepath.Dir(sourcePath)); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestoreIncomplete,
+			409,
+			fmt.Errorf("kernel: fsync source parent after cleanup: %w", err),
+		)
+	}
+
+	return nil
 }

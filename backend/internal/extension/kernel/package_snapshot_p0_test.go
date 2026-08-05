@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -251,28 +252,34 @@ func TestPackageRestoreConflictsTargetWithMismatchedHash(t *testing.T) {
 	ctx := context.Background()
 	runtime, container := newPackagePipelineRuntime(t)
 	extRoot, _ := filepath.Abs(container.ExtRoot)
-	body := []byte("new content wins over stale file")
+	body := []byte("new content must not replace mismatched target")
 	storageRef, contentHash, sz := storeTestResourceContent(t, extRoot, body)
 	restoreDir := filepath.Join(container.ExtRoot, "conflict")
 	if err := os.MkdirAll(restoreDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	restorePath := filepath.Join(restoreDir, "file.txt")
-	if err := os.WriteFile(restorePath, []byte("stale content"), 0o600); err != nil {
+	staleBody := []byte("stale content")
+	if err := os.WriteFile(restorePath, staleBody, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	entry := newPackageRestoreEntry("conflict-res", "file://data/x", contentHash, sz, storageRef, restorePath)
 	point := PackageRollbackPoint{ConfigSnapshotJSON: jsonMustMarshal(packageConfigSnapshot{}), ResourceSnapshotJSON: jsonMustMarshal(packageResourceSnapshot{Entries: []packageResourceSnapshotEntry{entry}})}
 	installation := &domain.ExtensionInstallation{ExtensionID: "test-ext", Metadata: map[string]any{}}
-	if err := runtime.restorePackageRepositorySnapshots(ctx, "test-ext", point, installation); err != nil {
-		t.Fatalf("restore must overwrite conflicting target, got %v", err)
+	err := runtime.restorePackageRepositorySnapshots(ctx, "test-ext", point, installation)
+	if err == nil {
+		t.Fatal("restore must fail when target exists with mismatched hash (no-replace semantics)")
 	}
-	got, err := os.ReadFile(restorePath)
-	if err != nil {
-		t.Fatal(err)
+	var pkgErr *PackageError
+	if errors.As(err, &pkgErr) && pkgErr.Code != PackageErrCodeResourceRestoreTargetChanged {
+		t.Fatalf("expected PACKAGE_RESOURCE_RESTORE_TARGET_CHANGED, got %v", err)
 	}
-	if string(got) != "new content wins over stale file" {
-		t.Fatalf("target was not overwritten: %q", string(got))
+	got, readErr := os.ReadFile(restorePath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, staleBody) {
+		t.Fatalf("target was overwritten despite hash mismatch: %q", string(got))
 	}
 }
 

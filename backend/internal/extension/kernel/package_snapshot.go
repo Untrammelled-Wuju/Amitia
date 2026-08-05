@@ -892,14 +892,6 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 		if err := contentStore.VerifyContent(entry.ContentStorageReference, entry.ContentHash); err != nil {
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content verification failed at stage content_verification: %w", entry.Resource.ResourceID, err))
 		}
-		restorePath := resolveResourceRestorePath(entry)
-		if validateErr := ValidateRestoreTargetPath(restorePath, absExtRoot); validateErr != nil {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path validation failed for resource %s at stage path_validation: %w", entry.Resource.ResourceID, validateErr))
-		}
-		absOriginal, absErr := filepath.Abs(restorePath)
-		if absErr != nil {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: resolve restore path for resource %s at stage path_validation: %w", entry.Resource.ResourceID, absErr))
-		}
 		data, readErr := contentStore.ReadContent(entry.ContentStorageReference)
 		if readErr != nil {
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: read content for resource %s at stage content_read: %w", entry.Resource.ResourceID, readErr))
@@ -909,46 +901,13 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 		if actualHash != entry.ContentHash {
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content hash mismatch at stage content_verification: expected %s got %s", entry.Resource.ResourceID, entry.ContentHash, actualHash))
 		}
-		if info, statErr := os.Stat(absOriginal); statErr == nil && !info.IsDir() {
-			existingHash, hashErr := hashFileContent(absOriginal)
-			if hashErr != nil {
-				return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s failed to hash existing target at stage target_hash: %w", entry.Resource.ResourceID, hashErr))
-			}
-			if existingHash == entry.ContentHash {
-				continue
-			}
+		restorePath := resolveResourceRestorePath(entry)
+		validated, prepareErr := prepareRestoreTargetPath(restorePath, absExtRoot)
+		if prepareErr != nil {
+			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path validation failed for resource %s at stage path_validation: %w", entry.Resource.ResourceID, prepareErr))
 		}
-		if mkErr := os.MkdirAll(filepath.Dir(absOriginal), 0o700); mkErr != nil {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: create directory for restored resource %s at stage prepare: %w", entry.Resource.ResourceID, mkErr))
-		}
-		tmp, tmpErr := os.CreateTemp(filepath.Dir(absOriginal), ".restore-*.tmp")
-		if tmpErr != nil {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: create temp file for restored resource %s at stage prepare: %w", entry.Resource.ResourceID, tmpErr))
-		}
-		tmpPath := tmp.Name()
-		if _, writeErr := tmp.Write(data); writeErr != nil {
-			tmp.Close()
-			os.Remove(tmpPath)
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: write restored resource %s at stage write: %w", entry.Resource.ResourceID, writeErr))
-		}
-		if syncErr := tmp.Sync(); syncErr != nil {
-			tmp.Close()
-			os.Remove(tmpPath)
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: sync restored resource %s at stage write: %w", entry.Resource.ResourceID, syncErr))
-		}
-		if closeErr := tmp.Close(); closeErr != nil {
-			os.Remove(tmpPath)
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: close restored resource %s at stage write: %w", entry.Resource.ResourceID, closeErr))
-		}
-		if renameErr := os.Rename(tmpPath, absOriginal); renameErr != nil {
-			os.Remove(tmpPath)
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: rename restored resource %s at stage commit: %w", entry.Resource.ResourceID, renameErr))
-		}
-		if dirSyncErr := syncDir(filepath.Dir(absOriginal)); dirSyncErr != nil {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: sync directory after restore %s at stage commit: %w", entry.Resource.ResourceID, dirSyncErr))
-		}
-		if verifyHash, verifyErr := hashFileContent(absOriginal); verifyErr != nil || verifyHash != entry.ContentHash {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s restored file hash verification failed at stage post_verify: expected %s got %s err=%v", entry.Resource.ResourceID, entry.ContentHash, verifyHash, verifyErr))
+		if publishErr := publishRestoreBytesNoReplace(validated, data, entry.ContentHash); publishErr != nil {
+			return NewPackageError(PackageErrCodeResourceRestoreTargetChanged, 409, fmt.Errorf("kernel: publish restored resource %s at stage publish: %w", entry.Resource.ResourceID, publishErr))
 		}
 	}
 	current, err := r.container.ResourceRepository.ListResources(ctx, extensionID)
