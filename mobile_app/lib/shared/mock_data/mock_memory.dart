@@ -14,7 +14,7 @@ class MockMemory {
 
   static List<EmoteGroup> emoteGroups = [
     EmoteGroup(id: 'eg1', name: '默认表情', count: 12),
-    EmoteGroup(id: 'eg2', name: '阿米娅专属', count: 8),
+    EmoteGroup(id: 'eg2', name: 'Amitia专属', count: 8),
     EmoteGroup(id: 'eg3', name: '节日表情', count: 6),
     EmoteGroup(id: 'eg4', name: '日常情绪', count: 10),
   ];
@@ -25,22 +25,22 @@ class MockMemory {
     EmoteItem(id: 'em3', name: '害羞', meaning: '不好意思', group: '默认表情', emoji: '😊'),
     EmoteItem(id: 'em4', name: '思考', meaning: '正在思考', group: '默认表情', emoji: '🤔'),
     EmoteItem(id: 'em5', name: '惊讶', meaning: '吃惊', group: '默认表情', emoji: '😲'),
-    EmoteItem(id: 'em6', name: '阿米娅问好', meaning: '打招呼', group: '阿米娅专属', characterId: 'c1', emoji: '👋'),
-    EmoteItem(id: 'em7', name: '阿米娅加油', meaning: '鼓励', group: '阿米娅专属', characterId: 'c1', emoji: '💪'),
+    EmoteItem(id: 'em6', name: 'Amitia问好', meaning: '打招呼', group: 'Amitia专属', characterId: 'c1', emoji: '👋'),
+    EmoteItem(id: 'em7', name: 'Amitia加油', meaning: '鼓励', group: 'Amitia专属', characterId: 'c1', emoji: '💪'),
     EmoteItem(id: 'em8', name: '生日快乐', meaning: '节日祝福', group: '节日表情', emoji: '🎂'),
     EmoteItem(id: 'em9', name: '新年好', meaning: '新年祝福', group: '节日表情', emoji: '🧧'),
     EmoteItem(id: 'em10', name: '困了', meaning: '想睡觉', group: '日常情绪', emoji: '😴'),
   ];
 
   static List<EpisodicMemory> episodicMemories = [
-    EpisodicMemory(id: 'ep1', time: DateTime(2026, 7, 30, 9, 15), location: '主界面', participants: ['用户', '阿米娅'], emotion: '愉快', summary: '早安对话', detail: '用户早上来打招呼，聊了今天的天气和安排，气氛轻松愉快。'),
-    EpisodicMemory(id: 'ep2', time: DateTime(2026, 7, 29, 18, 0), location: '主界面', participants: ['用户', '阿米娅'], emotion: '关心', summary: '下班问候', detail: '阿米娅主动询问用户工作情况，用户分享了今天遇到的困难。'),
+    EpisodicMemory(id: 'ep1', time: DateTime(2026, 7, 30, 9, 15), location: '主界面', participants: ['用户', 'Amitia'], emotion: '愉快', summary: '早安对话', detail: '用户早上来打招呼，聊了今天的天气和安排，气氛轻松愉快。'),
+    EpisodicMemory(id: 'ep2', time: DateTime(2026, 7, 29, 18, 0), location: '主界面', participants: ['用户', 'Amitia'], emotion: '关心', summary: '下班问候', detail: 'Amitia主动询问用户工作情况，用户分享了今天遇到的困难。'),
     EpisodicMemory(id: 'ep3', time: DateTime(2026, 7, 28, 20, 0), location: '工作区', participants: ['用户', '小雨'], emotion: '满足', summary: '完成周报', detail: '在小雨的帮助下完成了本周工作周报，效率提升。'),
     EpisodicMemory(id: 'ep4', time: DateTime(2026, 7, 27, 22, 0), location: '创意工坊', participants: ['用户', 'Karin'], emotion: '兴奋', summary: '头脑风暴', detail: '和Karin一起进行功能头脑风暴，产生了多个创意点子。'),
   ];
 
   static List<MemoryGraphNode> graphNodes = [
-    MemoryGraphNode(id: 'gn1', label: '阿米娅', type: '角色', category: '角色', x: 0.5, y: 0.3),
+    MemoryGraphNode(id: 'gn1', label: 'Amitia', type: '角色', category: '角色', x: 0.5, y: 0.3),
     MemoryGraphNode(id: 'gn2', label: '用户', type: '实体', category: '用户', x: 0.2, y: 0.5),
     MemoryGraphNode(id: 'gn3', label: '咖啡偏好', type: '记忆', category: '偏好', x: 0.8, y: 0.2),
     MemoryGraphNode(id: 'gn4', label: '全栈开发', type: '记忆', category: '工作', x: 0.3, y: 0.8),
@@ -81,7 +81,7 @@ class MockMemory {
   ];
 
   static List<WorldBookEntry> worldBookEntries = [
-    WorldBookEntry(id: 'wb1', keyword: '阿米娅', content: '来自一个科技与魔法并存的世界，温柔细心的 AI 伙伴', priority: 10, category: '角色设定'),
+    WorldBookEntry(id: 'wb1', keyword: 'Amitia', content: '来自一个科技与魔法并存的世界，温柔细心的 AI 伙伴', priority: 10, category: '角色设定'),
     WorldBookEntry(id: 'wb2', keyword: '用户', content: '全栈开发者，偏好简洁风格，有一只宠物猫', priority: 8, category: '用户设定'),
     WorldBookEntry(id: 'wb3', keyword: '世界设定', content: '科技与魔法并存的世界，AI 角色拥有自主意识', priority: 9, category: '世界设定'),
     WorldBookEntry(id: 'wb4', keyword: '小雨', content: '效率助手，理性高效，擅长分析和规划', priority: 7, category: '角色设定'),
@@ -89,7 +89,7 @@ class MockMemory {
   ];
 
   static List<ChatLogConversation> chatLogConversations = [
-    ChatLogConversation(id: 'cl1', title: '和阿米娅的日常对话', characterId: 'c1', channel: 'App', messageCount: 3421, lastTime: DateTime(2026, 7, 30, 9, 28)),
+    ChatLogConversation(id: 'cl1', title: '和Amitia的日常对话', characterId: 'c1', channel: 'App', messageCount: 3421, lastTime: DateTime(2026, 7, 30, 9, 28)),
     ChatLogConversation(id: 'cl2', title: '整理下载目录', characterId: 'c1', channel: 'App', messageCount: 15, lastTime: DateTime(2026, 7, 30, 9, 18)),
     ChatLogConversation(id: 'cl3', title: '分析产品需求文档', characterId: 'c2', channel: 'App', messageCount: 28, lastTime: DateTime(2026, 7, 29, 16, 30)),
     ChatLogConversation(id: 'cl4', title: '微信聊天', characterId: 'c1', channel: '微信', messageCount: 156, lastTime: DateTime(2026, 7, 29, 20, 0)),

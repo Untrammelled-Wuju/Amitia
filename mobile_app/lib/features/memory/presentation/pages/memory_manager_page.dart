@@ -32,7 +32,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
 
   final _types = ['全部', '长期记忆', '情景记忆', '关系记忆', '世界设定'];
   final _importances = ['全部', '高', '较高', '中', '低'];
-  final _characters = ['全部', '阿米娅', '小雨', 'Epsilon', 'Karin'];
+  final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
 
   @override
   void initState() {

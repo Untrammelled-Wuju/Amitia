@@ -29,12 +29,12 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
   final _searchController = TextEditingController();
 
   final _nodeTypes = ['全部', '角色', '实体', '记忆', '关系', '地点'];
-  final _characters = ['全部', '阿米娅', '小雨', '用户'];
+  final _characters = ['全部', 'Amitia', '小雨', '用户'];
 
   List<MemoryGraphNode> get _filteredNodes {
     return _allNodes.where((n) {
       if (_nodeTypeFilter != '全部' && n.type != _nodeTypeFilter) return false;
-      if (_characterFilter != '全部' && !n.label.contains(_characterFilter == '阿米娅' ? '阿米娅' : _characterFilter == '小雨' ? '小雨' : _characterFilter)) return false;
+      if (_characterFilter != '全部' && !n.label.contains(_characterFilter == 'Amitia' ? 'Amitia' : _characterFilter == '小雨' ? '小雨' : _characterFilter)) return false;
       if (_searchQuery.isNotEmpty && !n.label.toLowerCase().contains(_searchQuery.toLowerCase())) return false;
       return true;
     }).toList();

@@ -78,6 +78,32 @@ func newR62SnapshotFixture(t *testing.T, rows []r62Row) *r62SnapshotFixture {
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
 	})
 
+	identity := UserDataTableIdentity{
+		Domain:                userDataBatchGenesisDomain,
+		SchemaVersion:         userDataRecordSchemaVersion,
+		ExtensionID:           extID,
+		CanonicalTable:        table,
+		EntityType:            entityType,
+		NamespaceHash:         nsHash,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+	}
+	genesisHash := computeUserDataGenesisHash(identity)
+
+	finalBatchHash := genesisHash
+	if len(parsedRecords) > 0 {
+		chainSpec := UserDataBatchChainSpec{
+			Identity:            identity,
+			DataExportReference: computeUserDataExportReference("op-r62", table, extID),
+			BatchSize:           int64(userDataRestoreBatchSize),
+			GenesisHash:         genesisHash,
+		}
+		chainResult, cerr := recalculateBatchHashChain(rawRecords, chainSpec)
+		if cerr != nil {
+			t.Fatalf("r62 chain: %v", cerr)
+		}
+		finalBatchHash = chainResult.FinalHash
+	}
+
 	manifest := UserDataTableManifest{
 		SchemaVersion:         userDataTableManifestSchemaVersion,
 		ExtensionID:           extID,
@@ -90,6 +116,8 @@ func newR62SnapshotFixture(t *testing.T, rows []r62Row) *r62SnapshotFixture {
 		EmptySetHash:          emptySetHash,
 		BatchSize:             userDataRestoreBatchSize,
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		GenesisHash:           genesisHash,
+		FinalBatchHash:        finalBatchHash,
 		DataExportReference:   computeUserDataExportReference("op-r62", table, extID),
 	}
 
@@ -507,17 +535,21 @@ func TestR62CompletedJournalRejectsJournalDatabaseMismatch(t *testing.T) {
 	err := store.verifyCompletedJournalAgainstManifest(
 		context.Background(),
 		&UserDataRestoreJournal{
-			TableName:             fixture.TableName,
-			State:                 UserDataRestoreCompleted,
-			NamespaceHash:         fixture.Manifest.NamespaceHash,
-			ExpectedAggregateHash: fixture.Manifest.AggregateHash,
-			AggregateHash:         fixture.Manifest.AggregateHash,
-			TotalRows:             1,
-			ImportedRows:          1,
-			AppliedCount:          1,
-			Cursor:                "1",
-			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-			DataExportReference:   fixture.Manifest.DataExportReference,
+			TableName:              fixture.TableName,
+			State:                  UserDataRestoreCompleted,
+			NamespaceHash:          fixture.Manifest.NamespaceHash,
+			ExpectedAggregateHash:  fixture.Manifest.AggregateHash,
+			AggregateHash:          fixture.Manifest.AggregateHash,
+			TotalRows:              1,
+			ImportedRows:           1,
+			AppliedCount:           1,
+			Cursor:                 "1",
+			BatchAlgorithmVersion:  userDataBatchHashAlgorithmVersion,
+			DataExportReference:    fixture.Manifest.DataExportReference,
+			GenesisHash:            fixture.Manifest.GenesisHash,
+			ExpectedFinalBatchHash: fixture.Manifest.FinalBatchHash,
+			BatchHash:              fixture.Manifest.FinalBatchHash,
+			BatchIndex:             1,
 		},
 		fixture.Manifest,
 		fixture.Manifest.NamespaceHash,
@@ -539,17 +571,21 @@ func TestR62CompletedJournalRejectsManifestDatabaseMismatch(t *testing.T) {
 	err := store.verifyCompletedJournalAgainstManifest(
 		context.Background(),
 		&UserDataRestoreJournal{
-			TableName:             fixture.TableName,
-			State:                 UserDataRestoreCompleted,
-			NamespaceHash:         fixture.Manifest.NamespaceHash,
-			ExpectedAggregateHash: fixture.Manifest.AggregateHash,
-			AggregateHash:         fixture.Manifest.AggregateHash,
-			TotalRows:             1,
-			ImportedRows:          1,
-			AppliedCount:          1,
-			Cursor:                "1",
-			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-			DataExportReference:   fixture.Manifest.DataExportReference,
+			TableName:              fixture.TableName,
+			State:                  UserDataRestoreCompleted,
+			NamespaceHash:          fixture.Manifest.NamespaceHash,
+			ExpectedAggregateHash:  fixture.Manifest.AggregateHash,
+			AggregateHash:          fixture.Manifest.AggregateHash,
+			TotalRows:              1,
+			ImportedRows:           1,
+			AppliedCount:           1,
+			Cursor:                 "1",
+			BatchAlgorithmVersion:  userDataBatchHashAlgorithmVersion,
+			DataExportReference:    fixture.Manifest.DataExportReference,
+			GenesisHash:            fixture.Manifest.GenesisHash,
+			ExpectedFinalBatchHash: fixture.Manifest.FinalBatchHash,
+			BatchHash:              fixture.Manifest.FinalBatchHash,
+			BatchIndex:             1,
 		},
 		tamperedManifest,
 		fixture.Manifest.NamespaceHash,

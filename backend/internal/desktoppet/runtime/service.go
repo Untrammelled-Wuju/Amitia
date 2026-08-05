@@ -4,7 +4,9 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
@@ -26,10 +28,10 @@ type Service struct {
 	notifier            *RuntimeNotifierAdapter
 	bootstrapTicketRepo *BootstrapTicketRepository
 
-	startOnce sync.Once
-	stopOnce  sync.Once
-	cancel    context.CancelFunc
-	ctx       context.Context
+	started     atomic.Bool
+	lifecycleMu sync.Mutex
+	cancel      context.CancelFunc
+	ctx         context.Context
 }
 
 func NewService(
@@ -79,18 +81,78 @@ func (s *Service) SetBootstrapTicketRepo(repo *BootstrapTicketRepository) {
 	}
 }
 
-func (s *Service) Start(ctx context.Context) error {
-	var err error
-	s.startOnce.Do(func() {
-		s.ctx, s.cancel = context.WithCancel(ctx)
-		log.Logger.Infof("runtime service: started path=%s backendInstanceID=%s", s.config.Path, s.config.BackendInstanceID)
-		go s.reconciler.RunPeriodic(s.ctx, 10*time.Second)
-		go s.runDispatchLoop(s.ctx)
-		if s.bootstrapTicketRepo != nil {
-			go s.runBootstrapTicketGC(s.ctx)
-		}
-	})
-	return err
+func (
+	s *Service,
+) ValidateDependencies() error {
+	if s == nil {
+		return errors.New(
+			"runtime service is nil",
+		)
+	}
+
+	if s.config == nil ||
+		s.auth == nil ||
+		s.registry == nil ||
+		s.pending == nil ||
+		s.store == nil ||
+		s.state == nil ||
+		s.dispatcher == nil ||
+		s.snapshot == nil ||
+		s.reconciler == nil ||
+		s.handler == nil ||
+		s.bootstrapTicketRepo == nil {
+		return errors.New(
+			"runtime service dependencies are incomplete",
+		)
+	}
+
+	if err := s.config.Validate();
+		err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (
+	s *Service,
+) Start(
+	ctx context.Context,
+) error {
+	if err :=
+		s.ValidateDependencies();
+		err != nil {
+		return err
+	}
+
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+
+	if s.started.Load() {
+		return nil
+	}
+
+	s.ctx, s.cancel =
+		context.WithCancel(ctx)
+
+	s.started.Store(true)
+
+	log.Logger.Infof(
+		"runtime service: started path=%s backendInstanceID=%s",
+		s.config.Path,
+		s.config.BackendInstanceID,
+	)
+
+	go s.reconciler.RunPeriodic(
+		s.ctx,
+		10*time.Second,
+	)
+	go s.runDispatchLoop(s.ctx)
+	go s.runBootstrapTicketGC(
+		s.ctx,
+	)
+
+	return nil
 }
 
 func (s *Service) runBootstrapTicketGC(ctx context.Context) {
@@ -111,21 +173,48 @@ func (s *Service) runBootstrapTicketGC(ctx context.Context) {
 	}
 }
 
-func (s *Service) Close(ctx context.Context) error {
-	s.stopOnce.Do(func() {
-		if s.cancel != nil {
-			s.cancel()
-		}
-		s.pending.FailAll(
-			contracts.ResultCancelled,
-			ErrCodeBackendShuttingDown,
-			"backend shutting down",
-			ErrBackendShuttingDown,
-		)
-		s.registry.CloseAll(1001, "backend shutting down")
-		log.Logger.Info("runtime service: closed")
-	})
+func (
+	s *Service,
+) Close(
+	ctx context.Context,
+) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+
+	if !s.started.Load() {
+		return nil
+	}
+
+	s.started.Store(false)
+
+	if s.cancel != nil {
+		s.cancel()
+	}
+
+	s.pending.FailAll(
+		contracts.ResultCancelled,
+		ErrCodeBackendShuttingDown,
+		"backend shutting down",
+		ErrBackendShuttingDown,
+	)
+
+	s.registry.CloseAll(
+		1001,
+		"backend shutting down",
+	)
+
+	log.Logger.Info(
+		"runtime service: closed",
+	)
+
 	return nil
+}
+
+func (
+	s *Service,
+) IsStarted() bool {
+	return s != nil &&
+		s.started.Load()
 }
 
 func (s *Service) Dispatch(ctx context.Context, req CommandRequest) (DispatchReceipt, error) {

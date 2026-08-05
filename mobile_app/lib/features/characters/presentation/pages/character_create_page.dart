@@ -272,7 +272,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
 
   Widget _buildNameStep() => _buildStepContent(
     label: '给角色起个名字',
-    hint: '例如：阿米娅',
+    hint: '例如：Amitia',
     controller: _nameController,
   );
   Widget _buildIdentityStep() => _buildStepContent(

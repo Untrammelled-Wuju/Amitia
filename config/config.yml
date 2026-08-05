@@ -20,11 +20,42 @@ app:
 security:
   mode: "local_single_user"
   localToken: "c3j22EREBHyFPEcP09s6C5cPSa-xxY3Vfslq2xZILbI"
+
+runtime:
+  mode: "desktop"
+  node:
+    binaryPath: ""
+    npmPath: ""
+    npxPath: ""
+    workDir: ""
+  pluginHost:
+    enabled: true
+    entryPath: ""
+    workDir: ""
+  taskHost:
+    enabled: true
+    entryPath: ""
+    workDir: ""
+  sidecars:
+    wechat:
+      enabled: true
+      entryPath: ""
+      workDir: ""
+      port: 19876
+      healthUrl: "http://127.0.0.1:19876/api/health"
+    qq:
+      enabled: true
+      entryPath: ""
+      workDir: ""
+      port: 19877
+      healthUrl: "http://127.0.0.1:19877/api/health"
+
 chat:
   mergeWindowMs: 6000
   contextWindowMaxRounds: 20
 
 qdrant:
+  enabled: true
   host: "127.0.0.1"
   port: 9178
   collectionName: "memory_embeddings"
@@ -50,6 +81,7 @@ embedding:
   apiKey: ""
 
 surrealdb:
+  enabled: true
   host: "127.0.0.1"
   port: 8000
   namespace: "uai"
@@ -57,3 +89,6 @@ surrealdb:
   username: "root"
   password: "root"
   dataPath: "data/graph.db"
+
+desktopPetRuntime:
+  enabled: true[char]10

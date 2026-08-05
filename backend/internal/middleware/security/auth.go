@@ -443,3 +443,44 @@ func RequirePermission(perm string) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func RequireAuthMethod(
+	allowed ...string,
+) gin.HandlerFunc {
+	allowedSet :=
+		make(map[string]struct{})
+
+	for _, method := range allowed {
+		allowedSet[method] =
+			struct{}{}
+	}
+
+	return func(c *gin.Context) {
+		actor := GetActor(c)
+		if actor == nil {
+			util.ErrorResponse(
+				c,
+				response.Unauthorized,
+				"认证失败",
+				nil,
+			)
+			c.Abort()
+			return
+		}
+
+		if _, ok :=
+			allowedSet[actor.AuthMethod];
+			!ok {
+			util.ErrorResponse(
+				c,
+				response.Forbidden,
+				"认证方式不允许",
+				nil,
+			)
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

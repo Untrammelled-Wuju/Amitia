@@ -26,7 +26,7 @@ class _AiConfigPageState extends ConsumerState<AiConfigPage> {
   late bool _toolCalls;
   late String _errorFallback;
 
-  static const _characters = ['阿米娅', '小雨', 'Epsilon', 'Karin'];
+  static const _characters = ['Amitia', '小雨', 'Epsilon', 'Karin'];
   static const _models = ['GPT-4', 'Claude 3', 'DeepSeek', '本地模型'];
   static const _strategies = ['滑动窗口', '摘要压缩', '全量上下文', '向量检索'];
   static const _fallbacks = ['简单回复', '重试', '切换模型', '静默失败'];

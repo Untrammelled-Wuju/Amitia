@@ -1,8 +1,9 @@
 import http from "node:http";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getAmitiaDataDir } from "./path-manager";
+import { getDesktopInstanceID } from "./desktop-identity";
 
 interface DesktopSessionResponse {
   sessionToken: string;
@@ -21,25 +22,6 @@ const SESSION_RENEW_SKEW_MS = 2 * 60 * 1000;
 
 function readTextFile(filePath: string): string {
   return fs.readFileSync(filePath, "utf8").trim();
-}
-
-function ensureDesktopInstanceID(): string {
-  const securityDir = path.join(getAmitiaDataDir(), "security");
-  const instanceFile = path.join(securityDir, "desktop-instance-id");
-  fs.mkdirSync(securityDir, { recursive: true });
-
-  if (fs.existsSync(instanceFile)) {
-    const existing = readTextFile(instanceFile);
-    if (existing) return existing;
-  }
-
-  const id = `desktop_${randomUUID()}`;
-  fs.writeFileSync(instanceFile, id, {
-    encoding: "utf8",
-    mode: 0o600,
-    flag: "wx",
-  });
-  return id;
 }
 
 function readLocalRootToken(): string {
@@ -143,7 +125,7 @@ function requestJSON<T>(
 }
 
 class BackendSessionClient {
-  private readonly desktopInstanceID = ensureDesktopInstanceID();
+  private readonly desktopInstanceID = getDesktopInstanceID();
   private sessionToken: string | null = null;
   private expiresAt = 0;
   private createInFlight: Promise<void> | null = null;

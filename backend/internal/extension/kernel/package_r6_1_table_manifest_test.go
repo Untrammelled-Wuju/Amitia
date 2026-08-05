@@ -115,25 +115,35 @@ func TestR61CaptureNonEmptyTableComputesFinalBatchHash(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedFinalHash, batchCount, err := recalculateBatchHashChain(
+	chainSpec := UserDataBatchChainSpec{
+		Identity: UserDataTableIdentity{
+			Domain:                userDataBatchGenesisDomain,
+			SchemaVersion:         userDataRecordSchemaVersion,
+			ExtensionID:           extensionID,
+			CanonicalTable:        table,
+			EntityType:            result.manifest.EntityType,
+			NamespaceHash:         result.manifest.NamespaceHash,
+			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		},
+		DataExportReference: result.manifest.DataExportReference,
+		BatchSize:           int64(userDataRestoreBatchSize),
+		GenesisHash:         result.manifest.GenesisHash,
+	}
+
+	chainResult, err := recalculateBatchHashChain(
 		rawRecords,
-		extensionID,
-		userDataRecordSchemaVersion,
-		table,
-		result.manifest.DataExportReference,
-		int64(userDataRestoreBatchSize),
-		result.manifest.GenesisHash,
+		chainSpec,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if batchCount != 3 {
-		t.Fatalf("expected 3 batches, got %d", batchCount)
+	if chainResult.BatchCount != 3 {
+		t.Fatalf("expected 3 batches, got %d", chainResult.BatchCount)
 	}
 
-	if result.manifest.FinalBatchHash != expectedFinalHash {
-		t.Fatalf("final batch hash mismatch: manifest=%s expected=%s", result.manifest.FinalBatchHash, expectedFinalHash)
+	if result.manifest.FinalBatchHash != chainResult.FinalHash {
+		t.Fatalf("final batch hash mismatch: manifest=%s expected=%s", result.manifest.FinalBatchHash, chainResult.FinalHash)
 	}
 
 	if result.manifest.FinalBatchHash == result.manifest.GenesisHash {

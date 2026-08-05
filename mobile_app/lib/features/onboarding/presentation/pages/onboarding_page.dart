@@ -842,7 +842,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               Text('角色名称', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
-                hintText: '如 阿米娅 / 小雨 / Epsilon',
+                hintText: '如 Amitia / 小雨 / Epsilon',
                 controller: _charNameCtrl,
                 prefixIcon: Icon(Icons.badge_outlined, size: 20, color: context.textTertiary),
                 onChanged: (_) => setState(() {}),
@@ -853,7 +853,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
-                children: ['阿米娅', '小雨', 'Epsilon', 'Karin', 'Nova'].map((name) {
+                children: ['Amitia', '小雨', 'Epsilon', 'Karin', 'Nova'].map((name) {
                   return GestureDetector(
                     onTap: () {
                       _charNameCtrl.text = name;

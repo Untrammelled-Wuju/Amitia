@@ -30,7 +30,37 @@ chat:
   mergeWindowMs: 5000
   contextWindowMaxRounds: 20
 
+runtime:
+  mode: "desktop"
+  node:
+    binaryPath: ""
+    npmPath: ""
+    npxPath: ""
+    workDir: ""
+  pluginHost:
+    enabled: true
+    entryPath: ""
+    workDir: ""
+  taskHost:
+    enabled: true
+    entryPath: ""
+    workDir: ""
+  sidecars:
+    wechat:
+      enabled: true
+      entryPath: ""
+      workDir: ""
+      port: 19876
+      healthUrl: "http://127.0.0.1:19876/api/health"
+    qq:
+      enabled: true
+      entryPath: ""
+      workDir: ""
+      port: 19877
+      healthUrl: "http://127.0.0.1:19877/api/health"
+
 qdrant:
+  enabled: true
   host: "127.0.0.1"
   port: 19178
   collectionName: "memory_embeddings"
@@ -56,6 +86,7 @@ embedding:
   apiKey: ""
 
 surrealdb:
+  enabled: true
   host: "127.0.0.1"
   port: 18000
   namespace: "uai"

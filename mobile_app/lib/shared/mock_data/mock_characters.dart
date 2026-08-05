@@ -33,7 +33,7 @@ class MockCharacters {
   ];
 
   static CharacterLifeRules lifeRules(String charId) => CharacterLifeRules(
-    prompt: '你是一个温柔细心的 AI 伙伴，名叫阿米娅。你关心用户的日常，善于倾听，偶尔带着俏皮。',
+    prompt: '你是一个温柔细心的 AI 伙伴，名叫Amitia。你关心用户的日常，善于倾听，偶尔带着俏皮。',
     personality: '温柔、细心、有耐心，善于倾听',
     personalityScore: 65,
     relationshipTime: '128天',

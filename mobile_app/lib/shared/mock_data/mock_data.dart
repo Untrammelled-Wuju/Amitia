@@ -16,7 +16,7 @@ class MockData {
   static List<Character> characters = [
     Character(
       id: 'c1',
-      name: '阿米娅',
+      name: 'Amitia',
       avatarColor: '#7668EE',
       avatarInitial: '阿',
       status: '在线',
@@ -28,7 +28,7 @@ class MockData {
       personality: '温柔、细心、有耐心，善于倾听',
       speakingStyle: '语气温和，偶尔带着俏皮',
       userRelation: '亲密伙伴',
-      prompt: '你是一个温柔细心的 AI 伙伴，名叫阿米娅……',
+      prompt: '你是一个温柔细心的 AI 伙伴，名叫Amitia……',
       currentActivity: '整理今天的记忆',
       location: '主界面',
     ),
@@ -165,7 +165,7 @@ class MockData {
   static List<Conversation> conversations = [
     Conversation(
       id: 'conv1',
-      title: '和阿米娅的日常对话',
+      title: '和Amitia的日常对话',
       lastMessage: '好的，我正在生成摘要……',
       lastTime: DateTime(2026, 7, 30, 9, 28),
       characterId: 'c1',
@@ -384,7 +384,7 @@ class MockData {
     ),
     Memory(
       id: 'mem6',
-      content: '阿米娅的世界设定：来自一个科技与魔法并存的世界',
+      content: 'Amitia的世界设定：来自一个科技与魔法并存的世界',
       source: '设定',
       importance: '高',
       time: DateTime(2026, 7, 25, 10, 0),
@@ -592,5 +592,5 @@ class MockData {
   static List<String> gamePlugins = ['Minecraft 控制器', '星露谷助手', '原神计时器'];
   static List<String> gameTasks = ['每日签到提醒', '体力恢复提醒', '活动倒计时'];
 
-  static List<String> desktopPetPlugins = ['阿米娅桌宠', '小雨桌宠', '自定义桌宠'];
+  static List<String> desktopPetPlugins = ['Amitia桌宠', '小雨桌宠', '自定义桌宠'];
 }

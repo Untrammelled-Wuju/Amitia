@@ -133,7 +133,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('阿米娅', style: AppTypography.cardTitle(context)),
+                    Text('Amitia', style: AppTypography.cardTitle(context)),
                     Text(info.psycheSummary, style: AppTypography.caption(context)),
                   ],
                 ),

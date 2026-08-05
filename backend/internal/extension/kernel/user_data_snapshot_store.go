@@ -22,9 +22,11 @@ const (
 	userDataTableManifestSchemaVersion = 1
 	userDataRecordSchemaVersion        = "1.0.0"
 
-	userDataBatchHashAlgorithmVersion = "content-chain-v2"
+	userDataBatchHashAlgorithmVersion = "content-chain-v3"
 
-	userDataBatchGenesisDomain = "amitia-userdata-batch-genesis-v2"
+	userDataBatchGenesisDomain = "amitia-userdata-batch-genesis-v3"
+
+	userDataBatchHashDomain = "amitia-userdata-batch-v3"
 
 	userDataEmptySetDomain = "amitia-userdata-empty-set-v1"
 )
@@ -45,6 +47,44 @@ type UserDataTableIdentity struct {
 	EntityType            string `json:"entityType"`
 	NamespaceHash         string `json:"namespaceHash"`
 	BatchAlgorithmVersion string `json:"batchAlgorithmVersion"`
+}
+
+type UserDataBatchChainSpec struct {
+	Identity             UserDataTableIdentity
+	DataExportReference  string
+	BatchSize            int64
+	GenesisHash          string
+}
+
+type UserDataBatchChainResult struct {
+	GenesisHash  string
+	PreviousHash string
+	FinalHash    string
+	BatchCount   int64
+	RecordCount  int64
+}
+
+type userDataBatchRecordDigest struct {
+	Index       int    `json:"index"`
+	RawJSONHash string `json:"rawJsonHash"`
+	ExtensionID string `json:"extensionId"`
+	Namespace   string `json:"namespace"`
+	EntityType  string `json:"entityType"`
+	EntityID    string `json:"entityId"`
+	Operation   string `json:"operation"`
+	PayloadHash string `json:"payloadHash"`
+}
+
+type userDataBatchHashPayload struct {
+	Domain                string                    `json:"domain"`
+	BatchAlgorithmVersion string                    `json:"batchAlgorithmVersion"`
+	TableIdentity         UserDataTableIdentity      `json:"tableIdentity"`
+	DataExportReference   string                    `json:"dataExportReference"`
+	BatchIndex            int64                     `json:"batchIndex"`
+	CursorBefore          int64                     `json:"cursorBefore"`
+	CursorAfter           int64                     `json:"cursorAfter"`
+	PreviousBatchHash     string                    `json:"previousBatchHash"`
+	Records               []userDataBatchRecordDigest `json:"records"`
 }
 
 func computeUserDataNamespaceHash(identity UserDataNamespaceIdentity) string {
@@ -72,16 +112,104 @@ func computeUserDataEmptySetHash(identity UserDataTableIdentity) string {
 }
 
 func computeUserDataGenesisHash(identity UserDataTableIdentity) string {
-	hasher := sha256.New()
-	hasher.Write([]byte(fmt.Sprintf("domain:%s|nsHash:%s|ext:%s|table:%s|entityType:%s|schemaVer:%s|algo:%s",
-		identity.Domain,
-		identity.NamespaceHash,
-		strings.ToLower(strings.TrimSpace(identity.ExtensionID)),
-		strings.ToLower(strings.TrimSpace(identity.CanonicalTable)),
-		strings.ToLower(strings.TrimSpace(identity.EntityType)),
-		strings.ToLower(strings.TrimSpace(identity.SchemaVersion)),
-		identity.BatchAlgorithmVersion)))
-	return "gen:" + hex.EncodeToString(hasher.Sum(nil))
+	if identity.Domain != userDataBatchGenesisDomain {
+		return ""
+	}
+	if strings.TrimSpace(identity.SchemaVersion) == "" ||
+		strings.TrimSpace(identity.ExtensionID) == "" ||
+		strings.TrimSpace(identity.CanonicalTable) == "" ||
+		strings.TrimSpace(identity.EntityType) == "" ||
+		strings.TrimSpace(identity.NamespaceHash) == "" ||
+		identity.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
+		return ""
+	}
+	raw, err := json.Marshal(struct {
+		Domain                string `json:"domain"`
+		SchemaVersion         string `json:"schemaVersion"`
+		ExtensionID           string `json:"extensionId"`
+		CanonicalTable        string `json:"canonicalTable"`
+		EntityType            string `json:"entityType"`
+		NamespaceHash         string `json:"namespaceHash"`
+		BatchAlgorithmVersion string `json:"batchAlgorithmVersion"`
+	}{
+		Domain:                identity.Domain,
+		SchemaVersion:         strings.ToLower(strings.TrimSpace(identity.SchemaVersion)),
+		ExtensionID:           strings.ToLower(strings.TrimSpace(identity.ExtensionID)),
+		CanonicalTable:        strings.ToLower(strings.TrimSpace(identity.CanonicalTable)),
+		EntityType:            strings.ToLower(strings.TrimSpace(identity.EntityType)),
+		NamespaceHash:         strings.TrimSpace(identity.NamespaceHash),
+		BatchAlgorithmVersion: identity.BatchAlgorithmVersion,
+	})
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return "genesis:sha256:" + hex.EncodeToString(sum[:])
+}
+
+func validateUserDataBatchChainSpec(spec UserDataBatchChainSpec) error {
+	if spec.Identity.Domain != userDataBatchGenesisDomain {
+		return fmt.Errorf("kernel: batch chain genesis domain mismatch")
+	}
+	if spec.Identity.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
+		return fmt.Errorf("kernel: unsupported batch algorithm version %q", spec.Identity.BatchAlgorithmVersion)
+	}
+	if strings.TrimSpace(spec.Identity.SchemaVersion) == "" {
+		return fmt.Errorf("kernel: batch chain schema version missing")
+	}
+	if strings.TrimSpace(spec.Identity.ExtensionID) == "" {
+		return fmt.Errorf("kernel: batch chain extension id missing")
+	}
+	if strings.TrimSpace(spec.Identity.CanonicalTable) == "" {
+		return fmt.Errorf("kernel: batch chain canonical table missing")
+	}
+	if strings.TrimSpace(spec.Identity.EntityType) == "" {
+		return fmt.Errorf("kernel: batch chain entity type missing")
+	}
+	if strings.TrimSpace(spec.Identity.NamespaceHash) == "" {
+		return fmt.Errorf("kernel: batch chain namespace hash missing")
+	}
+	if strings.TrimSpace(spec.DataExportReference) == "" {
+		return fmt.Errorf("kernel: batch chain data export reference missing")
+	}
+	if spec.BatchSize <= 0 {
+		return fmt.Errorf("kernel: batch chain batch size must be positive")
+	}
+	if spec.BatchSize != int64(userDataRestoreBatchSize) {
+		return fmt.Errorf("kernel: batch chain batch size mismatch: expected=%d actual=%d", userDataRestoreBatchSize, spec.BatchSize)
+	}
+	expectedGenesis := computeUserDataGenesisHash(spec.Identity)
+	if expectedGenesis == "" {
+		return fmt.Errorf("kernel: batch chain genesis computation failed")
+	}
+	if strings.TrimSpace(spec.GenesisHash) == "" {
+		return fmt.Errorf("kernel: batch chain genesis hash missing")
+	}
+	if spec.GenesisHash != expectedGenesis {
+		return fmt.Errorf("kernel: batch chain genesis hash mismatch: expected=%s actual=%s", expectedGenesis, spec.GenesisHash)
+	}
+	return nil
+}
+
+func buildUserDataBatchChainSpec(manifest UserDataTableManifest) (UserDataBatchChainSpec, error) {
+	spec := UserDataBatchChainSpec{
+		Identity: UserDataTableIdentity{
+			Domain:                userDataBatchGenesisDomain,
+			SchemaVersion:         userDataRecordSchemaVersion,
+			ExtensionID:           manifest.ExtensionID,
+			CanonicalTable:        manifest.CanonicalTable,
+			EntityType:            manifest.EntityType,
+			NamespaceHash:         manifest.NamespaceHash,
+			BatchAlgorithmVersion: manifest.BatchAlgorithmVersion,
+		},
+		DataExportReference: manifest.DataExportReference,
+		BatchSize:           int64(manifest.BatchSize),
+		GenesisHash:         manifest.GenesisHash,
+	}
+	if err := validateUserDataBatchChainSpec(spec); err != nil {
+		return UserDataBatchChainSpec{}, NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409, err)
+	}
+	return spec, nil
 }
 
 const (
@@ -108,6 +236,9 @@ const userDataRestoreJournalDDL = `CREATE TABLE IF NOT EXISTS extension_package_
 	batch_size INTEGER NOT NULL DEFAULT 0,
 
 	namespace_hash TEXT NOT NULL DEFAULT '',
+
+	genesis_hash TEXT NOT NULL DEFAULT '',
+	expected_final_batch_hash TEXT NOT NULL DEFAULT '',
 
 	expected_aggregate_hash TEXT NOT NULL DEFAULT '',
 	aggregate_hash TEXT NOT NULL DEFAULT '',
@@ -150,6 +281,9 @@ type UserDataRestoreJournal struct {
 	BatchSize             int64
 
 	NamespaceHash string
+
+	GenesisHash            string
+	ExpectedFinalBatchHash string
 
 	ExpectedAggregateHash string
 	AggregateHash         string
@@ -196,6 +330,8 @@ func (s *UserDataSnapshotStore) ensureJournalColumns(ctx context.Context) error 
 		s.ensureExpectedAggregateHashColumn,
 		s.ensureAggregateHashColumn,
 		s.ensureDataExportReferenceColumn,
+		s.ensureGenesisHashColumn,
+		s.ensureExpectedFinalBatchHashColumn,
 	}
 	for _, fn := range closures {
 		if err := fn(ctx); err != nil {
@@ -378,6 +514,38 @@ func (s *UserDataSnapshotStore) ensureBatchSizeColumn(ctx context.Context) error
 	}
 	_, err = s.db.ExecContext(ctx,
 		`ALTER TABLE extension_package_user_data_restore_journal ADD COLUMN batch_size INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
+func (s *UserDataSnapshotStore) ensureGenesisHashColumn(ctx context.Context) error {
+	var name string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name FROM pragma_table_info('extension_package_user_data_restore_journal') WHERE name='genesis_hash'`,
+	).Scan(&name)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`ALTER TABLE extension_package_user_data_restore_journal ADD COLUMN genesis_hash TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+func (s *UserDataSnapshotStore) ensureExpectedFinalBatchHashColumn(ctx context.Context) error {
+	var name string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name FROM pragma_table_info('extension_package_user_data_restore_journal') WHERE name='expected_final_batch_hash'`,
+	).Scan(&name)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`ALTER TABLE extension_package_user_data_restore_journal ADD COLUMN expected_final_batch_hash TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 
@@ -622,10 +790,9 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		return s.verifyCompletedJournalAgainstManifest(ctx, journal, manifest, expectedNamespaceHash)
 	}
 	if journal.State == UserDataRestoreFailed {
-		journal.ImportedRows = 0
-		journal.AppliedCount = 0
-		journal.Cursor = ""
-		journal.BatchHash = ""
+		if err := s.resetRestoreJournalToGenesis(ctx, journal, manifest); err != nil {
+			return err
+		}
 	}
 	startCursor, cursorErr := parseJournalCursor(journal, manifest.RecordCount)
 	if cursorErr != nil {
@@ -635,9 +802,16 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: journal applied_count %d does not match cursor %d", journal.AppliedCount, startCursor))
 	}
-	if journal.BatchAlgorithmVersion != "" && journal.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
+	if journal.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
 		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
 			fmt.Errorf("kernel: journal %s batch algorithm version %q does not match current %q", journal.JournalID, journal.BatchAlgorithmVersion, userDataBatchHashAlgorithmVersion))
+	}
+	chainSpec, chainErr := buildUserDataBatchChainSpec(manifest)
+	if chainErr != nil {
+		return chainErr
+	}
+	if verifyErr := verifyRestoreJournalBatchPrefix(journal, rawRecords, chainSpec); verifyErr != nil {
+		return verifyErr
 	}
 	if len(parsedRecords) == 0 {
 		genesisHash := computeUserDataGenesisHash(UserDataTableIdentity{
@@ -703,6 +877,10 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 			}
 			return failErr
 		}
+		if manifest.FinalBatchHash != manifest.GenesisHash {
+			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: empty table %s final batch hash must equal genesis", table))
+		}
 		if err := s.completeRestoreJournalWithAggregate(ctx, journal, manifest, userDataRestoreCompletionEvidence{
 			Cursor:        "0",
 			ImportedRows:  0,
@@ -716,34 +894,32 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		return s.verifyCompletedJournalAgainstManifest(ctx, journal, manifest, expectedNamespaceHash)
 	}
 	if startCursor == manifest.RecordCount {
-		finalHash := ""
-		if startCursor > 0 {
-			if err := s.deleteDifferingRows(ctx, table, records, extensionID); err != nil {
-				failErr := fmt.Errorf("kernel: delete differing rows for %s: %w", table, err)
-				if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
-					return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
-				}
-				return failErr
+		if journal.BatchHash != manifest.FinalBatchHash {
+			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: completed cursor has wrong final batch hash for table %s", table))
+		}
+		if err := s.deleteDifferingRows(ctx, table, records, extensionID); err != nil {
+			failErr := fmt.Errorf("kernel: delete differing rows for %s: %w", table, err)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
 			}
-			recomputedAggHash, recomputeErr := s.computeAggregateHashFromDB(ctx, table)
-			if recomputeErr != nil {
-				failErr := fmt.Errorf("kernel: recompute aggregate hash on recovery for table %s: %w", table, recomputeErr)
-				if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
-					return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
-				}
-				return failErr
+			return failErr
+		}
+		recomputedAggHash, recomputeErr := s.computeAggregateHashFromDB(ctx, table)
+		if recomputeErr != nil {
+			failErr := fmt.Errorf("kernel: recompute aggregate hash on recovery for table %s: %w", table, recomputeErr)
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
 			}
-			if recomputedAggHash != manifest.AggregateHash {
-				failErr := NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
-					fmt.Errorf("kernel: aggregate hash mismatch on recovery for table %s", table))
-				if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
-					return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
-				}
-				return failErr
+			return failErr
+		}
+		if recomputedAggHash != manifest.AggregateHash {
+			failErr := NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+				fmt.Errorf("kernel: aggregate hash mismatch on recovery for table %s", table))
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
 			}
-			finalHash = recomputedAggHash
-		} else {
-			finalHash = computeUserDataAggregateHashFromRecords(nil)
+			return failErr
 		}
 		if err := s.completeRestoreJournalWithAggregate(ctx, journal, manifest, userDataRestoreCompletionEvidence{
 			Cursor:        strconv.FormatInt(manifest.RecordCount, 10),
@@ -751,7 +927,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 			AppliedCount:  manifest.RecordCount,
 			BatchIndex:    journal.BatchIndex,
 			BatchHash:     journal.BatchHash,
-			AggregateHash: finalHash,
+			AggregateHash: recomputedAggHash,
 		}); err != nil {
 			return err
 		}
@@ -771,15 +947,16 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		}
 		batch := remaining[i:end]
 		batchIdx++
-		batchHash := computeContentBoundBatchHash(batch, extensionID, startCursor+int64(i), prevBatchHash, int(batchIdx), schemaVersion, table, manifest.DataExportReference)
-		if batchHash == "" {
-			if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed,
-				fmt.Sprintf("batch content hash computation failed at cursor %d", startCursor+int64(i))); failErr != nil {
-				return errors.Join(failErr, fmt.Errorf("kernel: batch content hash failed"))
+		batchHash, err := computeContentBoundBatchHash(batch, chainSpec, startCursor+int64(i), prevBatchHash, int64(batchIdx))
+		if err != nil {
+			failErr := NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: batch content hash computation failed at cursor %d: %w", startCursor+int64(i), err))
+			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+				return errors.Join(failErr, journalErr)
 			}
-			return fmt.Errorf("kernel: batch content hash computation failed at cursor %d", startCursor+int64(i))
+			return failErr
 		}
-		batchApplied, _, err := s.importBatchAtomic(ctx, journal, table, batch, startCursor+int64(i), appliedCount, int(batchIdx), batchHash, prevBatchHash, journal.PrevBatchHash)
+		batchApplied, _, err := s.importBatchAtomic(ctx, journal, table, batch, startCursor+int64(i), appliedCount, int(batchIdx), batchHash, prevBatchHash, journal.BatchHash, journal.BatchIndex)
 		if err != nil {
 			if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error()); failErr != nil {
 				return errors.Join(err, fmt.Errorf("kernel: update journal to failed: %w", failErr))
@@ -795,6 +972,14 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		}
 		prevBatchHash = batchHash
 		appliedCount += batchApplied
+	}
+	if prevBatchHash != manifest.FinalBatchHash {
+		failErr := NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: restored batch chain final hash mismatch for table %s: journal=%s manifest=%s", table, prevBatchHash, manifest.FinalBatchHash))
+		if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
+			return errors.Join(failErr, journalErr)
+		}
+		return failErr
 	}
 	if err := s.deleteDifferingRows(ctx, table, records, extensionID); err != nil {
 		if failErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, err.Error()); failErr != nil {
@@ -821,7 +1006,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		Cursor:        strconv.FormatInt(manifest.RecordCount, 10),
 		ImportedRows:  manifest.RecordCount,
 		AppliedCount:  appliedCount,
-		BatchIndex:    batchIdx,
+		BatchIndex:    int64(batchIdx),
 		BatchHash:     prevBatchHash,
 		AggregateHash: aggHashFromDB,
 	}); err != nil {
@@ -887,24 +1072,26 @@ func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(
 	}
 
 	var (
-		storedExtensionID string
-		storedTotalRows   int64
-		state             string
-		startedAt         string
-		updatedAt         string
-		errorDetail       string
-		cursor            string
-		batchHash         string
-		prevBatchHash     string
-		batchAlgorithmVer string
-		namespaceHash     string
-		expectedAggHash   string
-		aggregateHash     string
-		dataExportRef     string
-		importedRows      int64
-		appliedCount      int64
-		batchIndex        int64
-		batchSize         int64
+		storedExtensionID    string
+		storedTotalRows      int64
+		state                string
+		startedAt            string
+		updatedAt            string
+		errorDetail          string
+		cursor               string
+		batchHash            string
+		prevBatchHash        string
+		batchAlgorithmVer    string
+		namespaceHash        string
+		expectedAggHash      string
+		aggregateHash        string
+		dataExportRef        string
+		importedRows         int64
+		appliedCount         int64
+		batchIndex           int64
+		batchSize            int64
+		genesisHash          string
+		expectedFinalBatch   string
 	)
 
 	err := s.db.QueryRowContext(ctx,
@@ -921,6 +1108,8 @@ prev_batch_hash,
 batch_algorithm_version,
 batch_size,
 namespace_hash,
+genesis_hash,
+expected_final_batch_hash,
 expected_aggregate_hash,
 aggregate_hash,
 data_export_reference,
@@ -944,6 +1133,8 @@ error_detail
 		&batchAlgorithmVer,
 		&batchSize,
 		&namespaceHash,
+		&genesisHash,
+		&expectedFinalBatch,
 		&expectedAggHash,
 		&aggregateHash,
 		&dataExportRef,
@@ -965,6 +1156,8 @@ error_detail
 		journal.BatchAlgorithmVersion = batchAlgorithmVer
 		journal.BatchSize = batchSize
 		journal.NamespaceHash = namespaceHash
+		journal.GenesisHash = genesisHash
+		journal.ExpectedFinalBatchHash = expectedFinalBatch
 		journal.ExpectedAggregateHash = expectedAggHash
 		journal.AggregateHash = aggregateHash
 		journal.DataExportReference = dataExportRef
@@ -1004,6 +1197,30 @@ error_detail
 			return nil, NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
 				fmt.Errorf("kernel: restore journal %s belongs to export %s, cannot use export %s", journal.JournalID, journal.DataExportReference, manifest.DataExportReference))
 		}
+		if journal.GenesisHash == "" {
+			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal %s has empty genesis hash", journal.JournalID))
+		}
+		if journal.GenesisHash != manifest.GenesisHash {
+			return nil, NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: restore journal %s genesis differs from manifest", journal.JournalID))
+		}
+		if journal.ExpectedFinalBatchHash == "" {
+			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal %s expected final batch hash missing", journal.JournalID))
+		}
+		if journal.ExpectedFinalBatchHash != manifest.FinalBatchHash {
+			return nil, NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
+				fmt.Errorf("kernel: restore journal %s final batch hash differs from manifest", journal.JournalID))
+		}
+		if journal.BatchAlgorithmVersion != manifest.BatchAlgorithmVersion {
+			return nil, NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: restore journal %s batch algorithm differs from manifest", journal.JournalID))
+		}
+		if journal.BatchSize != int64(manifest.BatchSize) {
+			return nil, NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: restore journal %s batch size differs from manifest", journal.JournalID))
+		}
 		if journal.AggregateHash != "" && journal.AggregateHash != journal.ExpectedAggregateHash {
 			return nil, NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
 				fmt.Errorf("kernel: restore journal %s observed aggregate differs from expected aggregate: observed=%s expected=%s", journal.JournalID, journal.AggregateHash, journal.ExpectedAggregateHash))
@@ -1032,6 +1249,8 @@ prev_batch_hash,
 batch_algorithm_version,
 batch_size,
 namespace_hash,
+genesis_hash,
+expected_final_batch_hash,
 expected_aggregate_hash,
 aggregate_hash,
 data_export_reference,
@@ -1044,7 +1263,7 @@ error_detail
 ?, ?, ?, ?, ?,
 ?, ?, ?, ?, ?,
 ?, ?, ?, ?, ?,
-?
+?, ?, ?
  )`,
 		journal.JournalID,
 		operationID,
@@ -1053,13 +1272,15 @@ error_detail
 		manifest.RecordCount,
 		0,
 		0,
-		"",
-		"",
+		"0",
+		manifest.GenesisHash,
 		0,
 		"",
 		userDataBatchHashAlgorithmVersion,
 		userDataRestoreBatchSize,
 		expectedNamespaceHash,
+		manifest.GenesisHash,
+		manifest.FinalBatchHash,
 		manifest.AggregateHash,
 		"",
 		manifest.DataExportReference,
@@ -1075,6 +1296,9 @@ error_detail
 
 	journal.BatchAlgorithmVersion = userDataBatchHashAlgorithmVersion
 	journal.BatchSize = userDataRestoreBatchSize
+	journal.GenesisHash = manifest.GenesisHash
+	journal.ExpectedFinalBatchHash = manifest.FinalBatchHash
+	journal.BatchHash = manifest.GenesisHash
 
 	return journal, nil
 }
@@ -1092,7 +1316,73 @@ func (s *UserDataSnapshotStore) updateRestoreJournalState(ctx context.Context, j
 	return err
 }
 
-func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *UserDataRestoreJournal, table string, batch []map[string]interface{}, cursorBefore int64, appliedCountBefore int64, batchIdx int, batchHash string, prevBatchHash string, expectedPrevBatchHash string) (int64, string, error) {
+func (s *UserDataSnapshotStore) resetRestoreJournalToGenesis(
+	ctx context.Context,
+	journal *UserDataRestoreJournal,
+	manifest UserDataTableManifest,
+) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE extension_package_user_data_restore_journal
+ SET state=?,
+imported_rows=0,
+applied_count=0,
+cursor='',
+batch_hash=?,
+batch_index=0,
+prev_batch_hash='',
+aggregate_hash='',
+error_detail='',
+updated_at=?
+ WHERE operation_id=?
+   AND table_name=?
+   AND genesis_hash=?
+   AND expected_final_batch_hash=?`,
+		string(UserDataRestorePending),
+		manifest.GenesisHash,
+		now,
+		journal.OperationID,
+		journal.TableName,
+		manifest.GenesisHash,
+		manifest.FinalBatchHash,
+	)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected != 1 {
+		return NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
+			fmt.Errorf("kernel: reset restore journal to genesis affected %d rows", rowsAffected))
+	}
+	journal.State = UserDataRestorePending
+	journal.ImportedRows = 0
+	journal.AppliedCount = 0
+	journal.Cursor = ""
+	journal.BatchHash = manifest.GenesisHash
+	journal.BatchIndex = 0
+	journal.PrevBatchHash = ""
+	journal.AggregateHash = ""
+	journal.ErrorDetail = ""
+	journal.UpdatedAt = now
+	return nil
+}
+
+func (s *UserDataSnapshotStore) importBatchAtomic(
+	ctx context.Context,
+	journal *UserDataRestoreJournal,
+	table string,
+	batch []map[string]interface{},
+	cursorBefore int64,
+	appliedCountBefore int64,
+	batchIndex int,
+	batchHash string,
+	previousBatchHash string,
+	expectedCurrentBatchHash string,
+	expectedBatchIndex int64,
+) (int64, string, error) {
 	if len(batch) == 0 {
 		return 0, "", nil
 	}
@@ -1159,9 +1449,9 @@ func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *
 	res, err := tx.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal
 		 SET imported_rows=?, cursor=?, applied_count=?, batch_hash=?, batch_index=?, prev_batch_hash=?, updated_at=?
-		 WHERE operation_id=? AND table_name=? AND state=? AND prev_batch_hash=?`,
-		newCursor, strconv.FormatInt(newCursor, 10), newAppliedCount, batchHash, int64(batchIdx), prevBatchHash, now,
-		journal.OperationID, journal.TableName, string(UserDataRestoreImporting), expectedPrevBatchHash)
+		 WHERE operation_id=? AND table_name=? AND state=? AND batch_hash=? AND batch_index=? AND cursor=?`,
+		newCursor, strconv.FormatInt(newCursor, 10), newAppliedCount, batchHash, int64(batchIndex), previousBatchHash, now,
+		journal.OperationID, journal.TableName, string(UserDataRestoreImporting), expectedCurrentBatchHash, expectedBatchIndex, strconv.FormatInt(cursorBefore, 10))
 	if err != nil {
 		return 0, "", fmt.Errorf("update journal in batch transaction: %w", err)
 	}
@@ -1170,7 +1460,7 @@ func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *
 		return 0, "", fmt.Errorf("query rows affected for journal update: %w", rowsErr)
 	}
 	if rowsAff != 1 {
-		return 0, "", NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409, fmt.Errorf("kernel: journal update affected %d rows, expected exactly 1 (op=%s table=%s batch=%d)", rowsAff, journal.OperationID, journal.TableName, batchIdx))
+		return 0, "", NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409, fmt.Errorf("kernel: journal update affected %d rows, expected exactly 1 (op=%s table=%s batch=%d)", rowsAff, journal.OperationID, journal.TableName, batchIndex))
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, "", fmt.Errorf("commit atomic batch for %s: %w", table, err)
@@ -1179,8 +1469,8 @@ func (s *UserDataSnapshotStore) importBatchAtomic(ctx context.Context, journal *
 	journal.Cursor = strconv.FormatInt(newCursor, 10)
 	journal.AppliedCount = newAppliedCount
 	journal.BatchHash = batchHash
-	journal.BatchIndex = int64(batchIdx)
-	journal.PrevBatchHash = prevBatchHash
+	journal.BatchIndex = int64(batchIndex)
+	journal.PrevBatchHash = previousBatchHash
 	journal.UpdatedAt = now
 	return imported, batchHash, nil
 }
@@ -1604,6 +1894,42 @@ func validateUserDataTableSnapshotManifest(manifest UserDataTableManifest, exten
 				fmt.Errorf("kernel: manifest empty set hash mismatch for table %s: expected=%s actual=%s", table, expectedEmptySetHash, manifest.EmptySetHash))
 		}
 	}
+	if manifest.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: table %s batch algorithm mismatch: expected=%s actual=%s", table, userDataBatchHashAlgorithmVersion, manifest.BatchAlgorithmVersion))
+	}
+	if manifest.BatchSize != userDataRestoreBatchSize {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: table %s batch size mismatch: expected=%d actual=%d", table, userDataRestoreBatchSize, manifest.BatchSize))
+	}
+	chainSpec, err := buildUserDataBatchChainSpec(manifest)
+	if err != nil {
+		return err
+	}
+	chainResult, err := recalculateBatchHashChain(rawRecords, chainSpec)
+	if err != nil {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: recalculate manifest batch chain for table %s: %w", table, err))
+	}
+	if manifest.GenesisHash != chainResult.GenesisHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: table %s genesis hash mismatch: manifest=%s calculated=%s", table, manifest.GenesisHash, chainResult.GenesisHash))
+	}
+	if manifest.FinalBatchHash == "" || manifest.FinalBatchHash != chainResult.FinalHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: table %s final batch hash mismatch: manifest=%s calculated=%s", table, manifest.FinalBatchHash, chainResult.FinalHash))
+	}
+	if manifest.RecordCount == 0 {
+		if manifest.FinalBatchHash != manifest.GenesisHash {
+			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: empty table %s final batch hash must equal genesis", table))
+		}
+	} else {
+		if manifest.FinalBatchHash == manifest.GenesisHash {
+			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+				fmt.Errorf("kernel: non-empty table %s final batch hash equals genesis", table))
+		}
+	}
 	for _, record := range parsedRecords {
 		if record.ExtensionID != extensionID {
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
@@ -1615,7 +1941,6 @@ func validateUserDataTableSnapshotManifest(manifest UserDataTableManifest, exten
 		}
 	}
 	_ = jsonlData
-	_ = rawRecords
 	return nil
 }
 
@@ -1698,6 +2023,14 @@ func (s *UserDataSnapshotStore) completeRestoreJournalWithAggregate(
 	if evidence.Cursor != expectedCursor {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: completion cursor mismatch for table %s: expected=%s actual=%s", journal.TableName, expectedCursor, evidence.Cursor))
+	}
+	if evidence.BatchHash != manifest.FinalBatchHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: completion final batch hash differs from manifest for table %s: completion=%s manifest=%s", journal.TableName, evidence.BatchHash, manifest.FinalBatchHash))
+	}
+	if journal.GenesisHash != manifest.GenesisHash || journal.ExpectedFinalBatchHash != manifest.FinalBatchHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: completion journal chain identity differs from manifest for table %s", journal.TableName))
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(ctx,
@@ -1813,6 +2146,26 @@ func (s *UserDataSnapshotStore) verifyCompletedJournalAgainstManifest(
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: completed database row count mismatch for table %s: manifest=%d database=%d", journal.TableName, manifest.RecordCount, databaseCount))
 	}
+	if journal.GenesisHash == "" || journal.GenesisHash != manifest.GenesisHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: completed journal genesis mismatch for table %s", journal.TableName))
+	}
+	if journal.ExpectedFinalBatchHash == "" || journal.ExpectedFinalBatchHash != manifest.FinalBatchHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: completed journal expected final hash mismatch for table %s", journal.TableName))
+	}
+	if journal.BatchHash == "" || journal.BatchHash != manifest.FinalBatchHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: completed journal final batch hash mismatch for table %s: journal=%s manifest=%s", journal.TableName, journal.BatchHash, manifest.FinalBatchHash))
+	}
+	expectedBatchCount := int64(0)
+	if manifest.RecordCount > 0 {
+		expectedBatchCount = (manifest.RecordCount + int64(manifest.BatchSize) - 1) / int64(manifest.BatchSize)
+	}
+	if journal.BatchIndex != expectedBatchCount {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: completed journal batch count mismatch for table %s: journal=%d expected=%d", journal.TableName, journal.BatchIndex, expectedBatchCount))
+	}
 	return s.verifyAggregateHashClosure(ctx, journal, manifest)
 }
 
@@ -1840,7 +2193,9 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
        batch_index,
        batch_algorithm_version,
        batch_size,
-       data_export_reference
+       data_export_reference,
+       genesis_hash,
+       expected_final_batch_hash
  FROM extension_package_user_data_restore_journal
  WHERE operation_id=?`, operationID)
 	if err != nil {
@@ -1851,10 +2206,10 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 	found := false
 	for rows.Next() {
 		found = true
-		var table, state, errorDetail, cursor, namespaceHash, expectedAggregateHash, aggregateHash, batchHash, extensionID, batchAlgoVer, dataExportRef string
+		var table, state, errorDetail, cursor, namespaceHash, expectedAggregateHash, aggregateHash, batchHash, extensionID, batchAlgoVer, dataExportRef, genesisHash, expectedFinalBatchHash string
 		var importedRows, totalRows, appliedCount, batchIndex, batchSize int64
 		if err := rows.Scan(&table, &state, &importedRows, &totalRows, &appliedCount, &cursor, &errorDetail,
-			&namespaceHash, &expectedAggregateHash, &aggregateHash, &batchHash, &extensionID, &batchIndex, &batchAlgoVer, &batchSize, &dataExportRef); err != nil {
+			&namespaceHash, &expectedAggregateHash, &aggregateHash, &batchHash, &extensionID, &batchIndex, &batchAlgoVer, &batchSize, &dataExportRef, &genesisHash, &expectedFinalBatchHash); err != nil {
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: scan restore journal for operation %s: %w", operationID, err))
 		}
@@ -1887,9 +2242,29 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: restore journal for table %s has empty data_export_reference", table))
 		}
+		if genesisHash == "" {
+			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal for table %s has empty genesis hash", table))
+		}
+		if expectedFinalBatchHash == "" {
+			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal for table %s has empty expected final batch hash", table))
+		}
 		if totalRows > 0 && batchHash == "" {
 			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 422,
 				fmt.Errorf("kernel: restore journal for table %s has empty batch hash but %d rows were imported", table, totalRows))
+		}
+		if batchHash != expectedFinalBatchHash {
+			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 422,
+				fmt.Errorf("kernel: restore journal final batch mismatch for table %s: expected=%s actual=%s", table, expectedFinalBatchHash, batchHash))
+		}
+		if totalRows == 0 && batchHash != genesisHash {
+			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 422,
+				fmt.Errorf("kernel: empty table %s final batch hash differs from genesis", table))
+		}
+		if totalRows > 0 && batchHash == genesisHash {
+			return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 422,
+				fmt.Errorf("kernel: non-empty table %s final batch hash equals genesis", table))
 		}
 		if batchAlgoVer != userDataBatchHashAlgorithmVersion {
 			return NewPackageError(PackageErrCodeSnapshotSchemaUnsupported, 422,
@@ -1960,84 +2335,157 @@ func computeUserDataPayloadHash(payload interface{}) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func computeContentBoundBatchHash(batch []map[string]interface{}, extensionID string, cursor int64, prevBatchHash string, batchIdx int, schemaVersion, canonicalTable, dataExportReference string) string {
-	if len(batch) == 0 || extensionID == "" {
-		return ""
+func computeContentBoundBatchHash(
+	batch []map[string]interface{},
+	spec UserDataBatchChainSpec,
+	cursorBefore int64,
+	previousBatchHash string,
+	batchIndex int64,
+) (string, error) {
+	if err := validateUserDataBatchChainSpec(spec); err != nil {
+		return "", err
 	}
-	h := sha256.New()
-	h.Write([]byte(fmt.Sprintf("v:%s:op:%s:ext:%s:tbl:%s:schema:%s:batch:%d:cursor_before:%d",
-		userDataBatchHashAlgorithmVersion, dataExportReference, extensionID, canonicalTable, schemaVersion, batchIdx, cursor)))
-	if prevBatchHash != "" {
-		h.Write([]byte(":prev:" + prevBatchHash))
+	if len(batch) == 0 {
+		return "", fmt.Errorf("kernel: empty batch cannot produce a batch hash")
 	}
-	for idx, record := range batch {
+	if cursorBefore < 0 {
+		return "", fmt.Errorf("kernel: batch cursor before cannot be negative")
+	}
+	if batchIndex <= 0 {
+		return "", fmt.Errorf("kernel: batch index must start at one")
+	}
+	if strings.TrimSpace(previousBatchHash) == "" {
+		return "", fmt.Errorf("kernel: previous batch hash missing")
+	}
+	if batchIndex == 1 && previousBatchHash != spec.GenesisHash {
+		return "", fmt.Errorf("kernel: first batch must start from manifest genesis hash")
+	}
+	recordDigests := make([]userDataBatchRecordDigest, 0, len(batch))
+	for index, record := range batch {
 		raw, exists := record["_raw"]
 		if !exists {
-			return ""
+			return "", fmt.Errorf("kernel: batch record %d raw JSON missing", index)
 		}
-		rawStr, ok := raw.(string)
-		if !ok || strings.TrimSpace(rawStr) == "" {
-			return ""
+		rawString, ok := raw.(string)
+		if !ok || strings.TrimSpace(rawString) == "" {
+			return "", fmt.Errorf("kernel: batch record %d raw JSON invalid", index)
 		}
 		var parsed userDataRecord
-		if err := json.Unmarshal([]byte(rawStr), &parsed); err != nil {
-			return ""
+		if err := json.Unmarshal([]byte(rawString), &parsed); err != nil {
+			return "", fmt.Errorf("kernel: parse batch record %d: %w", index, err)
 		}
-		if err := validateUserDataRecord(parsed, extensionID); err != nil {
-			return ""
+		if err := validateUserDataRecord(parsed, spec.Identity.ExtensionID); err != nil {
+			return "", fmt.Errorf("kernel: validate batch record %d: %w", index, err)
 		}
-		h.Write([]byte(fmt.Sprintf(":[%d:%s:%s:%s:%s:%s:%s:%s]", idx,
-			parsed.ExtensionID, parsed.Namespace, parsed.SchemaVersion, parsed.EntityType, parsed.EntityID, parsed.Operation, parsed.PayloadHash)))
+		if parsed.Namespace != spec.Identity.CanonicalTable {
+			return "", fmt.Errorf("kernel: batch record %d namespace mismatch", index)
+		}
+		if parsed.EntityType != spec.Identity.EntityType {
+			return "", fmt.Errorf("kernel: batch record %d entity type mismatch", index)
+		}
+		if parsed.SchemaVersion != spec.Identity.SchemaVersion {
+			return "", fmt.Errorf("kernel: batch record %d schema version mismatch", index)
+		}
+		rawDigest := sha256.Sum256([]byte(rawString))
+		recordDigests = append(recordDigests, userDataBatchRecordDigest{
+			Index:       index,
+			RawJSONHash: "sha256:" + hex.EncodeToString(rawDigest[:]),
+			ExtensionID: parsed.ExtensionID,
+			Namespace:   parsed.Namespace,
+			EntityType:  parsed.EntityType,
+			EntityID:    parsed.EntityID,
+			Operation:   parsed.Operation,
+			PayloadHash: parsed.PayloadHash,
+		})
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	payload := userDataBatchHashPayload{
+		Domain:                userDataBatchHashDomain,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		TableIdentity:         spec.Identity,
+		DataExportReference:   spec.DataExportReference,
+		BatchIndex:            batchIndex,
+		CursorBefore:          cursorBefore,
+		CursorAfter:           cursorBefore + int64(len(batch)),
+		PreviousBatchHash:     previousBatchHash,
+		Records:               recordDigests,
+	}
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("kernel: marshal batch hash payload: %w", err)
+	}
+	sum := sha256.Sum256(rawPayload)
+	return "batch:sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func recalculateBatchHashChain(records []map[string]interface{}, extensionID, schemaVersion, canonicalTable, dataExportReference string, batchSize int64, perTableGenesisHash string) (string, int64, error) {
+func recalculateBatchHashChain(
+	records []map[string]interface{},
+	spec UserDataBatchChainSpec,
+) (UserDataBatchChainResult, error) {
+	var result UserDataBatchChainResult
+	if err := validateUserDataBatchChainSpec(spec); err != nil {
+		return result, err
+	}
+	result.GenesisHash = spec.GenesisHash
+	result.FinalHash = spec.GenesisHash
+	result.RecordCount = int64(len(records))
 	if len(records) == 0 {
-		if perTableGenesisHash != "" {
-			return perTableGenesisHash, 0, nil
-		}
-		genesisHash := computeUserDataGenesisHash(UserDataTableIdentity{
-			Domain:                userDataBatchGenesisDomain,
-			SchemaVersion:         schemaVersion,
-			ExtensionID:           extensionID,
-			CanonicalTable:        canonicalTable,
-			NamespaceHash:         "",
-			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-		})
-		return genesisHash, 0, nil
+		return result, nil
 	}
-	if extensionID == "" || schemaVersion == "" || canonicalTable == "" || dataExportReference == "" {
-		return "", 0, fmt.Errorf("kernel: missing required fields for batch hash chain recalculation")
-	}
-	prevHash := perTableGenesisHash
-	if prevHash == "" {
-		genesisHash := computeUserDataGenesisHash(UserDataTableIdentity{
-			Domain:                userDataBatchGenesisDomain,
-			SchemaVersion:         schemaVersion,
-			ExtensionID:           extensionID,
-			CanonicalTable:        canonicalTable,
-			NamespaceHash:         "",
-			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-		})
-		prevHash = genesisHash
-	}
-	batchCount := int64(0)
+	previousHash := spec.GenesisHash
 	totalRecords := int64(len(records))
-	for i := int64(0); i < totalRecords; i += batchSize {
-		end := i + batchSize
+	for cursor := int64(0); cursor < totalRecords; cursor += spec.BatchSize {
+		end := cursor + spec.BatchSize
 		if end > totalRecords {
 			end = totalRecords
 		}
-		batch := records[i:end]
-		batchCount++
-		batchHash := computeContentBoundBatchHash(batch, extensionID, i, prevHash, int(batchCount), schemaVersion, canonicalTable, dataExportReference)
-		if batchHash == "" {
-			return "", 0, fmt.Errorf("kernel: batch hash computation failed at batch %d, cursor %d", batchCount, i)
+		batch := records[int(cursor):int(end)]
+		batchIndex := result.BatchCount + 1
+		batchHash, err := computeContentBoundBatchHash(batch, spec, cursor, previousHash, batchIndex)
+		if err != nil {
+			return UserDataBatchChainResult{}, fmt.Errorf("kernel: compute batch %d at cursor %d: %w", batchIndex, cursor, err)
 		}
-		prevHash = batchHash
+		result.PreviousHash = previousHash
+		result.FinalHash = batchHash
+		result.BatchCount = batchIndex
+		previousHash = batchHash
 	}
-	return prevHash, batchCount, nil
+	return result, nil
+}
+
+func verifyRestoreJournalBatchPrefix(
+	journal *UserDataRestoreJournal,
+	records []map[string]interface{},
+	spec UserDataBatchChainSpec,
+) error {
+	if journal == nil {
+		return fmt.Errorf("kernel: restore journal missing")
+	}
+	cursor, err := parseJournalCursor(journal, int64(len(records)))
+	if err != nil {
+		return err
+	}
+	if cursor < int64(len(records)) && cursor%spec.BatchSize != 0 {
+		return NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
+			fmt.Errorf("kernel: journal cursor %d is not aligned to batch size %d", cursor, spec.BatchSize))
+	}
+	prefix := records[:int(cursor)]
+	result, err := recalculateBatchHashChain(prefix, spec)
+	if err != nil {
+		return err
+	}
+	if journal.BatchIndex != result.BatchCount {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: journal batch index mismatch: journal=%d recalculated=%d", journal.BatchIndex, result.BatchCount))
+	}
+	if journal.BatchHash == "" || journal.BatchHash != result.FinalHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: journal batch hash mismatch at cursor %d: journal=%s recalculated=%s", cursor, journal.BatchHash, result.FinalHash))
+	}
+	if journal.PrevBatchHash != result.PreviousHash {
+		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
+			fmt.Errorf("kernel: journal previous batch hash mismatch at cursor %d: journal=%s recalculated=%s", cursor, journal.PrevBatchHash, result.PreviousHash))
+	}
+	return nil
 }
 
 func computeContentBoundChainHash(records []map[string]interface{}, extensionID string, cursor int) string {

@@ -42,6 +42,9 @@ func (s *stubOwnershipGuard) RequireRelease(ctx context.Context, actor *desktopp
 func (s *stubOwnershipGuard) RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
 	return &security.InstallationScope{UserID: actor.UserID, InstallationID: installationID}, nil
 }
+func (s *stubOwnershipGuard) RequireInstallationStrict(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
+	return &security.InstallationScope{UserID: actor.UserID, InstallationID: installationID}, nil
+}
 func (s *stubOwnershipGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*security.EditSessionScope, error) {
 	return &security.EditSessionScope{UserID: actor.UserID, SessionID: sessionID}, nil
 }

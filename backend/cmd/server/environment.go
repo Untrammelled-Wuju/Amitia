@@ -73,7 +73,7 @@ func (e *Environment) AddService(name, dir, cmd string, args []string, port int,
 		Args:        args,
 		Env:         env,
 		Port:        port,
-		HealthURL:   fmt.Sprintf("http://127.0.0.1:%d/api/health", port),
+		HealthURL:   fmt.Sprintf("http://127.0.0.1:%d/livez", port),
 		maxRestarts: 10,
 	})
 }
@@ -331,7 +331,7 @@ func startEnvironment() *Environment {
 		log.Printf("[Env] 根目录: %s", runtimeRoot)
 		log.Printf("[Env] 使用打包版附属服务")
 	} else {
-		workspace := findWorkspace()
+		workspace := util.RuntimeWorkspaceDir(runtimeRoot)
 		env = NewEnvironment(workspace)
 		log.Printf("[Env] 根目录: %s", workspace)
 	}
@@ -367,42 +367,6 @@ func startEnvironment() *Environment {
 	log.Println("[Env] 附属服务启动中...")
 
 	return env
-}
-
-func findWorkspace() string {
-	cwd, _ := os.Getwd()
-	for i := 0; i < 4; i++ {
-		if info, err := os.Stat(filepath.Join(cwd, "backend")); err == nil && info.IsDir() {
-			return cwd
-		}
-		cwd = filepath.Dir(cwd)
-	}
-
-	exe, _ := os.Executable()
-	dir := filepath.Dir(exe)
-
-	for i := 0; i < 6; i++ {
-		for _, check := range []string{"backend", "ai-companion/apps", "apps"} {
-			if info, err := os.Stat(filepath.Join(dir, check)); err == nil && info.IsDir() {
-				return dir
-			}
-		}
-		if info, err := os.Stat(filepath.Join(dir, "ai-companion")); err == nil && info.IsDir() {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-
-	cwd, _ = os.Getwd()
-	for i := 0; i < 3; i++ {
-		if info, err := os.Stat(filepath.Join(cwd, "backend")); err == nil && info.IsDir() {
-			return cwd
-		}
-		cwd = filepath.Dir(cwd)
-	}
-
-	cwd, _ = os.Getwd()
-	return cwd
 }
 
 func bundledNodePath(root string) string {

@@ -134,7 +134,8 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
     if (effectiveLeading == null) {
       if (navigation == AmitiaAppBarNavigation.back || showBackButton) {
         effectiveLeading = IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           onPressed: () {
             final router = GoRouter.of(context);
             if (router.canPop()) {
@@ -146,7 +147,8 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
         );
       } else if (navigation == AmitiaAppBarNavigation.drawer) {
         effectiveLeading = IconButton(
-          icon: const Icon(Icons.menu, size: 22),
+          icon: const Icon(Icons.menu, size: 20),
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           onPressed: () {
             final scope = ShellDrawerScope.of(context);
             if (scope != null) {

@@ -95,15 +95,14 @@ func main() {
 	runtimeRoot := util.RuntimeRoot()
 
 	configPath := opts.configPath
-	if configPath == "" {
-		configPath = os.Getenv("CONFIG_PATH")
+	if configPath != "" {
+		if !filepath.IsAbs(configPath) {
+			configPath = filepath.Join(runtimeRoot, configPath)
+		}
+		config.InitConfig(configPath)
+	} else {
+		config.InitConfig(util.RuntimeConfigDir(runtimeRoot))
 	}
-	if configPath == "" {
-		configPath = filepath.Join(runtimeRoot, "config")
-	} else if !filepath.IsAbs(configPath) {
-		configPath = filepath.Join(runtimeRoot, configPath)
-	}
-	config.InitConfig(configPath)
 
 	if opts.dataDir != "" {
 		if filepath.IsAbs(opts.dataDir) {
@@ -112,11 +111,11 @@ func main() {
 			config.AppCfg.Storage.DataDir = filepath.Join(runtimeRoot, opts.dataDir)
 		}
 	} else {
-		config.AppCfg.Storage.DataDir = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Storage.DataDir)
+		config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
 	}
 	config.AppCfg.Surreal.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Surreal.DataPath)
 
-	log.InitLogger(filepath.Join(runtimeRoot, "logs"))
+	log.InitLogger(util.RuntimeLogDir(runtimeRoot))
 
 	rootCtx, stop := context.WithCancel(context.Background())
 	defer stop()

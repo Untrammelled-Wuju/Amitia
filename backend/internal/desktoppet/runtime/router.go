@@ -6,37 +6,123 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/middleware"
 )
 
-func RegisterInternalRoutes(r *gin.Engine, svc *Service) {
-	internalGroup := r.Group("/internal")
-	internalGroup.Use(InternalOriginMiddleware(svc))
-	path := svc.Config().Path
+func RegisterInternalRoutes(
+	r *gin.Engine,
+	svc *Service,
+	safeMode *readiness.SafeModeController,
+) {
+	path := strings.TrimSpace(
+		svc.Config().Path,
+	)
+
 	if path == "" {
-		path = "/internal/desktop-pet/runtime/ws"
+		path =
+			"/internal/desktop-pet/runtime/ws"
 	}
-	internalGroup.GET(path, gin.WrapH(svc.Handler()))
+
+	if !strings.HasPrefix(
+		path,
+		"/internal/",
+	) {
+		panic(
+			"runtime path must start with /internal/",
+		)
+	}
+
+	r.GET(
+		path,
+		InternalOriginMiddleware(
+			svc,
+			safeMode,
+		),
+		gin.WrapH(
+			svc.Handler(),
+		),
+	)
 }
 
-func InternalOriginMiddleware(svc *Service) gin.HandlerFunc {
+func InternalOriginMiddleware(
+	svc *Service,
+	safeMode *readiness.SafeModeController,
+) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if svc == nil || svc.Config() == nil {
-			c.AbortWithStatus(http.StatusServiceUnavailable)
+		if svc == nil ||
+			svc.Config() == nil {
+			c.AbortWithStatus(
+				http.StatusServiceUnavailable,
+			)
 			return
 		}
+
+		if safeMode == nil {
+			c.AbortWithStatusJSON(
+				http.StatusServiceUnavailable,
+				gin.H{
+					"code": 503,
+					"msg":
+						"safe mode controller missing",
+				},
+			)
+			return
+		}
+
+		active, reason, _ :=
+			safeMode.IsInSafeMode()
+
+		if active {
+			c.AbortWithStatusJSON(
+				http.StatusServiceUnavailable,
+				gin.H{
+					"code": 503,
+					"msg":
+						"desktop pet safe mode",
+					"reason": reason,
+				},
+			)
+			return
+		}
+
+		if !svc.IsStarted() {
+			c.AbortWithStatusJSON(
+				http.StatusServiceUnavailable,
+				gin.H{
+					"code": 503,
+					"msg":
+						"runtime service not started",
+				},
+			)
+			return
+		}
+
 		if svc.Config().LoopbackOnly {
-			host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+			host, _, err :=
+				net.SplitHostPort(
+					c.Request.RemoteAddr,
+				)
 			if err != nil {
-				host = c.Request.RemoteAddr
+				host =
+					c.Request.RemoteAddr
 			}
-			if host != "127.0.0.1" && host != "::1" && host != "localhost" {
-				c.AbortWithStatus(http.StatusForbidden)
+
+			ip :=
+				net.ParseIP(host)
+
+			if ip == nil ||
+				!ip.IsLoopback() {
+				c.AbortWithStatus(
+					http.StatusForbidden,
+				)
 				return
 			}
 		}
+
 		c.Next()
 	}
 }

@@ -144,7 +144,7 @@ class AiConfig {
   final String errorFallback;
 
   AiConfig({
-    this.defaultCharacter = '阿米娅',
+    this.defaultCharacter = 'Amitia',
     this.defaultModel = 'GPT-4',
     this.contextStrategy = '滑动窗口',
     this.streamingOutput = true,

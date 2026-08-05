@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -46,14 +45,8 @@ var triggerShutdown context.CancelFunc
 
 func main() {
 	runtimeRoot := util.RuntimeRoot()
-
-	configPath := os.Getenv("CONFIG_PATH")
-	if configPath == "" {
-		configPath = filepath.Join(runtimeRoot, "config")
-	} else if !filepath.IsAbs(configPath) {
-		configPath = filepath.Join(runtimeRoot, configPath)
-	}
-	config.InitConfig(configPath)
+	configDir := util.RuntimeConfigDir(runtimeRoot)
+	config.InitConfig(configDir)
 
 	resolvedToken := config.AppCfg.Security.LocalToken
 	if resolvedToken == "" && config.AppCfg.Security.LocalTokenFile != "" {
@@ -84,10 +77,20 @@ func main() {
 		}
 	}
 
-	config.AppCfg.Storage.DataDir = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Storage.DataDir)
+	config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
 	config.AppCfg.Surreal.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Surreal.DataPath)
 
-	log.InitLogger(filepath.Join(runtimeRoot, "logs"))
+	logDir := util.RuntimeLogDir(runtimeRoot)
+	log.InitLogger(logDir)
+
+	paths := util.DetectRuntimePaths(config.AppCfg.Storage.DataDir)
+	log.Info("Runtime Root: ", paths.Root)
+	log.Info("Config Dir: ", paths.ConfigDir)
+	log.Info("Data Dir: ", paths.DataDir)
+	log.Info("Log Dir: ", paths.LogDir)
+	log.Info("Workspace Dir: ", paths.WorkspaceDir)
+	log.Info("Cache Dir: ", paths.CacheDir)
+	log.Info("Temp Dir: ", paths.TempDir)
 
 	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopRoot()

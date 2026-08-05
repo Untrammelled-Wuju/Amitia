@@ -19,6 +19,10 @@ import (
 type linuxPlatform struct{}
 
 func Detect() RuntimePlatform {
+	mode := os.Getenv(RuntimeModeEnv)
+	if IsAndroidPRootMode(mode) {
+		return androidPootPlatform{}
+	}
 	return linuxPlatform{}
 }
 
@@ -42,6 +46,9 @@ func (linuxPlatform) RootFSDir() string {
 }
 
 func (linuxPlatform) DefaultDataDir() string {
+	if v := os.Getenv("AMITIA_DATA_DIR"); v != "" {
+		return v
+	}
 	return "data"
 }
 
@@ -73,7 +80,9 @@ func (p linuxPlatform) KillExistingServer(addr string) error {
 		return fmt.Errorf("parse addr failed: %w", splitErr)
 	}
 
-	if pid, pidErr := p.ReadPidFile(p.DefaultDataDir()); pidErr == nil && pid > 0 {
+	dataDir := p.DefaultDataDir()
+
+	if pid, pidErr := p.ReadPidFile(dataDir); pidErr == nil && pid > 0 {
 		if killErr := killPid(pid); killErr == nil {
 			time.Sleep(2 * time.Second)
 			return nil
@@ -99,6 +108,9 @@ func (p linuxPlatform) KillExistingServer(addr string) error {
 }
 
 func (linuxPlatform) WritePidFile(dataDir string) error {
+	if dataDir == "" {
+		dataDir = linuxPlatform{}.DefaultDataDir()
+	}
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return err
 	}
@@ -107,6 +119,9 @@ func (linuxPlatform) WritePidFile(dataDir string) error {
 }
 
 func (linuxPlatform) ReadPidFile(dataDir string) (int, error) {
+	if dataDir == "" {
+		dataDir = linuxPlatform{}.DefaultDataDir()
+	}
 	pidPath := filepath.Join(dataDir, ".amitia-backend.pid")
 	data, err := os.ReadFile(pidPath)
 	if err != nil {
@@ -116,6 +131,9 @@ func (linuxPlatform) ReadPidFile(dataDir string) (int, error) {
 }
 
 func (linuxPlatform) RemovePidFile(dataDir string) error {
+	if dataDir == "" {
+		dataDir = linuxPlatform{}.DefaultDataDir()
+	}
 	pidPath := filepath.Join(dataDir, ".amitia-backend.pid")
 	return os.Remove(pidPath)
 }

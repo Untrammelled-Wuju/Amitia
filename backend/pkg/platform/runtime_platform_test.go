@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
+
 package platform
 
 import (
@@ -8,6 +9,16 @@ import (
 	"runtime"
 	"testing"
 )
+
+func saveAndClearCache() RuntimePlatform {
+	original := current
+	current = nil
+	return original
+}
+
+func restoreCache(p RuntimePlatform) {
+	current = p
+}
 
 func TestDetectReturnsNonNil(t *testing.T) {
 	p := Detect()
@@ -23,6 +34,11 @@ func TestDetectWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("only runs on windows")
 	}
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	t.Setenv(RuntimeModeEnv, "")
+
 	p := Detect()
 	if !p.IsWindows() {
 		t.Fatalf("expected IsWindows=true, got false (name=%s)", p.Name())
@@ -45,6 +61,11 @@ func TestDetectLinux(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("only runs on linux")
 	}
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	t.Setenv(RuntimeModeEnv, "")
+
 	p := Detect()
 	if !p.IsLinux() {
 		t.Fatalf("expected IsLinux=true, got false (name=%s)", p.Name())
@@ -52,8 +73,14 @@ func TestDetectLinux(t *testing.T) {
 	if p.IsWindows() {
 		t.Fatalf("expected IsWindows=false on linux")
 	}
-	if p.Name() != "desktop-linux" && p.Name() != "server-remote" {
-		t.Fatalf("expected name=desktop-linux or server-remote, got %s", p.Name())
+	if p.IsAndroid() {
+		t.Fatalf("expected IsAndroid=false on plain linux")
+	}
+	if p.IsAndroidEmbedded() {
+		t.Fatalf("expected IsAndroidEmbedded=false on plain linux")
+	}
+	if p.Name() != "desktop-linux" {
+		t.Fatalf("expected name=desktop-linux, got %s", p.Name())
 	}
 }
 
@@ -77,7 +104,13 @@ func TestDetectAndroid(t *testing.T) {
 }
 
 func TestGetReturnsDetectWhenUnset(t *testing.T) {
-	current = nil
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	if runtime.GOOS == "linux" {
+		t.Setenv(RuntimeModeEnv, "")
+	}
+
 	p := Get()
 	if p == nil {
 		t.Fatal("Get() returned nil after reset")
@@ -146,9 +179,12 @@ func TestRootFSDirEnvVarOnNonWindows(t *testing.T) {
 		t.Skip("RootFSDir is intentionally empty on windows")
 	}
 
-	original := current
-	defer func() { current = original }()
-	current = nil
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	if runtime.GOOS == "linux" {
+		t.Setenv(RuntimeModeEnv, "")
+	}
 
 	const fakeRoot = "/tmp/amitia-rootfs-test"
 	t.Setenv("AMITIA_ROOTFS_DIR", fakeRoot)
@@ -242,5 +278,201 @@ func TestServerRuntimeRootFSDirFromEnv(t *testing.T) {
 	t.Setenv("AMITIA_ROOTFS_DIR", fakeRoot)
 	if got := srv.RootFSDir(); got != fakeRoot {
 		t.Fatalf("expected RootFSDir=%s, got %s", fakeRoot, got)
+	}
+}
+
+func TestAndroidPootModeDetection(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only runs on linux")
+	}
+
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	tmp := t.TempDir()
+	t.Setenv(RuntimeModeEnv, AndroidPRootMode)
+	t.Setenv("AMITIA_ROOTFS_DIR", tmp)
+	t.Setenv("AMITIA_DATA_DIR", tmp)
+
+	p := Detect()
+	if p.Name() != "android-proot" {
+		t.Fatalf("expected name=android-proot, got %s", p.Name())
+	}
+	if !p.IsLinux() {
+		t.Fatalf("expected IsLinux=true on android-proot")
+	}
+	if !p.IsAndroid() {
+		t.Fatalf("expected IsAndroid=true on android-proot")
+	}
+	if !p.IsAndroidEmbedded() {
+		t.Fatalf("expected IsAndroidEmbedded=true on android-proot")
+	}
+	if p.IsWindows() {
+		t.Fatalf("expected IsWindows=false on android-proot")
+	}
+	if p.ExecutableSuffix() != "" {
+		t.Fatalf("expected empty ExecutableSuffix, got %q", p.ExecutableSuffix())
+	}
+	if p.BinarySuffix() != "" {
+		t.Fatalf("expected empty BinarySuffix, got %q", p.BinarySuffix())
+	}
+	if p.RootFSDir() != tmp {
+		t.Fatalf("expected RootFSDir=%s, got %s", tmp, p.RootFSDir())
+	}
+	if p.DefaultDataDir() != tmp {
+		t.Fatalf("expected DefaultDataDir=%s, got %s", tmp, p.DefaultDataDir())
+	}
+}
+
+func TestAndroidPootModeNormalization(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only runs on linux")
+	}
+
+	cases := []string{
+		AndroidPRootMode,
+		"ANDROID-PROOT",
+		"  android-proot  ",
+	}
+
+	for _, tc := range cases {
+		original := saveAndClearCache()
+		t.Setenv(RuntimeModeEnv, tc)
+
+		p := Detect()
+		if p.Name() != "android-proot" {
+			restoreCache(original)
+			t.Fatalf("expected android-proot for mode=%q, got %s", tc, p.Name())
+		}
+		restoreCache(original)
+	}
+}
+
+func TestUnknownRuntimeModeFallsBackToLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only runs on linux")
+	}
+
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	t.Setenv(RuntimeModeEnv, "unknown-mode")
+
+	p := Detect()
+	if p.Name() != "desktop-linux" {
+		t.Fatalf("expected name=desktop-linux for unknown mode, got %s", p.Name())
+	}
+	if p.IsAndroid() {
+		t.Fatalf("expected IsAndroid=false for unknown mode")
+	}
+	if p.IsAndroidEmbedded() {
+		t.Fatalf("expected IsAndroidEmbedded=false for unknown mode")
+	}
+}
+
+func TestAndroidPootPidFileUsesDataDir(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only runs on linux")
+	}
+
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	tmp := t.TempDir()
+	t.Setenv(RuntimeModeEnv, AndroidPRootMode)
+	t.Setenv("AMITIA_DATA_DIR", tmp)
+
+	p := Detect()
+
+	if err := p.WritePidFile(""); err != nil {
+		t.Fatalf("WritePidFile failed: %v", err)
+	}
+
+	pid, err := p.ReadPidFile("")
+	if err != nil {
+		t.Fatalf("ReadPidFile failed: %v", err)
+	}
+	if pid != os.Getpid() {
+		t.Fatalf("expected pid=%d, got %d", os.Getpid(), pid)
+	}
+
+	pidPath := filepath.Join(tmp, ".amitia-backend.pid")
+	if _, err := os.Stat(pidPath); err != nil {
+		t.Fatalf("expected pid file at %s, err=%v", pidPath, err)
+	}
+
+	cwdPidPath := filepath.Join(".", "data", ".amitia-backend.pid")
+	if _, err := os.Stat(cwdPidPath); err == nil {
+		t.Fatalf("pid file should not be at %s", cwdPidPath)
+	}
+
+	if err := p.RemovePidFile(""); err != nil {
+		t.Fatalf("RemovePidFile failed: %v", err)
+	}
+
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatalf("pid file still exists after RemovePidFile")
+	}
+}
+
+func TestRuntimeModeCacheIsolation(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only runs on linux")
+	}
+
+	original := saveAndClearCache()
+	defer restoreCache(original)
+
+	t.Setenv(RuntimeModeEnv, AndroidPRootMode)
+	p1 := Detect()
+	if p1.Name() != "android-proot" {
+		t.Fatalf("first detect: expected android-proot, got %s", p1.Name())
+	}
+
+	current = nil
+	t.Setenv(RuntimeModeEnv, "")
+
+	p2 := Detect()
+	if p2.Name() != "desktop-linux" {
+		t.Fatalf("second detect: expected desktop-linux, got %s", p2.Name())
+	}
+}
+
+func TestNormalizeRuntimeModeFunction(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"android-proot", "android-proot"},
+		{"ANDROID-PROOT", "android-proot"},
+		{"  android-proot  ", "android-proot"},
+		{"", ""},
+		{"unknown", "unknown"},
+	}
+	for _, tc := range cases {
+		got := NormalizeRuntimeMode(tc.input)
+		if got != tc.expected {
+			t.Fatalf("NormalizeRuntimeMode(%q)=%q, want %q", tc.input, got, tc.expected)
+		}
+	}
+}
+
+func TestIsAndroidPRootModeFunction(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected bool
+	}{
+		{"android-proot", true},
+		{"ANDROID-PROOT", true},
+		{"  android-proot  ", true},
+		{"", false},
+		{"unknown", false},
+		{"android", false},
+	}
+	for _, tc := range cases {
+		got := IsAndroidPRootMode(tc.input)
+		if got != tc.expected {
+			t.Fatalf("IsAndroidPRootMode(%q)=%v, want %v", tc.input, got, tc.expected)
+		}
 	}
 }

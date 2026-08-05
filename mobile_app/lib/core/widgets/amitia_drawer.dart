@@ -112,7 +112,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
 
   _CharInfo _getCharacter(String id) {
     const chars = {
-      'c1': ('阿米娅', '在线 · 空闲中', '温柔、细心，喜欢帮助你解决问题', '阿', '#7668EE'),
+      'c1': ('Amitia', '在线 · 空闲中', '温柔、细心，喜欢帮助你解决问题', '阿', '#7668EE'),
       'c2': ('小雨', '在线 · 专注中', '理性、高效，擅长分析和规划', '雨', '#52B788'),
       'c3': ('Epsilon', '离线', '冷静、专业，精通技术问题', 'E', '#6C8FEA'),
       'c4': ('Karin', '在线 · 活力满满', '活泼、充满创意，喜欢头脑风暴', 'K', '#E9A23B'),

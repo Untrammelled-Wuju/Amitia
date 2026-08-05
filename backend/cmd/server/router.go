@@ -23,7 +23,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/device"
-	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/doctor"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
@@ -33,6 +32,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
+	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -127,21 +127,115 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 	services.DesktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
 
-	local := r.Group("/api/local")
-	local.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:             config.AppCfg.Security.Mode,
-		JWTSecret:        config.AppCfg.JWT.Secret,
-		JWTIssuer:        config.AppCfg.JWT.Issuer,
-		JWTAudience:      config.AppCfg.JWT.Audience,
-		LocalCredentials: localCredentialStore,
-		LocalUserID:      config.AppCfg.Security.LocalUserID,
-		ListenAddress:    config.AppCfg.Server.Host,
-		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-	}))
+	localRoot :=
+		r.Group("/api/local")
+
+	localRoot.Use(
+		security.AuthenticationMiddleware(
+			security.AuthConfig{
+				Mode:             config.AppCfg.Security.Mode,
+				JWTSecret:        config.AppCfg.JWT.Secret,
+				JWTIssuer:        config.AppCfg.JWT.Issuer,
+				JWTAudience:      config.AppCfg.JWT.Audience,
+				LocalCredentials: localCredentialStore,
+				LocalUserID:      config.AppCfg.Security.LocalUserID,
+				ListenAddress:    config.AppCfg.Server.Host,
+				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+			},
+		),
+	)
+
+	localRoot.Use(
+		security.RequireAuthMethod(
+			security.AuthMethodLocalToken,
+		),
+	)
 	{
-		local.POST("/sessions", sessionSvc.CreateSession)
-		local.POST("/token/rotate", sessionSvc.RotateToken)
-		local.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+		localRoot.POST(
+			"/sessions",
+			sessionSvc.CreateSession,
+		)
+	}
+
+	localDesktop :=
+		r.Group("/api/local")
+
+	localDesktop.Use(
+		security.AuthenticationMiddleware(
+			security.AuthConfig{
+				Mode:             config.AppCfg.Security.Mode,
+				JWTSecret:        config.AppCfg.JWT.Secret,
+				JWTIssuer:        config.AppCfg.JWT.Issuer,
+				JWTAudience:      config.AppCfg.JWT.Audience,
+				LocalCredentials: localCredentialStore,
+				LocalUserID:      config.AppCfg.Security.LocalUserID,
+				ListenAddress:    config.AppCfg.Server.Host,
+				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+				SessionService:   sessionSvc,
+			},
+		),
+	)
+
+	localDesktop.Use(
+		security.RequireAuthMethod(
+			security.AuthMethodDesktopSession,
+		),
+	)
+	{
+		localDesktop.POST("/devices/register", func(c *gin.Context) {
+			actor := security.GetActor(c)
+			if actor == nil || actor.UserID == "" {
+				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
+				return
+			}
+			var request struct {
+				DeviceID          string `json:"deviceId" binding:"required"`
+				DesktopInstanceID string `json:"desktopInstanceId"`
+				Platform          string `json:"platform"`
+				AppVersion        string `json:"appVersion"`
+			}
+			if err := c.ShouldBindJSON(&request); err != nil {
+				c.JSON(400, gin.H{"code": 400, "msg": err.Error()})
+				return
+			}
+			headerInstanceID :=
+				strings.TrimSpace(
+					c.GetHeader(
+						"X-Amitia-Desktop-Instance",
+					),
+				)
+			request.DesktopInstanceID =
+				strings.TrimSpace(
+					request.DesktopInstanceID,
+				)
+			if headerInstanceID == "" ||
+				request.DesktopInstanceID == "" ||
+				request.DesktopInstanceID !=
+					headerInstanceID {
+				c.JSON(
+					http.StatusBadRequest,
+					gin.H{
+						"code": 400,
+						"msg":  "desktopInstanceId mismatch",
+					},
+				)
+				return
+			}
+			err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
+				UserID:            actor.UserID,
+				DeviceID:          request.DeviceID,
+				DesktopInstanceID: request.DesktopInstanceID,
+				Platform:          request.Platform,
+				AppVersion:        request.AppVersion,
+			})
+			if err != nil {
+				log.Error("failed to register device identity", "error", err)
+				c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
+				return
+			}
+			c.JSON(200, gin.H{"code": 200, "msg": "ok"})
+		})
+		localDesktop.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 			actor := security.GetActor(c)
 			if actor == nil || actor.UserID == "" {
 				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
@@ -183,41 +277,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				},
 			})
 		})
-		local.POST("/devices/register", func(c *gin.Context) {
-			actor := security.GetActor(c)
-			if actor == nil || actor.UserID == "" {
-				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
-				return
-			}
-			var request struct {
-				DeviceID          string `json:"deviceId" binding:"required"`
-				DesktopInstanceID string `json:"desktopInstanceId"`
-				Platform          string `json:"platform"`
-				AppVersion        string `json:"appVersion"`
-			}
-			if err := c.ShouldBindJSON(&request); err != nil {
-				c.JSON(400, gin.H{"code": 400, "msg": err.Error()})
-				return
-			}
-			if request.DesktopInstanceID != "" && request.DesktopInstanceID != c.GetHeader("X-Amitia-Desktop-Instance") {
-				c.JSON(400, gin.H{"code": 400, "msg": "desktopInstanceId mismatch"})
-				return
-			}
-			err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
-				UserID:            actor.UserID,
-				DeviceID:          request.DeviceID,
-				DesktopInstanceID: request.DesktopInstanceID,
-				Platform:          request.Platform,
-				AppVersion:        request.AppVersion,
-			})
-			if err != nil {
-				log.Error("failed to register device identity", "error", err)
-				c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
-				return
-			}
-			c.JSON(200, gin.H{"code": 200, "msg": "ok"})
-		})
-		local.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+		localDesktop.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
 			actor := security.GetActor(c)
 			if actor == nil || actor.UserID == "" {
 				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
@@ -248,6 +308,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		DesktopInstanceValidator: services.DesktopInstanceStore.Validate,
 	}))
 	localAdmin.Use(security.RequirePermission("system.shutdown"))
+	localAdmin.POST("/token/rotate", sessionSvc.RotateToken)
 	localAdmin.POST("/shutdown", func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.AuthMethod != security.AuthMethodLocalAdminToken || !actor.IsLocalTrusted {
@@ -335,7 +396,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)
 	}
-	runtime.RegisterInternalRoutes(r, services.DesktopPetRuntime)
+	runtime.RegisterInternalRoutes(
+		r,
+		services.DesktopPetRuntime,
+		services.SafeMode,
+	)
 	runtime.RegisterUserRoutes(apiGroup, services.DesktopPetRuntime)
 
 	maintenance := r.Group("/api/maintenance")

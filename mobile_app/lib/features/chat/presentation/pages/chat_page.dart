@@ -451,7 +451,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 }
 
-const double _chatTopBarHeight = 88;
+const double _chatTopBarHeight = 68;
 
 class _ChatScrollFade extends StatelessWidget {
   final Alignment alignment;
@@ -521,7 +521,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               borderColor: borderColor,
               child: Icon(
                 Icons.menu_rounded,
-                size: 24,
+                size: 20,
                 color: context.textPrimary,
               ),
             ),
@@ -530,24 +530,24 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               color: surfaceColor,
               shape: RoundedRectangleBorder(
                 side: BorderSide(color: borderColor),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: SizedBox(
-                height: 48,
+                height: 36,
                 child: Row(
                   children: [
                     Tooltip(
                       message: '新建聊天',
                       child: InkWell(
                         borderRadius: const BorderRadius.horizontal(
-                          left: Radius.circular(24),
+                          left: Radius.circular(20),
                         ),
                         onTap: onNewConversation,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 10, 0),
+                          padding: const EdgeInsets.fromLTRB(10, 0, 6, 0),
                           child: Icon(
                             Icons.edit_square,
-                            size: 24,
+                            size: 20,
                             color: context.textPrimary,
                           ),
                         ),
@@ -557,14 +557,14 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                       message: '聊天操作',
                       child: InkWell(
                         borderRadius: const BorderRadius.horizontal(
-                          right: Radius.circular(24),
+                          right: Radius.circular(20),
                         ),
                         onTap: onMore,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+                          padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
                           child: Icon(
                             Icons.more_vert,
-                            size: 25,
+                            size: 20,
                             color: context.textPrimary,
                           ),
                         ),
@@ -600,7 +600,7 @@ class _ChatTopPillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(24);
+    final radius = BorderRadius.circular(20);
     return Material(
       color: surfaceColor,
       shape: RoundedRectangleBorder(
@@ -613,10 +613,10 @@ class _ChatTopPillButton extends StatelessWidget {
         child: Tooltip(
           message: tooltip,
           child: SizedBox(
-            width: isCircular ? 48 : null,
-            height: 48,
+            width: isCircular ? 36 : null,
+            height: 36,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: isCircular ? 0 : 14),
+              padding: EdgeInsets.symmetric(horizontal: isCircular ? 0 : 12),
               child: Center(child: child),
             ),
           ),

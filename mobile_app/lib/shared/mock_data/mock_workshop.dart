@@ -15,7 +15,7 @@ class MockWorkshop {
   ];
 
   static List<PetTask> petTasks = [
-    PetTask(id: 'pt1', name: '阿米娅桌宠', characterName: '阿米娅', totalActions: 8, completedActions: 8, status: PetTaskStatus.completed, progress: 100, createdAt: DateTime(2026, 7, 25)),
+    PetTask(id: 'pt1', name: 'Amitia桌宠', characterName: 'Amitia', totalActions: 8, completedActions: 8, status: PetTaskStatus.completed, progress: 100, createdAt: DateTime(2026, 7, 25)),
     PetTask(id: 'pt2', name: '小雨桌宠', characterName: '小雨', totalActions: 8, completedActions: 5, status: PetTaskStatus.processing, progress: 62, createdAt: DateTime(2026, 7, 28)),
     PetTask(id: 'pt3', name: 'Karin 桌宠', characterName: 'Karin', totalActions: 8, completedActions: 0, status: PetTaskStatus.pending, progress: 0, createdAt: DateTime(2026, 7, 30)),
   ];
@@ -48,7 +48,7 @@ class MockWorkshop {
   ];
 
   static List<PetInstallation> installations = [
-    PetInstallation(id: 'pi1', name: '阿米娅桌宠', characterName: '阿米娅', isEnabled: true, isRunning: true, scale: 1.0, defaultAction: 'idle', actions: ['idle', 'wave', 'happy', 'speaking']),
+    PetInstallation(id: 'pi1', name: 'Amitia桌宠', characterName: 'Amitia', isEnabled: true, isRunning: true, scale: 1.0, defaultAction: 'idle', actions: ['idle', 'wave', 'happy', 'speaking']),
     PetInstallation(id: 'pi2', name: '小雨桌宠', characterName: '小雨', isEnabled: false, isRunning: false, scale: 0.8, defaultAction: 'idle', actions: ['idle', 'wave']),
   ];
 }

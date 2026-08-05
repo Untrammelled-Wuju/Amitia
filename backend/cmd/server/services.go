@@ -27,6 +27,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior/adapters"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/events"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
+	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
@@ -55,8 +56,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
-	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -78,6 +77,7 @@ import (
 	"github.com/u-ai/backend/internal/mcp/protocol"
 	mcpskill "github.com/u-ai/backend/internal/mcp/skill"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mindruntime"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
@@ -150,9 +150,9 @@ type AppServices struct {
 	MCPFeatures           *mcpfeatures.Service
 	MCPHost               *mcphost.Service
 	MCPInteractions       *mcphost.Broker
-	MCPDependencies              *mcpdependency.Service
-	DesktopInstanceStore         *security.DesktopInstanceStore
-	DeviceRepository             *device.Repository
+	MCPDependencies       *mcpdependency.Service
+	DesktopInstanceStore  *security.DesktopInstanceStore
+	DeviceRepository      *device.Repository
 }
 
 type defaultCharacterProvider struct {
@@ -609,6 +609,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 
 	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
 	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
+
+	if err := releaseStoragePort.Validate(); err != nil {
+		return nil, fmt.Errorf("initialize release storage: %w", err)
+	}
+
 	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
@@ -772,7 +777,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 		OwnershipGuard:        ownershipGuard,
 		PathRegistry:          pathRegistry,
 		ImportStagingRepo:     importStagingRepo,
-		PackageImporter:       importer.NewPackageImporter(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo)),
+		PackageImporter:       importer.NewPackageImporterWithStaging(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo),
 		Readiness:             readinessSvc,
 		SafeMode:              safeModeCtrl,
 		MCPRepository:         mcpRepository,

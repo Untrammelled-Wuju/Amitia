@@ -75,7 +75,7 @@ func (m *SelfHealMonitor) loop(ctx context.Context) {
 }
 
 func (m *SelfHealMonitor) checkHTTPServer() {
-	url := "http://" + m.addr + "/api/health"
+	url := "http://" + m.addr + "/livez"
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	healthy := err == nil && resp.StatusCode == 200

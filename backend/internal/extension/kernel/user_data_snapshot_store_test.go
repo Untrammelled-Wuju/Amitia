@@ -370,6 +370,25 @@ func wrapRawRecords(rawLines ...string) []map[string]any {
 	return records
 }
 
+func testUserDataBatchChainSpec(t *testing.T, extensionID, canonicalTable, entityType, namespaceHash, dataExportReference string) UserDataBatchChainSpec {
+	t.Helper()
+	identity := UserDataTableIdentity{
+		Domain:                userDataBatchGenesisDomain,
+		SchemaVersion:         userDataRecordSchemaVersion,
+		ExtensionID:           extensionID,
+		CanonicalTable:        canonicalTable,
+		EntityType:            entityType,
+		NamespaceHash:         namespaceHash,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+	}
+	return UserDataBatchChainSpec{
+		Identity:            identity,
+		DataExportReference: dataExportReference,
+		BatchSize:           int64(userDataRestoreBatchSize),
+		GenesisHash:         computeUserDataGenesisHash(identity),
+	}
+}
+
 func TestComputeContentBoundBatchHashSameCountDifferentContent(t *testing.T) {
 	payloadA1 := map[string]any{"key": "value_a1"}
 	payloadA2 := map[string]any{"key": "value_a2"}
@@ -383,8 +402,22 @@ func TestComputeContentBoundBatchHashSameCountDifferentContent(t *testing.T) {
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payloadB1),
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payloadB2),
 	)
-	hashA := computeContentBoundBatchHash(batchA, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
-	hashB := computeContentBoundBatchHash(batchB, "ext1", 0, "", 2, "1.0.0", "ext_ext1_data", "op-test")
+	nsHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            "ext1",
+		CanonicalTable:         "ext_ext1_data",
+		LogicalEntityType:      "data",
+		NamespacePolicyVersion: "v1",
+	})
+	spec := testUserDataBatchChainSpec(t, "ext1", "ext_ext1_data", "data", nsHash, "op-test")
+	hashA, err := computeContentBoundBatchHash(batchA, spec, 0, spec.GenesisHash, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashB, err := computeContentBoundBatchHash(batchB, spec, 0, spec.GenesisHash, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if hashA == "" || hashB == "" {
 		t.Fatalf("expected non-empty hashes, got A=%s B=%s", hashA, hashB)
 	}
@@ -404,8 +437,22 @@ func TestComputeContentBoundBatchHashSameCountDifferentOrder(t *testing.T) {
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payload2),
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payload1),
 	)
-	hashForward := computeContentBoundBatchHash(batchForward, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
-	hashReversed := computeContentBoundBatchHash(batchReversed, "ext1", 0, "", 2, "1.0.0", "ext_ext1_data", "op-test")
+	nsHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            "ext1",
+		CanonicalTable:         "ext_ext1_data",
+		LogicalEntityType:      "data",
+		NamespacePolicyVersion: "v1",
+	})
+	spec := testUserDataBatchChainSpec(t, "ext1", "ext_ext1_data", "data", nsHash, "op-test")
+	hashForward, err := computeContentBoundBatchHash(batchForward, spec, 0, spec.GenesisHash, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashReversed, err := computeContentBoundBatchHash(batchReversed, spec, 0, spec.GenesisHash, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if hashForward == "" || hashReversed == "" {
 		t.Fatalf("expected non-empty hashes")
 	}
@@ -419,34 +466,26 @@ func TestComputeContentBoundBatchHashSingleFieldChange(t *testing.T) {
 	baseBatch := wrapRawRecords(
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", basePayload),
 	)
-	baseHash := computeContentBoundBatchHash(baseBatch, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
-
-	changeNamespace := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_other", "other", "e1", "upsert", basePayload),
-	)
-	if computeContentBoundBatchHash(changeNamespace, "ext1", 0, "", 1, "1.0.0", "ext_ext1_other", "op-test") == baseHash {
-		t.Fatalf("namespace change should alter hash")
+	nsHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            "ext1",
+		CanonicalTable:         "ext_ext1_data",
+		LogicalEntityType:      "data",
+		NamespacePolicyVersion: "v1",
+	})
+	spec := testUserDataBatchChainSpec(t, "ext1", "ext_ext1_data", "data", nsHash, "op-test")
+	baseHash, err := computeContentBoundBatchHash(baseBatch, spec, 0, spec.GenesisHash, 1)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	changeOperation := wrapRawRecords(
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "delete", basePayload),
 	)
-	if computeContentBoundBatchHash(changeOperation, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test") == baseHash {
+	if h, err := computeContentBoundBatchHash(changeOperation, spec, 0, spec.GenesisHash, 1); err != nil {
+		t.Fatal(err)
+	} else if h == baseHash {
 		t.Fatalf("operation change should alter hash")
-	}
-
-	changeSchemaVersion := wrapRawRecords(
-		makeTestRawLine("2.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", basePayload),
-	)
-	if computeContentBoundBatchHash(changeSchemaVersion, "ext1", 0, "", 1, "2.0.0", "ext_ext1_data", "op-test") == baseHash {
-		t.Fatalf("schemaVersion change should alter hash")
-	}
-
-	changeEntityType := wrapRawRecords(
-		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "setting", "e1", "upsert", basePayload),
-	)
-	if computeContentBoundBatchHash(changeEntityType, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test") == baseHash {
-		t.Fatalf("entityType change should alter hash")
 	}
 }
 
@@ -457,12 +496,29 @@ func TestComputeContentBoundBatchHashStable(t *testing.T) {
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e1", "upsert", payload1),
 		makeTestRawLine("1.0.0", "ext1", "ext_ext1_data", "data", "e2", "upsert", payload2),
 	)
-	hash1 := computeContentBoundBatchHash(batch, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
-	hash2 := computeContentBoundBatchHash(batch, "ext1", 0, "", 1, "1.0.0", "ext_ext1_data", "op-test")
+	nsHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            "ext1",
+		CanonicalTable:         "ext_ext1_data",
+		LogicalEntityType:      "data",
+		NamespacePolicyVersion: "v1",
+	})
+	spec := testUserDataBatchChainSpec(t, "ext1", "ext_ext1_data", "data", nsHash, "op-test")
+	hash1, err := computeContentBoundBatchHash(batch, spec, 0, spec.GenesisHash, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash2, err := computeContentBoundBatchHash(batch, spec, 0, spec.GenesisHash, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if hash1 != hash2 {
 		t.Fatalf("same content must produce same hash: %s vs %s", hash1, hash2)
 	}
-	hash3 := computeContentBoundBatchHash(batch, "ext1", 10, "", 2, "1.0.0", "ext_ext1_data", "op-test")
+	hash3, err := computeContentBoundBatchHash(batch, spec, 10, spec.GenesisHash, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if hash3 == hash1 || hash3 == "" {
 		t.Fatalf("different startCursor should produce different non-empty hash: %s vs %s", hash1, hash3)
 	}
@@ -972,7 +1028,7 @@ func mustBuildManifest(t *testing.T, extensionID, table, entityType, jsonlData, 
 
 	genesisIdentity := UserDataTableIdentity{
 		Domain:                userDataBatchGenesisDomain,
-		SchemaVersion:         fmt.Sprintf("%d", userDataTableManifestSchemaVersion),
+		SchemaVersion:         userDataRecordSchemaVersion,
 		ExtensionID:           extensionID,
 		CanonicalTable:        table,
 		EntityType:            entityType,
@@ -992,25 +1048,28 @@ func mustBuildManifest(t *testing.T, extensionID, table, entityType, jsonlData, 
 	}
 	emptySetHash := computeUserDataEmptySetHash(emptySetIdentity)
 
+	dataExportRef := computeUserDataExportReference("test", table, extensionID)
 	var finalBatchHash string
 	if recordCount > 0 {
-		batchCount := (len(rawRecords) + userDataRestoreBatchSize - 1) / userDataRestoreBatchSize
-		prevHash := genesisHash
-		for b := 0; b < batchCount; b++ {
-			start := b * userDataRestoreBatchSize
-			end := start + userDataRestoreBatchSize
-			if end > len(rawRecords) {
-				end = len(rawRecords)
-			}
-			batch := rawRecords[start:end]
-			cursor := int64(start)
-			batchIdx := b + 1
-			batchHash := computeContentBoundBatchHash(batch, extensionID, cursor, prevHash, batchIdx, fmt.Sprintf("%d", userDataTableManifestSchemaVersion), table, "")
-			if b == batchCount-1 {
-				finalBatchHash = batchHash
-			}
-			prevHash = batchHash
+		chainSpec := UserDataBatchChainSpec{
+			Identity: UserDataTableIdentity{
+				Domain:                userDataBatchGenesisDomain,
+				SchemaVersion:         userDataRecordSchemaVersion,
+				ExtensionID:           extensionID,
+				CanonicalTable:        table,
+				EntityType:            entityType,
+				NamespaceHash:         nsHash,
+				BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+			},
+			DataExportReference: dataExportRef,
+			BatchSize:           int64(userDataRestoreBatchSize),
+			GenesisHash:         genesisHash,
 		}
+		chainResult, err := recalculateBatchHashChain(rawRecords, chainSpec)
+		if err != nil {
+			panic(err)
+		}
+		finalBatchHash = chainResult.FinalHash
 	}
 
 	return UserDataTableManifest{
@@ -1027,7 +1086,7 @@ func mustBuildManifest(t *testing.T, extensionID, table, entityType, jsonlData, 
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
 		GenesisHash:           genesisHash,
 		FinalBatchHash:        finalBatchHash,
-		DataExportReference:   computeUserDataExportReference("test", table, extensionID),
+		DataExportReference:   dataExportRef,
 	}
 }
 
@@ -1062,9 +1121,15 @@ func TestFIV_CrashBeforeFirstBatch(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi1, "op-fi1", string(userStateJSON)); err != nil {
 		t.Fatalf("first restore: %v", err)
 	}
+	var genesisFi1 string
+	if err := db.QueryRowContext(ctx,
+		`SELECT genesis_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
+		"op-fi1", "ext_fi1_data").Scan(&genesisFi1); err != nil {
+		t.Fatalf("query genesis: %v", err)
+	}
 	if _, err := db.ExecContext(ctx,
-		`UPDATE extension_package_user_data_restore_journal SET state='pending', imported_rows=0, applied_count=0, cursor='', batch_hash='', aggregate_hash='', batch_index=0, prev_batch_hash='' WHERE operation_id=? AND table_name=?`,
-		"op-fi1", "ext_fi1_data"); err != nil {
+		`UPDATE extension_package_user_data_restore_journal SET state='pending', imported_rows=0, applied_count=0, cursor='0', batch_hash=?, aggregate_hash='', batch_index=0, prev_batch_hash='' WHERE operation_id=? AND table_name=?`,
+		genesisFi1, "op-fi1", "ext_fi1_data"); err != nil {
 		t.Fatalf("reset journal: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, "DELETE FROM ext_fi1_data"); err != nil {
@@ -1125,14 +1190,25 @@ func TestFIV_CrashAfterFirstBatchCommits(t *testing.T) {
 		t.Fatalf("expected 250 rows, got %d", fullCount)
 	}
 
-	recordsFi2, parsedFi2, _ := parseAndValidateJSONL(jsonl, extFi2)
+	recordsFi2, _, _ := parseAndValidateJSONL(jsonl, extFi2)
 	var genesisHash string
 	if err := db.QueryRowContext(ctx,
-		`SELECT prev_batch_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
+		`SELECT genesis_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
 		"op-fi2", "ext_fi2_data").Scan(&genesisHash); err != nil {
 		t.Fatalf("query genesis hash: %v", err)
 	}
-	h0fi2 := computeContentBoundBatchHash(recordsFi2[0:100], extFi2, 0, genesisHash, 1, parsedFi2[0].SchemaVersion, "ext_fi2_data", "op-fi2")
+	nsHashFi2 := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            extFi2,
+		CanonicalTable:         "ext_fi2_data",
+		LogicalEntityType:      "data",
+		NamespacePolicyVersion: "v1",
+	})
+	specFi2 := testUserDataBatchChainSpec(t, extFi2, "ext_fi2_data", "data", nsHashFi2, userState.TableManifests["ext_fi2_data"].DataExportReference)
+	h0fi2, hashErr := computeContentBoundBatchHash(recordsFi2[0:100], specFi2, 0, genesisHash, 1)
+	if hashErr != nil {
+		t.Fatalf("compute batch hash: %v", hashErr)
+	}
 	_, err = db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=?, batch_hash=? WHERE operation_id=? AND table_name=?`,
 		genesisHash, h0fi2, "op-fi2", "ext_fi2_data")
@@ -1232,9 +1308,28 @@ func TestFIV_MidBatchFailure(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi4, "op-fi4", string(userStateJSON)); err != nil {
 		t.Fatalf("first restore: %v", err)
 	}
+	var genesisFi4 string
+	if err := db.QueryRowContext(ctx,
+		`SELECT genesis_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
+		"op-fi4", "ext_fi4_data").Scan(&genesisFi4); err != nil {
+		t.Fatalf("query genesis: %v", err)
+	}
+	recordsFi4, _, _ := parseAndValidateJSONL(jsonl, extFi4)
+	nsHashFi4 := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            extFi4,
+		CanonicalTable:         "ext_fi4_data",
+		LogicalEntityType:      "data",
+		NamespacePolicyVersion: "v1",
+	})
+	specFi4 := testUserDataBatchChainSpec(t, extFi4, "ext_fi4_data", "data", nsHashFi4, userState.TableManifests["ext_fi4_data"].DataExportReference)
+	h0fi4, hashErr := computeContentBoundBatchHash(recordsFi4[0:100], specFi4, 0, genesisFi4, 1)
+	if hashErr != nil {
+		t.Fatalf("compute batch hash: %v", hashErr)
+	}
 	_, err = db.ExecContext(ctx,
-		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100' WHERE operation_id=? AND table_name=?`,
-		"op-fi4", "ext_fi4_data")
+		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=?, batch_hash=? WHERE operation_id=? AND table_name=?`,
+		genesisFi4, h0fi4, "op-fi4", "ext_fi4_data")
 	if err != nil {
 		t.Fatalf("set partial progress: %v", err)
 	}
@@ -1301,14 +1396,25 @@ func TestFIV_RestartExecutesOnlyRemainingBatches(t *testing.T) {
 	if err := store.RestoreUserDataFromSnapshot(ctx, extFi5, "op-fi5", string(userStateJSON)); err != nil {
 		t.Fatalf("first restore: %v", err)
 	}
-	records5, parsed5, _ := parseAndValidateJSONL(jsonl, extFi5)
+	records5, _, _ := parseAndValidateJSONL(jsonl, extFi5)
 	var genesisHash5 string
 	if err := db.QueryRowContext(ctx,
-		`SELECT prev_batch_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
+		`SELECT genesis_hash FROM extension_package_user_data_restore_journal WHERE operation_id=? AND table_name=?`,
 		"op-fi5", "ext_fi5_data").Scan(&genesisHash5); err != nil {
 		t.Fatalf("query genesis hash: %v", err)
 	}
-	h0fi5 := computeContentBoundBatchHash(records5[0:100], extFi5, 0, genesisHash5, 1, parsed5[0].SchemaVersion, "ext_fi5_data", "op-fi5")
+	nsHashFi5 := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            extFi5,
+		CanonicalTable:         "ext_fi5_data",
+		LogicalEntityType:      "data",
+		NamespacePolicyVersion: "v1",
+	})
+	specFi5 := testUserDataBatchChainSpec(t, extFi5, "ext_fi5_data", "data", nsHashFi5, userState.TableManifests["ext_fi5_data"].DataExportReference)
+	h0fi5, hashErr := computeContentBoundBatchHash(records5[0:100], specFi5, 0, genesisHash5, 1)
+	if hashErr != nil {
+		t.Fatalf("compute batch hash: %v", hashErr)
+	}
 	_, err = db.ExecContext(ctx,
 		`UPDATE extension_package_user_data_restore_journal SET state='importing', imported_rows=100, applied_count=100, cursor='100', batch_index=1, prev_batch_hash=?, batch_hash=? WHERE operation_id=? AND table_name=?`,
 		genesisHash5, h0fi5, "op-fi5", "ext_fi5_data")

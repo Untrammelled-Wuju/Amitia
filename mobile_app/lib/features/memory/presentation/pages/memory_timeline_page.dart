@@ -27,7 +27,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
 
   final _months = ['全部', '7月', '6月', '5月'];
   final _types = ['全部', '对话', '主动消息', '记忆形成', '情绪', '关系', '行为'];
-  final _characters = ['全部', '阿米娅', '小雨', 'Epsilon', 'Karin'];
+  final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
 
   @override
   void initState() {
@@ -320,7 +320,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
 
   String _getCharacterName(String id) {
     switch (id) {
-      case 'c1': return '阿米娅';
+      case 'c1': return 'Amitia';
       case 'c2': return '小雨';
       case 'c3': return 'Epsilon';
       case 'c4': return 'Karin';

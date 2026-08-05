@@ -4,8 +4,11 @@ package device
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -44,38 +47,89 @@ func (
 	ctx context.Context,
 	identity Identity,
 ) error {
+	if r == nil || r.db == nil {
+		return errors.New(
+			"device repository is unavailable",
+		)
+	}
+
+	identity.UserID =
+		strings.TrimSpace(
+			identity.UserID,
+		)
+	identity.DeviceID =
+		strings.TrimSpace(
+			identity.DeviceID,
+		)
+	identity.DesktopInstanceID =
+		strings.TrimSpace(
+			identity.DesktopInstanceID,
+		)
+
+	if identity.UserID == "" ||
+		identity.DeviceID == "" ||
+		identity.DesktopInstanceID == "" {
+		return errors.New(
+			"device identity fields are required",
+		)
+	}
+
+	if identity.ID == "" {
+		identity.ID =
+			"device_identity_" +
+				uuid.NewString()
+	}
+
 	now := time.Now().
 		UTC().
-		Format(time.RFC3339Nano)
+		Format(
+			time.RFC3339Nano,
+		)
 
 	identity.FirstSeenAt = now
 	identity.LastSeenAt = now
 	identity.Status = "active"
 
-	return r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "user_id"},
-				{Name: "device_id"},
+	result := r.db.WithContext(ctx).
+		Clauses(
+			clause.OnConflict{
+				Columns:
+					[]clause.Column{
+						{
+							Name:
+								"user_id",
+						},
+						{
+							Name:
+								"device_id",
+						},
+					},
+				DoUpdates:
+					clause.Assignments(
+						map[string]any{
+							"desktop_instance_id":
+								identity.DesktopInstanceID,
+							"platform":
+								identity.Platform,
+							"app_version":
+								identity.AppVersion,
+							"status":
+								"active",
+							"last_seen_at":
+								now,
+							"revoked_at":
+								"",
+						},
+					),
 			},
-			DoUpdates: clause.Assignments(
-				map[string]any{
-					"desktop_instance_id":
-						identity.DesktopInstanceID,
-					"platform":
-						identity.Platform,
-					"app_version":
-						identity.AppVersion,
-					"status":
-						"active",
-					"last_seen_at":
-						now,
-					"revoked_at":
-						"",
-				},
-			),
-		}).
-		Create(&identity).Error
+		).
+		Create(&identity)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
 }
 
 func (

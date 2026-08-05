@@ -561,27 +561,37 @@ func captureUserDataTableSnapshot(
 			fmt.Errorf("kernel: table %s export reference generation failed: %w", table, exportReferenceErr))
 	}
 
-	finalBatchHash, batchCount, batchErr := recalculateBatchHashChain(
+	chainSpec := UserDataBatchChainSpec{
+		Identity: UserDataTableIdentity{
+			Domain:                userDataBatchGenesisDomain,
+			SchemaVersion:         userDataRecordSchemaVersion,
+			ExtensionID:           extensionID,
+			CanonicalTable:        canonicalTable,
+			EntityType:            entityType,
+			NamespaceHash:         namespaceHash,
+			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		},
+		DataExportReference: dataExportReference,
+		BatchSize:           int64(userDataRestoreBatchSize),
+		GenesisHash:         genesisHash,
+	}
+
+	chainResult, batchErr := recalculateBatchHashChain(
 		rawRecords,
-		extensionID,
-		userDataRecordSchemaVersion,
-		canonicalTable,
-		dataExportReference,
-		int64(userDataRestoreBatchSize),
-		genesisHash,
+		chainSpec,
 	)
 	if batchErr != nil {
 		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
-			fmt.Errorf("kernel: table %s batch hash chain calculation failed: %w", table, batchErr))
+			fmt.Errorf("kernel: table %s batch chain calculation failed: %w", table, batchErr))
 	}
 
 	expectedBatchCount := int64(0)
 	if result.count > 0 {
 		expectedBatchCount = (result.count + int64(userDataRestoreBatchSize) - 1) / int64(userDataRestoreBatchSize)
 	}
-	if batchCount != expectedBatchCount {
+	if chainResult.BatchCount != expectedBatchCount {
 		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
-			fmt.Errorf("kernel: table %s batch count mismatch: expected=%d actual=%d", table, expectedBatchCount, batchCount))
+			fmt.Errorf("kernel: table %s batch count mismatch: expected=%d actual=%d", table, expectedBatchCount, chainResult.BatchCount))
 	}
 
 	result.manifest = UserDataTableSnapshotManifest{
@@ -596,8 +606,8 @@ func captureUserDataTableSnapshot(
 		EmptySetHash:          emptySetHash,
 		BatchSize:             userDataRestoreBatchSize,
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-		GenesisHash:           genesisHash,
-		FinalBatchHash:        finalBatchHash,
+		GenesisHash:           chainResult.GenesisHash,
+		FinalBatchHash:        chainResult.FinalHash,
 		DataExportReference:   dataExportReference,
 	}
 

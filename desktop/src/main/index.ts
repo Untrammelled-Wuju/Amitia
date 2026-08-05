@@ -16,6 +16,7 @@ import {
   ensureDataAndConfig,
 } from "./core-manager";
 import { ensureAmitiaDataDir, getAmitiaDataDir } from "./path-manager";
+import { ensureDesktopInstanceID } from "./desktop-identity";
 import { registerExtensionProtocol } from "./protocol";
 import { registerUpdateManager, waitForStartupCheck } from "./update-manager";
 import { ipcMain } from "electron";
@@ -152,10 +153,28 @@ async function enterMainApp(): Promise<void> {
     );
   }
 
+  try {
+    const desktopInstanceID =
+      ensureDesktopInstanceID();
+
+    console.log(
+      "[AmitiaDesktop] Desktop Instance:",
+      desktopInstanceID,
+    );
+  } catch (error) {
+    console.error(
+      "[AmitiaDesktop] 创建Desktop Instance失败:",
+      error,
+    );
+    app.quit();
+    return;
+  }
+
   if (currentConfig.mode === "local") {
     notifyStatus(runtimeManager, "starting");
     try {
       console.log("[AmitiaDesktop] 启动本地核心...");
+      ensureDesktopInstanceID();
       startCore();
       await waitForCoreReady();
       console.log("[AmitiaDesktop] 核心就绪");

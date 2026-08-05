@@ -26,7 +26,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   String _characterFilter = '全部';
   String _channelFilter = '全部';
 
-  final _characters = ['全部', '阿米娅', '小雨', 'Epsilon', 'Karin'];
+  final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
   final _channels = ['全部', 'App', '微信', 'QQ'];
 
   @override
@@ -481,7 +481,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   String _getCharacterName(String id) {
     switch (id) {
-      case 'c1': return '阿米娅';
+      case 'c1': return 'Amitia';
       case 'c2': return '小雨';
       case 'c3': return 'Epsilon';
       case 'c4': return 'Karin';

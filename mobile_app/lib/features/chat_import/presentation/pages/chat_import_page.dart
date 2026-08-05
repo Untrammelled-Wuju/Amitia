@@ -32,7 +32,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     {'name': '手动输入', 'icon': Icons.edit_note, 'color': '#7668EE'},
   ];
 
-  final _characters = ['阿米娅', '小雨', 'Epsilon', 'Karin'];
+  final _characters = ['Amitia', '小雨', 'Epsilon', 'Karin'];
   final _steps = ['选择来源', '输入内容', '解析预览', '编辑消息', '选择角色', '生成摘要', '提取记忆', '确认导入', '完成'];
 
   final _parsedMessages = [

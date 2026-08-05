@@ -42,7 +42,7 @@ class _ToolboxPromptTracePageState extends State<ToolboxPromptTracePage> {
       blocks: 'system / character / memory / tools',
       promptTokens: 1842,
       completionTokens: 326,
-      snippet: '[system] 你是阿米娅，一个温柔细心的 AI 伙伴…\n[character] 语气温柔，偶尔俏皮…\n[memory] 用户喜欢早上喝咖啡…\n[user] 帮我整理下载目录',
+      snippet: '[system] 你是Amitia，一个温柔细心的 AI 伙伴…\n[character] 语气温柔，偶尔俏皮…\n[memory] 用户喜欢早上喝咖啡…\n[user] 帮我整理下载目录',
     ),
     _TraceEntry(
       id: '#1023',

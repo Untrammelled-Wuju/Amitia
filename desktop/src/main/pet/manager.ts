@@ -81,7 +81,7 @@ import {
 const CORE_BASE_HOST = "127.0.0.1";
 const CORE_BASE_PORT = 18899;
 const API_BASE_PATH = "/api/desktop-pets";
-const HEALTH_CHECK_PATH = "/api/health";
+const HEALTH_CHECK_PATH = "/livez";
 const DEFAULT_USER_ID = "default";
 const DEFAULT_ALPHA_THRESHOLD = 10;
 
@@ -471,8 +471,9 @@ export class DesktopPetManager {
     this.initializing = true;
     try {
       await this.waitCoreReady();
-      this.startBridge();
+      await this.registerDeviceIdentity();
       await this.restoreActiveInstallation();
+      this.startBridge();
       this.initialized = true;
       if (this.state === "uninitialized") {
         this.setState("ready", null, "初始化完成但无活跃桌宠");
@@ -2222,14 +2223,6 @@ export class DesktopPetManager {
     const callbacks = this.buildBridgeCallbacks();
     this.bridgeClient = new RuntimeBridgeClient(config, callbacks);
     this.bridgeClient.connect();
-    try {
-      await this.registerDeviceIdentity();
-    } catch (error) {
-      console.warn(
-        "[DesktopPetManager] device identity registration failed:",
-        this.errorMessage(error),
-      );
-    }
   }
 
   private scheduleBridgeReconnect(): void {
