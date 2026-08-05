@@ -42,7 +42,10 @@ apiClient.interceptors.request.use(async (config) => {
     for (const [key, value] of Object.entries(desktopHeaders)) {
       config.headers[key] = value;
     }
-    delete config.headers.Authorization;
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   } else {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) {

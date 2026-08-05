@@ -30,10 +30,19 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
     return cachedConnection;
   }
 
-  cachedConnection = {
-    apiBaseURL: "http://127.0.0.1:18899",
-    websocketBaseURL: "ws://127.0.0.1:18899",
-  };
+  const isDev = (import.meta as any).env?.DEV === true;
+  const devOrigin = window.location.origin;
+  if (isDev && devOrigin) {
+    cachedConnection = {
+      apiBaseURL: devOrigin,
+      websocketBaseURL: devOrigin.replace(/^http/, "ws"),
+    };
+  } else {
+    cachedConnection = {
+      apiBaseURL: "http://127.0.0.1:18899",
+      websocketBaseURL: "ws://127.0.0.1:18899",
+    };
+  }
   return cachedConnection;
 }
 
@@ -43,6 +52,10 @@ export async function getApiBaseURL(): Promise<string> {
 }
 
 export async function getQQApiBaseURL(): Promise<string> {
+  const isDev = (import.meta as any).env?.DEV === true;
+  if (isDev) {
+    return "/qq-api";
+  }
   const base = await getApiBaseURL();
   if (base === "http://127.0.0.1:18899") {
     return "http://127.0.0.1:19877/api";

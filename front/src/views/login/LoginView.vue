@@ -125,6 +125,9 @@ async function handleLogin() {
     const data = res.data?.data || res.data;
     if (data?.token) {
       setToken(data.token);
+      if (window.amitiaDesktop?.setAuthToken) {
+        void window.amitiaDesktop.setAuthToken(data.token);
+      }
       ElMessage.success(`欢迎回来，${data.username || name}`);
       const redirect = (route.query.redirect as string) || "/chat";
       router.push(redirect);

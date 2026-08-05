@@ -5475,6 +5475,7 @@ CREATE TABLE IF NOT EXISTS extension_package_user_data_restore_journal (
     batch_algorithm_version TEXT NOT NULL DEFAULT '',
     batch_size INTEGER NOT NULL DEFAULT 0,
     namespace_hash TEXT NOT NULL DEFAULT '',
+    expected_aggregate_hash TEXT NOT NULL DEFAULT '',
     aggregate_hash TEXT NOT NULL DEFAULT '',
     state TEXT NOT NULL DEFAULT 'pending',
     started_at TEXT NOT NULL,

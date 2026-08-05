@@ -183,9 +183,9 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   try {
-    const res = await apiClient.get("/api/public/auth/me")
+    const res = await apiClient.get("/api/auth/me")
     const userData = res.data?.data || res.data
-    if (!userData?.id) {
+    if (!(userData?.id || userData?.userId)) {
       localStorage.removeItem(TOKEN_KEY)
       return next("/login")
     }
@@ -198,4 +198,5 @@ router.beforeEach(async (to, _from, next) => {
 })
 
 export default router
+
 

@@ -209,15 +209,37 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 		}
 	}
 
-	if token == "" || cfg.LocalCredentials == nil || !cfg.LocalCredentials.Validate(token) {
-		util.ErrorResponse(c, response.Unauthorized, "本地令牌无效", nil)
-		c.Abort()
+	if token != "" && cfg.LocalCredentials != nil && cfg.LocalCredentials.Validate(token) {
+		actor := buildLocalUserActor(cfg)
+		actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
+		applyActorToContext(c, actor)
 		return
 	}
 
-	actor := buildLocalUserActor(cfg)
-	actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
-	applyActorToContext(c, actor)
+	jwtStr := extractBearerToken(c)
+	if jwtStr != "" {
+		claims := &JWTClaims{}
+		token, err := jwt.ParseWithClaims(jwtStr, claims, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method")
+			}
+			return []byte(cfg.JWTSecret), nil
+		}, jwt.WithValidMethods([]string{"HS256", "HS384", "HS512"}))
+		if err == nil && token.Valid && claims.UserId > 0 {
+			actor := &auth.ActorContext{
+				ActorType:      auth.ActorTypeUser,
+				UserID:         fmt.Sprintf("%d", claims.UserId),
+				Roles:          []string{claims.Role},
+				AuthMethod:     "jwt",
+				IsLocalTrusted: true,
+			}
+			applyActorToContext(c, actor)
+			return
+		}
+	}
+
+	util.ErrorResponse(c, response.Unauthorized, "本地令牌无效", nil)
+	c.Abort()
 }
 
 func handleMaintenanceAuth(c *gin.Context, cfg AuthConfig) {

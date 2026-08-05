@@ -2,13 +2,10 @@ package kernel
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 
@@ -91,7 +88,17 @@ func TestUserDataRestoreJournalProgressAndStateUpdate(t *testing.T) {
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
 	}
-	journal, err := store.getOrCreateRestoreJournal(ctx, "op-progress", "ext1", "ext_progress_table", "", 100, "", "")
+	manifest := UserDataTableManifest{
+		ExtensionID:         "ext1",
+		CanonicalTable:      "ext_progress_table",
+		Namespace:           "ext_progress_table",
+		EntityType:          "data",
+		RecordCount:         100,
+		AggregateHash:       computeUserDataAggregateHashFromRecords(nil),
+		EmptySetHash:        computeUserDataEmptySetHash(UserDataTableIdentity{Domain: userDataEmptySetDomain, SchemaVersion: "1.0.0", ExtensionID: "ext1", CanonicalTable: "ext_progress_table", EntityType: "data", NamespaceHash: "", BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion}),
+		DataExportReference: "export:test:ext1",
+	}
+	journal, err := store.getOrCreateRestoreJournal(ctx, "op-progress", "ext1", "ext_progress_table", "", manifest, "")
 	if err != nil {
 		t.Fatalf("create journal: %v", err)
 	}
@@ -123,7 +130,17 @@ func TestUserDataRestoreJournalErrorNotSwallowed(t *testing.T) {
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
 	}
-	journal, err := store.getOrCreateRestoreJournal(ctx, "op-error", "ext1", "ext_error_table", "", 50, "", "")
+	manifest := UserDataTableManifest{
+		ExtensionID:         "ext1",
+		CanonicalTable:      "ext_error_table",
+		Namespace:           "ext_error_table",
+		EntityType:          "data",
+		RecordCount:         50,
+		AggregateHash:       computeUserDataAggregateHashFromRecords(nil),
+		EmptySetHash:        computeUserDataEmptySetHash(UserDataTableIdentity{Domain: userDataEmptySetDomain, SchemaVersion: "1.0.0", ExtensionID: "ext1", CanonicalTable: "ext_error_table", EntityType: "data", NamespaceHash: "", BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion}),
+		DataExportReference: "export:test:ext1",
+	}
+	journal, err := store.getOrCreateRestoreJournal(ctx, "op-error", "ext1", "ext_error_table", "", manifest, "")
 	if err != nil {
 		t.Fatalf("create journal: %v", err)
 	}
@@ -917,7 +934,8 @@ func makeCrashTestTable(t *testing.T, db *sql.DB, table string) {
 	t.Helper()
 	if _, err := db.Exec(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		entity_id TEXT PRIMARY KEY,
-		entity_value TEXT NOT NULL DEFAULT ''
+		entity_value TEXT NOT NULL DEFAULT '',
+		amount INTEGER NOT NULL DEFAULT 0
 	)`, table)); err != nil {
 		t.Fatalf("create table %s: %v", table, err)
 	}
@@ -927,7 +945,10 @@ func makeNLines(t *testing.T, extensionID, namespace string, count int, prefix s
 	t.Helper()
 	var lines string
 	for i := 0; i < count; i++ {
-		payload := map[string]any{"entity_value": fmt.Sprintf("%s_v_%d", prefix, i)}
+		payload := map[string]any{
+			"entity_value": fmt.Sprintf("%s_v_%d", prefix, i),
+			"amount":       i % 10,
+		}
 		line := makeTestRawLine("1.0.0", extensionID, namespace, "data", fmt.Sprintf("%s_e_%04d", prefix, i), "upsert", payload)
 		lines += line + "\n"
 	}
@@ -940,38 +961,14 @@ func mustBuildManifest(t *testing.T, extensionID, table, entityType, jsonlData, 
 	recordCount := int64(len(parsedRecords))
 
 	nsHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
 		ExtensionID:            extensionID,
 		CanonicalTable:         table,
 		LogicalEntityType:      entityType,
-		NamespacePolicyVersion: "",
+		NamespacePolicyVersion: "v1",
 	})
 
-	var aggHash string
-	if recordCount == 0 {
-		aggHash = computeUserDataAggregateHashFromRecords(nil)
-	} else {
-		hashes := make([]string, 0, len(rawRecords))
-		for _, rec := range rawRecords {
-			payload := make(map[string]interface{})
-			for k, v := range rec {
-				if strings.HasPrefix(k, "_") {
-					continue
-				}
-				if k == "entity_id" && idColumn == "id" {
-					payload["id"] = v
-				} else {
-					payload[k] = v
-				}
-			}
-			hashes = append(hashes, computeUserDataPayloadHash(payload))
-		}
-		sort.Strings(hashes)
-		hasher := sha256.New()
-		for _, h := range hashes {
-			hasher.Write([]byte(h))
-		}
-		aggHash = "sha256:" + hex.EncodeToString(hasher.Sum(nil))
-	}
+	aggHash := computeUserDataAggregateHashFromRecords(parsedRecords)
 
 	genesisIdentity := UserDataTableIdentity{
 		Domain:                userDataBatchGenesisDomain,
@@ -985,8 +982,8 @@ func mustBuildManifest(t *testing.T, extensionID, table, entityType, jsonlData, 
 	genesisHash := computeUserDataGenesisHash(genesisIdentity)
 
 	emptySetIdentity := UserDataTableIdentity{
-		Domain:                userDataBatchGenesisDomain,
-		SchemaVersion:         fmt.Sprintf("%d", userDataTableManifestSchemaVersion),
+		Domain:                userDataEmptySetDomain,
+		SchemaVersion:         userDataRecordSchemaVersion,
 		ExtensionID:           extensionID,
 		CanonicalTable:        table,
 		EntityType:            entityType,

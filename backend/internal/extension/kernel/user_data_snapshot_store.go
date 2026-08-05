@@ -95,21 +95,30 @@ const userDataRestoreJournalDDL = `CREATE TABLE IF NOT EXISTS extension_package_
 	operation_id TEXT NOT NULL,
 	extension_id TEXT NOT NULL,
 	table_name TEXT NOT NULL,
+
 	total_rows INTEGER NOT NULL DEFAULT 0,
 	imported_rows INTEGER NOT NULL DEFAULT 0,
 	applied_count INTEGER NOT NULL DEFAULT 0,
 	cursor TEXT NOT NULL DEFAULT '',
+
 	batch_hash TEXT NOT NULL DEFAULT '',
 	batch_index INTEGER NOT NULL DEFAULT 0,
 	prev_batch_hash TEXT NOT NULL DEFAULT '',
 	batch_algorithm_version TEXT NOT NULL DEFAULT '',
 	batch_size INTEGER NOT NULL DEFAULT 0,
+
 	namespace_hash TEXT NOT NULL DEFAULT '',
+
+	expected_aggregate_hash TEXT NOT NULL DEFAULT '',
 	aggregate_hash TEXT NOT NULL DEFAULT '',
+
+	data_export_reference TEXT NOT NULL DEFAULT '',
+
 	state TEXT NOT NULL DEFAULT 'pending',
 	started_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL,
 	error_detail TEXT NOT NULL DEFAULT '',
+
 	PRIMARY KEY (operation_id, table_name)
 )`
 
@@ -123,27 +132,34 @@ const (
 )
 
 type UserDataRestoreJournal struct {
-	JournalID             string
-	OperationID           string
-	ExtensionID           string
-	Namespace             string
-	TableName             string
-	TotalRows             int64
-	ImportedRows          int64
-	AppliedCount          int64
-	Cursor                string
+	JournalID   string
+	OperationID string
+	ExtensionID string
+	Namespace   string
+	TableName   string
+
+	TotalRows    int64
+	ImportedRows int64
+	AppliedCount int64
+	Cursor       string
+
 	BatchHash             string
 	BatchIndex            int64
 	PrevBatchHash         string
 	BatchAlgorithmVersion string
 	BatchSize             int64
-	NamespaceHash         string
+
+	NamespaceHash string
+
+	ExpectedAggregateHash string
 	AggregateHash         string
-	DataExportReference   string
-	State                 UserDataRestoreState
-	StartedAt             string
-	UpdatedAt             string
-	ErrorDetail           string
+
+	DataExportReference string
+
+	State       UserDataRestoreState
+	StartedAt   string
+	UpdatedAt   string
+	ErrorDetail string
 }
 
 type UserDataSnapshotStore struct {
@@ -177,6 +193,7 @@ func (s *UserDataSnapshotStore) ensureJournalColumns(ctx context.Context) error 
 		s.ensureBatchAlgorithmVersionColumn,
 		s.ensureBatchSizeColumn,
 		s.ensureNamespaceHashColumn,
+		s.ensureExpectedAggregateHashColumn,
 		s.ensureAggregateHashColumn,
 		s.ensureDataExportReferenceColumn,
 	}
@@ -249,6 +266,22 @@ func (s *UserDataSnapshotStore) ensureNamespaceHashColumn(ctx context.Context) e
 	}
 	_, err = s.db.ExecContext(ctx,
 		`ALTER TABLE extension_package_user_data_restore_journal ADD COLUMN namespace_hash TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+func (s *UserDataSnapshotStore) ensureExpectedAggregateHashColumn(ctx context.Context) error {
+	var name string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name FROM pragma_table_info('extension_package_user_data_restore_journal') WHERE name='expected_aggregate_hash'`,
+	).Scan(&name)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`ALTER TABLE extension_package_user_data_restore_journal ADD COLUMN expected_aggregate_hash TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 
@@ -581,7 +614,7 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		LogicalEntityType:      resolver.LogicalEntityType,
 		NamespacePolicyVersion: "v1",
 	})
-	journal, err := s.getOrCreateRestoreJournal(ctx, operationID, extensionID, table, namespace, manifest.RecordCount, expectedNamespaceHash, manifest.DataExportReference)
+	journal, err := s.getOrCreateRestoreJournal(ctx, operationID, extensionID, table, namespace, manifest, expectedNamespaceHash)
 	if err != nil {
 		return err
 	}
@@ -662,31 +695,28 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 			}
 			return failErr
 		}
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		journal.State = UserDataRestoreCompleted
-		journal.Cursor = "0"
-		journal.ImportedRows = 0
-		journal.AppliedCount = 0
-		journal.BatchIndex = 0
-		journal.BatchHash = genesisHash
-		journal.AggregateHash = emptyContentHash
-		journal.TotalRows = 0
-		journal.UpdatedAt = now
-		if _, execErr := s.db.ExecContext(ctx,
-			`UPDATE extension_package_user_data_restore_journal
-			 SET state=?, cursor=?, imported_rows=?, applied_count=?, batch_index=?, batch_hash=?, aggregate_hash=?, total_rows=?, updated_at=?
-			 WHERE operation_id=? AND table_name=?`,
-			string(UserDataRestoreCompleted), "0", 0, 0, 0, genesisHash, emptyContentHash, 0, now,
-			journal.OperationID, journal.TableName); execErr != nil {
-			failErr := fmt.Errorf("kernel: update journal to completed for empty table %s: %w", table, execErr)
+		if emptyContentHash != manifest.AggregateHash {
+			failErr := NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+				fmt.Errorf("kernel: empty database aggregate differs from manifest for table %s: database=%s manifest=%s", table, emptyContentHash, manifest.AggregateHash))
 			if journalErr := s.updateRestoreJournalState(ctx, journal, UserDataRestoreFailed, failErr.Error()); journalErr != nil {
 				return errors.Join(failErr, fmt.Errorf("kernel: update journal to failed: %w", journalErr))
 			}
 			return failErr
 		}
-		return nil
+		if err := s.completeRestoreJournalWithAggregate(ctx, journal, manifest, userDataRestoreCompletionEvidence{
+			Cursor:        "0",
+			ImportedRows:  0,
+			AppliedCount:  0,
+			BatchIndex:    0,
+			BatchHash:     genesisHash,
+			AggregateHash: emptyContentHash,
+		}); err != nil {
+			return err
+		}
+		return s.verifyCompletedJournalAgainstManifest(ctx, journal, manifest, expectedNamespaceHash)
 	}
 	if startCursor == manifest.RecordCount {
+		finalHash := ""
 		if startCursor > 0 {
 			if err := s.deleteDifferingRows(ctx, table, records, extensionID); err != nil {
 				failErr := fmt.Errorf("kernel: delete differing rows for %s: %w", table, err)
@@ -711,20 +741,21 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 				}
 				return failErr
 			}
-			journal.AggregateHash = recomputedAggHash
-			journal.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-			if _, updateErr := s.db.ExecContext(ctx,
-				`UPDATE extension_package_user_data_restore_journal
-				 SET aggregate_hash=?, updated_at=?
-				 WHERE operation_id=? AND table_name=?`,
-				recomputedAggHash, journal.UpdatedAt, journal.OperationID, journal.TableName); updateErr != nil {
-				return fmt.Errorf("kernel: update journal aggregate hash on recovery: %w", updateErr)
-			}
+			finalHash = recomputedAggHash
+		} else {
+			finalHash = computeUserDataAggregateHashFromRecords(nil)
 		}
-		if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreCompleted, ""); err != nil {
-			return fmt.Errorf("kernel: update journal to completed: %w", err)
+		if err := s.completeRestoreJournalWithAggregate(ctx, journal, manifest, userDataRestoreCompletionEvidence{
+			Cursor:        strconv.FormatInt(manifest.RecordCount, 10),
+			ImportedRows:  manifest.RecordCount,
+			AppliedCount:  manifest.RecordCount,
+			BatchIndex:    journal.BatchIndex,
+			BatchHash:     journal.BatchHash,
+			AggregateHash: finalHash,
+		}); err != nil {
+			return err
 		}
-		return nil
+		return s.verifyCompletedJournalAgainstManifest(ctx, journal, manifest, expectedNamespaceHash)
 	}
 	if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreImporting, ""); err != nil {
 		return fmt.Errorf("kernel: update journal to importing: %w", err)
@@ -786,20 +817,17 @@ func (s *UserDataSnapshotStore) restoreTable(ctx context.Context, extensionID, o
 		}
 		return failErr
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	journal.AggregateHash = aggHashFromDB
-	journal.UpdatedAt = now
-	if _, updateErr := s.db.ExecContext(ctx,
-		`UPDATE extension_package_user_data_restore_journal
-		 SET aggregate_hash=?, updated_at=?
-		 WHERE operation_id=? AND table_name=?`,
-		aggHashFromDB, now, journal.OperationID, journal.TableName); updateErr != nil {
-		return fmt.Errorf("kernel: update journal aggregate hash: %w", updateErr)
+	if err := s.completeRestoreJournalWithAggregate(ctx, journal, manifest, userDataRestoreCompletionEvidence{
+		Cursor:        strconv.FormatInt(manifest.RecordCount, 10),
+		ImportedRows:  manifest.RecordCount,
+		AppliedCount:  appliedCount,
+		BatchIndex:    batchIdx,
+		BatchHash:     prevBatchHash,
+		AggregateHash: aggHashFromDB,
+	}); err != nil {
+		return err
 	}
-	if err := s.updateRestoreJournalState(ctx, journal, UserDataRestoreCompleted, ""); err != nil {
-		return fmt.Errorf("kernel: update journal to completed: %w", err)
-	}
-	return nil
+	return s.verifyCompletedJournalAgainstManifest(ctx, journal, manifest, expectedNamespaceHash)
 }
 
 func parseJournalCursor(journal *UserDataRestoreJournal, totalRecords int64) (int64, error) {
@@ -814,27 +842,119 @@ func parseJournalCursor(journal *UserDataRestoreJournal, totalRecords int64) (in
 	return cursor, nil
 }
 
-func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(ctx context.Context, operationID, extensionID, table, namespace string, totalRows int64, expectedNamespaceHash string, dataExportReference string) (*UserDataRestoreJournal, error) {
+func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(
+	ctx context.Context,
+	operationID string,
+	extensionID string,
+	table string,
+	namespace string,
+	manifest UserDataTableManifest,
+	expectedNamespaceHash string,
+) (*UserDataRestoreJournal, error) {
+	if strings.TrimSpace(manifest.AggregateHash) == "" {
+		return nil, NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: manifest aggregate hash missing for restore journal %s/%s", operationID, table))
+	}
+	if err := validateUserDataAggregateHashFormat(manifest.AggregateHash); err != nil {
+		return nil, NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409, err)
+	}
+	if manifest.DataExportReference == "" {
+		return nil, NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: manifest data export reference missing for table %s", table))
+	}
+
+	nsHash := manifest.NamespaceHash
+	if nsHash == "" {
+		nsHash = expectedNamespaceHash
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+
 	journal := &UserDataRestoreJournal{
 		JournalID:   "ud-journal-" + operationID + "-" + table,
 		OperationID: operationID,
 		ExtensionID: extensionID,
 		Namespace:   namespace,
 		TableName:   table,
-		TotalRows:   totalRows,
-		State:       UserDataRestorePending,
-		StartedAt:   now,
-		UpdatedAt:   now,
+
+		TotalRows:             manifest.RecordCount,
+		NamespaceHash:         nsHash,
+		ExpectedAggregateHash: manifest.AggregateHash,
+		DataExportReference:   manifest.DataExportReference,
+		State:                 UserDataRestorePending,
+		StartedAt:             now,
+		UpdatedAt:             now,
 	}
-	var state, startedAt, updatedAt, errorDetail, cursor, batchHash, prevBatchHash, batchAlgorithmVer, namespaceHash, aggregateHash, dataExportRef string
-	var importedRows, appliedCount, batchIndex, batchSize int64
+
+	var (
+		storedExtensionID string
+		storedTotalRows   int64
+		state             string
+		startedAt         string
+		updatedAt         string
+		errorDetail       string
+		cursor            string
+		batchHash         string
+		prevBatchHash     string
+		batchAlgorithmVer string
+		namespaceHash     string
+		expectedAggHash   string
+		aggregateHash     string
+		dataExportRef     string
+		importedRows      int64
+		appliedCount      int64
+		batchIndex        int64
+		batchSize         int64
+	)
+
 	err := s.db.QueryRowContext(ctx,
-		`SELECT state, imported_rows, applied_count, cursor, batch_hash, batch_index, prev_batch_hash, batch_algorithm_version, batch_size, namespace_hash, aggregate_hash, data_export_reference, started_at, updated_at, error_detail
-		 FROM extension_package_user_data_restore_journal
-		 WHERE operation_id=? AND table_name=?`, operationID, table,
-	).Scan(&state, &importedRows, &appliedCount, &cursor, &batchHash, &batchIndex, &prevBatchHash, &batchAlgorithmVer, &batchSize, &namespaceHash, &aggregateHash, &dataExportRef, &startedAt, &updatedAt, &errorDetail)
+		`SELECT
+extension_id,
+total_rows,
+state,
+imported_rows,
+applied_count,
+cursor,
+batch_hash,
+batch_index,
+prev_batch_hash,
+batch_algorithm_version,
+batch_size,
+namespace_hash,
+expected_aggregate_hash,
+aggregate_hash,
+data_export_reference,
+started_at,
+updated_at,
+error_detail
+ FROM extension_package_user_data_restore_journal
+ WHERE operation_id=?
+   AND table_name=?`,
+		operationID, table,
+	).Scan(
+		&storedExtensionID,
+		&storedTotalRows,
+		&state,
+		&importedRows,
+		&appliedCount,
+		&cursor,
+		&batchHash,
+		&batchIndex,
+		&prevBatchHash,
+		&batchAlgorithmVer,
+		&batchSize,
+		&namespaceHash,
+		&expectedAggHash,
+		&aggregateHash,
+		&dataExportRef,
+		&startedAt,
+		&updatedAt,
+		&errorDetail,
+	)
+
 	if err == nil {
+		journal.ExtensionID = storedExtensionID
+		journal.TotalRows = storedTotalRows
 		journal.State = UserDataRestoreState(state)
 		journal.ImportedRows = importedRows
 		journal.AppliedCount = appliedCount
@@ -845,41 +965,117 @@ func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(ctx context.Context, o
 		journal.BatchAlgorithmVersion = batchAlgorithmVer
 		journal.BatchSize = batchSize
 		journal.NamespaceHash = namespaceHash
+		journal.ExpectedAggregateHash = expectedAggHash
 		journal.AggregateHash = aggregateHash
 		journal.DataExportReference = dataExportRef
 		journal.StartedAt = startedAt
 		journal.UpdatedAt = updatedAt
 		journal.ErrorDetail = errorDetail
+
 		if journal.ExtensionID != extensionID {
 			return nil, NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
 				fmt.Errorf("kernel: restore journal %s belongs to extension %s, cannot be used for extension %s", journal.JournalID, journal.ExtensionID, extensionID))
 		}
+		if journal.TotalRows != manifest.RecordCount {
+			return nil, NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
+				fmt.Errorf("kernel: restore journal %s row count differs from manifest: journal=%d manifest=%d", journal.JournalID, journal.TotalRows, manifest.RecordCount))
+		}
 		if journal.NamespaceHash == "" {
 			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
-				fmt.Errorf("kernel: restore journal %s has empty namespace hash from legacy version, cannot continue restore", journal.JournalID))
+				fmt.Errorf("kernel: restore journal %s has empty namespace hash", journal.JournalID))
 		}
 		if journal.NamespaceHash != expectedNamespaceHash {
 			return nil, NewPackageError(PackageErrCodeUserDataJournalHashMismatch, 422,
-				fmt.Errorf("kernel: restore journal %s namespace hash mismatch: expected %s, actual %s", journal.JournalID, expectedNamespaceHash, journal.NamespaceHash))
+				fmt.Errorf("kernel: restore journal %s namespace hash mismatch: expected=%s actual=%s", journal.JournalID, expectedNamespaceHash, journal.NamespaceHash))
 		}
-		if journal.DataExportReference != "" && journal.DataExportReference != dataExportReference {
+		if journal.ExpectedAggregateHash == "" {
+			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal %s has empty expected aggregate hash", journal.JournalID))
+		}
+		if journal.ExpectedAggregateHash != manifest.AggregateHash {
 			return nil, NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
-				fmt.Errorf("kernel: restore journal %s belongs to data export %s, cannot be used for export %s", journal.JournalID, journal.DataExportReference, dataExportReference))
+				fmt.Errorf("kernel: restore journal %s expected aggregate differs from manifest: journal=%s manifest=%s", journal.JournalID, journal.ExpectedAggregateHash, manifest.AggregateHash))
+		}
+		if journal.DataExportReference == "" {
+			return nil, NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal %s has empty data export reference", journal.JournalID))
+		}
+		if journal.DataExportReference != manifest.DataExportReference {
+			return nil, NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
+				fmt.Errorf("kernel: restore journal %s belongs to export %s, cannot use export %s", journal.JournalID, journal.DataExportReference, manifest.DataExportReference))
+		}
+		if journal.AggregateHash != "" && journal.AggregateHash != journal.ExpectedAggregateHash {
+			return nil, NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+				fmt.Errorf("kernel: restore journal %s observed aggregate differs from expected aggregate: observed=%s expected=%s", journal.JournalID, journal.AggregateHash, journal.ExpectedAggregateHash))
 		}
 		return journal, nil
 	}
+
 	if err != sql.ErrNoRows {
 		return nil, fmt.Errorf("query restore journal: %w", err)
 	}
+
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO extension_package_user_data_restore_journal
-		 (journal_id, operation_id, extension_id, table_name, total_rows, imported_rows, applied_count, cursor, batch_hash, batch_index, prev_batch_hash, batch_algorithm_version, batch_size, namespace_hash, aggregate_hash, data_export_reference, state, started_at, updated_at, error_detail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		journal.JournalID, operationID, extensionID, table, totalRows, 0, 0, "", "", 0, "", userDataBatchHashAlgorithmVersion, userDataRestoreBatchSize, expectedNamespaceHash, "", dataExportReference,
-		string(UserDataRestorePending), now, now, "")
+		`INSERT INTO
+ extension_package_user_data_restore_journal (
+journal_id,
+operation_id,
+extension_id,
+table_name,
+total_rows,
+imported_rows,
+applied_count,
+cursor,
+batch_hash,
+batch_index,
+prev_batch_hash,
+batch_algorithm_version,
+batch_size,
+namespace_hash,
+expected_aggregate_hash,
+aggregate_hash,
+data_export_reference,
+state,
+started_at,
+updated_at,
+error_detail
+ ) VALUES (
+?, ?, ?, ?, ?,
+?, ?, ?, ?, ?,
+?, ?, ?, ?, ?,
+?, ?, ?, ?, ?,
+?
+ )`,
+		journal.JournalID,
+		operationID,
+		extensionID,
+		table,
+		manifest.RecordCount,
+		0,
+		0,
+		"",
+		"",
+		0,
+		"",
+		userDataBatchHashAlgorithmVersion,
+		userDataRestoreBatchSize,
+		expectedNamespaceHash,
+		manifest.AggregateHash,
+		"",
+		manifest.DataExportReference,
+		string(UserDataRestorePending),
+		now,
+		now,
+		"",
+	)
+
 	if err != nil {
 		return nil, fmt.Errorf("create restore journal: %w", err)
 	}
+
+	journal.BatchAlgorithmVersion = userDataBatchHashAlgorithmVersion
+	journal.BatchSize = userDataRestoreBatchSize
+
 	return journal, nil
 }
 
@@ -1191,6 +1387,7 @@ func (s *UserDataSnapshotStore) computeAggregateHashFromDB(ctx context.Context, 
 	if err != nil {
 		return "", fmt.Errorf("kernel: get columns for aggregate hash %s: %w", table, err)
 	}
+	idColumn := detectIDColumnName(columns)
 	hashes := make([]string, 0, 64)
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
@@ -1203,6 +1400,9 @@ func (s *UserDataSnapshotStore) computeAggregateHashFromDB(ctx context.Context, 
 		}
 		payload := make(map[string]interface{}, len(columns))
 		for i, col := range columns {
+			if col == idColumn {
+				continue
+			}
 			payload[col] = normalizeSQLValue(values[i])
 		}
 		hashes = append(hashes, computeUserDataPayloadHash(payload))
@@ -1232,23 +1432,73 @@ func computeUserDataAggregateHash(extensionID, namespace, entityType, schemaVers
 }
 
 func computeUserDataAggregateHashFromRecords(records []userDataRecord) string {
-	if len(records) == 0 {
-		return "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	}
 	hashes := make([]string, 0, len(records))
-	for _, r := range records {
-		hashes = append(hashes, computeUserDataRecordHash(r.ExtensionID, r.Namespace, r.EntityType, r.SchemaVersion, r.Payload))
+	for _, record := range records {
+		payloadHash := record.PayloadHash
+		if payloadHash == "" {
+			payloadHash = computeUserDataPayloadHash(record.Payload)
+		}
+		hashes = append(hashes, payloadHash)
 	}
 	sort.Strings(hashes)
 	hasher := sha256.New()
-	for _, h := range hashes {
-		hasher.Write([]byte(h))
+	for _, payloadHash := range hashes {
+		hasher.Write([]byte(payloadHash))
 	}
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil))
 }
 
 func computeUserDataExportReference(operationID, table, extensionID string) string {
+	operationID = strings.TrimSpace(operationID)
+	table = strings.TrimSpace(table)
+	extensionID = strings.TrimSpace(extensionID)
+	if operationID == "" || table == "" || extensionID == "" {
+		return ""
+	}
 	return fmt.Sprintf("export:%s:%s:%s", operationID, table, extensionID)
+}
+
+type userDataSnapshotExportIdentity struct {
+	SchemaVersion  int    `json:"schemaVersion"`
+	ExtensionID    string `json:"extensionId"`
+	CanonicalTable string `json:"canonicalTable"`
+	EntityType     string `json:"entityType"`
+	NamespaceHash  string `json:"namespaceHash"`
+	RecordCount    int64  `json:"recordCount"`
+	JSONLHash      string `json:"jsonlHash"`
+}
+
+func computeCapturedUserDataExportReference(
+	extensionID string,
+	canonicalTable string,
+	entityType string,
+	namespaceHash string,
+	recordCount int64,
+	jsonlData string,
+) (string, error) {
+	extensionID = strings.TrimSpace(extensionID)
+	canonicalTable = strings.TrimSpace(canonicalTable)
+	entityType = strings.TrimSpace(entityType)
+	namespaceHash = strings.TrimSpace(namespaceHash)
+	if extensionID == "" || canonicalTable == "" || entityType == "" || namespaceHash == "" || recordCount < 0 {
+		return "", fmt.Errorf("kernel: captured user data export identity incomplete")
+	}
+	jsonlDigest := sha256.Sum256([]byte(jsonlData))
+	identity := userDataSnapshotExportIdentity{
+		SchemaVersion:  1,
+		ExtensionID:    extensionID,
+		CanonicalTable: canonicalTable,
+		EntityType:     entityType,
+		NamespaceHash:  namespaceHash,
+		RecordCount:    recordCount,
+		JSONLHash:      "sha256:" + hex.EncodeToString(jsonlDigest[:]),
+	}
+	raw, err := json.Marshal(identity)
+	if err != nil {
+		return "", fmt.Errorf("kernel: marshal captured export identity: %w", err)
+	}
+	identityDigest := sha256.Sum256(raw)
+	return "snapshot-export:sha256:" + hex.EncodeToString(identityDigest[:]), nil
 }
 
 func computeUserDataRecordHash(extensionID, namespace, entityType, schemaVersion string, rawPayload map[string]interface{}) string {
@@ -1262,7 +1512,22 @@ func computeUserDataRecordHash(extensionID, namespace, entityType, schemaVersion
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
-func validateUserDataTableSnapshotManifest(manifest UserDataTableManifest, extensionID, table, jsonlData string, rawRecords []map[string]interface{}, parsedRecords []userDataRecord) error {
+func validateUserDataAggregateHashFormat(value string) error {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "sha256:") {
+		return fmt.Errorf("aggregate hash must use sha256 prefix")
+	}
+	digest := strings.TrimPrefix(value, "sha256:")
+	if len(digest) != 64 {
+		return fmt.Errorf("aggregate hash digest length must be 64")
+	}
+	if _, err := hex.DecodeString(digest); err != nil {
+		return fmt.Errorf("aggregate hash digest is not valid hex: %w", err)
+	}
+	return nil
+}
+
+func validateUserDataTableSnapshotManifest(manifest UserDataTableManifest, extensionID string, table string, jsonlData string, rawRecords []map[string]interface{}, parsedRecords []userDataRecord) error {
 	if manifest.SchemaVersion != userDataTableManifestSchemaVersion {
 		return NewPackageError(PackageErrCodeSnapshotSchemaUnsupported, 422,
 			fmt.Errorf("kernel: table manifest schema version mismatch for %s: expected %d, got %d", table, userDataTableManifestSchemaVersion, manifest.SchemaVersion))
@@ -1275,37 +1540,235 @@ func validateUserDataTableSnapshotManifest(manifest UserDataTableManifest, exten
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: table manifest canonical_table mismatch: expected %s, got %s", table, manifest.CanonicalTable))
 	}
+	if manifest.Namespace == "" {
+		return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+			fmt.Errorf("kernel: table manifest namespace missing for %s", table))
+	}
 	if manifest.RecordCount != int64(len(parsedRecords)) {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-			fmt.Errorf("kernel: table manifest record count mismatch for %s: expected %d, got %d", table, manifest.RecordCount, len(parsedRecords)))
+			fmt.Errorf("kernel: table manifest record count mismatch for %s: manifest=%d parsed=%d", table, manifest.RecordCount, len(parsedRecords)))
 	}
-	if manifest.Namespace == "" {
+	if len(rawRecords) != len(parsedRecords) {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-			fmt.Errorf("kernel: table manifest namespace is empty for %s", table))
+			fmt.Errorf("kernel: raw and parsed record count mismatch for %s: raw=%d parsed=%d", table, len(rawRecords), len(parsedRecords)))
 	}
-	if len(parsedRecords) == 0 {
-		return nil
+	if manifest.AggregateHash == "" {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: table manifest aggregate hash missing for %s", table))
 	}
-	manifestEntityTypeSet := make(map[string]struct{})
-	if manifest.EntityType != "" {
-		manifestEntityTypeSet[manifest.EntityType] = struct{}{}
+	if err := validateUserDataAggregateHashFormat(manifest.AggregateHash); err != nil {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: manifest aggregate hash format invalid for table %s: %w", table, err))
 	}
-	recordEntityTypeSet := make(map[string]struct{})
-	for _, pr := range parsedRecords {
-		recordEntityTypeSet[pr.EntityType] = struct{}{}
+	expectedAggregateHash := computeUserDataAggregateHashFromRecords(parsedRecords)
+	if manifest.AggregateHash != expectedAggregateHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: manifest aggregate hash mismatch for table %s: expected=%s actual=%s", table, expectedAggregateHash, manifest.AggregateHash))
 	}
-	if len(manifestEntityTypeSet) > 0 && len(recordEntityTypeSet) > 0 {
-		for et := range recordEntityTypeSet {
-			if _, ok := manifestEntityTypeSet[et]; !ok {
-				return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-					fmt.Errorf("kernel: table manifest entity_type %s not found in records for %s", et, table))
-			}
+	if strings.TrimSpace(manifest.DataExportReference) == "" {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: table manifest data export reference missing for %s", table))
+	}
+	resolver, err := ResolveExtensionUserDataNamespace(extensionID, table)
+	if err != nil {
+		return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+			fmt.Errorf("kernel: resolve manifest namespace for table %s: %w", table, err))
+	}
+	if manifest.Namespace != resolver.CanonicalTable {
+		return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+			fmt.Errorf("kernel: table manifest namespace mismatch for %s: namespace=%s canonical=%s", table, manifest.Namespace, resolver.CanonicalTable))
+	}
+	expectedNamespaceHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
+		SchemaVersion:          1,
+		ExtensionID:            extensionID,
+		CanonicalTable:         resolver.CanonicalTable,
+		LogicalEntityType:      resolver.LogicalEntityType,
+		NamespacePolicyVersion: "v1",
+	})
+	if manifest.NamespaceHash != "" && manifest.NamespaceHash != expectedNamespaceHash {
+		return NewPackageError(PackageErrCodeUserDataJournalHashMismatch, 422,
+			fmt.Errorf("kernel: manifest namespace hash mismatch for table %s: expected=%s actual=%s", table, expectedNamespaceHash, manifest.NamespaceHash))
+	}
+	if manifest.EmptySetHash != "" {
+		expectedEmptySetHash := computeUserDataEmptySetHash(UserDataTableIdentity{
+			Domain:                userDataEmptySetDomain,
+			SchemaVersion:         userDataRecordSchemaVersion,
+			ExtensionID:           extensionID,
+			CanonicalTable:        resolver.CanonicalTable,
+			EntityType:            resolver.LogicalEntityType,
+			NamespaceHash:         manifest.NamespaceHash,
+			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+		})
+		if manifest.EmptySetHash != expectedEmptySetHash {
+			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+				fmt.Errorf("kernel: manifest empty set hash mismatch for table %s: expected=%s actual=%s", table, expectedEmptySetHash, manifest.EmptySetHash))
 		}
+	}
+	for _, record := range parsedRecords {
+		if record.ExtensionID != extensionID {
+			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+				fmt.Errorf("kernel: record extension mismatch for table %s", table))
+		}
+		if record.Namespace != manifest.Namespace {
+			return NewPackageError(PackageErrCodeUserDataNamespaceViolation, 422,
+				fmt.Errorf("kernel: record namespace mismatch for table %s: manifest=%s record=%s", table, manifest.Namespace, record.Namespace))
+		}
+	}
+	_ = jsonlData
+	_ = rawRecords
+	return nil
+}
+
+func (s *UserDataSnapshotStore) verifyAggregateHashClosure(
+	ctx context.Context,
+	journal *UserDataRestoreJournal,
+	manifest UserDataTableManifest,
+) error {
+	if journal == nil {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: restore journal missing"))
+	}
+	if err := validateUserDataAggregateHashFormat(manifest.AggregateHash); err != nil {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: manifest aggregate hash invalid for table %s: %w", journal.TableName, err))
+	}
+	if journal.ExpectedAggregateHash == "" {
+		return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+			fmt.Errorf("kernel: journal expected aggregate hash missing for table %s", journal.TableName))
+	}
+	if journal.ExpectedAggregateHash != manifest.AggregateHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: manifest and journal expected aggregate mismatch for table %s: manifest=%s journalExpected=%s", journal.TableName, manifest.AggregateHash, journal.ExpectedAggregateHash))
+	}
+	if journal.AggregateHash == "" {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: completed journal aggregate hash missing for table %s", journal.TableName))
+	}
+	if journal.AggregateHash != journal.ExpectedAggregateHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: journal observed and expected aggregate mismatch for table %s: observed=%s expected=%s", journal.TableName, journal.AggregateHash, journal.ExpectedAggregateHash))
+	}
+	actualAggregateHash, err := s.computeAggregateHashFromDB(ctx, journal.TableName)
+	if err != nil {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: recompute database aggregate hash for table %s: %w", journal.TableName, err))
+	}
+	if actualAggregateHash != manifest.AggregateHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: database and manifest aggregate mismatch for table %s: database=%s manifest=%s", journal.TableName, actualAggregateHash, manifest.AggregateHash))
+	}
+	if actualAggregateHash != journal.AggregateHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: database and journal aggregate mismatch for table %s: database=%s journal=%s", journal.TableName, actualAggregateHash, journal.AggregateHash))
 	}
 	return nil
 }
 
-func (s *UserDataSnapshotStore) verifyCompletedJournalAgainstManifest(ctx context.Context, journal *UserDataRestoreJournal, manifest UserDataTableManifest, expectedNamespaceHash string) error {
+type userDataRestoreCompletionEvidence struct {
+	Cursor        string
+	ImportedRows  int64
+	AppliedCount  int64
+	BatchIndex    int64
+	BatchHash     string
+	AggregateHash string
+}
+
+func (s *UserDataSnapshotStore) completeRestoreJournalWithAggregate(
+	ctx context.Context,
+	journal *UserDataRestoreJournal,
+	manifest UserDataTableManifest,
+	evidence userDataRestoreCompletionEvidence,
+) error {
+	if journal == nil {
+		return fmt.Errorf("kernel: restore journal missing")
+	}
+	if journal.ExpectedAggregateHash == "" || journal.ExpectedAggregateHash != manifest.AggregateHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: journal expected aggregate does not match manifest for table %s", journal.TableName))
+	}
+	if evidence.AggregateHash != manifest.AggregateHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: completion database aggregate does not match manifest for table %s: database=%s manifest=%s", journal.TableName, evidence.AggregateHash, manifest.AggregateHash))
+	}
+	if evidence.ImportedRows != manifest.RecordCount || evidence.AppliedCount != manifest.RecordCount {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: completion row count mismatch for table %s: manifest=%d imported=%d applied=%d", journal.TableName, manifest.RecordCount, evidence.ImportedRows, evidence.AppliedCount))
+	}
+	expectedCursor := strconv.FormatInt(manifest.RecordCount, 10)
+	if evidence.Cursor != expectedCursor {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: completion cursor mismatch for table %s: expected=%s actual=%s", journal.TableName, expectedCursor, evidence.Cursor))
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE
+ extension_package_user_data_restore_journal
+ SET
+state=?,
+cursor=?,
+imported_rows=?,
+applied_count=?,
+batch_index=?,
+batch_hash=?,
+aggregate_hash=?,
+error_detail='',
+updated_at=?
+ WHERE operation_id=?
+   AND table_name=?
+   AND state=?
+   AND total_rows=?
+   AND namespace_hash=?
+   AND expected_aggregate_hash=?
+   AND data_export_reference=?`,
+		string(UserDataRestoreCompleted),
+		evidence.Cursor,
+		evidence.ImportedRows,
+		evidence.AppliedCount,
+		evidence.BatchIndex,
+		evidence.BatchHash,
+		evidence.AggregateHash,
+		now,
+		journal.OperationID,
+		journal.TableName,
+		string(journal.State),
+		manifest.RecordCount,
+		journal.NamespaceHash,
+		manifest.AggregateHash,
+		manifest.DataExportReference,
+	)
+	if err != nil {
+		return fmt.Errorf("kernel: atomically complete restore journal for table %s: %w", journal.TableName, err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected != 1 {
+		return NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
+			fmt.Errorf("kernel: completion journal update affected %d rows for operation=%s table=%s", rowsAffected, journal.OperationID, journal.TableName))
+	}
+	journal.State = UserDataRestoreCompleted
+	journal.Cursor = evidence.Cursor
+	journal.ImportedRows = evidence.ImportedRows
+	journal.AppliedCount = evidence.AppliedCount
+	journal.BatchIndex = evidence.BatchIndex
+	journal.BatchHash = evidence.BatchHash
+	journal.AggregateHash = evidence.AggregateHash
+	journal.ErrorDetail = ""
+	journal.UpdatedAt = now
+	return nil
+}
+
+func (s *UserDataSnapshotStore) verifyCompletedJournalAgainstManifest(
+	ctx context.Context,
+	journal *UserDataRestoreJournal,
+	manifest UserDataTableManifest,
+	expectedNamespaceHash string,
+) error {
+	if journal == nil {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: completed restore journal missing"))
+	}
 	if journal.State != UserDataRestoreCompleted {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: journal for table %s not completed: state=%s", journal.TableName, journal.State))
@@ -1314,45 +1777,43 @@ func (s *UserDataSnapshotStore) verifyCompletedJournalAgainstManifest(ctx contex
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: journal for table %s has error: %s", journal.TableName, journal.ErrorDetail))
 	}
-	if journal.NamespaceHash != expectedNamespaceHash {
+	if journal.NamespaceHash == "" || (manifest.NamespaceHash != "" && journal.NamespaceHash != manifest.NamespaceHash) {
 		return NewPackageError(PackageErrCodeUserDataJournalHashMismatch, 422,
-			fmt.Errorf("kernel: journal namespace hash mismatch for table %s: expected %s, actual %s", journal.TableName, expectedNamespaceHash, journal.NamespaceHash))
+			fmt.Errorf("kernel: journal namespace hash mismatch for table %s: manifest=%s journal=%s", journal.TableName, manifest.NamespaceHash, journal.NamespaceHash))
 	}
-	if journal.BatchAlgorithmVersion != "" && journal.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
+	if journal.DataExportReference == "" || journal.DataExportReference != manifest.DataExportReference {
+		return NewPackageError(PackageErrCodeUserDataRestoreJournalConflict, 409,
+			fmt.Errorf("kernel: completed journal export identity mismatch for table %s", journal.TableName))
+	}
+	if journal.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
 		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,
-			fmt.Errorf("kernel: journal batch algorithm version mismatch for table %s: expected %s, got %s", journal.TableName, userDataBatchHashAlgorithmVersion, journal.BatchAlgorithmVersion))
-	}
-	if manifest.RecordCount == 0 {
-		if journal.TotalRows != 0 {
-			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-				fmt.Errorf("kernel: empty table %s journal total_rows %d != 0", journal.TableName, journal.TotalRows))
-		}
-		return nil
+			fmt.Errorf("kernel: journal batch algorithm version mismatch for table %s: expected=%s actual=%s", journal.TableName, userDataBatchHashAlgorithmVersion, journal.BatchAlgorithmVersion))
 	}
 	if journal.TotalRows != manifest.RecordCount {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: table %s journal total_rows %d != manifest record_count %d", journal.TableName, journal.TotalRows, manifest.RecordCount))
+	}
+	if journal.ImportedRows != manifest.RecordCount || journal.AppliedCount != manifest.RecordCount {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: table %s completed row counts differ: manifest=%d imported=%d applied=%d", journal.TableName, manifest.RecordCount, journal.ImportedRows, journal.AppliedCount))
 	}
 	expectedCursor := strconv.FormatInt(manifest.RecordCount, 10)
 	if journal.Cursor != expectedCursor {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: table %s cursor %s != expected %s", journal.TableName, journal.Cursor, expectedCursor))
 	}
-	aggErr := func() error {
-		actualAggHash, computeErr := s.computeAggregateHashFromDB(ctx, journal.TableName)
-		if computeErr != nil {
-			return computeErr
-		}
-		if actualAggHash != journal.AggregateHash {
-			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
-				fmt.Errorf("kernel: table %s aggregate hash mismatch: journal=%s db=%s", journal.TableName, journal.AggregateHash, actualAggHash))
-		}
-		return nil
-	}()
-	if aggErr != nil {
-		return aggErr
+	var databaseCount int64
+	if err := s.db.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM %s", quoteIdentifier(journal.TableName)),
+	).Scan(&databaseCount); err != nil {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: count completed restore table %s: %w", journal.TableName, err))
 	}
-	return nil
+	if databaseCount != manifest.RecordCount {
+		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			fmt.Errorf("kernel: completed database row count mismatch for table %s: manifest=%d database=%d", journal.TableName, manifest.RecordCount, databaseCount))
+	}
+	return s.verifyAggregateHashClosure(ctx, journal, manifest)
 }
 
 func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, operationID string) error {
@@ -1364,10 +1825,24 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 		return fmt.Errorf("kernel: ensure user data restore journal schema: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT table_name, state, imported_rows, total_rows, applied_count, cursor, error_detail,
-		        namespace_hash, aggregate_hash, batch_hash, extension_id, batch_index, batch_algorithm_version, batch_size, data_export_reference
-		 FROM extension_package_user_data_restore_journal
-		 WHERE operation_id=?`, operationID)
+		`SELECT table_name,
+       state,
+       imported_rows,
+       total_rows,
+       applied_count,
+       cursor,
+       error_detail,
+       namespace_hash,
+       expected_aggregate_hash,
+       aggregate_hash,
+       batch_hash,
+       extension_id,
+       batch_index,
+       batch_algorithm_version,
+       batch_size,
+       data_export_reference
+ FROM extension_package_user_data_restore_journal
+ WHERE operation_id=?`, operationID)
 	if err != nil {
 		return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 			fmt.Errorf("kernel: query restore journals for operation %s: %w", operationID, err))
@@ -1376,10 +1851,10 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 	found := false
 	for rows.Next() {
 		found = true
-		var table, state, errorDetail, cursor, namespaceHash, aggregateHash, batchHash, extensionID, batchAlgoVer, dataExportRef string
+		var table, state, errorDetail, cursor, namespaceHash, expectedAggregateHash, aggregateHash, batchHash, extensionID, batchAlgoVer, dataExportRef string
 		var importedRows, totalRows, appliedCount, batchIndex, batchSize int64
 		if err := rows.Scan(&table, &state, &importedRows, &totalRows, &appliedCount, &cursor, &errorDetail,
-			&namespaceHash, &aggregateHash, &batchHash, &extensionID, &batchIndex, &batchAlgoVer, &batchSize, &dataExportRef); err != nil {
+			&namespaceHash, &expectedAggregateHash, &aggregateHash, &batchHash, &extensionID, &batchIndex, &batchAlgoVer, &batchSize, &dataExportRef); err != nil {
 			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
 				fmt.Errorf("kernel: scan restore journal for operation %s: %w", operationID, err))
 		}
@@ -1420,23 +1895,30 @@ func (s *UserDataSnapshotStore) VerifyUserDataRestore(ctx context.Context, opera
 			return NewPackageError(PackageErrCodeSnapshotSchemaUnsupported, 422,
 				fmt.Errorf("kernel: restore journal for table %s uses unsupported batch algorithm version: got %s expected %s", table, batchAlgoVer, userDataBatchHashAlgorithmVersion))
 		}
+		if expectedAggregateHash == "" {
+			return NewPackageError(PackageErrCodeUserDataJournalLegacyEmpty, 422,
+				fmt.Errorf("kernel: restore journal for table %s has empty expected aggregate hash", table))
+		}
+		if err := validateUserDataAggregateHashFormat(expectedAggregateHash); err != nil {
+			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 422,
+				fmt.Errorf("kernel: restore journal expected aggregate hash invalid for table %s: %w", table, err))
+		}
 		if aggregateHash == "" {
-			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
+			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 422,
 				fmt.Errorf("kernel: restore journal for table %s has empty aggregate hash", table))
 		}
-		storedHashForCompare := strings.TrimPrefix(aggregateHash, "sha256:")
-		if _, decErr := hex.DecodeString(storedHashForCompare); decErr != nil || len(storedHashForCompare) != 64 {
-			return NewPackageError(PackageErrCodeUserDataSnapshotInvalid, 422,
-				fmt.Errorf("kernel: restore journal for table %s aggregate hash has invalid format", table))
-		}
-		actualAggHash, aggErr := s.computeAggregateHashFromDB(ctx, table)
-		if aggErr != nil {
+		if expectedAggregateHash != aggregateHash {
 			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 422,
-				fmt.Errorf("kernel: recompute aggregate hash for table %s: %w", table, aggErr))
+				fmt.Errorf("kernel: restore journal aggregate hash mismatch for table %s: expected=%s observed=%s", table, expectedAggregateHash, aggregateHash))
 		}
-		if actualAggHash != aggregateHash {
+		actualAggregateHash, err := s.computeAggregateHashFromDB(ctx, table)
+		if err != nil {
 			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 422,
-				fmt.Errorf("kernel: aggregate hash mismatch for table %s: stored=%s actual=%s", table, aggregateHash, actualAggHash))
+				fmt.Errorf("kernel: recompute aggregate hash for table %s: %w", table, err))
+		}
+		if actualAggregateHash != expectedAggregateHash || actualAggregateHash != aggregateHash {
+			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 422,
+				fmt.Errorf("kernel: restore aggregate hash mismatch for table %s: expected=%s observed=%s database=%s", table, expectedAggregateHash, aggregateHash, actualAggregateHash))
 		}
 		var dbCount int64
 		countErr := s.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quoteIdentifier(table))).Scan(&dbCount)

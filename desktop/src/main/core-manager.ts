@@ -208,6 +208,9 @@ export function startCore(): void {
     return;
   }
 
+  lastHealthyAt = 0;
+  ensureHealthPolling();
+
   const corePath = getCorePath();
   const dataDir = getAmitiaDataDir();
 
@@ -396,10 +399,28 @@ req.end();
 });
 }
 
+let lastHealthyAt = 0;
+let healthPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function ensureHealthPolling(): void {
+  if (healthPollTimer !== null) return;
+  healthPollTimer = setInterval(() => {
+    const tracked =
+      coreProcess !== null && !coreProcess.killed && coreProcess.exitCode === null;
+    if (tracked) {
+      lastHealthyAt = Date.now();
+    }
+  }, 2000);
+}
+
 export function isCoreRunning(): boolean {
-  return (
-    coreProcess !== null && !coreProcess.killed && coreProcess.exitCode === null
-  );
+  const tracked =
+    coreProcess !== null && !coreProcess.killed && coreProcess.exitCode === null;
+  if (tracked) {
+    lastHealthyAt = Date.now();
+    return true;
+  }
+  return Date.now() - lastHealthyAt < 8000;
 }
 
 function httpHealthCheck(url: string, timeoutMs: number): Promise<boolean> {

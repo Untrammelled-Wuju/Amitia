@@ -4,10 +4,10 @@ server:
   mode: "debug"
 
 storage:
-  dataDir: "data"
+  dataDir: "AmitiaData/data"
 
 jwt:
-  secret: ""
+  secret: "Am1t1a-D3skt0p-L0c4l-S3cr3t-K3y-2026"
   issuer: "amitia"
   audience: "amitia-api"
   expireDays: 7
@@ -16,6 +16,10 @@ app:
   name: "U-Ai"
   version: "1.0.0-beta"
   deployMode: "desktop-local"
+
+security:
+  mode: "local_single_user"
+  localToken: "c3j22EREBHyFPEcP09s6C5cPSa-xxY3Vfslq2xZILbI"
 chat:
   mergeWindowMs: 6000
   contextWindowMaxRounds: 20

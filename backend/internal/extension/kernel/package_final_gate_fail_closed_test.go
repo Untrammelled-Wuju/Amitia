@@ -2336,11 +2336,15 @@ func TestFinalGateUserDataRestoreMismatchBlocksRollback(t *testing.T) {
 	line2 := `{"schemaVersion":"1.0.0","extensionID":"fgext","namespace":"ext_fgext_entity","entityType":"entity","entityID":"e2","operation":"upsert","payload":` + mustMarshalJSON(payload2) + `,"payloadHash":"` + payloadHash2 + `"}`
 	jsonl := line1 + "\n" + line2 + "\n"
 
+	manifest := mustBuildManifest(t, "fgext", "ext_fgext_entity", "entity", jsonl, "entity_id")
 	userState := packageUserDataMigrationState{
 		Mode:           "repository",
 		AffectedTables: []string{"ext_fgext_entity"},
 		RecordCounts:   map[string]int64{"ext_fgext_entity": 2},
 		DataExports:    map[string]string{"ext_fgext_entity": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_fgext_entity": manifest,
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {
@@ -2399,11 +2403,15 @@ func TestFinalGateUserDataRestoreAggregateMismatchBlocksRollback(t *testing.T) {
 	line2 := `{"schemaVersion":"1.0.0","extensionID":"agg","namespace":"ext_agg_entity","entityType":"entity","entityID":"e2","operation":"upsert","payload":` + mustMarshalJSON(payload2) + `,"payloadHash":"` + payloadHash2 + `"}`
 	jsonl := line1 + "\n" + line2 + "\n"
 
+	manifest := mustBuildManifest(t, "agg", "ext_agg_entity", "entity", jsonl, "entity_id")
 	userState := packageUserDataMigrationState{
 		Mode:           "repository",
 		AffectedTables: []string{"ext_agg_entity"},
 		RecordCounts:   map[string]int64{"ext_agg_entity": 2},
 		DataExports:    map[string]string{"ext_agg_entity": jsonl},
+		TableManifests: map[string]UserDataTableSnapshotManifest{
+			"ext_agg_entity": manifest,
+		},
 	}
 	userStateJSON, err := json.Marshal(userState)
 	if err != nil {

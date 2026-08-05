@@ -379,13 +379,25 @@ type tableSnapshotResult struct {
 	manifest UserDataTableSnapshotManifest
 }
 
-func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, table string) (tableSnapshotResult, error) {
-	result := tableSnapshotResult{}
+func captureUserDataTableSnapshot(
+	ctx context.Context,
+	db *sql.DB,
+	extensionID string,
+	table string,
+) (tableSnapshotResult, error) {
+	var result tableSnapshotResult
+
+	if db == nil {
+		return result, fmt.Errorf("kernel: user data snapshot database unavailable")
+	}
 
 	resolver, resolverErr := ResolveExtensionUserDataNamespace(extensionID, table)
 	if resolverErr != nil {
 		return result, fmt.Errorf("kernel: resolve namespace for table %s: %w", table, resolverErr)
 	}
+
+	canonicalTable := resolver.CanonicalTable
+	entityType := resolver.LogicalEntityType
 
 	rows, queryErr := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s", quoteIdentifier(table)))
 	if queryErr != nil {
@@ -393,83 +405,111 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 	}
 	defer rows.Close()
 
-	columns, colErr := rows.Columns()
-	if colErr != nil {
-		return result, fmt.Errorf("kernel: get columns for %s: %w", table, colErr)
+	columns, columnErr := rows.Columns()
+	if columnErr != nil {
+		return result, fmt.Errorf("kernel: get columns for %s: %w", table, columnErr)
 	}
+
 	idColumn := ""
-	for _, col := range columns {
-		if col == "entity_id" {
-			idColumn = col
-			break
-		}
-		if col == "id" && idColumn == "" {
-			idColumn = col
+	for _, column := range columns {
+		switch {
+		case column == "entity_id":
+			idColumn = column
+		case column == "id" && idColumn == "":
+			idColumn = column
 		}
 	}
+
 	if idColumn == "" {
 		return result, NewPackageError(PackageErrCodeUserDataEntityIDMissing, 422,
 			fmt.Errorf("kernel: table %s has no entity_id or id column, cannot determine stable entity identity", table))
 	}
 
-	canonicalTable := resolver.CanonicalTable
-	entityType := resolver.LogicalEntityType
+	capturedRecords := make([]userDataRecord, 0, 64)
+	seenEntityIDs := make(map[string]struct{}, 64)
 
-	var lines []string
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
+		valuePointers := make([]interface{}, len(columns))
+		for index := range values {
+			valuePointers[index] = &values[index]
 		}
-		if scanErr := rows.Scan(valuePtrs...); scanErr != nil {
+
+		if scanErr := rows.Scan(valuePointers...); scanErr != nil {
 			return result, fmt.Errorf("kernel: scan row for %s: %w", table, scanErr)
 		}
+
 		payload := make(map[string]interface{}, len(columns))
 		entityID := ""
-		for i, col := range columns {
-			val := normalizeSQLValue(values[i])
-			payload[col] = val
-			if col == idColumn {
-				entityID = fmt.Sprintf("%v", val)
+		for index, column := range columns {
+			value := normalizeSQLValue(values[index])
+			payload[column] = value
+			if column == idColumn {
+				entityID = fmt.Sprintf("%v", value)
 			}
 		}
+
+		entityID = strings.TrimSpace(entityID)
 		if entityID == "" || entityID == "<nil>" {
 			return result, NewPackageError(PackageErrCodeUserDataEntityIDMissing, 422,
 				fmt.Errorf("kernel: table %s row has empty entity id, snapshot cannot be reliably restored", table))
 		}
-		payloadHash := computeUserDataPayloadHash(payload)
+
+		if _, duplicate := seenEntityIDs[entityID]; duplicate {
+			return result, NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
+				fmt.Errorf("kernel: table %s contains duplicate entity id %s", table, entityID))
+		}
+		seenEntityIDs[entityID] = struct{}{}
+
 		record := userDataRecord{
-			SchemaVersion: "1.0.0",
+			SchemaVersion: userDataRecordSchemaVersion,
 			ExtensionID:   extensionID,
 			Namespace:     canonicalTable,
 			EntityType:    entityType,
 			EntityID:      entityID,
 			Operation:     "upsert",
 			Payload:       payload,
-			PayloadHash:   payloadHash,
+			PayloadHash:   computeUserDataPayloadHash(payload),
 		}
-		if err := validateUserDataRecord(record, extensionID); err != nil {
+
+		if validationErr := validateUserDataRecord(record, extensionID); validationErr != nil {
 			return result, NewPackageError(PackageErrCodeUserDataRecordInvalid, 422,
-				fmt.Errorf("kernel: table %s row validation failed for entity %s: %w", table, entityID, err))
+				fmt.Errorf("kernel: table %s row validation failed for entity %s: %w", table, entityID, validationErr))
 		}
-		jsonBytes, marshalErr := json.Marshal(record)
+
+		capturedRecords = append(capturedRecords, record)
+	}
+
+	if rowErr := rows.Err(); rowErr != nil {
+		return result, fmt.Errorf("kernel: iterate rows for %s: %w", table, rowErr)
+	}
+
+	sort.Slice(capturedRecords, func(left int, right int) bool {
+		return capturedRecords[left].EntityID < capturedRecords[right].EntityID
+	})
+
+	lines := make([]string, 0, len(capturedRecords))
+	for _, record := range capturedRecords {
+		raw, marshalErr := json.Marshal(record)
 		if marshalErr != nil {
 			return result, fmt.Errorf("kernel: marshal row for %s: %w", table, marshalErr)
 		}
-		lines = append(lines, string(jsonBytes))
-		result.count++
+		lines = append(lines, string(raw))
 	}
-	if err := rows.Err(); err != nil {
-		return result, fmt.Errorf("kernel: iterate rows for %s: %w", table, err)
-	}
+
+	result.count = int64(len(lines))
 	result.jsonl = strings.Join(lines, "\n")
 
-	if result.count > 0 {
-		if _, _, selfErr := parseAndValidateJSONL(result.jsonl, extensionID); selfErr != nil {
-			return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
-				fmt.Errorf("kernel: table %s capture self-validation failed: %w", table, selfErr))
-		}
+	rawRecords, parsedRecords, parseErr := parseAndValidateJSONL(result.jsonl, extensionID)
+	if parseErr != nil {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s capture self-validation failed: %w", table, parseErr))
+	}
+
+	if len(rawRecords) != len(capturedRecords) || len(parsedRecords) != len(capturedRecords) {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s capture record count changed during canonical JSONL validation: captured=%d raw=%d parsed=%d",
+				table, len(capturedRecords), len(rawRecords), len(parsedRecords)))
 	}
 
 	namespaceHash := computeUserDataNamespaceHash(UserDataNamespaceIdentity{
@@ -479,8 +519,12 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 		LogicalEntityType:      entityType,
 		NamespacePolicyVersion: "v1",
 	})
+	if namespaceHash == "" {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s namespace hash missing", table))
+	}
 
-	genesisHash := computeUserDataGenesisHash(UserDataTableIdentity{
+	genesisIdentity := UserDataTableIdentity{
 		Domain:                userDataBatchGenesisDomain,
 		SchemaVersion:         userDataRecordSchemaVersion,
 		ExtensionID:           extensionID,
@@ -488,10 +532,10 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 		EntityType:            entityType,
 		NamespaceHash:         namespaceHash,
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-	})
+	}
+	genesisHash := computeUserDataGenesisHash(genesisIdentity)
 
-	manifestRecordCount := result.count
-	manifestEmptySetHash := computeUserDataEmptySetHash(UserDataTableIdentity{
+	emptySetIdentity := UserDataTableIdentity{
 		Domain:                userDataEmptySetDomain,
 		SchemaVersion:         userDataRecordSchemaVersion,
 		ExtensionID:           extensionID,
@@ -499,8 +543,46 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 		EntityType:            entityType,
 		NamespaceHash:         namespaceHash,
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-	})
-	manifestAggregateHash := computeUserDataAggregateHash(extensionID, canonicalTable, entityType, userDataRecordSchemaVersion, nil)
+	}
+	emptySetHash := computeUserDataEmptySetHash(emptySetIdentity)
+
+	aggregateHash := computeUserDataAggregateHashFromRecords(parsedRecords)
+
+	dataExportReference, exportReferenceErr := computeCapturedUserDataExportReference(
+		extensionID,
+		canonicalTable,
+		entityType,
+		namespaceHash,
+		result.count,
+		result.jsonl,
+	)
+	if exportReferenceErr != nil {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s export reference generation failed: %w", table, exportReferenceErr))
+	}
+
+	finalBatchHash, batchCount, batchErr := recalculateBatchHashChain(
+		rawRecords,
+		extensionID,
+		userDataRecordSchemaVersion,
+		canonicalTable,
+		dataExportReference,
+		int64(userDataRestoreBatchSize),
+		genesisHash,
+	)
+	if batchErr != nil {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s batch hash chain calculation failed: %w", table, batchErr))
+	}
+
+	expectedBatchCount := int64(0)
+	if result.count > 0 {
+		expectedBatchCount = (result.count + int64(userDataRestoreBatchSize) - 1) / int64(userDataRestoreBatchSize)
+	}
+	if batchCount != expectedBatchCount {
+		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+			fmt.Errorf("kernel: table %s batch count mismatch: expected=%d actual=%d", table, expectedBatchCount, batchCount))
+	}
 
 	result.manifest = UserDataTableSnapshotManifest{
 		SchemaVersion:         userDataTableManifestSchemaVersion,
@@ -509,25 +591,52 @@ func captureUserDataTableSnapshot(ctx context.Context, db *sql.DB, extensionID, 
 		Namespace:             canonicalTable,
 		EntityType:            entityType,
 		NamespaceHash:         namespaceHash,
-		RecordCount:           manifestRecordCount,
-		EmptySetHash:          manifestEmptySetHash,
-		GenesisHash:           genesisHash,
-		AggregateHash:         manifestAggregateHash,
+		RecordCount:           result.count,
+		AggregateHash:         aggregateHash,
+		EmptySetHash:          emptySetHash,
 		BatchSize:             userDataRestoreBatchSize,
 		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-		FinalBatchHash:        genesisHash,
-		DataExportReference:   computeUserDataExportReference("", table, extensionID),
+		GenesisHash:           genesisHash,
+		FinalBatchHash:        finalBatchHash,
+		DataExportReference:   dataExportReference,
 	}
 
 	if result.manifest.SchemaVersion != userDataTableManifestSchemaVersion ||
+		result.manifest.ExtensionID == "" ||
+		result.manifest.CanonicalTable == "" ||
 		result.manifest.Namespace == "" ||
-		result.manifest.DataExportReference == "" ||
+		result.manifest.EntityType == "" ||
+		result.manifest.NamespaceHash == "" ||
 		result.manifest.AggregateHash == "" ||
-		result.manifest.RecordCount != int64(len(lines)) {
+		result.manifest.EmptySetHash == "" ||
+		result.manifest.BatchSize <= 0 ||
+		result.manifest.BatchAlgorithmVersion == "" ||
+		result.manifest.GenesisHash == "" ||
+		result.manifest.FinalBatchHash == "" ||
+		result.manifest.DataExportReference == "" ||
+		result.manifest.RecordCount != int64(len(parsedRecords)) {
 		return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
-			fmt.Errorf("kernel: table %s manifest completeness check failed: schema=%d namespace=%q exportRef=%q aggHash=%q count=%d lines=%d",
-				table, result.manifest.SchemaVersion, result.manifest.Namespace, result.manifest.DataExportReference,
-				result.manifest.AggregateHash, result.manifest.RecordCount, len(lines)))
+			fmt.Errorf("kernel: table %s manifest completeness check failed: %+v", table, result.manifest))
+	}
+
+	if result.count == 0 {
+		if result.manifest.AggregateHash != computeUserDataAggregateHashFromRecords(nil) {
+			return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+				fmt.Errorf("kernel: table %s empty aggregate hash mismatch", table))
+		}
+		if result.manifest.FinalBatchHash != result.manifest.GenesisHash {
+			return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+				fmt.Errorf("kernel: table %s empty final batch hash must equal genesis", table))
+		}
+	} else {
+		if result.manifest.AggregateHash == computeUserDataAggregateHashFromRecords(nil) {
+			return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+				fmt.Errorf("kernel: table %s non-empty snapshot uses empty aggregate hash", table))
+		}
+		if result.manifest.FinalBatchHash == result.manifest.GenesisHash {
+			return result, NewPackageError(PackageErrCodeSnapshotIntegrityFailed, 500,
+				fmt.Errorf("kernel: table %s non-empty snapshot final batch hash equals genesis", table))
+		}
 	}
 
 	return result, nil

@@ -67,13 +67,8 @@ export function classifyError(
     ) {
       return {
         code: ERR.SERVICE_UNAVAILABLE,
-        message: "Core service not running",
-        detail: "Cannot connect to backend. Please start the core service.",
-        severity: "panel",
-        action: {
-          label: "Try starting core service",
-          handler: () => onStartCoreRequest?.(),
-        },
+        message: "核心服务连接中...",
+        severity: "toast",
       };
     }
     return { code: ERR.SERVICE_UNAVAILABLE, message, severity: "toast" };

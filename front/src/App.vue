@@ -100,7 +100,7 @@ onMounted(async () => {
       }
 
       try {
-        const meRes = await apiClient.get("/api/public/auth/me");
+        const meRes = await apiClient.get("/api/auth/me");
         const userData = meRes.data?.data || meRes.data;
         if (!userData?.id) {
           localStorage.removeItem(TOKEN_KEY);
@@ -113,7 +113,7 @@ onMounted(async () => {
     } catch {
       if (token) {
         try {
-          const meRes = await apiClient.get("/api/public/auth/me");
+          const meRes = await apiClient.get("/api/auth/me");
           const userData = meRes.data?.data || meRes.data;
           if (!userData?.id) {
             localStorage.removeItem(TOKEN_KEY);
@@ -192,3 +192,4 @@ html.amitia-desktop-shell .search-overlay {
   opacity: 1;
 }
 </style>
+
