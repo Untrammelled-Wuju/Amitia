@@ -7,12 +7,16 @@ storage:
   dataDir: "data"
 
 jwt:
-  secret: ""
+  secret: "Am1t1a-L0c4l-D3v-S3cr3t-K3y-2026"
   expireDays: 7
+  issuer: "amitia"
+  audience: "amitia-api"
 
 security:
   mode: "local_single_user"
   allowRemoteAccess: false
+  localToken: ""
+  localTokenFile: "security/local-token"
   localUserId: "1"
   allowedOrigins:
     - "app://amitia"
@@ -26,9 +30,79 @@ app:
   name: "U-Ai"
   version: "26.1.8"
   deployMode: "desktop-local"
+
 chat:
   mergeWindowMs: 5000
   contextWindowMaxRounds: 20
+
+providers:
+  scriptRuntime:
+    enabled: true
+    required: false
+    provider: "builtin.node-process"
+  vectorStore:
+    enabled: true
+    required: false
+    provider: "builtin.qdrant-process"
+    qdrant:
+      host: "127.0.0.1"
+      port: 19178
+      collectionName: "memory_embeddings"
+      vectorDim: 1536
+      limit: 10
+      collections:
+        memory_embeddings:
+          name: "memory_embeddings"
+          vectorDim: 1536
+        working_memory:
+          name: "working_memory"
+          vectorDim: 1536
+        user_profiles:
+          name: "user_profiles"
+          vectorDim: 1536
+        episodic_memories:
+          name: "episodic_memories"
+          vectorDim: 1536
+  graphStore:
+    enabled: true
+    required: false
+    provider: "builtin.surrealdb-process"
+    surrealdb:
+      host: "127.0.0.1"
+      port: 18000
+      namespace: "uai"
+      database: "memory_graph"
+      username: "root"
+      password: "root"
+      dataPath: "data/graph.db"
+
+components:
+  pluginHost:
+    enabled: true
+    entryUri: ""
+    workUri: ""
+  taskHost:
+    enabled: true
+    entryUri: ""
+    workUri: ""
+  sidecars:
+    wechat:
+      enabled: true
+      entryUri: ""
+      workUri: ""
+      port: 19876
+      healthUrl: "http://127.0.0.1:19876/api/health"
+    qq:
+      enabled: true
+      entryUri: ""
+      workUri: ""
+      port: 19877
+      healthUrl: "http://127.0.0.1:19877/api/health"
+
+embedding:
+  modelName: "text-embedding-3-small"
+  baseUrl: ""
+  apiKey: ""
 
 runtime:
   mode: "desktop"
@@ -59,38 +133,18 @@ runtime:
       port: 19877
       healthUrl: "http://127.0.0.1:19877/api/health"
 
-qdrant:
+desktopPetRuntime:
   enabled: true
-  host: "127.0.0.1"
-  port: 19178
-  collectionName: "memory_embeddings"
-  vectorDim: 1536
-  limit: 10
-  collections:
-    memory_embeddings:
-      name: "memory_embeddings"
-      vectorDim: 1536
-    working_memory:
-      name: "working_memory"
-      vectorDim: 1536
-    user_profiles:
-      name: "user_profiles"
-      vectorDim: 1536
-    episodic_memories:
-      name: "episodic_memories"
-      vectorDim: 1536
-
-embedding:
-  modelName: "text-embedding-3-small"
-  baseUrl: ""
-  apiKey: ""
-
-surrealdb:
-  enabled: true
-  host: "127.0.0.1"
-  port: 18000
-  namespace: "uai"
-  database: "memory_graph"
-  username: "root"
-  password: "root"
-  dataPath: "data/graph.db"
+  path: "/internal/desktop-pet/runtime/ws"
+  loopbackOnly: true
+  allowRemote: false
+  heartbeatIntervalMs: 10000
+  heartbeatTimeoutMs: 30000
+  maxMessageBytes: 1048576
+  registerTimeoutSec: 10
+  sendQueueSize: 64
+  commandTimeoutSec: 30
+  maxRetryAttempts: 5
+  retryBaseDelayMs: 500
+  retryMaxDelayMs: 30000
+  commandRetentionHours: 24

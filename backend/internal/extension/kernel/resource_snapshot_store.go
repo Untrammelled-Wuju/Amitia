@@ -813,6 +813,11 @@ func validatePathComponentsNoSymlink(absExtRoot, targetPath string) error {
 	return nil
 }
 
+type validatedPlatformPathComponent struct {
+	Path     string
+	Identity platformPathIdentity
+}
+
 type validatedRestorePath struct {
 	AbsoluteRoot string
 	RealRoot     string
@@ -827,6 +832,8 @@ type validatedRestorePath struct {
 
 	RootInfo     os.FileInfo
 	AncestorInfo os.FileInfo
+
+	PlatformComponents []validatedPlatformPathComponent
 }
 
 func pathIsWithinRoot(root string, path string) bool {
@@ -850,92 +857,77 @@ func pathIsWithinRoot(root string, path string) bool {
 	return true
 }
 
-func findNearestExistingAncestor(parentPath string, absoluteRoot string) (string, []string, error) {
-	parentPath = filepath.Clean(parentPath)
-	absoluteRoot = filepath.Clean(absoluteRoot)
-
-	if !pathIsWithinRoot(absoluteRoot, parentPath) {
-		return "", nil, NewPackageError(
+func captureRestoreParentPlatformChain(absoluteRoot string, absParentDir string) ([]validatedPlatformPathComponent, []string, error) {
+	if !pathIsWithinRoot(absoluteRoot, absParentDir) {
+		return nil, nil, NewPackageError(
 			PackageErrCodeResourceSnapshotPathInvalid,
 			400,
-			fmt.Errorf("kernel: restore parent %s is outside root %s", parentPath, absoluteRoot),
+			fmt.Errorf("kernel: restore parent %s escapes root %s", absParentDir, absoluteRoot),
 		)
 	}
 
-	current := parentPath
-	missingReversed := make([]string, 0, 8)
-
-	for {
-		info, err := os.Lstat(current)
-		if err == nil {
-			if info.Mode()&os.ModeSymlink != 0 {
-				return "", nil, NewPackageError(
-					PackageErrCodeResourceSnapshotSymlinkForbidden,
-					400,
-					fmt.Errorf("kernel: existing ancestor %s is a symlink", current),
-				)
-			}
-
-			if err := validateReparsePoint(current); err != nil {
-				return "", nil, NewPackageError(
-					PackageErrCodeResourceRestorePathRace,
-					409,
-					err,
-				)
-			}
-
-			if !info.IsDir() {
-				return "", nil, NewPackageError(
-					PackageErrCodeResourceSnapshotPathInvalid,
-					400,
-					fmt.Errorf("kernel: existing ancestor %s is not a directory", current),
-				)
-			}
-
-			missing := make([]string, len(missingReversed))
-			for index := range missingReversed {
-				missing[index] = missingReversed[len(missingReversed)-1-index]
-			}
-
-			return current, missing, nil
-		}
-
-		if !os.IsNotExist(err) {
-			return "", nil, NewPackageError(
-				PackageErrCodeResourceSnapshotPathInvalid,
-				400,
-				fmt.Errorf("kernel: lstat restore ancestor %s: %w", current, err),
-			)
-		}
-
-		if current == absoluteRoot {
-			return "", nil, NewPackageError(
-				PackageErrCodeResourceSnapshotPathInvalid,
-				400,
-				fmt.Errorf("kernel: restore root %s does not exist", absoluteRoot),
-			)
-		}
-
-		component := filepath.Base(current)
-
-		if err := validatePlatformPathComponent(component); err != nil {
-			return "", nil, err
-		}
-
-		missingReversed = append(missingReversed, component)
-
-		parent := filepath.Dir(current)
-
-		if parent == current || !pathIsWithinRoot(absoluteRoot, parent) {
-			return "", nil, NewPackageError(
-				PackageErrCodeResourceSnapshotPathInvalid,
-				400,
-				fmt.Errorf("kernel: cannot find existing ancestor under root for %s", parentPath),
-			)
-		}
-
-		current = parent
+	rootIdentity, err := capturePlatformPathIdentity(absoluteRoot, true)
+	if err != nil {
+		return nil, nil, fmt.Errorf("kernel: validate platform restore root %s: %w", absoluteRoot, err)
 	}
+
+	components := []validatedPlatformPathComponent{
+		{
+			Path:     absoluteRoot,
+			Identity: rootIdentity,
+		},
+	}
+
+	relative, err := filepath.Rel(absoluteRoot, absParentDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("kernel: compute restore parent relative path: %w", err)
+	}
+
+	relative = filepath.Clean(relative)
+
+	if relative == "." {
+		return components, nil, nil
+	}
+
+	names := strings.Split(relative, string(filepath.Separator))
+
+	current := absoluteRoot
+
+	for index, name := range names {
+		if err := validatePlatformPathComponent(name); err != nil {
+			return nil, nil, err
+		}
+
+		next := filepath.Join(current, name)
+
+		_, statErr := os.Lstat(next)
+
+		if os.IsNotExist(statErr) {
+			return components, append([]string(nil), names[index:]...), nil
+		}
+
+		if statErr != nil {
+			return nil, nil, NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: inspect restore path component %s: %w", next, statErr),
+			)
+		}
+
+		identity, err := capturePlatformPathIdentity(next, true)
+		if err != nil {
+			return nil, nil, fmt.Errorf("kernel: validate full restore path component %s: %w", next, err)
+		}
+
+		components = append(components, validatedPlatformPathComponent{
+			Path:     next,
+			Identity: identity,
+		})
+
+		current = next
+	}
+
+	return components, nil, nil
 }
 
 func validateRestoreTargetPathPure(targetPath string, extRoot string) (*validatedRestorePath, error) {
@@ -1021,35 +1013,20 @@ func validateRestoreTargetPathPure(targetPath string, extRoot string) (*validate
 		)
 	}
 
-	existingAncestor, missingComponents, err := findNearestExistingAncestor(absParentDir, absoluteRoot)
+	platformComponents, missingComponents, err := captureRestoreParentPlatformChain(absoluteRoot, absParentDir)
 	if err != nil {
 		return nil, err
 	}
 
-	existingInfo, err := os.Lstat(existingAncestor)
-	if err != nil {
+	if len(platformComponents) == 0 {
 		return nil, NewPackageError(
 			PackageErrCodeResourceRestorePathRace,
 			409,
-			fmt.Errorf("kernel: existing ancestor changed during validation: %w", err),
+			fmt.Errorf("kernel: restore parent platform proof is empty"),
 		)
 	}
 
-	if existingInfo.Mode()&os.ModeSymlink != 0 || !existingInfo.IsDir() {
-		return nil, NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: existing ancestor %s changed type during validation", existingAncestor),
-		)
-	}
-
-	if err := validateReparsePoint(existingAncestor); err != nil {
-		return nil, NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			err,
-		)
-	}
+	existingAncestor := platformComponents[len(platformComponents)-1].Path
 
 	realAncestor, err := filepath.EvalSymlinks(existingAncestor)
 	if err != nil {
@@ -1079,28 +1056,12 @@ func validateRestoreTargetPathPure(targetPath string, extRoot string) (*validate
 		)
 	}
 
-	if targetInfo, targetErr := os.Lstat(absTargetPath); targetErr == nil {
-		if targetInfo.Mode()&os.ModeSymlink != 0 {
+	if _, targetErr := os.Lstat(absTargetPath); targetErr == nil {
+		if err := validateExistingPathNoReparse(absTargetPath, false); err != nil {
 			return nil, NewPackageError(
-				PackageErrCodeResourceSnapshotSymlinkForbidden,
+				PackageErrCodeResourceRestoreReparsePointForbidden,
 				400,
-				fmt.Errorf("kernel: restore target %s is a symlink", absTargetPath),
-			)
-		}
-
-		if err := validateReparsePoint(absTargetPath); err != nil {
-			return nil, NewPackageError(
-				PackageErrCodeResourceRestorePathRace,
-				409,
 				err,
-			)
-		}
-
-		if !targetInfo.Mode().IsRegular() {
-			return nil, NewPackageError(
-				PackageErrCodeResourceRestoreTargetChanged,
-				409,
-				fmt.Errorf("kernel: restore target %s exists but is not a regular file", absTargetPath),
 			)
 		}
 	} else if !os.IsNotExist(targetErr) {
@@ -1112,24 +1073,46 @@ func validateRestoreTargetPathPure(targetPath string, extRoot string) (*validate
 	}
 
 	return &validatedRestorePath{
-		AbsoluteRoot: absoluteRoot,
-
-		RealRoot: realRoot,
-
-		AbsTargetPath: absTargetPath,
-
-		AbsParentDir: absParentDir,
-
+		AbsoluteRoot:     absoluteRoot,
+		RealRoot:         realRoot,
+		AbsTargetPath:    absTargetPath,
+		AbsParentDir:     absParentDir,
 		ExistingAncestor: existingAncestor,
-
-		RealAncestor: realAncestor,
-
+		RealAncestor:     realAncestor,
 		MissingComponents: append([]string(nil), missingComponents...),
-
-		RootInfo: rootInfo,
-
-		AncestorInfo: ancestorInfo,
+		RootInfo:         rootInfo,
+		AncestorInfo:     ancestorInfo,
+		PlatformComponents: append(
+			[]validatedPlatformPathComponent(nil),
+			platformComponents...,
+		),
 	}, nil
+}
+
+func revalidatePlatformPathComponents(components []validatedPlatformPathComponent) error {
+	if len(components) == 0 {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: platform path component proof missing"),
+		)
+	}
+
+	for index, component := range components {
+		if strings.TrimSpace(component.Path) == "" {
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: platform path proof component %d has empty path", index),
+			)
+		}
+
+		if err := validatePlatformPathIdentity(component.Path, component.Identity, true); err != nil {
+			return fmt.Errorf("kernel: platform path component %s changed: %w", component.Path, err)
+		}
+	}
+
+	return nil
 }
 
 func revalidateRestorePathProof(validated *validatedRestorePath, requireParent bool) error {
@@ -1139,6 +1122,10 @@ func revalidateRestorePathProof(validated *validatedRestorePath, requireParent b
 			409,
 			fmt.Errorf("kernel: restore path proof missing"),
 		)
+	}
+
+	if err := revalidatePlatformPathComponents(validated.PlatformComponents); err != nil {
+		return err
 	}
 
 	currentRealRoot, err := filepath.EvalSymlinks(validated.AbsoluteRoot)
@@ -1191,14 +1178,6 @@ func revalidateRestorePathProof(validated *validatedRestorePath, requireParent b
 			PackageErrCodeResourceRestorePathRace,
 			409,
 			fmt.Errorf("kernel: existing ancestor changed type"),
-		)
-	}
-
-	if err := validateReparsePoint(validated.ExistingAncestor); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			err,
 		)
 	}
 
@@ -1277,14 +1256,6 @@ func revalidateRestorePathProof(validated *validatedRestorePath, requireParent b
 			)
 		}
 
-		if err := validateReparsePoint(current); err != nil {
-			return NewPackageError(
-				PackageErrCodeResourceRestorePathRace,
-				409,
-				err,
-			)
-		}
-
 		realCurrent, err := filepath.EvalSymlinks(current)
 		if err != nil {
 			return NewPackageError(
@@ -1355,29 +1326,41 @@ func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
 			)
 		}
 
-		info, err := os.Lstat(next)
+		identity, err := capturePlatformPathIdentity(next, true)
 		if err != nil {
 			return NewPackageError(
 				PackageErrCodeResourceRestorePathRace,
 				409,
-				fmt.Errorf("kernel: inspect restore directory %s after create: %w", next, err),
+				fmt.Errorf("kernel: created restore directory %s failed platform verification: %w", next, err),
 			)
 		}
 
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return NewPackageError(
-				PackageErrCodeResourceRestorePathRace,
-				409,
-				fmt.Errorf("kernel: restore directory %s was replaced during creation", next),
-			)
+		alreadyRecorded := false
+
+		for index := range validated.PlatformComponents {
+			if filepath.Clean(validated.PlatformComponents[index].Path) == filepath.Clean(next) {
+				if !validated.PlatformComponents[index].Identity.same(identity) {
+					return NewPackageError(
+						PackageErrCodeResourceRestorePathRace,
+						409,
+						fmt.Errorf("kernel: restore directory %s identity changed during creation", next),
+					)
+				}
+
+				alreadyRecorded = true
+				break
+			}
 		}
 
-		if err := validateReparsePoint(next); err != nil {
-			return NewPackageError(
-				PackageErrCodeResourceRestorePathRace,
-				409,
-				err,
-			)
+		if !alreadyRecorded {
+			validated.PlatformComponents = append(validated.PlatformComponents, validatedPlatformPathComponent{
+				Path:     next,
+				Identity: identity,
+			})
+		}
+
+		if err := revalidatePlatformPathComponents(validated.PlatformComponents); err != nil {
+			return err
 		}
 
 		realNext, err := filepath.EvalSymlinks(next)
@@ -1460,19 +1443,19 @@ func inspectRestoreTarget(validated *validatedRestorePath, expectedHash string) 
 		)
 	}
 
-	if err := validateReparsePoint(validated.AbsTargetPath); err != nil {
-		return false, NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			err,
-		)
-	}
-
 	if !info.Mode().IsRegular() {
 		return false, NewPackageError(
 			PackageErrCodeResourceRestoreTargetChanged,
 			409,
 			fmt.Errorf("kernel: restore target %s is not a regular file", validated.AbsTargetPath),
+		)
+	}
+
+	if _, err := captureRegularFilePlatformIdentity(validated.AbsTargetPath); err != nil {
+		return false, NewPackageError(
+			PackageErrCodeResourceRestoreReparsePointForbidden,
+			400,
+			fmt.Errorf("kernel: restore target %s failed platform verification: %w", validated.AbsTargetPath, err),
 		)
 	}
 
@@ -1496,14 +1479,18 @@ func inspectRestoreTarget(validated *validatedRestorePath, expectedHash string) 
 	return true, nil
 }
 
-func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader, expectedHash string) (string, error) {
+func captureRegularFilePlatformIdentity(path string) (platformPathIdentity, error) {
+	return capturePlatformPathIdentity(path, false)
+}
+
+func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader, expectedHash string) (string, platformPathIdentity, error) {
 	if err := revalidateRestorePathProof(validated, true); err != nil {
-		return "", err
+		return "", platformPathIdentity{}, err
 	}
 
 	tempFile, err := os.CreateTemp(validated.AbsParentDir, ".amitia-restore-*.tmp")
 	if err != nil {
-		return "", NewPackageError(
+		return "", platformPathIdentity{}, NewPackageError(
 			PackageErrCodeResourceRestoreIncomplete,
 			500,
 			fmt.Errorf("kernel: create restore temp in %s: %w", validated.AbsParentDir, err),
@@ -1519,19 +1506,10 @@ func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader
 
 	if filepath.Clean(filepath.Dir(tempPath)) != validated.AbsParentDir {
 		cleanup()
-		return "", NewPackageError(
+		return "", platformPathIdentity{}, NewPackageError(
 			PackageErrCodeResourceRestorePathRace,
 			409,
 			fmt.Errorf("kernel: restore temp escaped validated parent"),
-		)
-	}
-
-	if err := validateReparsePoint(tempPath); err != nil {
-		cleanup()
-		return "", NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			err,
 		)
 	}
 
@@ -1541,7 +1519,7 @@ func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader
 
 	if err != nil {
 		cleanup()
-		return "", NewPackageError(
+		return "", platformPathIdentity{}, NewPackageError(
 			PackageErrCodeResourceRestoreIncomplete,
 			500,
 			fmt.Errorf("kernel: write restore temp: %w", err),
@@ -1552,7 +1530,7 @@ func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader
 
 	if actualHash != expectedHash {
 		cleanup()
-		return "", NewPackageError(
+		return "", platformPathIdentity{}, NewPackageError(
 			PackageErrCodeResourceSnapshotHashMismatch,
 			409,
 			fmt.Errorf("kernel: restore temp hash mismatch: expected=%s actual=%s", expectedHash, actualHash),
@@ -1561,7 +1539,7 @@ func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader
 
 	if err := tempFile.Sync(); err != nil {
 		cleanup()
-		return "", NewPackageError(
+		return "", platformPathIdentity{}, NewPackageError(
 			PackageErrCodeResourceRestoreIncomplete,
 			500,
 			fmt.Errorf("kernel: sync restore temp: %w", err),
@@ -1570,7 +1548,7 @@ func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader
 
 	if err := tempFile.Close(); err != nil {
 		_ = os.Remove(tempPath)
-		return "", NewPackageError(
+		return "", platformPathIdentity{}, NewPackageError(
 			PackageErrCodeResourceRestoreIncomplete,
 			500,
 			fmt.Errorf("kernel: close restore temp: %w", err),
@@ -1580,22 +1558,32 @@ func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader
 	tempInfo, err := os.Lstat(tempPath)
 	if err != nil || !tempInfo.Mode().IsRegular() || tempInfo.Mode()&os.ModeSymlink != 0 {
 		_ = os.Remove(tempPath)
-		return "", NewPackageError(
+		return "", platformPathIdentity{}, NewPackageError(
 			PackageErrCodeResourceRestorePathRace,
 			409,
 			fmt.Errorf("kernel: restore temp changed after close: %v", err),
 		)
 	}
 
-	if err := revalidateRestorePathProof(validated, true); err != nil {
+	tempIdentity, err := captureRegularFilePlatformIdentity(tempPath)
+	if err != nil {
 		_ = os.Remove(tempPath)
-		return "", err
+		return "", platformPathIdentity{}, NewPackageError(
+			PackageErrCodeResourceRestoreReparsePointForbidden,
+			400,
+			fmt.Errorf("kernel: restore temp %s failed platform verification: %w", tempPath, err),
+		)
 	}
 
-	return tempPath, nil
+	if err := revalidateRestorePathProof(validated, true); err != nil {
+		_ = os.Remove(tempPath)
+		return "", platformPathIdentity{}, err
+	}
+
+	return tempPath, tempIdentity, nil
 }
 
-func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPath string, expectedHash string) error {
+func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPath string, tempIdentity platformPathIdentity, expectedHash string) error {
 	if validated == nil {
 		return NewPackageError(
 			PackageErrCodeResourceRestorePathRace,
@@ -1612,7 +1600,25 @@ func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPa
 		)
 	}
 
-	defer os.Remove(tempPath)
+	removePreparedTemp := true
+
+	defer func() {
+		if !removePreparedTemp {
+			return
+		}
+
+		if err := validatePlatformPathIdentity(tempPath, tempIdentity, false); err == nil {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	if err := validatePlatformPathIdentity(tempPath, tempIdentity, false); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore temp identity changed before publish: %w", err),
+		)
+	}
 
 	tempHash, err := computeFileContentHash(tempPath)
 	if err != nil {
@@ -1644,7 +1650,7 @@ func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPa
 		return err
 	}
 
-	linkErr := os.Link(tempPath, validated.AbsTargetPath)
+	linkErr := createHardLinkNoReplacePlatform(validated.AbsTargetPath, tempPath)
 
 	if linkErr != nil {
 		if os.IsExist(linkErr) {
@@ -1668,6 +1674,23 @@ func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPa
 			PackageErrCodeResourceRestoreIncomplete,
 			500,
 			fmt.Errorf("kernel: no-replace hard link %s -> %s: %w", tempPath, validated.AbsTargetPath, linkErr),
+		)
+	}
+
+	targetIdentity, err := captureRegularFilePlatformIdentity(validated.AbsTargetPath)
+	if err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestoreReparsePointForbidden,
+			400,
+			fmt.Errorf("kernel: published target failed platform verification: %w", err),
+		)
+	}
+
+	if !tempIdentity.same(targetIdentity) {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: published target does not share temp filesystem identity"),
 		)
 	}
 
@@ -1705,14 +1728,6 @@ func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPa
 		)
 	}
 
-	if err := validateReparsePoint(validated.AbsTargetPath); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			err,
-		)
-	}
-
 	targetHash, err := computeFileContentHash(validated.AbsTargetPath)
 	if err != nil {
 		return NewPackageError(
@@ -1737,6 +1752,8 @@ func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPa
 			fmt.Errorf("kernel: fsync restore parent after publish: %w", err),
 		)
 	}
+
+	removePreparedTemp = false
 
 	if err := os.Remove(tempPath); err != nil {
 		return NewPackageError(
@@ -1775,12 +1792,12 @@ func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPa
 }
 
 func publishRestoreBytesNoReplace(validated *validatedRestorePath, data []byte, expectedHash string) error {
-	tempPath, err := createPreparedRestoreTemp(validated, bytes.NewReader(data), expectedHash)
+	tempPath, tempIdentity, err := createPreparedRestoreTemp(validated, bytes.NewReader(data), expectedHash)
 	if err != nil {
 		return err
 	}
 
-	return publishPreparedRestoreTempNoReplace(validated, tempPath, expectedHash)
+	return publishPreparedRestoreTempNoReplace(validated, tempPath, tempIdentity, expectedHash)
 }
 
 func publishRestoreFileNoReplace(sourcePath string, validated *validatedRestorePath, expectedHash string) error {
@@ -1792,17 +1809,13 @@ func publishRestoreFileNoReplace(sourcePath string, validated *validatedRestoreP
 		)
 	}
 
-	if err := validateReparsePoint(sourcePath); err != nil {
-		return err
-	}
-
-	sourceInfo, err := os.Lstat(sourcePath)
+	sourceIdentity, err := captureRegularFilePlatformIdentity(sourcePath)
 	if err != nil {
-		return fmt.Errorf("kernel: lstat restore source %s: %w", sourcePath, err)
-	}
-
-	if sourceInfo.Mode()&os.ModeSymlink != 0 || !sourceInfo.Mode().IsRegular() {
-		return fmt.Errorf("kernel: restore source %s is not a regular file", sourcePath)
+		return NewPackageError(
+			PackageErrCodeResourceRestoreReparsePointForbidden,
+			400,
+			fmt.Errorf("kernel: quarantine source %s failed platform verification: %w", sourcePath, err),
+		)
 	}
 
 	source, err := os.Open(sourcePath)
@@ -1810,7 +1823,27 @@ func publishRestoreFileNoReplace(sourcePath string, validated *validatedRestoreP
 		return fmt.Errorf("kernel: open restore source: %w", err)
 	}
 
-	tempPath, tempErr := createPreparedRestoreTemp(validated, source, expectedHash)
+	sourceFileInfo, err := source.Stat()
+	if err != nil {
+		_ = source.Close()
+		return fmt.Errorf("kernel: stat restore source %s: %w", sourcePath, err)
+	}
+
+	if sourceFileInfo.Mode()&os.ModeSymlink != 0 || !sourceFileInfo.Mode().IsRegular() {
+		_ = source.Close()
+		return fmt.Errorf("kernel: restore source %s is not a regular file", sourcePath)
+	}
+
+	if err := validatePlatformPathIdentity(sourcePath, sourceIdentity, false); err != nil {
+		_ = source.Close()
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: quarantine source changed after open: %w", err),
+		)
+	}
+
+	tempPath, tempIdentity, tempErr := createPreparedRestoreTemp(validated, source, expectedHash)
 
 	closeErr := source.Close()
 
@@ -1823,8 +1856,16 @@ func publishRestoreFileNoReplace(sourcePath string, validated *validatedRestoreP
 		return closeErr
 	}
 
-	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, expectedHash); err != nil {
+	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, tempIdentity, expectedHash); err != nil {
 		return err
+	}
+
+	if err := validatePlatformPathIdentity(sourcePath, sourceIdentity, false); err != nil {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: quarantine source changed before cleanup: %w", err),
+		)
 	}
 
 	if err := os.Remove(sourcePath); err != nil {

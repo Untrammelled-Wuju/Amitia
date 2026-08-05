@@ -422,7 +422,7 @@ func makeSQLitePingChecker(db *gorm.DB) func() (SystemStatus, string) {
 
 func makeSurrealPingChecker() func() (SystemStatus, string) {
 	return func() (SystemStatus, string) {
-		cfg := config.AppCfg.Surreal
+		cfg := config.AppCfg.Providers.GraphStore.SurrealDB
 		url := fmt.Sprintf("ws://%s:%d/rpc", cfg.Host, cfg.Port)
 		db, err := surrealdb.New(url)
 		if err != nil {

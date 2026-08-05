@@ -182,7 +182,7 @@ func NewDoctor(db *gorm.DB, ext *extension.Runtime) *Doctor {
 func (d *Doctor) RunChecks() *DoctorReport {
 	doctor := NewDesktopPetDoctor(ModeDeep)
 	doctor.AddChecker(&sqliteChecker{db: d.db})
-	doctor.AddChecker(&surrealChecker{cfg: config.AppCfg.Surreal})
+	doctor.AddChecker(&surrealChecker{cfg: config.AppCfg.Providers.GraphStore.SurrealDB})
 	doctor.AddChecker(&qdrantChecker{})
 	doctor.AddChecker(&extensionChecker{ext: d.extension})
 	return doctor.Run()

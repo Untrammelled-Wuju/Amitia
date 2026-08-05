@@ -354,7 +354,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
-		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Surreal)
+		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal)
 		companion.RegisterCompanionRouter(apiGroup, services.Companion)

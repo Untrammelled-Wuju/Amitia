@@ -87,7 +87,7 @@ func TestEmbedAcceptsProviderDataShapes(t *testing.T) {
 func TestFitEmbeddingDimension(t *testing.T) {
 	previous := config.AppCfg
 	config.AppCfg = &config.Config{}
-	config.AppCfg.Qdrant.VectorDim = 3
+	config.AppCfg.Providers.VectorStore.Qdrant.VectorDim = 3
 	t.Cleanup(func() {
 		config.AppCfg = previous
 	})

@@ -220,10 +220,10 @@ func parseEmbeddingVectors(body []byte) ([][]float32, error) {
 }
 
 func fitEmbeddingDimension(vector []float32) []float32 {
-	if config.AppCfg == nil || config.AppCfg.Qdrant.VectorDim <= 0 || len(vector) == config.AppCfg.Qdrant.VectorDim {
+	if config.AppCfg == nil || config.AppCfg.Providers.VectorStore.Qdrant.VectorDim <= 0 || len(vector) == config.AppCfg.Providers.VectorStore.Qdrant.VectorDim {
 		return vector
 	}
-	dimension := config.AppCfg.Qdrant.VectorDim
+	dimension := config.AppCfg.Providers.VectorStore.Qdrant.VectorDim
 	fitted := make([]float32, dimension)
 	for i, value := range vector {
 		fitted[i%dimension] += value
@@ -276,8 +276,8 @@ func fallbackEmbeddings(texts []string) [][]float32 {
 
 func fallbackEmbedding(text string) []float32 {
 	dim := 1536
-	if config.AppCfg != nil && config.AppCfg.Qdrant.VectorDim > 0 {
-		dim = config.AppCfg.Qdrant.VectorDim
+	if config.AppCfg != nil && config.AppCfg.Providers.VectorStore.Qdrant.VectorDim > 0 {
+		dim = config.AppCfg.Providers.VectorStore.Qdrant.VectorDim
 	}
 	vector := make([]float32, dim)
 	tokens := embeddingTokens(text)

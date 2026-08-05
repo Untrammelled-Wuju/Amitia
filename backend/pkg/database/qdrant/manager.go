@@ -81,7 +81,7 @@ func killExistingQdrant(port int) {
 }
 
 func resolveQdrantBinaryPath(qdrantDir string) string {
-	if cfgPath := config.AppCfg.Qdrant.BinaryPath; cfgPath != "" {
+	if cfgPath := config.AppCfg.Providers.VectorStore.Qdrant.BinaryPath; cfgPath != "" {
 		if filepath.IsAbs(cfgPath) {
 			return cfgPath
 		}
@@ -166,7 +166,7 @@ func resolveQdrantWorkDir(qdrantDir string) string {
 }
 
 func resolveQdrantDataDir(qdrantDir string) string {
-	if cfgDir := config.AppCfg.Qdrant.DataDir; cfgDir != "" {
+	if cfgDir := config.AppCfg.Providers.VectorStore.Qdrant.DataDir; cfgDir != "" {
 		if filepath.IsAbs(cfgDir) {
 			return cfgDir
 		}
@@ -182,7 +182,7 @@ func StartQdrant() error {
 }
 
 func startQdrantInternal() error {
-	cfg := config.AppCfg.Qdrant
+	cfg := config.AppCfg.Providers.VectorStore.Qdrant
 	workDir := util.RuntimeRoot()
 
 	killExistingQdrant(cfg.Port)
@@ -255,7 +255,7 @@ func StartQdrantMonitor() {
 				needRestart := false
 				if qdrantCmd == nil || qdrantCmd.Process == nil {
 					needRestart = true
-				} else if !isQdrantAlive(config.AppCfg.Qdrant.Port) {
+				} else if !isQdrantAlive(config.AppCfg.Providers.VectorStore.Qdrant.Port) {
 					needRestart = true
 				}
 				if needRestart && !IsQdrantShuttingDown() {
@@ -265,7 +265,7 @@ func StartQdrantMonitor() {
 						qdrantMu.Unlock()
 						continue
 					}
-					if err := WaitForQdrant(config.AppCfg.Qdrant.Port); err != nil {
+					if err := WaitForQdrant(config.AppCfg.Providers.VectorStore.Qdrant.Port); err != nil {
 						log.Error("等待Qdrant就绪超时:", err)
 						qdrantMu.Unlock()
 						continue

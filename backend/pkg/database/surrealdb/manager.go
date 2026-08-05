@@ -81,7 +81,7 @@ func killExistingSurreal(port int) {
 }
 
 func resolveSurrealBinaryPath(surrealDir string) string {
-	if cfgPath := config.AppCfg.Surreal.BinaryPath; cfgPath != "" {
+	if cfgPath := config.AppCfg.Providers.GraphStore.SurrealDB.BinaryPath; cfgPath != "" {
 		if filepath.IsAbs(cfgPath) {
 			return cfgPath
 		}
@@ -173,7 +173,7 @@ func StartSurreal() error {
 }
 
 func startSurrealInternal() error {
-	cfg := config.AppCfg.Surreal
+	cfg := config.AppCfg.Providers.GraphStore.SurrealDB
 	workDir := util.RuntimeRoot()
 
 	killExistingSurreal(cfg.Port)
@@ -251,7 +251,7 @@ func StartSurrealMonitor() {
 				needRestart := false
 				if surrealCmd == nil || surrealCmd.Process == nil {
 					needRestart = true
-				} else if !isSurrealAlive(config.AppCfg.Surreal.Port) {
+				} else if !isSurrealAlive(config.AppCfg.Providers.GraphStore.SurrealDB.Port) {
 					needRestart = true
 				}
 				if needRestart && !IsSurrealShuttingDown() {
@@ -261,7 +261,7 @@ func StartSurrealMonitor() {
 						surrealMu.Unlock()
 						continue
 					}
-					if err := WaitForSurreal(config.AppCfg.Surreal.Port); err != nil {
+					if err := WaitForSurreal(config.AppCfg.Providers.GraphStore.SurrealDB.Port); err != nil {
 						log.Error("等待SurrealDB就绪超时:", err)
 						surrealMu.Unlock()
 						continue

@@ -13,7 +13,7 @@ import (
 var Client *qdrant.Client
 
 func InitClient() error {
-	cfg := config.AppCfg.Qdrant
+	cfg := config.AppCfg.Providers.VectorStore.Qdrant
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -43,7 +43,7 @@ func EnsureCollection() error {
 }
 
 func EnsureCollections() error {
-	cfg := config.AppCfg.Qdrant
+	cfg := config.AppCfg.Providers.VectorStore.Qdrant
 	collections := cfg.Collections
 	if len(collections) == 0 {
 		return EnsureCollection()
@@ -171,7 +171,7 @@ func DeleteVectors(ids []string, collectionName ...string) error {
 }
 
 func SearchVectors(vector []float32, limit int, filter map[string]interface{}, collectionName ...string) ([]*qdrant.ScoredPoint, error) {
-	cfg := config.AppCfg.Qdrant
+	cfg := config.AppCfg.Providers.VectorStore.Qdrant
 	target := resolveCollectionName(collectionName...)
 	ctx := context.Background()
 
@@ -203,7 +203,7 @@ func MultiSearch(vector []float32, limit int, filter map[string]interface{}, col
 		collectionNames = CollectionNames()
 	}
 	if limit <= 0 {
-		limit = config.AppCfg.Qdrant.Limit
+		limit = config.AppCfg.Providers.VectorStore.Qdrant.Limit
 	}
 	results := make([]CollectionScoredPoint, 0)
 	var lastErr error
@@ -254,7 +254,7 @@ func GetVectorCount(collectionName ...string) (uint64, error) {
 }
 
 func CollectionNames() []string {
-	cfg := config.AppCfg.Qdrant
+	cfg := config.AppCfg.Providers.VectorStore.Qdrant
 	if len(cfg.Collections) == 0 {
 		return []string{defaultCollectionName()}
 	}
@@ -287,7 +287,7 @@ func ResolveConfiguredCollection(key string) string {
 	if config.AppCfg == nil {
 		return key
 	}
-	if c, ok := config.AppCfg.Qdrant.Collections[key]; ok {
+	if c, ok := config.AppCfg.Providers.VectorStore.Qdrant.Collections[key]; ok {
 		if c.Name != "" {
 			return c.Name
 		}
@@ -310,8 +310,8 @@ func defaultCollectionName() string {
 	if config.AppCfg == nil {
 		return "memory_embeddings"
 	}
-	if config.AppCfg.Qdrant.CollectionName != "" {
-		return config.AppCfg.Qdrant.CollectionName
+	if config.AppCfg.Providers.VectorStore.Qdrant.CollectionName != "" {
+		return config.AppCfg.Providers.VectorStore.Qdrant.CollectionName
 	}
 	return ResolveConfiguredCollection("memory_embeddings")
 }
@@ -320,10 +320,10 @@ func defaultVectorDim() int {
 	if config.AppCfg == nil {
 		return 1536
 	}
-	if config.AppCfg.Qdrant.VectorDim > 0 {
-		return config.AppCfg.Qdrant.VectorDim
+	if config.AppCfg.Providers.VectorStore.Qdrant.VectorDim > 0 {
+		return config.AppCfg.Providers.VectorStore.Qdrant.VectorDim
 	}
-	if c, ok := config.AppCfg.Qdrant.Collections["memory_embeddings"]; ok && c.VectorDim > 0 {
+	if c, ok := config.AppCfg.Providers.VectorStore.Qdrant.Collections["memory_embeddings"]; ok && c.VectorDim > 0 {
 		return c.VectorDim
 	}
 	return 1536

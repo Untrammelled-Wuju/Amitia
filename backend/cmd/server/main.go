@@ -78,7 +78,7 @@ func main() {
 	}
 
 	config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
-	config.AppCfg.Surreal.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Surreal.DataPath)
+	config.AppCfg.Providers.GraphStore.SurrealDB.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Providers.GraphStore.SurrealDB.DataPath)
 
 	logDir := util.RuntimeLogDir(runtimeRoot)
 	log.InitLogger(logDir)
@@ -161,8 +161,8 @@ func main() {
 	fmt.Printf("    Listen:      http://%s\n", serverAddr)
 	fmt.Printf("    Deploy Mode: %s\n", config.AppCfg.App.DeployMode)
 	fmt.Printf("    Database:    %s/app.db\n", config.AppCfg.Storage.DataDir)
-	fmt.Printf("    Qdrant:      %s:%d\n", config.AppCfg.Qdrant.Host, config.AppCfg.Qdrant.Port)
-	fmt.Printf("    SurrealDB:   %s:%d\n", config.AppCfg.Surreal.Host, config.AppCfg.Surreal.Port)
+	fmt.Printf("    Qdrant:      %s:%d\n", config.AppCfg.Providers.VectorStore.Qdrant.Host, config.AppCfg.Providers.VectorStore.Qdrant.Port)
+	fmt.Printf("    SurrealDB:   %s:%d\n", config.AppCfg.Providers.GraphStore.SurrealDB.Host, config.AppCfg.Providers.GraphStore.SurrealDB.Port)
 	fmt.Printf("  ========================================\n\n")
 
 	qqMgr := qq.NewManager("http://127.0.0.1:19877")
@@ -386,7 +386,7 @@ func applyDatabaseStartupMigrations(db *gorm.DB) error {
 }
 
 func startQdrant() {
-	qcfg := config.AppCfg.Qdrant
+	qcfg := config.AppCfg.Providers.VectorStore.Qdrant
 	log.Info("正在启动Qdrant...")
 	if err := qdrantDB.StartQdrant(); err != nil {
 		log.Error("Qdrant启动失败:", err)
@@ -415,7 +415,7 @@ func startQdrant() {
 }
 
 func startSurreal() {
-	cfg := config.AppCfg.Surreal
+	cfg := config.AppCfg.Providers.GraphStore.SurrealDB
 	log.Info("正在启动SurrealDB...")
 	if err := surrealdbDB.StartSurreal(); err != nil {
 		log.Error("SurrealDB启动失败:", err)
@@ -432,7 +432,7 @@ func startSurreal() {
 }
 
 func initGraph() graph.Service {
-	cfg := config.AppCfg.Surreal
+	cfg := config.AppCfg.Providers.GraphStore.SurrealDB
 	var lastErr error
 	for i := 0; i < 30; i++ {
 		client, err := graph.NewClient(cfg)

@@ -241,7 +241,7 @@ func TestR6_4_CreatePreparedRestoreTempVerifiesHash(t *testing.T) {
 	}
 	body := []byte("prepare me")
 	hash := r64HashContent(body)
-	tempPath, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	tempPath, _, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
 	if err != nil {
 		t.Fatalf("create prepared temp must succeed: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestR6_4_CreatePreparedRestoreTempRejectsMismatchedWrite(t *testing.T) {
 	}
 	body := []byte("written data")
 	wrongHash := r64HashContent([]byte("something else"))
-	tempPath, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), wrongHash)
+	tempPath, _, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), wrongHash)
 	if err == nil {
 		t.Fatal("must reject temp whose content hash mismatches expected")
 	}
@@ -283,11 +283,11 @@ func TestR6_4_PublishPreparedRestoreTempNoReplaceSkipsExisting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tempPath, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	tempPath, tempIdentity, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, hash); err != nil {
+	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, tempIdentity, hash); err != nil {
 		t.Fatalf("no-replace publish onto matching existing must succeed: %v", err)
 	}
 	got, readErr := os.ReadFile(target)
@@ -413,7 +413,7 @@ func TestR6_4_CreatePreparedRestoreTempResidesInTargetParent(t *testing.T) {
 	}
 	body := []byte("locate me in parent")
 	hash := r64HashContent(body)
-	tempPath, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	tempPath, _, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
 	if err != nil {
 		t.Fatal(err)
 	}
