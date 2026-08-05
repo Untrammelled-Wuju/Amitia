@@ -186,7 +186,7 @@ desktopPetRuntime:
 	if cfg.Runtime.Sidecars.Wechat.Port != 20001 {
 		t.Fatalf("expected wechat port 20001, got %d", cfg.Runtime.Sidecars.Wechat.Port)
 	}
-	if !cfg.DesktopPetRuntime.Enabled {
+	if cfg.DesktopPetRuntime.Enabled {
 		t.Fatalf("expected desktop pet false")
 	}
 }

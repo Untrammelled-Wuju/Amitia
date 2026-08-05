@@ -30,6 +30,7 @@ type RuntimePlatform interface {
 	WritePidFile(dataDir string) error
 	ReadPidFile(dataDir string) (int, error)
 	RemovePidFile(dataDir string) error
+	Descriptor() RuntimeDescriptor
 }
 
 var current RuntimePlatform

@@ -30,6 +30,10 @@ func (linuxPlatform) Name() string {
 	return "desktop-linux"
 }
 
+func (linuxPlatform) Descriptor() RuntimeDescriptor {
+	return newRuntimeDescriptor(HostPlatformLinux, RuntimeKindNativeProcess, GuestPlatformLinux)
+}
+
 func (linuxPlatform) ExecutableSuffix() string {
 	return ""
 }
@@ -137,6 +141,8 @@ func (linuxPlatform) RemovePidFile(dataDir string) error {
 	pidPath := filepath.Join(dataDir, ".amitia-backend.pid")
 	return os.Remove(pidPath)
 }
+
+var _ RuntimePlatform = linuxPlatform{}
 
 func killPid(pid int) error {
 	proc, err := os.FindProcess(pid)

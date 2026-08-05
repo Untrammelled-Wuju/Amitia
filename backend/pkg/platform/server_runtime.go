@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,12 @@ type ServerRuntime struct {
 func (s *ServerRuntime) Name() string {
 	return "server-remote"
 }
+
+func (s *ServerRuntime) Descriptor() RuntimeDescriptor {
+	return newRuntimeDescriptor(hostPlatformFromGOOS(runtime.GOOS), RuntimeKindRemote, guestPlatformFromGOOS(runtime.GOOS))
+}
+
+var _ RuntimePlatform = (*ServerRuntime)(nil)
 
 func (s *ServerRuntime) ExecutableSuffix() string {
 	return ""

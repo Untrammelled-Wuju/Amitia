@@ -28,6 +28,19 @@ func TestDetectReturnsNonNil(t *testing.T) {
 	if p.Name() == "" {
 		t.Fatal("Detect().Name() is empty")
 	}
+	desc := p.Descriptor()
+	if desc.Host == "" {
+		t.Fatal("Detect().Descriptor().Host is empty")
+	}
+	if desc.Kind == "" {
+		t.Fatal("Detect().Descriptor().Kind is empty")
+	}
+	if desc.Guest == "" {
+		t.Fatal("Detect().Descriptor().Guest is empty")
+	}
+	if desc.Architecture == "" {
+		t.Fatal("Detect().Descriptor().Architecture is empty")
+	}
 }
 
 func TestDetectWindows(t *testing.T) {
@@ -146,6 +159,14 @@ func (fakePlatform) IsAndroidEmbedded() bool              { return false }
 func (fakePlatform) WritePidFile(string) error            { return nil }
 func (fakePlatform) ReadPidFile(string) (int, error)      { return 0, nil }
 func (fakePlatform) RemovePidFile(string) error           { return nil }
+func (fakePlatform) Descriptor() RuntimeDescriptor {
+	return RuntimeDescriptor{
+		Host:         HostPlatformUnknown,
+		Kind:         RuntimeKindUnknown,
+		Guest:        GuestPlatformUnknown,
+		Architecture: "test",
+	}
+}
 
 func TestBinarySuffixMatchesExecutableSuffix(t *testing.T) {
 	p := Detect()
@@ -256,6 +277,36 @@ func TestAllImplementationsSatisfyInterface(t *testing.T) {
 
 	p := Detect()
 	var _ RuntimePlatform = p
+}
+
+func TestGetSetPreservesRuntimeDescriptor(t *testing.T) {
+	original := current
+	defer func() { current = original }()
+
+	fake := &fakePlatform{}
+	Set(fake)
+
+	got := Get()
+	if got != fake {
+		t.Fatalf("Get() did not return injected platform")
+	}
+
+	desc := got.Descriptor()
+	if desc.Host != HostPlatformUnknown {
+		t.Fatalf("expected Host=Unknown from fake, got %s", desc.Host)
+	}
+	if desc.Kind != RuntimeKindUnknown {
+		t.Fatalf("expected Kind=Unknown from fake, got %s", desc.Kind)
+	}
+	if desc.Guest != GuestPlatformUnknown {
+		t.Fatalf("expected Guest=Unknown from fake, got %s", desc.Guest)
+	}
+	if desc.Architecture != "test" {
+		t.Fatalf("expected Architecture=test from fake, got %s", desc.Architecture)
+	}
+
+	current = nil
+	Detect()
 }
 
 func TestServerRuntimeDefaultDataDirFromEnv(t *testing.T) {

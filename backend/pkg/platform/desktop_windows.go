@@ -25,6 +25,12 @@ func (windowsPlatform) Name() string {
 	return "desktop-windows"
 }
 
+func (windowsPlatform) Descriptor() RuntimeDescriptor {
+	return newRuntimeDescriptor(HostPlatformWindows, RuntimeKindNativeProcess, GuestPlatformWindows)
+}
+
+var _ RuntimePlatform = windowsPlatform{}
+
 func (windowsPlatform) ExecutableSuffix() string {
 	return ".exe"
 }

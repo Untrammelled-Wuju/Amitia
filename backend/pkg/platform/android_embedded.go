@@ -25,6 +25,12 @@ func (androidPlatform) Name() string {
 	return "android-embedded"
 }
 
+func (androidPlatform) Descriptor() RuntimeDescriptor {
+	return newRuntimeDescriptor(HostPlatformAndroid, RuntimeKindEmbedded, GuestPlatformAndroid)
+}
+
+var _ RuntimePlatform = androidPlatform{}
+
 func (androidPlatform) ExecutableSuffix() string {
 	return ""
 }

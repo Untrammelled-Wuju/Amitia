@@ -21,3 +21,7 @@ func (androidPootPlatform) IsAndroid() bool {
 func (androidPootPlatform) IsAndroidEmbedded() bool {
 	return true
 }
+
+func (androidPootPlatform) Descriptor() RuntimeDescriptor {
+	return newRuntimeDescriptor(HostPlatformAndroid, RuntimeKindProot, GuestPlatformLinux)
+}
