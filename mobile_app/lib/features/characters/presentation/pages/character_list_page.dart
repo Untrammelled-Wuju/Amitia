@@ -77,6 +77,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   ),
                 ),
                 data: (characters) {
+                  _characters = characters;
                   _defaultCharacterId ??= characters.isNotEmpty ? characters.first.id : null;
                   final activeChars = characters.where((c) => !_archivedIds.contains(c.id)).toList();
                   if (activeChars.isEmpty) {
@@ -406,12 +407,12 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: _parseColor(character.avatarColor),
+                                  color: context.accentPrimary,
                                   shape: BoxShape.circle,
                                 ),
                                 child: Center(
                                   child: Text(
-                                    character.avatarInitial,
+                                    character.name.isNotEmpty ? character.name[0] : '?',
                                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                                   ),
                                 ),

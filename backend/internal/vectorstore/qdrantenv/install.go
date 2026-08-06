@@ -3,6 +3,7 @@
 package qdrantenv
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,7 +47,7 @@ func (i *ensureInstaller) EnsureInstalled(req InstallRequest) error {
 		return nil
 	}
 	if req.Target.DistributionRoot == "" {
-		return NewInvalidInstallTargeterror("distribution root is empty")
+		return NewInvalidInstallTargetError("distribution root is empty")
 	}
 
 	guest := req.Target.Guest
@@ -56,7 +57,10 @@ func (i *ensureInstaller) EnsureInstalled(req InstallRequest) error {
 		req.Target.DistributionRoot,
 	}
 	if req.Target.DistributionRoot != "" {
-		searchDirs = append(searchDirs, filepath.Join(req.Target.DistributionRoot, "..", "qdrant"))
+		parent := filepath.Dir(req.Target.DistributionRoot)
+		if parent != "" && parent != req.Target.DistributionRoot {
+			searchDirs = append(searchDirs, filepath.Join(parent, "qdrant"))
+		}
 	}
 
 	for _, dir := range searchDirs {
@@ -102,8 +106,7 @@ func (i *ensureInstaller) ensureExecutable(binaryPath string, guest platform.Gue
 	if mode.Perm()&0111 != 0 {
 		return nil
 	}
-	os.Chmod(binaryPath, 0755)
-	return nil
+	return os.Chmod(binaryPath, 0755)
 }
 
 func archiveCandidates(guest platform.GuestPlatform, architecture string) []string {
@@ -156,9 +159,9 @@ func archiveCandidates(guest platform.GuestPlatform, architecture string) []stri
 }
 
 var (
-	ErrInvalidInstallTarget = errors_New("qdrantenv: invalid install target")
-	ErrArchiveExtraction    = errors_New("qdrantenv: archive extraction failed")
-	ErrInstallArchiveNotFound = errors_New("qdrantenv: no archive found for installation")
+	ErrInvalidInstallTarget   = errors.New("qdrantenv: invalid install target")
+	ErrArchiveExtraction      = errors.New("qdrantenv: archive extraction failed")
+	ErrInstallArchiveNotFound = errors.New("qdrantenv: no archive found for installation")
 )
 
 type invalidInstallTargetError struct {
@@ -212,16 +215,4 @@ func NewArchiveExtractionError(archive string, err error) error {
 
 func NewInstallArchiveNotFoundError(distributionRoot string) error {
 	return &installArchiveNotFoundError{distributionRoot: distributionRoot}
-}
-
-func errors_New(text string) error {
-	return &simpleError{text: text}
-}
-
-type simpleError struct {
-	text string
-}
-
-func (e *simpleError) Error() string {
-	return e.text
 }
