@@ -9,7 +9,7 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
+func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *security.PathRootRegistry) {
 	dataDir := config.AppCfg.Storage.DataDir
 	repo := NewRepository(ctx.DB)
 	assetStore := NewAssetStore(dataDir, repo)
@@ -17,15 +17,19 @@ func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	procAdapter := NewProcessingAdapter(ctx)
 	qualAdapter := NewQualityAdapter(ctx)
 	svc := NewService(repo, assetStore, genAdapter, procAdapter, qualAdapter, ctx.DB, dataDir)
-	registry := security.NewPathRootRegistry()
+	if registry == nil {
+		registry = security.NewPathRootRegistry()
+	}
 	_ = registry.Register(security.RootEditingAssets, filepath.Join(dataDir, "desktop-pets", "editing", "assets"))
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	registerRoutes(r, svc, responder, guard)
 }
 
-func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard security.OwnershipGuard) {
-	registry := security.NewPathRootRegistry()
+func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard security.OwnershipGuard, registry *security.PathRootRegistry) {
+	if registry == nil {
+		registry = security.NewPathRootRegistry()
+	}
 	_ = registry.Register(security.RootEditingAssets, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "editing", "assets"))
 	responder := security.NewSafeArtifactResponder(registry)
 	registerRoutes(r, svc, responder, guard)

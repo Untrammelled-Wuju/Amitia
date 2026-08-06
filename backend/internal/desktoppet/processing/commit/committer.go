@@ -1,4 +1,4 @@
-package commit
+﻿package commit
 
 import (
 	"context"
@@ -20,7 +20,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/processing/measurement"
 	"github.com/u-ai/backend/internal/desktoppet/processing/source"
 	"github.com/u-ai/backend/internal/desktoppet/processing/workspace"
-	"github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
 )
 
@@ -711,7 +710,33 @@ func validatePipelineResult(result *application.ProcessActionResult) error {
 }
 
 func cleanupStaging(stagingDir string) {
-	_ = security.RemoveDirNoSymlinks(stagingDir)
+	_ = removeDirNoSymlinksLocal(stagingDir)
+}
+
+func removeDirNoSymlinksLocal(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return os.Remove(path)
+	}
+	if !info.IsDir() {
+		return os.Remove(path)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := removeDirNoSymlinksLocal(filepath.Join(path, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return os.Remove(path)
 }
 
 func copyFileVerified(src, dst string) error {

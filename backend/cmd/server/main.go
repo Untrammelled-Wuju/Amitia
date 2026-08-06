@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -30,8 +31,8 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 
 	agenttool "github.com/u-ai/backend/internal/agent/tool"
-	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/migration"
+	"github.com/u-ai/backend/internal/runtimeorchestrator"
 )
 
 func killExistingServer(addr string) {
@@ -102,39 +103,49 @@ func main() {
 
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
-	if err := applyDatabaseStartupMigrations(db); err != nil {
+	if err := applyDatabaseStartupMigrations(db, paths.DataDir); err != nil {
 		log.Error("数据库启动迁移失败:", err)
 		os.Exit(1)
 	}
 	ctx := app.NewAppContext(db, nil)
 
-	env := startEnvironment()
-	env.SetOnShutdown(func() {
-		qdrantDB.StopQdrant()
-		surrealdbDB.StopSurreal()
-	})
-
-	cleanup := func() {
-		if env != nil {
-			env.StopAll()
-		}
-		qdrantDB.StopQdrant()
-		surrealdbDB.StopSurreal()
+	bootstrap, bootErr := newRuntimeBootstrap(&paths)
+	if bootErr != nil {
+		log.Error("创建运行时宿主失败:", bootErr)
+		os.Exit(1)
 	}
-	defer cleanup()
-
-	startQdrant()
-	startSurreal()
-	qdrantDB.StartQdrantMonitor()
-	surrealdbDB.StartSurrealMonitor()
-
 	graphSvc := initGraph()
+	if err := bootstrap.RegisterInfrastructure(sqlDB, graphSvc); err != nil {
+		log.Error("基础设施注册失败:", err)
+		os.Exit(1)
+	}
+	if err := bootstrap.StartPhase(appCtx, runtimeorchestrator.PhaseInfrastructure); err != nil {
+		log.Error("基础设施启动失败:", err)
+		os.Exit(1)
+	}
+	bootstrap.SetGraphService(graphSvc)
 	services, err := NewAppServices(ctx, graphSvc)
 	if err != nil {
 		log.Error("应用服务初始化失败:", err)
-		cleanup()
+		_ = bootstrap.StopAll(context.Background())
 		os.Exit(1)
 	}
+	if err := bootstrap.RegisterApplication(services); err != nil {
+		log.Error("应用组件注册失败:", err)
+		_ = bootstrap.StopAll(context.Background())
+		os.Exit(1)
+	}
+	if err := bootstrap.StartPhase(appCtx, runtimeorchestrator.PhaseApplication); err != nil {
+		log.Error("应用层启动失败:", err)
+		_ = bootstrap.StopAll(context.Background())
+		os.Exit(1)
+	}
+	services.RuntimeOrchestrator = bootstrap
+
+	cleanup := func() {
+		_ = bootstrap.StopAll(context.Background())
+	}
+	defer cleanup()
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -145,6 +156,7 @@ func main() {
 		newGraphSvc := initGraph()
 		if newGraphSvc != nil {
 			services.Graph = newGraphSvc
+			bootstrap.SetGraphService(newGraphSvc)
 			log.Info("SurrealDB恢复后图谱服务已重新连接")
 		}
 	})
@@ -225,44 +237,6 @@ func main() {
 	services.DeliveryWorker.Start(appCtx)
 	defer services.DeliveryWorker.Stop()
 
-	desktopBlocked := false
-	if services.Readiness == nil || services.SafeMode == nil {
-		desktopBlocked = true
-	} else {
-		snap := services.Readiness.Snapshot()
-		if snap.OverallStatus == readiness.StatusBlocked {
-			desktopBlocked = true
-			services.SafeMode.Enter("startup readiness blocked")
-			log.Error("startup readiness blocked, entering safe mode: blocking=", snap.BlockingCount)
-		}
-	}
-
-	if !desktopBlocked {
-		if err := services.DesktopPetRuntime.Start(appCtx); err != nil {
-			services.SafeMode.Enter("runtime gateway start failed")
-			log.Error("failed to start desktop pet runtime: ", err)
-			cleanup()
-			os.Exit(1)
-		}
-		services.DesktopPetWorker.Start(appCtx)
-		defer services.DesktopPetWorker.Stop()
-		services.ProcessingWorker.Start(appCtx)
-		defer services.ProcessingWorker.Stop()
-		services.QualityWorker.Start(appCtx)
-		defer services.QualityWorker.Stop()
-		services.RegenerationWorker.Start(appCtx)
-		defer services.RegenerationWorker.Stop()
-		if services.BehaviorService != nil {
-			if err := services.BehaviorService.Start(appCtx); err != nil {
-				services.SafeMode.Enter("behavior service start failed")
-				log.Error("failed to start behavior service: ", err)
-				cleanup()
-				os.Exit(1)
-			}
-			defer services.BehaviorService.Stop()
-		}
-	}
-
 	selfHeal := startSelfHealMonitor(appCtx, db)
 	defer selfHeal.Stop()
 	cron := NewProactiveCron(db, services.Companion, services.RuntimeQueue)
@@ -308,34 +282,14 @@ func main() {
 		}
 	case <-appCtx.Done():
 		log.Info("收到关闭信号，开始排水...")
-		SetEnvShuttingDown()
-		qdrantDB.SetQdrantShuttingDown()
-		surrealdbDB.SetSurrealShuttingDown()
-		qdrantDB.StopQdrantMonitor()
-		surrealdbDB.StopSurrealMonitor()
 		services.UnifiedEntry.SetOrchestratorReady(false)
 		pluginShutdownCtx, pluginCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := services.Extension.Close(pluginShutdownCtx); err != nil {
 			log.Error("Plugin Runtime 关闭失败:", err)
 		}
 		pluginCancel()
-		if services.KernelContainer != nil && services.KernelContainer.ArtifactMaintenance != nil {
-			services.KernelContainer.ArtifactMaintenance.Stop()
-		}
-		if services.KernelContainer != nil && services.KernelContainer.ScheduleService != nil {
-			schedShutdownCtx, schedCancel := context.WithTimeout(context.Background(), 15*time.Second)
-			services.KernelContainer.ScheduleService.Shutdown(schedShutdownCtx)
-			schedCancel()
-		}
-		if services.KernelContainer != nil && services.KernelContainer.EventService != nil {
-			services.KernelContainer.EventService.Stop()
-		}
-		if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
-			taskShutdownCtx, taskCancel := context.WithTimeout(context.Background(), 15*time.Second)
-			services.KernelContainer.TaskRuntimeService.Shutdown(taskShutdownCtx)
-			taskCancel()
-		}
-		services.DesktopPetRuntime.Close(appCtx)
+		_ = services.MCPConnections.Close(pluginShutdownCtx)
+		bootstrap.StopAll(context.Background())
 		log.Info("已停止接收新请求，等待现有请求完成...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -353,13 +307,24 @@ func main() {
 	}
 }
 
-func applyDatabaseStartupMigrations(db *gorm.DB) error {
+func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 	isNew, err := migration.IsNewDatabase(db)
 	if err != nil {
 		return fmt.Errorf("check existing database: %w", err)
 	}
 	migrations := migration.DefaultMigrations()
-	migRunner := migration.Runner{DB: db, SkipBackup: !isNew}
+	lockDir := filepath.Join(dataDir, "locks")
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
+		return fmt.Errorf("create lock directory: %w", err)
+	}
+	persistentLock := migration.NewPersistentLock(db, lockDir)
+	migRunner := migration.Runner{
+		DB:         db,
+		Locker:     persistentLock,
+		LockName:   "schema_migrations",
+		LockTTL:    5 * time.Minute,
+		SkipBackup: !isNew,
+	}
 	if isNew {
 		log.Info("检测到新数据库，执行基线快通道...")
 		if err := migration.ApplyBaseline(db); err != nil {

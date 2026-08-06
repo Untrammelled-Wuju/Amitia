@@ -195,6 +195,23 @@ func (r *SQLiteRepository) CreatePetIdentity(identity *release.PetIdentityData) 
 	return r.db.Create(&record).Error
 }
 
+func (r *SQLiteRepository) CreatePetIdentityTx(tx *gorm.DB, identity *release.PetIdentityData) error {
+	record := petIdentityRecord{
+		ID:                  identity.ID,
+		OwnerUserID:         identity.OwnerUserID,
+		SourceCharacterID:   identity.SourceCharacterID,
+		Name:                identity.Name,
+		Slug:                identity.Slug,
+		BindingPolicy:       identity.BindingPolicy,
+		UpstreamPetID:       identity.UpstreamPetID,
+		DefaultActionKey:    identity.DefaultActionKey,
+		NextReleaseSequence: identity.NextReleaseSequence,
+		CreatedAt:           identity.CreatedAt,
+		UpdatedAt:           identity.UpdatedAt,
+	}
+	return tx.Create(&record).Error
+}
+
 func (r *SQLiteRepository) UpdatePetIdentity(identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
@@ -210,6 +227,23 @@ func (r *SQLiteRepository) UpdatePetIdentity(identity *release.PetIdentityData) 
 		UpdatedAt:           identity.UpdatedAt,
 	}
 	return r.db.Save(&record).Error
+}
+
+func (r *SQLiteRepository) UpdatePetIdentityTx(tx *gorm.DB, identity *release.PetIdentityData) error {
+	record := petIdentityRecord{
+		ID:                  identity.ID,
+		OwnerUserID:         identity.OwnerUserID,
+		SourceCharacterID:   identity.SourceCharacterID,
+		Name:                identity.Name,
+		Slug:                identity.Slug,
+		BindingPolicy:       identity.BindingPolicy,
+		UpstreamPetID:       identity.UpstreamPetID,
+		DefaultActionKey:    identity.DefaultActionKey,
+		NextReleaseSequence: identity.NextReleaseSequence,
+		CreatedAt:           identity.CreatedAt,
+		UpdatedAt:           identity.UpdatedAt,
+	}
+	return tx.Save(&record).Error
 }
 
 func (r *SQLiteRepository) GetReleaseByContentHash(contentRootHash string) (*release.ReleaseData, error) {
@@ -316,6 +350,10 @@ func (r *SQLiteRepository) UpdateBuildRequestInbox(inbox *release.ReleaseBuildRe
 
 func (r *SQLiteRepository) CreateImportSnapshot(snapshot *release.ImportPackageSnapshot) error {
 	return r.db.Create(snapshot).Error
+}
+
+func (r *SQLiteRepository) CreateImportSnapshotTx(tx *gorm.DB, snapshot *release.ImportPackageSnapshot) error {
+	return tx.Create(snapshot).Error
 }
 
 func (r *SQLiteRepository) GetImportSnapshot(stagingID string) (*release.ImportPackageSnapshot, error) {

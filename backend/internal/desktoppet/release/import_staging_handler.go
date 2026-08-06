@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
+	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -128,11 +129,11 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	hashBuf := sha256.Sum256(data)
 	contentHash := hex.EncodeToString(hashBuf[:])
 
-	if err := os.MkdirAll(path.Dir(quarantinePath), 0o750); err != nil {
+	if err := os.MkdirAll(path.Dir(quarantinePath), 0o700); err != nil {
 		util.ErrorResponse(c, response.InternalError, "写入暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
-	if err := os.WriteFile(quarantinePath, data, 0o640); err != nil {
+	if err := os.WriteFile(quarantinePath, data, 0o600); err != nil {
 		util.ErrorResponse(c, response.InternalError, "写入暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
@@ -253,7 +254,13 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 
 	sourcePath, err := h.registry.Resolve(security.RootImportQuarantine, locked.StorageKey)
 	if err != nil {
-		_, _ = h.repo.SetRejected(c.Request.Context(), locked.ID, actorID, "resolve path failed")
+		failed, failErr := h.repo.FailConsumptionCAS(c.Request.Context(), locked.ID, actorID, locked.StateRevision, "resolve path failed")
+		if failErr != nil {
+			log.Error("failed to record path resolution failure: ", failErr)
+		}
+		if !failed {
+			log.Warn("path resolution failed but staging state had changed: ", locked.ID)
+		}
 		util.ErrorResponse(c, response.InternalError, "暂存路径解析失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
@@ -265,7 +272,13 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 		"idempotencyKey":  "import:" + locked.ID,
 	})
 	if err != nil {
-		_, _ = h.repo.SetRejected(c.Request.Context(), locked.ID, actorID, err.Error())
+		failed, failErr := h.repo.FailConsumptionCAS(c.Request.Context(), locked.ID, actorID, locked.StateRevision, err.Error())
+		if failErr != nil {
+			log.Error("failed to record import failure: ", failErr)
+		}
+		if !failed {
+			log.Warn("import failed but staging state had changed: ", locked.ID)
+		}
 		util.ErrorResponse(c, response.BusinessError, "导入失败: "+err.Error(), gin.H{"errorCode": "IMPORT_FAILED"})
 		return
 	}

@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -30,6 +31,9 @@ type Record struct {
 
 type Runner struct {
 	DB         *gorm.DB
+	Locker     Locker
+	LockName   string
+	LockTTL    time.Duration
 	Now        func() time.Time
 	BackupDir  string
 	SkipBackup bool
@@ -65,6 +69,22 @@ finished_at TEXT NOT NULL DEFAULT ''
 }
 
 func (r Runner) Apply(migrations []Migration) error {
+	if r.Locker != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		lockName := r.LockName
+		if lockName == "" {
+			lockName = "migration_runner"
+		}
+		ttl := r.LockTTL
+		if ttl <= 0 {
+			ttl = 5 * time.Minute
+		}
+		if err := r.Locker.Acquire(ctx, lockName, ttl); err != nil {
+			return fmt.Errorf("migration lock: %w", err)
+		}
+		defer r.Locker.Release(lockName)
+	}
 	if err := r.EnsureTable(); err != nil {
 		return err
 	}
@@ -72,15 +92,32 @@ func (r Runner) Apply(migrations []Migration) error {
 	if err != nil {
 		return err
 	}
+	operationID, err := r.startMigrationOperation(pending)
+	if err != nil {
+		return err
+	}
 	if pending && !r.SkipBackup {
 		if err := r.CreatePreMigrationBackup(); err != nil {
+			_ = r.failMigrationOperation(operationID, err.Error())
 			return err
 		}
 	}
+	failed := false
+	var failureMsg string
 	for _, migration := range migrations {
 		if err := r.applyOne(migration); err != nil {
-			return err
+			failed = true
+			failureMsg = err.Error()
+			break
 		}
+		_ = r.recordMigrationCheckpoint(operationID, migration.Version)
+	}
+	if failed {
+		_ = r.failMigrationOperation(operationID, failureMsg)
+		return fmt.Errorf("migration failed at operation %s: %s", operationID, failureMsg)
+	}
+	if err := r.completeMigrationOperation(operationID); err != nil {
+		return err
 	}
 	return nil
 }

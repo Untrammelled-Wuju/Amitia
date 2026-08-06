@@ -199,7 +199,9 @@ type ReleaseRepository interface {
 	GetPetIdentity(petID string) (*PetIdentityData, error)
 	GetPetIdentityByCharacter(userID, characterID string) (*PetIdentityData, error)
 	CreatePetIdentity(identity *PetIdentityData) error
+	CreatePetIdentityTx(tx *gorm.DB, identity *PetIdentityData) error
 	UpdatePetIdentity(identity *PetIdentityData) error
+	UpdatePetIdentityTx(tx *gorm.DB, identity *PetIdentityData) error
 
 	GetReleaseByContentHash(contentRootHash string) (*ReleaseData, error)
 	GetRelease(releaseID string) (*ReleaseData, error)
@@ -223,6 +225,7 @@ type ReleaseRepository interface {
 	UpdateBuildRequestInbox(inbox *ReleaseBuildRequestInbox) error
 
 	CreateImportSnapshot(snapshot *ImportPackageSnapshot) error
+	CreateImportSnapshotTx(tx *gorm.DB, snapshot *ImportPackageSnapshot) error
 	GetImportSnapshot(stagingID string) (*ImportPackageSnapshot, error)
 	UpdateImportSnapshot(snapshot *ImportPackageSnapshot) error
 

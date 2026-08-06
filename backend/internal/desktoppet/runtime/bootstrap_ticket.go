@@ -51,6 +51,20 @@ func NewBootstrapTicketRepository(db *gorm.DB) *BootstrapTicketRepository {
 	return &BootstrapTicketRepository{db: db}
 }
 
+func (r *BootstrapTicketRepository) ReadinessCheck(ctx context.Context) error {
+	if r.db == nil {
+		return errors.New("database is nil")
+	}
+	sqlDB, err := r.db.DB()
+	if err != nil {
+		return fmt.Errorf("get underlying db: %w", err)
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("database ping failed: %w", err)
+	}
+	return nil
+}
+
 func generateTicketID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {

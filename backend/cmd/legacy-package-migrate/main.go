@@ -190,7 +190,18 @@ func applyMigrations(db *gorm.DB) error {
 		return fmt.Errorf("check existing database: %w", err)
 	}
 	migrations := migration.DefaultMigrations()
-	migRunner := migration.Runner{DB: db, SkipBackup: !isNew}
+	lockDir := filepath.Join(config.AppCfg.Storage.DataDir, "locks")
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
+		return fmt.Errorf("create lock directory: %w", err)
+	}
+	persistentLock := migration.NewPersistentLock(db, lockDir)
+	migRunner := migration.Runner{
+		DB:         db,
+		Locker:     persistentLock,
+		LockName:   "schema_migrations",
+		LockTTL:    5 * time.Minute,
+		SkipBackup: !isNew,
+	}
 	if isNew {
 		if err := migration.ApplyBaseline(db); err != nil {
 			return fmt.Errorf("apply baseline: %w", err)

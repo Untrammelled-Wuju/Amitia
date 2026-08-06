@@ -118,7 +118,16 @@ func NewWorker(db *gorm.DB, repo desktoppet.Repository, registry *imageprovider.
 
 func (w *Worker) Start(ctx context.Context) {
 	w.RecoverOnStartup(ctx)
-	go w.recoveryWorker.Start(ctx)
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Logger.Errorf("worker recoveryWorker panic: %v", r)
+			}
+		}()
+		w.recoveryWorker.Start(ctx)
+	}()
 	w.wg.Add(1)
 	go w.pollLoop(ctx)
 }
@@ -131,6 +140,11 @@ func (w *Worker) Stop() {
 
 func (w *Worker) pollLoop(ctx context.Context) {
 	defer w.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Logger.Errorf("worker pollLoop panic: %v", r)
+		}
+	}()
 	for {
 		select {
 		case <-w.stopCh:
@@ -169,6 +183,11 @@ func (w *Worker) pollOnce(ctx context.Context) {
 		go func() {
 			defer w.wg.Done()
 			defer func() { <-w.sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Logger.Errorf("worker processTask(%s) panic: %v", task.ID, r)
+				}
+			}()
 			w.processTask(ctx, &task)
 		}()
 	}
@@ -240,6 +259,11 @@ func (w *Worker) startHeartbeat(ctx context.Context, taskID, executionID, worker
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Logger.Errorf("worker heartbeat(%s) panic: %v", taskID, r)
+			}
+		}()
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		for {

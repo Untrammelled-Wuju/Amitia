@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"mime/multipart"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,10 +46,12 @@ type Service interface {
 	ListTasks(userID, characterID, status string, page, pageSize int) (*TaskListResponse, error)
 	DeleteTask(taskID string) error
 	GetTaskSourceImage(taskID string) (fullPath string, mimeType string, err error)
+	GetTaskSourceImageRef(taskID string, userID string) (security.ArtifactReference, error)
 	StartTask(taskID string) (*TaskSummaryResponse, error)
 	CancelTask(taskID string) error
 	RetryAction(taskID, actionKey string) (*TaskActionResponse, error)
 	GetFrameImage(taskID, actionKey string, frameIndex int) (fullPath string, mimeType string, err error)
+	GetFrameImageRef(taskID, actionKey string, frameIndex int, userID string) (security.ArtifactReference, error)
 	GetTaskTransitions(taskID string, limit int) ([]taskstate.AuditRecord, error)
 }
 
@@ -607,6 +611,49 @@ func (s *service) GetTaskSourceImage(taskID string) (fullPath string, mimeType s
 	return fullPath, task.SourceImageMimeType, nil
 }
 
+func (s *service) GetTaskSourceImageRef(taskID string, userID string) (security.ArtifactReference, error) {
+	task, err := s.repo.GetTaskByID(taskID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "任务不存在")
+		}
+		return security.ArtifactReference{}, err
+	}
+	if task.SourceImagePath == "" {
+		return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "参考图片不存在")
+	}
+	hash := task.SourceImageHash
+	if hash == "" {
+		fullPath := filepath.Join(config.AppCfg.Storage.DataDir, task.SourceImagePath)
+		if h, err := computeSHA256File(fullPath); err == nil {
+			hash = h
+		}
+	}
+	storageKey := strings.TrimPrefix(task.SourceImagePath, "desktop-pets/")
+	return security.ArtifactReference{
+		ArtifactID:  taskID,
+		OwnerUserID: userID,
+		RootKind:    security.RootGenerationArtifacts,
+		StorageKey:  storageKey,
+		ContentHash: hash,
+		ByteSize:    int64(task.SourceImageSize),
+		MIME:        task.SourceImageMimeType,
+	}, nil
+}
+
+func computeSHA256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func (s *service) GetFrameImage(taskID, actionKey string, frameIndex int) (fullPath string, mimeType string, err error) {
 	if frameIndex < 0 {
 		return "", "", NewBusinessError(response.InvalidParams, ErrCodeFrameNotFound, "帧索引无效")
@@ -654,6 +701,66 @@ func (s *service) GetFrameImage(taskID, actionKey string, frameIndex int) (fullP
 		mimeType = "image/png"
 	}
 	return fullPath, mimeType, nil
+}
+
+func (s *service) GetFrameImageRef(taskID, actionKey string, frameIndex int, userID string) (security.ArtifactReference, error) {
+	if frameIndex < 0 {
+		return security.ArtifactReference{}, NewBusinessError(response.InvalidParams, ErrCodeFrameNotFound, "帧索引无效")
+	}
+	if _, err := s.repo.GetTaskByID(taskID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "任务不存在")
+		}
+		return security.ArtifactReference{}, err
+	}
+	actions, err := s.repo.ListActionsByTaskID(taskID)
+	if err != nil {
+		return security.ArtifactReference{}, err
+	}
+	var actionID string
+	for _, a := range actions {
+		if a.ActionKey == actionKey {
+			actionID = a.ID
+			break
+		}
+	}
+	if actionID == "" {
+		return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeActionNotFound, "动作不存在")
+	}
+	frames, err := s.repo.ListFramesByAction(actionID)
+	if err != nil {
+		return security.ArtifactReference{}, err
+	}
+	var target *GenerationFrame
+	for i := range frames {
+		if frames[i].FrameIndex == frameIndex {
+			target = &frames[i]
+			break
+		}
+	}
+	if target == nil {
+		return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeFrameNotFound, "帧不存在")
+	}
+	if target.Status != "succeeded" || target.ResultImagePath == "" {
+		return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeFrameNotFound, "帧图片不存在")
+	}
+	hash := target.ResultHash
+	if hash == "" {
+		fullPath := filepath.Join(config.AppCfg.Storage.DataDir, target.ResultImagePath)
+		if h, err := computeSHA256File(fullPath); err == nil {
+			hash = h
+		}
+	}
+	storageKey := strings.TrimPrefix(target.ResultImagePath, "desktop-pets/")
+	return security.ArtifactReference{
+		ArtifactID:  taskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex),
+		OwnerUserID: userID,
+		RootKind:    security.RootGenerationArtifacts,
+		StorageKey:  storageKey,
+		ContentHash: hash,
+		ByteSize:    int64(target.ResultSize),
+		MIME:        target.ResultMimeType,
+	}, nil
 }
 
 func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
@@ -1129,7 +1236,7 @@ func removeAllTaskDir(dir string) error {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			return nil
 		}
-		if err := security.RemoveDirNoSymlinks(dir); err != nil {
+		if err := removeLocalDirNoSymlinks(dir); err != nil {
 			lastErr = err
 		}
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -1151,6 +1258,29 @@ func removeAllTaskDir(dir string) error {
 		}
 	}
 	return lastErr
+}
+
+func removeLocalDirNoSymlinks(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return os.Remove(path)
+	}
+	if !info.IsDir() {
+		return os.Remove(path)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := removeLocalDirNoSymlinks(filepath.Join(path, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return os.Remove(path)
 }
 
 func (s *service) GetTaskTransitions(taskID string, limit int) ([]taskstate.AuditRecord, error) {

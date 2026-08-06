@@ -1,17 +1,21 @@
 package editing
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/pkg/util"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
-	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {
@@ -794,9 +798,52 @@ func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, a
 		c.Status(http.StatusNotFound)
 		return
 	}
+	storageKey, err := extractStorageKey(path)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	hash, size, err := computeFileHashAndSize(path)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Cache-Control", "private, max-age=300")
-	responder.ResolveAndServe(c, actor, rootKind, path, artifactID, entityID, mimeType)
+	responder.ServeArtifact(c, actor, security.ArtifactReference{
+		ArtifactID:  artifactID,
+		OwnerUserID: entityID,
+		RootKind:    rootKind,
+		StorageKey:  storageKey,
+		ContentHash: hash,
+		ByteSize:    size,
+		MIME:        mimeType,
+	})
+}
+
+func extractStorageKey(path string) (string, error) {
+	idx := strings.Index(path, "desktop-pets/")
+	if idx == -1 {
+		return "", errors.New("invalid path")
+	}
+	return path[idx+len("desktop-pets/"):], nil
+}
+
+func computeFileHashAndSize(path string) (string, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return "", 0, err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), info.Size(), nil
 }
 
 func writeEditError(c *gin.Context, err error) {

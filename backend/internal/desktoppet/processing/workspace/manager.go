@@ -1,4 +1,4 @@
-package workspace
+﻿package workspace
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/processing/artifact"
-	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
 type WorkspaceManager struct {
@@ -178,7 +177,7 @@ func (m *WorkspaceManager) AtomicPublish(stagingPath, finalPath string) error {
 
 	if err := os.Rename(stagingPath, finalPath); err != nil {
 		if _, statErr := os.Stat(finalPath); statErr == nil {
-			if rmErr := security.RemoveDirNoSymlinks(finalPath); rmErr != nil {
+			if rmErr := removeDirNoSymlinksLocal(finalPath); rmErr != nil {
 				return fmt.Errorf("workspace: remove existing final path %s: %w", finalPath, rmErr)
 			}
 		}
@@ -196,7 +195,7 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 	}
 	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
-		if err := security.RemoveDirNoSymlinks(dir); err != nil {
+		if err := removeDirNoSymlinksLocal(dir); err != nil {
 			lastErr = err
 			time.Sleep(200 * time.Millisecond)
 			continue
@@ -212,4 +211,31 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 		lastErr = fmt.Errorf("failed to remove directory after %d attempts: %s", maxAttempts, dir)
 	}
 	return lastErr
+}
+
+
+func removeDirNoSymlinksLocal(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return os.Remove(path)
+	}
+	if !info.IsDir() {
+		return os.Remove(path)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := removeDirNoSymlinksLocal(filepath.Join(path, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return os.Remove(path)
 }

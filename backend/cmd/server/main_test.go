@@ -31,7 +31,7 @@ func TestApplyDatabaseStartupMigrationsCreatesRetrievalLogsWithAllColumns(t *tes
 		config.AppCfg = originalCfg
 	})
 
-	if err := applyDatabaseStartupMigrations(db); err != nil {
+	if err := applyDatabaseStartupMigrations(db, dataDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,7 +105,7 @@ func TestApplyDatabaseStartupMigrationsCreatesConversationScopeIndexes(t *testin
 		config.AppCfg = originalCfg
 	})
 
-	if err := applyDatabaseStartupMigrations(db); err != nil {
+	if err := applyDatabaseStartupMigrations(db, dataDir); err != nil {
 		t.Fatal(err)
 	}
 

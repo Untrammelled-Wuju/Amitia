@@ -6,8 +6,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,11 +47,13 @@ import (
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
+	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/temporal"
@@ -59,6 +63,8 @@ import (
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
+	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
 func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error) {
@@ -77,31 +83,36 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		return nil, fmt.Errorf("initialize local credential store: %w", err)
 	}
 
-	if services.DesktopInstanceStore == nil {
-		return nil, fmt.Errorf("desktop instance store is not initialized")
-	}
-
 	r.GET("/livez", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "alive"})
 	})
 
 	r.GET("/readyz", func(c *gin.Context) {
-		if services.Readiness == nil {
-			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "readiness service not initialized"}})
+		if services.RuntimeOrchestrator == nil {
+			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "orchestrator not initialized"}})
 			return
 		}
-		snapshot := services.Readiness.Snapshot()
+		snap := services.RuntimeOrchestrator.Snapshot()
+		overallStatus := "ready"
+		if snap.IsBlocked() {
+			overallStatus = "blocked"
+		} else if snap.State == runtimeorchestrator.OrchestratorDegraded {
+			overallStatus = "degraded"
+		}
 		result := gin.H{
-			"status":        snapshot.OverallStatus,
-			"blockingCount": snapshot.BlockingCount,
-			"degradedCount": snapshot.DegradedCount,
-			"timestamp":     snapshot.Timestamp,
+			"status":        overallStatus,
+			"state":         snap.State,
+			"blockingCount": snap.BlockingCount,
+			"degradedCount": snap.DegradedCount,
+			"readyCount":    snap.ReadyCount,
+			"failedCount":   snap.FailedCount,
+			"timestamp":     snap.Timestamp,
 		}
 		httpStatus := 200
-		if snapshot.OverallStatus == readiness.StatusBlocked {
+		if snap.IsBlocked() {
 			httpStatus = 503
 		}
-		c.JSON(httpStatus, gin.H{"code": httpStatus, "msg": string(snapshot.OverallStatus), "data": result})
+		c.JSON(httpStatus, gin.H{"code": httpStatus, "msg": overallStatus, "data": result})
 	})
 
 	public := r.Group("/api/public")
@@ -127,204 +138,214 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 	services.DesktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
 
-	localRoot :=
-		r.Group("/api/local")
-
-	localRoot.Use(
-		security.AuthenticationMiddleware(
-			security.AuthConfig{
-				Mode:             config.AppCfg.Security.Mode,
-				JWTSecret:        config.AppCfg.JWT.Secret,
-				JWTIssuer:        config.AppCfg.JWT.Issuer,
-				JWTAudience:      config.AppCfg.JWT.Audience,
-				LocalCredentials: localCredentialStore,
-				LocalUserID:      config.AppCfg.Security.LocalUserID,
-				ListenAddress:    config.AppCfg.Server.Host,
-				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-			},
-		),
-	)
-
-	localRoot.Use(
-		security.RequireAuthMethod(
-			security.AuthMethodLocalToken,
-		),
-	)
-	{
-		localRoot.POST(
-			"/sessions",
-			sessionSvc.CreateSession,
-		)
+	if services.DesktopInstanceStore == nil && config.AppCfg.Security.Mode == "local_single_user" {
+		return nil, fmt.Errorf("desktop instance store is required in local_single_user mode")
 	}
 
-	localDesktop :=
-		r.Group("/api/local")
+	if services.DesktopInstanceStore != nil {
+		localRoot :=
+			r.Group("/api/local")
 
-	localDesktop.Use(
-		security.AuthenticationMiddleware(
-			security.AuthConfig{
-				Mode:             config.AppCfg.Security.Mode,
-				JWTSecret:        config.AppCfg.JWT.Secret,
-				JWTIssuer:        config.AppCfg.JWT.Issuer,
-				JWTAudience:      config.AppCfg.JWT.Audience,
-				LocalCredentials: localCredentialStore,
-				LocalUserID:      config.AppCfg.Security.LocalUserID,
-				ListenAddress:    config.AppCfg.Server.Host,
-				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-				SessionService:   sessionSvc,
-			},
-		),
-	)
-
-	localDesktop.Use(
-		security.RequireAuthMethod(
-			security.AuthMethodDesktopSession,
-		),
-	)
-	{
-		localDesktop.POST("/devices/register", func(c *gin.Context) {
-			actor := security.GetActor(c)
-			if actor == nil || actor.UserID == "" {
-				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
-				return
-			}
-			var request struct {
-				DeviceID          string `json:"deviceId" binding:"required"`
-				DesktopInstanceID string `json:"desktopInstanceId"`
-				Platform          string `json:"platform"`
-				AppVersion        string `json:"appVersion"`
-			}
-			if err := c.ShouldBindJSON(&request); err != nil {
-				c.JSON(400, gin.H{"code": 400, "msg": err.Error()})
-				return
-			}
-			headerInstanceID :=
-				strings.TrimSpace(
-					c.GetHeader(
-						"X-Amitia-Desktop-Instance",
-					),
-				)
-			request.DesktopInstanceID =
-				strings.TrimSpace(
-					request.DesktopInstanceID,
-				)
-			if headerInstanceID == "" ||
-				request.DesktopInstanceID == "" ||
-				request.DesktopInstanceID !=
-					headerInstanceID {
-				c.JSON(
-					http.StatusBadRequest,
-					gin.H{
-						"code": 400,
-						"msg":  "desktopInstanceId mismatch",
-					},
-				)
-				return
-			}
-			err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
-				UserID:            actor.UserID,
-				DeviceID:          request.DeviceID,
-				DesktopInstanceID: request.DesktopInstanceID,
-				Platform:          request.Platform,
-				AppVersion:        request.AppVersion,
-			})
-			if err != nil {
-				log.Error("failed to register device identity", "error", err)
-				c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
-				return
-			}
-			c.JSON(200, gin.H{"code": 200, "msg": "ok"})
-		})
-		localDesktop.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
-			actor := security.GetActor(c)
-			if actor == nil || actor.UserID == "" {
-				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
-				return
-			}
-			deviceID := c.Param("deviceId")
-			if deviceID == "" {
-				c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
-				return
-			}
-			var request struct {
-				RuntimeID string `json:"runtimeId"`
-			}
-			if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.RuntimeID) == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId is required"})
-				return
-			}
-			runtimeID := strings.TrimSpace(request.RuntimeID)
-			if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID, deviceID); err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
-				return
-			}
-			rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, runtimeID, 10*time.Minute)
-			if err != nil {
-				log.Error("failed to create bootstrap ticket", "error", err)
-				c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
-				return
-			}
-			c.JSON(200, gin.H{
-				"code": 200,
-				"msg":  "ok",
-				"data": gin.H{
-					"ticketId":   ticket.ID,
-					"ticket":     rawTicket,
-					"deviceId":   ticket.DeviceID,
-					"runtimeId":  ticket.RuntimeID,
-					"expiresAt":  ticket.ExpiresAt,
-					"ttlSeconds": 600,
+		localRoot.Use(
+			security.AuthenticationMiddleware(
+				security.AuthConfig{
+					Mode:             config.AppCfg.Security.Mode,
+					JWTSecret:        config.AppCfg.JWT.Secret,
+					JWTIssuer:        config.AppCfg.JWT.Issuer,
+					JWTAudience:      config.AppCfg.JWT.Audience,
+					LocalCredentials: localCredentialStore,
+					LocalUserID:      config.AppCfg.Security.LocalUserID,
+					ListenAddress:    config.AppCfg.Server.Host,
+					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 				},
-			})
-		})
-		localDesktop.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
-			actor := security.GetActor(c)
-			if actor == nil || actor.UserID == "" {
-				c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
-				return
-			}
-			deviceID := c.Param("deviceId")
-			if deviceID == "" {
-				c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
-				return
-			}
-			affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID, deviceID)
-			if err != nil {
-				log.Error("failed to revoke device bootstrap tickets", "error", err)
-				c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
-				return
-			}
-			c.JSON(200, gin.H{"code": 200, "msg": "ok", "data": gin.H{"revoked": affected}})
-		})
+			),
+		)
+
+		localRoot.Use(
+			security.RequireAuthMethod(
+				security.AuthMethodLocalToken,
+			),
+		)
+		{
+			localRoot.POST(
+				"/sessions",
+				sessionSvc.CreateSession,
+			)
+		}
 	}
 
-	localAdmin := r.Group("/api/local/admin")
-	localAdmin.Use(security.LocalAdminAuthenticationMiddleware(security.AuthConfig{
-		Mode:                     config.AppCfg.Security.Mode,
-		LocalCredentials:         localCredentialStore,
-		LocalUserID:              config.AppCfg.Security.LocalUserID,
-		ListenAddress:            config.AppCfg.Server.Host,
-		AllowedOrigins:           config.AppCfg.Security.AllowedOrigins,
-		DesktopInstanceValidator: services.DesktopInstanceStore.Validate,
-	}))
-	localAdmin.Use(security.RequirePermission("system.shutdown"))
-	localAdmin.POST("/token/rotate", sessionSvc.RotateToken)
-	localAdmin.POST("/shutdown", func(c *gin.Context) {
-		actor := security.GetActor(c)
-		if actor == nil || actor.AuthMethod != security.AuthMethodLocalAdminToken || !actor.IsLocalTrusted {
-			c.JSON(403, gin.H{"code": 403, "msg": "local admin credential required"})
-			return
+	if services.DesktopInstanceStore != nil {
+		localDesktop :=
+			r.Group("/api/local")
+
+		localDesktop.Use(
+			security.AuthenticationMiddleware(
+				security.AuthConfig{
+					Mode:             config.AppCfg.Security.Mode,
+					JWTSecret:        config.AppCfg.JWT.Secret,
+					JWTIssuer:        config.AppCfg.JWT.Issuer,
+					JWTAudience:      config.AppCfg.JWT.Audience,
+					LocalCredentials: localCredentialStore,
+					LocalUserID:      config.AppCfg.Security.LocalUserID,
+					ListenAddress:    config.AppCfg.Server.Host,
+					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+					SessionService:   sessionSvc,
+				},
+			),
+		)
+
+		localDesktop.Use(
+			security.RequireAuthMethod(
+				security.AuthMethodDesktopSession,
+			),
+		)
+		{
+			localDesktop.POST("/devices/register", func(c *gin.Context) {
+				actor := security.GetActor(c)
+				if actor == nil || actor.UserID == "" {
+					c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
+					return
+				}
+				var request struct {
+					DeviceID          string `json:"deviceId" binding:"required"`
+					DesktopInstanceID string `json:"desktopInstanceId"`
+					Platform          string `json:"platform"`
+					AppVersion        string `json:"appVersion"`
+				}
+				if err := c.ShouldBindJSON(&request); err != nil {
+					c.JSON(400, gin.H{"code": 400, "msg": err.Error()})
+					return
+				}
+				headerInstanceID :=
+					strings.TrimSpace(
+						c.GetHeader(
+							"X-Amitia-Desktop-Instance",
+						),
+					)
+				request.DesktopInstanceID =
+					strings.TrimSpace(
+						request.DesktopInstanceID,
+					)
+				if headerInstanceID == "" ||
+					request.DesktopInstanceID == "" ||
+					request.DesktopInstanceID !=
+						headerInstanceID {
+					c.JSON(
+						http.StatusBadRequest,
+						gin.H{
+							"code": 400,
+							"msg":  "desktopInstanceId mismatch",
+						},
+					)
+					return
+				}
+				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
+					UserID:            actor.UserID,
+					DeviceID:          request.DeviceID,
+					DesktopInstanceID: request.DesktopInstanceID,
+					Platform:          request.Platform,
+					AppVersion:        request.AppVersion,
+				})
+				if err != nil {
+					log.Error("failed to register device identity", "error", err)
+					c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
+					return
+				}
+				c.JSON(200, gin.H{"code": 200, "msg": "ok"})
+			})
+			localDesktop.POST("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+				actor := security.GetActor(c)
+				if actor == nil || actor.UserID == "" {
+					c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
+					return
+				}
+				deviceID := c.Param("deviceId")
+				if deviceID == "" {
+					c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
+					return
+				}
+				var request struct {
+					RuntimeID string `json:"runtimeId"`
+				}
+				if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.RuntimeID) == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId is required"})
+					return
+				}
+				runtimeID := strings.TrimSpace(request.RuntimeID)
+				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID, deviceID); err != nil {
+					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
+					return
+				}
+				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, runtimeID, 10*time.Minute)
+				if err != nil {
+					log.Error("failed to create bootstrap ticket", "error", err)
+					c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
+					return
+				}
+				c.JSON(200, gin.H{
+					"code": 200,
+					"msg":  "ok",
+					"data": gin.H{
+						"ticketId":   ticket.ID,
+						"ticket":     rawTicket,
+						"deviceId":   ticket.DeviceID,
+						"runtimeId":  ticket.RuntimeID,
+						"expiresAt":  ticket.ExpiresAt,
+						"ttlSeconds": 600,
+					},
+				})
+			})
+			localDesktop.DELETE("/devices/:deviceId/runtime-bootstrap-tickets", func(c *gin.Context) {
+				actor := security.GetActor(c)
+				if actor == nil || actor.UserID == "" {
+					c.JSON(401, gin.H{"code": 401, "msg": "unauthorized"})
+					return
+				}
+				deviceID := c.Param("deviceId")
+				if deviceID == "" {
+					c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
+					return
+				}
+				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID, deviceID)
+				if err != nil {
+					log.Error("failed to revoke device bootstrap tickets", "error", err)
+					c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
+					return
+				}
+				c.JSON(200, gin.H{"code": 200, "msg": "ok", "data": gin.H{"revoked": affected}})
+			})
 		}
-		log.Info("system.shutdown.requested", "actor", actor.UserID, "method", actor.AuthMethod)
-		c.JSON(202, gin.H{"code": 202, "msg": "shutting down", "shutdownOperationId": generateShutdownOpID()})
-		go func() {
-			time.Sleep(300 * time.Millisecond)
-			log.Info("system.shutdown.completed")
-			if triggerShutdown != nil {
-				triggerShutdown()
+	}
+
+	if services.DesktopInstanceStore != nil {
+		localAdmin := r.Group("/api/local/admin")
+		localAdmin.Use(security.LocalAdminAuthenticationMiddleware(security.AuthConfig{
+			Mode:                     config.AppCfg.Security.Mode,
+			LocalCredentials:         localCredentialStore,
+			LocalUserID:              config.AppCfg.Security.LocalUserID,
+			ListenAddress:            config.AppCfg.Server.Host,
+			AllowedOrigins:           config.AppCfg.Security.AllowedOrigins,
+			DesktopInstanceValidator: services.DesktopInstanceStore.Validate,
+		}))
+		localAdmin.Use(security.RequirePermission("system.shutdown"))
+		localAdmin.POST("/token/rotate", sessionSvc.RotateToken)
+		localAdmin.POST("/shutdown", func(c *gin.Context) {
+			actor := security.GetActor(c)
+			if actor == nil || actor.AuthMethod != security.AuthMethodLocalAdminToken || !actor.IsLocalTrusted {
+				c.JSON(403, gin.H{"code": 403, "msg": "local admin credential required"})
+				return
 			}
-		}()
-	})
+			log.Info("system.shutdown.requested", "actor", actor.UserID, "method", actor.AuthMethod)
+			c.JSON(202, gin.H{"code": 202, "msg": "shutting down", "shutdownOperationId": generateShutdownOpID()})
+			go func() {
+				time.Sleep(300 * time.Millisecond)
+				log.Info("system.shutdown.completed")
+				if triggerShutdown != nil {
+					triggerShutdown()
+				}
+			}()
+		})
+	}
 
 	apiGroup := r.Group("/api")
 	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
@@ -338,7 +359,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 		SessionService:   sessionSvc,
 	}))
-	apiGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
@@ -365,16 +385,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
-		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx)
+		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx, services.PathRegistry)
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, ctx.DB, services.Extension)
-		processing.RegisterProcessingRouter(apiGroup, ctx)
-		editing.RegisterEditingRouterWithService(apiGroup, services.EditingService, services.OwnershipGuard)
-		quality.RegisterQualityRouter(apiGroup, services.QualityService, services.OwnershipGuard)
-		installation.RegisterRoutes(apiGroup, services.InstallationService, services.OwnershipGuard)
-		release.RegisterRoutes(apiGroup, services.NewReleaseService, services.OwnershipGuard)
-		registerImportStagingRoutes(apiGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
-		behavior.RegisterRoutes(apiGroup, services.BehaviorService)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
@@ -396,6 +409,29 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)
 	}
+
+	desktopPetWriteGroup := r.Group("/api")
+	desktopPetWriteGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
+		Mode:             config.AppCfg.Security.Mode,
+		JWTSecret:        config.AppCfg.JWT.Secret,
+		JWTIssuer:        config.AppCfg.JWT.Issuer,
+		JWTAudience:      config.AppCfg.JWT.Audience,
+		LocalCredentials: localCredentialStore,
+		LocalUserID:      config.AppCfg.Security.LocalUserID,
+		ListenAddress:    config.AppCfg.Server.Host,
+		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+		SessionService:   sessionSvc,
+	}))
+	desktopPetWriteGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
+	{
+		processing.RegisterProcessingRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
+		editing.RegisterEditingRouterWithService(desktopPetWriteGroup, services.EditingService, services.OwnershipGuard, services.PathRegistry)
+		quality.RegisterQualityRouter(desktopPetWriteGroup, services.QualityService, services.OwnershipGuard)
+		installation.RegisterRoutes(desktopPetWriteGroup, services.InstallationService, services.OwnershipGuard)
+		release.RegisterRoutes(desktopPetWriteGroup, services.NewReleaseService, services.OwnershipGuard)
+		registerImportStagingRoutes(desktopPetWriteGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
+		behavior.RegisterRoutes(desktopPetWriteGroup, services.BehaviorService)
+	}
 	runtime.RegisterInternalRoutes(
 		r,
 		services.DesktopPetRuntime,
@@ -414,23 +450,156 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	}))
 	{
 		maintenance.GET("/doctor", func(c *gin.Context) {
-			c.JSON(200, gin.H{"code": 200, "msg": "doctor not implemented"})
+			report := buildDoctorReport(ctx.DB, services)
+			util.SuccessResponse(c, report)
 		})
 		maintenance.GET("/readiness", func(c *gin.Context) {
-			c.JSON(200, gin.H{"code": 200, "msg": "readiness not implemented"})
+			if services.Readiness == nil {
+				c.JSON(503, gin.H{"code": 503, "msg": "readiness service unavailable"})
+				return
+			}
+			snapshot := services.Readiness.Snapshot()
+			util.SuccessResponse(c, snapshot)
 		})
 		maintenance.GET("/migrations", func(c *gin.Context) {
-			c.JSON(200, gin.H{"code": 200, "msg": "migrations not implemented"})
+			migrations, err := queryMigrationStatus(ctx.DB)
+			if err != nil {
+				c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
+				return
+			}
+			util.SuccessResponse(c, migrations)
 		})
 		maintenance.POST("/backup", func(c *gin.Context) {
-			c.JSON(200, gin.H{"code": 200, "msg": "backup not implemented"})
+			report, err := runMaintenanceBackup(ctx.DB, services)
+			if err != nil {
+				c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
+				return
+			}
+			util.SuccessResponse(c, report)
 		})
 		maintenance.POST("/export", func(c *gin.Context) {
-			c.JSON(200, gin.H{"code": 200, "msg": "export not implemented"})
+			report, err := runMaintenanceExport(ctx.DB, services)
+			if err != nil {
+				c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
+				return
+			}
+			util.SuccessResponse(c, report)
 		})
 	}
 
 	return r, nil
+}
+
+func buildDoctorReport(db *gorm.DB, services *AppServices) map[string]interface{} {
+	sqlDB, _ := db.DB()
+	dbOk := sqlDB != nil && sqlDB.Ping() == nil
+	var failedMigrations int64
+	db.Model(&migration.Record{}).Where("status = ?", "failed").Count(&failedMigrations)
+	var appliedMigrations int64
+	db.Model(&migration.Record{}).Where("status = ?", "applied").Count(&appliedMigrations)
+	runtimeStatus := "unknown"
+	if services.RuntimeOrchestrator != nil {
+		snap := services.RuntimeOrchestrator.Snapshot()
+		runtimeStatus = string(snap.State)
+	}
+	safeMode := false
+	safeModeReason := ""
+	if services.SafeMode != nil {
+		safeMode, safeModeReason, _ = services.SafeMode.IsInSafeMode()
+	}
+	readiness := "unknown"
+	if services.Readiness != nil {
+		s := services.Readiness.Snapshot()
+		readiness = string(s.OverallStatus)
+	}
+	return map[string]interface{}{
+		"status": map[string]bool{
+			"database":          dbOk,
+			"safeMode":          safeMode,
+			"orchestratorReady": services.RuntimeOrchestrator != nil,
+			"readinessReady":    services.Readiness != nil,
+		},
+		"details": map[string]interface{}{
+			"safeModeReason":    safeModeReason,
+			"runtimeStatus":     runtimeStatus,
+			"readinessStatus":   readiness,
+			"failedMigrations":  failedMigrations,
+			"appliedMigrations": appliedMigrations,
+		},
+		"checkedAt": time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+func queryMigrationStatus(db *gorm.DB) (map[string]interface{}, error) {
+	var records []migration.Record
+	if err := db.Order("version asc").Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("query migrations: %w", err)
+	}
+	summary := map[string]int64{"applied": 0, "failed": 0, "pending": 0}
+	for _, r := range records {
+		summary[r.Status]++
+	}
+	return map[string]interface{}{
+		"total":    len(records),
+		"summary":  summary,
+		"versions": records,
+	}, nil
+}
+
+func runMaintenanceBackup(db *gorm.DB, services *AppServices) (map[string]interface{}, error) {
+	backupDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_backups")
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create backup dir: %w", err)
+	}
+	runner := migration.Runner{DB: db, BackupDir: backupDir}
+	if err := runner.CreatePreMigrationBackup(); err != nil {
+		return nil, fmt.Errorf("create backup: %w", err)
+	}
+	var latest struct {
+		ID         string
+		BackupPath string
+		BackupSize int64
+		Status     string
+		FinishedAt string
+	}
+	db.Raw("SELECT id, backup_path, backup_size, status, finished_at FROM backup_records WHERE status = 'completed' ORDER BY finished_at DESC LIMIT 1").Scan(&latest)
+	return map[string]interface{}{
+		"backupId":    latest.ID,
+		"backupPath":  latest.BackupPath,
+		"size":        latest.BackupSize,
+		"status":      latest.Status,
+		"completedAt": latest.FinishedAt,
+	}, nil
+}
+
+func runMaintenanceExport(db *gorm.DB, services *AppServices) (map[string]interface{}, error) {
+	var migrationRecords []migration.Record
+	db.Order("version asc").Find(&migrationRecords)
+	doctor := buildDoctorReport(db, services)
+	report := map[string]interface{}{
+		"doctor":     doctor,
+		"migrations": migrationRecords,
+		"exportedAt": time.Now().UTC().Format(time.RFC3339),
+	}
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal report: %w", err)
+	}
+	name := fmt.Sprintf("diagnostic_%s.json", time.Now().UTC().Format("20060102_150405"))
+	exportPath := filepath.Join(config.AppCfg.Storage.DataDir, "exports")
+	if err := os.MkdirAll(exportPath, 0o700); err != nil {
+		return nil, fmt.Errorf("create export dir: %w", err)
+	}
+	fullPath := filepath.Join(exportPath, name)
+	if err := os.WriteFile(fullPath, data, 0o600); err != nil {
+		return nil, fmt.Errorf("write export: %w", err)
+	}
+	return map[string]interface{}{
+		"exported":   true,
+		"file":       name,
+		"size":       len(data),
+		"exportedAt": report["exportedAt"],
+	}, nil
 }
 
 type packageImportAdapter struct {

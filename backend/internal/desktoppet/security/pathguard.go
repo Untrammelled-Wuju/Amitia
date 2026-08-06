@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
@@ -131,6 +132,31 @@ func (r *PathRootRegistry) StorageKeyFromPath(kind StorageRootKind, absolutePath
 	return filepath.ToSlash(rel), nil
 }
 
+func (r *PathRootRegistry) MoveToTrash(resolvedPath string, entityID string) error {
+	info, err := os.Lstat(resolvedPath)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return os.Remove(resolvedPath)
+	}
+	trashRoot, err := r.Root(RootStorageTrash)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(trashRoot, 0o700); err != nil {
+		return err
+	}
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	baseName := filepath.Base(resolvedPath)
+	trashName := fmt.Sprintf("%s_%s_%s", timestamp, entityID, baseName)
+	destPath := filepath.Join(trashRoot, trashName)
+	if err := os.Rename(resolvedPath, destPath); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *PathRootRegistry) resolve(filePath string) (string, error) {
 	abs, err := filepath.Abs(filePath)
 	if err != nil {
@@ -168,6 +194,37 @@ func (r *PathRootRegistry) resolveNonExistent(path string) (string, error) {
 		}
 	}
 	return "", ErrPathEscape
+}
+
+func (r *PathRootRegistry) Validate() error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for kind, root := range r.roots {
+		info, err := os.Lstat(root)
+		if err != nil {
+			return fmt.Errorf("root %s: %w", kind, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("root %s: %s is not a directory", kind, root)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("root %s: %s is a symlink", kind, root)
+		}
+		if err := checkWritable(root); err != nil {
+			return fmt.Errorf("root %s: %w", kind, err)
+		}
+	}
+	return nil
+}
+
+func checkWritable(dir string) error {
+	tmpFile := filepath.Join(dir, ".write_test")
+	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	if err != nil {
+		return fmt.Errorf("directory not writable: %w", err)
+	}
+	f.Close()
+	return os.Remove(tmpFile)
 }
 
 type ArtifactReference struct {
@@ -219,42 +276,6 @@ func (s *SafeArtifactResponder) ServeArtifact(c *gin.Context, actor *auth.ActorC
 	http.ServeFile(c.Writer, c.Request, resolved)
 }
 
-func (s *SafeArtifactResponder) BuildAndServe(c *gin.Context, actor *auth.ActorContext, kind StorageRootKind, storageKey string, artifactID string, ownerUserID string, mime string) {
-	resolved, err := s.registry.Resolve(kind, storageKey)
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
-	info, err := os.Lstat(resolved)
-	if err != nil || !info.Mode().IsRegular() {
-		c.Status(http.StatusNotFound)
-		return
-	}
-	hash, err := hashFileSHA256(resolved)
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
-	s.ServeArtifact(c, actor, ArtifactReference{
-		ArtifactID:  artifactID,
-		OwnerUserID: ownerUserID,
-		RootKind:    kind,
-		StorageKey:  storageKey,
-		ContentHash: hash,
-		ByteSize:    info.Size(),
-		MIME:        mime,
-	})
-}
-
-func (s *SafeArtifactResponder) ResolveAndServe(c *gin.Context, actor *auth.ActorContext, kind StorageRootKind, absolutePath string, artifactID string, ownerUserID string, mime string) {
-	storageKey, err := s.registry.StorageKeyFromPath(kind, absolutePath)
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
-	}
-	s.BuildAndServe(c, actor, kind, storageKey, artifactID, ownerUserID, mime)
-}
-
 func (s *SafeArtifactResponder) SafeDelete(kind StorageRootKind, storageKey string, expectation DeleteExpectation) error {
 	if strings.TrimSpace(expectation.EntityType) == "" || strings.TrimSpace(expectation.EntityID) == "" {
 		return ErrUnsafePath
@@ -274,34 +295,7 @@ func (s *SafeArtifactResponder) SafeDelete(kind StorageRootKind, storageKey stri
 	if err != nil || !strings.Contains(filepath.ToSlash(rel), expectation.EntityID) {
 		return ErrUnsafePath
 	}
-	return removeNoSymlinks(resolved)
-}
-
-func removeNoSymlinks(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return os.Remove(path)
-	}
-	if !info.IsDir() {
-		return os.Remove(path)
-	}
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if err := removeNoSymlinks(filepath.Join(path, entry.Name())); err != nil {
-			return err
-		}
-	}
-	return os.Remove(path)
-}
-
-func RemoveDirNoSymlinks(root string) error {
-	return removeNoSymlinks(root)
+	return s.registry.MoveToTrash(resolved, expectation.EntityID)
 }
 
 func hashFileSHA256(path string) (string, error) {

@@ -21,11 +21,18 @@ import (
 )
 
 type PackageImporter struct {
-	repo         release.ReleaseRepository
-	storage      release.ReleaseStoragePort
-	validator    PackageValidator
-	registry     *security.PathRootRegistry
-	stagingRepo  security.ImportStagingRepository
+	repo           release.ReleaseRepository
+	storage        release.ReleaseStoragePort
+	validator      PackageValidator
+	registry       *security.PathRootRegistry
+	stagingRepo    security.ImportStagingRepository
+	journalManager JournalManagerPort
+}
+
+type JournalManagerPort interface {
+	CreateJournal(operationID, releaseID, petID string) (*release.ReleasePublishJournal, error)
+	UpdateStage(journal *release.ReleasePublishJournal, stage, contentRootHash, stagingPath, publishedPath string) error
+	MarkFailed(journal *release.ReleasePublishJournal, errMsg string) error
 }
 
 type PackageValidator interface {
@@ -88,6 +95,24 @@ func NewPackageImporterWithStaging(
 	}
 }
 
+func NewPackageImporterWithJournal(
+	repo release.ReleaseRepository,
+	storage release.ReleaseStoragePort,
+	validator PackageValidator,
+	registry *security.PathRootRegistry,
+	stagingRepo security.ImportStagingRepository,
+	journalManager JournalManagerPort,
+) *PackageImporter {
+	return &PackageImporter{
+		repo:           repo,
+		storage:        storage,
+		validator:      validator,
+		registry:       registry,
+		stagingRepo:    stagingRepo,
+		journalManager: journalManager,
+	}
+}
+
 func (pi *PackageImporter) ImportPackage(ctx context.Context, req *ImportPackageRequest) (*ImportPackageResult, error) {
 	if req.UserID == "" {
 		return nil, release.NewReleaseError("INVALID_USER", "用户 ID 不能为空", nil)
@@ -119,29 +144,10 @@ func (pi *PackageImporter) ImportPackage(ctx context.Context, req *ImportPackage
 		return nil, err
 	}
 
-	snapshot := &release.ImportPackageSnapshot{
-		ID:                    uuid.NewString(),
-		ImportStagingID:       req.ImportStagingID,
-		SourcePackageHash:     validation.SourcePackageHash,
-		SourceManifestHash:    validation.SourceManifestHash,
-		SourceSchemaVersion:   validation.SourceSchemaVersion,
-		NormalizationWarnings: formatWarnings(validation.Warnings),
-		SelectedActionsJSON:   formatSelectedActions(validation.SelectedActions),
-		BindingDecision:       validation.BindingDecision,
-		LicenseDecision:       validation.LicenseDecision,
-		RuntimeCompatibility:  validation.RuntimeCompatibility,
-		UserID:                req.UserID,
-		PetID:                 result.PetID,
-		ReleaseID:             result.ReleaseID,
-		CreatedAt:             formatImportTimestamp(time.Now()),
-		UpdatedAt:             formatImportTimestamp(time.Now()),
+	if result.ImportSnapshot == nil {
+		return nil, release.NewReleaseError("SNAPSHOT_MISSING", "导入快照未在事务中创建", nil)
 	}
 
-	if err := pi.repo.CreateImportSnapshot(snapshot); err != nil {
-		return nil, release.NewReleaseError("SNAPSHOT_CREATE_FAILED", "创建导入快照失败", err)
-	}
-
-	result.ImportSnapshot = snapshot
 	return result, nil
 }
 
@@ -182,6 +188,9 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 	if petID != "" {
 		existingIdentity, err := pi.repo.GetPetIdentity(petID)
 		if err == nil && existingIdentity != nil {
+			if existingIdentity.OwnerUserID != req.UserID {
+				return nil, release.NewReleaseError("PET_IDENTITY_OWNER_MISMATCH", "manifest PetID 不属于当前用户", nil)
+			}
 			identity = existingIdentity
 		}
 	}
@@ -300,56 +309,20 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		UpdatedAt:      now,
 	}
 
-	var fileRecords []release.ReleaseFileData
-
-	txErr := pi.repo.Transaction(func(tx *gorm.DB) error {
-		if err := pi.repo.CreatePetIdentity(identity); err != nil {
-			if !isDuplicateKeyError(err) {
-				return err
-			}
-			existingIdentity, getErr := pi.repo.GetPetIdentity(petID)
-			if getErr != nil || existingIdentity == nil {
-				return err
-			}
-			identity = existingIdentity
-			releaseRecord.PetID = identity.ID
-			buildOp.PetID = identity.ID
+	var journal *release.ReleasePublishJournal
+	if pi.journalManager != nil {
+		j, err := pi.journalManager.CreateJournal(operationID, releaseID, petID)
+		if err != nil {
+			return nil, release.NewReleaseError("JOURNAL_CREATE_FAILED", "创建发布日志失败", err)
 		}
-
-		nextSeq := identity.NextReleaseSequence
-		releaseRecord.ReleaseSequence = nextSeq
-		if manifest.Version == "" {
-			releaseRecord.Version = fmt.Sprintf("1.0.%d", nextSeq)
-		}
-		identity.NextReleaseSequence = nextSeq + 1
-		identity.UpdatedAt = formatImportTimestamp(time.Now())
-		if identity.DefaultActionKey == "" {
-			identity.DefaultActionKey = manifest.DefaultAction
-		}
-		if uErr := pi.repo.UpdatePetIdentity(identity); uErr != nil {
-			return uErr
-		}
-
-		if err := pi.repo.CreateReleaseTx(tx, releaseRecord); err != nil {
-			return err
-		}
-
-		if err := pi.repo.CreateOperationTx(tx, buildOp); err != nil {
-			return err
-		}
-
-		_ = fileRecords
-		return nil
-	})
-
-	if txErr != nil {
-		return nil, release.NewReleaseError("TRANSACTION_FAILED", "导入事务提交失败", txErr)
+		journal = j
 	}
 
-	publishedErr := pi.publishFiles(sourcePath, manifest, petID, releaseID)
-	if publishedErr != nil {
-		pi.markOperationFailed(buildOp, "PUBLISH_FAILED", publishedErr)
-		return nil, release.NewReleaseError("PUBLISH_FAILED", "发布文件失败", publishedErr)
+	publishedPath := ""
+	stagingPath := sourcePath
+
+	if err := pi.runImportSaga(ctx, req, &identity, releaseRecord, buildOp, validation, sourcePath, journal, &publishedPath); err != nil {
+		return nil, err
 	}
 
 	buildOp.State = release.BuildOpStateCompleted
@@ -358,6 +331,10 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 	buildOp.UpdatedAt = buildOp.CompletedAt
 	if updateErr := pi.repo.UpdateBuildOperation(buildOp); updateErr != nil {
 		return nil, release.NewReleaseError("OPERATION_UPDATE_FAILED", "更新操作状态失败", updateErr)
+	}
+
+	if pi.journalManager != nil && journal != nil {
+		_ = pi.journalManager.UpdateStage(journal, release.JournalStageCompleted, contentRootHash, stagingPath, publishedPath)
 	}
 
 	releaseRecord.Lifecycle = string(release.ReleaseLifecycleReady)
@@ -369,11 +346,139 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		return nil, release.NewReleaseError("RELEASE_FINALIZE_FAILED", "发布完成状态更新失败", updateErr)
 	}
 
+	snapshot := &release.ImportPackageSnapshot{
+		ID:                    uuid.NewString(),
+		ImportStagingID:       req.ImportStagingID,
+		SourcePackageHash:     validation.SourcePackageHash,
+		SourceManifestHash:    validation.SourceManifestHash,
+		SourceSchemaVersion:   validation.SourceSchemaVersion,
+		NormalizationWarnings: formatWarnings(validation.Warnings),
+		SelectedActionsJSON:   formatSelectedActions(validation.SelectedActions),
+		BindingDecision:       validation.BindingDecision,
+		LicenseDecision:       validation.LicenseDecision,
+		RuntimeCompatibility:  validation.RuntimeCompatibility,
+		UserID:                req.UserID,
+		PetID:                 releaseRecord.PetID,
+		ReleaseID:             releaseID,
+		OperationID:           operationID,
+		CreatedAt:             formatImportTimestamp(time.Now()),
+		UpdatedAt:             formatImportTimestamp(time.Now()),
+	}
+
+	if err := pi.repo.CreateImportSnapshot(snapshot); err != nil {
+		return nil, release.NewReleaseError("SNAPSHOT_CREATE_FAILED", "创建导入快照失败", err)
+	}
+
 	return &ImportPackageResult{
-		PetID:       releaseRecord.PetID,
-		ReleaseID:   releaseID,
-		OperationID: operationID,
+		ImportSnapshot: snapshot,
+		PetID:          releaseRecord.PetID,
+		ReleaseID:      releaseID,
+		OperationID:    operationID,
 	}, nil
+}
+
+func (pi *PackageImporter) runImportSaga(
+	ctx context.Context,
+	req *ImportPackageRequest,
+	identity **release.PetIdentityData,
+	releaseRecord *release.ReleaseData,
+	buildOp *release.ReleaseBuildOperation,
+	validation *ImportValidationResult,
+	sourcePath string,
+	journal *release.ReleasePublishJournal,
+	publishedPath *string,
+) error {
+	txErr := pi.repo.Transaction(func(tx *gorm.DB) error {
+		if err := pi.repo.CreatePetIdentityTx(tx, *identity); err != nil {
+			if !isDuplicateKeyError(err) {
+				return err
+			}
+			existingIdentity, getErr := pi.repo.GetPetIdentity((*identity).ID)
+			if getErr != nil || existingIdentity == nil {
+				return err
+			}
+			if existingIdentity.OwnerUserID != req.UserID {
+				return release.NewReleaseError("PET_IDENTITY_OWNER_MISMATCH", "manifest PetID 不属于当前用户", nil)
+			}
+			*identity = existingIdentity
+			releaseRecord.PetID = (*identity).ID
+			buildOp.PetID = (*identity).ID
+		}
+
+		nextSeq := (*identity).NextReleaseSequence
+		releaseRecord.ReleaseSequence = nextSeq
+		if validation.Manifest.Version == "" {
+			releaseRecord.Version = fmt.Sprintf("1.0.%d", nextSeq)
+		}
+		(*identity).NextReleaseSequence = nextSeq + 1
+		(*identity).UpdatedAt = formatImportTimestamp(time.Now())
+		if (*identity).DefaultActionKey == "" {
+			(*identity).DefaultActionKey = validation.Manifest.DefaultAction
+		}
+		if uErr := pi.repo.UpdatePetIdentityTx(tx, *identity); uErr != nil {
+			return uErr
+		}
+
+		if err := pi.repo.CreateReleaseTx(tx, releaseRecord); err != nil {
+			return err
+		}
+
+		if err := pi.repo.CreateOperationTx(tx, buildOp); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if txErr != nil {
+		pi.failJournal(journal, txErr)
+		return release.NewReleaseError("TRANSACTION_FAILED", "导入事务提交失败", txErr)
+	}
+
+	if pi.journalManager != nil && journal != nil {
+		_ = pi.journalManager.UpdateStage(journal, release.JournalStageDatabaseCommitted, "", sourcePath, "")
+	}
+
+	buildOp.State = release.BuildOpStatePublishing
+	buildOp.Stage = release.BuildOpStageFilesPublished
+	buildOp.UpdatedAt = formatImportTimestamp(time.Now())
+	_ = pi.repo.UpdateBuildOperation(buildOp)
+
+	publishedErr := pi.publishFiles(sourcePath, validation.Manifest, releaseRecord.PetID, releaseRecord.ID)
+	if publishedErr != nil {
+		pi.failJournal(journal, publishedErr)
+		pi.compensateFailedImport(releaseRecord.PetID, releaseRecord.ID, buildOp)
+		return release.NewReleaseError("PUBLISH_FAILED", "发布文件失败", publishedErr)
+	}
+
+	*publishedPath = pi.storage.PublishedDir(releaseRecord.PetID, releaseRecord.ID)
+	if pi.journalManager != nil && journal != nil {
+		_ = pi.journalManager.UpdateStage(journal, release.JournalStageFilesPublished, releaseRecord.ContentRootHash, sourcePath, *publishedPath)
+	}
+
+	return nil
+}
+
+func (pi *PackageImporter) failJournal(journal *release.ReleasePublishJournal, err error) {
+	if pi.journalManager == nil || journal == nil {
+		return
+	}
+	_ = pi.journalManager.MarkFailed(journal, err.Error())
+}
+
+func (pi *PackageImporter) compensateFailedImport(petID, releaseID string, buildOp *release.ReleaseBuildOperation) {
+	if petID != "" && releaseID != "" {
+		pi.storage.RemovePublishedDir(petID, releaseID)
+	}
+	pi.markOperationFailed(buildOp, "COMPENSATED", fmt.Errorf("发布失败已补偿"))
+	if releaseID != "" {
+		if releaseRecord, err := pi.repo.GetRelease(releaseID); err == nil && releaseRecord != nil {
+			releaseRecord.Lifecycle = string(release.ReleaseLifecycleFailed)
+			releaseRecord.IntegrityStatus = string(release.ReleaseIntegrityUnknown)
+			releaseRecord.UpdatedAt = formatImportTimestamp(time.Now())
+			_ = pi.repo.UpdateRelease(releaseRecord)
+		}
+	}
 }
 
 func (pi *PackageImporter) publishFiles(sourcePath string, manifest *PackageManifest, petID, releaseID string) error {

@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
@@ -231,6 +232,14 @@ func (
 		return nil, err
 	}
 
+	if err :=
+		validateManifestHashes(
+			&manifest,
+			rawManifest,
+		); err != nil {
+		return nil, err
+	}
+
 	manifestHash :=
 		sha256.Sum256(rawManifest)
 
@@ -402,6 +411,16 @@ func validateManifestIntegrity(
 		)
 	}
 
+	if len(inventory) !=
+		len(manifest.Integrity.Files) {
+		return fmt.Errorf(
+			"manifest does not cover all inventory files: inventory=%d manifest=%d",
+			len(inventory),
+			len(manifest.Integrity.Files),
+		)
+	}
+
+	manifestMap := make(map[string]bool)
 	var total int64
 
 	for _, file :=
@@ -410,7 +429,7 @@ func validateManifestIntegrity(
 			inventoryMap[file.Path]
 		if !ok {
 			return fmt.Errorf(
-				"manifest file missing: %s",
+				"manifest file missing from inventory: %s",
 				file.Path,
 			)
 		}
@@ -426,7 +445,17 @@ func validateManifestIntegrity(
 			)
 		}
 
+		manifestMap[file.Path] = true
 		total += file.Bytes
+	}
+
+	for _, entry := range inventory {
+		if !manifestMap[entry.Path] {
+			return fmt.Errorf(
+				"inventory file not covered by manifest: %s",
+				entry.Path,
+			)
+		}
 	}
 
 	if total !=
@@ -437,4 +466,97 @@ func validateManifestIntegrity(
 	}
 
 	return nil
+}
+
+func validateManifestHashes(
+	manifest *PackageManifest,
+	rawManifest []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(rawManifest, &raw); err != nil {
+		return fmt.Errorf("unmarshal raw manifest: %w", err)
+	}
+
+	rawIntegrity, ok := raw["integrity"].(map[string]interface{})
+	if !ok {
+		return errors.New("manifest integrity section missing")
+	}
+
+	declaredManifestHash := strings.TrimSpace(rawIntegrity["manifestHash"].(string))
+	declaredContentRootHash := strings.TrimSpace(rawIntegrity["contentRootHash"].(string))
+
+	rawIntegrity["manifestHash"] = ""
+	rawIntegrity["contentRootHash"] = ""
+
+	canonical, err := canonicalizeRawManifest(raw)
+	if err != nil {
+		return fmt.Errorf("canonicalize manifest: %w", err)
+	}
+
+	computed := sha256.Sum256(canonical)
+	computedManifestHash := hex.EncodeToString(computed[:])
+
+	if !strings.EqualFold(declaredManifestHash, computedManifestHash) {
+		return fmt.Errorf(
+			"manifestHash mismatch: declared=%s computed=%s",
+			declaredManifestHash,
+			computedManifestHash,
+		)
+	}
+
+	var files []packageformat.FileEntry
+	for _, f := range manifest.Integrity.Files {
+		files = append(files, packageformat.FileEntry{
+			Path:   f.Path,
+			SHA256: f.SHA256,
+			Bytes:  f.Bytes,
+		})
+	}
+
+	computedContentRootHash := packageformat.ComputeContentRootHash(files, computedManifestHash, int64(len(canonical)))
+
+	if !strings.EqualFold(declaredContentRootHash, computedContentRootHash) {
+		return fmt.Errorf(
+			"contentRootHash mismatch: declared=%s computed=%s",
+			declaredContentRootHash,
+			computedContentRootHash,
+		)
+	}
+
+	return nil
+}
+
+func canonicalizeRawManifest(raw map[string]interface{}) ([]byte, error) {
+	canonical := canonicalizeValue(raw)
+	return json.Marshal(canonical)
+}
+
+func canonicalizeValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		ordered := make([]struct {
+			Key   string      `json:"k"`
+			Value interface{} `json:"v"`
+		}, len(keys))
+		for i, k := range keys {
+			ordered[i].Key = k
+			ordered[i].Value = canonicalizeValue(val[k])
+		}
+		return ordered
+
+	case []interface{}:
+		result := make([]interface{}, len(val))
+		for i, item := range val {
+			result[i] = canonicalizeValue(item)
+		}
+		return result
+
+	default:
+		return v
+	}
 }

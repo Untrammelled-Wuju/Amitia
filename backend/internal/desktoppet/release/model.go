@@ -272,6 +272,7 @@ type ImportPackageSnapshot struct {
 	UserID                string `gorm:"column:user_id;type:text" json:"userId"`
 	PetID                 string `gorm:"column:pet_id;type:text" json:"petId"`
 	ReleaseID             string `gorm:"column:release_id;type:text" json:"releaseId"`
+	OperationID           string `gorm:"column:operation_id;type:text" json:"operationId"`
 	CreatedAt             string `gorm:"column:created_at;type:text" json:"createdAt"`
 	UpdatedAt             string `gorm:"column:updated_at;type:text" json:"updatedAt"`
 }

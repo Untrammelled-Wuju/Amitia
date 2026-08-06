@@ -141,12 +141,12 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 		writeOwnershipError(c, err)
 		return
 	}
-	fullPath, mimeType, err := h.service.GetTaskSourceImage(taskID)
+	ref, err := h.service.GetTaskSourceImageRef(taskID, actor.UserID)
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	h.safeResponder.ResolveAndServe(c, actor, security.RootGenerationArtifacts, fullPath, taskID, actor.UserID, mimeType)
+	h.safeResponder.ServeArtifact(c, actor, ref)
 }
 
 func (h *Handler) StartTask(c *gin.Context) {
@@ -237,12 +237,12 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "帧索引无效", nil)
 		return
 	}
-	fullPath, mimeType, err := h.service.GetFrameImage(taskID, actionKey, frameIndex)
+	ref, err := h.service.GetFrameImageRef(taskID, actionKey, frameIndex, actor.UserID)
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	h.safeResponder.ResolveAndServe(c, actor, security.RootGenerationArtifacts, fullPath, taskID+":"+actionKey+":"+strconv.Itoa(frameIndex), actor.UserID, mimeType)
+	h.safeResponder.ServeArtifact(c, actor, ref)
 }
 
 func (h *Handler) GetTaskTransitions(c *gin.Context) {

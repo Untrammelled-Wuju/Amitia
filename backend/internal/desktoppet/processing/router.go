@@ -11,10 +11,12 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterProcessingRouter(r *gin.RouterGroup, ctx *app.AppContext) {
+func RegisterProcessingRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *security.PathRootRegistry) {
 	repo := NewRepository(ctx.DB, ctx)
 	svc := NewService(repo, ctx.DB, ctx, config.AppCfg.Storage.DataDir)
-	registry := security.NewPathRootRegistry()
+	if registry == nil {
+		registry = security.NewPathRootRegistry()
+	}
 	_ = registry.Register(security.RootProcessingRevisions, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "processing", "revisions"))
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)

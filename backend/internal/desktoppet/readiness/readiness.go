@@ -81,8 +81,6 @@ func (s *ReadinessService) checkerNames() map[string]bool {
 
 var RequiredCheckerNames = []string{
 	"sqlite",
-	"surrealdb",
-	"qdrant",
 	"extension",
 	"desktop_session",
 	"ownership_guard",
@@ -306,8 +304,6 @@ func (c *ComponentChecker) Evaluate() (SystemStatus, string) { return c.evaluate
 func NewStartupReadinessService(db *gorm.DB, ext *extension.Runtime) *ReadinessService {
 	svc := NewReadinessService()
 	_ = svc.Register(NewComponentChecker("sqlite", true, makeSQLitePingChecker(db)))
-	_ = svc.Register(NewComponentChecker("surrealdb", true, makeSurrealPingChecker()))
-	_ = svc.Register(NewComponentChecker("qdrant", true, makeQdrantPingChecker()))
 	_ = svc.Register(NewComponentChecker("extension", true, makeExtensionPingChecker(ext)))
 	return svc
 }
@@ -335,12 +331,6 @@ func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessServic
 		return svc.Register(NewComponentChecker(name, required, fn))
 	}
 	if err := register("sqlite", true, makeSQLitePingChecker(deps.DB)); err != nil {
-		return nil, err
-	}
-	if err := register("surrealdb", true, makeSurrealPingChecker()); err != nil {
-		return nil, err
-	}
-	if err := register("qdrant", true, makeQdrantPingChecker()); err != nil {
 		return nil, err
 	}
 	if err := register("extension", true, func() (SystemStatus, string) {

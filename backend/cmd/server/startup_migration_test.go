@@ -38,7 +38,7 @@ func TestApplyDatabaseStartupMigrationsBacksUpExistingDatabaseBeforeInitialSQL(t
 		t.Fatal(err)
 	}
 
-	if err := applyDatabaseStartupMigrations(db); err != nil {
+	if err := applyDatabaseStartupMigrations(db, dataDir); err != nil {
 		t.Fatal(err)
 	}
 

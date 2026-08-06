@@ -20,6 +20,7 @@ const (
 	StagingStatusReady       StagingStatus = "ready"
 	StagingStatusConsuming   StagingStatus = "consuming"
 	StagingStatusConsumed    StagingStatus = "consumed"
+	StagingStatusFailed      StagingStatus = "failed"
 	StagingStatusRejected    StagingStatus = "rejected"
 	StagingStatusExpired     StagingStatus = "expired"
 )
@@ -43,6 +44,8 @@ type ImportStaging struct {
 	ExpiresAt            string        `gorm:"column:expires_at" json:"expiresAt"`
 	ConsumptionStartedAt string        `gorm:"column:consumption_started_at" json:"consumptionStartedAt"`
 	ConsumedAt           string        `gorm:"column:consumed_at" json:"consumedAt,omitempty"`
+	FailedAt             string        `gorm:"column:failed_at" json:"failedAt,omitempty"`
+	FailureReason        string        `gorm:"column:failure_reason" json:"failureReason,omitempty"`
 	RejectedReason       string        `gorm:"column:rejected_reason" json:"rejectedReason"`
 	CorrelationID        string        `gorm:"column:correlation_id" json:"correlationId,omitempty"`
 }

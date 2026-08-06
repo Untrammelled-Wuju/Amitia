@@ -15,6 +15,7 @@ type ImportStagingRepository interface {
 	GetForUser(ctx context.Context, stagingID string, userID string) (*ImportStaging, error)
 	ListForUser(ctx context.Context, userID string) ([]*ImportStaging, error)
 	BeginConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
+	FailConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64, failureReason string) (bool, error)
 	CompleteConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
 	UpdateQuarantinePath(ctx context.Context, stagingID string, userID string, quarantinePath string) (bool, error)
 	UpdateInventory(ctx context.Context, stagingID string, userID string, inventoryJSON string, inventoryHash string) (bool, error)
@@ -104,6 +105,27 @@ func (r *importStagingRepository) CompleteConsumptionCAS(ctx context.Context, st
 		Updates(map[string]interface{}{
 			"status":         StagingStatusConsumed,
 			"consumed_at":    now,
+			"state_revision": expectedRevision + 1,
+			"updated_at":     now,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *importStagingRepository) FailConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64, failureReason string) (bool, error) {
+	if stagingID == "" || userID == "" {
+		return false, nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result := r.db.WithContext(ctx).Model(&ImportStaging{}).
+		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ?",
+			stagingID, userID, StagingStatusConsuming, expectedRevision).
+		Updates(map[string]interface{}{
+			"status":         StagingStatusFailed,
+			"failed_at":      now,
+			"failure_reason": failureReason,
 			"state_revision": expectedRevision + 1,
 			"updated_at":     now,
 		})

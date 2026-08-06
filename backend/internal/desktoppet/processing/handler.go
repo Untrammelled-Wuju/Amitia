@@ -4,6 +4,8 @@ package processing
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -382,7 +385,7 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	h.safeResponder.ResolveAndServe(c, actor, security.RootProcessingRevisions, fullPath, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), mimeType)
+	h.safeResponder.ServeArtifact(c, actor, buildProcessingFileRef(fullPath, mimeType, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), actor.UserID))
 }
 
 func (h *Handler) SourceFrameImage(c *gin.Context) {
@@ -409,7 +412,7 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	h.safeResponder.ResolveAndServe(c, actor, security.RootProcessingRevisions, fullPath, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), mimeType)
+	h.safeResponder.ServeArtifact(c, actor, buildProcessingFileRef(fullPath, mimeType, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), actor.UserID))
 }
 
 func (h *Handler) ActionPreview(c *gin.Context) {
@@ -431,7 +434,7 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	h.safeResponder.ResolveAndServe(c, actor, security.RootProcessingRevisions, fullPath, processingTaskID+":"+actionKey, "preview", mimeType)
+	h.safeResponder.ServeArtifact(c, actor, buildProcessingFileRef(fullPath, mimeType, processingTaskID+":"+actionKey, "preview", actor.UserID))
 }
 
 func writeProcessingError(c *gin.Context, err error) {
@@ -592,5 +595,34 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 	})
 	if err != nil {
 		_ = err
+	}
+}
+
+func buildProcessingFileRef(fullPath, mimeType, artifactID, entityID, ownerUserID string) security.ArtifactReference {
+	storageKey := ""
+	if idx := strings.Index(fullPath, "desktop-pets/"); idx != -1 {
+		storageKey = fullPath[idx+len("desktop-pets/"):]
+	}
+	var hash string
+	var size int64
+	if f, err := os.Open(fullPath); err == nil {
+		info, _ := f.Stat()
+		if info != nil {
+			size = info.Size()
+		}
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err == nil {
+			hash = hex.EncodeToString(h.Sum(nil))
+		}
+		f.Close()
+	}
+	return security.ArtifactReference{
+		ArtifactID:  artifactID,
+		OwnerUserID: ownerUserID,
+		RootKind:    security.RootProcessingRevisions,
+		StorageKey:  storageKey,
+		ContentHash: hash,
+		ByteSize:    size,
+		MIME:        mimeType,
 	}
 }
