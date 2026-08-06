@@ -48,9 +48,9 @@ func TestR6_5_CaptureRegularFilePlatformIdentityValid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	identity, err := captureRegularFilePlatformIdentity(targetFile)
+	identity, err := capturePlatformPathIdentity(targetFile, false)
 	if err != nil {
-		t.Fatalf("captureRegularFilePlatformIdentity must succeed on regular file: %v", err)
+		t.Fatalf("capturePlatformPathIdentity must succeed on regular file: %v", err)
 	}
 
 	if identity.IsDirectory {
@@ -166,18 +166,17 @@ func TestR6_5_CreatePreparedRestoreTempReturnsIdentity(t *testing.T) {
 	body := []byte("identity capture test")
 	hash := r65HashContentGeneric(body)
 
-	tempPath, identity, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(body), hash)
 	if err != nil {
-		t.Fatalf("createPreparedRestoreTemp must succeed: %v", err)
+		t.Fatalf("createPreparedRestoreTempHandle must succeed: %v", err)
 	}
-	defer os.Remove(tempPath)
+	defer func() {
+		_ = temp.File.Close()
+		_ = validated.ParentDirectory.removeChild(temp.Name)
+	}()
 
-	if identity.IsDirectory {
+	if temp.Identity.IsDirectory {
 		t.Fatal("temp file identity must not be directory")
-	}
-
-	if err := validatePlatformPathIdentity(tempPath, identity, false); err != nil {
-		t.Fatalf("temp must validate against returned identity: %v", err)
 	}
 }
 
@@ -193,23 +192,23 @@ func TestR6_5_PublishPreparedRestoreVerifiesPlatformIdentity(t *testing.T) {
 	body := []byte("platform identity preservation test")
 	hash := r65HashContentGeneric(body)
 
-	tempPath, identity, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(body), hash)
 	if err != nil {
-		t.Fatalf("createPreparedRestoreTemp must succeed: %v", err)
+		t.Fatalf("createPreparedRestoreTempHandle must succeed: %v", err)
 	}
 
-	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, identity, hash); err != nil {
-		t.Fatalf("publishPreparedRestoreTempNoReplace must succeed: %v", err)
+	if err := publishPreparedRestoreTempHandleNoReplace(validated, temp, hash); err != nil {
+		t.Fatalf("publishPreparedRestoreTempHandleNoReplace must succeed: %v", err)
 	}
 
-	publishedIdentity, err := captureRegularFilePlatformIdentity(target)
+	publishedIdentity, err := capturePlatformPathIdentity(target, false)
 	if err != nil {
-		t.Fatalf("capture regular file identity on published target: %v", err)
+		t.Fatalf("capture platform identity on published target: %v", err)
 	}
 
-	if !identity.same(publishedIdentity) {
+	if !temp.Identity.same(publishedIdentity) {
 		t.Fatalf("published file must share temp identity; temp=%+v published=%+v",
-			identity, publishedIdentity)
+			temp.Identity, publishedIdentity)
 	}
 }
 
@@ -270,7 +269,7 @@ func TestR6_5_PublishRestoreBytesCreatesFileSyncsDirectory(t *testing.T) {
 		t.Fatalf("content mismatch: %q", got)
 	}
 
-	publishedIdentity, err := captureRegularFilePlatformIdentity(target)
+	publishedIdentity, err := capturePlatformPathIdentity(target, false)
 	if err != nil {
 		t.Fatalf("capture published identity: %v", err)
 	}

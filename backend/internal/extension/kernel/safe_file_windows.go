@@ -121,7 +121,7 @@ func (directory *platformRestoreDirectory) createChildDirectoryExclusive(name st
 	handle, err := ntCreateRelative(
 		directory.handle,
 		name,
-		windows.FILE_LIST_DIRECTORY|windows.FILE_ADD_FILE|windows.FILE_ADD_SUBDIRECTORY|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
+		windows.FILE_LIST_DIRECTORY|windowsFileAddFile|windowsFileAddSubdirectory|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
 		windows.FILE_ATTRIBUTE_DIRECTORY,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
 		windows.FILE_CREATE,

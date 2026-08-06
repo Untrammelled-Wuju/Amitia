@@ -165,17 +165,20 @@ func TestR6_5_PreparedTempHasValidPlatformIdentity(t *testing.T) {
 	body := []byte("identity check")
 	hash := r65HashContent(body)
 
-	tempPath, identity, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(body), hash)
 	if err != nil {
-		t.Fatalf("createPreparedRestoreTemp must succeed: %v", err)
+		t.Fatalf("createPreparedRestoreTempHandle must succeed: %v", err)
 	}
-	defer os.Remove(tempPath)
+	defer func() {
+		_ = temp.File.Close()
+		_ = validated.ParentDirectory.removeChild(temp.Name)
+	}()
 
-	if identity.VolumeSerialNumber == 0 {
+	if temp.Identity.VolumeSerialNumber == 0 {
 		t.Fatal("platform identity volume serial number must not be zero")
 	}
 
-	if identity.IsDirectory {
+	if temp.Identity.IsDirectory {
 		t.Fatal("platform identity must mark file as non-directory")
 	}
 }
@@ -423,5 +426,122 @@ func TestR65WindowsDirectorySyncDoesNotRequireFlushFileBuffers(t *testing.T) {
 	defer directory.close()
 	if err := directory.sync(); err != nil {
 		t.Fatalf("Windows directory sync must not require FlushFileBuffers: %v", err)
+	}
+}
+
+func TestR65SourceParentMissingIsNotCreated(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+
+	sourceDir := filepath.Join(extRoot, "missing-source")
+	sourcePath := filepath.Join(sourceDir, "source.bin")
+	body := []byte("source body")
+	hash := r65HashContent(body)
+
+	target := filepath.Join(extRoot, "target.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash)
+	if err == nil {
+		t.Fatal("publish from missing source parent must fail")
+	}
+	if _, statErr := os.Stat(sourceDir); !os.IsNotExist(statErr) {
+		t.Fatalf("missing source parent must not be created, stat=%v", statErr)
+	}
+}
+
+func TestR65SourceParentJunctionRejectedWithoutSideEffect(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+
+	outside := filepath.Join(filepath.Dir(extRoot), "r65-outside-junction-safe")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+
+	junctionParent := filepath.Join(extRoot, "junction-parent-safe")
+	createR65Junction(t, junctionParent, outside)
+
+	body := []byte("source body")
+	if err := os.WriteFile(filepath.Join(outside, "source.bin"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(junctionParent, "source.bin")
+
+	target := filepath.Join(extRoot, "target-safe.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	hash := r65HashContent(body)
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash)
+	if err == nil {
+		t.Fatal("junction as source parent must be rejected")
+	}
+
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("target must not be created when source is rejected, stat=%v", statErr)
+	}
+}
+
+func TestR65RepeatedParentNamesStillRejectJunction(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+
+	outside := filepath.Join(filepath.Dir(extRoot), "r65-outside-repeated")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+
+	safe := filepath.Join(extRoot, "safe")
+	if err := os.MkdirAll(safe, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	junction := filepath.Join(safe, "child")
+	createR65Junction(t, junction, outside)
+
+	body := []byte("repeated name body")
+	if err := os.WriteFile(filepath.Join(outside, "source.bin"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(junction, "source.bin")
+
+	target := filepath.Join(extRoot, "target-repeated.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	hash := r65HashContent(body)
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash)
+	if err == nil {
+		t.Fatal("junction in parent chain with repeated names must be rejected")
+	}
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeResourceRestoreReparsePointForbidden {
+		t.Fatalf("expected PackageErrCodeResourceRestoreReparsePointForbidden, got %v", err)
+	}
+}
+
+func TestR65OpenPlatformFileParentNeverCreatesComponents(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+
+	missingParent := filepath.Join(extRoot, "nonexistent-parent")
+	target := filepath.Join(missingParent, "file.bin")
+	_, name, err := openPlatformFileParent(extRoot, target)
+	if err == nil {
+		t.Fatal("openPlatformFileParent must fail when parent is missing")
+	}
+	if name != "" {
+		t.Fatalf("expected empty name on failure, got %q", name)
+	}
+	if _, statErr := os.Stat(missingParent); !os.IsNotExist(statErr) {
+		t.Fatal("openPlatformFileParent must not create missing parent components")
 	}
 }

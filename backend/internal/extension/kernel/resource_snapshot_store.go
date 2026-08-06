@@ -1646,3 +1646,35 @@ func publishPreparedRestoreTempHandleNoReplace(validated *validatedRestorePath, 
 	return validated.ParentDirectory.sync()
 }
 
+func publishRestoreBytesNoReplace(validated *validatedRestorePath, data []byte, expectedHash string) error {
+	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(data), expectedHash)
+	if err != nil {
+		return err
+	}
+	return publishPreparedRestoreTempHandleNoReplace(validated, temp, expectedHash)
+}
+
+func publishRestoreFileNoReplace(sourceRoot string, sourcePath string, validated *validatedRestorePath, expectedHash string) error {
+	sourceParent, sourceName, err := openPlatformFileParent(sourceRoot, sourcePath)
+	if err != nil {
+		return fmt.Errorf("kernel: open restore source parent: %w", err)
+	}
+	defer sourceParent.close()
+	source, _, err := sourceParent.openRegularFile(sourceName)
+	if err != nil {
+		return fmt.Errorf("kernel: open restore source: %w", err)
+	}
+	defer source.Close()
+	temp, err := createPreparedRestoreTempHandle(validated, source, expectedHash)
+	if err != nil {
+		return err
+	}
+	if err := publishPreparedRestoreTempHandleNoReplace(validated, temp, expectedHash); err != nil {
+		return err
+	}
+	if err := sourceParent.removeChild(sourceName); err != nil {
+		return fmt.Errorf("kernel: remove restored source: %w", err)
+	}
+	return sourceParent.sync()
+}
+

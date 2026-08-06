@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -242,15 +243,20 @@ func TestR6_4_CreatePreparedRestoreTempVerifiesHash(t *testing.T) {
 	}
 	body := []byte("prepare me")
 	hash := r64HashContent(body)
-	tempPath, _, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(body), hash)
 	if err != nil {
 		t.Fatalf("create prepared temp must succeed: %v", err)
 	}
-	if _, statErr := os.Stat(tempPath); statErr != nil {
+	defer func() {
+		_ = temp.File.Close()
+		_ = validated.ParentDirectory.removeChild(temp.Name)
+	}()
+	expectedPath := filepath.Join(validated.AbsParentDir, temp.Name)
+	if _, statErr := os.Stat(expectedPath); statErr != nil {
 		t.Fatalf("temp file must exist: %v", statErr)
 	}
-	if !strings.Contains(filepath.Base(tempPath), ".amitia-restore-") {
-		t.Fatalf("temp prefix mismatch: %s", filepath.Base(tempPath))
+	if !strings.Contains(temp.Name, ".amitia-restore-") {
+		t.Fatalf("temp prefix mismatch: %s", temp.Name)
 	}
 }
 
@@ -263,12 +269,9 @@ func TestR6_4_CreatePreparedRestoreTempRejectsMismatchedWrite(t *testing.T) {
 	}
 	body := []byte("written data")
 	wrongHash := r64HashContent([]byte("something else"))
-	tempPath, _, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), wrongHash)
+	_, err = createPreparedRestoreTempHandle(validated, bytes.NewReader(body), wrongHash)
 	if err == nil {
 		t.Fatal("must reject temp whose content hash mismatches expected")
-	}
-	if tempPath != "" && fileExists(tempPath) {
-		t.Fatalf("temp must be cleaned up, still exists: %s", tempPath)
 	}
 }
 
@@ -284,11 +287,11 @@ func TestR6_4_PublishPreparedRestoreTempNoReplaceSkipsExisting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tempPath, tempIdentity, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(body), hash)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, tempIdentity, hash); err != nil {
+	if err := publishPreparedRestoreTempHandleNoReplace(validated, temp, hash); err != nil {
 		t.Fatalf("no-replace publish onto matching existing must succeed: %v", err)
 	}
 	got, readErr := os.ReadFile(target)
@@ -414,13 +417,16 @@ func TestR6_4_CreatePreparedRestoreTempResidesInTargetParent(t *testing.T) {
 	}
 	body := []byte("locate me in parent")
 	hash := r64HashContent(body)
-	tempPath, _, err := createPreparedRestoreTemp(validated, bytes.NewReader(body), hash)
+	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(body), hash)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tempPath)
-	if filepath.Dir(tempPath) != validated.AbsParentDir {
-		t.Fatalf("temp must be in validated parent %s, got %s", validated.AbsParentDir, filepath.Dir(tempPath))
+	defer func() {
+		_ = temp.File.Close()
+		_ = validated.ParentDirectory.removeChild(temp.Name)
+	}()
+	if filepath.Dir(filepath.Join(validated.AbsParentDir, temp.Name)) != validated.AbsParentDir {
+		t.Fatalf("temp must be in validated parent %s", validated.AbsParentDir)
 	}
 }
 
@@ -633,6 +639,171 @@ func TestR64AcceptsOnlyNewMissingDirectories(t *testing.T) {
 		if !identity.same(validated.PlatformComponents[index].Identity) {
 			t.Fatalf("created component %d identity mismatch", index)
 		}
+	}
+}
+
+func TestR64RepeatedComponentNamesDoNotConfuseMissingSuffix(t *testing.T) {
+	_, extRoot := r64NewSnapshotStore(t)
+	if err := os.MkdirAll(filepath.Join(extRoot, "a", "existing"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(extRoot, "a", "existing", "a", "missing", "file.bin")
+	validated, err := validateRestoreTargetPathPure(target, extRoot)
+	if err != nil {
+		t.Fatalf("validate must succeed: %v", err)
+	}
+	defer validated.Close()
+
+	if len(validated.MissingComponents) != 2 {
+		t.Fatalf("expected 2 missing components, got %v", validated.MissingComponents)
+	}
+	if validated.MissingComponents[0] != "a" || validated.MissingComponents[1] != "missing" {
+		t.Fatalf("missing components must be [a, missing], got %v", validated.MissingComponents)
+	}
+
+	if err := createRestoreDirectoriesSafely(validated); err != nil {
+		t.Fatalf("createRestoreDirectoriesSafely must succeed: %v", err)
+	}
+	defer validated.Close()
+
+	if len(validated.PlatformComponents) != 5 {
+		t.Fatalf("expected 5 platform components, got %d", len(validated.PlatformComponents))
+	}
+	if !fileExists(filepath.Join(extRoot, "a", "existing", "a", "missing")) {
+		t.Fatal("missing directory must be created")
+	}
+	if fileExists(filepath.Join(extRoot, "a", "existing", "a", "missing", "file.bin")) {
+		t.Fatal("file must not be created as directory entry")
+	}
+}
+
+func TestR64ExistingDirectoryDisappearsWithoutBeingRecreated(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("covered by platform-specific test")
+	}
+	_, extRoot := r64NewSnapshotStore(t)
+	existing := filepath.Join(extRoot, "existing")
+	if err := os.MkdirAll(existing, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(existing, "deep", "file.bin")
+
+	validated, err := validateRestoreTargetPathPure(target, extRoot)
+	if err != nil {
+		t.Fatalf("validate must succeed: %v", err)
+	}
+
+	if err := os.RemoveAll(existing); err != nil {
+		t.Fatal(err)
+	}
+
+	err = createRestoreDirectoriesSafely(validated)
+	if err == nil {
+		t.Fatal("must reject when existing directory disappears")
+	}
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeResourceRestorePathRace {
+		t.Fatalf("expected PackageErrCodeResourceRestorePathRace, got %v", err)
+	}
+	_ = validated.Close()
+}
+
+func TestR64UnixSourceParentSymlinkRejected(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+	if os.Geteuid() != 0 {
+		if err := os.Symlink("/tmp", filepath.Join(t.TempDir(), "probe-link")); err != nil {
+			t.Skip("symlink creation requires privilege")
+		}
+	}
+	_, extRoot := r64NewSnapshotStore(t)
+	sourceReal := filepath.Join(extRoot, "source-real")
+	if err := os.MkdirAll(sourceReal, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceLink := filepath.Join(extRoot, "source-link")
+	if err := os.Symlink(sourceReal, sourceLink); err != nil {
+		t.Skipf("symlink requires privilege: %v", err)
+	}
+
+	body := []byte("symlink source test")
+	if err := os.WriteFile(filepath.Join(sourceReal, "source.bin"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sourcePath := filepath.Join(sourceLink, "source.bin")
+
+	target := filepath.Join(extRoot, "target.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	hash := r64HashContent(body)
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash)
+	if err == nil {
+		t.Fatal("must reject publish through symlink source parent")
+	}
+}
+
+func TestR64QuarantineDirectoryCreationRejectsSymlinkParent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-specific test")
+	}
+	_, extRoot := r64NewSnapshotStore(t)
+	absExtRoot, err := filepath.Abs(extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	realDir := filepath.Join(filepath.Dir(absExtRoot), "r64-real-quarantine")
+	if err := os.MkdirAll(realDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(realDir) })
+
+	linkParent := filepath.Join(absExtRoot, "quarantine-link")
+	if err := os.Symlink(realDir, linkParent); err != nil {
+		t.Skipf("symlink requires privilege: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(linkParent) })
+
+	quarantinePath := filepath.Join(linkParent, "resources", "op-sym")
+	if err := createPlatformDirectoryPath(absExtRoot, quarantinePath); err == nil {
+		t.Fatal("must reject quarantine directory creation through symlink parent")
+	}
+}
+
+func TestR64NoPathBasedLegacyRestoreFunctionsRemain(t *testing.T) {
+	_, extRoot := r64NewSnapshotStore(t)
+	body := []byte("handle-based restore still works")
+	hash := r64HashContent(body)
+
+	target := filepath.Join(extRoot, "deep", "path", "file.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatalf("prepareRestoreTargetPath must succeed: %v", err)
+	}
+	if err := publishRestoreBytesNoReplace(validated, body, hash); err != nil {
+		t.Fatalf("publishRestoreBytesNoReplace must succeed after legacy deletion: %v", err)
+	}
+
+	sourceBody := []byte("handle-based source still works")
+	sourceHash := r64HashContent(sourceBody)
+	sourcePath := filepath.Join(extRoot, "source-test.bin")
+	if err := os.WriteFile(sourcePath, sourceBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	target2 := filepath.Join(extRoot, "deep", "path2", "file.bin")
+	validated2, err := prepareRestoreTargetPath(target2, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := publishRestoreFileNoReplace(extRoot, sourcePath, validated2, sourceHash); err != nil {
+		t.Fatalf("publishRestoreFileNoReplace must succeed after legacy deletion: %v", err)
 	}
 }
 
