@@ -6,29 +6,26 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/episodic.dart';
 
-class EpisodicMemoryPage extends ConsumerStatefulWidget {
+class EpisodicMemoryPage extends ConsumerWidget {
   const EpisodicMemoryPage({super.key});
 
-  @override
-  ConsumerState<EpisodicMemoryPage> createState() => _EpisodicMemoryPageState();
-}
-
-class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
-  late List<EpisodicMemory> _memories;
-
-  @override
-  void initState() {
-    super.initState();
-    _memories = List.from(MockMemory.episodicMemories);
+  String _formatTimeString(String timeStr) {
+    if (timeStr.isEmpty) return '';
+    try {
+      final time = DateTime.parse(timeStr);
+      return '${time.month}月${time.day}日 ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return timeStr;
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final episodicAsync = ref.watch(episodicListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '情景记忆',
@@ -37,23 +34,46 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _memories.isEmpty
-            ? AmitiaEmptyState(
+        child: episodicAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  const SizedBox(height: 16),
+                  Text('加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(context).copyWith(color: context.error),
+                    textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  AmitiaButton(label: '重试', onPressed: () => ref.invalidate(episodicListProvider)),
+                ],
+              ),
+            ),
+          ),
+          data: (memories) {
+            if (memories.isEmpty) {
+              return AmitiaEmptyState(
                 icon: Icons.psychology_outlined,
                 title: '暂无情景记忆',
                 subtitle: '互动后将自动记录情景记忆',
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                itemCount: _memories.length,
-                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) => _buildMemoryCard(context, _memories[index]),
-              ),
+              );
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              itemCount: memories.length,
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+              itemBuilder: (context, index) => _buildMemoryCard(context, ref, memories[index]),
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildMemoryCard(BuildContext context, EpisodicMemory memory) {
+  Widget _buildMemoryCard(BuildContext context, WidgetRef ref, EpisodicDto memory) {
     return AmitiaCard(
       onTap: () => _showDetailSheet(context, memory),
       child: Column(
@@ -75,9 +95,9 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(memory.summary, style: AppTypography.cardTitle(context)),
+                    Text(memory.summary.isNotEmpty ? memory.summary : memory.title, style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text(_formatTime(memory.time), style: AppTypography.caption(context)),
+                    Text(_formatTimeString(memory.timestamp.isNotEmpty ? memory.timestamp : memory.createdAt), style: AppTypography.caption(context)),
                   ],
                 ),
               ),
@@ -85,22 +105,7 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: context.surfaceSecondary,
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow(context, Icons.location_on_outlined, '地点', memory.location),
-                const SizedBox(height: AppSpacing.xs),
-                _buildInfoRow(context, Icons.people_outline, '参与', memory.participants.join('、')),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(memory.detail, style: AppTypography.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text(memory.content, style: AppTypography.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
@@ -121,7 +126,7 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
               ),
               const Spacer(),
               GestureDetector(
-                onTap: () => _showDeleteConfirm(context, memory),
+                onTap: () => _showDeleteConfirm(context, ref, memory),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: context.error.withValues(alpha: 0.1), borderRadius: AppRadius.brTag),
@@ -142,18 +147,7 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
     );
   }
 
-  Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: context.textTertiary),
-        const SizedBox(width: 4),
-        Text('$label：', style: AppTypography.label(context)),
-        Expanded(child: Text(value, style: AppTypography.bodySmall(context), overflow: TextOverflow.ellipsis)),
-      ],
-    );
-  }
-
-  void _showDetailSheet(BuildContext context, EpisodicMemory memory) {
+  void _showDetailSheet(BuildContext context, EpisodicDto memory) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -185,9 +179,9 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(memory.summary, style: AppTypography.sectionTitle(context)),
+                        Text(memory.summary.isNotEmpty ? memory.summary : memory.title, style: AppTypography.sectionTitle(context)),
                         const SizedBox(height: 2),
-                        Text(_formatTime(memory.time), style: AppTypography.caption(context)),
+                        Text(_formatTimeString(memory.timestamp.isNotEmpty ? memory.timestamp : memory.createdAt), style: AppTypography.caption(context)),
                       ],
                     ),
                   ),
@@ -201,9 +195,7 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildDetailSection(context, '时间', _formatTime(memory.time)),
-                      _buildDetailSection(context, '地点', memory.location),
-                      _buildDetailSection(context, '参与角色', memory.participants.join('、')),
+                      _buildDetailSection(context, '标题', memory.title),
                       _buildDetailSection(context, '情绪', memory.emotion),
                       const SizedBox(height: AppSpacing.md),
                       Text('详细内容', style: AppTypography.cardTitle(context)),
@@ -212,7 +204,7 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(AppSpacing.lg),
                         decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brMedium),
-                        child: Text(memory.detail, style: AppTypography.bodySmall(context).copyWith(height: 1.6)),
+                        child: Text(memory.content.isNotEmpty ? memory.content : memory.summary, style: AppTypography.bodySmall(context).copyWith(height: 1.6)),
                       ),
                     ],
                   ),
@@ -248,19 +240,29 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, EpisodicMemory memory) {
+  void _showDeleteConfirm(BuildContext context, WidgetRef ref, EpisodicDto memory) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('删除情景记忆', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除「${memory.summary}」吗？', style: AppTypography.bodySmall(context)),
+        content: Text('确定要删除「${memory.summary.isNotEmpty ? memory.summary : memory.title}」吗？', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              setState(() => _memories.removeWhere((m) => m.id == memory.id));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情景记忆已删除'), duration: Duration(seconds: 1)));
+              try {
+                final svc = ref.read(episodicServiceProvider);
+                await svc.delete(memory.id);
+                ref.invalidate(episodicListProvider);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情景记忆已删除'), duration: Duration(seconds: 1)));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: ${e.toString().replaceFirst('Exception: ', '')}')));
+                }
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),
@@ -286,9 +288,5 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
       case '满足': return BadgeType.accent;
       default: return BadgeType.warning;
     }
-  }
-
-  String _formatTime(DateTime time) {
-    return '${time.month}月${time.day}日 ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 }

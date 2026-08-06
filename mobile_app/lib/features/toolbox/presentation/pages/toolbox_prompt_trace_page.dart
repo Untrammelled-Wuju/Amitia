@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -6,13 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-
-class ToolboxPromptTracePage extends StatefulWidget {
-  const ToolboxPromptTracePage({super.key});
-
-  @override
-  State<ToolboxPromptTracePage> createState() => _ToolboxPromptTracePageState();
-}
+import '../../../../core/services/providers.dart';
 
 class _TraceEntry {
   final String id;
@@ -33,49 +28,59 @@ class _TraceEntry {
   });
 }
 
-class _ToolboxPromptTracePageState extends State<ToolboxPromptTracePage> {
-  final _traces = const <_TraceEntry>[
-    _TraceEntry(
-      id: '#1024',
-      role: 'assistant',
-      model: 'GPT-4',
-      blocks: 'system / character / memory / tools',
-      promptTokens: 1842,
-      completionTokens: 326,
-      snippet: '[system] 你是Amitia，一个温柔细心的 AI 伙伴…\n[character] 语气温柔，偶尔俏皮…\n[memory] 用户喜欢早上喝咖啡…\n[user] 帮我整理下载目录',
-    ),
-    _TraceEntry(
-      id: '#1023',
-      role: 'assistant',
-      model: 'Claude 3.5',
-      blocks: 'system / character / tools',
-      promptTokens: 968,
-      completionTokens: 512,
-      snippet: '[system] 你是高效理性的助手…\n[tools] 文件系统、Web 搜索…\n[user] 生成一份周报模板',
-    ),
-    _TraceEntry(
-      id: '#1022',
-      role: 'assistant',
-      model: 'GPT-4o',
-      blocks: 'system / character / memory / vision',
-      promptTokens: 2410,
-      completionTokens: 188,
-      snippet: '[vision] 图像内容描述：产品需求文档截图\n[user] 提取关键信息',
-    ),
-    _TraceEntry(
-      id: '#1021',
-      role: 'assistant',
-      model: 'DeepSeek-Voice',
-      blocks: 'system / character',
-      promptTokens: 412,
-      completionTokens: 96,
-      snippet: '[user 语音] 今天天气怎么样\n[转录] 今天天气怎么样',
-    ),
-  ];
+class ToolboxPromptTracePage extends ConsumerStatefulWidget {
+  const ToolboxPromptTracePage({super.key});
+
+  @override
+  ConsumerState<ToolboxPromptTracePage> createState() => _ToolboxPromptTracePageState();
+}
+
+class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage> {
+  List<_TraceEntry> _traces = [];
+  bool _loading = true;
+  String? _error;
   String? _expandedId;
 
   @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final api = ref.read(apiClientProvider);
+      final resp = await api.get<List<dynamic>>('/api/system/prompt-traces');
+      final items = resp.data ?? [];
+      final traces = items.map((e) {
+        final m = e as Map<String, dynamic>? ?? {};
+        return _TraceEntry(
+          id: (m['id'] ?? m['traceId'] ?? '').toString(),
+          role: (m['role'] ?? 'assistant').toString(),
+          model: (m['model'] ?? m['modelName'] ?? 'Unknown').toString(),
+          blocks: (m['blocks'] ?? m['injectedBlocks'] ?? m['sections'] ?? '').toString(),
+          promptTokens: (m['promptTokens'] ?? m['inputTokens'] ?? 0) as int,
+          completionTokens: (m['completionTokens'] ?? m['outputTokens'] ?? 0) as int,
+          snippet: (m['snippet'] ?? m['promptSnippet'] ?? m['content'] ?? '').toString(),
+        );
+      }).toList();
+      if (mounted) {
+        setState(() { _traces = traces; _loading = false; });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState(message: '正在加载 Prompt Trace...');
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_traces.isEmpty) {
+      return const AmitiaEmptyState(icon: Icons.psychology_outlined, title: '暂无 Prompt Trace', subtitle: '暂无已记录的 prompt 追踪数据');
+    }
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'Prompt Trace', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView.separated(

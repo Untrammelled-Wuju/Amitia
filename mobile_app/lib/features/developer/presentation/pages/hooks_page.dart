@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class HooksPage extends ConsumerStatefulWidget {
   const HooksPage({super.key});
@@ -19,16 +18,50 @@ class HooksPage extends ConsumerStatefulWidget {
 }
 
 class _HooksPageState extends ConsumerState<HooksPage> {
-  late List<HookEntry> _hooks;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _hooks = [];
 
   @override
   void initState() {
     super.initState();
-    _hooks = List.from(MockKernel.hooks);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final data = await svc.diagnostics();
+      if (mounted) {
+        if (data != null) {
+          final hooks = data['hooks'];
+          if (hooks is List) {
+            _hooks = hooks.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
         title: 'Hook 中心',
@@ -52,7 +85,13 @@ class _HooksPageState extends ConsumerState<HooksPage> {
     );
   }
 
-  Widget _buildHookCard(BuildContext context, HookEntry hook) {
+  Widget _buildHookCard(BuildContext context, Map<String, dynamic> hook) {
+    final point = hook['point'] as String? ?? '';
+    final contributor = hook['contributor'] as String? ?? '';
+    final priority = hook['priority'] ?? 0;
+    final status = hook['status'] as String? ?? '';
+    final id = hook['id'] as String? ?? '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -76,27 +115,27 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(hook.point, style: AppTypography.cardTitle(context).copyWith(fontFamily: 'monospace', fontSize: 14)),
+                      Text(point, style: AppTypography.cardTitle(context).copyWith(fontFamily: 'monospace', fontSize: 14)),
                       const SizedBox(height: 2),
-                      Text(hook.contributor, style: AppTypography.caption(context)),
+                      Text(contributor, style: AppTypography.caption(context)),
                     ],
                   ),
                 ),
-                _buildStatusBadge(hook.status),
+                _buildStatusBadge(status),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
-                _buildInfoChip(context, '优先级', '${hook.priority}'),
+                _buildInfoChip(context, '优先级', '$priority'),
                 const SizedBox(width: AppSpacing.sm),
-                _buildInfoChip(context, '贡献者', hook.contributor),
+                _buildInfoChip(context, '贡献者', contributor),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
-                if (hook.status == HookStatus.circuitOpen)
+                if (status == 'circuit_open')
                   Expanded(
                     child: AmitiaButton(
                       label: '熔断器详情',
@@ -108,9 +147,9 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                 else
                   Expanded(
                     child: AmitiaButton(
-                      label: hook.status == HookStatus.active ? '停用' : '启用',
+                      label: status == 'active' ? '停用' : '启用',
                       isSecondary: true,
-                      icon: hook.status == HookStatus.active ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                      icon: status == 'active' ? Icons.pause_circle_outline : Icons.play_circle_outline,
                       onPressed: () => _showToggleConfirm(context, hook),
                     ),
                   ),
@@ -131,14 +170,16 @@ class _HooksPageState extends ConsumerState<HooksPage> {
     );
   }
 
-  Widget _buildStatusBadge(HookStatus status) {
+  Widget _buildStatusBadge(String status) {
     switch (status) {
-      case HookStatus.active:
+      case 'active':
         return const AmitiaStatusBadge(label: '活跃', type: BadgeType.success);
-      case HookStatus.inactive:
+      case 'inactive':
         return const AmitiaStatusBadge(label: '已停用', type: BadgeType.neutral);
-      case HookStatus.circuitOpen:
+      case 'circuit_open':
         return const AmitiaStatusBadge(label: '熔断中', type: BadgeType.error);
+      default:
+        return const AmitiaStatusBadge(label: '未知', type: BadgeType.neutral);
     }
   }
 
@@ -153,7 +194,13 @@ class _HooksPageState extends ConsumerState<HooksPage> {
     );
   }
 
-  void _showHookDetailSheet(BuildContext context, HookEntry hook) {
+  void _showHookDetailSheet(BuildContext context, Map<String, dynamic> hook) {
+    final point = hook['point'] as String? ?? '';
+    final contributor = hook['contributor'] as String? ?? '';
+    final priority = hook['priority'] ?? 0;
+    final status = hook['status'] as String? ?? '';
+    final id = hook['id'] as String? ?? '';
+
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -173,11 +220,11 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                 const SizedBox(height: 20),
                 Text('Hook 贡献详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
-                _buildDetailRow(context, 'Hook 点', hook.point),
-                _buildDetailRow(context, '贡献者', hook.contributor),
-                _buildDetailRow(context, '优先级', '${hook.priority}'),
-                _buildDetailRow(context, '状态', _statusLabel(hook.status)),
-                _buildDetailRow(context, 'Hook ID', hook.id),
+                _buildDetailRow(context, 'Hook 点', point),
+                _buildDetailRow(context, '贡献者', contributor),
+                _buildDetailRow(context, '优先级', '$priority'),
+                _buildDetailRow(context, '状态', _statusLabel(status)),
+                _buildDetailRow(context, 'Hook ID', id),
                 const SizedBox(height: 20),
                 AmitiaButton(
                   label: '关闭',
@@ -208,7 +255,10 @@ class _HooksPageState extends ConsumerState<HooksPage> {
     );
   }
 
-  void _showCircuitBreakerSheet(BuildContext context, HookEntry hook) {
+  void _showCircuitBreakerSheet(BuildContext context, Map<String, dynamic> hook) {
+    final point = hook['point'] as String? ?? '';
+    final contributor = hook['contributor'] as String? ?? '';
+
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -245,14 +295,14 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                       Icon(Icons.warning_amber_rounded, color: context.error, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text('Hook 点「${hook.point}」的熔断器已打开，贡献者执行持续失败导致熔断。', style: AppTypography.caption(context).copyWith(color: context.error)),
+                        child: Text('Hook 点「$point」的熔断器已打开，贡献者执行持续失败导致熔断。', style: AppTypography.caption(context).copyWith(color: context.error)),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                _buildDetailRow(context, 'Hook 点', hook.point),
-                _buildDetailRow(context, '贡献者', hook.contributor),
+                _buildDetailRow(context, 'Hook 点', point),
+                _buildDetailRow(context, '贡献者', contributor),
                 _buildDetailRow(context, '失败次数', '5'),
                 _buildDetailRow(context, '熔断阈值', '5'),
                 _buildDetailRow(context, '恢复策略', '半开探测'),
@@ -263,19 +313,13 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                   icon: Icons.refresh,
                   onPressed: () {
                     setState(() {
-                      final idx = _hooks.indexWhere((h) => h.id == hook.id);
+                      final idx = _hooks.indexWhere((h) => h['id'] == hook['id']);
                       if (idx >= 0) {
-                        _hooks[idx] = HookEntry(
-                          id: hook.id,
-                          point: hook.point,
-                          contributor: hook.contributor,
-                          priority: hook.priority,
-                          status: HookStatus.active,
-                        );
+                        _hooks[idx]['status'] = 'active';
                       }
                     });
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已重置熔断器：${hook.point}')));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已重置熔断器：$point')));
                   },
                 ),
               ],
@@ -286,8 +330,9 @@ class _HooksPageState extends ConsumerState<HooksPage> {
     );
   }
 
-  void _showToggleConfirm(BuildContext context, HookEntry hook) {
-    final isActive = hook.status == HookStatus.active;
+  void _showToggleConfirm(BuildContext context, Map<String, dynamic> hook) {
+    final point = hook['point'] as String? ?? '';
+    final isActive = hook['status'] == 'active';
     final action = isActive ? '停用' : '启用';
     showDialog(
       context: context,
@@ -296,7 +341,7 @@ class _HooksPageState extends ConsumerState<HooksPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('$action Hook', style: AppTypography.cardTitle(context)),
-          content: Text('确定要$action Hook 点「${hook.point}」吗？', style: AppTypography.body(context)),
+          content: Text('确定要$action Hook 点「$point」吗？', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -305,19 +350,13 @@ class _HooksPageState extends ConsumerState<HooksPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _hooks.indexWhere((h) => h.id == hook.id);
+                  final idx = _hooks.indexWhere((h) => h['id'] == hook['id']);
                   if (idx >= 0) {
-                    _hooks[idx] = HookEntry(
-                      id: hook.id,
-                      point: hook.point,
-                      contributor: hook.contributor,
-                      priority: hook.priority,
-                      status: isActive ? HookStatus.inactive : HookStatus.active,
-                    );
+                    _hooks[idx]['status'] = isActive ? 'inactive' : 'active';
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已$action：${hook.point}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已$action：$point')));
               },
               child: Text(action, style: TextStyle(color: isActive ? context.warning : context.accentPrimary)),
             ),
@@ -327,14 +366,16 @@ class _HooksPageState extends ConsumerState<HooksPage> {
     );
   }
 
-  String _statusLabel(HookStatus status) {
+  String _statusLabel(String status) {
     switch (status) {
-      case HookStatus.active:
+      case 'active':
         return '活跃';
-      case HookStatus.inactive:
+      case 'inactive':
         return '已停用';
-      case HookStatus.circuitOpen:
+      case 'circuit_open':
         return '熔断中';
+      default:
+        return status;
     }
   }
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
 func newDevModeTestWorkspace(t *testing.T, extDir string) (string, string) {
@@ -62,7 +63,7 @@ func TestBaseline_E2E_DevMode_V1LoadSucceeds(t *testing.T) {
 	extDir, manifestPath := newDevModeTestWorkspace(t, v1Dir)
 
 	registry := dev_mode.NewWorkspaceRegistry()
-	pipeline := dev_mode.NewRebuildPipeline("node").WithRegistry(registry)
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver()).WithRegistry(registry)
 	preserver := dev_mode.NewStatePreserver()
 	reloader := dev_mode.NewRuntimeReloader(registry, pipeline, preserver)
 
@@ -114,7 +115,7 @@ func TestBaseline_E2E_DevMode_V2ReloadActivatesNewGeneration(t *testing.T) {
 	_, v2Manifest := newDevModeTestWorkspace(t, v2Dir)
 
 	registry := dev_mode.NewWorkspaceRegistry()
-	pipeline := dev_mode.NewRebuildPipeline("node").WithRegistry(registry)
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver()).WithRegistry(registry)
 	preserver := dev_mode.NewStatePreserver()
 	reloader := dev_mode.NewRuntimeReloader(registry, pipeline, preserver)
 
@@ -184,7 +185,7 @@ func TestBaseline_E2E_DevMode_V3InvalidReloadFailsAndV2Continues(t *testing.T) {
 	_, v2Manifest := newDevModeTestWorkspace(t, v2Dir)
 
 	registry := dev_mode.NewWorkspaceRegistry()
-	pipeline := dev_mode.NewRebuildPipeline("node").WithRegistry(registry)
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver()).WithRegistry(registry)
 	preserver := dev_mode.NewStatePreserver()
 	reloader := dev_mode.NewRuntimeReloader(registry, pipeline, preserver)
 
@@ -312,7 +313,7 @@ func TestBaseline_E2E_DevMode_DevTrustRequiredForReload(t *testing.T) {
 	extDir, manifestPath := newDevModeTestWorkspace(t, v1Dir)
 
 	registry := dev_mode.NewWorkspaceRegistry()
-	pipeline := dev_mode.NewRebuildPipeline("node").WithRegistry(registry)
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver()).WithRegistry(registry)
 	preserver := dev_mode.NewStatePreserver()
 	reloader := dev_mode.NewRuntimeReloader(registry, pipeline, preserver)
 
@@ -348,7 +349,7 @@ func TestBaseline_E2E_DevMode_ReloadDisabledWhenNotEnabled(t *testing.T) {
 	extDir, manifestPath := newDevModeTestWorkspace(t, v1Dir)
 
 	registry := dev_mode.NewWorkspaceRegistry()
-	pipeline := dev_mode.NewRebuildPipeline("node").WithRegistry(registry)
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver()).WithRegistry(registry)
 	preserver := dev_mode.NewStatePreserver()
 	reloader := dev_mode.NewRuntimeReloader(registry, pipeline, preserver)
 
@@ -386,7 +387,7 @@ func TestBaseline_E2E_DevMode_StatePreservationAcrossReload(t *testing.T) {
 	_, v2Manifest := newDevModeTestWorkspace(t, v2Dir)
 
 	registry := dev_mode.NewWorkspaceRegistry()
-	pipeline := dev_mode.NewRebuildPipeline("node").WithRegistry(registry)
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver()).WithRegistry(registry)
 	preserver := dev_mode.NewStatePreserver()
 	reloader := dev_mode.NewRuntimeReloader(registry, pipeline, preserver)
 

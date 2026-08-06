@@ -12,7 +12,7 @@ class ApiClient {
   final Logger _logger = Logger();
   static const String _tokenKey = 'ai_companion_token';
   static const String _baseUrlKey = 'api_base_url';
-  static const String _defaultBaseUrl = 'http://127.0.0.1:8080';
+  static const String _defaultBaseUrl = 'http://127.0.0.1:18899';
 
   static const Set<String> _publicPaths = {
     '/api/public/auth/status',

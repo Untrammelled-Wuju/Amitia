@@ -8,88 +8,210 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../shared/models/settings_models.dart';
 
-class TemporalSettingsPage extends ConsumerStatefulWidget {
+final _temporalConfigProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final svc = ref.read(temporalServiceProvider);
+  return svc.config();
+});
+
+final _temporalAnchorsProvider = FutureProvider<List<Map<String, dynamic>>?>((ref) async {
+  final svc = ref.read(temporalServiceProvider);
+  final anchors = await svc.anchors();
+  return anchors;
+});
+
+class TemporalSettingsPage extends ConsumerWidget {
   const TemporalSettingsPage({super.key});
-
-  @override
-  ConsumerState<TemporalSettingsPage> createState() => _TemporalSettingsPageState();
-}
-
-class _TemporalSettingsPageState extends ConsumerState<TemporalSettingsPage> {
-  bool _timeAwareness = true;
-  String _timezone = 'Asia/Shanghai (UTC+8)';
-  String _dateFormat = 'YYYY-MM-DD';
-  late List<TimeAnchor> _anchors;
 
   static const _timezones = ['Asia/Shanghai (UTC+8)', 'Asia/Tokyo (UTC+9)', 'America/New_York (UTC-5)', 'Europe/London (UTC+0)'];
   static const _dateFormats = ['YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY年MM月DD日'];
 
   @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final configAsync = ref.watch(_temporalConfigProvider);
+    final anchorsAsync = ref.watch(_temporalAnchorsProvider);
+
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(title: '时间感知设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      body: configAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                const SizedBox(height: 16),
+                Text(
+                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                  style: AppTypography.body(context).copyWith(color: context.error),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () {
+                    ref.invalidate(_temporalConfigProvider);
+                    ref.invalidate(_temporalAnchorsProvider);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (config) {
+          final anchors = anchorsAsync.when(
+            loading: () => <TimeAnchor>[],
+            error: (_, __) => <TimeAnchor>[],
+            data: (data) {
+              if (data == null) return <TimeAnchor>[];
+              return data.map((e) => TimeAnchor(
+                id: (e['id'] ?? '').toString(),
+                name: (e['name'] ?? '').toString(),
+                type: (e['type'] ?? '周期锚点').toString(),
+                value: (e['value'] ?? '').toString(),
+              )).toList();
+            },
+          );
+          return _TemporalContent(
+            config: config,
+            anchors: anchors,
+            timezones: _timezones,
+            dateFormats: _dateFormats,
+            onRefresh: () {
+              ref.invalidate(_temporalConfigProvider);
+              ref.invalidate(_temporalAnchorsProvider);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TemporalContent extends ConsumerStatefulWidget {
+  final Map<String, dynamic>? config;
+  final List<TimeAnchor> anchors;
+  final List<String> timezones;
+  final List<String> dateFormats;
+  final VoidCallback onRefresh;
+
+  const _TemporalContent({
+    this.config,
+    required this.anchors,
+    required this.timezones,
+    required this.dateFormats,
+    required this.onRefresh,
+  });
+
+  @override
+  ConsumerState<_TemporalContent> createState() => _TemporalContentState();
+}
+
+class _TemporalContentState extends ConsumerState<_TemporalContent> {
+  late bool _timeAwareness;
+  late String _timezone;
+  late String _dateFormat;
+  late List<TimeAnchor> _anchors;
+
+  @override
   void initState() {
     super.initState();
-    _anchors = List.from(MockSettings.timeAnchors);
+    _timeAwareness = widget.config?['timeAwareness'] == true;
+    _timezone = (widget.config?['timezone'] ?? 'Asia/Shanghai (UTC+8)').toString();
+    _dateFormat = (widget.config?['dateFormat'] ?? 'YYYY-MM-DD').toString();
+    _anchors = List.from(widget.anchors);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TemporalContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.anchors != oldWidget.anchors) {
+      _anchors = List.from(widget.anchors);
+    }
   }
 
   List<TimeAnchor> get _periodicAnchors => _anchors.where((a) => a.type == '周期锚点').toList();
   List<TimeAnchor> get _specialDates => _anchors.where((a) => a.type == '特殊日期').toList();
 
+  Future<void> _saveConfig() async {
+    final svc = ref.read(temporalServiceProvider);
+    await svc.updateConfig({
+      'timeAwareness': _timeAwareness,
+      'timezone': _timezone,
+      'dateFormat': _dateFormat,
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('时间感知设置已保存'), duration: Duration(seconds: 1)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '时间感知设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        children: [
-          _SectionLabel(text: '基础设置'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard([
-            AmitiaSwitchTile(
-              title: '时间感知',
-              subtitle: '让 AI 理解当前时间和时间上下文',
-              value: _timeAwareness,
-              onChanged: (v) => setState(() => _timeAwareness = v),
-            ),
-            _divider(),
-            _buildDropdownTile(
-              icon: Icons.public,
-              title: '时区',
-              value: _timezone,
-              options: _timezones,
-              onChanged: (v) => setState(() => _timezone = v),
-            ),
-            _divider(),
-            _buildDropdownTile(
-              icon: Icons.date_range,
-              title: '日期格式',
-              value: _dateFormat,
-              options: _dateFormats,
-              onChanged: (v) => setState(() => _dateFormat = v),
-            ),
-          ]),
-          const SizedBox(height: AppSpacing.sectionGap),
-          AmitiaSectionHeader(
-            title: '周期锚点',
-            actionText: '新增',
-            onAction: () => _showAnchorSheet(null),
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      children: [
+        _SectionLabel(text: '基础设置'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildCard([
+          AmitiaSwitchTile(
+            title: '时间感知',
+            subtitle: '让 AI 理解当前时间和时间上下文',
+            value: _timeAwareness,
+            onChanged: (v) => setState(() => _timeAwareness = v),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          ..._periodicAnchors.map((a) => _buildAnchorTile(a)),
-          if (_periodicAnchors.isEmpty) _buildEmpty('暂无周期锚点'),
-          const SizedBox(height: AppSpacing.sectionGap),
-          AmitiaSectionHeader(
-            title: '特殊日期',
-            actionText: '新增',
-            onAction: () => _showAnchorSheet(null, isSpecial: true),
+          _divider(),
+          _buildDropdownTile(
+            icon: Icons.public,
+            title: '时区',
+            value: _timezone,
+            options: widget.timezones,
+            onChanged: (v) => setState(() => _timezone = v),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          ..._specialDates.map((a) => _buildAnchorTile(a)),
-          if (_specialDates.isEmpty) _buildEmpty('暂无特殊日期'),
-          const SizedBox(height: AppSpacing.xl),
-        ],
-      ),
+          _divider(),
+          _buildDropdownTile(
+            icon: Icons.date_range,
+            title: '日期格式',
+            value: _dateFormat,
+            options: widget.dateFormats,
+            onChanged: (v) => setState(() => _dateFormat = v),
+          ),
+        ]),
+        const SizedBox(height: AppSpacing.sectionGap),
+        AmitiaSectionHeader(
+          title: '周期锚点',
+          actionText: '新增',
+          onAction: () => _showAnchorSheet(null),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        ..._periodicAnchors.map((a) => _buildAnchorTile(a)),
+        if (_periodicAnchors.isEmpty) _buildEmpty('暂无周期锚点'),
+        const SizedBox(height: AppSpacing.sectionGap),
+        AmitiaSectionHeader(
+          title: '特殊日期',
+          actionText: '新增',
+          onAction: () => _showAnchorSheet(null, isSpecial: true),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        ..._specialDates.map((a) => _buildAnchorTile(a)),
+        if (_specialDates.isEmpty) _buildEmpty('暂无特殊日期'),
+        const SizedBox(height: AppSpacing.sectionGap),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: AmitiaButton(
+            label: '保存配置',
+            icon: Icons.check,
+            isFullWidth: true,
+            onPressed: _saveConfig,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+      ],
     );
   }
 
@@ -263,30 +385,30 @@ class _TemporalSettingsPageState extends ConsumerState<TemporalSettingsPage> {
                   AmitiaButton(
                     label: '保存',
                     isFullWidth: true,
-                    onPressed: () {
+                    onPressed: () async {
                       if (nameCtrl.text.isEmpty || valueCtrl.text.isEmpty) return;
-                      setState(() {
-                        if (existing != null) {
-                          final idx = _anchors.indexWhere((a) => a.id == existing.id);
-                          _anchors[idx] = TimeAnchor(
-                            id: existing.id,
-                            name: nameCtrl.text,
-                            type: isPeriodic ? '周期锚点' : '特殊日期',
-                            value: valueCtrl.text,
-                          );
-                        } else {
-                          _anchors.add(TimeAnchor(
-                            id: 'ta${DateTime.now().millisecondsSinceEpoch}',
-                            name: nameCtrl.text,
-                            type: isPeriodic ? '周期锚点' : '特殊日期',
-                            value: valueCtrl.text,
-                          ));
-                        }
-                      });
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(existing == null ? '已添加锚点' : '已更新锚点'), duration: const Duration(seconds: 1)),
-                      );
+                      final svc = ref.read(temporalServiceProvider);
+                      final type = isPeriodic ? '周期锚点' : '特殊日期';
+                      if (existing != null) {
+                        await svc.updateAnchor(existing.id, {
+                          'name': nameCtrl.text,
+                          'type': type,
+                          'value': valueCtrl.text,
+                        });
+                      } else {
+                        await svc.createAnchor({
+                          'name': nameCtrl.text,
+                          'type': type,
+                          'value': valueCtrl.text,
+                        });
+                      }
+                      if (mounted) {
+                        Navigator.pop(ctx);
+                        widget.onRefresh();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(existing == null ? '已添加锚点' : '已更新锚点'), duration: const Duration(seconds: 1)),
+                        );
+                      }
                     },
                   ),
                 ],
@@ -308,12 +430,16 @@ class _TemporalSettingsPageState extends ConsumerState<TemporalSettingsPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              setState(() => _anchors.removeWhere((a) => a.id == anchor.id));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已删除'), duration: Duration(seconds: 1)),
-              );
+              final svc = ref.read(temporalServiceProvider);
+              await svc.deleteAnchor(anchor.id);
+              if (mounted) {
+                widget.onRefresh();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('已删除'), duration: Duration(seconds: 1)),
+                );
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),

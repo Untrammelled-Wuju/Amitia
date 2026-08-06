@@ -8,20 +8,76 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class SkillDraftEditorPage extends ConsumerStatefulWidget {
+final _skillDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, draftId) async {
+  final svc = ref.read(extensionServiceProvider);
+  return svc.getSkill(draftId);
+});
+
+class SkillDraftEditorPage extends ConsumerWidget {
   final String draftId;
 
   const SkillDraftEditorPage({super.key, required this.draftId});
 
   @override
-  ConsumerState<SkillDraftEditorPage> createState() => _SkillDraftEditorPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final skillAsync = ref.watch(_skillDetailProvider(draftId));
+
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(
+        title: 'Draft 编辑器',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
+      ),
+      body: skillAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                const SizedBox(height: 16),
+                Text(
+                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                  style: AppTypography.body(context).copyWith(color: context.error),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () => ref.invalidate(_skillDetailProvider(draftId)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (skill) {
+          return _SkillDraftContent(
+            draftId: draftId,
+            skill: skill,
+            onRefresh: () => ref.invalidate(_skillDetailProvider(draftId)),
+          );
+        },
+      ),
+    );
+  }
 }
 
-class _SkillDraftEditorPageState extends ConsumerState<SkillDraftEditorPage> {
-  late SkillDraft _draft;
+class _SkillDraftContent extends ConsumerStatefulWidget {
+  final String draftId;
+  final Map<String, dynamic>? skill;
+  final VoidCallback onRefresh;
+
+  const _SkillDraftContent({required this.draftId, this.skill, required this.onRefresh});
+
+  @override
+  ConsumerState<_SkillDraftContent> createState() => _SkillDraftContentState();
+}
+
+class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
   late TextEditingController _nameController;
   late TextEditingController _descController;
   late TextEditingController _metadataController;
@@ -33,34 +89,30 @@ class _SkillDraftEditorPageState extends ConsumerState<SkillDraftEditorPage> {
   bool _hasTested = false;
   String _testResult = '';
   String _selectedRisk = '低风险';
+  bool _isSaving = false;
 
   final _riskOptions = ['低风险', '中风险', '高风险'];
 
   @override
   void initState() {
     super.initState();
-    SkillDraft? found;
-    for (final d in MockWorkshop.skillDrafts) {
-      if (d.id == widget.draftId) {
-        found = d;
-        break;
-      }
-    }
-    _draft = found ?? SkillDraft(
-      id: widget.draftId,
-      name: '新技能',
-      description: '',
-      updated: DateTime.now(),
-    );
-    _nameController = TextEditingController(text: _draft.name);
-    _descController = TextEditingController(text: _draft.description);
-    _metadataController = TextEditingController(text: _draft.metadata);
-    _inputSchemaController = TextEditingController(text: _draft.inputSchema);
-    _outputSchemaController = TextEditingController(text: _draft.outputSchema);
-    _riskController = TextEditingController(text: _draft.riskAssessment);
-    _selectedRisk = _draft.riskAssessment;
-    _hasTested = _draft.testResult != '未测试';
-    _testResult = _draft.testResult;
+    final name = (widget.skill?['name'] ?? '').toString();
+    final description = (widget.skill?['description'] ?? '').toString();
+    final metadata = (widget.skill?['metadata'] ?? '').toString();
+    final inputSchema = (widget.skill?['inputSchema'] ?? '').toString();
+    final outputSchema = (widget.skill?['outputSchema'] ?? '').toString();
+    final riskAssessment = (widget.skill?['riskAssessment'] ?? '低风险').toString();
+    final testResult = (widget.skill?['testResult'] ?? '未测试').toString();
+
+    _nameController = TextEditingController(text: name);
+    _descController = TextEditingController(text: description);
+    _metadataController = TextEditingController(text: metadata);
+    _inputSchemaController = TextEditingController(text: inputSchema);
+    _outputSchemaController = TextEditingController(text: outputSchema);
+    _riskController = TextEditingController(text: riskAssessment);
+    _selectedRisk = _riskOptions.contains(riskAssessment) ? riskAssessment : '低风险';
+    _hasTested = testResult != '未测试';
+    _testResult = testResult;
   }
 
   @override
@@ -87,52 +139,107 @@ class _SkillDraftEditorPageState extends ConsumerState<SkillDraftEditorPage> {
     }
   }
 
+  Future<void> _runTest() async {
+    setState(() => _isTesting = true);
+    final svc = ref.read(extensionServiceProvider);
+    final result = await svc.executeSkill(widget.draftId, {
+      'action': 'test',
+      'inputSchema': _inputSchemaController.text,
+      'outputSchema': _outputSchemaController.text,
+    });
+    if (mounted) {
+      setState(() {
+        _isTesting = false;
+        _hasTested = true;
+        _testResult = (result?['passed'] == true) ? '通过' : '失败';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('测试$_testResult')),
+      );
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请填写技能名称')),
+      );
+      return;
+    }
+    setState(() => _isSaving = true);
+    final svc = ref.read(extensionServiceProvider);
+    await svc.updateSkillConfig(widget.draftId, {
+      'name': _nameController.text,
+      'description': _descController.text,
+      'metadata': _metadataController.text,
+      'inputSchema': _inputSchemaController.text,
+      'outputSchema': _outputSchemaController.text,
+      'riskAssessment': _selectedRisk,
+    });
+    if (mounted) {
+      setState(() => _isSaving = false);
+      widget.onRefresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('「${_nameController.text}」已保存')),
+      );
+    }
+  }
+
+  Future<void> _installSkill() async {
+    if (!_hasTested) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先运行测试')),
+      );
+      return;
+    }
+    final svc = ref.read(extensionServiceProvider);
+    await svc.enableSkill(widget.draftId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('「${_nameController.text}」安装成功')),
+      );
+    }
+  }
+
+  Future<void> _archiveDraft() async {
+    final svc = ref.read(extensionServiceProvider);
+    await svc.disableSkill(widget.draftId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('草稿已归档')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        title: 'Draft 编辑器',
-        showBackButton: true,
-        fallbackRoute: AppRoutes.workshop,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.sm),
-            child: AmitiaIconButton(
-              icon: Icons.archive_outlined,
-              color: context.warning,
-              onPressed: _showArchiveConfirm,
+    return SafeArea(
+      top: false,
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              children: [
+                _buildStatusBanner(context),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildMetadataSection(context),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildSchemaSection(context, '输入 Schema', _inputSchemaController, '定义技能的输入参数'),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildSchemaSection(context, '输出 Schema', _outputSchemaController, '定义技能的输出结果'),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildRiskSection(context),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildTestSection(context),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildInstallPreviewSection(context),
+                const SizedBox(height: AppSpacing.xxl),
+              ],
             ),
           ),
+          _buildBottomActions(context),
         ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                children: [
-                  _buildStatusBanner(context),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildMetadataSection(context),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildSchemaSection(context, '输入 Schema', _inputSchemaController, '定义技能的输入参数'),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildSchemaSection(context, '输出 Schema', _outputSchemaController, '定义技能的输出结果'),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildRiskSection(context),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildTestSection(context),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildInstallPreviewSection(context),
-                  const SizedBox(height: AppSpacing.xxl),
-                ],
-              ),
-            ),
-            _buildBottomActions(context),
-          ],
-        ),
       ),
     );
   }
@@ -408,17 +515,17 @@ class _SkillDraftEditorPageState extends ConsumerState<SkillDraftEditorPage> {
         children: [
           Expanded(
             child: AmitiaButton(
-              label: '安装',
+              label: '归档',
               isSecondary: true,
-              onPressed: _showInstallConfirm,
+              onPressed: () => _confirmArchive(context),
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: AmitiaButton(
-              label: '提交',
+              label: _isSaving ? '保存中...' : '提交',
               icon: Icons.check,
-              onPressed: _showSubmitConfirm,
+              onPressed: _isSaving ? null : _saveDraft,
             ),
           ),
         ],
@@ -426,101 +533,7 @@ class _SkillDraftEditorPageState extends ConsumerState<SkillDraftEditorPage> {
     );
   }
 
-  void _runTest() {
-    setState(() {
-      _isTesting = true;
-    });
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isTesting = false;
-          _hasTested = true;
-          _testResult = '通过';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('测试通过')),
-        );
-      }
-    });
-  }
-
-  void _showSubmitConfirm() {
-    if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请填写技能名称')),
-      );
-      return;
-    }
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('提交草稿', style: AppTypography.cardTitle(context)),
-          content: Text(
-            '确认提交「${_nameController.text}」？提交后草稿将保存并可以安装使用。',
-            style: AppTypography.body(context),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('草稿已提交')),
-                );
-                Navigator.pop(context);
-              },
-              child: Text('提交', style: TextStyle(color: context.accentPrimary)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showInstallConfirm() {
-    if (!_hasTested) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先运行测试')),
-      );
-      return;
-    }
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('安装技能', style: AppTypography.cardTitle(context)),
-          content: Text(
-            '确认安装「${_nameController.text}」到系统？安装后可在扩展中心管理。',
-            style: AppTypography.body(context),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「${_nameController.text}」安装成功')),
-                );
-                Navigator.pop(context);
-              },
-              child: Text('安装', style: TextStyle(color: context.accentPrimary)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showArchiveConfirm() {
+  void _confirmArchive(BuildContext context) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -539,10 +552,7 @@ class _SkillDraftEditorPageState extends ConsumerState<SkillDraftEditorPage> {
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('草稿已归档')),
-                );
-                Navigator.pop(context);
+                _archiveDraft();
               },
               child: Text('归档', style: TextStyle(color: context.warning)),
             ),

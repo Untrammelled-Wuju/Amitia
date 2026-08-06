@@ -8,19 +8,17 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/providers.dart';
 
-class CharacterDebugPage extends ConsumerStatefulWidget {
+class CharacterDebugPage extends ConsumerWidget {
   final String characterId;
 
   const CharacterDebugPage({super.key, required this.characterId});
 
   @override
-  ConsumerState<CharacterDebugPage> createState() => _CharacterDebugPageState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final companionAsync = ref.watch(companionStateProvider);
 
-class _CharacterDebugPageState extends ConsumerState<CharacterDebugPage> {
-  @override
-  Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '调试模式',
@@ -32,7 +30,7 @@ class _CharacterDebugPageState extends ConsumerState<CharacterDebugPage> {
             color: context.warning,
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('开发者模式 - 所有操作均为Mock'), duration: Duration(seconds: 2)),
+                const SnackBar(content: Text('开发者模式'), duration: Duration(seconds: 2)),
               );
             },
           ),
@@ -45,85 +43,72 @@ class _CharacterDebugPageState extends ConsumerState<CharacterDebugPage> {
           children: [
             _buildWarningBanner(context),
             const SizedBox(height: AppSpacing.sectionGap),
-            AmitiaSectionHeader(title: '调度操作'),
+            AmitiaSectionHeader(title: '角色状态'),
             const SizedBox(height: AppSpacing.sm),
+            companionAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, _) => Text('加载失败: $err', style: AppTypography.bodySmall(context)),
+              data: (state) {
+                if (state == null) {
+                  return Text('暂无状态数据', style: AppTypography.caption(context));
+                }
+                return Column(
+                  children: [
+                    _buildStatusRow(context, '状态', state['state']?.toString() ?? '-', Icons.info_outline),
+                    _buildStatusRow(context, '睡眠中', (state['isSleeping'] == true) ? '是' : '否', Icons.bedtime_outlined),
+                    _buildStatusRow(context, '当前活动', state['currentActivity']?.toString() ?? '-', Icons.play_circle_outline),
+                    _buildStatusRow(context, '下次活动', state['nextActivity']?.toString() ?? '-', Icons.schedule),
+                    _buildStatusRow(context, '醒来时间', state['wakeTime']?.toString() ?? '-', Icons.wb_sunny_outlined),
+                    _buildStatusRow(context, '睡眠时间', state['sleepTime']?.toString() ?? '-', Icons.nights_stay_outlined),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: AppSpacing.sectionGap),
+            AmitiaSectionHeader(title: '调试操作'),
+            const SizedBox(height: AppSpacing.sm),
+            _buildDebugAction(
+              context,
+              '测试角色对话',
+              '发送测试消息验证角色响应',
+              Icons.chat_bubble_outline,
+              context.accentPrimary,
+              () => _testCharacter(context, ref),
+            ),
             _buildDebugAction(
               context,
               '重新生成今日作息',
               '根据当前时间和规则重新生成今日作息计划',
               Icons.refresh,
               context.accentPrimary,
-              () => _showConfirmDialog(
-                context,
-                '重新生成今日作息',
-                '这将覆盖当前的作息计划，根据生活规则重新生成。确定继续吗？',
-                () => _showResultDialog(context, '重新生成今日作息', '已成功重新生成今日作息计划，包含6个时段。'),
-              ),
+              () => _regenerateSchedule(context, ref),
             ),
             _buildDebugAction(
               context,
-              '触发主动消息处理',
-              '立即执行一次主动消息规则检查和触发',
-              Icons.notifications_active_outlined,
-              context.info,
-              () => _showConfirmDialog(
-                context,
-                '触发主动消息处理',
-                '将立即检查所有主动消息规则并尝试触发。确定继续吗？',
-                () => _showResultDialog(context, '触发主动消息处理', '已检查5条规则，其中2条满足触发条件，已发送主动消息。'),
-              ),
-            ),
-            _buildDebugAction(
-              context,
-              '处理延迟回复',
-              '处理因网络或其他原因延迟的回复消息',
-              Icons.schedule_send_outlined,
+              '重置所有状态',
+              '重置角色的运行状态',
+              Icons.restart_alt,
               context.warning,
-              () => _showConfirmDialog(
-                context,
-                '处理延迟回复',
-                '将处理所有待发送的延迟回复消息。确定继续吗？',
-                () => _showResultDialog(context, '处理延迟回复', '已处理3条延迟回复，全部发送成功。'),
-              ),
-            ),
-            _buildDebugAction(
-              context,
-              '触发每日重生',
-              '执行每日角色重生流程，重置部分状态',
-              Icons.auto_awesome_outlined,
-              context.accentSecondary,
-              () => _showConfirmDialog(
-                context,
-                '触发每日重生',
-                '这将执行角色每日重生流程，包括重置情绪、更新作息等。此操作不可撤销，确定继续吗？',
-                () => _showResultDialog(context, '触发每日重生', '每日重生已完成。情绪已重置，作息已更新，记忆已归档。'),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sectionGap),
-            AmitiaSectionHeader(title: '任务管理'),
-            const SizedBox(height: AppSpacing.sm),
-            _buildDebugAction(
-              context,
-              '查看任务',
-              '查看当前角色的所有调度任务',
-              Icons.list_alt,
-              context.success,
-              () => _showTaskListDialog(context),
-            ),
-            _buildDebugAction(
-              context,
-              '取消所有任务',
-              '取消该角色的所有待执行调度任务',
-              Icons.cancel_outlined,
-              context.error,
-              () => _showConfirmDialog(
-                context,
-                '取消所有任务',
-                '这将取消该角色的所有待执行调度任务，已执行的任务不受影响。确定继续吗？',
-                () => _showResultDialog(context, '取消所有任务', '已取消4个待执行任务。'),
-              ),
+              () => _showResetConfirm(context, ref),
             ),
             const SizedBox(height: AppSpacing.xxl),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(BuildContext context, String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: AmitiaCard(
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: context.accentPrimary),
+            const SizedBox(width: AppSpacing.md),
+            Text(label, style: AppTypography.body(context)),
+            const Spacer(),
+            Text(value, style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary)),
           ],
         ),
       ),
@@ -198,13 +183,70 @@ class _CharacterDebugPageState extends ConsumerState<CharacterDebugPage> {
     );
   }
 
-  void _showConfirmDialog(
-    BuildContext context,
-    String title,
-    String message,
-    VoidCallback onConfirm,
-  ) {
-    showDialog(
+  Future<void> _testCharacter(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _showConfirmDialog(context, '测试角色对话', '将发送一条测试消息验证角色响应。确定继续吗？');
+    if (confirmed != true) return;
+    try {
+      final svc = ref.read(characterDetailServiceProvider);
+      final result = await svc.test(characterId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('测试成功: ${result?.name ?? characterId}')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('测试失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _regenerateSchedule(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _showConfirmDialog(context, '重新生成今日作息', '这将覆盖当前的作息计划。确定继续吗？');
+    if (confirmed != true) return;
+    try {
+      final svc = ref.read(companionServiceProvider);
+      await svc.regenerateSchedule();
+      ref.invalidate(companionStateProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已重新生成今日作息')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showResetConfirm(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _showConfirmDialog(context, '重置所有状态', '将重置角色所有运行状态。此操作不可撤销，确定继续吗？');
+    if (confirmed != true) return;
+    try {
+      final svc = ref.read(companionServiceProvider);
+      await svc.regenerateAll();
+      ref.invalidate(companionStateProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已重置所有状态')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<bool?> _showConfirmDialog(BuildContext context, String title, String message) {
+    return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Row(
@@ -216,85 +258,11 @@ class _CharacterDebugPageState extends ConsumerState<CharacterDebugPage> {
         ),
         content: Text(message, style: AppTypography.bodySmall(context)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              onConfirm();
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: Text('确认执行', style: TextStyle(color: context.accentPrimary)),
           ),
-        ],
-      ),
-    );
-  }
-
-  void _showResultDialog(BuildContext context, String title, String result) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.check_circle, color: context.success, size: 22),
-            const SizedBox(width: AppSpacing.sm),
-            Text(title, style: AppTypography.cardTitle(context)),
-          ],
-        ),
-        content: Container(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          decoration: BoxDecoration(
-            color: context.success.withValues(alpha: 0.06),
-            borderRadius: AppRadius.brSmall,
-          ),
-          child: Text(result, style: AppTypography.bodySmall(context)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
-      ),
-    );
-  }
-
-  void _showTaskListDialog(BuildContext context) {
-    final tasks = [
-      {'name': '早安问候', 'time': '07:00', 'status': '已完成'},
-      {'name': '午餐提醒', 'time': '12:00', 'status': '待执行'},
-      {'name': '午休问候', 'time': '13:30', 'status': '待执行'},
-      {'name': '晚安问候', 'time': '23:00', 'status': '待执行'},
-    ];
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('调度任务列表', style: AppTypography.cardTitle(context)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: tasks.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final task = tasks[index];
-              final isDone = task['status'] == '已完成';
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  isDone ? Icons.check_circle : Icons.schedule,
-                  size: 20,
-                  color: isDone ? context.success : context.accentPrimary,
-                ),
-                title: Text(task['name']!, style: AppTypography.bodySmall(context)),
-                subtitle: Text('计划时间：${task['time']}', style: AppTypography.label(context)),
-                trailing: AmitiaStatusBadge(
-                  label: task['status']!,
-                  type: isDone ? BadgeType.success : BadgeType.info,
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
         ],
       ),
     );

@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class SchedulesPage extends ConsumerStatefulWidget {
   const SchedulesPage({super.key});
@@ -19,16 +18,53 @@ class SchedulesPage extends ConsumerStatefulWidget {
 }
 
 class _SchedulesPageState extends ConsumerState<SchedulesPage> {
-  late List<ScheduleEntry> _schedules;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _schedules = [];
 
   @override
   void initState() {
     super.initState();
-    _schedules = List.from(MockKernel.schedules);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final data = await svc.diagnostics();
+      if (mounted) {
+        if (data != null) {
+          final schedules = data['schedules'];
+          if (schedules is List) {
+            _schedules = schedules.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_schedules.isEmpty) {
+      return const AmitiaEmptyState(icon: Icons.schedule_outlined, title: '暂无调度');
+    }
+
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
         title: '调度中心',
@@ -37,22 +73,22 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _schedules.isEmpty
-            ? AmitiaEmptyState(
-                icon: Icons.schedule_outlined,
-                title: '暂无调度',
-                subtitle: '调度将在配置后自动生成',
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                itemCount: _schedules.length,
-                itemBuilder: (context, index) => _buildScheduleCard(context, _schedules[index]),
-              ),
+        child: ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          itemCount: _schedules.length,
+          itemBuilder: (context, index) => _buildScheduleCard(context, _schedules[index]),
+        ),
       ),
     );
   }
 
-  Widget _buildScheduleCard(BuildContext context, ScheduleEntry schedule) {
+  Widget _buildScheduleCard(BuildContext context, Map<String, dynamic> schedule) {
+    final name = schedule['name'] as String? ?? '调度';
+    final id = schedule['id'] as String? ?? '';
+    final isEnabled = schedule['enabled'] as bool? ?? true;
+    final nextRun = schedule['next_run'] as String?;
+    final lastRun = schedule['last_run'] as String?;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -66,13 +102,13 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: schedule.isEnabled ? context.accentSoft : context.surfaceSecondary,
+                    color: isEnabled ? context.accentSoft : context.surfaceSecondary,
                     borderRadius: AppRadius.brSmall,
                   ),
                   child: Icon(
                     Icons.schedule_outlined,
                     size: 22,
-                    color: schedule.isEnabled ? context.accentPrimary : context.textTertiary,
+                    color: isEnabled ? context.accentPrimary : context.textTertiary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -80,22 +116,22 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(schedule.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
-                      Text('ID: ${schedule.id}', style: AppTypography.label(context)),
+                      Text('ID: $id', style: AppTypography.label(context)),
                     ],
                   ),
                 ),
                 AmitiaStatusBadge(
-                  label: schedule.isEnabled ? '已启用' : '已停用',
-                  type: schedule.isEnabled ? BadgeType.success : BadgeType.neutral,
+                  label: isEnabled ? '已启用' : '已停用',
+                  type: isEnabled ? BadgeType.success : BadgeType.neutral,
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            _buildTimeRow(context, '下次执行', schedule.nextRun, Icons.schedule),
-            if (schedule.lastRun != null)
-              _buildTimeRow(context, '最近执行', schedule.lastRun, Icons.history),
+            _buildTimeRow(context, '下次执行', nextRun, Icons.schedule),
+            if (lastRun != null)
+              _buildTimeRow(context, '最近执行', lastRun, Icons.history),
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
@@ -104,7 +140,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                     label: '立即执行',
                     isSecondary: true,
                     icon: Icons.play_arrow,
-                    onPressed: schedule.isEnabled ? () => _showExecuteConfirm(context, schedule) : null,
+                    onPressed: isEnabled ? () => _showExecuteConfirm(context, schedule) : null,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -113,7 +149,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                     label: '跳过',
                     isSecondary: true,
                     icon: Icons.skip_next,
-                    onPressed: schedule.isEnabled ? () => _showSkipConfirm(context, schedule) : null,
+                    onPressed: isEnabled ? () => _showSkipConfirm(context, schedule) : null,
                   ),
                 ),
               ],
@@ -124,7 +160,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
     );
   }
 
-  Widget _buildTimeRow(BuildContext context, String label, DateTime? time, IconData icon) {
+  Widget _buildTimeRow(BuildContext context, String label, String? time, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -134,7 +170,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
           Text(label, style: AppTypography.label(context).copyWith(color: context.textSecondary)),
           const SizedBox(width: 8),
           Text(
-            time != null ? _formatDateTime(time) : '暂无',
+            time ?? '暂无',
             style: AppTypography.bodySmall(context).copyWith(fontSize: 13),
           ),
         ],
@@ -142,11 +178,13 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
     );
   }
 
-  String _formatDateTime(DateTime time) {
-    return '${time.month}/${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
+  void _showScheduleDetailSheet(BuildContext context, Map<String, dynamic> schedule) {
+    final name = schedule['name'] as String? ?? '';
+    final id = schedule['id'] as String? ?? '';
+    final isEnabled = schedule['enabled'] as bool? ?? true;
+    final nextRun = schedule['next_run'] as String?;
+    final lastRun = schedule['last_run'] as String?;
 
-  void _showScheduleDetailSheet(BuildContext context, ScheduleEntry schedule) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -166,11 +204,11 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                 const SizedBox(height: 20),
                 Text('调度详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
-                _buildDetailRow(context, '调度名称', schedule.name),
-                _buildDetailRow(context, '调度 ID', schedule.id),
-                _buildDetailRow(context, '状态', schedule.isEnabled ? '已启用' : '已停用'),
-                _buildDetailRow(context, '下次执行', schedule.nextRun != null ? _formatDateTime(schedule.nextRun!) : '暂无'),
-                _buildDetailRow(context, '最近执行', schedule.lastRun != null ? _formatDateTime(schedule.lastRun!) : '暂无'),
+                _buildDetailRow(context, '调度名称', name),
+                _buildDetailRow(context, '调度 ID', id),
+                _buildDetailRow(context, '状态', isEnabled ? '已启用' : '已停用'),
+                _buildDetailRow(context, '下次执行', nextRun ?? '暂无'),
+                _buildDetailRow(context, '最近执行', lastRun ?? '暂无'),
                 const SizedBox(height: 20),
                 Row(
                   children: [
@@ -178,7 +216,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                       child: AmitiaButton(
                         label: '立即执行',
                         icon: Icons.play_arrow,
-                        onPressed: schedule.isEnabled
+                        onPressed: isEnabled
                             ? () {
                                 Navigator.pop(context);
                                 _showExecuteConfirm(context, schedule);
@@ -192,7 +230,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                         label: '跳过',
                         isSecondary: true,
                         icon: Icons.skip_next,
-                        onPressed: schedule.isEnabled
+                        onPressed: isEnabled
                             ? () {
                                 Navigator.pop(context);
                                 _showSkipConfirm(context, schedule);
@@ -232,7 +270,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
     );
   }
 
-  void _showExecuteConfirm(BuildContext context, ScheduleEntry schedule) {
+  void _showExecuteConfirm(BuildContext context, Map<String, dynamic> schedule) {
     showDialog(
       context: context,
       builder: (context) {
@@ -240,7 +278,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('立即执行', style: AppTypography.cardTitle(context)),
-          content: Text('确定要立即执行调度「${schedule.name}」吗？', style: AppTypography.body(context)),
+          content: Text('确定要立即执行调度「${schedule['name']}」吗？', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -249,7 +287,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已触发执行：${schedule.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已触发执行：${schedule['name']}')));
               },
               child: Text('执行', style: TextStyle(color: context.accentPrimary)),
             ),
@@ -259,7 +297,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
     );
   }
 
-  void _showSkipConfirm(BuildContext context, ScheduleEntry schedule) {
+  void _showSkipConfirm(BuildContext context, Map<String, dynamic> schedule) {
     showDialog(
       context: context,
       builder: (context) {
@@ -267,7 +305,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('跳过调度', style: AppTypography.cardTitle(context)),
-          content: Text('确定要跳过调度「${schedule.name}」的本次执行吗？', style: AppTypography.body(context)),
+          content: Text('确定要跳过调度「${schedule['name']}」的本次执行吗？', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -276,19 +314,13 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _schedules.indexWhere((s) => s.id == schedule.id);
+                  final idx = _schedules.indexWhere((s) => s['id'] == schedule['id']);
                   if (idx >= 0) {
-                    _schedules[idx] = ScheduleEntry(
-                      id: schedule.id,
-                      name: schedule.name,
-                      nextRun: schedule.nextRun,
-                      lastRun: DateTime.now(),
-                      isEnabled: schedule.isEnabled,
-                    );
+                    _schedules[idx]['last_run'] = DateTime.now().toIso8601String();
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已跳过调度：${schedule.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已跳过调度：${schedule['name']}')));
               },
               child: Text('跳过', style: TextStyle(color: context.warning)),
             ),

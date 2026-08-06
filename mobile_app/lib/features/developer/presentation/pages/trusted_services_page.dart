@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class TrustedServicesPage extends ConsumerStatefulWidget {
   const TrustedServicesPage({super.key});
@@ -19,16 +18,50 @@ class TrustedServicesPage extends ConsumerStatefulWidget {
 }
 
 class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
-  late List<TrustedService> _services;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _services = [];
 
   @override
   void initState() {
     super.initState();
-    _services = List.from(MockKernel.trustedServices);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final data = await svc.diagnostics();
+      if (mounted) {
+        if (data != null) {
+          final services = data['trusted_services'];
+          if (services is List) {
+            _services = services.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '可信服务',
@@ -60,8 +93,13 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     );
   }
 
-  Widget _buildServiceCard(BuildContext context, TrustedService service) {
-    final isRunning = service.runStatus == '已启动';
+  Widget _buildServiceCard(BuildContext context, Map<String, dynamic> service) {
+    final name = service['name'] as String? ?? '';
+    final id = service['id'] as String? ?? '';
+    final runStatus = service['run_status'] as String? ?? '已停止';
+    final isolated = service['isolated'] as bool? ?? false;
+    final isRunning = runStatus == '已启动';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -74,13 +112,13 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: service.isolated ? context.error.withValues(alpha: 0.1) : context.accentSoft,
+                    color: isolated ? context.error.withValues(alpha: 0.1) : context.accentSoft,
                     borderRadius: AppRadius.brSmall,
                   ),
                   child: Icon(
                     Icons.verified_user_outlined,
                     size: 22,
-                    color: service.isolated ? context.error : context.accentPrimary,
+                    color: isolated ? context.error : context.accentPrimary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -88,9 +126,9 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(service.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
-                      Text('ID: ${service.id}', style: AppTypography.label(context)),
+                      Text('ID: $id', style: AppTypography.label(context)),
                     ],
                   ),
                 ),
@@ -98,10 +136,10 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     AmitiaStatusBadge(
-                      label: service.runStatus,
+                      label: runStatus,
                       type: isRunning ? BadgeType.success : BadgeType.neutral,
                     ),
-                    if (service.isolated) ...[
+                    if (isolated) ...[
                       const SizedBox(height: 4),
                       const AmitiaStatusBadge(label: '已隔离', type: BadgeType.error),
                     ],
@@ -113,7 +151,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
-              children: _buildActionButtons(context, service, isRunning),
+              children: _buildActionButtons(context, service, isRunning, isolated),
             ),
           ],
         ),
@@ -121,10 +159,10 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     );
   }
 
-  List<Widget> _buildActionButtons(BuildContext context, TrustedService service, bool isRunning) {
+  List<Widget> _buildActionButtons(BuildContext context, Map<String, dynamic> service, bool isRunning, bool isolated) {
     final buttons = <Widget>[];
 
-    if (service.isolated) {
+    if (isolated) {
       buttons.add(_miniButton(
         context,
         label: '解除隔离',
@@ -226,11 +264,12 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
                     return;
                   }
                   setState(() {
-                    _services.add(TrustedService(
-                      id: 'ts${_services.length + 1}',
-                      name: name,
-                      runStatus: '已停止',
-                    ));
+                    _services.add({
+                      'id': 'ts${_services.length + 1}',
+                      'name': name,
+                      'run_status': '已停止',
+                      'isolated': false,
+                    });
                   });
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已注册服务：$name')));
@@ -243,22 +282,17 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     );
   }
 
-  void _toggleService(BuildContext context, TrustedService service, String newStatus) {
+  void _toggleService(BuildContext context, Map<String, dynamic> service, String newStatus) {
     setState(() {
-      final idx = _services.indexWhere((s) => s.id == service.id);
+      final idx = _services.indexWhere((s) => s['id'] == service['id']);
       if (idx >= 0) {
-        _services[idx] = TrustedService(
-          id: service.id,
-          name: service.name,
-          runStatus: newStatus,
-          isolated: service.isolated,
-        );
+        _services[idx]['run_status'] = newStatus;
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('服务「${service.name}」已${newStatus == '已启动' ? '启动' : '停止'}')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('服务「${service['name']}」已${newStatus == '已启动' ? '启动' : '停止'}')));
   }
 
-  void _showCallResult(BuildContext context, TrustedService service) {
+  void _showCallResult(BuildContext context, Map<String, dynamic> service) {
     showDialog(
       context: context,
       builder: (context) {
@@ -270,7 +304,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('服务: ${service.name}', style: AppTypography.body(context)),
+              Text('服务: ${service['name']}', style: AppTypography.body(context)),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -297,7 +331,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     );
   }
 
-  void _showUnregisterConfirm(BuildContext context, TrustedService service) {
+  void _showUnregisterConfirm(BuildContext context, Map<String, dynamic> service) {
     showDialog(
       context: context,
       builder: (context) {
@@ -305,7 +339,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('注销服务', style: AppTypography.cardTitle(context)),
-          content: Text('确定要注销服务「${service.name}」吗？注销后相关功能将不可用。', style: AppTypography.body(context)),
+          content: Text('确定要注销服务「${service['name']}」吗？注销后相关功能将不可用。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -314,10 +348,10 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  _services.removeWhere((s) => s.id == service.id);
+                  _services.removeWhere((s) => s['id'] == service['id']);
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已注销服务：${service.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已注销服务：${service['name']}')));
               },
               child: Text('注销', style: TextStyle(color: context.error)),
             ),
@@ -327,7 +361,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     );
   }
 
-  void _showUnisolatedConfirm(BuildContext context, TrustedService service) {
+  void _showUnisolatedConfirm(BuildContext context, Map<String, dynamic> service) {
     showDialog(
       context: context,
       builder: (context) {
@@ -335,7 +369,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('解除隔离', style: AppTypography.cardTitle(context)),
-          content: Text('确定要解除服务「${service.name}」的隔离状态吗？解除后服务将恢复可用。', style: AppTypography.body(context)),
+          content: Text('确定要解除服务「${service['name']}」的隔离状态吗？解除后服务将恢复可用。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -344,18 +378,14 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _services.indexWhere((s) => s.id == service.id);
+                  final idx = _services.indexWhere((s) => s['id'] == service['id']);
                   if (idx >= 0) {
-                    _services[idx] = TrustedService(
-                      id: service.id,
-                      name: service.name,
-                      runStatus: '已停止',
-                      isolated: false,
-                    );
+                    _services[idx]['run_status'] = '已停止';
+                    _services[idx]['isolated'] = false;
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已解除隔离：${service.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已解除隔离：${service['name']}')));
               },
               child: Text('解除', style: TextStyle(color: context.success)),
             ),

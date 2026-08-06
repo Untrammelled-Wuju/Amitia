@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,7 +149,7 @@ func TestR6_4_PublishRestoreFileNoReplaceRemovesSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := publishRestoreFileNoReplace(sourcePath, validated, hash); err != nil {
+	if err := publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash); err != nil {
 		t.Fatalf("publish from source must succeed: %v", err)
 	}
 	if _, statErr := os.Stat(sourcePath); !os.IsNotExist(statErr) {
@@ -176,7 +177,7 @@ func TestR6_4_PublishRestoreFileNoReplaceRejectsMismatchedHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = publishRestoreFileNoReplace(sourcePath, validated, wrongHash)
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, wrongHash)
 	if err == nil {
 		t.Fatal("must reject mismatched expected hash")
 	}
@@ -391,7 +392,7 @@ func TestR6_4_PublishRestoreFileNoReplaceRejectsRegularFileTargetWithDifferentHa
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = publishRestoreFileNoReplace(sourcePath, validated, hash)
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash)
 	if err == nil {
 		t.Fatal("must reject publish onto existing target with mismatched hash")
 	}
@@ -480,7 +481,7 @@ func TestR6_4_PublishRestoreFileNoReplaceWithEmptySourceRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = publishRestoreFileNoReplace(emptySource, validated, "no-such-hash")
+	err = publishRestoreFileNoReplace(extRoot, emptySource, validated, "no-such-hash")
 	if err == nil {
 		t.Fatal("must reject publish with hash mismatch")
 	}
@@ -509,7 +510,7 @@ func TestR6_4_RestoreQuarantinedFileSafelyUsesValidatedPath(t *testing.T) {
 		QuarantinePath: quarantinePath,
 		ContentHash:    hash,
 	}
-	if err := restoreQuarantinedFileSafely(entry, validated); err != nil {
+	if err := restoreQuarantinedFileSafely(extRoot, entry, validated); err != nil {
 		t.Fatalf("restore quarantined file must succeed: %v", err)
 	}
 	got, readErr := os.ReadFile(target)
@@ -527,4 +528,128 @@ func TestR6_4_RestoreQuarantinedFileSafelyUsesValidatedPath(t *testing.T) {
 func fileExists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil
+}
+
+func assertR64PathRaceError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected PackageErrCodeResourceRestorePathRace error")
+	}
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeResourceRestorePathRace {
+		t.Fatalf("expected PackageErrCodeResourceRestorePathRace, got %v", err)
+	}
+}
+
+func TestR64RejectsRootReplacedBeforeHandleOpen(t *testing.T) {
+	_, extRoot := r64NewSnapshotStore(t)
+	target := filepath.Join(extRoot, "deep", "file.bin")
+	validated, err := validateRestoreTargetPathPure(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	replaced := extRoot + ".replaced-root"
+	if err := os.Rename(extRoot, replaced); err != nil {
+		t.Skipf("rename requires privilege: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Rename(replaced, extRoot) })
+	if err := os.MkdirAll(extRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err = createRestoreDirectoriesSafely(validated)
+	assertR64PathRaceError(t, err)
+}
+
+func TestR64RejectsExistingParentReplacedBeforeHandleOpen(t *testing.T) {
+	_, extRoot := r64NewSnapshotStore(t)
+	parent := filepath.Join(extRoot, "existing")
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(parent, "file.bin")
+	validated, err := validateRestoreTargetPathPure(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	replaced := parent + ".replaced-parent"
+	if err := os.Rename(parent, replaced); err != nil {
+		t.Skipf("rename requires privilege: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Rename(replaced, parent) })
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err = createRestoreDirectoriesSafely(validated)
+	assertR64PathRaceError(t, err)
+}
+
+func TestR64AcceptsOnlyNewMissingDirectories(t *testing.T) {
+	_, extRoot := r64NewSnapshotStore(t)
+	existing := filepath.Join(extRoot, "existing")
+	if err := os.MkdirAll(existing, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(existing, "a", "b", "file.bin")
+	validated, err := validateRestoreTargetPathPure(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(validated.PlatformComponents) != 2 {
+		t.Fatalf("expected root + existing components, got %d", len(validated.PlatformComponents))
+	}
+	if len(validated.MissingComponents) != 2 {
+		t.Fatalf("expected 2 missing components, got %v", validated.MissingComponents)
+	}
+	if err := createRestoreDirectoriesSafely(validated); err != nil {
+		t.Fatalf("create restore directories must succeed: %v", err)
+	}
+	defer validated.Close()
+
+	if len(validated.PlatformComponents) != 4 {
+		t.Fatalf("expected root + existing + 2 created components, got %d", len(validated.PlatformComponents))
+	}
+	expectedPaths := []string{
+		filepath.Clean(extRoot),
+		filepath.Clean(existing),
+		filepath.Clean(filepath.Join(existing, "a")),
+		filepath.Clean(filepath.Join(existing, "a", "b")),
+	}
+	for index, component := range validated.PlatformComponents {
+		if filepath.Clean(component.Path) != expectedPaths[index] {
+			t.Fatalf("platform component %d path mismatch: %q vs %q", index, component.Path, expectedPaths[index])
+		}
+	}
+	for index := 2; index < len(validated.PlatformComponents); index++ {
+		identity, captureErr := capturePlatformPathIdentity(validated.PlatformComponents[index].Path, true)
+		if captureErr != nil {
+			t.Fatal(captureErr)
+		}
+		if !identity.same(validated.PlatformComponents[index].Identity) {
+			t.Fatalf("created component %d identity mismatch", index)
+		}
+	}
+}
+
+func TestR64ValidateRestoreTargetPathClosesHandles(t *testing.T) {
+	_, extRoot := r64NewSnapshotStore(t)
+	target := filepath.Join(extRoot, "a", "b", "c", "file.bin")
+	if err := ValidateRestoreTargetPath(target, extRoot); err != nil {
+		t.Fatal(err)
+	}
+	before := r64ProcessHandleCount(t)
+	for i := 0; i < 64; i++ {
+		if err := ValidateRestoreTargetPath(target, extRoot); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after := r64ProcessHandleCount(t)
+	if after > before+16 {
+		t.Fatalf("ValidateRestoreTargetPath leaked handles: before=%d after=%d", before, after)
+	}
 }

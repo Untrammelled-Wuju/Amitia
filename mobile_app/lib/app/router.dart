@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'theme/app_motion.dart';
 import '../core/widgets/amitia_drawer.dart';
-import '../core/services/providers.dart';
 import '../core/widgets/amitia_scaffold.dart';
 import '../app/app_routes.dart';
 import '../features/chat/presentation/pages/chat_page.dart';

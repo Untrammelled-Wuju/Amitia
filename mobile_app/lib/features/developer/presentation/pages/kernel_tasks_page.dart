@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class KernelTasksPage extends ConsumerStatefulWidget {
   const KernelTasksPage({super.key});
@@ -19,16 +18,55 @@ class KernelTasksPage extends ConsumerStatefulWidget {
 }
 
 class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
-  late List<KernelTask> _tasks;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _tasks = [];
 
   @override
   void initState() {
     super.initState();
-    _tasks = List.from(MockKernel.kernelTasks);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final nodes = await svc.graphNodes();
+      if (mounted) {
+        final tasks = nodes.map((n) {
+          return {
+            'id': n['id'] ?? '',
+            'name': n['label'] ?? n['name'] ?? '任务',
+            'status': n['status'] ?? '已完成',
+            'output': n['output'],
+            'error': n['error'],
+            'hasCheckpoint': n['has_checkpoint'] ?? false,
+          };
+        }).toList();
+        setState(() {
+          _tasks = tasks;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
         title: '任务运行时',
@@ -52,7 +90,14 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     );
   }
 
-  Widget _buildTaskCard(BuildContext context, KernelTask task) {
+  Widget _buildTaskCard(BuildContext context, Map<String, dynamic> task) {
+    final name = task['name'] as String? ?? '任务';
+    final id = task['id'] as String? ?? '';
+    final status = task['status'] as String? ?? '';
+    final output = task['output'] as String?;
+    final error = task['error'] as String?;
+    final hasCheckpoint = task['hasCheckpoint'] as bool? ?? false;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -66,26 +111,26 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: _statusColor(context, task.status).withValues(alpha: 0.1),
+                    color: _statusColor(context, status).withValues(alpha: 0.1),
                     borderRadius: AppRadius.brSmall,
                   ),
-                  child: Icon(Icons.task_alt, size: 22, color: _statusColor(context, task.status)),
+                  child: Icon(Icons.task_alt, size: 22, color: _statusColor(context, status)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(task.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
-                      Text('ID: ${task.id}', style: AppTypography.label(context)),
+                      Text('ID: $id', style: AppTypography.label(context)),
                     ],
                   ),
                 ),
-                _buildStatusBadge(task.status),
+                _buildStatusBadge(status),
               ],
             ),
-            if (task.output != null) ...[
+            if (output != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Container(
                 width: double.infinity,
@@ -98,12 +143,12 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                   children: [
                     Icon(Icons.text_snippet_outlined, size: 16, color: context.success),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(task.output!, style: AppTypography.caption(context))),
+                    Expanded(child: Text(output, style: AppTypography.caption(context))),
                   ],
                 ),
               ),
             ],
-            if (task.error != null) ...[
+            if (error != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Container(
                 width: double.infinity,
@@ -116,12 +161,12 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                   children: [
                     Icon(Icons.error_outline, size: 16, color: context.error),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(task.error!, style: AppTypography.caption(context).copyWith(color: context.error))),
+                    Expanded(child: Text(error, style: AppTypography.caption(context).copyWith(color: context.error))),
                   ],
                 ),
               ),
             ],
-            if (task.hasCheckpoint) ...[
+            if (hasCheckpoint) ...[
               const SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
@@ -141,10 +186,11 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     );
   }
 
-  List<Widget> _buildActionButtons(BuildContext context, KernelTask task) {
+  List<Widget> _buildActionButtons(BuildContext context, Map<String, dynamic> task) {
     final buttons = <Widget>[];
+    final status = task['status'] as String? ?? '';
 
-    if (task.status == '运行中') {
+    if (status == '运行中') {
       buttons.add(Expanded(
         child: AmitiaButton(
           label: '取消',
@@ -153,7 +199,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
           onPressed: () => _showCancelConfirm(context, task),
         ),
       ));
-    } else if (task.status == '已暂停') {
+    } else if (status == '已暂停') {
       buttons.add(Expanded(
         child: AmitiaButton(
           label: '恢复',
@@ -215,7 +261,14 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     }
   }
 
-  void _showTaskDetailSheet(BuildContext context, KernelTask task) {
+  void _showTaskDetailSheet(BuildContext context, Map<String, dynamic> task) {
+    final name = task['name'] as String? ?? '任务';
+    final id = task['id'] as String? ?? '';
+    final status = task['status'] as String? ?? '';
+    final output = task['output'] as String?;
+    final error = task['error'] as String?;
+    final hasCheckpoint = task['hasCheckpoint'] as bool? ?? false;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -235,14 +288,14 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                 const SizedBox(height: 20),
                 Text('任务详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
-                _buildDetailRow(context, '任务名称', task.name),
-                _buildDetailRow(context, '任务 ID', task.id),
-                _buildDetailRow(context, '状态', task.status),
-                if (task.output != null)
-                  _buildDetailRow(context, '输出', task.output!),
-                if (task.error != null)
-                  _buildDetailRow(context, '错误', task.error!),
-                _buildDetailRow(context, '检查点', task.hasCheckpoint ? '有' : '无'),
+                _buildDetailRow(context, '任务名称', name),
+                _buildDetailRow(context, '任务 ID', id),
+                _buildDetailRow(context, '状态', status),
+                if (output != null)
+                  _buildDetailRow(context, '输出', output),
+                if (error != null)
+                  _buildDetailRow(context, '错误', error),
+                _buildDetailRow(context, '检查点', hasCheckpoint ? '有' : '无'),
                 const SizedBox(height: 20),
                 AmitiaButton(
                   label: '关闭',
@@ -274,7 +327,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     );
   }
 
-  void _showExecuteConfirm(BuildContext context, KernelTask task) {
+  void _showExecuteConfirm(BuildContext context, Map<String, dynamic> task) {
     showDialog(
       context: context,
       builder: (context) {
@@ -282,7 +335,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('手动执行', style: AppTypography.cardTitle(context)),
-          content: Text('确定要手动执行任务「${task.name}」吗？', style: AppTypography.body(context)),
+          content: Text('确定要手动执行任务「${task['name']}」吗？', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -291,19 +344,14 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _tasks.indexWhere((t) => t.id == task.id);
+                  final idx = _tasks.indexWhere((t) => t['id'] == task['id']);
                   if (idx >= 0) {
-                    _tasks[idx] = KernelTask(
-                      id: task.id,
-                      name: task.name,
-                      status: '运行中',
-                      output: '处理中...',
-                      hasCheckpoint: task.hasCheckpoint,
-                    );
+                    _tasks[idx]['status'] = '运行中';
+                    _tasks[idx]['output'] = '处理中...';
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已开始执行：${task.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已开始执行：${task['name']}')));
               },
               child: Text('执行', style: TextStyle(color: context.accentPrimary)),
             ),
@@ -313,7 +361,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     );
   }
 
-  void _showCancelConfirm(BuildContext context, KernelTask task) {
+  void _showCancelConfirm(BuildContext context, Map<String, dynamic> task) {
     showDialog(
       context: context,
       builder: (context) {
@@ -321,7 +369,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('取消任务', style: AppTypography.cardTitle(context)),
-          content: Text('确定要取消任务「${task.name}」吗？取消后任务将进入暂停状态。', style: AppTypography.body(context)),
+          content: Text('确定要取消任务「${task['name']}」吗？取消后任务将进入暂停状态。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -330,18 +378,14 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _tasks.indexWhere((t) => t.id == task.id);
+                  final idx = _tasks.indexWhere((t) => t['id'] == task['id']);
                   if (idx >= 0) {
-                    _tasks[idx] = KernelTask(
-                      id: task.id,
-                      name: task.name,
-                      status: '已暂停',
-                      hasCheckpoint: true,
-                    );
+                    _tasks[idx]['status'] = '已暂停';
+                    _tasks[idx]['hasCheckpoint'] = true;
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已取消任务：${task.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已取消任务：${task['name']}')));
               },
               child: Text('确认取消', style: TextStyle(color: context.warning)),
             ),
@@ -351,19 +395,14 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     );
   }
 
-  void _resumeTask(BuildContext context, KernelTask task) {
+  void _resumeTask(BuildContext context, Map<String, dynamic> task) {
     setState(() {
-      final idx = _tasks.indexWhere((t) => t.id == task.id);
+      final idx = _tasks.indexWhere((t) => t['id'] == task['id']);
       if (idx >= 0) {
-        _tasks[idx] = KernelTask(
-          id: task.id,
-          name: task.name,
-          status: '运行中',
-          output: '处理中...',
-          hasCheckpoint: task.hasCheckpoint,
-        );
+        _tasks[idx]['status'] = '运行中';
+        _tasks[idx]['output'] = '处理中...';
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已恢复任务：${task.name}')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已恢复任务：${task['name']}')));
   }
 }

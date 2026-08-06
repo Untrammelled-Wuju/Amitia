@@ -8,8 +8,9 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+
+enum _QqStatus { connected, disconnected, connecting, expired }
 
 class QqPage extends ConsumerStatefulWidget {
   const QqPage({super.key});
@@ -19,14 +20,15 @@ class QqPage extends ConsumerStatefulWidget {
 }
 
 class _QqPageState extends ConsumerState<QqPage> {
-  late ChannelStatus _status;
-  late String _wsStatus;
-  late String? _errorMessage;
-  late List<String> _logs;
-  late String _appId;
-  late String _token;
+  _QqStatus _status = _QqStatus.disconnected;
+  String _wsStatus = '未连接';
+  String? _errorMessage;
+  List<String> _logs = [];
+  String _appId = '';
+  String _token = '';
   bool _obscureToken = true;
   int _testState = 0;
+  bool _loading = true;
 
   final _appIdController = TextEditingController();
   final _tokenController = TextEditingController();
@@ -34,15 +36,7 @@ class _QqPageState extends ConsumerState<QqPage> {
   @override
   void initState() {
     super.initState();
-    final qq = MockChannels.qq;
-    _status = qq.status;
-    _wsStatus = qq.wsStatus ?? '未连接';
-    _errorMessage = qq.errorMessage;
-    _logs = List.of(qq.logs);
-    _appId = qq.botAppId ?? '';
-    _token = qq.botToken ?? '';
-    _appIdController.text = _appId;
-    _tokenController.text = _token;
+    _loadConfig();
   }
 
   @override
@@ -52,15 +46,77 @@ class _QqPageState extends ConsumerState<QqPage> {
     super.dispose();
   }
 
-  bool get _isConnected => _status == ChannelStatus.connected;
+  Future<void> _loadConfig() async {
+    setState(() => _loading = true);
+    try {
+      final svc = ref.read(qqServiceProvider);
+      final config = await svc.config();
+      if (config != null && mounted) {
+        _appId = (config['appId'] ?? config['app_id'] ?? '').toString();
+        _token = (config['token'] ?? config['botToken'] ?? config['bot_token'] ?? '').toString();
+        _appIdController.text = _appId;
+        _tokenController.text = _token;
+      }
+      final status = await svc.status();
+      if (status != null && mounted) {
+        final s = (status['status'] ?? '').toString().toLowerCase();
+        final connected = status['connected'];
+        if (connected is bool && connected) {
+          _status = _QqStatus.connected;
+          _wsStatus = '已连接';
+        } else if (s == 'connected' || s == '已连接') {
+          _status = _QqStatus.connected;
+          _wsStatus = '已连接';
+        } else if (s == 'connecting' || s == '连接中') {
+          _status = _QqStatus.connecting;
+          _wsStatus = '连接中...';
+        } else if (s == 'disconnected' || s == '未连接') {
+          _status = _QqStatus.disconnected;
+          _wsStatus = '未连接';
+        } else {
+          _status = _QqStatus.disconnected;
+          _wsStatus = '未连接';
+        }
+        final logs = status['logs'] as List?;
+        if (logs != null) {
+          _logs = logs.map((e) => e?.toString() ?? '').where((e) => e.isNotEmpty).toList();
+        }
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  bool get _isConnected => _status == _QqStatus.connected;
+
+  String _statusLabel() {
+    switch (_status) {
+      case _QqStatus.connected:
+        return '已连接';
+      case _QqStatus.disconnected:
+        return '未连接';
+      case _QqStatus.connecting:
+        return '连接中...';
+      case _QqStatus.expired:
+        return '已过期';
+    }
+  }
+
+  BadgeType _badgeType() {
+    switch (_status) {
+      case _QqStatus.connected:
+        return BadgeType.success;
+      case _QqStatus.disconnected:
+        return BadgeType.neutral;
+      case _QqStatus.connecting:
+        return BadgeType.warning;
+      case _QqStatus.expired:
+        return BadgeType.error;
+    }
+  }
 
   void _snack(String message, {Color? color}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        backgroundColor: color,
-      ),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2), backgroundColor: color),
     );
   }
 
@@ -85,10 +141,7 @@ class _QqPageState extends ConsumerState<QqPage> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: TextStyle(color: context.textSecondary)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('取消', style: TextStyle(color: context.textSecondary))),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -103,41 +156,47 @@ class _QqPageState extends ConsumerState<QqPage> {
 
   Future<void> _doConnect() async {
     setState(() {
-      _status = ChannelStatus.connecting;
+      _status = _QqStatus.connecting;
       _wsStatus = '连接中...';
       _errorMessage = null;
     });
     _snack('正在连接 QQ Bot...', color: context.accentPrimary);
-
-    await Future.delayed(const Duration(milliseconds: 1500));
-    if (!mounted) return;
-
-    final token = _tokenController.text.trim();
-    if (token == '****' || token.isEmpty) {
-      setState(() {
-        _status = ChannelStatus.disconnected;
-        _wsStatus = '未连接';
-        _errorMessage = 'Token 验证失败，请检查 Bot 配置';
-        _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] Token 验证失败');
+    try {
+      final svc = ref.read(qqServiceProvider);
+      await svc.connect({
+        'appId': _appIdController.text.trim(),
+        'token': _tokenController.text.trim(),
       });
-      _snack('连接失败：Token 验证失败', color: context.error);
-    } else {
+      if (!mounted) return;
       setState(() {
-        _status = ChannelStatus.connected;
+        _status = _QqStatus.connected;
         _wsStatus = '已连接';
-        _errorMessage = null;
         _appId = _appIdController.text;
         _token = _tokenController.text;
         _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] WebSocket 连接成功');
         _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] Bot 已上线');
       });
       _snack('QQ Bot 连接成功', color: context.success);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = _QqStatus.disconnected;
+        _wsStatus = '未连接';
+        _errorMessage = e.toString();
+        _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] 连接失败: $e');
+      });
+      _snack('连接失败: $e', color: context.error);
     }
   }
 
-  void _disconnect() {
+  Future<void> _disconnect() async {
+    try {
+      final svc = ref.read(qqServiceProvider);
+      await svc.disconnect();
+    } catch (_) {}
+    if (!mounted) return;
     setState(() {
-      _status = ChannelStatus.disconnected;
+      _status = _QqStatus.disconnected;
       _wsStatus = '未连接';
       _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] 已断开连接');
     });
@@ -149,13 +208,10 @@ class _QqPageState extends ConsumerState<QqPage> {
       _snack('请先连接 QQ Bot', color: context.warning);
       return;
     }
-
     setState(() => _testState = 1);
     await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted) return;
-
     setState(() => _testState = 2);
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -213,40 +269,30 @@ class _QqPageState extends ConsumerState<QqPage> {
   Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'QQ 连接', showBackButton: true, fallbackRoute: AppRoutes.channels),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
-        children: [
-          _buildStatusCard(),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _buildBotConfig(),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _buildConnectionStatus(),
-          const SizedBox(height: AppSpacing.sectionGap),
-          if (_errorMessage != null && !_isConnected) ...[
-            _buildErrorState(),
-            const SizedBox(height: AppSpacing.sectionGap),
-          ],
-          _buildActions(),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _buildLogs(),
-        ],
-      ),
+      body: _loading
+          ? const AmitiaLoadingState(message: '加载中...')
+          : ListView(
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              children: [
+                _buildStatusCard(),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildBotConfig(),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildConnectionStatus(),
+                const SizedBox(height: AppSpacing.sectionGap),
+                if (_errorMessage != null && !_isConnected) ...[
+                  _buildErrorState(),
+                  const SizedBox(height: AppSpacing.sectionGap),
+                ],
+                _buildActions(),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildLogs(),
+              ],
+            ),
     );
   }
 
   Widget _buildStatusCard() {
-    final statusLabel = switch (_status) {
-      ChannelStatus.connected => '已连接',
-      ChannelStatus.disconnected => '未连接',
-      ChannelStatus.connecting => '连接中...',
-      ChannelStatus.expired => '已过期',
-    };
-    final badgeType = switch (_status) {
-      ChannelStatus.connected => BadgeType.success,
-      ChannelStatus.disconnected => BadgeType.neutral,
-      ChannelStatus.connecting => BadgeType.warning,
-      ChannelStatus.expired => BadgeType.error,
-    };
     return AmitiaCard(
       child: Row(
         children: [
@@ -275,7 +321,7 @@ class _QqPageState extends ConsumerState<QqPage> {
               ],
             ),
           ),
-          AmitiaStatusBadge(label: statusLabel, type: badgeType),
+          AmitiaStatusBadge(label: _statusLabel(), type: _badgeType()),
         ],
       ),
     );
@@ -372,13 +418,8 @@ class _QqPageState extends ConsumerState<QqPage> {
             children: [
               _StatusLine(
                 label: '连接状态',
-                value: switch (_status) {
-                  ChannelStatus.connected => '已连接',
-                  ChannelStatus.disconnected => '未连接',
-                  ChannelStatus.connecting => '连接中...',
-                  ChannelStatus.expired => '已过期',
-                },
-                type: _isConnected ? BadgeType.success : (_status == ChannelStatus.connecting ? BadgeType.warning : BadgeType.neutral),
+                value: _statusLabel(),
+                type: _isConnected ? BadgeType.success : (_status == _QqStatus.connecting ? BadgeType.warning : BadgeType.neutral),
               ),
               Divider(height: 1, color: context.borderSecondary),
               _StatusLine(
@@ -436,16 +477,16 @@ class _QqPageState extends ConsumerState<QqPage> {
           runSpacing: AppSpacing.md,
           children: [
             AmitiaButton(
-              label: _status == ChannelStatus.connecting ? '连接中...' : '连接',
+              label: _status == _QqStatus.connecting ? '连接中...' : '连接',
               icon: Icons.link,
               isSecondary: _isConnected,
-              onPressed: _status == ChannelStatus.connecting ? null : (_isConnected ? null : _showConnectConfirm),
+              onPressed: _status == _QqStatus.connecting ? null : (_isConnected ? null : _showConnectConfirm),
             ),
             AmitiaButton(
               label: '重新连接',
               icon: Icons.refresh,
               isSecondary: true,
-              onPressed: _status == ChannelStatus.connecting ? null : _doConnect,
+              onPressed: _status == _QqStatus.connecting ? null : _doConnect,
             ),
             AmitiaButton(
               label: '断开',
@@ -478,39 +519,44 @@ class _QqPageState extends ConsumerState<QqPage> {
             borderRadius: AppRadius.brMedium,
             border: Border.all(color: context.borderPrimary, width: 0.5),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _logs.take(8).map((log) {
-              final isError = log.contains('失败') || log.contains('断开');
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                child: Row(
+          child: _logs.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('暂无日志', style: AppTypography.label(context).copyWith(color: context.textTertiary)),
+                )
+              : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(top: 6),
-                      decoration: BoxDecoration(
-                        color: isError ? context.error : context.success,
-                        shape: BoxShape.circle,
+                  children: _logs.take(8).map((log) {
+                    final isError = log.contains('失败') || log.contains('断开');
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(top: 6),
+                            decoration: BoxDecoration(
+                              color: isError ? context.error : context.success,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              log,
+                              style: AppTypography.label(context).copyWith(
+                                fontFamily: 'monospace',
+                                color: isError ? context.error : context.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        log,
-                        style: AppTypography.label(context).copyWith(
-                          fontFamily: 'monospace',
-                          color: isError ? context.error : context.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  }).toList(),
                 ),
-              );
-            }).toList(),
-          ),
         ),
       ],
     );

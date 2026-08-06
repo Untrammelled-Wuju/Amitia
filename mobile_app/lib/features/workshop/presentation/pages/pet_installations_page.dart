@@ -8,8 +8,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class PetInstallationsPage extends ConsumerStatefulWidget {
   const PetInstallationsPage({super.key});
@@ -19,12 +18,35 @@ class PetInstallationsPage extends ConsumerStatefulWidget {
 }
 
 class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
-  late List<PetInstallation> _installations;
+  List<Map<String, dynamic>> _installations = [];
+  List<Map<String, dynamic>> _availableTasks = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _installations = List.from(MockWorkshop.installations);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final results = await Future.wait([
+        svc.plugins(),
+        svc.workshopSessions(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _installations = List<Map<String, dynamic>>.from(results[0]);
+          _availableTasks = List<Map<String, dynamic>>.from(results[1]);
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
   }
 
   @override
@@ -40,31 +62,52 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
             child: AmitiaIconButton(
               icon: Icons.add,
               color: context.accentPrimary,
-              onPressed: _showInstallDialog,
+              onPressed: _loading ? null : _showInstallDialog,
             ),
           ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: _installations.isEmpty
-            ? AmitiaEmptyState(
-                icon: Icons.install_desktop,
-                title: '暂无已安装桌宠',
-                subtitle: '点击右上角安装新桌宠',
-                actionText: '安装桌宠',
-                onAction: _showInstallDialog,
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                itemCount: _installations.length,
-                itemBuilder: (context, index) => _buildInstallationCard(context, _installations[index]),
-              ),
+        child: _buildBody(context),
       ),
     );
   }
 
-  Widget _buildInstallationCard(BuildContext context, PetInstallation pet) {
+  Widget _buildBody(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(child: Text('加载失败: $_error'));
+    }
+    if (_installations.isEmpty) {
+      return AmitiaEmptyState(
+        icon: Icons.install_desktop,
+        title: '暂无已安装桌宠',
+        subtitle: '点击右上角安装新桌宠',
+        actionText: '安装桌宠',
+        onAction: _showInstallDialog,
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      itemCount: _installations.length,
+      itemBuilder: (context, index) => _buildInstallationCard(context, _installations[index]),
+    );
+  }
+
+  Widget _buildInstallationCard(BuildContext context, Map<String, dynamic> pet) {
+    final name = pet['name']?.toString() ?? '';
+    final characterName = pet['character']?.toString() ?? pet['characterName']?.toString() ?? '';
+    final scale = (pet['scale'] is num) ? (pet['scale'] as num).toDouble() : 1.0;
+    final isEnabled = pet['enabled'] == true;
+    final isRunning = pet['isRunning'] == true || (isEnabled && pet['status'] == 'active');
+    final defaultAction = pet['defaultAction']?.toString() ?? 'idle';
+    final actions = pet['actions'] is List ? (pet['actions'] as List).map((e) => e.toString()).toList() : <String>[];
+    final id = pet['id']?.toString() ?? '';
+    final pluginId = pet['pluginId']?.toString() ?? id;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
@@ -82,7 +125,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                   ),
                   child: Center(
                     child: Text(
-                      pet.characterName.substring(0, 1),
+                      characterName.isNotEmpty ? characterName.substring(0, 1) : '?',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -96,18 +139,18 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(pet.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
                       Text(
-                        '${pet.characterName} · 缩放 ${(pet.scale * 100).round()}%',
+                        '$characterName · 缩放 ${(scale * 100).round()}%',
                         style: AppTypography.caption(context),
                       ),
                     ],
                   ),
                 ),
-                if (pet.isRunning)
+                if (isRunning)
                   AmitiaStatusBadge(label: '运行中', type: BadgeType.success)
-                else if (pet.isEnabled)
+                else if (isEnabled)
                   AmitiaStatusBadge(label: '已启用', type: BadgeType.accent)
                 else
                   AmitiaStatusBadge(label: '已停用', type: BadgeType.neutral),
@@ -126,10 +169,10 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                   const SizedBox(width: AppSpacing.xs),
                   Text('默认动作', style: AppTypography.label(context)),
                   const Spacer(),
-                  Text(_actionLabel(pet.defaultAction), style: AppTypography.bodySmall(context)),
+                  Text(_actionLabel(defaultAction), style: AppTypography.bodySmall(context)),
                   const SizedBox(width: AppSpacing.xs),
                   GestureDetector(
-                    onTap: () => _showDefaultActionSheet(pet),
+                    onTap: () => _showDefaultActionSheet(id, defaultAction, actions),
                     child: Text(
                       '更换',
                       style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500),
@@ -142,18 +185,19 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
             Wrap(
               spacing: AppSpacing.xs,
               runSpacing: AppSpacing.xs,
-              children: pet.actions.map((action) {
+              children: actions.map((action) {
+                final a = action.toString();
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: action == pet.defaultAction ? context.accentSoft : context.surfaceSecondary,
+                    color: a == defaultAction ? context.accentSoft : context.surfaceSecondary,
                     borderRadius: AppRadius.brTag,
                   ),
                   child: Text(
-                    _actionLabel(action),
+                    _actionLabel(a),
                     style: TextStyle(
                       fontSize: 12,
-                      color: action == pet.defaultAction ? context.accentPrimary : context.textSecondary,
+                      color: a == defaultAction ? context.accentPrimary : context.textSecondary,
                     ),
                   ),
                 );
@@ -164,11 +208,11 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               children: [
                 Expanded(
                   child: AmitiaButton(
-                    label: pet.isEnabled ? '停用' : '启用',
+                    label: isEnabled ? '停用' : '启用',
                     isSecondary: true,
                     height: 38,
-                    icon: pet.isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
-                    onPressed: () => _toggleEnabled(pet),
+                    icon: isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                    onPressed: () => _toggleEnabled(id, isEnabled),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -178,7 +222,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     isSecondary: true,
                     height: 38,
                     icon: Icons.aspect_ratio,
-                    onPressed: () => _showResizeDialog(pet),
+                    onPressed: () => _showResizeDialog(id, scale),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -188,7 +232,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     isSecondary: true,
                     height: 38,
                     icon: Icons.list,
-                    onPressed: () => _showActionListSheet(pet),
+                    onPressed: () => _showActionListSheet(id, defaultAction, actions),
                   ),
                 ),
               ],
@@ -200,7 +244,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               isFullWidth: true,
               icon: Icons.delete_outline,
               height: 38,
-              onPressed: () => _showUninstallConfirm(pet),
+              onPressed: () => _showUninstallConfirm(id, pluginId),
             ),
           ],
         ),
@@ -220,32 +264,30 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
     return labels[action] ?? action;
   }
 
-  void _toggleEnabled(PetInstallation pet) {
-    if (pet.isEnabled) {
-      _showDisableConfirm(pet);
+  Future<void> _toggleEnabled(String id, bool currentlyEnabled) async {
+    if (currentlyEnabled) {
+      _showDisableConfirm(id);
     } else {
-      setState(() {
-        final idx = _installations.indexWhere((p) => p.id == pet.id);
-        if (idx >= 0) {
-          _installations[idx] = PetInstallation(
-            id: pet.id,
-            name: pet.name,
-            characterName: pet.characterName,
-            isEnabled: true,
-            isRunning: true,
-            scale: pet.scale,
-            defaultAction: pet.defaultAction,
-            actions: pet.actions,
+      try {
+        final svc = ref.read(extensionServiceProvider);
+        await svc.enablePlugin(id);
+        await _load();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已启用')),
           );
         }
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('「${pet.name}」已启用')),
-      );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('启用失败: $e')),
+          );
+        }
+      }
     }
   }
 
-  void _showDisableConfirm(PetInstallation pet) {
+  void _showDisableConfirm(String id) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -253,7 +295,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('停用桌宠', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认停用「${pet.name}」？停用后桌宠将不再显示在桌面上。',
+            '确认停用该桌宠？停用后桌宠将不再显示在桌面上。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -262,26 +304,24 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext);
-                setState(() {
-                  final idx = _installations.indexWhere((p) => p.id == pet.id);
-                  if (idx >= 0) {
-                    _installations[idx] = PetInstallation(
-                      id: pet.id,
-                      name: pet.name,
-                      characterName: pet.characterName,
-                      isEnabled: false,
-                      isRunning: false,
-                      scale: pet.scale,
-                      defaultAction: pet.defaultAction,
-                      actions: pet.actions,
+                try {
+                  final svc = ref.read(extensionServiceProvider);
+                  await svc.disablePlugin(id);
+                  await _load();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已停用')),
                     );
                   }
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「${pet.name}」已停用')),
-                );
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('停用失败: $e')),
+                    );
+                  }
+                }
               },
               child: Text('停用', style: TextStyle(color: context.warning)),
             ),
@@ -291,8 +331,8 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
     );
   }
 
-  void _showResizeDialog(PetInstallation pet) {
-    double tempScale = pet.scale;
+  void _showResizeDialog(String id, double currentScale) {
+    double tempScale = currentScale;
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -304,7 +344,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('「${pet.name}」当前缩放：${(tempScale * 100).round()}%', style: AppTypography.body(context)),
+                  Text('当前缩放：${(tempScale * 100).round()}%', style: AppTypography.body(context)),
                   const SizedBox(height: AppSpacing.md),
                   Slider(
                     value: tempScale,
@@ -313,9 +353,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     divisions: 15,
                     activeColor: context.accentPrimary,
                     onChanged: (value) {
-                      setDialogState(() {
-                        tempScale = value;
-                      });
+                      setDialogState(() { tempScale = value; });
                     },
                   ),
                   Row(
@@ -333,26 +371,9 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                   child: Text('取消', style: TextStyle(color: context.textSecondary)),
                 ),
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(dialogContext);
-                    setState(() {
-                      final idx = _installations.indexWhere((p) => p.id == pet.id);
-                      if (idx >= 0) {
-                        _installations[idx] = PetInstallation(
-                          id: pet.id,
-                          name: pet.name,
-                          characterName: pet.characterName,
-                          isEnabled: pet.isEnabled,
-                          isRunning: pet.isRunning,
-                          scale: tempScale,
-                          defaultAction: pet.defaultAction,
-                          actions: pet.actions,
-                        );
-                      }
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('「${pet.name}」缩放已调整为 ${(tempScale * 100).round()}%')),
-                    );
+                    _updateScale(id, tempScale);
                   },
                   child: Text('确认', style: TextStyle(color: context.accentPrimary)),
                 ),
@@ -364,7 +385,26 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
     );
   }
 
-  void _showActionListSheet(PetInstallation pet) {
+  Future<void> _updateScale(String id, double scale) async {
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      await svc.updatePluginConfig(id, {'scale': scale});
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('缩放已调整为 ${(scale * 100).round()}%')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('调整失败: $e')),
+        );
+      }
+    }
+  }
+
+  void _showActionListSheet(String id, String defaultAction, List<String> actions) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -381,24 +421,25 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: Text('动作列表 - ${pet.name}', style: AppTypography.sectionTitle(context)),
+                  child: Text('动作列表', style: AppTypography.sectionTitle(context)),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                ...pet.actions.map((action) {
+                ...actions.map((action) {
+                  final a = action.toString();
                   return AmitiaListTile(
                     leading: Icon(
-                      action == pet.defaultAction ? Icons.star : Icons.play_circle_outline,
+                      a == defaultAction ? Icons.star : Icons.play_circle_outline,
                       size: 22,
-                      color: action == pet.defaultAction ? context.accentPrimary : context.textSecondary,
+                      color: a == defaultAction ? context.accentPrimary : context.textSecondary,
                     ),
-                    title: _actionLabel(action),
-                    subtitle: action == pet.defaultAction ? '当前默认动作' : '点击设为默认',
-                    trailing: action == pet.defaultAction
+                    title: _actionLabel(a),
+                    subtitle: a == defaultAction ? '当前默认动作' : '点击设为默认',
+                    trailing: a == defaultAction
                         ? Icon(Icons.check, size: 20, color: context.accentPrimary)
                         : null,
                     onTap: () {
                       Navigator.pop(sheetContext);
-                      _setDefaultAction(pet, action);
+                      _setDefaultAction(id, a);
                     },
                   );
                 }),
@@ -420,7 +461,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
     );
   }
 
-  void _showDefaultActionSheet(PetInstallation pet) {
+  void _showDefaultActionSheet(String id, String currentDefault, List<String> actions) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -440,12 +481,13 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                   child: Text('更换默认待机动作', style: AppTypography.sectionTitle(context)),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                ...pet.actions.map((action) {
-                  final isSelected = action == pet.defaultAction;
+                ...actions.map((action) {
+                  final a = action.toString();
+                  final isSelected = a == currentDefault;
                   return GestureDetector(
                     onTap: () {
                       Navigator.pop(sheetContext);
-                      _setDefaultAction(pet, action);
+                      _setDefaultAction(id, a);
                     },
                     behavior: HitTestBehavior.opaque,
                     child: Container(
@@ -459,7 +501,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                           ),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
-                            child: Text(_actionLabel(action), style: AppTypography.body(context)),
+                            child: Text(_actionLabel(a), style: AppTypography.body(context)),
                           ),
                           if (isSelected)
                             Icon(Icons.check, size: 18, color: context.accentPrimary),
@@ -476,28 +518,26 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
     );
   }
 
-  void _setDefaultAction(PetInstallation pet, String action) {
-    setState(() {
-      final idx = _installations.indexWhere((p) => p.id == pet.id);
-      if (idx >= 0) {
-        _installations[idx] = PetInstallation(
-          id: pet.id,
-          name: pet.name,
-          characterName: pet.characterName,
-          isEnabled: pet.isEnabled,
-          isRunning: pet.isRunning,
-          scale: pet.scale,
-          defaultAction: action,
-          actions: pet.actions,
+  Future<void> _setDefaultAction(String id, String action) async {
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      await svc.updatePluginConfig(id, {'defaultAction': action});
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('默认动作已更换为「${_actionLabel(action)}」')),
         );
       }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('默认动作已更换为「${_actionLabel(action)}」')),
-    );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('更换失败: $e')),
+        );
+      }
+    }
   }
 
-  void _showUninstallConfirm(PetInstallation pet) {
+  void _showUninstallConfirm(String id, String pluginId) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -505,7 +545,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('卸载桌宠', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认卸载「${pet.name}」？卸载后所有动作和配置将被删除，无法恢复。',
+            '确认卸载该桌宠？卸载后所有动作和配置将被删除，无法恢复。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -514,14 +554,24 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext);
-                setState(() {
-                  _installations.removeWhere((p) => p.id == pet.id);
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「${pet.name}」已卸载')),
-                );
+                try {
+                  final svc = ref.read(extensionServiceProvider);
+                  await svc.disablePlugin(id);
+                  await _load();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已卸载')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('卸载失败: $e')),
+                    );
+                  }
+                }
               },
               child: Text('卸载', style: TextStyle(color: context.error)),
             ),
@@ -532,8 +582,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
   }
 
   void _showInstallDialog() {
-    final availablePets = MockWorkshop.petTasks.map((t) => t.name).toList();
-    String? selectedPet;
+    String? selectedTask;
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -548,16 +597,15 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                 children: [
                   Text('选择要安装的桌宠', style: AppTypography.caption(context)),
                   const SizedBox(height: AppSpacing.sm),
-                  ...availablePets.map((name) {
-                    final isInstalled = _installations.any((p) => p.name == name);
-                    final isSelected = name == selectedPet;
+                  ..._availableTasks.map((task) {
+                    final taskName = task['name']?.toString() ?? '';
+                    final isInstalled = _installations.any((p) => p['name']?.toString() == taskName);
+                    final isSelected = taskName == selectedTask;
                     return GestureDetector(
                       onTap: isInstalled
                           ? null
                           : () {
-                              setDialogState(() {
-                                selectedPet = name;
-                              });
+                              setDialogState(() { selectedTask = taskName; });
                             },
                       behavior: HitTestBehavior.opaque,
                       child: Container(
@@ -579,7 +627,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    name,
+                                    taskName,
                                     style: AppTypography.body(context).copyWith(
                                       color: isInstalled ? context.textTertiary : context.textPrimary,
                                     ),
@@ -605,26 +653,11 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                   child: Text('取消', style: TextStyle(color: context.textSecondary)),
                 ),
                 TextButton(
-                  onPressed: selectedPet == null
+                  onPressed: selectedTask == null
                       ? null
                       : () {
                           Navigator.pop(dialogContext);
-                          final task = MockWorkshop.petTasks.firstWhere((t) => t.name == selectedPet);
-                          setState(() {
-                            _installations.add(PetInstallation(
-                              id: 'pi${DateTime.now().millisecondsSinceEpoch}',
-                              name: task.name,
-                              characterName: task.characterName,
-                              isEnabled: true,
-                              isRunning: false,
-                              scale: 1.0,
-                              defaultAction: 'idle',
-                              actions: const ['idle', 'wave', 'happy', 'speaking'],
-                            ));
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('「$selectedPet」安装成功')),
-                          );
+                          _installPet(selectedTask!);
                         },
                   child: Text('安装', style: TextStyle(color: context.accentPrimary)),
                 ),
@@ -634,5 +667,24 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
         );
       },
     );
+  }
+
+  Future<void> _installPet(String taskName) async {
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      await svc.installPlugin(taskName);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('「$taskName」安装成功')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('安装失败: $e')),
+        );
+      }
+    }
   }
 }

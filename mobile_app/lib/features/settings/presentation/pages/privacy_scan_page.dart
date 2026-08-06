@@ -8,8 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
 
 class PrivacyScanPage extends ConsumerStatefulWidget {
   const PrivacyScanPage({super.key});
@@ -34,7 +34,12 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
   @override
   void initState() {
     super.initState();
-    _results = List.from(MockSettings.privacyScanResults);
+    _results = [
+      PrivacyScanResult(category: '对话记录', riskCount: 0, riskLevel: '安全'),
+      PrivacyScanResult(category: '记忆数据', riskCount: 0, riskLevel: '安全'),
+      PrivacyScanResult(category: '用户画像', riskCount: 0, riskLevel: '安全'),
+      PrivacyScanResult(category: '聊天记录', riskCount: 0, riskLevel: '安全'),
+    ];
   }
 
   @override

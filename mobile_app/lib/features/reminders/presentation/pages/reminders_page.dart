@@ -7,8 +7,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class RemindersPage extends ConsumerStatefulWidget {
   const RemindersPage({super.key});
@@ -18,24 +17,37 @@ class RemindersPage extends ConsumerStatefulWidget {
 }
 
 class _RemindersPageState extends ConsumerState<RemindersPage> {
-  late List<Reminder> _reminders;
+  List<Map<String, dynamic>> _reminders = [];
   int _selectedSegment = 0;
   final _segments = ['今天', '未来', '已完成'];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _reminders = List.from(MockMemory.reminders);
+    _loadReminders();
   }
 
-  List<Reminder> get _filteredReminders {
+  Future<void> _loadReminders() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(reminderServiceProvider);
+      final list = await svc.list();
+      if (mounted) setState(() { _reminders = list.map((r) => r.toJson()).toList(); _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  List<Map<String, dynamic>> get _filteredReminders {
     switch (_selectedSegment) {
       case 0:
-        return _reminders.where((r) => r.isToday && !r.isCompleted).toList();
+        return _reminders.where((r) => r['isToday'] == true && r['isCompleted'] != true).toList();
       case 1:
-        return _reminders.where((r) => !r.isToday && !r.isCompleted).toList();
+        return _reminders.where((r) => r['isToday'] != true && r['isCompleted'] != true).toList();
       case 2:
-        return _reminders.where((r) => r.isCompleted).toList();
+        return _reminders.where((r) => r['isCompleted'] == true).toList();
       default:
         return _reminders;
     }
@@ -67,128 +79,27 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               ),
             ),
             Expanded(
-              child: _filteredReminders.isEmpty
-                  ? AmitiaEmptyState(
-                      icon: Icons.notifications_none,
-                      title: '暂无提醒',
-                      subtitle: '点击右上角添加新提醒',
-                      actionText: '新建提醒',
-                      onAction: () => _showReminderEditor(context, null),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                      itemCount: _filteredReminders.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-                      itemBuilder: (context, index) => _buildReminderCard(context, _filteredReminders[index]),
-                    ),
+              child: _loading
+                  ? const AmitiaLoadingState(message: '加载中...')
+                  : _error != null
+                      ? AmitiaErrorState(message: _error!, onRetry: _loadReminders)
+                      : _filteredReminders.isEmpty
+                          ? AmitiaEmptyState(
+                              icon: Icons.notifications_none,
+                              title: '暂无提醒',
+                              subtitle: '点击右上角添加新提醒',
+                              actionText: '新建提醒',
+                              onAction: () => _showReminderEditor(context, null),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                              itemCount: _filteredReminders.length,
+                              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                              itemBuilder: (context, index) => _buildReminderCard(context, _filteredReminders[index]),
+                            ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildReminderCard(BuildContext context, Reminder reminder) {
-    return AmitiaCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: _getCategoryColor(context, reminder.category).withValues(alpha: 0.12),
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Icon(
-                  _getCategoryIcon(reminder.category),
-                  size: 22,
-                  color: _getCategoryColor(context, reminder.category),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(reminder.title, style: AppTypography.cardTitle(context)),
-                    const SizedBox(height: 2),
-                    Text(reminder.description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-              AmitiaStatusBadge(
-                label: reminder.category,
-                type: _getCategoryBadge(reminder.category),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Icon(Icons.access_time, size: 14, color: context.textTertiary),
-              const SizedBox(width: 4),
-              Text(_formatReminderTime(reminder.time), style: AppTypography.label(context)),
-              const Spacer(),
-              if (reminder.isCompleted)
-                AmitiaStatusBadge(label: '已完成', type: BadgeType.success)
-              else if (!reminder.isEnabled)
-                AmitiaStatusBadge(label: '已停用', type: BadgeType.neutral)
-              else
-                AmitiaStatusBadge(label: '已启用', type: BadgeType.accent),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              if (!reminder.isCompleted) ...[
-                GestureDetector(
-                  onTap: () => _showTestResult(context, reminder),
-                  child: _buildActionButton(context, '测试', Icons.science_outlined, context.success),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      final idx = _reminders.indexWhere((r) => r.id == reminder.id);
-                      _reminders[idx] = Reminder(
-                        id: reminder.id,
-                        title: reminder.title,
-                        description: reminder.description,
-                        time: reminder.time,
-                        isCompleted: reminder.isCompleted,
-                        isEnabled: !reminder.isEnabled,
-                        category: reminder.category,
-                        isToday: reminder.isToday,
-                      );
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('已${reminder.isEnabled ? '停用' : '启用'}提醒'), duration: const Duration(seconds: 1)),
-                    );
-                  },
-                  child: _buildActionButton(
-                    context,
-                    reminder.isEnabled ? '停用' : '启用',
-                    reminder.isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
-                    context.warning,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-              ],
-              GestureDetector(
-                onTap: () => _showReminderEditor(context, reminder),
-                child: _buildActionButton(context, '编辑', Icons.edit_outlined, context.accentPrimary),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => _showDeleteConfirm(context, reminder),
-                child: _buildActionButton(context, '删除', Icons.delete_outline, context.error),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -256,15 +167,137 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     }
   }
 
-  String _formatReminderTime(DateTime time) {
-    return '${time.month}月${time.day}日 ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  String _formatTime(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return '未知';
+    try {
+      final dt = DateTime.parse(timeStr);
+      return '${dt.month}月${dt.day}日 ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return timeStr;
+    }
   }
 
-  void _showReminderEditor(BuildContext context, Reminder? existing) {
+  Widget _buildReminderCard(BuildContext context, Map<String, dynamic> reminder) {
+    final id = (reminder['id'] ?? '').toString();
+    final title = (reminder['title'] ?? '').toString();
+    final description = (reminder['content'] ?? reminder['description'] ?? '').toString();
+    final category = (reminder['category'] ?? '日常').toString();
+    final isCompleted = (reminder['isCompleted'] == true);
+    final isEnabled = (reminder['enabled'] is int)
+        ? (reminder['enabled'] == 1)
+        : (reminder['isEnabled'] as bool? ?? true);
+    final timeStr = (reminder['cronExpr'] ?? reminder['time'] ?? reminder['createdAt'] ?? '').toString();
+
+    return AmitiaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _getCategoryColor(context, category).withValues(alpha: 0.12),
+                  borderRadius: AppRadius.brSmall,
+                ),
+                child: Icon(
+                  _getCategoryIcon(category),
+                  size: 22,
+                  color: _getCategoryColor(context, category),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTypography.cardTitle(context)),
+                    const SizedBox(height: 2),
+                    Text(description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              AmitiaStatusBadge(
+                label: category,
+                type: _getCategoryBadge(category),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Icon(Icons.access_time, size: 14, color: context.textTertiary),
+              const SizedBox(width: 4),
+              Text(_formatTime(timeStr), style: AppTypography.label(context)),
+              const Spacer(),
+              if (isCompleted)
+                AmitiaStatusBadge(label: '已完成', type: BadgeType.success)
+              else if (!isEnabled)
+                AmitiaStatusBadge(label: '已停用', type: BadgeType.neutral)
+              else
+                AmitiaStatusBadge(label: '已启用', type: BadgeType.accent),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              if (!isCompleted) ...[
+                GestureDetector(
+                  onTap: () => _showTestResult(context, title),
+                  child: _buildActionButton(context, '测试', Icons.science_outlined, context.success),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                GestureDetector(
+                  onTap: () => _toggleReminder(id, !isEnabled),
+                  child: _buildActionButton(
+                    context,
+                    isEnabled ? '停用' : '启用',
+                    isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                    context.warning,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              GestureDetector(
+                onTap: () => _showReminderEditor(context, reminder),
+                child: _buildActionButton(context, '编辑', Icons.edit_outlined, context.accentPrimary),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => _showDeleteConfirm(context, id, title),
+                child: _buildActionButton(context, '删除', Icons.delete_outline, context.error),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleReminder(String id, bool enable) async {
+    try {
+      final svc = ref.read(reminderServiceProvider);
+      await svc.toggle(id);
+      _loadReminders();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(enable ? '已启用提醒' : '已停用提醒'), duration: const Duration(seconds: 1)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: $e'), backgroundColor: context.error));
+      }
+    }
+  }
+
+  void _showReminderEditor(BuildContext context, Map<String, dynamic>? existing) {
     final isEdit = existing != null;
-    final titleCtrl = TextEditingController(text: existing?.title ?? '');
-    final descCtrl = TextEditingController(text: existing?.description ?? '');
-    String category = existing?.category ?? '日常';
+    final titleCtrl = TextEditingController(text: (existing?['title'] ?? '').toString());
+    final descCtrl = TextEditingController(text: (existing?['content'] ?? existing?['description'] ?? '').toString());
+    String category = (existing?['category'] ?? '日常').toString();
+    String cronExpr = (existing?['cronExpr'] ?? existing?['time'] ?? '').toString();
 
     showModalBottomSheet(
       context: context,
@@ -291,6 +324,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               const SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: descCtrl, maxLines: 2, hintText: '输入提醒描述'),
               const SizedBox(height: AppSpacing.md),
+              Text('Cron 表达式', style: AppTypography.label(context)),
+              const SizedBox(height: AppSpacing.xs),
+              AmitiaTextField(controller: TextEditingController(text: cronExpr), hintText: '例如：0 9 * * *'),
+              const SizedBox(height: AppSpacing.md),
               Text('分类', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
               Wrap(
@@ -314,36 +351,34 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
-                onPressed: () {
+                onPressed: () async {
                   if (titleCtrl.text.trim().isEmpty) return;
-                  Navigator.pop(ctx);
-                  setState(() {
+                  try {
+                    final svc = ref.read(reminderServiceProvider);
+                    final data = {
+                      'title': titleCtrl.text.trim(),
+                      'content': descCtrl.text.trim(),
+                      'cronExpr': cronExpr,
+                      'category': category,
+                      'enabled': 1,
+                    };
                     if (isEdit) {
-                      final idx = _reminders.indexWhere((r) => r.id == existing.id);
-                      _reminders[idx] = Reminder(
-                        id: existing.id,
-                        title: titleCtrl.text.trim(),
-                        description: descCtrl.text.trim(),
-                        time: existing.time,
-                        isCompleted: existing.isCompleted,
-                        isEnabled: existing.isEnabled,
-                        category: category,
-                        isToday: existing.isToday,
-                      );
+                      await svc.update(existing!['id'].toString(), data);
                     } else {
-                      _reminders.add(Reminder(
-                        id: 'r${DateTime.now().millisecondsSinceEpoch}',
-                        title: titleCtrl.text.trim(),
-                        description: descCtrl.text.trim(),
-                        time: DateTime.now().add(const Duration(days: 1)),
-                        category: category,
-                        isToday: false,
-                      ));
+                      await svc.create(data);
                     }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(isEdit ? '提醒已更新' : '提醒已创建'), duration: const Duration(seconds: 1)),
-                  );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    _loadReminders();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(isEdit ? '提醒已更新' : '提醒已创建'), duration: const Duration(seconds: 1)),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败: $e'), backgroundColor: context.error));
+                    }
+                  }
                 },
               ),
             ],
@@ -353,7 +388,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     );
   }
 
-  void _showTestResult(BuildContext context, Reminder reminder) {
+  void _showTestResult(BuildContext context, String title) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -378,7 +413,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            Text('提醒标题：${reminder.title}', style: AppTypography.bodySmall(context)),
+            Text('提醒标题：$title', style: AppTypography.bodySmall(context)),
             const SizedBox(height: 4),
             Text('通知渠道：系统通知', style: AppTypography.caption(context)),
             Text('声音：默认', style: AppTypography.caption(context)),
@@ -392,23 +427,27 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, Reminder reminder) {
+  void _showDeleteConfirm(BuildContext context, String id, String title) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('删除提醒', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除「${reminder.title}」吗？', style: AppTypography.bodySmall(context)),
+        content: Text('确定要删除「$title」吗？', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _reminders.removeWhere((r) => r.id == reminder.id);
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('提醒已删除'), duration: Duration(seconds: 1)),
-              );
+            onPressed: () async {
+              try {
+                final svc = ref.read(reminderServiceProvider);
+                await svc.delete(id);
+              } catch (_) {}
+              if (ctx.mounted) Navigator.pop(ctx);
+              _loadReminders();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('提醒已删除'), duration: Duration(seconds: 1)),
+                );
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),

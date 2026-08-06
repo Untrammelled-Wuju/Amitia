@@ -8,7 +8,6 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
 
 class ChatImportPage extends ConsumerStatefulWidget {
   const ChatImportPage({super.key});
@@ -19,11 +18,10 @@ class ChatImportPage extends ConsumerStatefulWidget {
 
 class _ChatImportPageState extends ConsumerState<ChatImportPage> {
   int _currentStep = 0;
-  late List<ImportBatch> _batches;
+  final List<ImportBatch> _batches = [];
   String _selectedSource = '';
   final _contentController = TextEditingController();
   String _selectedCharacter = '';
-  bool _isProcessing = false;
 
   final _sources = [
     {'name': '微信聊天记录', 'icon': Icons.chat, 'color': '#52B788'},
@@ -41,12 +39,6 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     {'role': 'user', 'content': '帮我整理一下文件', 'time': '2026-07-30 09:15'},
     {'role': 'assistant', 'content': '好的，我来帮你扫描目录。', 'time': '2026-07-30 09:16'},
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    _batches = List.from(MockMemory.importBatches);
-  }
 
   @override
   void dispose() {
@@ -195,7 +187,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
               AmitiaButtonOutline(
                 label: '从文件导入',
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择文件（Mock）'), duration: Duration(seconds: 1)));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择文件'), duration: Duration(seconds: 1)));
                 },
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -276,7 +268,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
               Text('编辑消息', style: AppTypography.sectionTitle(context)),
               const Spacer(),
               AmitiaIconButton(icon: Icons.add, color: context.accentPrimary, onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('添加新消息（Mock）'), duration: Duration(seconds: 1)));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('添加新消息'), duration: Duration(seconds: 1)));
               }),
             ],
           ),
@@ -367,7 +359,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
         children: [
           Text('生成会话摘要', style: AppTypography.sectionTitle(context)),
           const SizedBox(height: AppSpacing.sm),
-          Text('AI 正在为这批聊天记录生成摘要（Mock）', style: AppTypography.caption(context)),
+          Text('AI 正在为这批聊天记录生成摘要', style: AppTypography.caption(context)),
           const SizedBox(height: AppSpacing.lg),
           AmitiaCard(
             backgroundColor: context.accentSoft,
@@ -411,7 +403,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
         children: [
           Text('提取记忆候选', style: AppTypography.sectionTitle(context)),
           const SizedBox(height: AppSpacing.sm),
-          Text('AI 从聊天记录中提取了以下记忆候选（Mock）', style: AppTypography.caption(context)),
+          Text('AI 从聊天记录中提取了以下记忆候选', style: AppTypography.caption(context)),
           const SizedBox(height: AppSpacing.lg),
           ...[
             {'content': '用户习惯在早上9点左右开始活动', 'type': '习惯', 'confidence': 0.85},

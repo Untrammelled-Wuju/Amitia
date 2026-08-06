@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
 type fakeCandidateRunner struct {
@@ -96,7 +98,7 @@ func setupReloaderTest(t *testing.T) (*RuntimeReloader, *WorkspaceRegistry, Work
 	}
 	_ = registry.GrantDevTrust(ws.WorkspaceID)
 
-	pipeline := NewRebuildPipeline("node").WithRegistry(registry)
+	pipeline := NewRebuildPipeline(script_host.UnavailableNodeResolver()).WithRegistry(registry)
 	preserver := NewStatePreserver()
 	reloader := NewRuntimeReloader(registry, pipeline, preserver)
 	reloader.Enable(ws.WorkspaceID)

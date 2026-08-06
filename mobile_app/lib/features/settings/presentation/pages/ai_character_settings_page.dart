@@ -6,22 +6,68 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class AiCharacterSettingsPage extends ConsumerStatefulWidget {
+class AiCharacterSettingsPage extends ConsumerWidget {
   const AiCharacterSettingsPage({super.key});
 
   @override
-  ConsumerState<AiCharacterSettingsPage> createState() => _AiCharacterSettingsPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final charactersAsync = ref.watch(characterListProvider);
+
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(
+        title: '角色性格设置',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.characters,
+      ),
+      body: charactersAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                const SizedBox(height: 16),
+                Text(
+                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                  style: AppTypography.body(context).copyWith(color: context.error),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () => ref.invalidate(characterListProvider),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (characters) {
+          final activeCharacter = characters.where((c) => c.isActive == 1).firstOrNull ?? characters.firstOrNull;
+          return _CharacterContent(character: activeCharacter);
+        },
+      ),
+    );
+  }
 }
 
-class _AiCharacterSettingsPageState extends ConsumerState<AiCharacterSettingsPage> {
-  final _nameController = TextEditingController(text: '轻熟朋友');
-  final _descController = TextEditingController(
-    text: '自然、简短、有反应，有一点熟悉感，但不过度装熟。',
-  );
+class _CharacterContent extends ConsumerStatefulWidget {
+  final dynamic character;
+
+  const _CharacterContent({this.character});
+
+  @override
+  ConsumerState<_CharacterContent> createState() => _CharacterContentState();
+}
+
+class _CharacterContentState extends ConsumerState<_CharacterContent> {
+  late TextEditingController _nameController;
+  late TextEditingController _descController;
   bool _isDefault = false;
   bool _saving = false;
 
@@ -49,49 +95,79 @@ class _AiCharacterSettingsPageState extends ConsumerState<AiCharacterSettingsPag
   };
 
   @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.character?.name ?? '轻熟朋友');
+    _descController = TextEditingController(
+      text: widget.character?.personality ?? '自然、简短、有反应，有一点熟悉感，但不过度装熟。',
+    );
+    _isDefault = widget.character?.isActive == 1;
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _descController.dispose();
     super.dispose();
   }
 
+  Future<void> _saveConfig() async {
+    if (!mounted) return;
+    setState(() => _saving = true);
+
+    final svc = ref.read(characterServiceProvider);
+    final characterId = widget.character?.id;
+    if (characterId != null) {
+      await svc.update(characterId, {
+        'name': _nameController.text,
+        'personality': _descController.text,
+      });
+    }
+
+    if (!mounted) return;
+    setState(() => _saving = false);
+    ref.invalidate(characterListProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('角色设置已保存'),
+        backgroundColor: context.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        title: '角色性格设置',
-        showBackButton: true,
-        fallbackRoute: AppRoutes.characters,
-        actions: [
-          TextButton(
-            onPressed: _saving ? null : _saveConfig,
-            child: _saving
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text('保存', style: TextStyle(color: context.accentPrimary, fontSize: 15, fontWeight: FontWeight.w600)),
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _buildInfoCard(context),
+              const SizedBox(height: AppSpacing.sm),
+              _buildPersonalityCard(context),
+              const SizedBox(height: AppSpacing.sm),
+              _buildPersonalityCard(context, title: '情感与氛围', sectionKey: 'emotion'),
+              const SizedBox(height: AppSpacing.sm),
+              _buildGenderCard(context),
+              const SizedBox(height: AppSpacing.sm),
+              _buildSleepCard(context),
+              const SizedBox(height: AppSpacing.lg),
+            ],
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            _buildInfoCard(context),
-            const SizedBox(height: AppSpacing.sm),
-            _buildPersonalityCard(context),
-            const SizedBox(height: AppSpacing.sm),
-            _buildPersonalityCard(context, title: '情感与氛围', sectionKey: 'emotion'),
-            const SizedBox(height: AppSpacing.sm),
-            _buildGenderCard(context),
-            const SizedBox(height: AppSpacing.sm),
-            _buildSleepCard(context),
-            const SizedBox(height: AppSpacing.lg),
-          ],
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          child: AmitiaButton(
+            label: _saving ? '保存中...' : '保存',
+            icon: Icons.check,
+            isFullWidth: true,
+            onPressed: _saving ? null : _saveConfig,
+          ),
+        ),
+      ],
     );
   }
 
@@ -367,22 +443,6 @@ class _AiCharacterSettingsPageState extends ConsumerState<AiCharacterSettingsPag
           child: Text(value, style: AppTypography.body(context)),
         ),
       ],
-    );
-  }
-
-  Future<void> _saveConfig() async {
-    if (!mounted) return;
-    setState(() => _saving = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('角色设置已保存'),
-        backgroundColor: context.success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
-      ),
     );
   }
 }

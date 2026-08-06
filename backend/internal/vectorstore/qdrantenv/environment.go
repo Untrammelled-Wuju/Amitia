@@ -9,13 +9,13 @@ import (
 )
 
 type Environment struct {
-	BinaryPath        string
-	DistributionRoot  string
-	Source            Source
-	Guest             platform.GuestPlatform
-	Architecture      string
-	Installed         bool
-	Explicit          bool
+	BinaryPath       string
+	DistributionRoot string
+	Source           Source
+	Guest            platform.GuestPlatform
+	Architecture     string
+	Installed        bool
+	Explicit         bool
 }
 
 func (e Environment) Clone() Environment {

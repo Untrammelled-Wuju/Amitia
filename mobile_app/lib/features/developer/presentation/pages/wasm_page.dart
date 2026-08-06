@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class WasmPage extends ConsumerStatefulWidget {
   const WasmPage({super.key});
@@ -19,16 +18,54 @@ class WasmPage extends ConsumerStatefulWidget {
 }
 
 class _WasmPageState extends ConsumerState<WasmPage> {
-  late List<WasmModule> _modules;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _modules = [];
 
   @override
   void initState() {
     super.initState();
-    _modules = List.from(MockKernel.wasmModules);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final plugins = await svc.plugins();
+      if (mounted) {
+        final modules = plugins.map((p) {
+          return {
+            'id': p['id'] ?? '',
+            'name': p['name'] ?? 'WASM 模块',
+            'status': p['status'] ?? '已加载',
+            'quota': p['quota'] ?? 100,
+            'used': p['used'] ?? 0,
+          };
+        }).toList();
+        setState(() {
+          _modules = modules;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: 'WASM Runtime',
@@ -90,8 +127,14 @@ class _WasmPageState extends ConsumerState<WasmPage> {
     );
   }
 
-  Widget _buildModuleCard(BuildContext context, WasmModule module) {
-    final isLoaded = module.status == '已加载';
+  Widget _buildModuleCard(BuildContext context, Map<String, dynamic> module) {
+    final name = module['name'] as String? ?? 'WASM 模块';
+    final id = module['id'] as String? ?? '';
+    final status = module['status'] as String? ?? '已卸载';
+    final quota = (module['quota'] as num?)?.toInt() ?? 100;
+    final used = (module['used'] as num?)?.toInt() ?? 0;
+    final isLoaded = status == '已加载';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -115,14 +158,14 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(module.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
-                      Text('ID: ${module.id}', style: AppTypography.label(context)),
+                      Text('ID: $id', style: AppTypography.label(context)),
                     ],
                   ),
                 ),
                 AmitiaStatusBadge(
-                  label: module.status,
+                  label: status,
                   type: isLoaded ? BadgeType.success : BadgeType.neutral,
                 ),
               ],
@@ -133,10 +176,10 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                 Text('配额', style: AppTypography.label(context)),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: AmitiaProgressBar(progress: module.quota > 0 ? module.used / module.quota : 0),
+                  child: AmitiaProgressBar(progress: quota > 0 ? used / quota : 0),
                 ),
                 const SizedBox(width: 8),
-                Text('${module.used}/${module.quota}', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
+                Text('$used/$quota', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -227,13 +270,13 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                   }
                   final quota = int.tryParse(quotaController.text.trim()) ?? 100;
                   setState(() {
-                    _modules.add(WasmModule(
-                      id: 'wm${_modules.length + 1}',
-                      name: name,
-                      status: '已卸载',
-                      quota: quota,
-                      used: 0,
-                    ));
+                    _modules.add({
+                      'id': 'wm${_modules.length + 1}',
+                      'name': name,
+                      'status': '已卸载',
+                      'quota': quota,
+                      'used': 0,
+                    });
                   });
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已创建定义：$name')));
@@ -246,7 +289,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
     );
   }
 
-  void _showUnloadConfirm(BuildContext context, WasmModule module) {
+  void _showUnloadConfirm(BuildContext context, Map<String, dynamic> module) {
     showDialog(
       context: context,
       builder: (context) {
@@ -254,7 +297,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('卸载模块', style: AppTypography.cardTitle(context)),
-          content: Text('确定要卸载模块「${module.name}」吗？卸载后模块将从内存中移除。', style: AppTypography.body(context)),
+          content: Text('确定要卸载模块「${module['name']}」吗？卸载后模块将从内存中移除。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -263,19 +306,14 @@ class _WasmPageState extends ConsumerState<WasmPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _modules.indexWhere((m) => m.id == module.id);
+                  final idx = _modules.indexWhere((m) => m['id'] == module['id']);
                   if (idx >= 0) {
-                    _modules[idx] = WasmModule(
-                      id: module.id,
-                      name: module.name,
-                      status: '已卸载',
-                      quota: module.quota,
-                      used: 0,
-                    );
+                    _modules[idx]['status'] = '已卸载';
+                    _modules[idx]['used'] = 0;
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已卸载模块：${module.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已卸载模块：${module['name']}')));
               },
               child: Text('卸载', style: TextStyle(color: context.warning)),
             ),
@@ -285,23 +323,17 @@ class _WasmPageState extends ConsumerState<WasmPage> {
     );
   }
 
-  void _loadModule(BuildContext context, WasmModule module) {
+  void _loadModule(BuildContext context, Map<String, dynamic> module) {
     setState(() {
-      final idx = _modules.indexWhere((m) => m.id == module.id);
+      final idx = _modules.indexWhere((m) => m['id'] == module['id']);
       if (idx >= 0) {
-        _modules[idx] = WasmModule(
-          id: module.id,
-          name: module.name,
-          status: '已加载',
-          quota: module.quota,
-          used: 0,
-        );
+        _modules[idx]['status'] = '已加载';
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已加载模块：${module.name}')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已加载模块：${module['name']}')));
   }
 
-  void _showDeleteConfirm(BuildContext context, WasmModule module) {
+  void _showDeleteConfirm(BuildContext context, Map<String, dynamic> module) {
     showDialog(
       context: context,
       builder: (context) {
@@ -309,7 +341,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('删除定义', style: AppTypography.cardTitle(context)),
-          content: Text('确定要删除「${module.name}」的定义吗？此操作不可恢复。', style: AppTypography.body(context)),
+          content: Text('确定要删除「${module['name']}」的定义吗？此操作不可恢复。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -318,10 +350,10 @@ class _WasmPageState extends ConsumerState<WasmPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  _modules.removeWhere((m) => m.id == module.id);
+                  _modules.removeWhere((m) => m['id'] == module['id']);
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已删除定义：${module.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已删除定义：${module['name']}')));
               },
               child: Text('删除', style: TextStyle(color: context.error)),
             ),
@@ -331,7 +363,13 @@ class _WasmPageState extends ConsumerState<WasmPage> {
     );
   }
 
-  void _showModuleOptions(BuildContext context, WasmModule module) {
+  void _showModuleOptions(BuildContext context, Map<String, dynamic> module) {
+    final name = module['name'] as String? ?? '';
+    final id = module['id'] as String? ?? '';
+    final status = module['status'] as String? ?? '';
+    final quota = module['quota'] ?? 0;
+    final used = module['used'] ?? 0;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -351,23 +389,23 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(module.name, style: AppTypography.pageTitle(context)),
+                    Text(name, style: AppTypography.pageTitle(context)),
                     const SizedBox(height: 4),
-                    Text('模块 ID: ${module.id}', style: AppTypography.caption(context)),
+                    Text('模块 ID: $id', style: AppTypography.caption(context)),
                     const SizedBox(height: 4),
-                    Text('状态: ${module.status}', style: AppTypography.caption(context)),
+                    Text('状态: $status', style: AppTypography.caption(context)),
                     const SizedBox(height: 4),
-                    Text('配额: ${module.used}/${module.quota}', style: AppTypography.caption(context)),
+                    Text('配额: $used/$quota', style: AppTypography.caption(context)),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: Icon(module.status == '已加载' ? Icons.power_settings_new : Icons.download_for_offline_outlined, color: context.accentPrimary),
-                title: Text(module.status == '已加载' ? '卸载模块' : '加载模块'),
+                leading: Icon(status == '已加载' ? Icons.power_settings_new : Icons.download_for_offline_outlined, color: context.accentPrimary),
+                title: Text(status == '已加载' ? '卸载模块' : '加载模块'),
                 onTap: () {
                   Navigator.pop(context);
-                  if (module.status == '已加载') {
+                  if (status == '已加载') {
                     _showUnloadConfirm(context, module);
                   } else {
                     _loadModule(context, module);

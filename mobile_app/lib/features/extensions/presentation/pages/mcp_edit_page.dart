@@ -9,8 +9,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_extensions.dart';
+import '../../../../core/services/providers.dart';
 
 class McpEditPage extends ConsumerStatefulWidget {
   final String mcpId;
@@ -29,31 +28,48 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
   bool _hasSampling = false;
   bool _hasTasks = false;
   bool _hasRoots = false;
-
-  McpServer? get _server {
-    try {
-      return MockExtensions.mcpServers.firstWhere((s) => s.id == widget.mcpId);
-    } catch (_) {
-      return null;
-    }
-  }
+  Map<String, dynamic>? _server;
+  bool _loading = true;
+  String? _error;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    final server = _server;
-    if (server != null) {
-      _nameController.text = server.name;
-      _addressController.text = server.address;
-      _transportIndex = server.transport.index;
-      _hasSampling = server.hasSampling;
-      _hasTasks = server.hasTasks;
-      _hasRoots = server.hasRoots;
-      _envControllers = server.envVars.entries.map((e) {
-        return MapEntry(TextEditingController(text: e.key), TextEditingController(text: e.value));
-      }).toList();
-    } else {
-      _envControllers = [];
+    _envControllers = [];
+    _loadServer();
+  }
+
+  Future<void> _loadServer() async {
+    if (widget.mcpId.isEmpty) {
+      if (mounted) setState(() { _loading = false; });
+      return;
+    }
+    try {
+      final svc = ref.read(mcpServiceProvider);
+      final data = await svc.getServer(widget.mcpId);
+      if (data != null && mounted) {
+        _nameController.text = (data['name'] ?? '').toString();
+        _addressController.text = (data['address'] ?? data['url'] ?? '').toString();
+        final transportStr = (data['transport'] ?? '').toString().toLowerCase();
+        if (transportStr.contains('sse')) {
+          _transportIndex = 1;
+        } else if (transportStr.contains('websocket') || transportStr.contains('ws')) {
+          _transportIndex = 2;
+        } else {
+          _transportIndex = 0;
+        }
+        _hasSampling = (data['hasSampling'] ?? false) as bool;
+        _hasTasks = (data['hasTasks'] ?? false) as bool;
+        _hasRoots = (data['hasRoots'] ?? false) as bool;
+        final envVars = (data['envVars'] as Map?)?.cast<String, dynamic>() ?? {};
+        _envControllers = envVars.entries.map((e) {
+          return MapEntry(TextEditingController(text: e.key), TextEditingController(text: (e.value ?? '').toString()));
+        }).toList();
+      }
+      if (mounted) setState(() { _server = data; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -68,9 +84,44 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     super.dispose();
   }
 
+  String _transportToLabel() {
+    switch (_transportIndex) {
+      case 1:
+        return 'sse';
+      case 2:
+        return 'websocket';
+      default:
+        return 'stdio';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isNew = _server == null;
+    if (_loading) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(
+          title: isNew ? '添加 MCP 服务' : '编辑 MCP 服务',
+          showBackButton: true,
+          fallbackRoute: AppRoutes.extensions,
+        ),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null && !isNew) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(
+          title: '编辑 MCP 服务',
+          showBackButton: true,
+          fallbackRoute: AppRoutes.extensions,
+        ),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: _error!, onRetry: () {
+          setState(() { _loading = true; _error = null; });
+          _loadServer();
+        })),
+      );
+    }
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: isNew ? '添加 MCP 服务' : '编辑 MCP 服务',
@@ -104,7 +155,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                     child: AmitiaButton(
                       label: '保存',
                       icon: Icons.check,
-                      onPressed: _onSave,
+                      onPressed: _saving ? null : _onSave,
                     ),
                   ),
                 ],
@@ -277,7 +328,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     });
   }
 
-  void _onSave() {
+  Future<void> _onSave() async {
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: const Text('请输入服务名称'), backgroundColor: context.error),
@@ -290,9 +341,44 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       );
       return;
     }
-    context.pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: const Text('MCP 服务配置已保存'), backgroundColor: context.success),
-    );
+    setState(() => _saving = true);
+    try {
+      final svc = ref.read(mcpServiceProvider);
+      final envVars = <String, String>{};
+      for (final pair in _envControllers) {
+        final key = pair.key.text.trim();
+        if (key.isNotEmpty) {
+          envVars[key] = pair.value.text;
+        }
+      }
+      final data = {
+        'name': _nameController.text.trim(),
+        'transport': _transportToLabel(),
+        'address': _addressController.text.trim(),
+        'hasSampling': _hasSampling,
+        'hasTasks': _hasTasks,
+        'hasRoots': _hasRoots,
+        'envVars': envVars,
+      };
+      if (_server != null) {
+        await svc.updateServer(widget.mcpId, data);
+      } else {
+        await svc.createServer(data);
+      }
+      if (mounted) {
+        context.pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: const Text('MCP 服务配置已保存'), backgroundColor: context.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存失败: $e'), backgroundColor: context.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 }

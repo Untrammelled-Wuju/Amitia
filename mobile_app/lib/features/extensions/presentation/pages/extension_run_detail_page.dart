@@ -8,19 +8,36 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_extensions.dart';
+import '../../../../core/services/providers.dart';
 
-class ExtensionRunDetailPage extends ConsumerWidget {
+class ExtensionRunDetailPage extends ConsumerStatefulWidget {
   final String runId;
 
   const ExtensionRunDetailPage({super.key, required this.runId});
 
-  ExecutionRun? get _run {
+  @override
+  ConsumerState<ExtensionRunDetailPage> createState() => _ExtensionRunDetailPageState();
+}
+
+class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage> {
+  Map<String, dynamic>? _run;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRun();
+  }
+
+  Future<void> _loadRun() async {
+    setState(() { _loading = true; _error = null; });
     try {
-      return MockExtensions.executionRuns.firstWhere((r) => r.id == runId);
-    } catch (_) {
-      return null;
+      final svc = ref.read(extensionServiceProvider);
+      final data = await svc.getExtensionRun(widget.runId);
+      if (mounted) setState(() { _run = data; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -37,32 +54,36 @@ class ExtensionRunDetailPage extends ConsumerWidget {
     }
   }
 
-  Color _statusColor(String status, BuildContext context) {
-    switch (status) {
-      case '运行中':
-        return context.accentPrimary;
-      case '已完成':
-        return context.success;
-      case '失败':
-        return context.error;
-      default:
-        return context.textTertiary;
-    }
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final run = _run;
-    if (run == null) {
+  Widget build(BuildContext context) {
+    if (_loading) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(title: '执行详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
-        body: AmitiaErrorState(message: '未找到该执行记录', onRetry: () => Navigator.pop(context)),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null || _run == null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '执行详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: _error ?? '未找到该执行记录', onRetry: () {
+          Navigator.pop(context);
+        })),
       );
     }
 
+    final run = _run!;
+    final status = (run['status'] ?? '').toString();
+    final name = (run['name'] ?? '').toString();
+    final duration = (run['duration'] ?? '').toString();
+    final input = (run['input'] ?? '').toString();
+    final output = (run['output'] ?? '').toString();
+    final error = run['error']?.toString();
+    final toolCalls = (run['toolCalls'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final startTimeStr = (run['startTime'] ?? '').toString();
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: run.name,
+        title: name,
         showBackButton: true,
         fallbackRoute: AppRoutes.extensions,
       ),
@@ -73,25 +94,25 @@ class ExtensionRunDetailPage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildStatusCard(context, run),
+              _buildStatusCard(context, status, duration, startTimeStr),
               const SizedBox(height: AppSpacing.sectionGap),
-              _buildInputSection(context, run),
+              _buildInputSection(context, input),
               const SizedBox(height: AppSpacing.sectionGap),
-              _buildOutputSection(context, run),
-              if (run.error != null) ...[
+              _buildOutputSection(context, output),
+              if (error != null) ...[
                 const SizedBox(height: AppSpacing.sectionGap),
-                _buildErrorSection(context, run),
+                _buildErrorSection(context, error),
               ],
               const SizedBox(height: AppSpacing.sectionGap),
-              _buildToolCallsSection(context, run),
+              _buildToolCallsSection(context, toolCalls),
               const SizedBox(height: AppSpacing.xxl),
-              if (run.status == '运行中')
+              if (status == '运行中')
                 AmitiaButton(
                   label: '取消任务',
                   isFullWidth: true,
                   isDestructive: true,
                   icon: Icons.stop_circle_outlined,
-                  onPressed: () => _showCancelConfirm(context, run),
+                  onPressed: () => _showCancelConfirm(context, name),
                 ),
             ],
           ),
@@ -100,7 +121,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatusCard(BuildContext context, ExecutionRun run) {
+  Widget _buildStatusCard(BuildContext context, String status, String duration, String startTimeStr) {
     return AmitiaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,7 +130,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
             children: [
               Text('运行状态', style: AppTypography.sectionTitle(context)),
               const Spacer(),
-              AmitiaStatusBadge(label: run.status, type: _statusBadgeType(run.status)),
+              AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -117,17 +138,14 @@ class ExtensionRunDetailPage extends ConsumerWidget {
             children: [
               Icon(Icons.timer_outlined, size: 16, color: context.textTertiary),
               const SizedBox(width: 6),
-              Text('耗时 ${run.duration}', style: AppTypography.label(context)),
+              Text('耗时 $duration', style: AppTypography.label(context)),
               const SizedBox(width: 16),
               Icon(Icons.schedule, size: 16, color: context.textTertiary),
               const SizedBox(width: 6),
-              Text(
-                '${run.startTime.month}/${run.startTime.day} ${run.startTime.hour.toString().padLeft(2, '0')}:${run.startTime.minute.toString().padLeft(2, '0')}',
-                style: AppTypography.label(context),
-              ),
+              Text(startTimeStr, style: AppTypography.label(context)),
             ],
           ),
-          if (run.status == '运行中') ...[
+          if (status == '运行中') ...[
             const SizedBox(height: AppSpacing.md),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -144,7 +162,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildInputSection(BuildContext context, ExecutionRun run) {
+  Widget _buildInputSection(BuildContext context, String input) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -158,14 +176,14 @@ class ExtensionRunDetailPage extends ConsumerWidget {
               color: context.surfaceSecondary,
               borderRadius: AppRadius.brSmall,
             ),
-            child: Text(run.input, style: AppTypography.bodySmall(context)),
+            child: Text(input, style: AppTypography.bodySmall(context)),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildOutputSection(BuildContext context, ExecutionRun run) {
+  Widget _buildOutputSection(BuildContext context, String output) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -176,13 +194,13 @@ class ExtensionRunDetailPage extends ConsumerWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: run.output.isEmpty ? context.surfaceSecondary : context.accentSoft,
+              color: output.isEmpty ? context.surfaceSecondary : context.accentSoft,
               borderRadius: AppRadius.brSmall,
             ),
             child: Text(
-              run.output.isEmpty ? '(无输出)' : run.output,
+              output.isEmpty ? '(无输出)' : output,
               style: AppTypography.bodySmall(context).copyWith(
-                color: run.output.isEmpty ? context.textTertiary : context.textPrimary,
+                color: output.isEmpty ? context.textTertiary : context.textPrimary,
               ),
             ),
           ),
@@ -191,7 +209,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildErrorSection(BuildContext context, ExecutionRun run) {
+  Widget _buildErrorSection(BuildContext context, String error) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -210,7 +228,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
               Icon(Icons.error_outline, size: 18, color: context.error),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(run.error!, style: AppTypography.bodySmall(context).copyWith(color: context.error)),
+                child: Text(error, style: AppTypography.bodySmall(context).copyWith(color: context.error)),
               ),
             ],
           ),
@@ -219,13 +237,13 @@ class ExtensionRunDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildToolCallsSection(BuildContext context, ExecutionRun run) {
+  Widget _buildToolCallsSection(BuildContext context, List<Map<String, dynamic>> toolCalls) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('工具调用 (${run.toolCalls.length})', style: AppTypography.sectionTitle(context)),
+        Text('工具调用 (${toolCalls.length})', style: AppTypography.sectionTitle(context)),
         const SizedBox(height: AppSpacing.md),
-        ...run.toolCalls.map((call) => Padding(
+        ...toolCalls.map((call) => Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: _ToolCallCard(call: call),
             )),
@@ -233,14 +251,14 @@ class ExtensionRunDetailPage extends ConsumerWidget {
     );
   }
 
-  void _showCancelConfirm(BuildContext context, ExecutionRun run) {
+  void _showCancelConfirm(BuildContext context, String name) {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
         title: Text('取消任务', style: AppTypography.cardTitle(context)),
-        content: Text('确定要取消「${run.name}」吗？正在执行的操作将被中断，已完成的步骤不受影响。', style: AppTypography.bodySmall(context)),
+        content: Text('确定要取消「$name」吗？正在执行的操作将被中断，已完成的步骤不受影响。', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('继续运行', style: TextStyle(color: context.textSecondary))),
           TextButton(
@@ -248,7 +266,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
               Navigator.pop(dialogContext);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${run.name} 已取消'), backgroundColor: context.error),
+                SnackBar(content: Text('$name 已取消'), backgroundColor: context.error),
               );
             },
             child: Text('取消任务', style: TextStyle(color: context.error)),
@@ -260,7 +278,7 @@ class ExtensionRunDetailPage extends ConsumerWidget {
 }
 
 class _ToolCallCard extends StatelessWidget {
-  final ToolCallEntry call;
+  final Map<String, dynamic> call;
 
   const _ToolCallCard({required this.call});
 
@@ -279,6 +297,12 @@ class _ToolCallCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final toolName = (call['toolName'] ?? call['tool_name'] ?? '').toString();
+    final status = (call['status'] ?? '').toString();
+    final input = (call['input'] ?? '').toString();
+    final output = (call['output'] ?? '').toString();
+    final duration = (call['duration'] ?? '').toString();
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
@@ -294,21 +318,21 @@ class _ToolCallCard extends StatelessWidget {
               Icon(Icons.build_outlined, size: 16, color: context.accentPrimary),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(call.toolName, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                child: Text(toolName, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
               ),
-              AmitiaStatusBadge(label: call.status, type: _statusBadgeType(call.status)),
+              AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          _InfoRow(label: '输入', value: call.input),
+          _InfoRow(label: '输入', value: input),
           const SizedBox(height: AppSpacing.sm),
-          _InfoRow(label: '输出', value: call.output),
+          _InfoRow(label: '输出', value: output),
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               Icon(Icons.timer_outlined, size: 14, color: context.textTertiary),
               const SizedBox(width: 4),
-              Text('耗时 ${call.duration}', style: AppTypography.label(context)),
+              Text('耗时 $duration', style: AppTypography.label(context)),
             ],
           ),
         ],

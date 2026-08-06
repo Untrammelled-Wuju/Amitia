@@ -9,8 +9,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class ExtensionCenterPage extends ConsumerStatefulWidget {
   const ExtensionCenterPage({super.key});
@@ -21,38 +20,81 @@ class ExtensionCenterPage extends ConsumerStatefulWidget {
 
 class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
   int _selectedCategory = 0;
+  bool _loading = true;
+  String? _error;
   final Map<String, bool> _installState = {};
   final Map<String, bool> _enableState = {};
+  List<Map<String, dynamic>> _allExtensions = [];
 
   final _categories = const ['全部', 'MCP', 'Skill', '插件', '主题'];
 
-  bool _isInstalled(Extension e) => _installState[e.id] ?? e.isInstalled;
-  bool _isEnabled(Extension e) => _enableState[e.id] ?? e.isEnabled;
+  @override
+  void initState() {
+    super.initState();
+    _loadExtensions();
+  }
 
-  bool _matchesCategory(Extension e) {
+  Future<void> _loadExtensions() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final skills = await svc.skills();
+      final plugins = await svc.plugins();
+      final agentSkills = await svc.agentSkills();
+
+      final all = <Map<String, dynamic>>[];
+      for (final s in skills) {
+        final m = Map<String, dynamic>.from(s);
+        m['_category'] = 'Skill';
+        all.add(m);
+      }
+      for (final p in plugins) {
+        final m = Map<String, dynamic>.from(p);
+        m['_category'] = '插件';
+        all.add(m);
+      }
+      for (final a in agentSkills) {
+        final m = Map<String, dynamic>.from(a);
+        m['_category'] = 'Skill';
+        all.add(m);
+      }
+      if (mounted) setState(() { _allExtensions = all; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  bool _isInstalled(Map<String, dynamic> e) => _installState[e['id'] ?? ''] ?? ((e['isEnabled'] as bool?) ?? ((e['enabled'] as int?) == 1));
+
+  bool _isEnabled(Map<String, dynamic> e) => _enableState[e['id'] ?? ''] ?? ((e['isEnabled'] as bool?) ?? ((e['enabled'] as int?) == 1));
+
+  bool _matchesCategory(Map<String, dynamic> e) {
     if (_selectedCategory == 0) return true;
-    return e.type.index == _selectedCategory - 1;
+    return (e['_category'] ?? '').toString() == _categories[_selectedCategory];
   }
 
-  List<Extension> get _filteredInstalled {
-    final installed = <Extension>[];
-    for (final e in MockData.installedExtensions) {
-      if (_isInstalled(e) && _matchesCategory(e)) installed.add(e);
-    }
-    for (final e in MockData.recommendedExtensions) {
-      if (_isInstalled(e) && _matchesCategory(e)) installed.add(e);
-    }
-    return installed;
+  List<Map<String, dynamic>> get _filteredInstalled {
+    return _allExtensions.where((e) => _isInstalled(e) && _matchesCategory(e)).toList();
   }
 
-  List<Extension> get _filteredRecommended {
-    return MockData.recommendedExtensions
-        .where((e) => !_isInstalled(e) && _matchesCategory(e))
-        .toList();
+  List<Map<String, dynamic>> get _filteredRecommended {
+    return _allExtensions.where((e) => !_isInstalled(e) && _matchesCategory(e)).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '扩展', navigation: AmitiaAppBarNavigation.back),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '扩展', navigation: AmitiaAppBarNavigation.back),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadExtensions)),
+      );
+    }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '扩展',
@@ -139,50 +181,43 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
     );
   }
 
-  Widget _buildExtensionCard(BuildContext context, Extension e, {required bool isFromRecommended}) {
+  Widget _buildExtensionCard(BuildContext context, Map<String, dynamic> e, {required bool isFromRecommended}) {
+    final name = (e['name'] ?? '').toString();
+    final description = (e['description'] ?? '').toString();
+    final isInstalled = _isInstalled(e);
+    final isEnabled = _isEnabled(e);
+    final id = (e['id'] ?? '').toString();
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.pagePadding,
         vertical: AppSpacing.xs,
       ),
       child: AmitiaExtensionCard(
-        name: e.name,
-        description: e.description,
-        icon: e.icon,
-        typeLabel: _getTypeLabel(e.type),
-        isInstalled: _isInstalled(e),
-        isEnabled: _isEnabled(e),
-        isRecommended: isFromRecommended && e.isRecommended,
-        onAction: _isInstalled(e)
+        name: name,
+        description: description,
+        icon: Icons.extension_outlined,
+        typeLabel: (e['_category'] ?? '').toString(),
+        isInstalled: isInstalled,
+        isEnabled: isEnabled,
+        isRecommended: isFromRecommended && ((e['isRecommended'] as bool?) ?? false),
+        onAction: isInstalled
             ? null
             : () {
                 setState(() {
-                  _installState[e.id] = true;
-                  _enableState[e.id] = true;
+                  _installState[id] = true;
+                  _enableState[id] = true;
                 });
               },
-        onToggle: _isInstalled(e)
+        onToggle: isInstalled
             ? (value) {
                 setState(() {
-                  _enableState[e.id] = value;
+                  _enableState[id] = value;
                 });
               }
             : null,
       ),
     );
-  }
-
-  String _getTypeLabel(ExtensionType type) {
-    switch (type) {
-      case ExtensionType.mcp:
-        return 'MCP';
-      case ExtensionType.skill:
-        return 'Skill';
-      case ExtensionType.plugin:
-        return '插件';
-      case ExtensionType.theme:
-        return '主题';
-    }
   }
 
   Widget _buildManagementEntries(BuildContext context) {

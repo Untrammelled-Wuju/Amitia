@@ -9,73 +9,76 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
-import '../providers/mock_agent_tasks.dart';
+import '../../presentation/providers/agent_tasks_provider.dart';
 
-class AgentTaskDetailPage extends ConsumerStatefulWidget {
+class AgentTaskDetailPage extends ConsumerWidget {
   final String taskId;
 
   const AgentTaskDetailPage({super.key, required this.taskId});
 
-  @override
-  ConsumerState<AgentTaskDetailPage> createState() => _AgentTaskDetailPageState();
-}
-
-class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
-  MockAgentTask? _findTask() {
-    final tasks = ref.read(agentTasksProvider);
-    final idx = tasks.indexWhere((t) => t.id == widget.taskId);
-    return idx >= 0 ? tasks[idx] : null;
-  }
-
-  void _updateTask(MockAgentTask updated) {
-    final tasks = ref.read(agentTasksProvider);
-    final next = List<MockAgentTask>.from(tasks);
-    final idx = next.indexWhere((t) => t.id == updated.id);
-    if (idx >= 0) {
-      next[idx] = updated;
-      ref.read(agentTasksProvider.notifier).state = next;
+  String _statusLabel(AgentTaskStatus s) {
+    switch (s) {
+      case AgentTaskStatus.pending: return '待开始';
+      case AgentTaskStatus.waitingApproval: return '待审批';
+      case AgentTaskStatus.running: return '运行中';
+      case AgentTaskStatus.paused: return '已暂停';
+      case AgentTaskStatus.completed: return '已完成';
+      case AgentTaskStatus.failed: return '已失败';
+      case AgentTaskStatus.cancelled: return '已取消';
     }
   }
 
-  void _changeStatus(MockAgentTask task, MockAgentTaskStatus newStatus, {String? result, String? error}) {
-    _updateTask(task.copyWith(status: newStatus, result: result, error: error));
+  BadgeType _badgeType(AgentTaskStatus s) {
+    switch (s) {
+      case AgentTaskStatus.pending: return BadgeType.neutral;
+      case AgentTaskStatus.waitingApproval: return BadgeType.warning;
+      case AgentTaskStatus.running: return BadgeType.accent;
+      case AgentTaskStatus.paused: return BadgeType.neutral;
+      case AgentTaskStatus.completed: return BadgeType.success;
+      case AgentTaskStatus.failed: return BadgeType.error;
+      case AgentTaskStatus.cancelled: return BadgeType.neutral;
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final task = _findTask();
-    final toolCalls = MockData.toolCallRecords;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final taskAsync = ref.watch(agentTaskDetailProvider(taskId));
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: task?.title ?? '任务详情',
+        title: '任务详情',
         showBackButton: true,
         fallbackRoute: AppRoutes.agent,
       ),
-      body: task == null
-          ? _buildNotFound(context)
-          : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.sm,
-                AppSpacing.pagePadding,
-                AppSpacing.xxxl,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStatusCard(context, task),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildExecutionPlan(context, task),
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  _buildToolCalls(context, toolCalls),
-                  const SizedBox(height: AppSpacing.xxxl),
-                  _buildBottomActions(context, task),
-                ],
-              ),
+      body: taskAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(child: Text('加载失败: $err', style: AppTypography.bodySmall(context))),
+        data: (task) {
+          if (task == null) {
+            return _buildNotFound(context);
+          }
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+              AppSpacing.pagePadding,
+              AppSpacing.xxxl,
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStatusCard(context, task, ref),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildExecutionPlan(context, task),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _buildToolCalls(context),
+                const SizedBox(height: AppSpacing.xxxl),
+                _buildBottomActions(context, task, ref),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -91,14 +94,14 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
           AmitiaButton(
             label: '返回任务列表',
             icon: Icons.arrow_back,
-            onPressed: () => context.go(AppRoutes.agent),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatusCard(BuildContext context, MockAgentTask task) {
+  Widget _buildStatusCard(BuildContext context, AgentTaskItem task, WidgetRef ref) {
     return AmitiaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,8 +111,8 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
               Text('任务状态', style: AppTypography.sectionTitle(context)),
               const Spacer(),
               AmitiaStatusBadge(
-                label: mockAgentTaskStatusLabel(task.status),
-                type: mockAgentTaskBadgeType(task.status),
+                label: _statusLabel(task.status),
+                type: _badgeType(task.status),
               ),
             ],
           ),
@@ -203,7 +206,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
     );
   }
 
-  Widget _buildExecutionPlan(BuildContext context, MockAgentTask task) {
+  Widget _buildExecutionPlan(BuildContext context, AgentTaskItem task) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -220,10 +223,8 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
             children: List.generate(task.steps.length, (index) {
               final stepName = task.steps[index];
               final isLast = index == task.steps.length - 1;
-              final isCompleted = task.status == MockAgentTaskStatus.completed ||
-                  index < task.currentStepIndex;
-              final isRunning = task.status == MockAgentTaskStatus.running &&
-                  index == task.currentStepIndex;
+              final isCompleted = task.status == AgentTaskStatus.completed || index < task.currentStepIndex;
+              final isRunning = task.status == AgentTaskStatus.running && index == task.currentStepIndex;
               final String stepStatus;
               if (isCompleted) {
                 stepStatus = '已完成';
@@ -240,23 +241,24 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
     );
   }
 
-  Widget _buildToolCalls(BuildContext context, List toolCalls) {
+  Widget _buildToolCalls(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('工具调用记录', style: AppTypography.sectionTitle(context)),
         const SizedBox(height: AppSpacing.md),
-        ...toolCalls.map((record) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: _ToolCallCard(record: record),
-            )),
+        Text('暂无工具调用记录', style: AppTypography.caption(context)),
       ],
     );
   }
 
-  Widget _buildBottomActions(BuildContext context, MockAgentTask task) {
+  Widget _buildBottomActions(BuildContext context, AgentTaskItem task, WidgetRef ref) {
+    void changeStatus(AgentTaskStatus newStatus) {
+      ref.read(agentTasksProvider.notifier).changeStatus(task.id, newStatus);
+    }
+
     switch (task.status) {
-      case MockAgentTaskStatus.pending:
+      case AgentTaskStatus.pending:
         return Row(
           children: [
             Expanded(
@@ -264,7 +266,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                 label: '开始',
                 icon: Icons.play_arrow,
                 onPressed: () {
-                  _changeStatus(task, MockAgentTaskStatus.running);
+                  changeStatus(AgentTaskStatus.running);
                   amitiaSnackBar(context, '任务已开始执行');
                 },
               ),
@@ -282,7 +284,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                   message: '确定要取消此任务吗？取消后需重新创建。',
                   confirmLabel: '取消任务',
                   onConfirm: () {
-                    _changeStatus(task, MockAgentTaskStatus.cancelled);
+                    changeStatus(AgentTaskStatus.cancelled);
                     amitiaSnackBar(context, '任务已取消');
                   },
                 ),
@@ -290,7 +292,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
             ),
           ],
         );
-      case MockAgentTaskStatus.waitingApproval:
+      case AgentTaskStatus.waitingApproval:
         return Row(
           children: [
             Expanded(
@@ -298,7 +300,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                 label: '允许',
                 icon: Icons.check,
                 onPressed: () {
-                  _changeStatus(task, MockAgentTaskStatus.running);
+                  changeStatus(AgentTaskStatus.running);
                   amitiaSnackBar(context, '已批准，任务开始执行');
                 },
               ),
@@ -311,14 +313,14 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                 isDestructive: true,
                 icon: Icons.close,
                 onPressed: () {
-                  _changeStatus(task, MockAgentTaskStatus.cancelled);
+                  changeStatus(AgentTaskStatus.cancelled);
                   amitiaSnackBar(context, '已拒绝，任务已取消');
                 },
               ),
             ),
           ],
         );
-      case MockAgentTaskStatus.running:
+      case AgentTaskStatus.running:
         return Row(
           children: [
             Expanded(
@@ -332,7 +334,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                   message: '确定要暂停此任务吗？',
                   confirmLabel: '暂停',
                   onConfirm: () {
-                    _changeStatus(task, MockAgentTaskStatus.paused);
+                    changeStatus(AgentTaskStatus.paused);
                     amitiaSnackBar(context, '任务已暂停');
                   },
                 ),
@@ -350,7 +352,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                   message: '确定要停止此任务吗？此操作不可撤销。',
                   confirmLabel: '停止',
                   onConfirm: () {
-                    _changeStatus(task, MockAgentTaskStatus.cancelled);
+                    changeStatus(AgentTaskStatus.cancelled);
                     amitiaSnackBar(context, '任务已停止');
                   },
                 ),
@@ -358,7 +360,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
             ),
           ],
         );
-      case MockAgentTaskStatus.paused:
+      case AgentTaskStatus.paused:
         return Row(
           children: [
             Expanded(
@@ -366,7 +368,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                 label: '继续',
                 icon: Icons.play_arrow,
                 onPressed: () {
-                  _changeStatus(task, MockAgentTaskStatus.running);
+                  changeStatus(AgentTaskStatus.running);
                   amitiaSnackBar(context, '任务已继续执行');
                 },
               ),
@@ -383,7 +385,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                   message: '确定要停止此任务吗？此操作不可撤销。',
                   confirmLabel: '停止',
                   onConfirm: () {
-                    _changeStatus(task, MockAgentTaskStatus.cancelled);
+                    changeStatus(AgentTaskStatus.cancelled);
                     amitiaSnackBar(context, '任务已停止');
                   },
                 ),
@@ -391,7 +393,7 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
             ),
           ],
         );
-      case MockAgentTaskStatus.completed:
+      case AgentTaskStatus.completed:
         return Row(
           children: [
             Expanded(
@@ -410,21 +412,14 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                 label: '再次执行',
                 icon: Icons.refresh,
                 onPressed: () {
-                  _updateTask(task.copyWith(
-                    status: MockAgentTaskStatus.running,
-                    progress: 0,
-                    currentStepIndex: 0,
-                    elapsed: '00:00',
-                    result: null,
-                    error: null,
-                  ));
+                  changeStatus(AgentTaskStatus.running);
                   amitiaSnackBar(context, '任务已重新开始');
                 },
               ),
             ),
           ],
         );
-      case MockAgentTaskStatus.failed:
+      case AgentTaskStatus.failed:
         return Row(
           children: [
             Expanded(
@@ -443,33 +438,20 @@ class _AgentTaskDetailPageState extends ConsumerState<AgentTaskDetailPage> {
                 label: '重试',
                 icon: Icons.refresh,
                 onPressed: () {
-                  _updateTask(task.copyWith(
-                    status: MockAgentTaskStatus.running,
-                    progress: 0,
-                    currentStepIndex: 0,
-                    elapsed: '00:00',
-                    error: null,
-                  ));
+                  changeStatus(AgentTaskStatus.running);
                   amitiaSnackBar(context, '任务已重新开始');
                 },
               ),
             ),
           ],
         );
-      case MockAgentTaskStatus.cancelled:
+      case AgentTaskStatus.cancelled:
         return AmitiaButton(
           label: '再次执行',
           icon: Icons.refresh,
           isFullWidth: true,
           onPressed: () {
-            _updateTask(task.copyWith(
-              status: MockAgentTaskStatus.running,
-              progress: 0,
-              currentStepIndex: 0,
-              elapsed: '00:00',
-              result: null,
-              error: null,
-            ));
+            changeStatus(AgentTaskStatus.running);
             amitiaSnackBar(context, '任务已重新开始');
           },
         );
@@ -586,82 +568,6 @@ class _TimelineStep extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ToolCallCard extends StatelessWidget {
-  final ToolCallRecord record;
-
-  const _ToolCallCard({required this.record});
-
-  @override
-  Widget build(BuildContext context) {
-    final isSuccess = record.status == '成功';
-    final isRunning = record.status == '运行中';
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
-      decoration: BoxDecoration(
-        color: context.surfacePrimary,
-        borderRadius: AppRadius.brMedium,
-        border: Border.all(color: context.borderPrimary, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.build_outlined, size: 16, color: context.accentPrimary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  record.toolName,
-                  style: AppTypography.bodySmall(context).copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              if (isSuccess)
-                const AmitiaStatusBadge(label: '成功', type: BadgeType.success)
-              else if (isRunning)
-                const AmitiaStatusBadge(label: '运行中', type: BadgeType.accent)
-              else
-                AmitiaStatusBadge(label: record.status, type: BadgeType.neutral),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _buildInfoRow(context, '输入', record.input),
-          const SizedBox(height: AppSpacing.sm),
-          _buildInfoRow(context, '输出', record.output),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Icon(Icons.timer_outlined, size: 14, color: context.textTertiary),
-              const SizedBox(width: 4),
-              Text('耗时 ${record.duration}', style: AppTypography.label(context)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 36,
-          child: Text(label, style: AppTypography.label(context)),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: AppTypography.bodySmall(context).copyWith(color: context.textSecondary),
-          ),
-        ),
-      ],
     );
   }
 }

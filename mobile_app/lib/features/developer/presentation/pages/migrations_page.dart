@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class MigrationsPage extends ConsumerStatefulWidget {
   const MigrationsPage({super.key});
@@ -19,16 +18,53 @@ class MigrationsPage extends ConsumerStatefulWidget {
 }
 
 class _MigrationsPageState extends ConsumerState<MigrationsPage> {
-  late List<MigrationPlan> _plans;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _plans = [];
 
   @override
   void initState() {
     super.initState();
-    _plans = List.from(MockKernel.migrationPlans);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final data = await svc.diagnostics();
+      if (mounted) {
+        if (data != null) {
+          final migrations = data['migrations'];
+          if (migrations is List) {
+            _plans = migrations.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_plans.isEmpty) {
+      return const AmitiaEmptyState(icon: Icons.merge_type_outlined, title: '暂无迁移计划');
+    }
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '迁移与灰度',
@@ -54,7 +90,13 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
     );
   }
 
-  Widget _buildMigrationCard(BuildContext context, MigrationPlan plan) {
+  Widget _buildMigrationCard(BuildContext context, Map<String, dynamic> plan) {
+    final name = plan['name'] as String? ?? '迁移计划';
+    final id = plan['id'] as String? ?? '';
+    final status = plan['status'] as String? ?? '灰度中';
+    final progress = (plan['progress'] as num?)?.toDouble() ?? 0.0;
+    final rollbackReason = plan['rollback_reason'] as String?;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -68,39 +110,39 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: _statusColor(context, plan.status).withValues(alpha: 0.1),
+                    color: _statusColor(context, status).withValues(alpha: 0.1),
                     borderRadius: AppRadius.brSmall,
                   ),
-                  child: Icon(_statusIcon(plan.status), size: 22, color: _statusColor(context, plan.status)),
+                  child: Icon(_statusIcon(status), size: 22, color: _statusColor(context, status)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(plan.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
-                      Text('ID: ${plan.id}', style: AppTypography.label(context)),
+                      Text('ID: $id', style: AppTypography.label(context)),
                     ],
                   ),
                 ),
-                _buildStatusBadge(plan.status),
+                _buildStatusBadge(status),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            if (plan.status == '灰度中') ...[
+            if (status == '灰度中') ...[
               Row(
                 children: [
                   Text('灰度进度', style: AppTypography.label(context)),
                   const SizedBox(width: 8),
-                  Expanded(child: AmitiaProgressBar(progress: plan.progress / 100)),
+                  Expanded(child: AmitiaProgressBar(progress: progress / 100)),
                   const SizedBox(width: 8),
-                  Text('${plan.progress}%', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
+                  Text('${progress.toInt()}%', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
                 ],
               ),
               const SizedBox(height: AppSpacing.md),
             ],
-            if (plan.rollbackReason != null) ...[
+            if (rollbackReason != null) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.sm),
@@ -113,7 +155,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
                     Icon(Icons.error_outline, size: 16, color: context.error),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text('回滚原因: ${plan.rollbackReason}', style: AppTypography.caption(context).copyWith(color: context.error)),
+                      child: Text('回滚原因: $rollbackReason', style: AppTypography.caption(context).copyWith(color: context.error)),
                     ),
                   ],
                 ),
@@ -129,10 +171,11 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
     );
   }
 
-  List<Widget> _buildActionButtons(BuildContext context, MigrationPlan plan) {
+  List<Widget> _buildActionButtons(BuildContext context, Map<String, dynamic> plan) {
     final buttons = <Widget>[];
+    final status = plan['status'] as String? ?? '';
 
-    if (plan.status == '灰度中') {
+    if (status == '灰度中') {
       buttons.add(Expanded(
         child: AmitiaButton(
           label: '灰度详情',
@@ -150,7 +193,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
           onPressed: () => _showRollbackConfirm(context, plan),
         ),
       ));
-    } else if (plan.status == '已完成') {
+    } else if (status == '已完成') {
       buttons.add(Expanded(
         child: AmitiaButton(
           label: '回滚',
@@ -160,7 +203,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
           onPressed: () => _showRollbackConfirm(context, plan),
         ),
       ));
-    } else if (plan.status == '已回滚') {
+    } else if (status == '已回滚') {
       buttons.add(Expanded(
         child: AmitiaButton(
           label: '重新迁移',
@@ -212,7 +255,13 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
     }
   }
 
-  void _showCanaryDetailSheet(BuildContext context, MigrationPlan plan) {
+  void _showCanaryDetailSheet(BuildContext context, Map<String, dynamic> plan) {
+    final name = plan['name'] as String? ?? '';
+    final id = plan['id'] as String? ?? '';
+    final status = plan['status'] as String? ?? '';
+    final progress = (plan['progress'] as num?)?.toDouble() ?? 0.0;
+    final rollbackReason = plan['rollback_reason'] as String?;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -232,12 +281,12 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
                 const SizedBox(height: 20),
                 Text('灰度发布详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
-                _buildDetailRow(context, '迁移计划', plan.name),
-                _buildDetailRow(context, '计划 ID', plan.id),
-                _buildDetailRow(context, '状态', plan.status),
-                _buildDetailRow(context, '进度', '${plan.progress}%'),
-                if (plan.rollbackReason != null)
-                  _buildDetailRow(context, '回滚原因', plan.rollbackReason!),
+                _buildDetailRow(context, '迁移计划', name),
+                _buildDetailRow(context, '计划 ID', id),
+                _buildDetailRow(context, '状态', status),
+                _buildDetailRow(context, '进度', '${progress.toInt()}%'),
+                if (rollbackReason != null)
+                  _buildDetailRow(context, '回滚原因', rollbackReason),
                 _buildDetailRow(context, '灰度比例', '35%'),
                 _buildDetailRow(context, '目标比例', '100%'),
                 _buildDetailRow(context, '健康检查', '正常'),
@@ -273,7 +322,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
     );
   }
 
-  void _showRollbackConfirm(BuildContext context, MigrationPlan plan) {
+  void _showRollbackConfirm(BuildContext context, Map<String, dynamic> plan) {
     showDialog(
       context: context,
       builder: (context) {
@@ -281,7 +330,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('回滚迁移', style: AppTypography.cardTitle(context)),
-          content: Text('确定要回滚「${plan.name}」吗？回滚后数据将恢复到迁移前的状态。', style: AppTypography.body(context)),
+          content: Text('确定要回滚「${plan['name']}」吗？回滚后数据将恢复到迁移前的状态。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -290,19 +339,15 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _plans.indexWhere((p) => p.id == plan.id);
+                  final idx = _plans.indexWhere((p) => p['id'] == plan['id']);
                   if (idx >= 0) {
-                    _plans[idx] = MigrationPlan(
-                      id: plan.id,
-                      name: plan.name,
-                      status: '已回滚',
-                      progress: 0,
-                      rollbackReason: '手动回滚',
-                    );
+                    _plans[idx]['status'] = '已回滚';
+                    _plans[idx]['progress'] = 0;
+                    _plans[idx]['rollback_reason'] = '手动回滚';
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已回滚：${plan.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已回滚：${plan['name']}')));
               },
               child: Text('确认回滚', style: TextStyle(color: context.error)),
             ),
@@ -312,7 +357,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
     );
   }
 
-  void _showRiskConfirm(BuildContext context, MigrationPlan plan) {
+  void _showRiskConfirm(BuildContext context, Map<String, dynamic> plan) {
     showDialog(
       context: context,
       builder: (context) {
@@ -324,7 +369,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('重新迁移「${plan.name}」存在以下风险：', style: AppTypography.body(context)),
+              Text('重新迁移「${plan['name']}」存在以下风险：', style: AppTypography.body(context)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -359,18 +404,15 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _plans.indexWhere((p) => p.id == plan.id);
+                  final idx = _plans.indexWhere((p) => p['id'] == plan['id']);
                   if (idx >= 0) {
-                    _plans[idx] = MigrationPlan(
-                      id: plan.id,
-                      name: plan.name,
-                      status: '灰度中',
-                      progress: 0,
-                    );
+                    _plans[idx]['status'] = '灰度中';
+                    _plans[idx]['progress'] = 0;
+                    _plans[idx].remove('rollback_reason');
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已开始重新迁移：${plan.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已开始重新迁移：${plan['name']}')));
               },
               child: Text('确认风险并继续', style: TextStyle(color: context.warning)),
             ),

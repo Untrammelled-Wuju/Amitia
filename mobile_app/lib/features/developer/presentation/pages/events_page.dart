@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class EventsPage extends ConsumerStatefulWidget {
   const EventsPage({super.key});
@@ -19,21 +18,58 @@ class EventsPage extends ConsumerStatefulWidget {
 }
 
 class _EventsPageState extends ConsumerState<EventsPage> {
-  late List<KernelEvent> _events;
+  bool _loading = true;
+  String? _error;
   int _selectedTab = 0;
   final _tabs = ['事件历史', '死信队列', '事件类型'];
+  List<Map<String, dynamic>> _events = [];
 
   @override
   void initState() {
     super.initState();
-    _events = List.from(MockKernel.kernelEvents);
+    _load();
   }
 
-  List<KernelEvent> get _deadLetterEvents => _events.where((e) => e.status == '死信').toList();
-  List<KernelEvent> get _historyEvents => _events.where((e) => e.status != '死信').toList();
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final data = await svc.diagnostics();
+      if (mounted) {
+        if (data != null) {
+          final events = data['events'];
+          if (events is List) {
+            _events = events.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> get _deadLetterEvents => _events.where((e) => e['status'] == '死信').toList();
+  List<Map<String, dynamic>> get _historyEvents => _events.where((e) => e['status'] != '死信').toList();
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_events.isEmpty) {
+      return const AmitiaEmptyState(icon: Icons.bolt, title: '暂无事件');
+    }
+
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
         title: '事件中心',
@@ -76,7 +112,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     }
   }
 
-  Widget _buildEventList(BuildContext context, List<KernelEvent> events, {required bool isDeadLetter}) {
+  Widget _buildEventList(BuildContext context, List<Map<String, dynamic>> events, {required bool isDeadLetter}) {
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       itemCount: events.length,
@@ -84,7 +120,13 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     );
   }
 
-  Widget _buildEventCard(BuildContext context, KernelEvent event, bool isDeadLetter) {
+  Widget _buildEventCard(BuildContext context, Map<String, dynamic> event, bool isDeadLetter) {
+    final type = event['type'] as String? ?? '';
+    final status = event['status'] as String? ?? '';
+    final timeStr = event['time'] as String? ?? '';
+    final detail = event['detail'] as String?;
+    final id = event['id'] as String? ?? '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -98,28 +140,28 @@ class _EventsPageState extends ConsumerState<EventsPage> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: _statusColor(context, event.status).withValues(alpha: 0.1),
+                    color: _statusColor(context, status).withValues(alpha: 0.1),
                     borderRadius: AppRadius.brSmall,
                   ),
-                  child: Icon(Icons.bolt, size: 18, color: _statusColor(context, event.status)),
+                  child: Icon(Icons.bolt, size: 18, color: _statusColor(context, status)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(event.type, style: AppTypography.cardTitle(context).copyWith(fontSize: 14, fontFamily: 'monospace')),
+                      Text(type, style: AppTypography.cardTitle(context).copyWith(fontSize: 14, fontFamily: 'monospace')),
                       const SizedBox(height: 2),
-                      Text(_formatTime(event.time), style: AppTypography.label(context)),
+                      Text(timeStr, style: AppTypography.label(context)),
                     ],
                   ),
                 ),
-                _buildStatusBadge(event.status),
+                _buildStatusBadge(status),
               ],
             ),
-            if (event.detail != null) ...[
+            if (detail != null) ...[
               const SizedBox(height: AppSpacing.sm),
-              Text(event.detail!, style: AppTypography.caption(context)),
+              Text(detail, style: AppTypography.caption(context)),
             ],
             if (isDeadLetter) ...[
               const SizedBox(height: AppSpacing.md),
@@ -227,11 +269,13 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     }
   }
 
-  String _formatTime(DateTime time) {
-    return '${time.month}/${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
+  void _showEventDetailSheet(BuildContext context, Map<String, dynamic> event, bool isDeadLetter) {
+    final type = event['type'] as String? ?? '';
+    final status = event['status'] as String? ?? '';
+    final timeStr = event['time'] as String? ?? '';
+    final detail = event['detail'] as String?;
+    final id = event['id'] as String? ?? '';
 
-  void _showEventDetailSheet(BuildContext context, KernelEvent event, bool isDeadLetter) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -251,12 +295,12 @@ class _EventsPageState extends ConsumerState<EventsPage> {
                 const SizedBox(height: 20),
                 Text('事件详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
-                _buildDetailRow(context, '事件类型', event.type),
-                _buildDetailRow(context, '状态', event.status),
-                _buildDetailRow(context, '时间', _formatTime(event.time)),
-                _buildDetailRow(context, '事件 ID', event.id),
-                if (event.detail != null)
-                  _buildDetailRow(context, '详情', event.detail!),
+                _buildDetailRow(context, '事件类型', type),
+                _buildDetailRow(context, '状态', status),
+                _buildDetailRow(context, '时间', timeStr),
+                _buildDetailRow(context, '事件 ID', id),
+                if (detail != null)
+                  _buildDetailRow(context, '详情', detail),
                 const SizedBox(height: 20),
                 if (isDeadLetter) ...[
                   Row(
@@ -317,7 +361,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     );
   }
 
-  void _showReplayConfirm(BuildContext context, KernelEvent event) {
+  void _showReplayConfirm(BuildContext context, Map<String, dynamic> event) {
     showDialog(
       context: context,
       builder: (context) {
@@ -325,7 +369,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('重放事件', style: AppTypography.cardTitle(context)),
-          content: Text('确定要重放事件「${event.type}」吗？事件将被重新投递处理。', style: AppTypography.body(context)),
+          content: Text('确定要重放事件「${event['type']}」吗？事件将被重新投递处理。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -334,19 +378,13 @@ class _EventsPageState extends ConsumerState<EventsPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  final idx = _events.indexWhere((e) => e.id == event.id);
+                  final idx = _events.indexWhere((e) => e['id'] == event['id']);
                   if (idx >= 0) {
-                    _events[idx] = KernelEvent(
-                      id: event.id,
-                      type: event.type,
-                      status: '已处理',
-                      time: DateTime.now(),
-                      detail: event.detail,
-                    );
+                    _events[idx]['status'] = '已处理';
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已重放事件：${event.type}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已重放事件：${event['type']}')));
               },
               child: Text('重放', style: TextStyle(color: context.accentPrimary)),
             ),
@@ -356,7 +394,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     );
   }
 
-  void _showDiscardConfirm(BuildContext context, KernelEvent event) {
+  void _showDiscardConfirm(BuildContext context, Map<String, dynamic> event) {
     showDialog(
       context: context,
       builder: (context) {
@@ -364,7 +402,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('丢弃事件', style: AppTypography.cardTitle(context)),
-          content: Text('确定要丢弃事件「${event.type}」吗？此操作不可恢复。', style: AppTypography.body(context)),
+          content: Text('确定要丢弃事件「${event['type']}」吗？此操作不可恢复。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -373,10 +411,10 @@ class _EventsPageState extends ConsumerState<EventsPage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  _events.removeWhere((e) => e.id == event.id);
+                  _events.removeWhere((e) => e['id'] == event['id']);
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已丢弃事件：${event.type}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已丢弃事件：${event['type']}')));
               },
               child: Text('丢弃', style: TextStyle(color: context.error)),
             ),

@@ -142,3 +142,23 @@ backend/server_*.exe
 backend/tmp/
 temp_*.go
 temp_*.txt
+
+# Runtime build outputs
+runtime/out/
+
+# Local build artifacts and runtime data (not to be committed)
+backend/cmd/server/backend
+backend/cmd/server/backend.exe
+backend/server
+backend/.zip
+backend/dev/
+data/
+qdrant/
+surrealdb/
+runtime/build/
+test_output.txt
+test_nodeenv_race.txt
+
+# AI tooling workspace config
+.reasonix/
+reasonix.toml

@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_extensions.dart';
+import '../../../../core/services/providers.dart';
 
 class ExtensionPackagesPage extends ConsumerStatefulWidget {
   const ExtensionPackagesPage({super.key});
@@ -19,12 +18,25 @@ class ExtensionPackagesPage extends ConsumerStatefulWidget {
 }
 
 class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
-  late List<ExtensionPackage> _packages;
+  List<Map<String, dynamic>> _packages = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _packages = List.from(MockExtensions.packages);
+    _loadPackages();
+  }
+
+  Future<void> _loadPackages() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final data = await svc.plugins();
+      if (mounted) setState(() { _packages = data; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
   }
 
   BadgeType _statusBadgeType(String status) {
@@ -42,6 +54,22 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '扩展包', showBackButton: true, fallbackRoute: AppRoutes.extensions, actions: [
+          AmitiaIconButton(icon: Icons.download_outlined, onPressed: _showInstallLocalSheet, tooltip: '安装本地包'),
+        ]),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '扩展包', showBackButton: true, fallbackRoute: AppRoutes.extensions, actions: [
+          AmitiaIconButton(icon: Icons.download_outlined, onPressed: _showInstallLocalSheet, tooltip: '安装本地包'),
+        ]),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadPackages)),
+      );
+    }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '扩展包',
@@ -72,7 +100,15 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     );
   }
 
-  Widget _buildPackageCard(BuildContext context, ExtensionPackage pkg) {
+  Widget _buildPackageCard(BuildContext context, Map<String, dynamic> pkg) {
+    final name = (pkg['name'] ?? '').toString();
+    final description = (pkg['description'] ?? '').toString();
+    final version = (pkg['version'] ?? '1.0.0').toString();
+    final status = (pkg['status'] ?? '已安装').toString();
+    final permissions = (pkg['permissions'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final hasUpdate = (pkg['hasUpdate'] as bool?) ?? false;
+    final isEnabled = (pkg['isEnabled'] as bool?) ?? ((pkg['enabled'] as int?) == 1);
+
     return AmitiaCard(
       onTap: () => _showExtensionDetail(pkg),
       child: Column(
@@ -87,7 +123,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                   color: context.accentSoft,
                   borderRadius: AppRadius.brSmall,
                 ),
-                child: Icon(pkg.icon, size: 22, color: context.accentPrimary),
+                child: Icon(Icons.extension_outlined, size: 22, color: context.accentPrimary),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -96,25 +132,25 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                   children: [
                     Row(
                       children: [
-                        Text(pkg.name, style: AppTypography.cardTitle(context)),
+                        Text(name, style: AppTypography.cardTitle(context)),
                         const SizedBox(width: 8),
-                        Text('v${pkg.version}', style: AppTypography.label(context)),
+                        Text('v$version', style: AppTypography.label(context)),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(pkg.description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              AmitiaStatusBadge(label: pkg.status, type: _statusBadgeType(pkg.status)),
+              AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: pkg.permissions.map((p) => Container(
+            children: permissions.map((p) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
@@ -124,7 +160,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
             )).toList(),
           ),
           const SizedBox(height: AppSpacing.md),
-          if (pkg.hasUpdate)
+          if (hasUpdate)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -146,15 +182,19 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context, ExtensionPackage pkg) {
-    final isRunning = pkg.status == '运行中';
-    final isPaused = pkg.status == '已暂停';
+  Widget _buildActionButtons(BuildContext context, Map<String, dynamic> pkg) {
+    final status = (pkg['status'] ?? '已安装').toString();
+    final name = (pkg['name'] ?? '').toString();
+    final isEnabled = (pkg['isEnabled'] as bool?) ?? ((pkg['enabled'] as int?) == 1);
+    final hasUpdate = (pkg['hasUpdate'] as bool?) ?? false;
+    final isRunning = status == '运行中';
+    final isPaused = status == '已暂停';
 
     return Wrap(
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.sm,
       children: [
-        if (pkg.hasUpdate)
+        if (hasUpdate)
           _MiniButton(
             label: '更新',
             icon: Icons.system_update,
@@ -173,14 +213,22 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
             label: '恢复',
             icon: Icons.play_circle_outline,
             color: context.success,
-            onTap: () => _resumePackage(pkg),
+            onTap: () => _togglePlugin(pkg),
           ),
-        _MiniButton(
-          label: '回滚',
-          icon: Icons.undo,
-          color: context.info,
-          onTap: () => _showRollbackConfirm(pkg),
-        ),
+        if (isEnabled && !isPaused)
+          _MiniButton(
+            label: '暂停',
+            icon: Icons.pause_circle_outline,
+            color: context.warning,
+            onTap: () => _togglePlugin(pkg),
+          ),
+        if (!isEnabled)
+          _MiniButton(
+            label: '启用',
+            icon: Icons.play_circle_outline,
+            color: context.success,
+            onTap: () => _togglePlugin(pkg),
+          ),
         _MiniButton(
           label: '卸载',
           icon: Icons.delete_outline,
@@ -205,120 +253,125 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     );
   }
 
-  void _showExtensionDetail(ExtensionPackage pkg) {
+  void _showExtensionDetail(Map<String, dynamic> pkg) {
     showDialog(
       context: context,
       builder: (context) => _ExtensionDetailDialog(pkg: pkg),
     );
   }
 
-  void _showUpdateDialog(ExtensionPackage pkg) {
+  void _showUpdateDialog(Map<String, dynamic> pkg) {
+    final name = (pkg['name'] ?? '').toString();
+    final version = (pkg['version'] ?? '1.0.0').toString();
     showDialog(
       context: context,
-      builder: (context) => _UpdateDialog(pkg: pkg, onConfirm: () {
-        Navigator.pop(context);
-        setState(() {
-          _packages[_packages.indexWhere((e) => e.id == pkg.id)] = ExtensionPackage(
-            id: pkg.id,
-            name: pkg.name,
-            description: pkg.description,
-            version: '1.3.0',
-            status: pkg.status,
-            permissions: pkg.permissions,
-            icon: pkg.icon,
-            hasUpdate: false,
-          );
-        });
-        ScaffoldMessenger.of(this.context).showSnackBar(
-          SnackBar(content: Text('${pkg.name} 已更新到最新版本'), backgroundColor: context.success),
-        );
-      }),
-    );
-  }
-
-  void _showPauseConfirm(ExtensionPackage pkg) {
-    showDialog(
-      context: context,
-      builder: (context) => _ConfirmDialog(
-        title: '暂停扩展',
-        message: '确定要暂停「${pkg.name}」吗？暂停后该扩展将停止运行，相关功能将不可用。',
-        confirmLabel: '暂停',
-        isDestructive: false,
-        onConfirm: () {
-          Navigator.pop(context);
-          setState(() {
-            _packages[_packages.indexWhere((e) => e.id == pkg.id)] = ExtensionPackage(
-              id: pkg.id,
-              name: pkg.name,
-              description: pkg.description,
-              version: pkg.version,
-              status: '已暂停',
-              permissions: pkg.permissions,
-              icon: pkg.icon,
-              hasUpdate: pkg.hasUpdate,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+        title: Text('更新扩展', style: AppTypography.cardTitle(context)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$name 有新版本可用', style: AppTypography.bodySmall(context)),
+            const SizedBox(height: 12),
+            _DetailRow(label: '当前版本', value: 'v$version'),
+            _DetailRow(label: '新版本', value: 'v1.3.0'),
+            _DetailRow(label: '更新大小', value: '1.2 MB'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.accentSoft,
+                borderRadius: AppRadius.brSmall,
+              ),
+              child: Text('更新日志：\n- 优化性能\n- 修复已知问题\n- 新增 API 支持', style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('稍后', style: TextStyle(color: context.textSecondary))),
+          TextButton(onPressed: () {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              SnackBar(content: Text('$name 已更新到最新版本'), backgroundColor: context.success),
             );
-          });
-          ScaffoldMessenger.of(this.context).showSnackBar(
-            SnackBar(content: Text('${pkg.name} 已暂停'), backgroundColor: context.warning),
-          );
-        },
+          }, child: Text('立即更新', style: TextStyle(color: context.accentPrimary))),
+        ],
       ),
     );
   }
 
-  void _resumePackage(ExtensionPackage pkg) {
-    setState(() {
-      _packages[_packages.indexWhere((e) => e.id == pkg.id)] = ExtensionPackage(
-        id: pkg.id,
-        name: pkg.name,
-        description: pkg.description,
-        version: pkg.version,
-        status: '运行中',
-        permissions: pkg.permissions,
-        icon: pkg.icon,
-        hasUpdate: pkg.hasUpdate,
-      );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${pkg.name} 已恢复运行'), backgroundColor: context.success),
-    );
-  }
-
-  void _showRollbackConfirm(ExtensionPackage pkg) {
+  void _showPauseConfirm(Map<String, dynamic> pkg) {
+    final name = (pkg['name'] ?? '').toString();
     showDialog(
       context: context,
-      builder: (context) => _ConfirmDialog(
-        title: '回滚版本',
-        message: '确定要将「${pkg.name}」回滚到上一个版本吗？回滚期间扩展将暂时不可用。',
-        confirmLabel: '回滚',
-        isDestructive: false,
-        onConfirm: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(this.context).showSnackBar(
-            SnackBar(content: Text('${pkg.name} 已回滚到上一版本'), backgroundColor: context.info),
-          );
-        },
+      builder: (context) => AlertDialog(
+        backgroundColor: context.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+        title: Text('暂停扩展', style: AppTypography.cardTitle(context)),
+        content: Text('确定要暂停「$name」吗？暂停后该扩展将停止运行，相关功能将不可用。', style: AppTypography.bodySmall(context)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _togglePlugin(pkg);
+            },
+            child: Text('暂停', style: TextStyle(color: context.warning)),
+          ),
+        ],
       ),
     );
   }
 
-  void _showUninstallConfirm(ExtensionPackage pkg) {
+  Future<void> _togglePlugin(Map<String, dynamic> pkg) async {
+    final id = (pkg['id'] ?? '').toString();
+    final name = (pkg['name'] ?? '').toString();
+    final isEnabled = (pkg['isEnabled'] as bool?) ?? ((pkg['enabled'] as int?) == 1);
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      if (isEnabled) {
+        await svc.disablePlugin(id);
+      } else {
+        await svc.enablePlugin(id);
+      }
+      _loadPackages();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name 已${isEnabled ? '停用' : '启用'}'), backgroundColor: context.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: context.error),
+        );
+      }
+    }
+  }
+
+  void _showUninstallConfirm(Map<String, dynamic> pkg) {
+    final name = (pkg['name'] ?? '').toString();
     showDialog(
       context: context,
-      builder: (context) => _ConfirmDialog(
-        title: '卸载扩展',
-        message: '确定要卸载「${pkg.name}」吗？此操作不可撤销，相关数据将被清除。',
-        confirmLabel: '卸载',
-        isDestructive: true,
-        onConfirm: () {
-          Navigator.pop(context);
-          setState(() {
-            _packages.removeWhere((e) => e.id == pkg.id);
-          });
-          ScaffoldMessenger.of(this.context).showSnackBar(
-            SnackBar(content: Text('${pkg.name} 已卸载'), backgroundColor: context.error),
-          );
-        },
+      builder: (context) => AlertDialog(
+        backgroundColor: context.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+        title: Text('卸载扩展', style: AppTypography.cardTitle(context)),
+        content: Text('确定要卸载「$name」吗？此操作不可撤销，相关数据将被清除。', style: AppTypography.bodySmall(context)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(content: Text('$name 已卸载'), backgroundColor: context.error),
+              );
+            },
+            child: Text('卸载', style: TextStyle(color: context.error)),
+          ),
+        ],
       ),
     );
   }
@@ -459,31 +512,37 @@ class _PreviewRow extends StatelessWidget {
 }
 
 class _ExtensionDetailDialog extends StatelessWidget {
-  final ExtensionPackage pkg;
+  final Map<String, dynamic> pkg;
 
   const _ExtensionDetailDialog({required this.pkg});
 
   @override
   Widget build(BuildContext context) {
+    final name = (pkg['name'] ?? '').toString();
+    final description = (pkg['description'] ?? '').toString();
+    final version = (pkg['version'] ?? '1.0.0').toString();
+    final status = (pkg['status'] ?? '已安装').toString();
+    final permissions = (pkg['permissions'] as List?)?.map((e) => e.toString()).toList() ?? [];
+
     return AlertDialog(
       backgroundColor: context.surfacePrimary,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
       title: Row(
         children: [
-          Icon(pkg.icon, color: context.accentPrimary, size: 24),
+          Icon(Icons.extension_outlined, color: context.accentPrimary, size: 24),
           const SizedBox(width: 10),
-          Expanded(child: Text(pkg.name, style: AppTypography.cardTitle(context))),
+          Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
         ],
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(pkg.description, style: AppTypography.bodySmall(context)),
+          Text(description, style: AppTypography.bodySmall(context)),
           const SizedBox(height: 16),
-          _DetailRow(label: '版本', value: 'v${pkg.version}'),
-          _DetailRow(label: '状态', value: pkg.status),
-          _DetailRow(label: '权限', value: pkg.permissions.join('、')),
+          _DetailRow(label: '版本', value: 'v$version'),
+          _DetailRow(label: '状态', value: status),
+          _DetailRow(label: '权限', value: permissions.join('、')),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
@@ -525,79 +584,6 @@ class _DetailRow extends StatelessWidget {
           Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
         ],
       ),
-    );
-  }
-}
-
-class _UpdateDialog extends StatelessWidget {
-  final ExtensionPackage pkg;
-  final VoidCallback onConfirm;
-
-  const _UpdateDialog({required this.pkg, required this.onConfirm});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: context.surfacePrimary,
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-      title: Text('更新扩展', style: AppTypography.cardTitle(context)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('${pkg.name} 有新版本可用', style: AppTypography.bodySmall(context)),
-          const SizedBox(height: 12),
-          _DetailRow(label: '当前版本', value: 'v${pkg.version}'),
-          _DetailRow(label: '新版本', value: 'v1.3.0'),
-          _DetailRow(label: '更新大小', value: '1.2 MB'),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: context.accentSoft,
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: Text('更新日志：\n- 优化性能\n- 修复已知问题\n- 新增 API 支持', style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('稍后', style: TextStyle(color: context.textSecondary))),
-        TextButton(onPressed: onConfirm, child: Text('立即更新', style: TextStyle(color: context.accentPrimary))),
-      ],
-    );
-  }
-}
-
-class _ConfirmDialog extends StatelessWidget {
-  final String title;
-  final String message;
-  final String confirmLabel;
-  final bool isDestructive;
-  final VoidCallback onConfirm;
-
-  const _ConfirmDialog({
-    required this.title,
-    required this.message,
-    required this.confirmLabel,
-    required this.isDestructive,
-    required this.onConfirm,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: context.surfacePrimary,
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-      title: Text(title, style: AppTypography.cardTitle(context)),
-      content: Text(message, style: AppTypography.bodySmall(context)),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
-        TextButton(
-          onPressed: onConfirm,
-          child: Text(confirmLabel, style: TextStyle(color: isDestructive ? context.error : context.accentPrimary)),
-        ),
-      ],
     );
   }
 }

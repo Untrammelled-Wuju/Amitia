@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class DesktopContributionsPage extends ConsumerStatefulWidget {
   const DesktopContributionsPage({super.key});
@@ -19,20 +18,55 @@ class DesktopContributionsPage extends ConsumerStatefulWidget {
 }
 
 class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsPage> {
-  late List<DesktopContribution> _contributions;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _contributions = [];
 
   @override
   void initState() {
     super.initState();
-    _contributions = List.from(MockKernel.desktopContributions);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final api = ref.read(apiClientProvider);
+      final resp = await api.get<List<dynamic>>('/api/desktop/contributions');
+      final data = resp.data;
+      if (mounted) {
+        if (data != null) {
+          _contributions = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final shortcuts = _contributions.where((c) => c.type == '快捷键').toList();
-    final menus = _contributions.where((c) => c.type == '菜单').toList();
-    final windows = _contributions.where((c) => c.type == '窗口').toList();
-    final trays = _contributions.where((c) => c.type == '托盘').toList();
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_contributions.isEmpty) {
+      return const AmitiaEmptyState(icon: Icons.desktop_windows_outlined, title: '暂无桌面贡献');
+    }
+
+    final shortcuts = _contributions.where((c) => c['type'] == '快捷键').toList();
+    final menus = _contributions.where((c) => c['type'] == '菜单').toList();
+    final windows = _contributions.where((c) => c['type'] == '窗口').toList();
+    final trays = _contributions.where((c) => c['type'] == '托盘').toList();
 
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
@@ -96,8 +130,11 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
     );
   }
 
-  Widget _buildContributionCard(BuildContext context, DesktopContribution contribution) {
-    final isShortcut = contribution.type == '快捷键';
+  Widget _buildContributionCard(BuildContext context, Map<String, dynamic> contribution) {
+    final type = contribution['type'] as String? ?? '';
+    final label = contribution['label'] as String? ?? '';
+    final value = contribution['value'] as String? ?? '';
+    final isShortcut = type == '快捷键';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -110,16 +147,16 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
                 color: context.accentSoft,
                 borderRadius: AppRadius.brSmall,
               ),
-              child: Icon(_getIcon(contribution.type), size: 22, color: context.accentPrimary),
+              child: Icon(_getIcon(type), size: 22, color: context.accentPrimary),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(contribution.label, style: AppTypography.cardTitle(context)),
+                  Text(label, style: AppTypography.cardTitle(context)),
                   const SizedBox(height: 2),
-                  Text(contribution.type, style: AppTypography.label(context)),
+                  Text(type, style: AppTypography.label(context)),
                 ],
               ),
             ),
@@ -132,7 +169,7 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
                   border: Border.all(color: context.borderPrimary, width: 0.5),
                 ),
                 child: Text(
-                  contribution.value,
+                  value,
                   style: AppTypography.bodySmall(context).copyWith(fontFamily: 'monospace', fontSize: 13),
                 ),
               ),
@@ -145,7 +182,7 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
               ),
             ] else
               AmitiaStatusBadge(
-                label: contribution.value,
+                label: value,
                 type: BadgeType.accent,
               ),
           ],
@@ -169,8 +206,8 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
     }
   }
 
-  void _showEditShortcutDialog(BuildContext context, DesktopContribution contribution) {
-    final controller = TextEditingController(text: contribution.value);
+  void _showEditShortcutDialog(BuildContext context, Map<String, dynamic> contribution) {
+    final controller = TextEditingController(text: contribution['value'] as String? ?? '');
     showDialog(
       context: context,
       builder: (context) {
@@ -182,11 +219,11 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(contribution.label, style: AppTypography.caption(context)),
+              Text(contribution['label'] as String? ?? '', style: AppTypography.caption(context)),
               const SizedBox(height: 12),
               Text('当前快捷键', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
               const SizedBox(height: 4),
-              Text(contribution.value, style: AppTypography.body(context).copyWith(fontFamily: 'monospace')),
+              Text(contribution['value'] as String? ?? '', style: AppTypography.body(context).copyWith(fontFamily: 'monospace')),
               const SizedBox(height: 16),
               Text('新快捷键', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
               const SizedBox(height: 6),
@@ -209,18 +246,13 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
                   return;
                 }
                 setState(() {
-                  final idx = _contributions.indexWhere((c) => c.id == contribution.id);
+                  final idx = _contributions.indexWhere((c) => c['id'] == contribution['id']);
                   if (idx >= 0) {
-                    _contributions[idx] = DesktopContribution(
-                      id: contribution.id,
-                      type: contribution.type,
-                      label: contribution.label,
-                      value: newValue,
-                    );
+                    _contributions[idx]['value'] = newValue;
                   }
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已修改快捷键：${contribution.label} -> $newValue')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已修改快捷键：${contribution['label']} -> $newValue')));
               },
               child: Text('保存', style: TextStyle(color: context.accentPrimary)),
             ),

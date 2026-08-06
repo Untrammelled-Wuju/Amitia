@@ -5,52 +5,97 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/services/providers.dart';
+
+final _healthProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final svc = ref.read(systemServiceProvider);
+  return svc.health();
+});
 
 class DevicesPage extends ConsumerWidget {
   const DevicesPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = [
-      _DeviceItem(name: 'Windows 桌面端', type: 'desktop', isCurrent: true, lastActive: '当前设备'),
-      _DeviceItem(name: 'iPhone 15 Pro', type: 'mobile', isCurrent: false, lastActive: '2小时前'),
-      _DeviceItem(name: 'iPad Air', type: 'tablet', isCurrent: false, lastActive: '昨天'),
-    ];
+    final healthAsync = ref.watch(_healthProvider);
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '我的设备', navigation: AmitiaAppBarNavigation.back),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: Text(
-              '已登录的设备',
-              style: AppTypography.caption(context),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            decoration: BoxDecoration(
-              color: context.surfacePrimary,
-              borderRadius: AppRadius.brMedium,
-              border: Border.all(color: context.borderPrimary, width: 0.5),
-            ),
+      body: healthAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                for (int i = 0; i < devices.length; i++) ...[
-                  _DeviceTile(item: devices[i]),
-                  if (i < devices.length - 1)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 56),
-                      child: Divider(height: 1, color: context.borderSecondary),
-                    ),
-                ],
+                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                const SizedBox(height: 16),
+                Text(
+                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                  style: AppTypography.body(context).copyWith(color: context.error),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () => ref.invalidate(_healthProvider),
+                ),
               ],
             ),
           ),
-        ],
+        ),
+        data: (health) {
+          final devices = health?['devices'] as List<dynamic>?;
+          final deviceItems = devices != null && devices.isNotEmpty
+              ? devices.map((d) {
+                  final m = d as Map<String, dynamic>;
+                  return _DeviceItem(
+                    name: (m['name'] ?? '').toString(),
+                    type: (m['type'] ?? 'desktop').toString(),
+                    isCurrent: m['isCurrent'] == true,
+                    lastActive: (m['lastActive'] ?? '').toString(),
+                  );
+                }).toList()
+              : [
+                  _DeviceItem(name: 'Windows 桌面端', type: 'desktop', isCurrent: true, lastActive: '当前设备'),
+                ];
+
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                child: Text(
+                  '已登录的设备 (${deviceItems.length})',
+                  style: AppTypography.caption(context),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                decoration: BoxDecoration(
+                  color: context.surfacePrimary,
+                  borderRadius: AppRadius.brMedium,
+                  border: Border.all(color: context.borderPrimary, width: 0.5),
+                ),
+                child: Column(
+                  children: [
+                    for (int i = 0; i < deviceItems.length; i++) ...[
+                      _DeviceTile(item: deviceItems[i]),
+                      if (i < deviceItems.length - 1)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 56),
+                          child: Divider(height: 1, color: context.borderSecondary),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

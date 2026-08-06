@@ -89,6 +89,7 @@ import (
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
@@ -202,7 +203,7 @@ func (a reflectionMemoryServiceAdapter) CreateReflectionMemory(req interaction.R
 	return err
 }
 
-func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, error) {
+func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap) (*AppServices, error) {
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
 	}
@@ -254,12 +255,30 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 	kernelCharReader := newKernelCharacterReader(charRepo)
 	kernelConvReader := newKernelConversationReader(chatSvc)
 	kernelMemQuerySvc := newKernelMemoryQueryService(memSvc)
+	var nodeResolver script_host.NodeEnvironmentResolver
+	var artifactResolver script_host.ArtifactResolver
+	if bootstrap != nil {
+		nodeResolver = bootstrap.NodeEnvironmentResolver()
+		host := bootstrap.RuntimeHost()
+		if host != nil {
+			var resolverErr error
+			artifactResolver, resolverErr = script_host.NewArtifactResolver(script_host.ResolveContext{
+				Host: host,
+			})
+			if resolverErr != nil {
+				log.Error("failed to create artifact resolver:", resolverErr)
+			}
+		}
+	}
+
 	kernelContainer, err := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
 		WithCharacterReader(kernelCharReader).
 		WithConversationReader(kernelConvReader).
 		WithMemoryQueryService(kernelMemQuerySvc).
+		WithNodeEnvironmentResolver(nodeResolver).
+		WithHostArtifactResolver(artifactResolver).
 		Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)

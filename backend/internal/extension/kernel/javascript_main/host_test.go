@@ -3,6 +3,8 @@ package javascript_main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,6 +13,11 @@ import (
 
 func makeTestHost(t *testing.T) *PluginHost {
 	t.Helper()
+	tmpDir := t.TempDir()
+	nodeBin := filepath.Join(tmpDir, "node")
+	pluginEntry := filepath.Join(tmpDir, "plugin-host.js")
+	writeTestFile(t, nodeBin, "")
+	writeTestFile(t, pluginEntry, "")
 	host, err := NewPluginHost(PluginHostConfig{
 		InstanceID:  "inst-1",
 		ExtensionID: "com.example/weather",
@@ -27,6 +34,9 @@ func makeTestHost(t *testing.T) *PluginHost {
 		ProcessBoundary: runtime.DefaultProcessBoundary(),
 		DefinitionHash:  "sha256:abc",
 		HostAPIVersion:  "1",
+		NodePath:        nodeBin,
+		PluginHostPath:  pluginEntry,
+		WorkingDirectory: tmpDir,
 		AllowedContributions: []AllowedContribution{
 			{ContributionID: "get_weather", EntryType: "tool", EntryName: "get_weather"},
 			{ContributionID: "filter_msg", EntryType: "hook", EntryName: "filter_msg"},
@@ -36,6 +46,13 @@ func makeTestHost(t *testing.T) *PluginHost {
 		t.Fatalf("create host: %v", err)
 	}
 	return host
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write test file %s: %v", path, err)
+	}
 }
 
 func TestPluginHostStart(t *testing.T) {
@@ -60,6 +77,11 @@ func TestPluginHostStart(t *testing.T) {
 }
 
 func TestPluginHostStartRejectsMissingSessionToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	nodeBin := filepath.Join(tmpDir, "node")
+	pluginEntry := filepath.Join(tmpDir, "plugin-host.js")
+	writeTestFile(t, nodeBin, "")
+	writeTestFile(t, pluginEntry, "")
 	_, err := NewPluginHost(PluginHostConfig{
 		InstanceID:  "inst-1",
 		ExtensionID: "com.example",
@@ -68,8 +90,11 @@ func TestPluginHostStartRejectsMissingSessionToken(t *testing.T) {
 			InstanceID: "inst-1",
 			Entry:      "entry.js",
 		},
-		DefinitionHash: "sha256:abc",
-		HostAPIVersion: "1",
+		DefinitionHash:   "sha256:abc",
+		HostAPIVersion:   "1",
+		NodePath:         nodeBin,
+		PluginHostPath:   pluginEntry,
+		WorkingDirectory: tmpDir,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)

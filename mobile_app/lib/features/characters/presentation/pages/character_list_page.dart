@@ -7,13 +7,10 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/models/character.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
 
 class CharacterListPage extends ConsumerStatefulWidget {
   const CharacterListPage({super.key});
@@ -22,13 +19,28 @@ class CharacterListPage extends ConsumerStatefulWidget {
   ConsumerState<CharacterListPage> createState() => _CharacterListPageState();
 }
 
+enum _SortOrder { none, name, createdAt }
+
 class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   String? _defaultCharacterId;
   final Set<String> _archivedIds = {};
   List<CharacterDto> _characters = [];
+  _SortOrder _sortOrder = _SortOrder.none;
 
-  List<CharacterDto> get _activeCharacters =>
-      _characters.where((c) => !_archivedIds.contains(c.id)).toList();
+  List<CharacterDto> get _activeCharacters {
+    var list = _characters.where((c) => !_archivedIds.contains(c.id)).toList();
+    switch (_sortOrder) {
+      case _SortOrder.name:
+        list.sort((a, b) => a.name.compareTo(b.name));
+        break;
+      case _SortOrder.createdAt:
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case _SortOrder.none:
+        break;
+    }
+    return list;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +91,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 data: (characters) {
                   _characters = characters;
                   _defaultCharacterId ??= characters.isNotEmpty ? characters.first.id : null;
-                  final activeChars = characters.where((c) => !_archivedIds.contains(c.id)).toList();
+                  final activeChars = _activeCharacters;
                   if (activeChars.isEmpty) {
                     return Center(
                       child: Text(
@@ -211,28 +223,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _showCharacterSelection(context, '复制角色', (character) {
-                      final copy = Character(
-                        id: 'c${DateTime.now().millisecondsSinceEpoch}',
-                        name: '${character.name} (副本)',
-                        avatarColor: character.avatarColor,
-                        avatarInitial: character.avatarInitial,
-                        status: '离线',
-                        mood: '新建',
-                        identity: character.identity,
-                        description: character.description,
-                        relationshipDays: 0,
-                        messageCount: 0,
-                        personality: character.personality,
-                        speakingStyle: character.speakingStyle,
-                        userRelation: character.userRelation,
-                        prompt: character.prompt,
-                        currentActivity: '等待激活',
-                        location: character.location,
-                      );
-                      setState(() {
-                        MockData.characters.add(copy);
-                      });
-                      amitiaSnackBar(context, '已复制角色 ${character.name}');
+                      amitiaSnackBar(context, '角色复制功能开发中');
                     });
                   },
                 ),
@@ -316,31 +307,31 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   onTap: () {
                     Navigator.pop(sheetContext);
                     setState(() {
-                      MockData.characters.sort((a, b) => a.name.compareTo(b.name));
+                      _sortOrder = _SortOrder.name;
                     });
                     amitiaSnackBar(context, '已按名称排序');
                   },
                 ),
                 AmitiaListTile(
                   leading: _buildSheetIcon(context, Icons.calendar_today_outlined, context.accentPrimary),
-                  title: '按认识天数',
+                  title: '按创建时间',
                   onTap: () {
                     Navigator.pop(sheetContext);
                     setState(() {
-                      MockData.characters.sort((a, b) => b.relationshipDays.compareTo(a.relationshipDays));
+                      _sortOrder = _SortOrder.createdAt;
                     });
-                    amitiaSnackBar(context, '已按认识天数排序');
+                    amitiaSnackBar(context, '已按创建时间排序');
                   },
                 ),
                 AmitiaListTile(
-                  leading: _buildSheetIcon(context, Icons.chat_bubble_outline, context.accentPrimary),
-                  title: '按消息数量',
+                  leading: _buildSheetIcon(context, Icons.sort_by_alpha, context.accentPrimary),
+                  title: '默认排序',
                   onTap: () {
                     Navigator.pop(sheetContext);
                     setState(() {
-                      MockData.characters.sort((a, b) => b.messageCount.compareTo(a.messageCount));
+                      _sortOrder = _SortOrder.none;
                     });
-                    amitiaSnackBar(context, '已按消息数量排序');
+                    amitiaSnackBar(context, '已恢复默认排序');
                   },
                 ),
                 const SizedBox(height: 8),
@@ -479,10 +470,5 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       ),
       child: Icon(icon, size: 20, color: color),
     );
-  }
-
-  Color _parseColor(String hex) {
-    final cleaned = hex.replaceAll('#', '');
-    return Color(int.parse('FF$cleaned', radix: 16));
   }
 }

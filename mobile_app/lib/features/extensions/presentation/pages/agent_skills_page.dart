@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_extensions.dart';
+import '../../../../core/services/providers.dart';
 
 class AgentSkillsPage extends ConsumerStatefulWidget {
   const AgentSkillsPage({super.key});
@@ -19,12 +18,25 @@ class AgentSkillsPage extends ConsumerStatefulWidget {
 }
 
 class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
-  late List<AgentSkill> _skills;
+  List<Map<String, dynamic>> _skills = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _skills = List.from(MockExtensions.agentSkills);
+    _loadSkills();
+  }
+
+  Future<void> _loadSkills() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final data = await svc.agentSkills();
+      if (mounted) setState(() { _skills = data; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
   }
 
   BadgeType _compatibilityBadgeType(String compatibility) {
@@ -42,6 +54,18 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: 'Agent Skills', showBackButton: true),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: 'Agent Skills', showBackButton: true),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadSkills)),
+      );
+    }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: 'Agent Skills',
@@ -72,7 +96,15 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     );
   }
 
-  Widget _buildSkillCard(BuildContext context, AgentSkill skill) {
+  Widget _buildSkillCard(BuildContext context, Map<String, dynamic> skill) {
+    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    final name = (skill['name'] ?? '').toString();
+    final description = (skill['description'] ?? '').toString();
+    final version = (skill['version'] ?? '1.0.0').toString();
+    final skillMd = (skill['skillMd'] ?? skill['skill_md'] ?? '').toString();
+    final compatibility = (skill['compatibility'] ?? '兼容').toString();
+    final requiredMcp = (skill['requiredMcp'] as List?)?.map((e) => e.toString()).toList() ?? [];
+
     return AmitiaCard(
       onTap: () => _showDetailSheet(skill),
       child: Column(
@@ -96,19 +128,19 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                   children: [
                     Row(
                       children: [
-                        Text(skill.name, style: AppTypography.cardTitle(context)),
+                        Text(name, style: AppTypography.cardTitle(context)),
                         const SizedBox(width: 8),
-                        Text('v${skill.version}', style: AppTypography.label(context)),
+                        Text('v$version', style: AppTypography.label(context)),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(skill.description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
               AmitiaStatusBadge(
-                label: skill.isEnabled ? '已启用' : '已停用',
-                type: skill.isEnabled ? BadgeType.success : BadgeType.neutral,
+                label: isEnabled ? '已启用' : '已停用',
+                type: isEnabled ? BadgeType.success : BadgeType.neutral,
               ),
             ],
           ),
@@ -131,7 +163,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  skill.skillMd,
+                  skillMd,
                   style: AppTypography.label(context),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -144,24 +176,23 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (skill.requiredMcp.isNotEmpty)
-                ...skill.requiredMcp.map((mcp) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: context.info.withValues(alpha: 0.1),
-                        borderRadius: AppRadius.brTag,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.link, size: 12, color: context.info),
-                          const SizedBox(width: 4),
-                          Text(mcp, style: TextStyle(fontSize: 11, color: context.info, fontWeight: FontWeight.w500)),
-                        ],
-                      ),
-                    )),
+              ...requiredMcp.map((mcp) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: context.info.withValues(alpha: 0.1),
+                      borderRadius: AppRadius.brTag,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.link, size: 12, color: context.info),
+                        const SizedBox(width: 4),
+                        Text(mcp, style: TextStyle(fontSize: 11, color: context.info, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  )),
               Builder(builder: (context) {
-                final badgeType = _compatibilityBadgeType(skill.compatibility);
+                final badgeType = _compatibilityBadgeType(compatibility);
                 final color = badgeType == BadgeType.success
                     ? context.success
                     : badgeType == BadgeType.warning
@@ -178,7 +209,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                     children: [
                       Icon(Icons.check_circle_outline, size: 12, color: color),
                       const SizedBox(width: 4),
-                      Text(skill.compatibility, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
+                      Text(compatibility, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
                     ],
                   ),
                 );
@@ -193,15 +224,15 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
-                    color: skill.isEnabled ? context.warning.withValues(alpha: 0.1) : context.success.withValues(alpha: 0.1),
+                    color: isEnabled ? context.warning.withValues(alpha: 0.1) : context.success.withValues(alpha: 0.1),
                     borderRadius: AppRadius.brTag,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(skill.isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 15, color: skill.isEnabled ? context.warning : context.success),
+                      Icon(isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 15, color: isEnabled ? context.warning : context.success),
                       const SizedBox(width: 5),
-                      Text(skill.isEnabled ? '停用' : '启用', style: TextStyle(fontSize: 13, color: skill.isEnabled ? context.warning : context.success, fontWeight: FontWeight.w500)),
+                      Text(isEnabled ? '停用' : '启用', style: TextStyle(fontSize: 13, color: isEnabled ? context.warning : context.success, fontWeight: FontWeight.w500)),
                     ],
                   ),
                 ),
@@ -258,18 +289,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (context) => _ImportSkillSheet(onConfirm: () {
         Navigator.pop(context);
-        setState(() {
-          _skills.add(AgentSkill(
-            id: 'as${_skills.length + 1}',
-            name: '新导入 Skill',
-            description: '通过导入文件添加的 Agent Skill',
-            skillMd: '# 新 Skill\n\n描述待补充',
-            requiredMcp: ['文件系统 MCP'],
-            compatibility: '兼容',
-            isEnabled: false,
-            version: '1.0.0',
-          ));
-        });
+        _loadSkills();
         ScaffoldMessenger.of(this.context).showSnackBar(
           SnackBar(content: const Text('Agent Skill 导入成功'), backgroundColor: context.success),
         );
@@ -277,7 +297,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     );
   }
 
-  void _showDetailSheet(AgentSkill skill) {
+  void _showDetailSheet(Map<String, dynamic> skill) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -287,47 +307,65 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     );
   }
 
-  void _toggleSkill(AgentSkill skill) {
-    setState(() {
-      final index = _skills.indexWhere((s) => s.id == skill.id);
-      _skills[index] = AgentSkill(
-        id: skill.id,
-        name: skill.name,
-        description: skill.description,
-        skillMd: skill.skillMd,
-        requiredMcp: skill.requiredMcp,
-        compatibility: skill.compatibility,
-        isEnabled: !skill.isEnabled,
-        version: skill.version,
-      );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${skill.name} 已${skill.isEnabled ? '停用' : '启用'}'),
-        backgroundColor: context.accentPrimary,
-      ),
-    );
+  Future<void> _toggleSkill(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      if (isEnabled) {
+        await svc.disableAgentSkill(id);
+      } else {
+        await svc.enableAgentSkill(id);
+      }
+      _loadSkills();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${skill['name'] ?? ''} 已${isEnabled ? '停用' : '启用'}'),
+            backgroundColor: context.accentPrimary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: context.error),
+        );
+      }
+    }
   }
 
-  void _showRemoveConfirm(AgentSkill skill) {
+  Future<void> _showRemoveConfirm(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    final name = (skill['name'] ?? '').toString();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
         title: Text('移除 Agent Skill', style: AppTypography.cardTitle(context)),
-        content: Text('确定要移除「${skill.name}」吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
+        content: Text('确定要移除「$name」吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              setState(() {
-                _skills.removeWhere((s) => s.id == skill.id);
-              });
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: Text('${skill.name} 已移除'), backgroundColor: context.error),
-              );
+              try {
+                final svc = ref.read(extensionServiceProvider);
+                await svc.removeAgentSkill(id);
+                _loadSkills();
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(content: Text('$name 已移除'), backgroundColor: context.error),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(content: Text('移除失败: $e'), backgroundColor: context.error),
+                  );
+                }
+              }
             },
             child: Text('移除', style: TextStyle(color: context.error)),
           ),
@@ -400,12 +438,20 @@ class _ImportSkillSheet extends StatelessWidget {
 }
 
 class _SkillDetailSheet extends StatelessWidget {
-  final AgentSkill skill;
+  final Map<String, dynamic> skill;
 
   const _SkillDetailSheet({required this.skill});
 
   @override
   Widget build(BuildContext context) {
+    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    final name = (skill['name'] ?? '').toString();
+    final description = (skill['description'] ?? '').toString();
+    final version = (skill['version'] ?? '1.0.0').toString();
+    final skillMd = (skill['skillMd'] ?? skill['skill_md'] ?? '').toString();
+    final compatibility = (skill['compatibility'] ?? '兼容').toString();
+    final requiredMcp = (skill['requiredMcp'] as List?)?.map((e) => e.toString()).toList() ?? [];
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
       child: Column(
@@ -432,20 +478,20 @@ class _SkillDetailSheet extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(skill.name, style: AppTypography.cardTitle(context)),
+                    Text(name, style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text('v${skill.version}', style: AppTypography.label(context)),
+                    Text('v$version', style: AppTypography.label(context)),
                   ],
                 ),
               ),
               AmitiaStatusBadge(
-                label: skill.isEnabled ? '已启用' : '已停用',
-                type: skill.isEnabled ? BadgeType.success : BadgeType.neutral,
+                label: isEnabled ? '已启用' : '已停用',
+                type: isEnabled ? BadgeType.success : BadgeType.neutral,
               ),
             ],
           ),
           const SizedBox(height: 16),
-          Text(skill.description, style: AppTypography.bodySmall(context)),
+          Text(description, style: AppTypography.bodySmall(context)),
           const SizedBox(height: 16),
           Text('SKILL.md 内容', style: AppTypography.sectionTitle(context)),
           const SizedBox(height: 8),
@@ -458,7 +504,7 @@ class _SkillDetailSheet extends StatelessWidget {
               borderRadius: AppRadius.brSmall,
             ),
             child: SingleChildScrollView(
-              child: Text(skill.skillMd, style: AppTypography.label(context).copyWith(fontFamily: 'monospace', height: 1.6)),
+              child: Text(skillMd, style: AppTypography.label(context).copyWith(fontFamily: 'monospace', height: 1.6)),
             ),
           ),
           const SizedBox(height: 16),
@@ -467,7 +513,7 @@ class _SkillDetailSheet extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: skill.requiredMcp.map((mcp) => Container(
+            children: requiredMcp.map((mcp) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: context.info.withValues(alpha: 0.1),
@@ -480,7 +526,7 @@ class _SkillDetailSheet extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text('兼容性', style: AppTypography.caption(context))),
-              AmitiaStatusBadge(label: skill.compatibility, type: skill.compatibility == '完全兼容' ? BadgeType.success : (skill.compatibility == '部分兼容' ? BadgeType.warning : BadgeType.info)),
+              AmitiaStatusBadge(label: compatibility, type: compatibility == '完全兼容' ? BadgeType.success : (compatibility == '部分兼容' ? BadgeType.warning : BadgeType.info)),
             ],
           ),
           const SizedBox(height: 20),

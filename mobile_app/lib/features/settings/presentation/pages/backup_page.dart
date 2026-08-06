@@ -6,6 +6,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/services/providers.dart';
 
 class BackupPage extends ConsumerStatefulWidget {
   const BackupPage({super.key});
@@ -15,14 +16,77 @@ class BackupPage extends ConsumerStatefulWidget {
 }
 
 class _BackupPageState extends ConsumerState<BackupPage> {
-  final _backups = <(String, String, String)>[
-    ('2026-07-29 20:15', '128.4 MB', '本地'),
-    ('2026-07-25 09:30', '124.1 MB', '本地'),
-    ('2026-07-20 14:00', '119.8 MB', '本地'),
-  ];
+  List<Map<String, dynamic>> _backups = [];
+  bool _loadingBackups = true;
+  String? _backupsError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackups();
+  }
+
+  Future<void> _loadBackups() async {
+    setState(() { _loadingBackups = true; _backupsError = null; });
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final resp = await apiClient.get<List<dynamic>>('/api/maintenance/backups');
+      if (mounted) {
+        final list = resp.data ?? [];
+        setState(() {
+          _backups = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _loadingBackups = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _backupsError = e.toString(); _loadingBackups = false; });
+    }
+  }
+
+  Future<void> _handleAction(String label) async {
+    final svc = ref.read(systemServiceProvider);
+    final apiClient = ref.read(apiClientProvider);
+    try {
+      switch (label) {
+        case '导出数据':
+          await svc.export({});
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('导出完成'), duration: Duration(seconds: 1)),
+            );
+          }
+          break;
+        case '本地备份':
+          await apiClient.post('/api/maintenance/backups');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('备份创建成功'), duration: Duration(seconds: 1)),
+            );
+            _loadBackups();
+          }
+          break;
+        default:
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('$label · 处理中'), duration: const Duration(seconds: 1)),
+            );
+          }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$label · 失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final charactersAsync = ref.watch(characterListProvider);
+    final conversationsAsync = ref.watch(conversationListProvider);
+    final memoriesAsync = ref.watch(memoryListProvider);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '数据与备份', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
@@ -30,20 +94,56 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         children: [
           Text('数据概览', style: AppTypography.sectionTitle(context)),
           const SizedBox(height: AppSpacing.md),
-          const _DataOverview(),
+          _DataOverview(
+            charactersCount: charactersAsync.valueOrNull?.length ?? 0,
+            conversationsCount: conversationsAsync.valueOrNull?.length ?? 0,
+            memoriesCount: memoriesAsync.valueOrNull?.length ?? 0,
+            isLoading: charactersAsync.isLoading || conversationsAsync.isLoading || memoriesAsync.isLoading,
+          ),
           const SizedBox(height: AppSpacing.sectionGap),
           Text('操作', style: AppTypography.sectionTitle(context)),
           const SizedBox(height: AppSpacing.md),
-          const _ActionGrid(),
+          _ActionGrid(onAction: _handleAction),
           const SizedBox(height: AppSpacing.sectionGap),
-          Text('本地备份', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.md),
-          ..._backups.map(
-            (b) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: _BackupRecord(time: b.$1, size: b.$2, source: b.$3),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('本地备份', style: AppTypography.sectionTitle(context)),
+              IconButton(
+                icon: Icon(Icons.refresh, size: 20, color: context.textTertiary),
+                onPressed: _loadBackups,
+              ),
+            ],
           ),
+          const SizedBox(height: AppSpacing.md),
+          if (_loadingBackups)
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.lg),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_backupsError != null)
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Text('加载失败: $_backupsError', style: TextStyle(color: context.error)),
+            )
+          else if (_backups.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Center(
+                child: Text('暂无备份记录', style: AppTypography.body(context).copyWith(color: context.textTertiary)),
+              ),
+            )
+          else
+            ..._backups.map(
+              (b) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child._BackupRecord(
+                  time: (b['time'] ?? b['created_at'] ?? '').toString(),
+                  size: (b['size'] ?? '').toString(),
+                  source: (b['source'] ?? '本地').toString(),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -51,15 +151,24 @@ class _BackupPageState extends ConsumerState<BackupPage> {
 }
 
 class _DataOverview extends StatelessWidget {
-  const _DataOverview();
+  final int charactersCount;
+  final int conversationsCount;
+  final int memoriesCount;
+  final bool isLoading;
+
+  const _DataOverview({
+    required this.charactersCount,
+    required this.conversationsCount,
+    required this.memoriesCount,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
     final items = <(String, String, IconData)>[
-      ('对话数据', '342 条', Icons.chat_outlined),
-      ('角色数据', '4 个', Icons.people_outline),
-      ('记忆数据', '128 条', Icons.memory),
-      ('插件数据', '9 个', Icons.extension_outlined),
+      ('对话数据', isLoading ? '...' : '$conversationsCount 条', Icons.chat_outlined),
+      ('角色数据', isLoading ? '...' : '$charactersCount 个', Icons.people_outline),
+      ('记忆数据', isLoading ? '...' : '$memoriesCount 条', Icons.memory),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -118,7 +227,9 @@ class _DataItem extends StatelessWidget {
 }
 
 class _ActionGrid extends StatelessWidget {
-  const _ActionGrid();
+  final void Function(String) onAction;
+
+  const _ActionGrid({required this.onAction});
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +248,7 @@ class _ActionGrid extends StatelessWidget {
       crossAxisSpacing: AppSpacing.md,
       childAspectRatio: 1.5,
       children: actions
-          .map((a) => _ActionButton(label: a.$1, icon: a.$2))
+          .map((a) => _ActionButton(label: a.$1, icon: a.$2, onAction: onAction))
           .toList(),
     );
   }
@@ -146,20 +257,14 @@ class _ActionGrid extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final String label;
   final IconData icon;
+  final void Function(String) onAction;
 
-  const _ActionButton({required this.label, required this.icon});
+  const _ActionButton({required this.label, required this.icon, required this.onAction});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$label · 处理中'),
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      },
+      onTap: () => onAction(label),
       child: Container(
         decoration: BoxDecoration(
           color: context.surfacePrimary,

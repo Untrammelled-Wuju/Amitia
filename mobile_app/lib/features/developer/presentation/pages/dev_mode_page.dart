@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class DevModePage extends ConsumerStatefulWidget {
   const DevModePage({super.key});
@@ -19,16 +18,59 @@ class DevModePage extends ConsumerStatefulWidget {
 }
 
 class _DevModePageState extends ConsumerState<DevModePage> {
-  late List<DevWorkspace> _workspaces;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _workspaces = [];
 
   @override
   void initState() {
     super.initState();
-    _workspaces = List.from(MockKernel.devWorkspaces);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final data = await svc.diagnostics();
+      if (mounted) {
+        if (data != null) {
+          final ws = data['workspaces'];
+          if (ws is List) {
+            _workspaces = ws.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          } else {
+            _workspaces = [
+              {
+                'id': 'default',
+                'name': data['app_name'] as String? ?? '工作区',
+                'version': data['version'] as String? ?? '1.0.0',
+                'status': data['status'] as String? ?? '已注册',
+              },
+            ];
+          }
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '开发模式',
@@ -62,7 +104,12 @@ class _DevModePageState extends ConsumerState<DevModePage> {
     );
   }
 
-  Widget _buildWorkspaceCard(BuildContext context, DevWorkspace workspace) {
+  Widget _buildWorkspaceCard(BuildContext context, Map<String, dynamic> workspace) {
+    final name = workspace['name'] as String? ?? '未命名';
+    final version = workspace['version'] as String? ?? '0.1.0';
+    final status = workspace['status'] as String? ?? '已注册';
+    final id = workspace['id'] as String? ?? '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -86,13 +133,13 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(workspace.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
-                      Text('v${workspace.version}', style: AppTypography.caption(context)),
+                      Text('v$version', style: AppTypography.caption(context)),
                     ],
                   ),
                 ),
-                _buildStatusBadge(workspace.status),
+                _buildStatusBadge(status),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -127,7 +174,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                   const SizedBox(width: 8),
                   Text('开发会话', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
                   const Spacer(),
-                  Text(workspace.status == '开发中' ? '活跃' : '无活跃会话', style: AppTypography.label(context)),
+                  Text(status == '开发中' ? '活跃' : '无活跃会话', style: AppTypography.label(context)),
                 ],
               ),
             ),
@@ -147,7 +194,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                   child: AmitiaButton(
                     label: '热重载',
                     icon: Icons.refresh,
-                    onPressed: workspace.status == '开发中' ? () => _hotReload(context, workspace) : null,
+                    onPressed: status == '开发中' ? () => _hotReload(context, workspace) : null,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -182,42 +229,47 @@ class _DevModePageState extends ConsumerState<DevModePage> {
 
   void _registerWorkspace() {
     setState(() {
-      _workspaces.add(DevWorkspace(
-        id: 'dw${_workspaces.length + 1}',
-        name: '新工作区 ${_workspaces.length + 1}',
-        version: '0.1.0',
-        status: '已注册',
-      ));
+      _workspaces.add({
+        'id': 'dw${_workspaces.length + 1}',
+        'name': '新工作区 ${_workspaces.length + 1}',
+        'version': '0.1.0',
+        'status': '已注册',
+      });
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已注册新工作区')),
     );
   }
 
-  void _buildWorkspace(BuildContext context, DevWorkspace workspace) {
+  void _buildWorkspace(BuildContext context, Map<String, dynamic> workspace) {
     setState(() {
-      final idx = _workspaces.indexWhere((w) => w.id == workspace.id);
+      final idx = _workspaces.indexWhere((w) => w['id'] == workspace['id']);
       if (idx >= 0) {
-        _workspaces[idx] = DevWorkspace(
-          id: workspace.id,
-          name: workspace.name,
-          version: workspace.version,
-          status: '已构建',
-        );
+        _workspaces[idx] = {
+          'id': workspace['id'],
+          'name': workspace['name'] ?? '未命名',
+          'version': workspace['version'] ?? '0.1.0',
+          'status': '已构建',
+        };
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('正在构建：${workspace.name}')),
+      SnackBar(content: Text('正在构建：${workspace['name'] ?? '未命名'}')),
     );
   }
 
-  void _hotReload(BuildContext context, DevWorkspace workspace) {
+  void _hotReload(BuildContext context, Map<String, dynamic> workspace) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已触发热重载：${workspace.name}')),
+      SnackBar(content: Text('已触发热重载：${workspace['name'] ?? '未命名'}')),
     );
   }
 
-  void _showVersionDetailSheet(BuildContext context, DevWorkspace workspace) {
+  void _showVersionDetailSheet(BuildContext context, Map<String, dynamic> workspace) {
+    final name = workspace['name'] as String? ?? '未命名';
+    final version = workspace['version'] as String? ?? '0.1.0';
+    final status = workspace['status'] as String? ?? '已注册';
+    final id = workspace['id'] as String? ?? '';
+
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -237,16 +289,16 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 const SizedBox(height: 20),
                 Text('版本详情', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 4),
-                Text(workspace.name, style: AppTypography.caption(context)),
+                Text(name, style: AppTypography.caption(context)),
                 const SizedBox(height: 16),
-                _buildDetailRow(context, '工作区', workspace.name),
-                _buildDetailRow(context, '当前版本', 'v${workspace.version}'),
-                _buildDetailRow(context, '状态', workspace.status),
-                _buildDetailRow(context, '工作区 ID', workspace.id),
+                _buildDetailRow(context, '工作区', name),
+                _buildDetailRow(context, '当前版本', 'v$version'),
+                _buildDetailRow(context, '状态', status),
+                _buildDetailRow(context, '工作区 ID', id),
                 const SizedBox(height: 16),
                 Text('版本历史', style: AppTypography.cardTitle(context).copyWith(fontSize: 14)),
                 const SizedBox(height: AppSpacing.sm),
-                ..._buildVersionHistory(context, workspace),
+                ..._buildVersionHistory(context, version),
                 const SizedBox(height: 20),
                 AmitiaButton(
                   label: '关闭',
@@ -262,11 +314,11 @@ class _DevModePageState extends ConsumerState<DevModePage> {
     );
   }
 
-  List<Widget> _buildVersionHistory(BuildContext context, DevWorkspace workspace) {
+  List<Widget> _buildVersionHistory(BuildContext context, String version) {
     final versions = [
-      {'version': workspace.version, 'date': '2026/07/30', 'note': '当前版本'},
-      {'version': _decrementVersion(workspace.version), 'date': '2026/07/25', 'note': '修复已知问题'},
-      {'version': _decrementVersion(_decrementVersion(workspace.version)), 'date': '2026/07/20', 'note': '初始版本'},
+      {'version': version, 'date': '2026/07/30', 'note': '当前版本'},
+      {'version': _decrementVersion(version), 'date': '2026/07/25', 'note': '修复已知问题'},
+      {'version': _decrementVersion(_decrementVersion(version)), 'date': '2026/07/20', 'note': '初始版本'},
     ];
 
     return versions.map((v) {
@@ -330,7 +382,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
     return '0.0.0';
   }
 
-  void _showDeleteConfirm(BuildContext context, DevWorkspace workspace) {
+  void _showDeleteConfirm(BuildContext context, Map<String, dynamic> workspace) {
     showDialog(
       context: context,
       builder: (context) {
@@ -338,7 +390,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
           backgroundColor: context.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('删除工作区', style: AppTypography.cardTitle(context)),
-          content: Text('确定要删除工作区「${workspace.name}」吗？所有版本和会话数据将被清除，此操作不可恢复。', style: AppTypography.body(context)),
+          content: Text('确定要删除工作区「${workspace['name'] ?? '未命名'}」吗？所有版本和会话数据将被清除，此操作不可恢复。', style: AppTypography.body(context)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -347,10 +399,10 @@ class _DevModePageState extends ConsumerState<DevModePage> {
             TextButton(
               onPressed: () {
                 setState(() {
-                  _workspaces.removeWhere((w) => w.id == workspace.id);
+                  _workspaces.removeWhere((w) => w['id'] == workspace['id']);
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已删除工作区：${workspace.name}')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已删除工作区：${workspace['name'] ?? '未命名'}')));
               },
               child: Text('删除', style: TextStyle(color: context.error)),
             ),

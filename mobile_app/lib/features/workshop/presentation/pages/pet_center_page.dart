@@ -6,19 +6,72 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class PetCenterPage extends ConsumerWidget {
+class PetCenterPage extends ConsumerStatefulWidget {
   const PetCenterPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final runningPet = MockWorkshop.installations.where((p) => p.isRunning).firstOrNull;
-    final activeTasks = MockWorkshop.petTasks.where((t) => t.status != PetTaskStatus.completed).toList();
-    final recentTasks = MockWorkshop.petTasks.take(3).toList();
+  ConsumerState<PetCenterPage> createState() => _PetCenterPageState();
+}
+
+class _PetCenterPageState extends ConsumerState<PetCenterPage> {
+  List<Map<String, dynamic>> _sessions = [];
+  List<Map<String, dynamic>> _plugins = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final results = await Future.wait([
+        svc.workshopSessions(),
+        svc.plugins(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _sessions = results[0] as List<Map<String, dynamic>>;
+          _plugins = results[1] as List<Map<String, dynamic>>;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const AmitiaScaffold(
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        body: SafeArea(child: Center(child: Text('加载失败: $_error'))),
+      );
+    }
+
+    final running = _plugins.where((p) => p['isRunning'] == true || p['enabled'] == true).toList();
+    final runningPet = running.isNotEmpty ? running.first : null;
+
+    final activeSessions = _sessions.where((s) {
+      final status = s['status']?.toString() ?? '';
+      return status != 'completed' && status != 'cancelled';
+    }).toList();
+
+    final recentSessions = _sessions.take(3).toList();
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -44,18 +97,24 @@ class PetCenterPage extends ConsumerWidget {
               onAction: () => context.push(AppRoutes.workshopPetTasks),
             ),
             const SizedBox(height: AppSpacing.sm),
-            _buildTaskListCard(context, activeTasks),
+            _buildTaskListCard(context, activeSessions),
             const SizedBox(height: AppSpacing.sectionGap),
             const AmitiaSectionHeader(title: '最近记录'),
             const SizedBox(height: AppSpacing.sm),
-            _buildRecentRecords(context, recentTasks),
+            _buildRecentRecords(context, recentSessions),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRunningPetCard(BuildContext context, PetInstallation pet) {
+  Widget _buildRunningPetCard(BuildContext context, Map<String, dynamic> pet) {
+    final name = pet['name']?.toString() ?? '';
+    final characterName = pet['characterName']?.toString() ?? pet['character']?.toString() ??'';
+    final petActions = pet['actions'];
+    final actionsList = petActions is List ? petActions : <dynamic>[];
+    final scale = (pet['scale'] is num) ? (pet['scale'] as num).toDouble() : 1.0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
@@ -70,7 +129,7 @@ class PetCenterPage extends ConsumerWidget {
               ),
               child: Center(
                 child: Text(
-                  pet.characterName.substring(0, 1),
+                  name.isNotEmpty ? name.substring(0, 1) : '?',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -84,10 +143,10 @@ class PetCenterPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(pet.name, style: AppTypography.cardTitle(context)),
+                  Text(name, style: AppTypography.cardTitle(context)),
                   const SizedBox(height: 2),
                   Text(
-                    '${pet.characterName} · ${pet.actions.length} 个动作 · 缩放 ${(pet.scale * 100).round()}%',
+                    '$characterName · ${actionsList.length} 个动作 · 缩放 ${(scale * 100).round()}%',
                     style: AppTypography.caption(context),
                   ),
                 ],
@@ -133,7 +192,7 @@ class PetCenterPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildTaskListCard(BuildContext context, List<PetTask> tasks) {
+  Widget _buildTaskListCard(BuildContext context, List<Map<String, dynamic>> tasks) {
     if (tasks.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
@@ -162,9 +221,16 @@ class PetCenterPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildTaskItem(BuildContext context, PetTask task) {
+  Widget _buildTaskItem(BuildContext context, Map<String, dynamic> task) {
+    final name = task['name']?.toString() ?? '';
+    final completedActions = (task['completedActions'] is num) ? (task['completedActions'] as num).toInt() : 0;
+    final totalActions = (task['totalActions'] is num) ? (task['totalActions'] as num).toInt() : 0;
+    final progress = (task['progress'] is num) ? (task['progress'] as num).toInt() : 0;
+    final status = task['status']?.toString() ?? '';
+    final sessionId = task['id']?.toString() ?? '';
+
     return GestureDetector(
-      onTap: () => context.push(AppRoutes.petProcessing(task.id)),
+      onTap: () => context.push(AppRoutes.petProcessing(sessionId)),
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 12),
@@ -174,24 +240,24 @@ class PetCenterPage extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(task.name, style: AppTypography.body(context)),
+                  child: Text(name, style: AppTypography.body(context)),
                 ),
-                AmitiaStatusBadge(label: _statusLabel(task.status), type: _statusBadgeType(task.status)),
+                AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
             Row(
               children: [
                 Text(
-                  '${task.completedActions}/${task.totalActions} 动作',
+                  '$completedActions/$totalActions 动作',
                   style: AppTypography.caption(context),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: AmitiaProgressBar(progress: task.progress / 100.0),
+                  child: AmitiaProgressBar(progress: progress / 100.0),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Text('${task.progress}%', style: AppTypography.caption(context)),
+                Text('$progress%', style: AppTypography.caption(context)),
               ],
             ),
           ],
@@ -200,7 +266,7 @@ class PetCenterPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildRecentRecords(BuildContext context, List<PetTask> records) {
+  Widget _buildRecentRecords(BuildContext context, List<Map<String, dynamic>> records) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
@@ -217,7 +283,13 @@ class PetCenterPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildRecordItem(BuildContext context, PetTask task) {
+  Widget _buildRecordItem(BuildContext context, Map<String, dynamic> task) {
+    final name = task['name']?.toString() ?? '';
+    final characterName = task['characterName']?.toString() ?? task['character']?.toString() ?? '';
+    final createdAt = task['createdAt']?.toString() ?? '';
+    final status = task['status']?.toString() ?? '';
+    final progress = (task['progress'] is num) ? (task['progress'] as num).toInt() : 0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),
       child: Row(
@@ -236,44 +308,48 @@ class PetCenterPage extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(task.name, style: AppTypography.body(context)),
+                Text(name, style: AppTypography.body(context)),
                 const SizedBox(height: 2),
                 Text(
-                  '${task.characterName} · ${task.createdAt.month}/${task.createdAt.day}',
+                  '$characterName · $createdAt',
                   style: AppTypography.label(context),
                 ),
               ],
             ),
           ),
-          AmitiaStatusBadge(label: _statusLabel(task.status), type: _statusBadgeType(task.status)),
+          AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
         ],
       ),
     );
   }
 
-  String _statusLabel(PetTaskStatus status) {
+  String _statusLabel(String status) {
     switch (status) {
-      case PetTaskStatus.pending:
+      case 'pending':
         return '待处理';
-      case PetTaskStatus.processing:
+      case 'processing':
         return '处理中';
-      case PetTaskStatus.completed:
+      case 'completed':
         return '已完成';
-      case PetTaskStatus.cancelled:
+      case 'cancelled':
         return '已取消';
+      default:
+        return status;
     }
   }
 
-  BadgeType _statusBadgeType(PetTaskStatus status) {
+  BadgeType _statusBadgeType(String status) {
     switch (status) {
-      case PetTaskStatus.pending:
+      case 'pending':
         return BadgeType.neutral;
-      case PetTaskStatus.processing:
+      case 'processing':
         return BadgeType.accent;
-      case PetTaskStatus.completed:
+      case 'completed':
         return BadgeType.success;
-      case PetTaskStatus.cancelled:
+      case 'cancelled':
         return BadgeType.error;
+      default:
+        return BadgeType.neutral;
     }
   }
 }

@@ -8,71 +8,132 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/mock_data/mock_data.dart';
-import '../../../../shared/models/models.dart';
+import '../../../../core/services/providers.dart';
 
-class PluginDetailPage extends ConsumerWidget {
+class PluginDetailPage extends ConsumerStatefulWidget {
   final String pluginId;
 
   const PluginDetailPage({super.key, required this.pluginId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final plugin = MockData.installedExtensions.where((e) => e.id == pluginId && e.type == ExtensionType.plugin).firstOrNull ??
-        MockData.recommendedExtensions.where((e) => e.id == pluginId && e.type == ExtensionType.plugin).firstOrNull;
+  ConsumerState<PluginDetailPage> createState() => _PluginDetailPageState();
+}
+
+class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
+  Map<String, dynamic>? _plugin;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlugin();
+  }
+
+  Future<void> _loadPlugin() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final plugins = await svc.plugins();
+      final found = plugins.where((p) => (p['id'] ?? '').toString() == widget.pluginId).firstOrNull;
+      if (mounted) setState(() { _plugin = found; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '插件详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '插件详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: _error!, onRetry: _loadPlugin)),
+      );
+    }
+    final plugin = _plugin;
+    if (plugin == null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '插件详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
+        body: SafeArea(top: false, child: Center(child: Text('未找到插件', style: AppTypography.body(context)))),
+      );
+    }
+
+    final name = (plugin['name'] ?? '').toString();
+    final description = (plugin['description'] ?? '').toString();
+    final isInstalled = (plugin['isInstalled'] as bool?) ?? ((plugin['installed'] as int?) == 1);
+    final isEnabled = (plugin['isEnabled'] as bool?) ?? ((plugin['enabled'] as int?) == 1);
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: plugin?.name ?? '插件详情', showBackButton: true, fallbackRoute: AppRoutes.extensions),
+      appBar: AmitiaAppBar(title: name, showBackButton: true, fallbackRoute: AppRoutes.extensions),
       body: SafeArea(
         top: false,
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.pagePadding),
           children: [
-            if (plugin != null) ...[
-              AmitiaCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-                          child: Icon(plugin.icon, size: 24, color: context.accentPrimary),
+            AmitiaCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
+                        child: Icon(Icons.extension_outlined, size: 24, color: context.accentPrimary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: AppTypography.cardTitle(context)),
+                            Text(description, style: AppTypography.caption(context)),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(plugin.name, style: AppTypography.cardTitle(context)),
-                              Text(plugin.description, style: AppTypography.caption(context)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _InfoRow(label: '类型', value: 'Plugin'),
-                    _InfoRow(label: '状态', value: plugin.isInstalled ? '已安装' : '未安装'),
-                    _InfoRow(label: '启用', value: plugin.isEnabled ? '已启用' : '已禁用'),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _InfoRow(label: '类型', value: 'Plugin'),
+                  _InfoRow(label: '状态', value: isInstalled ? '已安装' : '未安装'),
+                  _InfoRow(label: '启用', value: isEnabled ? '已启用' : '已禁用'),
+                ],
               ),
-              const SizedBox(height: AppSpacing.md),
-              AmitiaButton(
-                label: plugin.isInstalled ? '卸载' : '安装',
-                isFullWidth: true,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(plugin.isInstalled ? '已卸载（Mock）' : '已安装（Mock）')),
-                  );
-                  context.pop();
-                },
-              ),
-            ] else
-              Center(child: Text('未找到插件', style: AppTypography.body(context))),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AmitiaButton(
+              label: isInstalled ? '卸载' : '安装',
+              isFullWidth: true,
+              onPressed: () async {
+                try {
+                  final svc = ref.read(extensionServiceProvider);
+                  if (isInstalled) {
+                    await svc.disablePlugin(widget.pluginId);
+                  } else {
+                    await svc.enablePlugin(widget.pluginId);
+                  }
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isInstalled ? '已卸载' : '已安装'), backgroundColor: context.success),
+                    );
+                    context.pop();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('操作失败: $e'), backgroundColor: context.error),
+                    );
+                  }
+                }
+              },
+            ),
           ],
         ),
       ),

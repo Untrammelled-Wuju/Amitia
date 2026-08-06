@@ -6,10 +6,9 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/worldbook.dart';
 
 class WorldBookPage extends ConsumerStatefulWidget {
   const WorldBookPage({super.key});
@@ -19,27 +18,24 @@ class WorldBookPage extends ConsumerStatefulWidget {
 }
 
 class _WorldBookPageState extends ConsumerState<WorldBookPage> {
-  late List<WorldBookEntry> _entries;
   String _selectedCategory = '全部';
 
-  @override
-  void initState() {
-    super.initState();
-    _entries = List.from(MockMemory.worldBookEntries);
-  }
-
-  List<String> get _categories {
-    final cats = _entries.map((e) => e.category).toSet().toList();
+  List<String> _categories(List<WorldBookDto> entries) {
+    final cats = entries.map((e) => e.title.isNotEmpty ? e.title : (e.keywords.isNotEmpty ? e.keywords.first : '')).where((c) => c.isNotEmpty).toSet().toList();
     return ['全部', ...cats];
   }
 
-  List<WorldBookEntry> get _filteredEntries {
-    if (_selectedCategory == '全部') return _entries;
-    return _entries.where((e) => e.category == _selectedCategory).toList();
+  List<WorldBookDto> _filteredEntries(List<WorldBookDto> entries, List<String> categories) {
+    if (_selectedCategory == '全部') return entries;
+    return entries.where((e) {
+      final cat = e.title.isNotEmpty ? e.title : (e.keywords.isNotEmpty ? e.keywords.first : '');
+      return cat == _selectedCategory;
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final wbAsync = ref.watch(worldBookListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '世界书',
@@ -54,43 +50,68 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            _buildCategoryTabs(context),
-            Expanded(
-              child: _filteredEntries.isEmpty
-                  ? AmitiaEmptyState(
-                      icon: Icons.menu_book_outlined,
-                      title: '暂无世界书条目',
-                      subtitle: '点击右上角添加新条目',
-                      actionText: '新增条目',
-                      onAction: () => _showEntryEditor(context, null),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                      itemCount: _filteredEntries.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-                      itemBuilder: (context, index) => _buildEntryCard(context, _filteredEntries[index]),
-                    ),
+        child: wbAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  const SizedBox(height: 16),
+                  Text('加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(context).copyWith(color: context.error),
+                    textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  AmitiaButton(label: '重试', onPressed: () => ref.invalidate(worldBookListProvider)),
+                ],
+              ),
             ),
-          ],
+          ),
+          data: (entries) {
+            final categories = _categories(entries);
+            final filtered = _filteredEntries(entries, categories);
+            return Column(
+              children: [
+                _buildCategoryTabs(context, categories),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? AmitiaEmptyState(
+                          icon: Icons.menu_book_outlined,
+                          title: '暂无世界书条目',
+                          subtitle: '点击右上角添加新条目',
+                          actionText: '新增条目',
+                          onAction: () => _showEntryEditor(context, null),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                          itemBuilder: (context, index) => _buildEntryCard(context, filtered[index]),
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildCategoryTabs(BuildContext context) {
+  Widget _buildCategoryTabs(BuildContext context, List<String> categories) {
     return SizedBox(
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-        itemCount: _categories.length,
+        itemCount: categories.length,
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
-          final isSelected = _selectedCategory == _categories[index];
+          final cat = categories[index];
+          final isSelected = _selectedCategory == cat;
           return GestureDetector(
-            onTap: () => setState(() => _selectedCategory = _categories[index]),
+            onTap: () => setState(() => _selectedCategory = cat),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
               decoration: BoxDecoration(
@@ -98,7 +119,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                 borderRadius: AppRadius.brTag,
               ),
               child: Center(
-                child: Text(_categories[index], style: TextStyle(fontSize: 13, fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400, color: isSelected ? Colors.white : context.textSecondary)),
+                child: Text(cat, style: TextStyle(fontSize: 13, fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400, color: isSelected ? Colors.white : context.textSecondary)),
               ),
             ),
           );
@@ -107,7 +128,9 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     );
   }
 
-  Widget _buildEntryCard(BuildContext context, WorldBookEntry entry) {
+  Widget _buildEntryCard(BuildContext context, WorldBookDto entry) {
+    final isEnabled = entry.enabled == 1;
+    final keywordStr = entry.keywords.isNotEmpty ? entry.keywords.first : entry.title;
     return AmitiaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,10 +141,10 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: entry.isEnabled ? context.accentSoft : context.surfaceSecondary,
+                  color: isEnabled ? context.accentSoft : context.surfaceSecondary,
                   borderRadius: AppRadius.brSmall,
                 ),
-                child: Icon(Icons.menu_book_outlined, size: 20, color: entry.isEnabled ? context.accentPrimary : context.textTertiary),
+                child: Icon(Icons.menu_book_outlined, size: 20, color: isEnabled ? context.accentPrimary : context.textTertiary),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -130,27 +153,19 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                   children: [
                     Row(
                       children: [
-                        Text(entry.keyword, style: AppTypography.cardTitle(context)),
+                        Text(keywordStr, style: AppTypography.cardTitle(context)),
                         const SizedBox(width: AppSpacing.sm),
                         AmitiaStatusBadge(label: 'P${entry.priority}', type: _getPriorityBadge(entry.priority)),
                       ],
                     ),
                     const SizedBox(height: 2),
-                    AmitiaStatusBadge(label: entry.category, type: BadgeType.neutral),
+                    AmitiaStatusBadge(label: entry.title.isNotEmpty ? entry.title : '未分类', type: BadgeType.neutral),
                   ],
                 ),
               ),
               Switch(
-                value: entry.isEnabled,
-                onChanged: (v) {
-                  setState(() {
-                    final idx = _entries.indexWhere((e) => e.id == entry.id);
-                    _entries[idx] = WorldBookEntry(
-                      id: entry.id, keyword: entry.keyword, content: entry.content,
-                      priority: entry.priority, isEnabled: v, category: entry.category,
-                    );
-                  });
-                },
+                value: isEnabled,
+                onChanged: (v) => _toggleEntry(context, entry, v),
               ),
             ],
           ),
@@ -204,13 +219,32 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     );
   }
 
-  void _showEntryEditor(BuildContext context, WorldBookEntry? existing) {
+  Future<void> _toggleEntry(BuildContext context, WorldBookDto entry, bool enabled) async {
+    try {
+      final svc = ref.read(worldBookServiceProvider);
+      await svc.update(entry.id, {
+        'id': entry.id,
+        'title': entry.title,
+        'content': entry.content,
+        'keywords': entry.keywords,
+        'priority': entry.priority,
+        'enabled': enabled ? 1 : 0,
+      });
+      ref.invalidate(worldBookListProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('更新失败: ${e.toString().replaceFirst('Exception: ', '')}')));
+      }
+    }
+  }
+
+  void _showEntryEditor(BuildContext context, WorldBookDto? existing) {
     final isEdit = existing != null;
-    final keywordCtrl = TextEditingController(text: existing?.keyword ?? '');
+    final titleCtrl = TextEditingController(text: existing?.title ?? '');
     final contentCtrl = TextEditingController(text: existing?.content ?? '');
+    final keywordCtrl = TextEditingController(text: existing?.keywords.join(', ') ?? '');
     int priority = existing?.priority ?? 5;
-    String category = existing?.category ?? '默认';
-    bool isEnabled = existing?.isEnabled ?? true;
+    int enabled = existing?.enabled ?? 1;
 
     showModalBottomSheet(
       context: context,
@@ -226,33 +260,17 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
               const SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑条目' : '新增条目', style: AppTypography.sectionTitle(context)),
               const SizedBox(height: AppSpacing.lg),
-              Text('关键词', style: AppTypography.label(context)),
+              Text('标题', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(controller: keywordCtrl, hintText: '输入触发关键词'),
+              AmitiaTextField(controller: titleCtrl, hintText: '输入标题'),
               const SizedBox(height: AppSpacing.md),
               Text('内容', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: contentCtrl, maxLines: 4, hintText: '输入世界书内容'),
               const SizedBox(height: AppSpacing.md),
-              Text('分类', style: AppTypography.label(context)),
+              Text('关键词', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
-              Wrap(
-                spacing: AppSpacing.sm,
-                children: ['默认', '角色设定', '用户设定', '世界设定', '实体'].map((c) {
-                  final isSelected = category == c;
-                  return GestureDetector(
-                    onTap: () => setSheetState(() => category = c),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isSelected ? context.accentPrimary : context.surfaceSecondary,
-                        borderRadius: AppRadius.brTag,
-                      ),
-                      child: Text(c, style: TextStyle(fontSize: 13, color: isSelected ? Colors.white : context.textSecondary)),
-                    ),
-                  );
-                }).toList(),
-              ),
+              AmitiaTextField(controller: keywordCtrl, hintText: '输入关键词，用逗号分隔'),
               const SizedBox(height: AppSpacing.md),
               Text('优先级：$priority/10', style: AppTypography.label(context)),
               Slider(value: priority.toDouble(), min: 1, max: 10, divisions: 9, activeColor: context.accentPrimary, onChanged: (v) => setSheetState(() => priority = v.round())),
@@ -260,31 +278,40 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
               AmitiaSwitchTile(
                 title: '启用条目',
                 subtitle: '启用后该条目将在对话中生效',
-                value: isEnabled,
-                onChanged: (v) => setSheetState(() => isEnabled = v),
+                value: enabled == 1,
+                onChanged: (v) => setSheetState(() => enabled = v ? 1 : 0),
               ),
               const SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
-                onPressed: () {
-                  if (keywordCtrl.text.trim().isEmpty) return;
+                onPressed: () async {
+                  if (titleCtrl.text.trim().isEmpty && keywordCtrl.text.trim().isEmpty) return;
                   Navigator.pop(ctx);
-                  setState(() {
+                  final svc = ref.read(worldBookServiceProvider);
+                  final keywords = keywordCtrl.text.trim().split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+                  final data = {
+                    'title': titleCtrl.text.trim(),
+                    'content': contentCtrl.text.trim(),
+                    'keywords': keywords,
+                    'priority': priority,
+                    'enabled': enabled,
+                  };
+                  try {
                     if (isEdit) {
-                      final idx = _entries.indexWhere((e) => e.id == existing.id);
-                      _entries[idx] = WorldBookEntry(
-                        id: existing.id, keyword: keywordCtrl.text.trim(), content: contentCtrl.text.trim(),
-                        priority: priority, isEnabled: isEnabled, category: category,
-                      );
+                      await svc.update(existing.id, data);
                     } else {
-                      _entries.add(WorldBookEntry(
-                        id: 'wb${DateTime.now().millisecondsSinceEpoch}', keyword: keywordCtrl.text.trim(),
-                        content: contentCtrl.text.trim(), priority: priority, isEnabled: isEnabled, category: category,
-                      ));
+                      await svc.create(data);
                     }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEdit ? '条目已更新' : '条目已创建'), duration: const Duration(seconds: 1)));
+                    ref.invalidate(worldBookListProvider);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEdit ? '条目已更新' : '条目已创建'), duration: const Duration(seconds: 1)));
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: ${e.toString().replaceFirst('Exception: ', '')}')));
+                    }
+                  }
                 },
               ),
             ],
@@ -294,19 +321,29 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, WorldBookEntry entry) {
+  void _showDeleteConfirm(BuildContext context, WorldBookDto entry) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('删除条目', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除关键词「${entry.keyword}」的条目吗？', style: AppTypography.bodySmall(context)),
+        content: Text('确定要删除关键词「${entry.keywords.isNotEmpty ? entry.keywords.first : entry.title}」的条目吗？', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              setState(() => _entries.removeWhere((e) => e.id == entry.id));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('条目已删除'), duration: Duration(seconds: 1)));
+              try {
+                final svc = ref.read(worldBookServiceProvider);
+                await svc.delete(entry.id);
+                ref.invalidate(worldBookListProvider);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('条目已删除'), duration: Duration(seconds: 1)));
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: ${e.toString().replaceFirst('Exception: ', '')}')));
+                }
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),

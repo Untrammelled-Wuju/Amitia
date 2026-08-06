@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
 type TaskRuntimeService struct {
@@ -40,6 +41,12 @@ type TaskRuntimeService struct {
 }
 
 func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRuntimeService {
+	if config.NodeEnvironmentResolver == nil {
+		config.NodeEnvironmentResolver = script_host.UnavailableNodeResolver()
+	}
+	if config.HostArtifactResolver == nil {
+		config.HostArtifactResolver = script_host.UnavailableArtifactResolver()
+	}
 	queue := NewTaskQueue(store, "amitia-task-runtime", config.LeaseDuration)
 	limiter := NewConcurrencyLimiter(store, config)
 	return &TaskRuntimeService{
@@ -265,14 +272,29 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	s.store.PutTaskRun(ctx, run)
 
 	instanceID := "ri-" + uuid.NewString()
+
+	nodeEnv, err := s.config.NodeEnvironmentResolver.Resolve(ctx)
+	if err != nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, "node unavailable: "+err.Error())
+		s.cleanupWorkspace(run.TaskRunID, workspace)
+		return
+	}
+
+	hostArtifact, err := s.config.HostArtifactResolver.Resolve(ctx, script_host.KindTaskHost)
+	if err != nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, "task host unavailable: "+err.Error())
+		s.cleanupWorkspace(run.TaskRunID, workspace)
+		return
+	}
+
 	hostCfg := ProcessHostConfig{
 		InstanceID:  instanceID,
 		TaskRunID:   run.TaskRunID,
 		ExtensionID: run.ExtensionID,
 		ModuleID:    run.ModuleID,
 		DefHash:     def.DefinitionHash,
-		NodePath:    s.config.NodePath,
-		HostPath:    s.config.TaskHostPath,
+		NodePath:    nodeEnv.NodeBinary,
+		HostPath:    hostArtifact.EntryPath,
 		WorkDir:     workspace,
 		EntryPath:   def.Entry,
 	}

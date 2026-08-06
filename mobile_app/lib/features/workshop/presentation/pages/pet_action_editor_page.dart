@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -8,8 +7,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../app/app_routes.dart';
+import '../../../../core/services/providers.dart';
 
 class PetActionEditorPage extends ConsumerStatefulWidget {
   final String taskId;
@@ -26,7 +25,7 @@ class PetActionEditorPage extends ConsumerStatefulWidget {
 }
 
 class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
-  ProcessingTask? _task;
+  Map<String, dynamic>? _skill;
   int _currentFrame = 0;
   double _playbackSpeed = 1.0;
   double _cropStart = 0.0;
@@ -35,23 +34,68 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
   double _anchorX = 0.5;
   double _anchorY = 0.5;
   bool _loop = true;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    final tasks = MockWorkshop.processingTasks(widget.taskId);
-    for (final t in tasks) {
-      if (t.actionKey == widget.actionKey) {
-        _task = t;
-        break;
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final data = await svc.getSkill(widget.actionKey);
+      if (mounted) {
+        if (data != null) {
+          final config = data['config'] as Map<String, dynamic>?;
+          setState(() {
+            _skill = data;
+            if (config != null) {
+              _playbackSpeed = (config['playbackSpeed'] is num) ? (config['playbackSpeed'] as num).toDouble() : 1.0;
+              _cropStart = (config['cropStart'] is num) ? (config['cropStart'] as num).toDouble() : 0.0;
+              _cropEnd = (config['cropEnd'] is num) ? (config['cropEnd'] as num).toDouble() : 1.0;
+              _scale = (config['scale'] is num) ? (config['scale'] as num).toDouble() : 1.0;
+              _anchorX = (config['anchorX'] is num) ? (config['anchorX'] as num).toDouble() : 0.5;
+              _anchorY = (config['anchorY'] is num) ? (config['anchorY'] as num).toDouble() : 0.5;
+              _loop = config['loop'] == true;
+            }
+            _loading = false;
+          });
+        } else {
+          setState(() { _loading = false; _error = '未找到该技能'; });
+        }
       }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
-  String get _actionName => _task?.actionName ?? widget.actionKey;
+  String get _actionName => _skill?['name']?.toString() ?? widget.actionKey;
+
+  int get _totalFrames {
+    final frames = _skill?['frames'];
+    if (frames is List) return frames.length;
+    final config = _skill?['config'] as Map<String, dynamic>?;
+    if (config != null && config['totalFrames'] is num) {
+      return (config['totalFrames'] as num).toInt();
+    }
+    return 8;
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const AmitiaScaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        body: SafeArea(child: Center(child: Text('加载失败: $_error'))),
+      );
+    }
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '动作编辑器',
@@ -125,7 +169,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
                     borderRadius: AppRadius.brTag,
                   ),
                   child: Text(
-                    '帧 ${_currentFrame + 1}/${_task?.totalFrames ?? 8}',
+                    '帧 ${_currentFrame + 1}/$_totalFrames',
                     style: const TextStyle(fontSize: 12, color: Colors.white),
                   ),
                 ),
@@ -158,31 +202,25 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
   }
 
   Widget _buildFrameScrubber(BuildContext context) {
-    final totalFrames = _task?.totalFrames ?? 8;
+    final totalFrames = _totalFrames;
     return Row(
       children: [
         AmitiaIconButton(
           icon: Icons.skip_previous,
           color: context.textSecondary,
           onPressed: _currentFrame > 0
-              ? () {
-                  setState(() {
-                    _currentFrame--;
-                  });
-                }
+              ? () { setState(() { _currentFrame--; }); }
               : null,
         ),
         Expanded(
           child: Slider(
-            value: _currentFrame.toDouble(),
+            value: _currentFrame.toDouble().clamp(0, (totalFrames - 1).toDouble()),
             min: 0,
-            max: (totalFrames - 1).toDouble(),
-            divisions: totalFrames - 1,
+            max: (totalFrames - 1).toDouble().clamp(0, double.infinity),
+            divisions: totalFrames > 1 ? totalFrames - 1 : 1,
             activeColor: context.accentPrimary,
             onChanged: (value) {
-              setState(() {
-                _currentFrame = value.round();
-              });
+              setState(() { _currentFrame = value.round(); });
             },
           ),
         ),
@@ -190,11 +228,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
           icon: Icons.skip_next,
           color: context.textSecondary,
           onPressed: _currentFrame < totalFrames - 1
-              ? () {
-                  setState(() {
-                    _currentFrame++;
-                  });
-                }
+              ? () { setState(() { _currentFrame++; }); }
               : null,
         ),
       ],
@@ -222,9 +256,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
             divisions: 11,
             activeColor: context.accentPrimary,
             onChanged: (value) {
-              setState(() {
-                _playbackSpeed = value;
-              });
+              setState(() { _playbackSpeed = value; });
             },
           ),
         ],
@@ -253,9 +285,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
             divisions: 20,
             activeColor: context.accentPrimary,
             onChanged: (value) {
-              setState(() {
-                _cropStart = value.clamp(0.0, _cropEnd - 0.05);
-              });
+              setState(() { _cropStart = value.clamp(0.0, _cropEnd - 0.05); });
             },
           ),
           Text('结束帧', style: AppTypography.label(context)),
@@ -266,9 +296,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
             divisions: 20,
             activeColor: context.accentPrimary,
             onChanged: (value) {
-              setState(() {
-                _cropEnd = value.clamp(_cropStart + 0.05, 1.0);
-              });
+              setState(() { _cropEnd = value.clamp(_cropStart + 0.05, 1.0); });
             },
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -380,9 +408,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
             divisions: 15,
             activeColor: context.accentPrimary,
             onChanged: (value) {
-              setState(() {
-                _scale = value;
-              });
+              setState(() { _scale = value; });
             },
           ),
         ],
@@ -410,9 +436,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
             value: _loop,
             activeThumbColor: context.accentPrimary,
             onChanged: (value) {
-              setState(() {
-                _loop = value;
-              });
+              setState(() { _loop = value; });
             },
           ),
         ],
@@ -425,9 +449,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
-        border: Border(
-          top: BorderSide(color: context.borderPrimary, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: context.borderPrimary, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -466,6 +488,21 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
     );
   }
 
+  Future<void> _updateConfig() async {
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      await svc.updateSkillConfig(widget.actionKey, {
+        'playbackSpeed': _playbackSpeed,
+        'cropStart': _cropStart,
+        'cropEnd': _cropEnd,
+        'scale': _scale,
+        'anchorX': _anchorX,
+        'anchorY': _anchorY,
+        'loop': _loop,
+      });
+    } catch (_) {}
+  }
+
   void _showSubmitConfirm() {
     showDialog(
       context: context,
@@ -483,12 +520,15 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「$_actionName」会话已提交')),
-                );
-                Navigator.pop(context);
+                await _updateConfig();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('「$_actionName」会话已提交')),
+                  );
+                  Navigator.pop(context);
+                }
               },
               child: Text('提交', style: TextStyle(color: context.accentPrimary)),
             ),

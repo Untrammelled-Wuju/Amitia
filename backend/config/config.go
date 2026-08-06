@@ -124,7 +124,9 @@ type QdrantConfig struct {
 	Host           string                      `mapstructure:"host"`
 	Port           int                         `mapstructure:"port"`
 	BinaryPath     string                      `mapstructure:"binaryPath"`
+	ConfigDir      string                      `mapstructure:"configDir"`
 	DataDir        string                      `mapstructure:"dataDir"`
+	SnapshotsDir   string                      `mapstructure:"snapshotsDir"`
 	CollectionName string                      `mapstructure:"collectionName"`
 	VectorDim      int                         `mapstructure:"vectorDim"`
 	Limit          int                         `mapstructure:"limit"`

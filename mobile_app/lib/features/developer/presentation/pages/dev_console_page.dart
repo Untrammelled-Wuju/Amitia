@@ -7,8 +7,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class DevConsolePage extends ConsumerStatefulWidget {
   const DevConsolePage({super.key});
@@ -25,24 +24,56 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
   int _selectedLevel = 0;
   int _selectedModule = 0;
   bool _isPaused = false;
-  List<DevConsoleLog> _logs = [];
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _logs = [];
 
   @override
   void initState() {
     super.initState();
-    _logs = List.from(MockKernel.devConsoleLogs);
+    _load();
   }
 
-  List<DevConsoleLog> get _filteredLogs {
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final runs = await svc.extensionRuns();
+      if (mounted) {
+        setState(() {
+          _logs = runs;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> get _filteredLogs {
     return _logs.where((log) {
-      if (_selectedLevel > 0 && log.level != _levels[_selectedLevel]) return false;
-      if (_selectedModule > 0 && log.module != _modules[_selectedModule]) return false;
+      if (_selectedLevel > 0 && log['level'] != _levels[_selectedLevel]) return false;
+      if (_selectedModule > 0 && log['module'] != _modules[_selectedModule]) return false;
       return true;
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_logs.isEmpty) {
+      return const AmitiaEmptyState(icon: Icons.terminal, title: '暂无日志', subtitle: '没有运行记录');
+    }
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '诊断控制台',
@@ -213,7 +244,12 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
     );
   }
 
-  Widget _buildLogItem(BuildContext context, DevConsoleLog log) {
+  Widget _buildLogItem(BuildContext context, Map<String, dynamic> log) {
+    final level = log['level'] as String? ?? 'INFO';
+    final module = log['module'] as String? ?? 'unknown';
+    final message = log['message'] as String? ?? '';
+    final timeStr = log['time'] as String? ?? '';
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 1),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
@@ -227,24 +263,24 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
           SizedBox(
             width: 50,
             child: Text(
-              _formatTime(log.time),
+              timeStr.length > 8 ? timeStr.substring(11, 19) : timeStr,
               style: AppTypography.label(context).copyWith(fontFamily: 'monospace', fontSize: 11),
             ),
           ),
           const SizedBox(width: 8),
-          _buildLevelTag(context, log.level),
+          _buildLevelTag(context, level),
           const SizedBox(width: 8),
           SizedBox(
             width: 60,
             child: Text(
-              log.module,
+              module,
               style: AppTypography.label(context).copyWith(fontFamily: 'monospace', fontSize: 11, color: context.accentPrimary),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              log.message,
+              message,
               style: AppTypography.bodySmall(context).copyWith(fontSize: 13),
             ),
           ),
@@ -276,10 +312,6 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
         style: AppTypography.statusLabel(context).copyWith(color: color, fontSize: 10),
       ),
     );
-  }
-
-  String _formatTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
   }
 
   void _togglePause() {

@@ -7,7 +7,17 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+
+final dashboardHealthProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final svc = ref.read(systemServiceProvider);
+  return svc.health();
+});
+
+final dashboardStatsProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final svc = ref.read(systemServiceProvider);
+  return svc.chatStats();
+});
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -19,14 +29,8 @@ class DashboardPage extends ConsumerStatefulWidget {
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   int _selectedTab = 0;
 
-  void _snack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
-    );
-  }
-
   BadgeType _statusBadgeType(String status) {
-    if (status.contains('运行') || status.contains('已连接') || status.contains('正常')) {
+    if (status.contains('运行') || status.contains('已连接') || status.contains('正常') || status.contains('alive')) {
       return BadgeType.success;
     } else if (status.contains('空闲') || status.contains('低')) {
       return BadgeType.accent;
@@ -59,111 +63,98 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 
   Widget _buildRunOverview() {
-    final info = MockDashboard.runInfo;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
-      children: [
-        AmitiaSectionHeader(title: '系统状态'),
-        const SizedBox(height: AppSpacing.md),
-        _StatusGrid(
-          items: [
-            _StatusItem(label: '后端', value: info.backendStatus, icon: Icons.dns_outlined, type: _statusBadgeType(info.backendStatus)),
-            _StatusItem(label: 'Agent Runtime', value: info.agentRuntimeStatus, icon: Icons.auto_awesome, type: _statusBadgeType(info.agentRuntimeStatus)),
-            _StatusItem(label: '模型', value: info.modelStatus, icon: Icons.psychology_outlined, type: _statusBadgeType(info.modelStatus)),
-            _StatusItem(label: '数据库', value: info.databaseStatus, icon: Icons.storage, type: _statusBadgeType(info.databaseStatus)),
-            _StatusItem(label: '渠道', value: info.channelStatus, icon: Icons.wechat_outlined, type: _statusBadgeType(info.channelStatus)),
-            _StatusItem(label: '访问风险', value: info.accessRisk, icon: Icons.shield_outlined, type: _statusBadgeType(info.accessRisk)),
+    final healthAsync = ref.watch(dashboardHealthProvider);
+    return healthAsync.when(
+      data: (health) {
+        final status = health?['status'] as Map<String, dynamic>?;
+        final backendStatus = status?['database'] == true ? '运行中' : '已停止';
+        final modelStatus = status?['orchestratorReady'] == true ? '就绪' : '未就绪';
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
+          children: [
+            AmitiaSectionHeader(title: '系统状态'),
+            const SizedBox(height: AppSpacing.md),
+            _StatusGrid(
+              items: [
+                _StatusItem(label: '后端', value: backendStatus, icon: Icons.dns_outlined, type: _statusBadgeType(backendStatus)),
+                _StatusItem(label: 'Agent Runtime', value: modelStatus, icon: Icons.auto_awesome, type: _statusBadgeType(modelStatus)),
+                _StatusItem(label: '模型', value: status?['readinessReady'] == true ? '已加载' : '未加载', icon: Icons.psychology_outlined, type: _statusBadgeType(status?['readinessReady'] == true ? '正常' : '未加载')),
+                _StatusItem(label: '数据库', value: status?['database'] == true ? '正常' : '异常', icon: Icons.storage, type: _statusBadgeType(status?['database'] == true ? '正常' : '异常')),
+                _StatusItem(label: '渠道', value: '未连接', icon: Icons.wechat_outlined, type: BadgeType.neutral),
+                _StatusItem(label: '访问风险', value: '安全', icon: Icons.shield_outlined, type: BadgeType.success),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sectionGap),
+            AmitiaSectionHeader(title: '应用信息'),
+            const SizedBox(height: AppSpacing.md),
+            AmitiaCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('状态', style: AppTypography.bodySmall(context)),
+                      Text(status?['status']?.toString() ?? 'unknown', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('就绪组件', style: AppTypography.bodySmall(context)),
+                      Text('${status?['readyCount'] ?? 0}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('检查时间', style: AppTypography.bodySmall(context)),
+                      Text(DateTime.now().toString().substring(0, 19), style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sectionGap),
+            AmitiaButton(
+              label: '刷新状态',
+              icon: Icons.refresh,
+              isFullWidth: true,
+              isSecondary: true,
+              onPressed: () => ref.invalidate(dashboardHealthProvider),
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: context.error),
+            const SizedBox(height: AppSpacing.md),
+            Text('无法连接到后端', style: AppTypography.body(context)),
+            const SizedBox(height: AppSpacing.sm),
+            Text(err.toString(), style: AppTypography.caption(context)),
+            const SizedBox(height: AppSpacing.md),
+            AmitiaButton(
+              label: '重试',
+              icon: Icons.refresh,
+              isSecondary: true,
+              onPressed: () => ref.invalidate(dashboardHealthProvider),
+            ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaSectionHeader(title: '最近错误'),
-        const SizedBox(height: AppSpacing.md),
-        Container(
-          decoration: BoxDecoration(
-            color: context.surfacePrimary,
-            borderRadius: AppRadius.brMedium,
-            border: Border.all(color: context.borderPrimary, width: 0.5),
-          ),
-          child: Column(
-            children: [
-              for (int i = 0; i < info.recentErrors.length; i++) ...[
-                _ErrorTile(message: info.recentErrors[i]),
-                if (i < info.recentErrors.length - 1)
-                  Divider(height: 1, indent: AppSpacing.lg, color: context.borderSecondary),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaSectionHeader(title: '最近任务'),
-        const SizedBox(height: AppSpacing.md),
-        Container(
-          decoration: BoxDecoration(
-            color: context.surfacePrimary,
-            borderRadius: AppRadius.brMedium,
-            border: Border.all(color: context.borderPrimary, width: 0.5),
-          ),
-          child: Column(
-            children: [
-              for (int i = 0; i < info.recentTasks.length; i++) ...[
-                _TaskTile(task: info.recentTasks[i]),
-                if (i < info.recentTasks.length - 1)
-                  Divider(height: 1, indent: AppSpacing.lg, color: context.borderSecondary),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaSectionHeader(title: '心理状态摘要'),
-        const SizedBox(height: AppSpacing.md),
-        AmitiaCard(
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: context.accentSoft,
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Icon(Icons.mood, size: 24, color: context.accentPrimary),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Amitia', style: AppTypography.cardTitle(context)),
-                    Text(info.psycheSummary, style: AppTypography.caption(context)),
-                  ],
-                ),
-              ),
-              AmitiaStatusBadge(label: '稳定', type: BadgeType.success),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaButton(
-          label: '进入诊断',
-          icon: Icons.health_and_safety_outlined,
-          isFullWidth: true,
-          isSecondary: true,
-          onPressed: () => _snack('正在打开诊断工具...'),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildDataOverview() {
-    final info = MockDashboard.dataInfo;
-    final stats = [
-      _StatItem(label: '对话', value: info.conversationCount, icon: Icons.chat_bubble_outline),
-      _StatItem(label: '角色', value: info.characterCount, icon: Icons.people_outline),
-      _StatItem(label: '记忆', value: info.memoryCount, icon: Icons.memory),
-      _StatItem(label: '主动消息', value: info.proactiveMessageCount, icon: Icons.campaign_outlined),
-      _StatItem(label: '扩展', value: info.extensionCount, icon: Icons.extension_outlined),
-      _StatItem(label: '错误', value: info.errorCount, icon: Icons.error_outline),
-    ];
+    final statsAsync = ref.watch(dashboardStatsProvider);
+    final characterCount = ref.watch(characterListProvider);
+    final memoryCount = ref.watch(memoryListProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
       children: [
@@ -176,80 +167,23 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           mainAxisSpacing: AppSpacing.md,
           crossAxisSpacing: AppSpacing.md,
           childAspectRatio: 1.0,
-          children: stats.map((s) => _StatCard(stat: s)).toList(),
+          children: [
+            _StatCard(stat: _StatItem(label: '角色', value: characterCount.valueOrNull?.length ?? 0, icon: Icons.people_outline)),
+            _StatCard(stat: _StatItem(label: '记忆', value: memoryCount.valueOrNull?.length ?? 0, icon: Icons.memory)),
+            _StatCard(stat: _StatItem(label: '对话', value: statsAsync.valueOrNull?['conversationCount'] ?? 0, icon: Icons.chat_bubble_outline)),
+          ],
         ),
         const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaSectionHeader(title: '存储占用'),
-        const SizedBox(height: AppSpacing.md),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('已使用', style: AppTypography.caption(context)),
-                  Text(info.storageUsage, style: AppTypography.cardTitle(context).copyWith(color: context.accentPrimary)),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              AmitiaProgressBar(progress: 0.35, height: 8),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('总容量 10 GB', style: AppTypography.label(context)),
-                  Text('35%', style: AppTypography.label(context)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaSectionHeader(title: '使用趋势'),
-        const SizedBox(height: AppSpacing.md),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('近 7 天对话量', style: AppTypography.caption(context)),
-              const SizedBox(height: AppSpacing.lg),
-              _BarChart(),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaSectionHeader(title: '最近导入'),
-        const SizedBox(height: AppSpacing.md),
-        Container(
-          decoration: BoxDecoration(
-            color: context.surfacePrimary,
-            borderRadius: AppRadius.brMedium,
-            border: Border.all(color: context.borderPrimary, width: 0.5),
-          ),
-          child: Column(
-            children: [
-              for (int i = 0; i < info.recentImports.length; i++) ...[
-                _ImportTile(text: info.recentImports[i]),
-                if (i < info.recentImports.length - 1)
-                  Divider(height: 1, indent: AppSpacing.lg, color: context.borderSecondary),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        AmitiaSectionHeader(title: '错误统计'),
-        const SizedBox(height: AppSpacing.md),
-        AmitiaCard(
-          child: Column(
-            children: [
-              _ErrorStatRow(label: '模型调用错误', count: 2, color: context.warning),
-              const SizedBox(height: AppSpacing.sm),
-              _ErrorStatRow(label: '渠道连接错误', count: 1, color: context.error),
-              const SizedBox(height: AppSpacing.sm),
-              _ErrorStatRow(label: 'Agent 执行错误', count: 0, color: context.success),
-            ],
-          ),
+        AmitiaButton(
+          label: '刷新数据',
+          icon: Icons.refresh,
+          isFullWidth: true,
+          isSecondary: true,
+          onPressed: () {
+            ref.invalidate(dashboardStatsProvider);
+            ref.invalidate(characterListProvider);
+            ref.invalidate(memoryListProvider);
+          },
         ),
       ],
     );
@@ -321,59 +255,10 @@ class _StatusCard extends StatelessWidget {
               ],
             ),
           ),
-          AmitiaStatusBadge(label: item.value.contains('运行') || item.value.contains('已连接') || item.value.contains('正常') ? '正常' : item.value.contains('低') ? '安全' : '注意', type: item.type),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorTile extends StatelessWidget {
-  final String message;
-
-  const _ErrorTile({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, size: 18, color: context.error),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(child: Text(message, style: AppTypography.bodySmall(context))),
-          Icon(Icons.chevron_right, size: 18, color: context.textTertiary),
-        ],
-      ),
-    );
-  }
-}
-
-class _TaskTile extends StatelessWidget {
-  final String task;
-
-  const _TaskTile({required this.task});
-
-  @override
-  Widget build(BuildContext context) {
-    final isRunning = task.contains('进行中');
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
-      child: Row(
-        children: [
-          Icon(
-            isRunning ? Icons.play_circle_outline : Icons.check_circle_outline,
-            size: 18,
-            color: isRunning ? context.accentPrimary : context.success,
+          AmitiaStatusBadge(
+            label: item.value.contains('运行') || item.value.contains('正常') || item.value.contains('就绪') || item.value == '已加载' ? '正常' : '注意',
+            type: item.type,
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(child: Text(task, style: AppTypography.bodySmall(context))),
-          if (isRunning)
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: context.accentPrimary),
-            ),
         ],
       ),
     );
@@ -415,107 +300,6 @@ class _StatCard extends StatelessWidget {
           Text(stat.label, style: AppTypography.label(context)),
         ],
       ),
-    );
-  }
-}
-
-class _BarChart extends StatelessWidget {
-  final _data = [
-    ('周一', 0.45),
-    ('周二', 0.62),
-    ('周三', 0.38),
-    ('周四', 0.75),
-    ('周五', 0.55),
-    ('周六', 0.88),
-    ('周日', 0.70),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 120,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: _data.map((d) {
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Flexible(
-                    child: FractionallySizedBox(
-                      heightFactor: d.$2,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: context.accentPrimary.withValues(alpha: 0.15 + d.$2 * 0.5),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(4),
-                            topRight: Radius.circular(4),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(d.$1, style: AppTypography.label(context)),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-class _ImportTile extends StatelessWidget {
-  final String text;
-
-  const _ImportTile({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
-      child: Row(
-        children: [
-          Icon(Icons.file_download_outlined, size: 18, color: context.accentPrimary),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(child: Text(text, style: AppTypography.bodySmall(context))),
-          AmitiaStatusBadge(label: '已完成', type: BadgeType.success),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorStatRow extends StatelessWidget {
-  final String label;
-  final int count;
-  final Color color;
-
-  const _ErrorStatRow({required this.label, required this.count, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(child: Text(label, style: AppTypography.bodySmall(context))),
-        Text(
-          '$count 次',
-          style: AppTypography.bodySmall(context).copyWith(
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

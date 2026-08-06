@@ -43,6 +43,9 @@ type CreateHostRequest struct {
 	ResourceLimits       runtime.ResourceLimits
 	Env                  []string
 	NetworkDisabled      bool
+	NodePath             string
+	PluginHostPath        string
+	WorkingDirectory     string
 }
 
 func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*PluginHost, error) {
@@ -54,6 +57,15 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 	}
 	if req.Entry == "" {
 		return nil, errors.New("javascript_main: entry required")
+	}
+	if req.NodePath == "" {
+		return nil, errors.New("javascript_main: node path required")
+	}
+	if req.PluginHostPath == "" {
+		return nil, errors.New("javascript_main: plugin host path required")
+	}
+	if req.WorkingDirectory == "" {
+		return nil, errors.New("javascript_main: working directory required")
 	}
 
 	instanceID := fmt.Sprintf("inst-%s-%s-%d", req.ExtensionID, req.ModuleID, time.Now().UnixNano())
@@ -94,6 +106,9 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 		DefinitionHash:       req.DefinitionHash,
 		HostAPIVersion:       req.HostAPIVersion,
 		AllowedContributions: req.AllowedContributions,
+		NodePath:             req.NodePath,
+		PluginHostPath:        req.PluginHostPath,
+		WorkingDirectory:     req.WorkingDirectory,
 		HostAPI:              gateway,
 		Env:                  req.Env,
 		NetworkDisabled:      req.NetworkDisabled,

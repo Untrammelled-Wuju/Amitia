@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package builtin
 
 import (
@@ -9,39 +11,24 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
-	qdrantpkg "github.com/u-ai/backend/pkg/database/qdrant"
+	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
+	"github.com/u-ai/backend/internal/vectorstore/qdrantlayout"
+	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 )
 
 type QdrantDependency interface {
 	StartQdrant() error
 	WaitForQdrant(port int) error
 	InitClient() error
-	EnsureCollections() error
-	SetQdrantShuttingDown()
-	StopQdrant()
 	GetClient() *qdrant.Client
 }
-
-type defaultQdrantDep struct{}
-
-func (defaultQdrantDep) StartQdrant() error           { return qdrantpkg.StartQdrant() }
-func (defaultQdrantDep) WaitForQdrant(port int) error { return qdrantpkg.WaitForQdrant(port) }
-func (defaultQdrantDep) InitClient() error            { return qdrantpkg.InitClient() }
-func (defaultQdrantDep) EnsureCollections() error     { return qdrantpkg.EnsureCollections() }
-func (defaultQdrantDep) SetQdrantShuttingDown()       { qdrantpkg.SetQdrantShuttingDown() }
-func (defaultQdrantDep) StopQdrant()                  { qdrantpkg.StopQdrant() }
-func (defaultQdrantDep) GetClient() *qdrant.Client    { return qdrantpkg.Client }
 
 type QdrantProviderFactory struct {
 	dep QdrantDependency
 }
 
 func NewQdrantProviderFactory() *QdrantProviderFactory {
-	return &QdrantProviderFactory{dep: defaultQdrantDep{}}
-}
-
-func NewQdrantProviderFactoryWithDep(dep QdrantDependency) *QdrantProviderFactory {
-	return &QdrantProviderFactory{dep: dep}
+	return &QdrantProviderFactory{}
 }
 
 func (f *QdrantProviderFactory) ProviderID() string { return "builtin.qdrant-process" }
@@ -62,17 +49,46 @@ func (f *QdrantProviderFactory) Build(ctx runtimeorchestrator.ProviderBuildConte
 	if ctx.Config == nil {
 		return nil, runtimeorchestrator.DescriptorFailure("", "nil config")
 	}
+	if ctx.Host == nil {
+		return nil, runtimeorchestrator.DescriptorFailure("", "nil host")
+	}
+
+	envResolver, err := qdrantenv.NewResolver(qdrantenv.ResolveContext{
+		Config: ctx.Config,
+		Host:   ctx.Host,
+	})
+	if err != nil {
+		return nil, runtimeorchestrator.DescriptorFailure("", err.Error())
+	}
+
+	layoutResolver, err := qdrantlayout.NewResolver(qdrantlayout.ResolveContext{
+		Config: ctx.Config,
+		Host:   ctx.Host,
+	})
+	if err != nil {
+		return nil, runtimeorchestrator.DescriptorFailure("", err.Error())
+	}
+
 	return &qdrantProvider{
-		dep:    f.dep,
-		config: &ctx.Config.Providers.VectorStore,
-		host:   ctx.Host,
+		config:          &ctx.Config.Providers.VectorStore,
+		host:            ctx.Host,
+		envResolver:     envResolver,
+		layoutResolver:  layoutResolver,
+		directoryManager: qdrantlayout.NewDirectoryManager(nil),
+		configRenderer:  qdrantconfig.NewRenderer(),
+		configWriter:    qdrantconfig.NewWriter(nil),
 	}, nil
 }
 
 type qdrantProvider struct {
-	dep          QdrantDependency
-	config       *config.VectorStoreProviderConfig
-	host         runtimehost.RuntimeHost
+	config           *config.VectorStoreProviderConfig
+	host             runtimehost.RuntimeHost
+	layoutResolver   qdrantlayout.Resolver
+	envResolver      qdrantenv.Resolver
+	directoryManager qdrantlayout.DirectoryManager
+	configRenderer   qdrantconfig.Renderer
+	configWriter     qdrantconfig.Writer
+
 	capabilityMu sync.RWMutex
 	client       *qdrant.Client
 	started      bool
@@ -105,36 +121,55 @@ func (p *qdrantProvider) Start(ctx context.Context) error {
 	if p.started {
 		return nil
 	}
-	if err := p.dep.StartQdrant(); err != nil {
-		return p.startFail("StartQdrant", err)
+
+	env, err := p.envResolver.Resolve(ctx)
+	if err != nil {
+		if qdrantErr, ok := unwrapNotInstalled(err); ok {
+			return qdrantErr
+		}
+		return phaseError{phase: "qdrant:env-resolve", err: err}
 	}
-	if err := p.dep.WaitForQdrant(p.config.Qdrant.Port); err != nil {
-		p.dep.StopQdrant()
-		return p.startFail("WaitForQdrant", err)
+
+	layout, err := p.layoutResolver.Resolve(ctx, env)
+	if err != nil {
+		return phaseError{phase: "qdrant:layout-resolve", err: err}
 	}
-	if err := p.dep.InitClient(); err != nil {
-		p.dep.StopQdrant()
-		return p.startFail("InitClient", err)
+
+	if err := p.directoryManager.Ensure(ctx, layout); err != nil {
+		return phaseError{phase: "qdrant:ensure-dirs", err: err}
 	}
-	if err := p.dep.EnsureCollections(); err != nil {
-		p.dep.StopQdrant()
-		return p.startFail("EnsureCollections", err)
+
+	doc := qdrantconfig.Document{
+		HTTPPort:     p.config.Qdrant.Port,
+		GRPCPort:     p.config.Qdrant.Port + 1,
+		StoragePath:  layout.StorageDir,
+		SnapshotPath: layout.SnapshotsDir,
 	}
+
+	configBytes, err := p.configRenderer.Render(doc)
+	if err != nil {
+		return phaseError{phase: "qdrant:render-config", err: err}
+	}
+
+	if err := p.configWriter.Write(ctx, layout.ConfigPath, configBytes); err != nil {
+		return phaseError{phase: "qdrant:write-config", err: err}
+	}
+
 	p.started = true
 	return nil
 }
 
 func (p *qdrantProvider) Ready(ctx context.Context) error {
-	client := p.dep.GetClient()
-	if client == nil {
+	if p.client == nil {
 		return runtimeorchestrator.DescriptorFailure("", "qdrant client not initialized")
 	}
-	p.capabilityMu.Lock()
-	p.client = client
-	p.capabilityMu.Unlock()
-	hctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	p.capabilityMu.RLock()
+	client := p.client
+	p.capabilityMu.RUnlock()
+
+	hCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if _, err := client.HealthCheck(hctx); err != nil {
+	if _, err := client.HealthCheck(hCtx); err != nil {
 		return err
 	}
 	return nil
@@ -144,20 +179,21 @@ func (p *qdrantProvider) Stop(ctx context.Context) error {
 	if p.stopped {
 		return nil
 	}
-	p.dep.SetQdrantShuttingDown()
-	p.dep.StopQdrant()
 	p.stopped = true
 	return nil
 }
 
-func (p *qdrantProvider) startFail(stage string, err error) error {
-	return &phaseError{phase: "qdrant:" + stage, err: err}
+func unwrapNotInstalled(err error) (error, bool) {
+	for err != nil {
+		if err == qdrantenv.ErrQdrantBinaryNotInstalled {
+			return err, true
+		}
+		type unwrap interface{ Unwrap() error }
+		if u, ok := err.(unwrap); ok {
+			err = u.Unwrap()
+		} else {
+			return nil, false
+		}
+	}
+	return nil, false
 }
-
-type phaseError struct {
-	phase string
-	err   error
-}
-
-func (e *phaseError) Error() string { return e.phase + ": " + e.err.Error() }
-func (e *phaseError) Unwrap() error { return e.err }

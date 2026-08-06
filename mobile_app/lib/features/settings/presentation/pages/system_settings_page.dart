@@ -8,6 +8,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../core/services/providers.dart';
 
 class SystemSettingsPage extends ConsumerStatefulWidget {
   const SystemSettingsPage({super.key});
@@ -21,8 +22,28 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   bool _autoStart = false;
   bool _notifications = true;
   bool _developerMode = false;
+  Map<String, dynamic>? _healthData;
+  bool _loadingHealth = true;
+  String? _healthError;
 
   static const _languages = ['简体中文', 'English', '日本語'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHealth();
+  }
+
+  Future<void> _loadHealth() async {
+    setState(() { _loadingHealth = true; _healthError = null; });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final result = await svc.health();
+      if (mounted) setState(() { _healthData = result; _loadingHealth = false; });
+    } catch (e) {
+      if (mounted) setState(() { _healthError = e.toString(); _loadingHealth = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +52,10 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
+          _SectionLabel(text: '系统状态'),
+          const SizedBox(height: AppSpacing.sm),
+          _buildHealthCard(),
+          const SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '通用'),
           const SizedBox(height: AppSpacing.sm),
           _buildCard([
@@ -101,6 +126,88 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
         border: Border.all(color: context.borderPrimary, width: 0.5),
       ),
       child: Column(children: children),
+    );
+  }
+
+  Widget _buildHealthCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        borderRadius: AppRadius.brMedium,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: _loadingHealth
+          ? const Padding(
+              padding: EdgeInsets.all(AppSpacing.lg),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : _healthError != null
+              ? Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Text('获取系统状态失败: $_healthError', style: TextStyle(color: context.error)),
+                )
+              : _buildHealthContent(),
+    );
+  }
+
+  Widget _buildHealthContent() {
+    final components = (_healthData?['components'] as List?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        [];
+    final version = (_healthData?['version'] ?? '').toString();
+    final status = (_healthData?['status'] ?? 'unknown').toString();
+
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: status == 'ok' ? context.success : context.warning,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text('系统 $status', style: AppTypography.body(context)),
+              const Spacer(),
+              if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
+              const SizedBox(width: AppSpacing.sm),
+              Icon(Icons.refresh, size: 18, color: context.textTertiary),
+            ],
+          ),
+          if (components.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.xs,
+              children: components.map((c) {
+                final name = (c['name'] ?? '').toString();
+                final compStatus = (c['status'] ?? 'unknown').toString();
+                final isOk = compStatus == 'ok';
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isOk ? Icons.check_circle : Icons.error_outline,
+                      size: 14,
+                      color: isOk ? context.success : context.warning,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(name, style: AppTypography.label(context)),
+                  ],
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

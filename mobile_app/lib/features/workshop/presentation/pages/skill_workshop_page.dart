@@ -9,25 +9,92 @@ import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class SkillWorkshopPage extends ConsumerStatefulWidget {
+final _workshopSessionsProvider = FutureProvider<List<Map<String, dynamic>>?>((ref) async {
+  final svc = ref.read(extensionServiceProvider);
+  final sessions = await svc.workshopSessions();
+  return sessions;
+});
+
+class SkillWorkshopPage extends ConsumerWidget {
   const SkillWorkshopPage({super.key});
 
+  BadgeType _statusBadgeType(String status) {
+    switch (status) {
+      case '已完成':
+        return BadgeType.success;
+      case '进行中':
+        return BadgeType.accent;
+      case '草稿':
+        return BadgeType.neutral;
+      default:
+        return BadgeType.neutral;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}';
+  }
+
   @override
-  ConsumerState<SkillWorkshopPage> createState() => _SkillWorkshopPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessionsAsync = ref.watch(_workshopSessionsProvider);
+
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(
+        title: '技能制作',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.workshop,
+      ),
+      body: sessionsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                const SizedBox(height: 16),
+                Text(
+                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                  style: AppTypography.body(context).copyWith(color: context.error),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () => ref.invalidate(_workshopSessionsProvider),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (sessions) {
+          final sessionList = sessions ?? [];
+          return _SkillWorkshopContent(
+            sessions: sessionList,
+            onRefresh: () => ref.invalidate(_workshopSessionsProvider),
+          );
+        },
+      ),
+    );
+  }
 }
 
-class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
-  late List<WorkshopSession> _sessions;
-  final _descController = TextEditingController();
+class _SkillWorkshopContent extends ConsumerStatefulWidget {
+  final List<Map<String, dynamic>> sessions;
+  final VoidCallback onRefresh;
+
+  const _SkillWorkshopContent({required this.sessions, required this.onRefresh});
 
   @override
-  void initState() {
-    super.initState();
-    _sessions = List.from(MockWorkshop.skillSessions);
-  }
+  ConsumerState<_SkillWorkshopContent> createState() => _SkillWorkshopContentState();
+}
+
+class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
+  final _descController = TextEditingController();
 
   @override
   void dispose() {
@@ -54,49 +121,32 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        title: '技能制作',
-        showBackButton: true,
-        fallbackRoute: AppRoutes.workshop,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.sm),
-            child: AmitiaIconButton(
-              icon: Icons.add,
-              color: context.accentPrimary,
-              onPressed: _showCreateBottomSheet,
+    return SafeArea(
+      top: false,
+      child: widget.sessions.isEmpty
+          ? AmitiaEmptyState(
+              icon: Icons.psychology_outlined,
+              title: '暂无制作会话',
+              subtitle: '创建新技能来开始制作',
+              actionText: '新建技能',
+              onAction: _showCreateBottomSheet,
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              itemCount: widget.sessions.length,
+              itemBuilder: (context, index) {
+                return _buildSessionCard(context, widget.sessions[index]);
+              },
             ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: _sessions.isEmpty
-            ? AmitiaEmptyState(
-                icon: Icons.psychology_outlined,
-                title: '暂无制作会话',
-                subtitle: '点击右下角按钮创建新技能',
-                actionText: '新建技能',
-                onAction: _showCreateBottomSheet,
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                itemCount: _sessions.length,
-                itemBuilder: (context, index) {
-                  return _buildSessionCard(context, _sessions[index]);
-                },
-              ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showCreateBottomSheet,
-        backgroundColor: context.accentPrimary,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
     );
   }
 
-  Widget _buildSessionCard(BuildContext context, WorkshopSession session) {
+  Widget _buildSessionCard(BuildContext context, Map<String, dynamic> session) {
+    final title = (session['title'] ?? session['name'] ?? '').toString();
+    final type = (session['type'] ?? 'Skill').toString();
+    final status = (session['status'] ?? '草稿').toString();
+    final updated = DateTime.tryParse((session['updatedAt'] ?? '').toString()) ?? DateTime.now();
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
@@ -120,16 +170,16 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(session.title, style: AppTypography.cardTitle(context)),
+                      Text(title, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
                       Text(
-                        '${session.type} · ${_formatDate(session.updated)}',
+                        '$type · ${_formatDate(updated)}',
                         style: AppTypography.caption(context),
                       ),
                     ],
                   ),
                 ),
-                AmitiaStatusBadge(label: session.status, type: _statusBadgeType(session.status)),
+                AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -226,7 +276,7 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
     );
   }
 
-  void _createDraft() {
+  Future<void> _createDraft() async {
     final desc = _descController.text.trim();
     if (desc.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -234,36 +284,28 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
       );
       return;
     }
-    setState(() {
-      _sessions.insert(
-        0,
-        WorkshopSession(
-          id: 'ws${DateTime.now().millisecondsSinceEpoch}',
-          title: desc.length > 12 ? '${desc.substring(0, 12)}…' : desc,
-          type: 'Skill',
-          status: '草稿',
-          updated: DateTime.now(),
-        ),
-      );
+    final svc = ref.read(extensionServiceProvider);
+    await svc.createWorkshopSession({
+      'title': desc.length > 12 ? '${desc.substring(0, 12)}…' : desc,
+      'type': 'Skill',
+      'status': '草稿',
+      'description': desc,
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已创建草稿：$desc')),
-    );
+    if (mounted) {
+      widget.onRefresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已创建草稿：$desc')),
+      );
+    }
   }
 
-  void _openDraftEditor(WorkshopSession session) {
-    SkillDraft? draft;
-    for (final d in MockWorkshop.skillDrafts) {
-      if (d.name == session.title) {
-        draft = d;
-        break;
-      }
-    }
-    final draftId = draft?.id ?? 'sd_new';
+  void _openDraftEditor(Map<String, dynamic> session) {
+    final draftId = (session['id'] ?? 'sd_new').toString();
     context.push(AppRoutes.skillDraftEditor(draftId));
   }
 
-  void _showInstallConfirm(WorkshopSession session) {
+  void _showInstallConfirm(Map<String, dynamic> session) {
+    final title = (session['title'] ?? session['name'] ?? '').toString();
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -271,7 +313,7 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('安装技能', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认安装技能「${session.title}」？安装后可在扩展中心管理。',
+            '确认安装技能「$title」？安装后可在扩展中心管理。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -280,11 +322,16 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「${session.title}」安装成功')),
-                );
+                final svc = ref.read(extensionServiceProvider);
+                await svc.enableSkill(session['id'].toString());
+                if (mounted) {
+                  widget.onRefresh();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('「$title」安装成功')),
+                  );
+                }
               },
               child: Text('安装', style: TextStyle(color: context.accentPrimary)),
             ),
@@ -294,7 +341,8 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
     );
   }
 
-  void _showArchiveConfirm(WorkshopSession session) {
+  void _showArchiveConfirm(Map<String, dynamic> session) {
+    final title = (session['title'] ?? session['name'] ?? '').toString();
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -302,7 +350,7 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('归档会话', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认归档「${session.title}」？归档后将不再显示在列表中。',
+            '确认归档「$title」？归档后将不再显示在列表中。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -311,14 +359,16 @@ class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext);
-                setState(() {
-                  _sessions.removeWhere((s) => s.id == session.id);
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「${session.title}」已归档')),
-                );
+                final svc = ref.read(extensionServiceProvider);
+                await svc.removeAgentSkill(session['id'].toString());
+                if (mounted) {
+                  widget.onRefresh();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('「$title」已归档')),
+                  );
+                }
               },
               child: Text('归档', style: TextStyle(color: context.warning)),
             ),

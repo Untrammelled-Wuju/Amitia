@@ -11,6 +11,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -113,6 +115,27 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 	}
 	if cfg.ModuleID == "" {
 		return nil, errors.New("javascript_main: module id required")
+	}
+	if cfg.NodePath == "" {
+		return nil, errors.New("javascript_main: node path required")
+	}
+	if !filepath.IsAbs(cfg.NodePath) {
+		return nil, errors.New("javascript_main: node path must be absolute")
+	}
+	if cfg.PluginHostPath == "" {
+		return nil, errors.New("javascript_main: plugin host path required")
+	}
+	if !filepath.IsAbs(cfg.PluginHostPath) {
+		return nil, errors.New("javascript_main: plugin host path must be absolute")
+	}
+	if !isHostEntryExt(cfg.PluginHostPath) {
+		return nil, fmt.Errorf("javascript_main: unsupported plugin host entry: %s", filepath.Ext(cfg.PluginHostPath))
+	}
+	if cfg.WorkingDirectory == "" {
+		return nil, errors.New("javascript_main: working directory required")
+	}
+	if !filepath.IsAbs(cfg.WorkingDirectory) {
+		return nil, errors.New("javascript_main: working directory must be absolute")
 	}
 	host := &PluginHost{
 		instanceID:          cfg.InstanceID,
@@ -868,6 +891,15 @@ type HealthReport struct {
 	ActiveInvocations int
 	QueuedInvocations int
 	Watchdog          WatchdogReport
+}
+
+func isHostEntryExt(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".js", ".mjs", ".cjs":
+		return true
+	}
+	return false
 }
 
 func generateNonce() string {

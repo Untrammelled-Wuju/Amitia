@@ -7,7 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class DeploymentPage extends ConsumerStatefulWidget {
   const DeploymentPage({super.key});
@@ -17,9 +17,10 @@ class DeploymentPage extends ConsumerStatefulWidget {
 }
 
 class _DeploymentPageState extends ConsumerState<DeploymentPage> {
-  late String _currentMode;
-  late String _address;
+  String _currentMode = '本地';
+  String _address = 'localhost:18899';
   int _testState = 0;
+  bool _loading = true;
 
   static const _modes = <(String, IconData, String)>[
     ('本地', Icons.dns_outlined, '完整功能本地运行，数据不离开设备'),
@@ -30,50 +31,67 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   @override
   void initState() {
     super.initState();
-    _currentMode = MockSettings.deploymentConfig.mode;
-    _address = MockSettings.deploymentConfig.address;
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    final sys = ref.read(systemServiceProvider);
+    final health = await sys.health();
+    if (health != null && mounted) {
+      final mode = health['mode'] as String?;
+      final addr = health['address'] as String?;
+      setState(() {
+        _currentMode = mode ?? '本地';
+        _address = addr ?? 'localhost:18899';
+        _loading = false;
+      });
+    } else if (mounted) {
+      setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '部署模式', showBackButton: true, fallbackRoute: AppRoutes.settings),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        children: [
-          _SectionLabel(text: '选择部署模式'),
-          const SizedBox(height: AppSpacing.sm),
-          ..._modes.map((m) => Padding(
-                padding: const EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.md),
-                child: _ModeCard(
-                  mode: m.$1,
-                  icon: m.$2,
-                  description: m.$3,
-                  isSelected: m.$1 == _currentMode,
-                  onTap: () => _confirmSwitch(m.$1),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              children: [
+                _SectionLabel(text: '选择部署模式'),
+                const SizedBox(height: AppSpacing.sm),
+                ..._modes.map((m) => Padding(
+                      padding: const EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.md),
+                      child: _ModeCard(
+                        mode: m.$1,
+                        icon: m.$2,
+                        description: m.$3,
+                        isSelected: m.$1 == _currentMode,
+                        onTap: () => _confirmSwitch(m.$1),
+                      ),
+                    )),
+                const SizedBox(height: AppSpacing.sm),
+                _SectionLabel(text: '当前配置'),
+                const SizedBox(height: AppSpacing.sm),
+                _buildConfigCard(),
+                const SizedBox(height: AppSpacing.sectionGap),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: AmitiaButton(
+                    label: _testState == 1 ? '测试中...' : '测试连接',
+                    icon: Icons.wifi_protected_setup,
+                    isFullWidth: true,
+                    onPressed: _testState == 1 ? null : _testConnection,
+                  ),
                 ),
-              )),
-          const SizedBox(height: AppSpacing.sm),
-          _SectionLabel(text: '当前配置'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildConfigCard(),
-          const SizedBox(height: AppSpacing.sectionGap),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: AmitiaButton(
-              label: _testState == 1 ? '测试中...' : '测试连接',
-              icon: Icons.wifi_protected_setup,
-              isFullWidth: true,
-              onPressed: _testState == 1 ? null : _testConnection,
+                if (_testState == 2) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Center(child: _buildTestResult()),
+                ],
+                const SizedBox(height: AppSpacing.xl),
+              ],
             ),
-          ),
-          if (_testState == 2) ...[
-            const SizedBox(height: AppSpacing.md),
-            Center(child: _buildTestResult()),
-          ],
-          const SizedBox(height: AppSpacing.xl),
-        ],
-      ),
     );
   }
 
@@ -126,7 +144,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                 _testState = 0;
               });
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('已切换为$newMode模式'), duration: const Duration(seconds: 1)),
+                SnackBar(content: Text('已切换为${newMode}模式'), duration: const Duration(seconds: 1)),
               );
             },
             child: Text('确定', style: TextStyle(color: context.accentPrimary)),
@@ -138,7 +156,8 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
 
   Future<void> _testConnection() async {
     setState(() => _testState = 1);
-    await Future.delayed(const Duration(milliseconds: 1500));
+    final sys = ref.read(systemServiceProvider);
+    await sys.health();
     if (mounted) setState(() => _testState = 2);
   }
 }

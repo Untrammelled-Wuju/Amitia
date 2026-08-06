@@ -8,6 +8,12 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/providers.dart';
+
+final _aboutVersionProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final svc = ref.read(systemServiceProvider);
+  return svc.health();
+});
 
 class AboutPageNew extends ConsumerWidget {
   const AboutPageNew({super.key});
@@ -30,6 +36,16 @@ class AboutPageNew extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final versionAsync = ref.watch(_aboutVersionProvider);
+    final versionText = versionAsync.when(
+      data: (data) {
+        if (data == null) return 'v1.0.0';
+        final v = data['version'] as String? ?? data['app_version'] as String? ?? data['runtime_version'] as String?;
+        return v != null && v.isNotEmpty ? v : 'v1.0.0';
+      },
+      loading: () => 'v1.0.0',
+      error: (_, __) => 'v1.0.0',
+    );
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '关于', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
@@ -65,9 +81,15 @@ class AboutPageNew extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AmitiaStatusBadge(label: 'v1.0.0', type: BadgeType.accent),
+                AmitiaStatusBadge(label: versionText, type: BadgeType.accent),
                 const SizedBox(width: 8),
-                Text('Build 20260731', style: AppTypography.label(context)),
+                versionAsync.maybeWhen(
+                  data: (data) {
+                    final build = data?['build'] as String? ?? data?['build_number'] as String?;
+                    return Text('Build ${build ?? ''}', style: AppTypography.label(context));
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
               ],
             ),
           ),

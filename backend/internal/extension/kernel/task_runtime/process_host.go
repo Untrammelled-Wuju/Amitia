@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -111,6 +112,30 @@ type ProcessCallbacks struct {
 }
 
 func NewTaskProcessHost(cfg ProcessHostConfig) (*TaskProcessHost, error) {
+	if cfg.NodePath == "" {
+		return nil, fmt.Errorf("task_process_host: node path required")
+	}
+	if !filepath.IsAbs(cfg.NodePath) {
+		return nil, fmt.Errorf("task_process_host: node path must be absolute")
+	}
+	if cfg.HostPath == "" {
+		return nil, fmt.Errorf("task_process_host: host path required")
+	}
+	if !filepath.IsAbs(cfg.HostPath) {
+		return nil, fmt.Errorf("task_process_host: host path must be absolute")
+	}
+	if !isTaskHostEntryExt(cfg.HostPath) {
+		return nil, fmt.Errorf("task_process_host: unsupported host entry: %s", filepath.Ext(cfg.HostPath))
+	}
+	if cfg.WorkDir == "" {
+		return nil, fmt.Errorf("task_process_host: work dir required")
+	}
+	if !filepath.IsAbs(cfg.WorkDir) {
+		return nil, fmt.Errorf("task_process_host: work dir must be absolute")
+	}
+	if cfg.EntryPath == "" {
+		return nil, fmt.Errorf("task_process_host: entry path required")
+	}
 	nonce, err := generateNonce()
 	if err != nil {
 		return nil, fmt.Errorf("task_process_host: generate nonce: %w", err)
@@ -132,6 +157,15 @@ func NewTaskProcessHost(cfg ProcessHostConfig) (*TaskProcessHost, error) {
 		exitCh:      make(chan int, 1),
 		done:        make(chan struct{}),
 	}, nil
+}
+
+func isTaskHostEntryExt(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".js", ".mjs", ".cjs":
+		return true
+	}
+	return false
 }
 
 func (h *TaskProcessHost) Start(ctx context.Context, input json.RawMessage, checkpoint json.RawMessage, deadline *time.Time, attempt, maxAttempts int, callbacks ProcessCallbacks) error {

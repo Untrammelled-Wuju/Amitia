@@ -8,8 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+
+enum _WechatStatus { connected, disconnected, connecting, expired }
 
 class WechatPage extends ConsumerStatefulWidget {
   const WechatPage({super.key});
@@ -19,32 +19,26 @@ class WechatPage extends ConsumerStatefulWidget {
 }
 
 class _WechatPageState extends ConsumerState<WechatPage> {
-  late ChannelStatus _status;
-  late bool _receiving;
-  late bool _sending;
-  late List<String> _logs;
-  late String _lastHeartbeat;
+  _WechatStatus _status = _WechatStatus.disconnected;
+  bool _receiving = false;
+  bool _sending = false;
+  List<String> _logs = [];
+  String _lastHeartbeat = '未知';
+  String _account = '';
 
   @override
   void initState() {
     super.initState();
-    final wechat = MockChannels.wechat;
-    _status = wechat.status;
-    _receiving = wechat.receivingMessages;
-    _sending = wechat.sendingMessages;
-    _logs = List.of(wechat.logs);
-    _lastHeartbeat = wechat.lastHeartbeat ?? '未知';
+    _lastHeartbeat = '未知';
+    _logs = [];
+    _account = '';
   }
 
-  bool get _isConnected => _status == ChannelStatus.connected;
+  bool get _isConnected => _status == _WechatStatus.connected;
 
   void _snack(String message, {Color? color}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        backgroundColor: color,
-      ),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2), backgroundColor: color),
     );
   }
 
@@ -56,10 +50,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
         title: Text('重新连接', style: AppTypography.cardTitle(context)),
         content: Text('确定要重新连接微信吗？当前连接将被断开并重新建立。', style: AppTypography.bodySmall(context)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: TextStyle(color: context.textSecondary)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('取消', style: TextStyle(color: context.textSecondary))),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -74,23 +65,20 @@ class _WechatPageState extends ConsumerState<WechatPage> {
 
   Future<void> _doReconnect() async {
     setState(() {
-      _status = ChannelStatus.connecting;
+      _status = _WechatStatus.connecting;
       _receiving = false;
       _sending = false;
     });
     _snack('正在重新连接微信...', color: context.accentPrimary);
-
     await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
-
     setState(() {
-      _status = ChannelStatus.connected;
+      _status = _WechatStatus.connected;
       _receiving = true;
       _sending = true;
       _lastHeartbeat = '刚刚';
       _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] 重新连接成功');
     });
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -106,10 +94,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('好的', style: TextStyle(color: context.accentPrimary)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('好的', style: TextStyle(color: context.accentPrimary))),
         ],
       ),
     );
@@ -123,10 +108,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
         title: Text('断开连接', style: AppTypography.cardTitle(context)),
         content: Text('确定要断开微信连接吗？断开后将无法收发微信消息。', style: AppTypography.bodySmall(context)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: TextStyle(color: context.textSecondary)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('取消', style: TextStyle(color: context.textSecondary))),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -141,7 +123,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
 
   void _doDisconnect() {
     setState(() {
-      _status = ChannelStatus.disconnected;
+      _status = _WechatStatus.disconnected;
       _receiving = false;
       _sending = false;
       _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] 已断开连接');
@@ -157,10 +139,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
         title: Text('重新生成二维码', style: AppTypography.cardTitle(context)),
         content: Text('将生成新的登录二维码，当前二维码将失效。', style: AppTypography.bodySmall(context)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('取消', style: TextStyle(color: context.textSecondary)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('取消', style: TextStyle(color: context.textSecondary))),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -173,9 +152,34 @@ class _WechatPageState extends ConsumerState<WechatPage> {
     );
   }
 
+  String _statusLabel() {
+    switch (_status) {
+      case _WechatStatus.connected:
+        return '已连接';
+      case _WechatStatus.disconnected:
+        return '未连接';
+      case _WechatStatus.connecting:
+        return '连接中...';
+      case _WechatStatus.expired:
+        return '已过期';
+    }
+  }
+
+  BadgeType _badgeType() {
+    switch (_status) {
+      case _WechatStatus.connected:
+        return BadgeType.success;
+      case _WechatStatus.disconnected:
+        return BadgeType.neutral;
+      case _WechatStatus.connecting:
+        return BadgeType.warning;
+      case _WechatStatus.expired:
+        return BadgeType.error;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final wechat = MockChannels.wechat;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '微信连接', showBackButton: true, fallbackRoute: AppRoutes.channels),
       body: ListView(
@@ -185,7 +189,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
           const SizedBox(height: AppSpacing.sectionGap),
           _buildQRCard(),
           const SizedBox(height: AppSpacing.sectionGap),
-          _buildAccountInfo(wechat),
+          _buildAccountInfo(),
           const SizedBox(height: AppSpacing.sectionGap),
           _buildMessageStatus(),
           const SizedBox(height: AppSpacing.sectionGap),
@@ -200,18 +204,6 @@ class _WechatPageState extends ConsumerState<WechatPage> {
   }
 
   Widget _buildStatusCard() {
-    final statusLabel = switch (_status) {
-      ChannelStatus.connected => '已连接',
-      ChannelStatus.disconnected => '未连接',
-      ChannelStatus.connecting => '连接中...',
-      ChannelStatus.expired => '已过期',
-    };
-    final badgeType = switch (_status) {
-      ChannelStatus.connected => BadgeType.success,
-      ChannelStatus.disconnected => BadgeType.neutral,
-      ChannelStatus.connecting => BadgeType.warning,
-      ChannelStatus.expired => BadgeType.error,
-    };
     return AmitiaCard(
       child: Row(
         children: [
@@ -240,7 +232,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
               ],
             ),
           ),
-          AmitiaStatusBadge(label: statusLabel, type: badgeType),
+          AmitiaStatusBadge(label: _statusLabel(), type: _badgeType()),
         ],
       ),
     );
@@ -292,7 +284,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
     );
   }
 
-  Widget _buildAccountInfo(ChannelConnection wechat) {
+  Widget _buildAccountInfo() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -301,7 +293,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
         AmitiaCard(
           child: Column(
             children: [
-              _InfoLine(label: '当前账号', value: wechat.account ?? '未登录'),
+              _InfoLine(label: '当前账号', value: _account.isNotEmpty ? _account : '未登录'),
               Divider(height: 1, color: context.borderSecondary),
               _InfoLine(label: '最后心跳', value: _lastHeartbeat),
             ],
@@ -387,39 +379,44 @@ class _WechatPageState extends ConsumerState<WechatPage> {
             borderRadius: AppRadius.brMedium,
             border: Border.all(color: context.borderPrimary, width: 0.5),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _logs.take(8).map((log) {
-              final isError = log.contains('失败') || log.contains('断开');
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                child: Row(
+          child: _logs.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text('暂无日志', style: AppTypography.label(context).copyWith(color: context.textTertiary)),
+                )
+              : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(top: 6),
-                      decoration: BoxDecoration(
-                        color: isError ? context.error : context.success,
-                        shape: BoxShape.circle,
+                  children: _logs.take(8).map((log) {
+                    final isError = log.contains('失败') || log.contains('断开');
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(top: 6),
+                            decoration: BoxDecoration(
+                              color: isError ? context.error : context.success,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              log,
+                              style: AppTypography.label(context).copyWith(
+                                fontFamily: 'monospace',
+                                color: isError ? context.error : context.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        log,
-                        style: AppTypography.label(context).copyWith(
-                          fontFamily: 'monospace',
-                          color: isError ? context.error : context.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  }).toList(),
                 ),
-              );
-            }).toList(),
-          ),
         ),
       ],
     );

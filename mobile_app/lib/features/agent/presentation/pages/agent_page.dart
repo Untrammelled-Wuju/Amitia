@@ -11,10 +11,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
-import '../../../../shared/mock_data/mock_data.dart';
-import '../../../../shared/models/models.dart';
-import '../../presentation/providers/mock_agent_tasks.dart';
+import '../../presentation/providers/agent_tasks_provider.dart';
 
 class AgentPage extends ConsumerStatefulWidget {
   const AgentPage({super.key});
@@ -25,147 +22,34 @@ class AgentPage extends ConsumerStatefulWidget {
 
 class _AgentPageState extends ConsumerState<AgentPage> {
   int _selectedSegment = 0;
-  final Map<String, Timer> _timers = {};
-  final Map<String, int> _elapsedSeconds = {};
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _syncTimers(ref.read(agentTasksProvider));
-    });
-  }
-
-  @override
-  void dispose() {
-    for (final t in _timers.values) {
-      t.cancel();
-    }
-    _timers.clear();
-    super.dispose();
-  }
-
-  int _parseElapsed(String e) {
-    final parts = e.split(':');
-    if (parts.length == 2) {
-      return (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
-    }
-    return 0;
-  }
-
-  String _formatElapsed(int s) {
-    final m = (s ~/ 60).toString().padLeft(2, '0');
-    final ss = (s % 60).toString().padLeft(2, '0');
-    return '$m:$ss';
-  }
-
-  void _syncTimers(List<MockAgentTask> tasks) {
-    final runningIds = tasks.where((t) => t.status == MockAgentTaskStatus.running).map((t) => t.id).toSet();
-    for (final id in _timers.keys.toList()) {
-      if (!runningIds.contains(id)) {
-        _timers[id]?.cancel();
-        _timers.remove(id);
-      }
-    }
-    for (final task in tasks) {
-      if (task.status == MockAgentTaskStatus.running && !_timers.containsKey(task.id)) {
-        _elapsedSeconds.putIfAbsent(task.id, () => _parseElapsed(task.elapsed));
-        _timers[task.id] = Timer.periodic(const Duration(seconds: 1), (_) => _tick(task.id));
-      }
+  List<AgentTaskItem> _filterTasks(List<AgentTaskItem> tasks) {
+    switch (_selectedSegment) {
+      case 0:
+        return tasks.where((t) => t.status == AgentTaskStatus.running || t.status == AgentTaskStatus.paused).toList();
+      case 1:
+        return tasks.where((t) => t.status == AgentTaskStatus.waitingApproval || t.status == AgentTaskStatus.pending).toList();
+      case 2:
+        return tasks.where((t) =>
+            t.status == AgentTaskStatus.completed ||
+            t.status == AgentTaskStatus.failed ||
+            t.status == AgentTaskStatus.cancelled).toList();
+      default:
+        return const [];
     }
   }
 
-  void _tick(String taskId) {
-    if (!mounted) return;
-    final tasks = ref.read(agentTasksProvider);
-    final idx = tasks.indexWhere((t) => t.id == taskId);
-    if (idx == -1) {
-      _timers[taskId]?.cancel();
-      _timers.remove(taskId);
-      return;
-    }
-    final task = tasks[idx];
-    if (task.status != MockAgentTaskStatus.running) {
-      _timers[taskId]?.cancel();
-      _timers.remove(taskId);
-      return;
-    }
-    final secs = (_elapsedSeconds[taskId] ?? 0) + 1;
-    _elapsedSeconds[taskId] = secs;
-    var progress = task.progress + 4;
-    var stepIndex = task.currentStepIndex;
-    final stepThreshold = ((stepIndex + 1) / task.steps.length * 100).round();
-    if (progress >= stepThreshold && stepIndex < task.steps.length - 1) stepIndex++;
-    MockAgentTask updated;
-    if (progress >= 100) {
-      updated = task.copyWith(
-        progress: 100,
-        currentStepIndex: task.steps.length - 1,
-        elapsed: _formatElapsed(secs),
-        status: MockAgentTaskStatus.completed,
-        result: '任务已完成，共执行 ${task.steps.length} 个步骤',
-      );
-    } else {
-      updated = task.copyWith(
-        progress: progress,
-        currentStepIndex: stepIndex,
-        elapsed: _formatElapsed(secs),
-      );
-    }
-    final next = List<MockAgentTask>.from(tasks);
-    next[idx] = updated;
-    ref.read(agentTasksProvider.notifier).state = next;
-  }
-
-  void _togglePause(MockAgentTask task) {
-    final tasks = ref.read(agentTasksProvider);
-    final idx = tasks.indexWhere((t) => t.id == task.id);
-    if (idx == -1) return;
-    final next = List<MockAgentTask>.from(tasks);
-    next[idx] = task.copyWith(
-      status: task.status == MockAgentTaskStatus.running ? MockAgentTaskStatus.paused : MockAgentTaskStatus.running,
+  void _togglePause(AgentTaskItem task) {
+    ref.read(agentTasksProvider.notifier).changeStatus(
+      task.id,
+      task.status == AgentTaskStatus.running ? AgentTaskStatus.paused : AgentTaskStatus.running,
     );
-    ref.read(agentTasksProvider.notifier).state = next;
-    _syncTimers(next);
-    amitiaSnackBar(context, task.status == MockAgentTaskStatus.running ? '任务已暂停' : '任务已继续');
+    amitiaSnackBar(context, task.status == AgentTaskStatus.running ? '任务已暂停' : '任务已继续');
   }
 
-  void _startTask(MockAgentTask task) {
-    final tasks = ref.read(agentTasksProvider);
-    final idx = tasks.indexWhere((t) => t.id == task.id);
-    if (idx == -1) return;
-    final next = List<MockAgentTask>.from(tasks);
-    next[idx] = task.copyWith(
-      status: MockAgentTaskStatus.running,
-      progress: task.status == MockAgentTaskStatus.cancelled || task.status == MockAgentTaskStatus.failed ? 0 : task.progress,
-    );
-    ref.read(agentTasksProvider.notifier).state = next;
-    _syncTimers(next);
+  void _startTask(AgentTaskItem task) {
+    ref.read(agentTasksProvider.notifier).changeStatus(task.id, AgentTaskStatus.running);
     amitiaSnackBar(context, '任务已开始');
-  }
-
-  void _createTask(String title, String description, List<String> abilities, int stepCount) {
-    final id = 't${DateTime.now().millisecondsSinceEpoch}';
-    final steps = List.generate(stepCount, (i) => '步骤 ${i + 1}：执行子任务');
-    final newTask = MockAgentTask(
-      id: id,
-      title: title,
-      description: description,
-      requiredAbilities: abilities,
-      steps: steps,
-      status: MockAgentTaskStatus.running,
-      progress: 0,
-      currentStepIndex: 0,
-      elapsed: '00:00',
-      createdAt: DateTime.now(),
-    );
-    final tasks = ref.read(agentTasksProvider);
-    final next = [newTask, ...tasks];
-    ref.read(agentTasksProvider.notifier).state = next;
-    _elapsedSeconds[id] = 0;
-    _syncTimers(next);
-    context.push(AppRoutes.agentTask(id));
   }
 
   void _showCreateTaskSheet() {
@@ -175,35 +59,29 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       backgroundColor: context.surfacePrimary,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetCtx) {
-        return _CreateTaskSheet(onCreate: (title, desc, abilities, stepCount) {
-          Navigator.pop(sheetCtx);
-          _createTask(title, desc, abilities, stepCount);
-        });
+        return _CreateTaskSheet(
+          onCreate: (title, desc, abilities, stepCount) {
+            Navigator.pop(sheetCtx);
+            ref.read(agentTasksProvider.notifier).createTask(
+              title: title,
+              description: desc,
+              abilities: abilities,
+              stepCount: stepCount,
+            );
+          },
+        );
       },
     );
   }
 
-  List<MockAgentTask> _filterTasks(List<MockAgentTask> tasks) {
-    switch (_selectedSegment) {
-      case 0:
-        return tasks.where((t) => t.status == MockAgentTaskStatus.running || t.status == MockAgentTaskStatus.paused).toList();
-      case 1:
-        return tasks.where((t) => t.status == MockAgentTaskStatus.waitingApproval || t.status == MockAgentTaskStatus.pending).toList();
-      case 2:
-        return tasks.where((t) =>
-            t.status == MockAgentTaskStatus.completed ||
-            t.status == MockAgentTaskStatus.failed ||
-            t.status == MockAgentTaskStatus.cancelled).toList();
-      default:
-        return const [];
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    ref.listen(agentTasksProvider, (_, next) => _syncTimers(next));
-    final tasks = ref.watch(agentTasksProvider);
-    final filtered = _filterTasks(tasks);
+    final tasksAsync = ref.watch(agentTasksProvider);
+    final filtered = tasksAsync.when(
+      loading: () => <AgentTaskItem>[],
+      error: (_, __) => <AgentTaskItem>[],
+      data: (tasks) => _filterTasks(tasks),
+    );
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -229,32 +107,39 @@ class _AgentPageState extends ConsumerState<AgentPage> {
             ),
           ),
           Expanded(
-            child: filtered.isEmpty
-                ? AmitiaEmptyState(
-                    icon: _selectedSegment == 0
-                        ? Icons.auto_awesome
-                        : _selectedSegment == 1
-                            ? Icons.pending_actions
-                            : Icons.task_alt,
-                    title: _selectedSegment == 0
-                        ? '暂无进行中的任务'
-                        : _selectedSegment == 1
-                            ? '暂无等待审批的任务'
-                            : '暂无已完成的任务',
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final task = filtered[index];
-                      return _TaskCard(
-                        task: task,
-                        onTap: () => context.push(AppRoutes.agentTask(task.id)),
-                        onTogglePause: () => _togglePause(task),
-                        onStart: () => _startTask(task),
+            child: tasksAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, _) => Center(child: Text('加载失败: $err', style: AppTypography.bodySmall(context))),
+              data: (tasks) {
+                final items = _filterTasks(tasks);
+                return items.isEmpty
+                    ? AmitiaEmptyState(
+                        icon: _selectedSegment == 0
+                            ? Icons.auto_awesome
+                            : _selectedSegment == 1
+                                ? Icons.pending_actions
+                                : Icons.task_alt,
+                        title: _selectedSegment == 0
+                            ? '暂无进行中的任务'
+                            : _selectedSegment == 1
+                                ? '暂无等待审批的任务'
+                                : '暂无已完成的任务',
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final task = items[index];
+                          return _TaskCard(
+                            task: task,
+                            onTap: () => context.push(AppRoutes.agentTask(task.id)),
+                            onTogglePause: () => _togglePause(task),
+                            onStart: () => _startTask(task),
+                          );
+                        },
                       );
-                    },
-                  ),
+              },
+            ),
           ),
         ],
       ),
@@ -263,7 +148,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
 }
 
 class _TaskCard extends StatelessWidget {
-  final MockAgentTask task;
+  final AgentTaskItem task;
   final VoidCallback onTap;
   final VoidCallback onTogglePause;
   final VoidCallback onStart;
@@ -275,16 +160,86 @@ class _TaskCard extends StatelessWidget {
     required this.onStart,
   });
 
+  String _statusLabel(AgentTaskStatus status) {
+    switch (status) {
+      case AgentTaskStatus.pending: return '待开始';
+      case AgentTaskStatus.waitingApproval: return '待审批';
+      case AgentTaskStatus.running: return '运行中';
+      case AgentTaskStatus.paused: return '已暂停';
+      case AgentTaskStatus.completed: return '已完成';
+      case AgentTaskStatus.failed: return '已失败';
+      case AgentTaskStatus.cancelled: return '已取消';
+    }
+  }
+
+  BadgeType _badgeType(AgentTaskStatus status) {
+    switch (status) {
+      case AgentTaskStatus.pending: return BadgeType.neutral;
+      case AgentTaskStatus.waitingApproval: return BadgeType.warning;
+      case AgentTaskStatus.running: return BadgeType.accent;
+      case AgentTaskStatus.paused: return BadgeType.neutral;
+      case AgentTaskStatus.completed: return BadgeType.success;
+      case AgentTaskStatus.failed: return BadgeType.error;
+      case AgentTaskStatus.cancelled: return BadgeType.neutral;
+    }
+  }
+
+  IconData _icon(AgentTaskStatus status) {
+    switch (status) {
+      case AgentTaskStatus.running: return Icons.auto_awesome;
+      case AgentTaskStatus.waitingApproval: return Icons.hourglass_top;
+      case AgentTaskStatus.pending: return Icons.schedule;
+      case AgentTaskStatus.completed: return Icons.check_circle_outline;
+      case AgentTaskStatus.failed: return Icons.error_outline;
+      case AgentTaskStatus.cancelled: return Icons.cancel_outlined;
+      case AgentTaskStatus.paused: return Icons.pause_circle_outline;
+    }
+  }
+
+  Color _iconColor(BuildContext context, AgentTaskStatus status) {
+    switch (status) {
+      case AgentTaskStatus.running: return context.accentPrimary;
+      case AgentTaskStatus.waitingApproval:
+      case AgentTaskStatus.pending: return context.warning;
+      case AgentTaskStatus.completed: return context.success;
+      case AgentTaskStatus.failed: return context.error;
+      case AgentTaskStatus.cancelled:
+      case AgentTaskStatus.paused: return context.textTertiary;
+    }
+  }
+
   bool get _showProgress =>
-      task.status == MockAgentTaskStatus.running ||
-      task.status == MockAgentTaskStatus.paused ||
-      task.status == MockAgentTaskStatus.completed ||
-      task.status == MockAgentTaskStatus.failed;
+      task.status == AgentTaskStatus.running ||
+      task.status == AgentTaskStatus.paused ||
+      task.status == AgentTaskStatus.completed ||
+      task.status == AgentTaskStatus.failed;
+
+  String get _subtitle {
+    switch (task.status) {
+      case AgentTaskStatus.running:
+        return task.currentStepIndex < task.steps.length ? task.steps[task.currentStepIndex] : task.steps.isNotEmpty ? task.steps.last : '';
+      case AgentTaskStatus.paused:
+        return '已暂停 · ${task.currentStepIndex < task.steps.length ? task.steps[task.currentStepIndex] : ''}';
+      case AgentTaskStatus.waitingApproval:
+        return '等待权限审批';
+      case AgentTaskStatus.pending:
+        return '等待开始';
+      case AgentTaskStatus.completed:
+        return '已完成';
+      case AgentTaskStatus.failed:
+        return task.error ?? '执行失败';
+      case AgentTaskStatus.cancelled:
+        return '已取消';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final statusLabel = mockAgentTaskStatusLabel(task.status);
-    final badgeType = mockAgentTaskBadgeType(task.status);
+    final statusLabel = _statusLabel(task.status);
+    final badgeType = _badgeType(task.status);
+    final iconColor = _iconColor(context, task.status);
+    final iconData = _icon(task.status);
+
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
@@ -298,10 +253,10 @@ class _TaskCard extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: _iconBg(context),
+                    color: iconColor.withValues(alpha: 0.12),
                     borderRadius: AppRadius.brSmall,
                   ),
-                  child: Icon(_icon, size: 18, color: _iconColor(context)),
+                  child: Icon(iconData, size: 18, color: iconColor),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -325,11 +280,11 @@ class _TaskCard extends StatelessWidget {
                 children: [
                   Text('${task.progress}%', style: AppTypography.label(context)),
                   const SizedBox(width: 12),
-                  if (task.status == MockAgentTaskStatus.running || task.status == MockAgentTaskStatus.paused)
+                  if (task.status == AgentTaskStatus.running || task.status == AgentTaskStatus.paused)
                     Text('已运行 ${task.elapsed}', style: AppTypography.label(context))
-                  else if (task.status == MockAgentTaskStatus.completed)
+                  else if (task.status == AgentTaskStatus.completed)
                     Text('耗时 ${task.elapsed}', style: AppTypography.label(context))
-                  else if (task.status == MockAgentTaskStatus.failed)
+                  else if (task.status == AgentTaskStatus.failed)
                     Text('失败 ${task.elapsed}', style: AppTypography.label(context)),
                   const Spacer(),
                   _buildAction(context),
@@ -347,12 +302,12 @@ class _TaskCard extends StatelessWidget {
                         children: task.requiredAbilities.take(3).map((a) => Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: task.status == MockAgentTaskStatus.waitingApproval
+                            color: task.status == AgentTaskStatus.waitingApproval
                                 ? context.warning.withValues(alpha: 0.08)
                                 : context.accentSoft,
                             borderRadius: AppRadius.brTag,
                           ),
-                          child: Text(a, style: TextStyle(fontSize: 11, color: task.status == MockAgentTaskStatus.waitingApproval ? context.warning : context.accentPrimary)),
+                          child: Text(a, style: TextStyle(fontSize: 11, color: task.status == AgentTaskStatus.waitingApproval ? context.warning : context.accentPrimary)),
                         )).toList(),
                       ),
                     )
@@ -362,11 +317,11 @@ class _TaskCard extends StatelessWidget {
                 ],
               ),
             ],
-            if (task.status == MockAgentTaskStatus.completed && task.result != null) ...[
+            if (task.status == AgentTaskStatus.completed && task.result != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Text(task.result!, style: AppTypography.caption(context)),
             ],
-            if (task.status == MockAgentTaskStatus.failed && task.error != null) ...[
+            if (task.status == AgentTaskStatus.failed && task.error != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Text(task.error!, style: AppTypography.caption(context).copyWith(color: context.error)),
             ],
@@ -376,80 +331,21 @@ class _TaskCard extends StatelessWidget {
     );
   }
 
-  String get _subtitle {
-    switch (task.status) {
-      case MockAgentTaskStatus.running:
-        return task.currentStepIndex < task.steps.length ? task.steps[task.currentStepIndex] : task.steps.last;
-      case MockAgentTaskStatus.paused:
-        return '已暂停 · ${task.currentStepIndex < task.steps.length ? task.steps[task.currentStepIndex] : ''}';
-      case MockAgentTaskStatus.waitingApproval:
-        return '等待权限审批';
-      case MockAgentTaskStatus.pending:
-        return '等待开始';
-      case MockAgentTaskStatus.completed:
-        return '已完成';
-      case MockAgentTaskStatus.failed:
-        return task.error ?? '执行失败';
-      case MockAgentTaskStatus.cancelled:
-        return '已取消';
-    }
-  }
-
-  IconData get _icon {
-    switch (task.status) {
-      case MockAgentTaskStatus.running:
-        return Icons.auto_awesome;
-      case MockAgentTaskStatus.waitingApproval:
-        return Icons.hourglass_top;
-      case MockAgentTaskStatus.pending:
-        return Icons.schedule;
-      case MockAgentTaskStatus.completed:
-        return Icons.check_circle_outline;
-      case MockAgentTaskStatus.failed:
-        return Icons.error_outline;
-      case MockAgentTaskStatus.cancelled:
-        return Icons.cancel_outlined;
-      case MockAgentTaskStatus.paused:
-        return Icons.pause_circle_outline;
-    }
-  }
-
-  Color _iconColor(BuildContext context) {
-    switch (task.status) {
-      case MockAgentTaskStatus.running:
-        return context.accentPrimary;
-      case MockAgentTaskStatus.waitingApproval:
-      case MockAgentTaskStatus.pending:
-        return context.warning;
-      case MockAgentTaskStatus.completed:
-        return context.success;
-      case MockAgentTaskStatus.failed:
-        return context.error;
-      case MockAgentTaskStatus.cancelled:
-      case MockAgentTaskStatus.paused:
-        return context.textTertiary;
-    }
-  }
-
-  Color _iconBg(BuildContext context) {
-    return _iconColor(context).withValues(alpha: 0.12);
-  }
-
   Widget _buildAction(BuildContext context) {
     switch (task.status) {
-      case MockAgentTaskStatus.running:
+      case AgentTaskStatus.running:
         return _miniButton(context, '暂停', Icons.pause, onTogglePause);
-      case MockAgentTaskStatus.paused:
+      case AgentTaskStatus.paused:
         return _miniButton(context, '继续', Icons.play_arrow, onTogglePause);
-      case MockAgentTaskStatus.waitingApproval:
+      case AgentTaskStatus.waitingApproval:
         return _miniButton(context, '审批', Icons.shield_outlined, onTap, accent: true);
-      case MockAgentTaskStatus.pending:
+      case AgentTaskStatus.pending:
         return _miniButton(context, '开始', Icons.play_arrow, onStart, accent: true);
-      case MockAgentTaskStatus.completed:
+      case AgentTaskStatus.completed:
         return _miniButton(context, '查看结果', Icons.visibility_outlined, onTap);
-      case MockAgentTaskStatus.failed:
+      case AgentTaskStatus.failed:
         return _miniButton(context, '查看错误', Icons.error_outline, onTap);
-      case MockAgentTaskStatus.cancelled:
+      case AgentTaskStatus.cancelled:
         return _miniButton(context, '再次执行', Icons.refresh, onStart, accent: true);
     }
   }
@@ -510,7 +406,16 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
   final _descCtrl = TextEditingController();
   final List<String> _abilities = [];
   int _stepCount = 3;
-  QuickTask? _selectedQuickTask;
+  _QuickTask? _selectedQuickTask;
+
+  final _quickTasks = [
+    _QuickTask(title: '控制手机', icon: Icons.phone_android, category: '设备'),
+    _QuickTask(title: '处理文件', icon: Icons.folder_outlined, category: '文件'),
+    _QuickTask(title: '打开工作区', icon: Icons.work_outline, category: '工作'),
+    _QuickTask(title: '新建工作流', icon: Icons.account_tree_outlined, category: '自动化'),
+    _QuickTask(title: '数据分析', icon: Icons.analytics_outlined, category: '分析'),
+    _QuickTask(title: '信息搜索', icon: Icons.search, category: '搜索'),
+  ];
 
   @override
   void dispose() {
@@ -529,7 +434,7 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
     });
   }
 
-  void _selectQuickTask(QuickTask task) {
+  void _selectQuickTask(_QuickTask task) {
     final abilities = _quickTaskAbilities[task.title] ?? ['文件系统'];
     setState(() {
       _selectedQuickTask = task;
@@ -607,9 +512,9 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
             crossAxisSpacing: 8,
             childAspectRatio: 2.5,
           ),
-          itemCount: MockData.quickTasks.length,
+          itemCount: _quickTasks.length,
           itemBuilder: (context, index) {
-            final task = MockData.quickTasks[index];
+            final task = _quickTasks[index];
             return GestureDetector(
               onTap: () => _selectQuickTask(task),
               child: Container(
@@ -764,4 +669,11 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
       ),
     );
   }
+}
+
+class _QuickTask {
+  final String title;
+  final IconData icon;
+  final String category;
+  const _QuickTask({required this.title, required this.icon, required this.category});
 }

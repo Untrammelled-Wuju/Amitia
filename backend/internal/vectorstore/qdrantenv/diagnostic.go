@@ -7,22 +7,22 @@ import "time"
 type DetectionState string
 
 const (
-	DetectionStateNotStarted DetectionState = "not-started"
-	DetectionStateReady      DetectionState = "ready"
+	DetectionStateNotStarted   DetectionState = "not-started"
+	DetectionStateReady        DetectionState = "ready"
 	DetectionStateNotInstalled DetectionState = "not-installed"
-	DetectionStateFailed     DetectionState = "failed"
+	DetectionStateFailed       DetectionState = "failed"
 )
 
 type CandidateResult string
 
 const (
-	CandidateResultSelected          CandidateResult = "selected"
-	CandidateResultNotFound          CandidateResult = "not-found"
-	CandidateResultInvalidFile       CandidateResult = "invalid-file"
-	CandidateResultNotExecutable     CandidateResult = "not-executable"
+	CandidateResultSelected                CandidateResult = "selected"
+	CandidateResultNotFound                CandidateResult = "not-found"
+	CandidateResultInvalidFile             CandidateResult = "invalid-file"
+	CandidateResultNotExecutable           CandidateResult = "not-executable"
 	CandidateResultResourceRootUnavailable CandidateResult = "resource-root-unavailable"
-	CandidateResultSkipped           CandidateResult = "skipped"
-	CandidateResultInstallTarget     CandidateResult = "install-target"
+	CandidateResultSkipped                 CandidateResult = "skipped"
+	CandidateResultInstallTarget           CandidateResult = "install-target"
 )
 
 type CandidateDiagnostic struct {

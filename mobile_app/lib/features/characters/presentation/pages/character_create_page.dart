@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
@@ -10,6 +9,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/providers.dart';
 
 class CharacterCreatePage extends ConsumerStatefulWidget {
   const CharacterCreatePage({super.key});
@@ -26,11 +26,11 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   final _identityController = TextEditingController();
   final _personalityController = TextEditingController();
   final _speakingStyleController = TextEditingController();
-  final _relationController = TextEditingController();
   final _promptController = TextEditingController();
   String _selectedColor = '#7668EE';
+  bool _isCreating = false;
 
-  final _steps = ['基础形象', '名字', '身份', '性格', '说话方式', '关系设定', '初始提示词', '完成预览'];
+  final _steps = ['基础形象', '名字', '身份', '性格', '说话方式', '提示词', '完成预览'];
 
   final _colors = [
     '#7668EE',
@@ -50,7 +50,6 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
     _identityController.dispose();
     _personalityController.dispose();
     _speakingStyleController.dispose();
-    _relationController.dispose();
     _promptController.dispose();
     super.dispose();
   }
@@ -75,30 +74,37 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
     }
   }
 
-  void _finish() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-        title: Text('创建成功', style: AppTypography.cardTitle(context)),
-        content: Text(
-          '角色「${_nameController.text.isEmpty ? "未命名" : _nameController.text}」已创建（Mock）',
-          style: AppTypography.body(context),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.go(AppRoutes.characters);
-            },
-            child: Text(
-              '查看角色列表',
-              style: TextStyle(color: context.accentPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> _finish() async {
+    if (_isCreating) return;
+    setState(() => _isCreating = true);
+    try {
+      final svc = ref.read(characterServiceProvider);
+      final data = {
+        'name': _nameController.text,
+        'identity': _identityController.text,
+        'personality': _personalityController.text,
+        'speakingStyle': _speakingStyleController.text,
+        'description': _personalityController.text,
+        'status': '在线',
+        'voiceSpeed': 1.0,
+      };
+      final character = await svc.create(data);
+      ref.invalidate(characterListProvider);
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('角色「${character?.name ?? '未命名'}」已创建')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('创建失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCreating = false);
+    }
   }
 
   @override
@@ -147,7 +153,6 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                   _buildIdentityStep(),
                   _buildPersonalityStep(),
                   _buildSpeakingStyleStep(),
-                  _buildRelationStep(),
                   _buildPromptStep(),
                   _buildPreviewStep(),
                 ],
@@ -169,10 +174,12 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                   if (_currentStep > 0) const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: AmitiaButton(
-                      label: _currentStep == _steps.length - 1 ? '完成创建' : '下一步',
+                      label: _currentStep == _steps.length - 1
+                          ? (_isCreating ? '创建中...' : '完成创建')
+                          : '下一步',
                       isFullWidth: true,
                       onPressed: _currentStep == _steps.length - 1
-                          ? _finish
+                          ? (_isCreating ? null : _finish)
                           : _nextStep,
                     ),
                   ),
@@ -292,11 +299,6 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
     controller: _speakingStyleController,
     maxLines: 3,
   );
-  Widget _buildRelationStep() => _buildStepContent(
-    label: '关系设定',
-    hint: '例如：亲密伙伴',
-    controller: _relationController,
-  );
   Widget _buildPromptStep() => _buildStepContent(
     label: '初始提示词',
     hint: '输入角色的系统提示词...',
@@ -371,13 +373,6 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                     const SizedBox(height: 4),
                     Text(
                       '说话方式：${_speakingStyleController.text}',
-                      style: AppTypography.label(context),
-                    ),
-                  ],
-                  if (_relationController.text.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '关系：${_relationController.text}',
                       style: AppTypography.label(context),
                     ),
                   ],

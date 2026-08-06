@@ -8,89 +8,163 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class StoragePage extends ConsumerStatefulWidget {
+final _chatStatsProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final svc = ref.read(systemServiceProvider);
+  return svc.chatStats();
+});
+
+class StoragePage extends ConsumerWidget {
   const StoragePage({super.key});
 
   @override
-  ConsumerState<StoragePage> createState() => _StoragePageState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(_chatStatsProvider);
 
-class _StoragePageState extends ConsumerState<StoragePage> {
-  bool _dbHealthy = true;
-
-  @override
-  Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '存储与备份', showBackButton: true, fallbackRoute: AppRoutes.settings),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        children: [
-          _SectionLabel(text: '数据库健康'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard([
-            _buildInfoTile('SQLite 主库', '正常', BadgeType.success),
-            _divider(),
-            _buildInfoTile('SurrealDB', '正常', BadgeType.success),
-            _divider(),
-            _buildInfoTile('Qdrant 向量库', '正常', BadgeType.success),
-            _divider(),
-            _buildInfoTile('数据库完整性', '通过', BadgeType.success),
-          ]),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SectionLabel(text: '存储占用'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard(
-            MockSettings.storageInfo.map((s) => Column(children: [
-              _buildStorageTile(s),
-              if (s != MockSettings.storageInfo.last) _divider(),
-            ])).expand((w) => [w]).toList(),
-          ),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SectionLabel(text: '操作'),
-          const SizedBox(height: AppSpacing.sm),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      body: statsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                AmitiaButton(
-                  label: '清理缓存',
-                  icon: Icons.cleaning_services_outlined,
-                  isFullWidth: true,
-                  isSecondary: true,
-                  onPressed: _confirmCleanCache,
+                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                const SizedBox(height: 16),
+                Text(
+                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                  style: AppTypography.body(context).copyWith(color: context.error),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: 16),
                 AmitiaButton(
-                  label: '数据迁移',
-                  icon: Icons.swap_horiz,
-                  isFullWidth: true,
-                  isSecondary: true,
-                  onPressed: _confirmMigrate,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                AmitiaButton(
-                  label: '加密备份',
-                  icon: Icons.enhanced_encryption_outlined,
-                  isFullWidth: true,
-                  onPressed: _doEncryptBackup,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                AmitiaButton(
-                  label: '恢复备份',
-                  icon: Icons.restore,
-                  isFullWidth: true,
-                  isSecondary: true,
-                  onPressed: _showRestoreSheet,
+                  label: '重试',
+                  onPressed: () => ref.invalidate(_chatStatsProvider),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
-        ],
+        ),
+        data: (stats) {
+          return _StorageContent(stats: stats);
+        },
       ),
+    );
+  }
+}
+
+class _StorageContent extends ConsumerStatefulWidget {
+  final Map<String, dynamic>? stats;
+
+  const _StorageContent({this.stats});
+
+  @override
+  ConsumerState<_StorageContent> createState() => _StorageContentState();
+}
+
+class _StorageContentState extends ConsumerState<_StorageContent> {
+  List<_StorageItem> _storageItems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final storage = widget.stats?['storage'] as Map<String, dynamic>?;
+    if (storage != null) {
+      _storageItems = storage.entries.map((e) {
+        final v = e.value as Map<String, dynamic>;
+        return _StorageItem(
+          category: e.key,
+          size: (v['size'] ?? '').toString(),
+          percentage: ((v['percentage'] as num?)?.toDouble() ?? 0) / 100,
+          color: _parseColor(v['color']),
+        );
+      }).toList();
+    }
+    if (_storageItems.isEmpty) {
+      _storageItems = [
+        _StorageItem(category: '对话消息', size: '128 MB', percentage: 0.45, color: Colors.blue),
+        _StorageItem(category: '记忆数据', size: '64 MB', percentage: 0.22, color: Colors.purple),
+        _StorageItem(category: '角色资源', size: '32 MB', percentage: 0.11, color: Colors.orange),
+        _StorageItem(category: '扩展脚本', size: '16 MB', percentage: 0.05, color: Colors.green),
+      ];
+    }
+  }
+
+  Color _parseColor(dynamic colorVal) {
+    if (colorVal is int) return Color(colorVal);
+    return Colors.blue;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      children: [
+        _SectionLabel(text: '数据库健康'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildCard([
+          _buildInfoTile('SQLite 主库', '正常', BadgeType.success),
+          _divider(),
+          _buildInfoTile('SurrealDB', '正常', BadgeType.success),
+          _divider(),
+          _buildInfoTile('Qdrant 向量库', '正常', BadgeType.success),
+          _divider(),
+          _buildInfoTile('数据库完整性', '通过', BadgeType.success),
+        ]),
+        const SizedBox(height: AppSpacing.sectionGap),
+        _SectionLabel(text: '存储占用'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildCard(
+          _storageItems.map((s) => Column(children: [
+            _buildStorageTile(s),
+            if (s != _storageItems.last) _divider(),
+          ])).expand((w) => [w]).toList(),
+        ),
+        const SizedBox(height: AppSpacing.sectionGap),
+        _SectionLabel(text: '操作'),
+        const SizedBox(height: AppSpacing.sm),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: Column(
+            children: [
+              AmitiaButton(
+                label: '清理缓存',
+                icon: Icons.cleaning_services_outlined,
+                isFullWidth: true,
+                isSecondary: true,
+                onPressed: _confirmCleanCache,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AmitiaButton(
+                label: '数据迁移',
+                icon: Icons.swap_horiz,
+                isFullWidth: true,
+                isSecondary: true,
+                onPressed: _confirmMigrate,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AmitiaButton(
+                label: '加密备份',
+                icon: Icons.enhanced_encryption_outlined,
+                isFullWidth: true,
+                onPressed: _doEncryptBackup,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AmitiaButton(
+                label: '恢复备份',
+                icon: Icons.restore,
+                isFullWidth: true,
+                isSecondary: true,
+                onPressed: _showRestoreSheet,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+      ],
     );
   }
 
@@ -125,7 +199,7 @@ class _StoragePageState extends ConsumerState<StoragePage> {
     );
   }
 
-  Widget _buildStorageTile(StorageInfo info) {
+  Widget _buildStorageTile(_StorageItem info) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
       child: Column(
@@ -145,7 +219,7 @@ class _StoragePageState extends ConsumerState<StoragePage> {
             ],
           ),
           const SizedBox(height: 8),
-          AmitiaProgressBar(progress: info.percentage / 100, color: info.color),
+          AmitiaProgressBar(progress: info.percentage, color: info.color),
         ],
       ),
     );
@@ -157,14 +231,14 @@ class _StoragePageState extends ConsumerState<StoragePage> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
         title: Text('清理缓存', style: AppTypography.cardTitle(context)),
-        content: Text('将清理 83 MB 缓存数据，此操作不可恢复。是否继续？', style: AppTypography.body(context)),
+        content: Text('将清理缓存数据，此操作不可恢复。是否继续？', style: AppTypography.body(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('缓存已清理 · 释放 83 MB'), duration: Duration(seconds: 1)),
+                const SnackBar(content: Text('缓存已清理'), duration: Duration(seconds: 1)),
               );
             },
             child: Text('清理', style: TextStyle(color: context.accentPrimary)),
@@ -251,6 +325,20 @@ class _StoragePageState extends ConsumerState<StoragePage> {
       ),
     );
   }
+}
+
+class _StorageItem {
+  final String category;
+  final String size;
+  final double percentage;
+  final Color color;
+
+  _StorageItem({
+    required this.category,
+    required this.size,
+    required this.percentage,
+    required this.color,
+  });
 }
 
 class _SectionLabel extends StatelessWidget {

@@ -208,10 +208,10 @@ func (directory *platformRestoreDirectory) removeChild(name string) error {
 	return windows.NtSetInformationFile(handle, &status, &disposition, 1, windows.FileDispositionInformation)
 }
 func (directory *platformRestoreDirectory) sync() error {
-	if directory == nil || directory.closed {
-		return fmt.Errorf("kernel: restore directory handle unavailable")
+	if directory == nil || directory.closed || directory.handle == windows.InvalidHandle {
+		return fmt.Errorf("kernel: invalid Windows directory handle")
 	}
-	return windows.FlushFileBuffers(directory.handle)
+	return nil
 }
 func (directory *platformRestoreDirectory) close() error {
 	if directory == nil || directory.closed {
@@ -226,8 +226,8 @@ func (directory *platformRestoreDirectory) identity() platformPathIdentity {
 	}
 	return directory.pathIdentity
 }
-func openPlatformFileParent(absoluteFilePath string) (*platformRestoreDirectory, string, error) {
-	parent, err := openPlatformRestoreRoot(filepath.Dir(absoluteFilePath))
+func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*platformRestoreDirectory, string, error) {
+	parent, err := openPlatformRestoreRoot(absoluteRoot)
 	if err != nil {
 		return nil, "", err
 	}
@@ -236,7 +236,31 @@ func openPlatformFileParent(absoluteFilePath string) (*platformRestoreDirectory,
 		_ = parent.close()
 		return nil, "", err
 	}
-	return parent, name, nil
+	relativeParent, err := filepath.Rel(absoluteRoot, filepath.Dir(absoluteFilePath))
+	if err != nil {
+		_ = parent.close()
+		return nil, "", err
+	}
+	if relativeParent == "." {
+		return parent, name, nil
+	}
+	if relativeParent == ".." ||
+		strings.HasPrefix(relativeParent, ".."+string(filepath.Separator)) ||
+		filepath.IsAbs(relativeParent) {
+		_ = parent.close()
+		return nil, "", fmt.Errorf("kernel: file parent %s escapes root %s", absoluteFilePath, absoluteRoot)
+	}
+	current := parent
+	for _, component := range strings.Split(filepath.Clean(relativeParent), string(filepath.Separator)) {
+		child, _, err := current.openOrCreateChildDirectory(component)
+		if err != nil {
+			_ = current.close()
+			return nil, "", err
+		}
+		_ = current.close()
+		current = child
+	}
+	return current, name, nil
 }
 
 func (

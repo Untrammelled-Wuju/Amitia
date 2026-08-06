@@ -36,6 +36,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
@@ -52,12 +53,14 @@ import (
 )
 
 type ContainerBuilder struct {
-	dbPath             string
-	extRoot            string
-	db                 *sql.DB
-	characterReader    CharacterReader
-	conversationReader ConversationReader
-	memoryQueryService MemoryQueryService
+	dbPath                 string
+	extRoot                string
+	db                     *sql.DB
+	characterReader        CharacterReader
+	conversationReader     ConversationReader
+	memoryQueryService     MemoryQueryService
+	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
+	hostArtifactResolver    script_host.ArtifactResolver
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -94,7 +97,30 @@ func (b *ContainerBuilder) WithMemoryQueryService(s MemoryQueryService) *Contain
 	return b
 }
 
+func (b *ContainerBuilder) WithNodeEnvironmentResolver(
+	resolver script_host.NodeEnvironmentResolver,
+) *ContainerBuilder {
+	b.nodeEnvironmentResolver = resolver
+	return b
+}
+
+func (b *ContainerBuilder) WithHostArtifactResolver(
+	resolver script_host.ArtifactResolver,
+) *ContainerBuilder {
+	b.hostArtifactResolver = resolver
+	return b
+}
+
 func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
+	nodeResolver := b.nodeEnvironmentResolver
+	if nodeResolver == nil {
+		nodeResolver = script_host.UnavailableNodeResolver()
+	}
+	artifactResolver := b.hostArtifactResolver
+	if artifactResolver == nil {
+		artifactResolver = script_host.UnavailableArtifactResolver()
+	}
+
 	store, err := b.buildStore(ctx)
 	if err != nil {
 		return nil, err
@@ -265,8 +291,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	taskRepo := sqlite.NewTaskRepository(db)
 	taskCfg := task_runtime.DefaultTaskRuntimeConfig()
 	taskCfg.WorkspaceRoot = b.extRoot
-	taskCfg.NodePath = b.resolveNodePath()
-	taskCfg.TaskHostPath = b.resolveTaskHostPath()
+	taskCfg.NodeEnvironmentResolver = nodeResolver
+	taskCfg.HostArtifactResolver = artifactResolver
 	taskRuntimeService := task_runtime.NewTaskRuntimeService(taskRepo, taskCfg)
 	taskHandler := task_runtime.NewTaskHandler(taskRuntimeService)
 
@@ -380,7 +406,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewKernelToolExecutorAdapter(executionKernel)))
 	jsFactory.SetHostAPI(hostAPIGateway)
 
-	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, b.resolveNodePath(), b.resolvePluginHostPath())
+	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, nodeResolver, artifactResolver)
 	_ = supervisor.RegisterFactory(jsSupervisorFactory)
 
 	builtinDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
@@ -612,7 +638,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	devModeStore := dev_mode.NewSQLiteWorkspaceStore(db)
 	devModeRegistry := dev_mode.NewWorkspaceRegistry()
-	devModePipeline := dev_mode.NewRebuildPipeline(b.resolveNodePath())
+	devModePipeline := dev_mode.NewRebuildPipeline(nodeResolver)
 	devModePreserver := dev_mode.NewStatePreserver()
 	devModeReloader := dev_mode.NewRuntimeReloader(devModeRegistry, devModePipeline, devModePreserver)
 	devModeSessions := dev_mode.NewSessionManager(8 * time.Hour)
@@ -863,55 +889,3 @@ func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error
 	return store, nil
 }
 
-func (b *ContainerBuilder) resolveNodePath() string {
-	candidates := []string{
-		filepath.Join("backend", "node", "node.exe"),
-		"node.exe",
-	}
-	for _, c := range candidates {
-		absPath, err := filepath.Abs(c)
-		if err != nil {
-			continue
-		}
-		if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
-			return absPath
-		}
-	}
-	return "node"
-}
-
-func (b *ContainerBuilder) resolveTaskHostPath() string {
-	candidates := []string{
-		filepath.Join("..", "runtime", "task-host", "dist", "index.js"),
-		filepath.Join("runtime", "task-host", "dist", "index.js"),
-	}
-	for _, c := range candidates {
-		absPath, err := filepath.Abs(c)
-		if err != nil {
-			continue
-		}
-		if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
-			return absPath
-		}
-	}
-	absPath, _ := filepath.Abs(filepath.Join("..", "runtime", "task-host", "dist", "index.js"))
-	return absPath
-}
-
-func (b *ContainerBuilder) resolvePluginHostPath() string {
-	candidates := []string{
-		filepath.Join("..", "runtime", "plugin-host", "dist", "index.js"),
-		filepath.Join("runtime", "plugin-host", "dist", "index.js"),
-	}
-	for _, c := range candidates {
-		absPath, err := filepath.Abs(c)
-		if err != nil {
-			continue
-		}
-		if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
-			return absPath
-		}
-	}
-	absPath, _ := filepath.Abs(filepath.Join("..", "runtime", "plugin-host", "dist", "index.js"))
-	return absPath
-}

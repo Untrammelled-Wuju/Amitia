@@ -7,8 +7,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class EmotesPage extends ConsumerStatefulWidget {
   const EmotesPage({super.key});
@@ -18,22 +17,47 @@ class EmotesPage extends ConsumerStatefulWidget {
 }
 
 class _EmotesPageState extends ConsumerState<EmotesPage> {
-  late List<EmoteGroup> _groups;
-  late List<EmoteItem> _emotes;
+  List<Map<String, dynamic>> _groups = [];
+  List<Map<String, dynamic>> _emotes = [];
   String _selectedGroup = '全部';
   bool _batchMode = false;
   Set<String> _selected = {};
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _groups = List.from(MockMemory.emoteGroups);
-    _emotes = List.from(MockMemory.emotes);
+    _loadData();
   }
 
-  List<EmoteItem> get _filteredEmotes {
+  Future<void> _loadData() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(emoteServiceProvider);
+      final groups = await svc.groups();
+      final emotes = await svc.listEmotes();
+      if (mounted) setState(() { _groups = groups; _emotes = emotes; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  List<Map<String, dynamic>> get _filteredEmotes {
     if (_selectedGroup == '全部') return _emotes;
-    return _emotes.where((e) => e.group == _selectedGroup).toList();
+    return _emotes.where((e) => (e['group'] ?? '').toString() == _selectedGroup).toList();
+  }
+
+  int _groupCount(String groupName) {
+    if (groupName == '全部') return _emotes.length;
+    final g = _groups.firstWhere(
+      (gr) => (gr['name'] ?? '').toString() == groupName,
+      orElse: () => {},
+    );
+    if (g.isEmpty) {
+      return _emotes.where((e) => (e['group'] ?? '').toString() == groupName).length;
+    }
+    return (g['count'] as int?) ?? 0;
   }
 
   @override
@@ -59,26 +83,30 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            _buildGroupList(context),
-            if (_batchMode) _buildBatchBar(context),
-            Expanded(
-              child: _filteredEmotes.isEmpty
-                  ? AmitiaEmptyState(
-                      icon: Icons.emoji_emotions_outlined,
-                      title: '暂无表情',
-                      subtitle: '点击右上角导入表情包',
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
-                      itemCount: _filteredEmotes.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-                      itemBuilder: (context, index) => _buildEmoteCard(context, _filteredEmotes[index]),
-                    ),
-            ),
-          ],
-        ),
+        child: _loading
+            ? const AmitiaLoadingState(message: '加载中...')
+            : _error != null
+                ? AmitiaErrorState(message: _error!, onRetry: _loadData)
+                : Column(
+                    children: [
+                      _buildGroupList(context),
+                      if (_batchMode) _buildBatchBar(context),
+                      Expanded(
+                        child: _filteredEmotes.isEmpty
+                            ? AmitiaEmptyState(
+                                icon: Icons.emoji_emotions_outlined,
+                                title: '暂无表情',
+                                subtitle: '点击右上角导入表情包',
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+                                itemCount: _filteredEmotes.length,
+                                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                                itemBuilder: (context, index) => _buildEmoteCard(context, _filteredEmotes[index]),
+                              ),
+                      ),
+                    ],
+                  ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showGroupEditor(context, null),
@@ -89,7 +117,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
   }
 
   Widget _buildGroupList(BuildContext context) {
-    final allGroups = ['全部', ..._groups.map((g) => g.name)];
+    final allGroups = ['全部', ..._groups.map((g) => (g['name'] ?? '').toString()).where((n) => n.isNotEmpty)];
     return SizedBox(
       height: 50,
       child: ListView.separated(
@@ -100,7 +128,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
         itemBuilder: (context, index) {
           final group = allGroups[index];
           final isSelected = _selectedGroup == group;
-          final count = group == '全部' ? _emotes.length : _groups.firstWhere((g) => g.name == group, orElse: () => EmoteGroup(id: '', name: '')).count;
+          final count = _groupCount(group);
           return GestureDetector(
             onTap: () => setState(() => _selectedGroup = group),
             child: Container(
@@ -141,8 +169,17 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     );
   }
 
-  Widget _buildEmoteCard(BuildContext context, EmoteItem emote) {
-    final isSelected = _selected.contains(emote.id);
+  Widget _buildEmoteCard(BuildContext context, Map<String, dynamic> emote) {
+    final id = (emote['id'] ?? '').toString();
+    final name = (emote['name'] ?? '').toString();
+    final meaning = (emote['meaning'] ?? '').toString();
+    final group = (emote['group'] ?? '').toString();
+    final emoji = (emote['emoji'] ?? '😊').toString();
+    final characterId = emote['characterId']?.toString();
+    final isEnabled = (emote['isEnabled'] as bool?) ?? ((emote['enabled'] as int?) == 1);
+    final sendProbability = (emote['sendProbability'] ?? emote['probability'] ?? 50) as int;
+    final isSelected = _selected.contains(id);
+
     return AmitiaCard(
       border: Border.all(
         color: _batchMode && isSelected ? context.accentPrimary : context.borderPrimary,
@@ -151,7 +188,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
       onTap: () {
         if (_batchMode) {
           setState(() {
-            if (isSelected) { _selected.remove(emote.id); } else { _selected.add(emote.id); }
+            if (isSelected) { _selected.remove(id); } else { _selected.add(id); }
           });
         }
       },
@@ -169,7 +206,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
               color: context.accentSoft,
               borderRadius: AppRadius.brSmall,
             ),
-            child: Center(child: Text(emote.emoji, style: const TextStyle(fontSize: 28))),
+            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 28))),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -178,22 +215,22 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
               children: [
                 Row(
                   children: [
-                    Text(emote.name, style: AppTypography.cardTitle(context)),
+                    Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
                     const SizedBox(width: AppSpacing.sm),
-                    if (emote.characterId != null)
+                    if (characterId != null && characterId.isNotEmpty)
                       AmitiaStatusBadge(label: '专属', type: BadgeType.accent),
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('含义：${emote.meaning}', style: AppTypography.caption(context)),
+                Text('含义：$meaning', style: AppTypography.caption(context)),
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Text('分组：${emote.group}', style: AppTypography.label(context)),
+                    Text('分组：$group', style: AppTypography.label(context)),
                     const SizedBox(width: AppSpacing.md),
                     AmitiaStatusBadge(
-                      label: emote.isEnabled ? '启用' : '禁用',
-                      type: emote.isEnabled ? BadgeType.success : BadgeType.neutral,
+                      label: isEnabled ? '启用' : '禁用',
+                      type: isEnabled ? BadgeType.success : BadgeType.neutral,
                     ),
                   ],
                 ),
@@ -205,7 +242,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
             children: [
               Text('发送概率', style: AppTypography.label(context)),
               const SizedBox(height: 2),
-              Text('${emote.sendProbability}%', style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600)),
+              Text('$sendProbability%', style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600)),
             ],
           ),
           if (!_batchMode) ...[
@@ -222,9 +259,9 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     );
   }
 
-  void _showGroupEditor(BuildContext context, EmoteGroup? existing) {
+  void _showGroupEditor(BuildContext context, Map<String, dynamic>? existing) {
     final isEdit = existing != null;
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final nameCtrl = TextEditingController(text: (existing?['name'] ?? '').toString());
 
     showModalBottomSheet(
       context: context,
@@ -250,25 +287,30 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                     child: AmitiaButton(
                       label: '删除分组',
                       isDestructive: true,
-                      onPressed: () => _showDeleteGroupConfirm(context, existing!),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showDeleteGroupConfirm(context, existing!);
+                      },
                     ),
                   ),
                 if (isEdit) const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: isEdit ? '保存' : '创建',
-                    onPressed: () {
+                    onPressed: () async {
                       if (nameCtrl.text.trim().isEmpty) return;
-                      Navigator.pop(ctx);
-                      setState(() {
-                        if (isEdit) {
-                          final idx = _groups.indexWhere((g) => g.id == existing.id);
-                          _groups[idx] = EmoteGroup(id: existing.id, name: nameCtrl.text.trim(), count: existing.count);
-                        } else {
-                          _groups.add(EmoteGroup(id: 'eg${DateTime.now().millisecondsSinceEpoch}', name: nameCtrl.text.trim()));
-                        }
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEdit ? '分组已更新' : '分组已创建'), duration: const Duration(seconds: 1)));
+                      final svc = ref.read(emoteServiceProvider);
+                      if (isEdit) {
+                        final id = (existing!['id'] ?? '').toString();
+                        await svc.updateGroup(id, {'name': nameCtrl.text.trim()});
+                      } else {
+                        await svc.createGroup({'name': nameCtrl.text.trim()});
+                      }
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      _loadData();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEdit ? '分组已更新' : '分组已创建'), duration: const Duration(seconds: 1)));
+                      }
                     },
                   ),
                 ),
@@ -280,20 +322,25 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     );
   }
 
-  void _showDeleteGroupConfirm(BuildContext context, EmoteGroup group) {
+  void _showDeleteGroupConfirm(BuildContext context, Map<String, dynamic> group) {
+    final groupName = (group['name'] ?? '').toString();
+    final groupId = (group['id'] ?? '').toString();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('删除分组', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除分组「${group.name}」吗？组内表情将被移至默认分组。', style: AppTypography.bodySmall(context)),
+        content: Text('确定要删除分组「$groupName」吗？组内表情将被移至默认分组。', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pop(ctx);
-              setState(() => _groups.removeWhere((g) => g.id == group.id));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('分组已删除'), duration: Duration(seconds: 1)));
+            onPressed: () async {
+              final svc = ref.read(emoteServiceProvider);
+              await svc.deleteGroup(groupId);
+              if (ctx.mounted) Navigator.pop(ctx);
+              _loadData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('分组已删除'), duration: Duration(seconds: 1)));
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),
@@ -331,13 +378,14 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                final newGroup = EmoteGroup(id: 'eg${DateTime.now().millisecondsSinceEpoch}', name: '导入表情', count: 24);
-                _groups.add(newGroup);
-              });
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已导入24个表情'), duration: Duration(seconds: 1)));
+            onPressed: () async {
+              final svc = ref.read(emoteServiceProvider);
+              await svc.createGroup({'name': '导入表情'});
+              if (ctx.mounted) Navigator.pop(ctx);
+              _loadData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已导入24个表情'), duration: Duration(seconds: 1)));
+              }
             },
             child: Text('确认导入', style: TextStyle(color: context.accentPrimary)),
           ),
@@ -346,19 +394,25 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, EmoteItem emote) {
+  void _showDeleteConfirm(BuildContext context, Map<String, dynamic> emote) {
+    final emoteName = (emote['name'] ?? '').toString();
+    final emoteId = (emote['id'] ?? '').toString();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('删除表情', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除「${emote.name}」吗？', style: AppTypography.bodySmall(context)),
+        content: Text('确定要删除「$emoteName」吗？', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _emotes.removeWhere((e) => e.id == emote.id));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('表情已删除'), duration: Duration(seconds: 1)));
+            onPressed: () async {
+              final svc = ref.read(emoteServiceProvider);
+              await svc.deleteGroup(emoteId);
+              if (ctx.mounted) Navigator.pop(ctx);
+              _loadData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('表情已删除'), duration: Duration(seconds: 1)));
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),
@@ -376,13 +430,17 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _emotes.removeWhere((e) => _selected.contains(e.id));
+            onPressed: () async {
+              final svc = ref.read(emoteServiceProvider);
+              for (final id in _selected) {
+                await svc.deleteGroup(id);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+              _loadData();
+              if (mounted) {
                 _selected.clear();
-              });
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('批量删除完成'), duration: Duration(seconds: 1)));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('批量删除完成'), duration: Duration(seconds: 1)));
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),

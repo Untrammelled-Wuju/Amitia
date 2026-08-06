@@ -9,8 +9,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class PetProcessingPage extends ConsumerStatefulWidget {
   final String taskId;
@@ -22,72 +21,108 @@ class PetProcessingPage extends ConsumerStatefulWidget {
 }
 
 class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
-  late List<ProcessingTask> _processingTasks;
-  late PetTask _petTask;
+  List<Map<String, dynamic>> _processingTasks = [];
+  Map<String, dynamic>? _petTask;
   int _selectedActionIndex = 0;
   int _selectedAttemptIndex = 0;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _processingTasks = MockWorkshop.processingTasks(widget.taskId);
-    PetTask? found;
-    for (final t in MockWorkshop.petTasks) {
-      if (t.id == widget.taskId) {
-        found = t;
-        break;
-      }
-    }
-    _petTask = found ?? PetTask(id: widget.taskId, name: '未知任务', characterName: '未知', createdAt: DateTime.now());
-    if (_processingTasks.isNotEmpty) {
-      final selected = _processingTasks[_selectedActionIndex];
-      for (int i = 0; i < selected.attempts.length; i++) {
-        if (selected.attempts[i].isSelected) {
-          _selectedAttemptIndex = i;
-          break;
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final sessionData = await svc.getExtensionRun(widget.taskId);
+      if (mounted) {
+        if (sessionData != null) {
+          await _parseSessionData(sessionData, svc);
+        } else {
+          final sessions = await svc.workshopSessions();
+          Map<String, dynamic>? found;
+          for (final s in sessions) {
+            if (s['id']?.toString() == widget.taskId) {
+              found = s;
+              break;
+            }
+          }
+          if (found != null) {
+            await _parseSessionData(found, svc);
+          } else {
+            setState(() { _loading = false; _error = '未找到任务'; });
+          }
         }
       }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
-  BadgeType _statusBadgeType(ProcessingStatus status) {
+  Future<void> _parseSessionData(Map<String, dynamic> data, dynamic svc) async {
+    _petTask = Map<String, dynamic>.from(data);
+    final actions = data['actions'];
+    if (actions is List) {
+      for (final action in actions) {
+        if (action is Map<String, dynamic>) {
+          final runs = await _fetchActionRuns(svc, action['id']?.toString() ?? '');
+          action['_runs'] = runs;
+        }
+      }
+      _processingTasks = List<Map<String, dynamic>>.from(actions);
+    } else {
+      _processingTasks = [];
+    }
+    setState(() { _loading = false; });
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchActionRuns(dynamic svc, String actionId) async {
+    if (actionId.isEmpty) return [];
+    try {
+      final runs = await svc.extensionRuns();
+      return runs.where((r) => r['actionId']?.toString() == actionId || r['skillId']?.toString() == actionId)
+          .toList()
+          .cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  String get _taskName => _petTask?['name']?.toString() ?? '未知任务';
+  String get _characterName => _petTask?['characterName']?.toString() ?? _petTask?['character']?.toString() ?? '未知';
+
+  BadgeType _statusBadgeType(String? status) {
     switch (status) {
-      case ProcessingStatus.pending:
+      case 'pending':
         return BadgeType.neutral;
-      case ProcessingStatus.reviewing:
+      case 'reviewing':
         return BadgeType.warning;
-      case ProcessingStatus.approved:
+      case 'approved':
         return BadgeType.success;
-      case ProcessingStatus.rejected:
+      case 'rejected':
         return BadgeType.error;
+      default:
+        return BadgeType.neutral;
     }
   }
 
-  String _statusLabel(ProcessingStatus status) {
+  String _statusLabel(String? status) {
     switch (status) {
-      case ProcessingStatus.pending:
+      case 'pending':
         return '待处理';
-      case ProcessingStatus.reviewing:
+      case 'reviewing':
         return '审核中';
-      case ProcessingStatus.approved:
+      case 'approved':
         return '已通过';
-      case ProcessingStatus.rejected:
+      case 'rejected':
         return '已拒绝';
+      default:
+        return '未知';
     }
-  }
-
-  Color _frameColor(BuildContext context, FrameEntry frame) {
-    if (frame.status == '等待中') return context.surfaceSecondary;
-    if (frame.qualityLabel == '不合格') return context.error.withValues(alpha: 0.15);
-    if (frame.qualityLabel == '高质量') return context.success.withValues(alpha: 0.15);
-    return context.accentSoft;
-  }
-
-  Color _frameIconColor(BuildContext context, FrameEntry frame) {
-    if (frame.status == '等待中') return context.textTertiary;
-    if (frame.qualityLabel == '不合格') return context.error;
-    if (frame.qualityLabel == '高质量') return context.success;
-    return context.accentPrimary;
   }
 
   @override
@@ -100,36 +135,47 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _processingTasks.isEmpty
-            ? AmitiaEmptyState(
-                icon: Icons.assignment_late_outlined,
-                title: '暂无处理任务',
-                subtitle: '该任务还没有创建处理子任务',
-              )
-            : Column(
-                children: [
-                  _buildTaskHeader(context),
-                  _buildActionBarTabs(context),
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                      children: [
-                        _buildQualityBanner(context),
-                        const SizedBox(height: AppSpacing.md),
-                        _buildAttemptSelector(context),
-                        const SizedBox(height: AppSpacing.md),
-                        _buildFrameGrid(context),
-                        const SizedBox(height: AppSpacing.md),
-                        _buildOriginalResult(context),
-                        const SizedBox(height: AppSpacing.md),
-                        _buildActionButtons(context),
-                        const SizedBox(height: AppSpacing.xxl),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+        child: _buildBody(context),
       ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(child: Text('加载失败: $_error'));
+    }
+    if (_processingTasks.isEmpty) {
+      return AmitiaEmptyState(
+        icon: Icons.assignment_late_outlined,
+        title: '暂无处理任务',
+        subtitle: '该任务还没有创建处理子任务',
+      );
+    }
+    return Column(
+      children: [
+        _buildTaskHeader(context),
+        _buildActionBarTabs(context),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            children: [
+              _buildQualityBanner(context),
+              const SizedBox(height: AppSpacing.md),
+              _buildAttemptSelector(context),
+              const SizedBox(height: AppSpacing.md),
+              _buildFrameGrid(context),
+              const SizedBox(height: AppSpacing.md),
+              _buildOriginalResult(context),
+              const SizedBox(height: AppSpacing.md),
+              _buildActionButtons(context),
+              const SizedBox(height: AppSpacing.xxl),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -138,9 +184,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
-        border: Border(
-          bottom: BorderSide(color: context.borderPrimary, width: 0.5),
-        ),
+        border: Border(bottom: BorderSide(color: context.borderPrimary, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -158,10 +202,10 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_petTask.name, style: AppTypography.cardTitle(context)),
+                Text(_taskName, style: AppTypography.cardTitle(context)),
                 const SizedBox(height: 2),
                 Text(
-                  '${_petTask.characterName} · ${_processingTasks.length} 个动作待处理',
+                  '$_characterName · ${_processingTasks.length} 个动作待处理',
                   style: AppTypography.caption(context),
                 ),
               ],
@@ -182,18 +226,13 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
         itemBuilder: (context, index) {
           final task = _processingTasks[index];
+          final actionName = task['name']?.toString() ?? task['actionName']?.toString() ?? '';
           final isSelected = index == _selectedActionIndex;
           return GestureDetector(
             onTap: () {
               setState(() {
                 _selectedActionIndex = index;
                 _selectedAttemptIndex = 0;
-                for (int i = 0; i < task.attempts.length; i++) {
-                  if (task.attempts[i].isSelected) {
-                    _selectedAttemptIndex = i;
-                    break;
-                  }
-                }
               });
             },
             child: Container(
@@ -204,7 +243,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
               ),
               child: Center(
                 child: Text(
-                  task.actionName,
+                  actionName,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
@@ -221,13 +260,20 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
 
   Widget _buildQualityBanner(BuildContext context) {
     final task = _processingTasks[_selectedActionIndex];
-    final qualityType = task.qualityStatus == '高质量'
+    final actionName = task['name']?.toString() ?? task['actionName']?.toString() ?? '';
+    final status = task['status']?.toString();
+    final qualityStatus = task['qualityStatus']?.toString() ?? '待审核';
+    final completedFrames = (task['completedFrames'] is num) ? (task['completedFrames'] as num).toInt() : 0;
+    final totalFrames = (task['totalFrames'] is num) ? (task['totalFrames'] as num).toInt() : 0;
+
+    final qualityType = qualityStatus == '高质量'
         ? BadgeType.success
-        : task.qualityStatus == '部分不合格'
+        : qualityStatus == '部分不合格'
             ? BadgeType.error
-            : task.qualityStatus == '待审核'
+            : qualityStatus == '待审核'
                 ? BadgeType.warning
                 : BadgeType.neutral;
+
     return AmitiaCard(
       child: Row(
         children: [
@@ -237,10 +283,10 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(task.actionName, style: AppTypography.cardTitle(context)),
+                Text(actionName, style: AppTypography.cardTitle(context)),
                 const SizedBox(height: 2),
                 Text(
-                  '${task.completedFrames}/${task.totalFrames} 帧已完成',
+                  '$completedFrames/$totalFrames 帧已完成',
                   style: AppTypography.caption(context),
                 ),
               ],
@@ -249,9 +295,9 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              AmitiaStatusBadge(label: _statusLabel(task.status), type: _statusBadgeType(task.status)),
+              AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
               const SizedBox(height: 4),
-              AmitiaStatusBadge(label: task.qualityStatus, type: qualityType),
+              AmitiaStatusBadge(label: qualityStatus, type: qualityType),
             ],
           ),
         ],
@@ -261,7 +307,9 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
 
   Widget _buildAttemptSelector(BuildContext context) {
     final task = _processingTasks[_selectedActionIndex];
-    if (task.attempts.isEmpty) {
+    final attempts = task['attempts'] is List ? (task['attempts'] as List) : [<dynamic>[]];
+
+    if (attempts.isEmpty) {
       return AmitiaCard(
         child: Row(
           children: [
@@ -274,6 +322,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         ),
       );
     }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -282,10 +331,11 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         AmitiaCard(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
           child: Row(
-            children: task.attempts.asMap().entries.map((entry) {
+            children: attempts.asMap().entries.map((entry) {
               final i = entry.key;
               final attempt = entry.value;
               final isSelected = i == _selectedAttemptIndex;
+              final label = attempt is Map ? (attempt['label']?.toString() ?? 'Attempt ${i + 1}') : 'Attempt ${i + 1}';
               return Expanded(
                 child: GestureDetector(
                   onTap: () => _switchAttempt(i),
@@ -297,7 +347,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                     ),
                     child: Center(
                       child: Text(
-                        attempt.label,
+                        label,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
@@ -317,6 +367,8 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
 
   Widget _buildFrameGrid(BuildContext context) {
     final task = _processingTasks[_selectedActionIndex];
+    final frames = task['frames'] is List ? (task['frames'] as List) : <dynamic>[];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -331,22 +383,26 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             crossAxisSpacing: AppSpacing.sm,
             childAspectRatio: 0.8,
           ),
-          itemCount: task.frames.length,
+          itemCount: frames.length,
           itemBuilder: (context, index) {
-            final frame = task.frames[index];
-            return _buildFrameCell(context, frame);
+            final frame = frames[index];
+            return _buildFrameCell(context, frame, index);
           },
         ),
       ],
     );
   }
 
-  Widget _buildFrameCell(BuildContext context, FrameEntry frame) {
+  Widget _buildFrameCell(BuildContext context, dynamic frame, int index) {
+    final frameMap = frame is Map ? frame : <String, dynamic>{};
+    final status = frameMap['status']?.toString() ?? '等待中';
+    final qualityLabel = frameMap['qualityLabel']?.toString();
+
     return GestureDetector(
-      onTap: () => _showFramePreview(frame),
+      onTap: () => _showFramePreview(frameMap, index),
       child: Container(
         decoration: BoxDecoration(
-          color: _frameColor(context, frame),
+          color: _frameColor(context, status, qualityLabel),
           borderRadius: AppRadius.brSmall,
           border: Border.all(color: context.borderPrimary, width: 0.5),
         ),
@@ -354,29 +410,29 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              frame.status == '等待中' ? Icons.hourglass_empty : Icons.image,
+              status == '等待中' ? Icons.hourglass_empty : Icons.image,
               size: 24,
-              color: _frameIconColor(context, frame),
+              color: _frameIconColor(context, status, qualityLabel),
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              '帧 ${frame.index + 1}',
+              '帧 ${index + 1}',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: frame.status == '等待中' ? context.textTertiary : context.textSecondary,
+                color: status == '等待中' ? context.textTertiary : context.textSecondary,
               ),
             ),
-            if (frame.qualityLabel != null)
+            if (qualityLabel != null && qualityLabel.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
-                  frame.qualityLabel!,
+                  qualityLabel,
                   style: TextStyle(
                     fontSize: 9,
-                    color: frame.qualityLabel == '不合格'
+                    color: qualityLabel == '不合格'
                         ? context.error
-                        : frame.qualityLabel == '高质量'
+                        : qualityLabel == '高质量'
                             ? context.success
                             : context.textTertiary,
                   ),
@@ -388,8 +444,33 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     );
   }
 
+  Color _frameColor(BuildContext context, String status, String? qualityLabel) {
+    if (status == '等待中') return context.surfaceSecondary;
+    if (qualityLabel == '不合格') return context.error.withValues(alpha: 0.15);
+    if (qualityLabel == '高质量') return context.success.withValues(alpha: 0.15);
+    return context.accentSoft;
+  }
+
+  Color _frameIconColor(BuildContext context, String status, String? qualityLabel) {
+    if (status == '等待中') return context.textTertiary;
+    if (qualityLabel == '不合格') return context.error;
+    if (qualityLabel == '高质量') return context.success;
+    return context.accentPrimary;
+  }
+
   Widget _buildOriginalResult(BuildContext context) {
     final task = _processingTasks[_selectedActionIndex];
+    final actionName = task['name']?.toString() ?? task['actionName']?.toString() ?? '';
+    final totalFrames = (task['totalFrames'] is num) ? (task['totalFrames'] as num).toInt() : 0;
+    final completedFrames = (task['completedFrames'] is num) ? (task['completedFrames'] as num).toInt() : 0;
+    final qualityStatus = task['qualityStatus']?.toString() ?? '待审核';
+    final attempts = task['attempts'] is List ? (task['attempts'] as List) : <dynamic>[];
+    final attemptLabel = _selectedAttemptIndex < attempts.length
+        ? (attempts[_selectedAttemptIndex] is Map
+            ? (attempts[_selectedAttemptIndex]['label']?.toString() ?? 'Attempt ${_selectedAttemptIndex + 1}')
+            : 'Attempt ${_selectedAttemptIndex + 1}')
+        : '无';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -399,15 +480,15 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildResultRow(context, '动作', task.actionName),
+              _buildResultRow(context, '动作', actionName),
               const SizedBox(height: AppSpacing.xs),
-              _buildResultRow(context, '帧数', '${task.totalFrames} 帧'),
+              _buildResultRow(context, '帧数', '$totalFrames 帧'),
               const SizedBox(height: AppSpacing.xs),
-              _buildResultRow(context, '已完成', '${task.completedFrames} 帧'),
+              _buildResultRow(context, '已完成', '$completedFrames 帧'),
               const SizedBox(height: AppSpacing.xs),
-              _buildResultRow(context, 'Attempt', _selectedAttemptIndex < task.attempts.length ? task.attempts[_selectedAttemptIndex].label : '无'),
+              _buildResultRow(context, 'Attempt', attemptLabel),
               const SizedBox(height: AppSpacing.xs),
-              _buildResultRow(context, '质量', task.qualityStatus),
+              _buildResultRow(context, '质量', qualityStatus),
             ],
           ),
         ),
@@ -418,19 +499,17 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
   Widget _buildResultRow(BuildContext context, String label, String value) {
     return Row(
       children: [
-        SizedBox(
-          width: 64,
-          child: Text(label, style: AppTypography.label(context)),
-        ),
-        Expanded(
-          child: Text(value, style: AppTypography.bodySmall(context)),
-        ),
+        SizedBox(width: 64, child: Text(label, style: AppTypography.label(context))),
+        Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
       ],
     );
   }
 
   Widget _buildActionButtons(BuildContext context) {
     final task = _processingTasks[_selectedActionIndex];
+    final actionKey = task['id']?.toString() ?? task['actionKey']?.toString() ?? '';
+    final actionName = task['name']?.toString() ?? task['actionName']?.toString() ?? '';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -441,7 +520,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                 label: '编辑动作',
                 isSecondary: true,
                 icon: Icons.edit_outlined,
-                onPressed: () => context.push(AppRoutes.petActionEditor(widget.taskId, task.actionKey)),
+                onPressed: () => context.push(AppRoutes.petActionEditor(widget.taskId, actionKey)),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -450,7 +529,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                 label: '重处理',
                 isSecondary: true,
                 icon: Icons.refresh,
-                onPressed: _showReprocessConfirm,
+                onPressed: () => _showReprocessConfirm(actionName),
               ),
             ),
           ],
@@ -463,7 +542,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                 label: '排除动作',
                 isSecondary: true,
                 icon: Icons.block,
-                onPressed: _showExcludeConfirm,
+                onPressed: () => _showExcludeConfirm(actionName),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -471,7 +550,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
               child: AmitiaButton(
                 label: '打包',
                 icon: Icons.archive_outlined,
-                onPressed: _showPackageDialog,
+                onPressed: () => _showPackageDialog(actionName),
               ),
             ),
           ],
@@ -481,13 +560,16 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           label: '安装到桌宠',
           icon: Icons.install_desktop,
           isFullWidth: true,
-          onPressed: _showInstallDialog,
+          onPressed: () => _showInstallDialog(actionName),
         ),
       ],
     );
   }
 
-  void _showFramePreview(FrameEntry frame) {
+  void _showFramePreview(Map<String, dynamic> frame, int index) {
+    final status = frame['status']?.toString() ?? '等待中';
+    final qualityLabel = frame['qualityLabel']?.toString() ?? '';
+
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -498,36 +580,37 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('帧 ${frame.index + 1} 预览', style: AppTypography.cardTitle(context)),
+                Text('帧 ${index + 1} 预览', style: AppTypography.cardTitle(context)),
                 const SizedBox(height: AppSpacing.md),
                 Container(
                   width: 200,
                   height: 200,
                   decoration: BoxDecoration(
-                    color: _frameColor(context, frame),
+                    color: _frameColor(context, status, qualityLabel),
                     borderRadius: AppRadius.brMedium,
                     border: Border.all(color: context.borderPrimary),
                   ),
-                  child: Icon(Icons.image, size: 64, color: _frameIconColor(context, frame)),
+                  child: Icon(Icons.image, size: 64, color: _frameIconColor(context, status, qualityLabel)),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     AmitiaStatusBadge(
-                      label: frame.status,
-                      type: frame.status == '已完成' ? BadgeType.success : BadgeType.neutral,
+                      label: status,
+                      type: status == '已完成' ? BadgeType.success : BadgeType.neutral,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    if (frame.qualityLabel != null)
+                    if (qualityLabel.isNotEmpty) ...[
+                      const SizedBox(width: AppSpacing.sm),
                       AmitiaStatusBadge(
-                        label: frame.qualityLabel!,
-                        type: frame.qualityLabel == '不合格'
+                        label: qualityLabel,
+                        type: qualityLabel == '不合格'
                             ? BadgeType.error
-                            : frame.qualityLabel == '高质量'
+                            : qualityLabel == '高质量'
                                 ? BadgeType.success
                                 : BadgeType.neutral,
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -546,16 +629,18 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
   }
 
   void _switchAttempt(int index) {
-    setState(() {
-      _selectedAttemptIndex = index;
-    });
+    setState(() { _selectedAttemptIndex = index; });
+    final task = _processingTasks[_selectedActionIndex];
+    final attempts = task['attempts'] is List ? (task['attempts'] as List) : <dynamic>[];
+    final label = index < attempts.length && attempts[index] is Map
+        ? (attempts[index]['label']?.toString() ?? 'Attempt ${index + 1}')
+        : 'Attempt ${index + 1}';
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已切换到 ${_processingTasks[_selectedActionIndex].attempts[index].label}')),
+      SnackBar(content: Text('已切换到 $label')),
     );
   }
 
-  void _showReprocessConfirm() {
-    final task = _processingTasks[_selectedActionIndex];
+  void _showReprocessConfirm(String actionName) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -563,7 +648,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('重处理动作', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认重新处理动作「${task.actionName}」？将生成新的 Attempt。',
+            '确认重新处理动作「$actionName」？将生成新的 Attempt。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -575,7 +660,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
               onPressed: () {
                 Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「${task.actionName}」重处理已启动')),
+                  SnackBar(content: Text('「$actionName」重处理已启动')),
                 );
               },
               child: Text('确认', style: TextStyle(color: context.accentPrimary)),
@@ -586,8 +671,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     );
   }
 
-  void _showExcludeConfirm() {
-    final task = _processingTasks[_selectedActionIndex];
+  void _showExcludeConfirm(String actionName) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -595,7 +679,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('排除动作', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认排除动作「${task.actionName}」？排除后该动作将不会安装到桌宠。',
+            '确认排除动作「$actionName」？排除后该动作将不会安装到桌宠。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -613,7 +697,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                   }
                 });
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('动作「${task.actionName}」已排除')),
+                  SnackBar(content: Text('动作「$actionName」已排除')),
                 );
               },
               child: Text('排除', style: TextStyle(color: context.error)),
@@ -624,8 +708,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     );
   }
 
-  void _showPackageDialog() {
-    final task = _processingTasks[_selectedActionIndex];
+  void _showPackageDialog(String actionName) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -633,7 +716,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('打包资源', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认打包动作「${task.actionName}」的资源？打包后将生成可安装的资源包。',
+            '确认打包动作「$actionName」的资源？打包后将生成可安装的资源包。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -645,7 +728,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
               onPressed: () {
                 Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「${task.actionName}」资源打包完成')),
+                  SnackBar(content: Text('「$actionName」资源打包完成')),
                 );
               },
               child: Text('打包', style: TextStyle(color: context.accentPrimary)),
@@ -656,8 +739,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     );
   }
 
-  void _showInstallDialog() {
-    final task = _processingTasks[_selectedActionIndex];
+  void _showInstallDialog(String actionName) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -665,7 +747,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('安装到桌宠', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认将动作「${task.actionName}」安装到桌宠「${_petTask.name}」？',
+            '确认将动作「$actionName」安装到桌宠「$_taskName」？',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -677,7 +759,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
               onPressed: () {
                 Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('动作「${task.actionName}」安装成功')),
+                  SnackBar(content: Text('动作「$actionName」安装成功')),
                 );
               },
               child: Text('安装', style: TextStyle(color: context.accentPrimary)),

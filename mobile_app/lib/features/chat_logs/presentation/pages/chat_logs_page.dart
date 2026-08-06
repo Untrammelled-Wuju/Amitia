@@ -8,8 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/conversation.dart';
 import '../../../../app/app_routes.dart';
 
 class ChatLogsPage extends ConsumerStatefulWidget {
@@ -20,25 +20,17 @@ class ChatLogsPage extends ConsumerStatefulWidget {
 }
 
 class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
-  late List<ChatLogConversation> _conversations;
-  late List<ChatLogMessage> _messages;
   String? _selectedConversationId;
   String _characterFilter = '全部';
   String _channelFilter = '全部';
+  List<MessageDto> _messages = [];
 
   final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
   final _channels = ['全部', 'App', '微信', 'QQ'];
 
-  @override
-  void initState() {
-    super.initState();
-    _conversations = List.from(MockMemory.chatLogConversations);
-    _messages = List.from(MockMemory.chatLogMessages);
-    _selectedConversationId = _conversations.first.id;
-  }
-
-  List<ChatLogConversation> get _filteredConversations {
-    return _conversations.where((c) {
+  List<ConversationDto> get _filteredConversations {
+    final conversations = _conversationList;
+    return conversations.where((c) {
       if (_characterFilter != '全部') {
         final charName = _getCharacterName(c.characterId);
         if (charName != _characterFilter) return false;
@@ -48,12 +40,20 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     }).toList();
   }
 
-  ChatLogConversation? get _selectedConversation {
-    return _conversations.where((c) => c.id == _selectedConversationId).firstOrNull;
+  List<ConversationDto> get _conversationList {
+    final async = ref.watch(conversationListProvider);
+    return async.valueOrNull ?? [];
+  }
+
+  ConversationDto? get _selectedConversation {
+    final conversations = _filteredConversations;
+    return conversations.where((c) => c.id == _selectedConversationId).firstOrNull;
   }
 
   @override
   Widget build(BuildContext context) {
+    final conversationsAsync = ref.watch(conversationListProvider);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '聊天记录',
@@ -73,25 +73,82 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            _buildFilters(context),
-            Expanded(
-              child: Row(
+        child: conversationsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 160,
-                    child: _buildConversationList(context),
+                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  const SizedBox(height: 16),
+                  Text(
+                    '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(context).copyWith(color: context.error),
+                    textAlign: TextAlign.center,
                   ),
-                  Container(width: 0.5, color: context.borderPrimary),
-                  Expanded(child: _buildMessagePanel(context)),
+                  const SizedBox(height: 16),
+                  AmitiaButton(
+                    label: '重试',
+                    onPressed: () => ref.invalidate(conversationListProvider),
+                  ),
                 ],
               ),
             ),
-          ],
+          ),
+          data: (conversations) {
+            if (conversations.isEmpty) {
+              return AmitiaEmptyState(
+                icon: Icons.chat_bubble_outline,
+                title: '暂无聊天记录',
+                subtitle: '开始一个新的对话吧',
+              );
+            }
+
+            if (_selectedConversationId == null && conversations.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  setState(() => _selectedConversationId = conversations.first.id);
+                  _loadMessages(conversations.first.id);
+                }
+              });
+            }
+
+            if (_selectedConversationId != null && _messages.isEmpty) {
+              _loadMessages(_selectedConversationId!);
+            }
+
+            return Column(
+              children: [
+                _buildFilters(context),
+                Expanded(
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 160,
+                        child: _buildConversationList(context),
+                      ),
+                      Container(width: 0.5, color: context.borderPrimary),
+                      Expanded(child: _buildMessagePanel(context)),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
+  }
+
+  void _loadMessages(String conversationId) {
+    final chatApi = ref.read(chatServiceProvider);
+    chatApi.getMessages(conversationId).then((msgs) {
+      if (mounted) {
+        setState(() => _messages = msgs);
+      }
+    });
   }
 
   Widget _buildFilters(BuildContext context) {
@@ -158,15 +215,22 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   }
 
   Widget _buildConversationList(BuildContext context) {
+    final filtered = _filteredConversations;
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-      itemCount: _filteredConversations.length,
+      itemCount: filtered.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final conv = _filteredConversations[index];
+        final conv = filtered[index];
         final isSelected = conv.id == _selectedConversationId;
         return GestureDetector(
-          onTap: () => setState(() => _selectedConversationId = conv.id),
+          onTap: () {
+            setState(() {
+              _selectedConversationId = conv.id;
+              _messages = [];
+            });
+            _loadMessages(conv.id);
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.md),
             decoration: BoxDecoration(
@@ -182,11 +246,11 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                   children: [
                     AmitiaStatusBadge(label: _getCharacterName(conv.characterId), type: BadgeType.accent, fontSize: 10),
                     const SizedBox(width: 4),
-                    AmitiaStatusBadge(label: conv.channel, type: BadgeType.neutral, fontSize: 10),
+                    AmitiaStatusBadge(label: conv.channel.isEmpty ? 'App' : conv.channel, type: BadgeType.neutral, fontSize: 10),
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('${conv.messageCount}条 · ${_formatTime(conv.lastTime)}', style: AppTypography.label(context)),
+                Text('${conv.messageCount}条 · ${_formatTime(conv.updatedAt)}', style: AppTypography.label(context)),
               ],
             ),
           ),
@@ -208,7 +272,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     );
   }
 
-  Widget _buildMessageHeader(BuildContext context, ChatLogConversation conv) {
+  Widget _buildMessageHeader(BuildContext context, ConversationDto conv) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(color: context.surfacePrimary, border: Border(bottom: BorderSide(color: context.borderPrimary, width: 0.5))),
@@ -219,11 +283,10 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(conv.title, style: AppTypography.cardTitle(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text('${_getCharacterName(conv.characterId)} · ${conv.channel} · ${conv.messageCount}条消息', style: AppTypography.label(context)),
+                Text('${_getCharacterName(conv.characterId)} · ${conv.channel.isEmpty ? "App" : conv.channel} · ${conv.messageCount}条消息', style: AppTypography.label(context)),
               ],
             ),
           ),
-          AmitiaIconButton(icon: Icons.swap_horiz, size: 18, tooltip: '切换角色', onPressed: () => _showSwitchCharacterConfirm(context, conv)),
           AmitiaIconButton(icon: Icons.delete_sweep_outlined, size: 18, color: context.error, tooltip: '清空会话', onPressed: () => _showClearConfirm(context, conv)),
         ],
       ),
@@ -231,6 +294,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   }
 
   Widget _buildMessageList(BuildContext context) {
+    if (_messages.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(AppSpacing.sm),
       itemCount: _messages.length,
@@ -239,10 +305,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     );
   }
 
-  Widget _buildMessageItem(BuildContext context, ChatLogMessage message) {
+  Widget _buildMessageItem(BuildContext context, MessageDto message) {
     final isUser = message.role == 'user';
     return GestureDetector(
-      onTap: () => message.context != null ? _showContextPreview(context, message) : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
@@ -269,78 +334,13 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                 const SizedBox(width: AppSpacing.sm),
                 Text(isUser ? '用户' : '角色', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w500)),
                 const Spacer(),
-                Text(_formatTime(message.time), style: AppTypography.label(context)),
-                if (message.context != null) ...[
-                  const SizedBox(width: AppSpacing.sm),
-                  Icon(Icons.code, size: 12, color: context.accentPrimary),
-                ],
-                const SizedBox(width: AppSpacing.xs),
-                GestureDetector(
-                  onTap: () => _showDeleteMessageConfirm(context, message),
-                  child: Icon(Icons.close, size: 14, color: context.textTertiary),
-                ),
+                Text(_formatMsgTime(message.createdAt), style: AppTypography.label(context)),
               ],
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(message.content, style: AppTypography.bodySmall(context)),
-            if (message.context != null) ...[
-              const SizedBox(height: AppSpacing.xs),
-              GestureDetector(
-                onTap: () => _showContextPreview(context, message),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brTag),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.code, size: 12, color: context.accentPrimary),
-                      const SizedBox(width: 4),
-                      Text('上下文: ${message.context}', style: TextStyle(fontSize: 11, color: context.accentPrimary)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
-      ),
-    );
-  }
-
-  void _showContextPreview(BuildContext context, ChatLogMessage message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('上下文预览', style: AppTypography.cardTitle(context)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('消息内容', style: AppTypography.label(context)),
-            const SizedBox(height: 4),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
-              child: Text(message.content, style: AppTypography.bodySmall(context)),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text('上下文信息', style: AppTypography.label(context)),
-            const SizedBox(height: 4),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-              child: Text(message.context ?? '无上下文', style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary)),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text('角色：${message.role}', style: AppTypography.caption(context)),
-            Text('时间：${_formatTime(message.time)}', style: AppTypography.caption(context)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
       ),
     );
   }
@@ -364,78 +364,23 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brMedium),
                 child: Text(
-                  '本次会话主要讨论了文件整理和文档分析。用户请求整理下载目录，AI 扫描了1,247个文件并识别了23个重复文件。随后用户提交了产品需求文档，AI 生成了包含三个模块的摘要。',
+                  '${_getCharacterName(conv?.characterId ?? "")} · ${_messages.length}条消息',
                   style: AppTypography.bodySmall(context).copyWith(height: 1.6),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
               Text('消息数：${conv?.messageCount ?? 0}', style: AppTypography.caption(context)),
-              Text('最后时间：${conv != null ? _formatTime(conv.lastTime) : '-'}', style: AppTypography.caption(context)),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showDeleteSummaryConfirm(context);
-            },
-            child: Text('删除摘要', style: TextStyle(color: context.error)),
-          ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
         ],
       ),
     );
   }
 
-  void _showDeleteSummaryConfirm(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('删除摘要', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除该会话的摘要吗？', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('摘要已删除'), duration: Duration(seconds: 1)));
-            },
-            child: Text('删除', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSwitchCharacterConfirm(BuildContext context, ChatLogConversation conv) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('切换会话角色', style: AppTypography.cardTitle(context)),
-        content: Text('确定要将此会话的角色从「${_getCharacterName(conv.characterId)}」切换为「小雨」吗？切换后历史消息不受影响。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                final idx = _conversations.indexWhere((c) => c.id == conv.id);
-                _conversations[idx] = ChatLogConversation(
-                  id: conv.id, title: conv.title, characterId: 'c2',
-                  channel: conv.channel, messageCount: conv.messageCount, lastTime: conv.lastTime,
-                );
-              });
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已切换角色为「小雨」'), duration: Duration(seconds: 1)));
-            },
-            child: Text('确认切换', style: TextStyle(color: context.accentPrimary)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showClearConfirm(BuildContext context, ChatLogConversation conv) {
+  void _showClearConfirm(BuildContext context, ConversationDto conv) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -446,10 +391,14 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              setState(() {
-                _messages.clear();
+              final chatApi = ref.read(chatServiceProvider);
+              chatApi.deleteConversation(conv.id).then((_) {
+                if (mounted) {
+                  ref.invalidate(conversationListProvider);
+                  setState(() => _selectedConversationId = null);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('会话已删除'), duration: Duration(seconds: 1)));
+                }
               });
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('会话已清空'), duration: Duration(seconds: 1)));
             },
             child: Text('清空', style: TextStyle(color: context.error)),
           ),
@@ -458,38 +407,30 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     );
   }
 
-  void _showDeleteMessageConfirm(BuildContext context, ChatLogMessage message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('删除消息', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除这条消息吗？', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _messages.removeWhere((m) => m.id == message.id));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('消息已删除'), duration: Duration(seconds: 1)));
-            },
-            child: Text('删除', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
+  String _getCharacterName(String id) {
+    final characters = ref.read(characterListProvider).valueOrNull ?? [];
+    final character = characters.where((c) => c.id == id).firstOrNull;
+    return character?.name ?? '未知';
   }
 
-  String _getCharacterName(String id) {
-    switch (id) {
-      case 'c1': return 'Amitia';
-      case 'c2': return '小雨';
-      case 'c3': return 'Epsilon';
-      case 'c4': return 'Karin';
-      default: return '未知';
+  String _formatTime(String updatedAt) {
+    final time = DateTime.tryParse(updatedAt);
+    if (time == null) return '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final convDate = DateTime(time.year, time.month, time.day);
+    if (convDate == today) {
+      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    } else if (convDate == today.subtract(const Duration(days: 1))) {
+      return '昨天';
+    } else {
+      return '${time.month}/${time.day}';
     }
   }
 
-  String _formatTime(DateTime time) {
-    return '${time.month}/${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  String _formatMsgTime(String createdAt) {
+    final time = DateTime.tryParse(createdAt);
+    if (time == null) return '';
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 }

@@ -180,7 +180,7 @@ func (directory *platformRestoreDirectory) identity() platformPathIdentity {
 	return directory.pathIdentity
 }
 
-func openPlatformFileParent(absoluteFilePath string) (*platformRestoreDirectory, string, error) {
+func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*platformRestoreDirectory, string, error) {
 	parent, err := openPlatformRestoreRoot(filepath.Dir(absoluteFilePath))
 	if err != nil {
 		return nil, "", err

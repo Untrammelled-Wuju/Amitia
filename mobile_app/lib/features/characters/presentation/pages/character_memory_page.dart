@@ -8,8 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/memory.dart';
 
 class CharacterMemoryPage extends ConsumerStatefulWidget {
   final String characterId;
@@ -21,16 +21,9 @@ class CharacterMemoryPage extends ConsumerStatefulWidget {
 }
 
 class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
-  late List<Memory> _memories;
   bool _searchVisible = false;
   String _searchQuery = '';
   final _searchController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _memories = List.from(MockData.memories);
-  }
 
   @override
   void dispose() {
@@ -38,23 +31,10 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
     super.dispose();
   }
 
-  List<Memory> get _filteredMemories {
-    return _memories.where((m) {
-      if (_searchQuery.isEmpty) return true;
-      return m.content.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
-  }
-
-  Map<String, List<Memory>> get _groupedMemories {
-    final groups = <String, List<Memory>>{};
-    for (final m in _filteredMemories) {
-      groups.putIfAbsent(m.category, () => []).add(m);
-    }
-    return groups;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final memoriesAsync = ref.watch(memoryListProvider);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '角色记忆',
@@ -93,20 +73,35 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                 ),
               ),
             Expanded(
-              child: _filteredMemories.isEmpty
-                  ? AmitiaEmptyState(
+              child: memoriesAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) => Center(child: Text('加载失败: $err')),
+                data: (allMemories) {
+                  final filtered = allMemories.where((m) {
+                    if (_searchQuery.isEmpty) return true;
+                    return m.content.toLowerCase().contains(_searchQuery.toLowerCase());
+                  }).toList();
+                  if (filtered.isEmpty) {
+                    return AmitiaEmptyState(
                       icon: Icons.memory,
                       title: '暂无记忆',
                       subtitle: '与角色对话后记忆会自动生成',
                       actionText: '新建记忆',
                       onAction: () => _showMemoryEditor(context, null),
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                      children: _groupedMemories.entries.map((entry) {
-                        return _buildMemoryGroup(context, entry.key, entry.value);
-                      }).toList(),
-                    ),
+                    );
+                  }
+                  final grouped = <String, List<MemoryDto>>{};
+                  for (final m in filtered) {
+                    grouped.putIfAbsent(m.type, () => []).add(m);
+                  }
+                  return ListView(
+                    padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                    children: grouped.entries.map((entry) {
+                      return _buildMemoryGroup(context, entry.key, entry.value);
+                    }).toList(),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -114,7 +109,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
     );
   }
 
-  Widget _buildMemoryGroup(BuildContext context, String category, List<Memory> memories) {
+  Widget _buildMemoryGroup(BuildContext context, String category, List<MemoryDto> memories) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -143,37 +138,25 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
     );
   }
 
-  Widget _buildMemoryCard(BuildContext context, Memory memory) {
+  Widget _buildMemoryCard(BuildContext context, MemoryDto memory) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(memory.content, style: AppTypography.body(context)),
-                ),
-                if (memory.isPinned)
-                  Padding(
-                    padding: const EdgeInsets.only(left: AppSpacing.sm),
-                    child: Icon(Icons.push_pin, size: 16, color: context.accentPrimary),
-                  ),
-              ],
-            ),
+            Text(memory.content, style: AppTypography.body(context)),
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 AmitiaStatusBadge(
-                  label: memory.importance,
-                  type: _importanceToBadgeType(memory.importance),
+                  label: '${memory.importance}',
+                  type: memory.importance >= 7 ? BadgeType.error : memory.importance >= 4 ? BadgeType.info : BadgeType.neutral,
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Text(memory.source, style: AppTypography.label(context)),
+                Text(memory.status, style: AppTypography.label(context)),
                 const Spacer(),
-                Text(_formatTime(memory.time), style: AppTypography.label(context)),
+                Text(_formatTime(memory.createdAt), style: AppTypography.label(context)),
               ],
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -199,7 +182,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 GestureDetector(
-                  onTap: () => _showDeleteConfirm(context, memory),
+                  onTap: () => _deleteMemory(memory),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -216,15 +199,6 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                     ),
                   ),
                 ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('跳转到记忆详情'), duration: Duration(seconds: 1)),
-                    );
-                  },
-                  child: Icon(Icons.chevron_right, size: 18, color: context.textTertiary),
-                ),
               ],
             ),
           ],
@@ -233,12 +207,12 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
     );
   }
 
-  void _showMemoryEditor(BuildContext context, Memory? existing) {
+  void _showMemoryEditor(BuildContext context, MemoryDto? existing) {
     final isEdit = existing != null;
     final contentCtrl = TextEditingController(text: existing?.content ?? '');
-    final sourceCtrl = TextEditingController(text: existing?.source ?? '对话');
-    String importance = existing?.importance ?? '中';
-    String category = existing?.category ?? '情景记忆';
+    String type = existing?.type ?? '情景记忆';
+    int importance = existing?.importance ?? 5;
+    String status = existing?.status ?? 'active';
 
     showModalBottomSheet(
       context: context,
@@ -272,28 +246,14 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
               const SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: contentCtrl, maxLines: 4, hintText: '输入记忆内容'),
               const SizedBox(height: AppSpacing.md),
-              Text('来源', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(controller: sourceCtrl, hintText: '如：对话、日程、设定'),
-              const SizedBox(height: AppSpacing.md),
-              Text('重要程度', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
-              Wrap(
-                spacing: AppSpacing.sm,
-                children: ['高', '较高', '中', '低'].map((i) {
-                  final isSelected = importance == i;
-                  return GestureDetector(
-                    onTap: () => setSheetState(() => importance = i),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isSelected ? context.accentPrimary : context.surfaceSecondary,
-                        borderRadius: AppRadius.brTag,
-                      ),
-                      child: Text(i, style: TextStyle(fontSize: 13, color: isSelected ? Colors.white : context.textSecondary)),
-                    ),
-                  );
-                }).toList(),
+              Text('重要程度: $importance', style: AppTypography.label(context)),
+              Slider(
+                value: importance.toDouble(),
+                min: 1,
+                max: 10,
+                divisions: 9,
+                activeColor: context.accentPrimary,
+                onChanged: (v) => setSheetState(() => importance = v.round()),
               ),
               const SizedBox(height: AppSpacing.md),
               Text('分类', style: AppTypography.label(context)),
@@ -301,9 +261,9 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['长期记忆', '情景记忆', '关系记忆', '世界设定'].map((c) {
-                  final isSelected = category == c;
+                  final isSelected = type == c;
                   return GestureDetector(
-                    onTap: () => setSheetState(() => category = c),
+                    onTap: () => setSheetState(() => type = c),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
@@ -319,35 +279,31 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
-                onPressed: () {
+                onPressed: () async {
                   if (contentCtrl.text.trim().isEmpty) return;
                   Navigator.pop(ctx);
-                  setState(() {
-                    if (isEdit) {
-                      final idx = _memories.indexWhere((m) => m.id == existing.id);
-                      _memories[idx] = Memory(
-                        id: existing.id,
-                        content: contentCtrl.text.trim(),
-                        source: sourceCtrl.text.trim(),
-                        importance: importance,
-                        time: existing.time,
-                        category: category,
-                        isPinned: existing.isPinned,
-                      );
-                    } else {
-                      _memories.insert(0, Memory(
-                        id: 'mem${DateTime.now().millisecondsSinceEpoch}',
-                        content: contentCtrl.text.trim(),
-                        source: sourceCtrl.text.trim(),
-                        importance: importance,
-                        time: DateTime.now(),
-                        category: category,
-                      ));
-                    }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(isEdit ? '记忆已更新' : '记忆已创建'), duration: const Duration(seconds: 1)),
-                  );
+                  final svc = ref.read(memoryServiceProvider);
+                  if (isEdit) {
+                    await svc.update(existing.id, {
+                      'content': contentCtrl.text.trim(),
+                      'type': type,
+                      'importance': importance,
+                      'status': status,
+                    });
+                  } else {
+                    await svc.create({
+                      'content': contentCtrl.text.trim(),
+                      'type': type,
+                      'importance': importance,
+                      'status': status,
+                    });
+                  }
+                  ref.invalidate(memoryListProvider);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isEdit ? '记忆已更新' : '记忆已创建'), duration: const Duration(seconds: 1)),
+                    );
+                  }
                 },
               ),
             ],
@@ -357,7 +313,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, Memory memory) {
+  void _deleteMemory(MemoryDto memory) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -366,14 +322,16 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              setState(() {
-                _memories.removeWhere((m) => m.id == memory.id);
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('记忆已删除'), duration: Duration(seconds: 1)),
-              );
+              final svc = ref.read(memoryServiceProvider);
+              await svc.delete(memory.id);
+              ref.invalidate(memoryListProvider);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('记忆已删除'), duration: Duration(seconds: 1)),
+                );
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),
@@ -382,25 +340,14 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
     );
   }
 
-  BadgeType _importanceToBadgeType(String importance) {
-    switch (importance) {
-      case '高':
-        return BadgeType.error;
-      case '较高':
-        return BadgeType.warning;
-      case '中':
-        return BadgeType.info;
-      default:
-        return BadgeType.neutral;
-    }
-  }
-
-  String _formatTime(DateTime time) {
+  String _formatTime(String createdAt) {
+    final dt = DateTime.tryParse(createdAt);
+    if (dt == null) return '';
     final now = DateTime.now();
-    final diff = now.difference(time);
+    final diff = now.difference(dt);
     if (diff.inHours < 1) return '刚刚';
     if (diff.inDays == 0) return '${diff.inHours}小时前';
     if (diff.inDays < 7) return '${diff.inDays}天前';
-    return '${time.month}/${time.day}';
+    return '${dt.month}/${dt.day}';
   }
 }

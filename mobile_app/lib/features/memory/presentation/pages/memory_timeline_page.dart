@@ -7,10 +7,8 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class MemoryTimelinePage extends ConsumerStatefulWidget {
   const MemoryTimelinePage({super.key});
@@ -20,7 +18,6 @@ class MemoryTimelinePage extends ConsumerStatefulWidget {
 }
 
 class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
-  late List<MemoryTimelineEntry> _entries;
   String _monthFilter = '全部';
   String _typeFilter = '全部';
   String _characterFilter = '全部';
@@ -30,37 +27,8 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
   final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
 
   @override
-  void initState() {
-    super.initState();
-    _entries = List.from(MockMemory.timelineEntries);
-  }
-
-  List<MemoryTimelineEntry> get _filteredEntries {
-    return _entries.where((e) {
-      if (_typeFilter != '全部' && e.type != _typeFilter) return false;
-      if (_characterFilter != '全部' && e.characterId != null) {
-        final charName = _getCharacterName(e.characterId!);
-        if (charName != _characterFilter) return false;
-      }
-      if (_monthFilter != '全部') {
-        final monthNum = int.parse(_monthFilter.replaceAll('月', ''));
-        if (e.time.month != monthNum) return false;
-      }
-      return true;
-    }).toList();
-  }
-
-  Map<String, List<MemoryTimelineEntry>> get _groupedEntries {
-    final groups = <String, List<MemoryTimelineEntry>>{};
-    for (final e in _filteredEntries) {
-      final dateKey = _formatDate(e.time);
-      groups.putIfAbsent(dateKey, () => []).add(e);
-    }
-    return groups;
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final timelineAsync = ref.watch(_timelineProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '记忆时间线',
@@ -69,30 +37,78 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            _buildFilters(context),
-            Expanded(
-              child: _filteredEntries.isEmpty
-                  ? AmitiaEmptyState(
-                      icon: Icons.timeline,
-                      title: '暂无时间线条目',
-                      subtitle: '互动后将自动生成时间线',
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                      children: [
-                        ..._groupedEntries.entries.map((entry) {
-                          return _buildDateGroup(context, entry.key, entry.value);
-                        }),
-                        const SizedBox(height: AppSpacing.xxl),
-                      ],
-                    ),
+        child: timelineAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  const SizedBox(height: 16),
+                  Text('加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(context).copyWith(color: context.error),
+                    textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  AmitiaButton(label: '重试', onPressed: () => ref.invalidate(_timelineProvider)),
+                ],
+              ),
             ),
-          ],
+          ),
+          data: (entries) {
+            final filtered = _filterEntries(entries);
+            final grouped = _groupEntries(filtered);
+            return Column(
+              children: [
+                _buildFilters(context),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? AmitiaEmptyState(
+                          icon: Icons.timeline,
+                          title: '暂无时间线条目',
+                          subtitle: '互动后将自动生成时间线',
+                        )
+                      : ListView(
+                          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                          children: [
+                            ...grouped.entries.map((entry) {
+                              return _buildDateGroup(context, entry.key, entry.value);
+                            }),
+                            const SizedBox(height: AppSpacing.xxl),
+                          ],
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
+  }
+
+  List<_TimelineEntry> _filterEntries(List<Map<String, dynamic>> raw) {
+    return raw.map((e) => _TimelineEntry.fromMap(e)).where((e) {
+      if (_typeFilter != '全部' && e.type != _typeFilter) return false;
+      if (_characterFilter != '全部' && e.characterId != null) {
+        final charName = _getCharacterName(e.characterId!);
+        if (charName != _characterFilter) return false;
+      }
+      if (_monthFilter != '全部') {
+        final monthNum = int.tryParse(_monthFilter.replaceAll('月', '')) ?? 0;
+        if (e.time.month != monthNum) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  Map<String, List<_TimelineEntry>> _groupEntries(List<_TimelineEntry> entries) {
+    final groups = <String, List<_TimelineEntry>>{};
+    for (final e in entries) {
+      final dateKey = _formatDate(e.time);
+      groups.putIfAbsent(dateKey, () => []).add(e);
+    }
+    return groups;
   }
 
   Widget _buildFilters(BuildContext context) {
@@ -164,7 +180,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
     );
   }
 
-  Widget _buildDateGroup(BuildContext context, String date, List<MemoryTimelineEntry> entries) {
+  Widget _buildDateGroup(BuildContext context, String date, List<_TimelineEntry> entries) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -191,7 +207,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
     );
   }
 
-  Widget _buildTimelineItem(BuildContext context, MemoryTimelineEntry entry) {
+  Widget _buildTimelineItem(BuildContext context, _TimelineEntry entry) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
@@ -337,5 +353,54 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
     if (diff == 1) return '昨天';
     if (diff == 2) return '前天';
     return '${time.month}月${time.day}日';
+  }
+}
+
+final _timelineProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final svc = ref.read(memoryServiceProvider);
+  return svc.timeline();
+});
+
+class _TimelineEntry {
+  final String id;
+  final DateTime time;
+  final String type;
+  final String title;
+  final String description;
+  final bool isImportant;
+  final String? characterId;
+
+  _TimelineEntry({
+    required this.id,
+    required this.time,
+    required this.type,
+    required this.title,
+    required this.description,
+    this.isImportant = false,
+    this.characterId,
+  });
+
+  factory _TimelineEntry.fromMap(Map<String, dynamic> map) {
+    final timeRaw = map['time'] ?? map['timestamp'] ?? map['createdAt'] ?? '';
+    DateTime parsedTime;
+    try {
+      if (timeRaw is String && timeRaw.isNotEmpty) {
+        parsedTime = DateTime.parse(timeRaw);
+      } else {
+        parsedTime = DateTime.now();
+      }
+    } catch (_) {
+      parsedTime = DateTime.now();
+    }
+
+    return _TimelineEntry(
+      id: (map['id'] ?? '').toString(),
+      time: parsedTime,
+      type: (map['type'] ?? '').toString(),
+      title: (map['title'] ?? map['name'] ?? '').toString(),
+      description: (map['description'] ?? map['content'] ?? map['detail'] ?? '').toString(),
+      isImportant: map['isImportant'] == true || map['is_important'] == true,
+      characterId: map['characterId']?.toString() ?? map['character_id']?.toString(),
+    );
   }
 }

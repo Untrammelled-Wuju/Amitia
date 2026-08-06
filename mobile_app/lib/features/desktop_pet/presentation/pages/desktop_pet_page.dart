@@ -9,13 +9,13 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class _MockPetAction {
+class _PetAction {
   final String name;
   final String trigger;
   bool enabled;
-  _MockPetAction({required this.name, required this.trigger, this.enabled = true});
+  _PetAction({required this.name, required this.trigger, this.enabled = true});
 }
 
 class DesktopPetPage extends ConsumerStatefulWidget {
@@ -30,19 +30,23 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
   double _transparency = 0.85;
   int _currentPetIndex = 0;
 
-  final _petColors = ['#7668EE', '#52B788', '#E9A23B'];
+  final _petColors = ['#7668EE', '#52B788', '#E9A23B', '#6C8FEA'];
 
-  final List<_MockPetAction> _actions = [
-    _MockPetAction(name: '待机', trigger: '无操作 5 秒'),
-    _MockPetAction(name: '招手', trigger: '用户进入'),
-    _MockPetAction(name: '开心', trigger: '收到消息'),
-    _MockPetAction(name: '说话', trigger: '语音交互'),
-    _MockPetAction(name: '吃饭', trigger: '定时 12:00'),
-    _MockPetAction(name: '睡觉', trigger: '定时 23:00'),
+  final List<_PetAction> _actions = [
+    _PetAction(name: '待机', trigger: '无操作 5 秒'),
+    _PetAction(name: '招手', trigger: '用户进入'),
+    _PetAction(name: '开心', trigger: '收到消息'),
+    _PetAction(name: '说话', trigger: '语音交互'),
+    _PetAction(name: '吃饭', trigger: '定时 12:00'),
+    _PetAction(name: '睡觉', trigger: '定时 23:00'),
   ];
+
+  static const _defaultPetNames = ['Amitia桌宠', '小雨桌宠', '自定义桌宠'];
 
   @override
   Widget build(BuildContext context) {
+    final companionAsync = ref.watch(companionStateProvider);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '桌宠中心',
@@ -50,39 +54,79 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-          children: [
-            const SizedBox(height: AppSpacing.sm),
-            _buildCurrentPetCard(context),
-            const SizedBox(height: AppSpacing.sm),
-            _buildActionEntry(context),
-            const SizedBox(height: AppSpacing.sectionGap),
-            const AmitiaSectionHeader(title: '已安装桌宠插件'),
-            const SizedBox(height: AppSpacing.sm),
-            _buildPluginsCard(context),
-            const SizedBox(height: AppSpacing.sectionGap),
-            const AmitiaSectionHeader(title: '显示设置'),
-            const SizedBox(height: AppSpacing.sm),
-            _buildSettingsCard(context),
-            const SizedBox(height: AppSpacing.sectionGap),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: AmitiaButton(
-                label: '生成新桌宠',
-                icon: Icons.auto_awesome_outlined,
-                isFullWidth: true,
-                onPressed: () => context.go(AppRoutes.workshopPetCreate),
-              ),
-            ),
-          ],
+        child: companionAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, __) => _buildStaticContent(context),
+          data: (state) {
+            final petName = state?['currentActivity']?.toString() ?? _defaultPetNames[_currentPetIndex % _defaultPetNames.length];
+            return _buildContentWithState(context, petName);
+          },
         ),
       ),
     );
   }
 
-  Widget _buildCurrentPetCard(BuildContext context) {
-    final petName = MockData.desktopPetPlugins[_currentPetIndex];
+  Widget _buildStaticContent(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        _buildCurrentPetCard(context, _defaultPetNames[_currentPetIndex % _defaultPetNames.length]),
+        const SizedBox(height: AppSpacing.sm),
+        _buildActionEntry(context),
+        const SizedBox(height: AppSpacing.sectionGap),
+        const AmitiaSectionHeader(title: '已安装桌宠插件'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildPluginsCard(context),
+        const SizedBox(height: AppSpacing.sectionGap),
+        const AmitiaSectionHeader(title: '显示设置'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildSettingsCard(context),
+        const SizedBox(height: AppSpacing.sectionGap),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: AmitiaButton(
+            label: '生成新桌宠',
+            icon: Icons.auto_awesome_outlined,
+            isFullWidth: true,
+            onPressed: () => context.go(AppRoutes.workshopPetCreate),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContentWithState(BuildContext context, String petName) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        _buildCurrentPetCard(context, petName),
+        const SizedBox(height: AppSpacing.sm),
+        _buildActionEntry(context),
+        const SizedBox(height: AppSpacing.sectionGap),
+        const AmitiaSectionHeader(title: '已安装桌宠插件'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildPluginsCard(context),
+        const SizedBox(height: AppSpacing.sectionGap),
+        const AmitiaSectionHeader(title: '显示设置'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildSettingsCard(context),
+        const SizedBox(height: AppSpacing.sectionGap),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: AmitiaButton(
+            label: '生成新桌宠',
+            icon: Icons.auto_awesome_outlined,
+            isFullWidth: true,
+            onPressed: () => context.go(AppRoutes.workshopPetCreate),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCurrentPetCard(BuildContext context, String petName) {
     final color = _parseColor(_petColors[_currentPetIndex % _petColors.length]);
     final initial = _getInitial(petName);
 
@@ -191,7 +235,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
                     const SizedBox(height: 20),
                     Text('动作管理', style: AppTypography.pageTitle(ctx)),
                     const SizedBox(height: 4),
-                    Text('当前桌宠: ${MockData.desktopPetPlugins[_currentPetIndex]}', style: AppTypography.caption(ctx)),
+                    Text('当前桌宠: ${_defaultPetNames[_currentPetIndex % _defaultPetNames.length]}', style: AppTypography.caption(ctx)),
                     const SizedBox(height: 16),
                     Flexible(
                       child: ListView.builder(
@@ -326,9 +370,9 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Column(
           children: [
-            for (int i = 0; i < MockData.desktopPetPlugins.length; i++) ...[
-              _buildPluginItem(context, MockData.desktopPetPlugins[i], i),
-              if (i < MockData.desktopPetPlugins.length - 1)
+            for (int i = 0; i < _defaultPetNames.length; i++) ...[
+              _buildPluginItem(context, _defaultPetNames[i], i),
+              if (i < _defaultPetNames.length - 1)
                 Divider(height: 1, color: context.borderSecondary),
             ],
           ],
@@ -437,14 +481,6 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
                     amitiaSnackBar(context, '正在预览 $name');
                   },
                 ),
-                AmitiaListTile(
-                  leading: Icon(Icons.delete_outline, size: 20, color: context.error),
-                  title: '卸载',
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    _confirmUninstall(context, name, index);
-                  },
-                ),
                 const SizedBox(height: 8),
               ],
             ),
@@ -452,26 +488,6 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         );
       },
     );
-  }
-
-  void _confirmUninstall(BuildContext context, String name, int index) {
-    showAmitiaConfirmDialog(
-      context,
-      title: '卸载桌宠插件',
-      message: '确定要卸载 $name 吗？卸载后相关数据将被清除。',
-      confirmLabel: '卸载',
-      isDestructive: true,
-    ).then((confirmed) {
-      if (confirmed == true) {
-        setState(() {
-          MockData.desktopPetPlugins.removeAt(index);
-          if (_currentPetIndex >= MockData.desktopPetPlugins.length) {
-            _currentPetIndex = 0;
-          }
-        });
-        amitiaSnackBar(context, '$name 已卸载');
-      }
-    });
   }
 
   Widget _buildSettingsCard(BuildContext context) {

@@ -8,7 +8,6 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
-import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/providers.dart';
 
 class LoginPage extends ConsumerStatefulWidget {

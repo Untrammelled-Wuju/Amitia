@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_extensions.dart';
+import '../../../../core/services/providers.dart';
 
 class CompatibleSkillsPage extends ConsumerStatefulWidget {
   const CompatibleSkillsPage({super.key});
@@ -19,16 +18,41 @@ class CompatibleSkillsPage extends ConsumerStatefulWidget {
 }
 
 class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
-  late List<CompatibleSkill> _skills;
+  List<Map<String, dynamic>> _skills = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _skills = List.from(MockExtensions.compatibleSkills);
+    _loadSkills();
+  }
+
+  Future<void> _loadSkills() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final data = await svc.skills();
+      if (mounted) setState(() { _skills = data; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '兼容技能', showBackButton: true, fallbackRoute: AppRoutes.extensions),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(title: '兼容技能', showBackButton: true, fallbackRoute: AppRoutes.extensions),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadSkills)),
+      );
+    }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '兼容技能',
@@ -47,7 +71,14 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     );
   }
 
-  Widget _buildSkillCard(BuildContext context, CompatibleSkill skill) {
+  Widget _buildSkillCard(BuildContext context, Map<String, dynamic> skill) {
+    final name = (skill['name'] ?? '').toString();
+    final description = (skill['description'] ?? '').toString();
+    final version = (skill['version'] ?? '1.0.0').toString();
+    final previousVersion = skill['previousVersion']?.toString();
+    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    final lastTestResult = skill['lastTestResult']?.toString();
+
     return AmitiaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,9 +99,9 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(skill.name, style: AppTypography.cardTitle(context)),
+                    Text(name, style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 4),
-                    Text(skill.description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -78,14 +109,14 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   AmitiaStatusBadge(
-                    label: skill.isEnabled ? '已启用' : '已停用',
-                    type: skill.isEnabled ? BadgeType.success : BadgeType.neutral,
+                    label: isEnabled ? '已启用' : '已停用',
+                    type: isEnabled ? BadgeType.success : BadgeType.neutral,
                   ),
                   const SizedBox(height: 4),
-                  if (skill.lastTestResult != null)
+                  if (lastTestResult != null)
                     AmitiaStatusBadge(
-                      label: skill.lastTestResult!,
-                      type: skill.lastTestResult == '通过' ? BadgeType.success : BadgeType.error,
+                      label: lastTestResult,
+                      type: lastTestResult == '通过' ? BadgeType.success : BadgeType.error,
                     ),
                 ],
               ),
@@ -94,12 +125,12 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              Text('v${skill.version}', style: AppTypography.label(context)),
-              if (skill.previousVersion != null) ...[
+              Text('v$version', style: AppTypography.label(context)),
+              if (previousVersion != null) ...[
                 const SizedBox(width: 6),
                 Icon(Icons.arrow_forward, size: 12, color: context.textTertiary),
                 const SizedBox(width: 6),
-                Text('v${skill.previousVersion}', style: AppTypography.label(context).copyWith(decoration: TextDecoration.lineThrough)),
+                Text('v$previousVersion', style: AppTypography.label(context).copyWith(decoration: TextDecoration.lineThrough)),
               ],
             ],
           ),
@@ -115,18 +146,18 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
                 onTap: () => _showVersionCompareDialog(skill),
               ),
               _ActionChip(
-                label: skill.isEnabled ? '禁用' : '启用',
-                icon: skill.isEnabled ? Icons.block : Icons.check_circle_outline,
-                color: skill.isEnabled ? context.error : context.success,
+                label: isEnabled ? '禁用' : '启用',
+                icon: isEnabled ? Icons.block : Icons.check_circle_outline,
+                color: isEnabled ? context.error : context.success,
                 onTap: () {
-                  if (skill.isEnabled) {
+                  if (isEnabled) {
                     _showDisableConfirm(skill);
                   } else {
                     _toggleSkill(skill);
                   }
                 },
               ),
-              if (skill.previousVersion != null)
+              if (previousVersion != null)
                 _ActionChip(
                   label: '回滚',
                   icon: Icons.undo,
@@ -174,7 +205,9 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     );
   }
 
-  void _showVersionCompareDialog(CompatibleSkill skill) {
+  void _showVersionCompareDialog(Map<String, dynamic> skill) {
+    final version = (skill['version'] ?? '1.0.0').toString();
+    final previousVersion = skill['previousVersion']?.toString();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -198,7 +231,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
                       children: [
                         Text('旧版本', style: AppTypography.label(context)),
                         const SizedBox(height: 4),
-                        Text('v${skill.previousVersion ?? 'N/A'}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                        Text('v${previousVersion ?? 'N/A'}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -217,7 +250,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
                       children: [
                         Text('当前版本', style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
                         const SizedBox(height: 4),
-                        Text('v${skill.version}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600, color: context.accentPrimary)),
+                        Text('v$version', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600, color: context.accentPrimary)),
                       ],
                     ),
                   ),
@@ -230,7 +263,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
             _CompareItem(text: '接口签名兼容', isPositive: true),
             _CompareItem(text: '性能提升约 15%', isPositive: true),
             _CompareItem(text: '新增 2 个可选参数', isPositive: true),
-            if (skill.previousVersion != null && skill.version.split('.').first != skill.previousVersion!.split('.').first)
+            if (previousVersion != null && version.split('.').first != previousVersion.split('.').first)
               _CompareItem(text: '主版本升级，存在破坏性变更', isPositive: false),
           ],
         ),
@@ -241,14 +274,15 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     );
   }
 
-  void _showDisableConfirm(CompatibleSkill skill) {
+  void _showDisableConfirm(Map<String, dynamic> skill) {
+    final name = (skill['name'] ?? '').toString();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
         title: Text('禁用技能', style: AppTypography.cardTitle(context)),
-        content: Text('确定要禁用「${skill.name}」吗？禁用后该技能将不可用。', style: AppTypography.bodySmall(context)),
+        content: Text('确定要禁用「$name」吗？禁用后该技能将不可用。', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
           TextButton(
@@ -263,54 +297,50 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     );
   }
 
-  void _toggleSkill(CompatibleSkill skill) {
-    setState(() {
-      final index = _skills.indexWhere((s) => s.id == skill.id);
-      _skills[index] = CompatibleSkill(
-        id: skill.id,
-        name: skill.name,
-        description: skill.description,
-        version: skill.version,
-        previousVersion: skill.previousVersion,
-        isEnabled: !skill.isEnabled,
-        lastTestResult: skill.lastTestResult,
-      );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${skill.name} 已${skill.isEnabled ? '禁用' : '启用'}'),
-        backgroundColor: context.accentPrimary,
-      ),
-    );
+  Future<void> _toggleSkill(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    final name = (skill['name'] ?? '').toString();
+    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      if (isEnabled) {
+        await svc.disableSkill(id);
+      } else {
+        await svc.enableSkill(id);
+      }
+      _loadSkills();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name 已${isEnabled ? '禁用' : '启用'}'), backgroundColor: context.accentPrimary),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: context.error),
+        );
+      }
+    }
   }
 
-  void _showRollbackConfirm(CompatibleSkill skill) {
+  void _showRollbackConfirm(Map<String, dynamic> skill) {
+    final name = (skill['name'] ?? '').toString();
+    final version = (skill['version'] ?? '1.0.0').toString();
+    final previousVersion = skill['previousVersion']?.toString();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
         title: Text('回滚版本', style: AppTypography.cardTitle(context)),
-        content: Text('确定要将「${skill.name}」从 v${skill.version} 回滚到 v${skill.previousVersion} 吗？', style: AppTypography.bodySmall(context)),
+        content: Text('确定要将「$name」从 v$version 回滚到 v$previousVersion 吗？', style: AppTypography.bodySmall(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              setState(() {
-                final index = _skills.indexWhere((s) => s.id == skill.id);
-                _skills[index] = CompatibleSkill(
-                  id: skill.id,
-                  name: skill.name,
-                  description: skill.description,
-                  version: skill.previousVersion!,
-                  previousVersion: null,
-                  isEnabled: skill.isEnabled,
-                  lastTestResult: skill.lastTestResult,
-                );
-              });
               ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: Text('${skill.name} 已回滚到 v${skill.previousVersion}'), backgroundColor: context.info),
+                SnackBar(content: Text('$name 已回滚到 v$previousVersion'), backgroundColor: context.info),
               );
             },
             child: Text('回滚', style: TextStyle(color: context.warning)),
@@ -320,18 +350,18 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     );
   }
 
-  void _showPermissionSettings(CompatibleSkill skill) {
+  void _showPermissionSettings(Map<String, dynamic> skill) {
     showDialog(
       context: context,
-      builder: (context) => _PermissionDialog(skillName: skill.name),
+      builder: (context) => _PermissionDialog(skillName: (skill['name'] ?? '').toString()),
     );
   }
 
-  void _runTest(CompatibleSkill skill) {
+  void _runTest(Map<String, dynamic> skill) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _TestRunningDialog(skillName: skill.name),
+      builder: (context) => _TestRunningDialog(skillName: (skill['name'] ?? '').toString()),
     );
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
@@ -339,34 +369,22 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
       showDialog(
         context: context,
         builder: (context) => _TestResultDialog(
-          skillName: skill.name,
+          skillName: (skill['name'] ?? '').toString(),
           isPassed: true,
           onConfirm: () {
             Navigator.pop(context);
-            setState(() {
-              final index = _skills.indexWhere((s) => s.id == skill.id);
-              _skills[index] = CompatibleSkill(
-                id: skill.id,
-                name: skill.name,
-                description: skill.description,
-                version: skill.version,
-                previousVersion: skill.previousVersion,
-                isEnabled: skill.isEnabled,
-                lastTestResult: '通过',
-              );
-            });
           },
         ),
       );
     });
   }
 
-  void _showExecutionHistory(CompatibleSkill skill) {
+  void _showExecutionHistory(Map<String, dynamic> skill) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => _ExecutionHistorySheet(skillName: skill.name),
+      builder: (context) => _ExecutionHistorySheet(skillName: (skill['name'] ?? '').toString()),
     );
   }
 }

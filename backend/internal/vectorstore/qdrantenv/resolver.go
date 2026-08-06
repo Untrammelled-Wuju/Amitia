@@ -34,13 +34,13 @@ type resolver struct {
 	host      runtimehost.RuntimeHost
 	inspector FileInspector
 
-	mu              sync.Mutex
-	cachedEnv       Environment
-	cachedErr       error
-	cacheValid      bool
-	lastSnapshot    DetectionSnapshot
-	detecting       bool
-	detectWaiters   []chan struct{}
+	mu            sync.Mutex
+	cachedEnv     Environment
+	cachedErr     error
+	cacheValid    bool
+	lastSnapshot  DetectionSnapshot
+	detecting     bool
+	detectWaiters []chan struct{}
 }
 
 func NewResolver(ctx ResolveContext) (Resolver, error) {
@@ -170,6 +170,8 @@ func (r *resolver) performDetection(ctx context.Context) (Environment, error) {
 		return Environment{}, err
 	}
 
+	qdrantRoot := filepath.Join(runtimeRoot, "qdrant")
+
 	for _, uri := range runtimePackageCandidates(guest) {
 		resolved, ok := r.resolveRuntimePackage(uri, runtimeRoot)
 		if !ok {
@@ -189,7 +191,7 @@ func (r *resolver) performDetection(ctx context.Context) (Environment, error) {
 		if err != nil {
 			continue
 		}
-		valid, reason := isValidBinaryPath(info, guest)
+		valid, _ := isValidBinaryPath(info, guest)
 		if !valid {
 			continue
 		}
@@ -209,9 +211,9 @@ func (r *resolver) performDetection(ctx context.Context) (Environment, error) {
 		return Environment{}, newRuntimeRootUnavailable("runtime resource root unavailable")
 	}
 
-	target := standardInstallTarget(guest, runtimeRoot)
+	target := standardInstallTarget(guest, qdrantRoot)
 	env.BinaryPath = target
-	env.DistributionRoot = runtimeRoot
+	env.DistributionRoot = qdrantRoot
 	env.Source = SourceRuntimePackage
 	env.Installed = false
 	env.Explicit = false

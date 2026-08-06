@@ -8,8 +8,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class CharacterProactivePage extends ConsumerStatefulWidget {
   final String characterId;
@@ -21,14 +20,7 @@ class CharacterProactivePage extends ConsumerStatefulWidget {
 }
 
 class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage> {
-  late List<ProactiveRule> _rules;
   bool _masterEnabled = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _rules = List.from(MockCharacters.proactiveRules);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,11 +30,6 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
         showBackButton: true,
         fallbackRoute: AppRoutes.characters,
         actions: [
-          AmitiaIconButton(
-            icon: Icons.refresh,
-            tooltip: '恢复默认',
-            onPressed: () => _showRestoreDefaultConfirm(context),
-          ),
           AmitiaIconButton(
             icon: Icons.add,
             onPressed: () => _showRuleEditor(context, null),
@@ -56,8 +43,27 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
           children: [
             _buildMasterSwitch(context),
             const SizedBox(height: AppSpacing.sectionGap),
-            ..._rules.map((r) => _buildRuleCard(context, r)),
-            const SizedBox(height: AppSpacing.xxl),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: ref.read(proactiveServiceProvider).rules(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('加载失败: ${snapshot.error}'));
+                }
+                final rules = snapshot.data ?? [];
+                if (rules.isEmpty) {
+                  return const Center(child: Text('暂无规则'));
+                }
+                return Column(
+                  children: [
+                    ...rules.map((r) => _buildRuleCard(context, r)),
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -65,54 +71,64 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
   }
 
   Widget _buildMasterSwitch(BuildContext context) {
-    return AmitiaCard(
-      backgroundColor: _masterEnabled ? context.accentSoft : null,
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: _masterEnabled ? context.accentPrimary : context.borderPrimary,
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: Icon(
-              Icons.notifications_active,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('主动消息总开关', style: AppTypography.cardTitle(context)),
-                const SizedBox(height: 2),
-                Text(
-                  _masterEnabled ? '已开启 - 角色将按规则主动发送消息' : '已关闭 - 角色不会主动发送消息',
-                  style: AppTypography.caption(context),
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: ref.read(proactiveServiceProvider).status(),
+      builder: (context, snapshot) {
+        final status = snapshot.data;
+        final enabled = status?['enabled'] == true || _masterEnabled;
+        return AmitiaCard(
+          backgroundColor: enabled ? context.accentSoft : null,
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: enabled ? context.accentPrimary : context.borderPrimary,
+                  borderRadius: AppRadius.brSmall,
                 ),
-              ],
-            ),
+                child: const Icon(Icons.notifications_active, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('主动消息总开关', style: AppTypography.cardTitle(context)),
+                    const SizedBox(height: 2),
+                    Text(
+                      enabled ? '已开启 - 角色将按规则主动发送消息' : '已关闭 - 角色不会主动发送消息',
+                      style: AppTypography.caption(context),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: enabled,
+                onChanged: (v) {
+                  setState(() => _masterEnabled = v);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('主动消息已${v ? '开启' : '关闭'}'), duration: const Duration(seconds: 1)),
+                  );
+                },
+              ),
+            ],
           ),
-          Switch(
-            value: _masterEnabled,
-            onChanged: (v) {
-              setState(() {
-                _masterEnabled = v;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('主动消息已${v ? '开启' : '关闭'}'), duration: const Duration(seconds: 1)),
-              );
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildRuleCard(BuildContext context, ProactiveRule rule) {
+  Widget _buildRuleCard(BuildContext context, Map<String, dynamic> rule) {
+    final name = rule['name']?.toString() ?? '';
+    final trigger = rule['trigger']?.toString() ?? '';
+    final time = rule['time']?.toString() ?? '';
+    final probability = (rule['probability'] as num?)?.toInt() ?? 50;
+    final cooldown = (rule['cooldown'] as num?)?.toInt() ?? 60;
+    final enabled = rule['isEnabled'] == true || rule['enabled'] == true;
+    final category = rule['category']?.toString() ?? '日常';
+    final id = rule['id']?.toString() ?? '';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
@@ -125,13 +141,13 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: rule.isEnabled ? context.accentSoft : context.surfaceSecondary,
+                    color: enabled ? context.accentSoft : context.surfaceSecondary,
                     borderRadius: AppRadius.brSmall,
                   ),
                   child: Icon(
-                    _getCategoryIcon(rule.category),
+                    _getCategoryIcon(category),
                     size: 20,
-                    color: rule.isEnabled ? context.accentPrimary : context.textTertiary,
+                    color: enabled ? context.accentPrimary : context.textTertiary,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.md),
@@ -141,32 +157,21 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                     children: [
                       Row(
                         children: [
-                          Text(rule.name, style: AppTypography.cardTitle(context)),
+                          Text(name, style: AppTypography.cardTitle(context)),
                           const SizedBox(width: AppSpacing.sm),
-                          AmitiaStatusBadge(label: rule.category, type: BadgeType.accent),
+                          AmitiaStatusBadge(label: category, type: BadgeType.accent),
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text('触发：${rule.trigger} · 时间：${rule.time}', style: AppTypography.caption(context)),
+                      Text('触发：$trigger · 时间：$time', style: AppTypography.caption(context)),
                     ],
                   ),
                 ),
                 Switch(
-                  value: rule.isEnabled,
+                  value: enabled,
                   onChanged: (v) {
-                    setState(() {
-                      final idx = _rules.indexWhere((r) => r.id == rule.id);
-                      _rules[idx] = ProactiveRule(
-                        id: rule.id,
-                        name: rule.name,
-                        trigger: rule.trigger,
-                        time: rule.time,
-                        probability: rule.probability,
-                        cooldown: rule.cooldown,
-                        isEnabled: v,
-                        category: rule.category,
-                      );
-                    });
+                    ref.read(proactiveServiceProvider).toggleRule(id, v);
+                    setState(() {});
                   },
                 ),
               ],
@@ -180,9 +185,9 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
               ),
               child: Column(
                 children: [
-                  _buildParamRow(context, '触发概率', '${rule.probability}%', rule.probability / 100, context.accentPrimary),
+                  _buildParamRow(context, '触发概率', '$probability%', probability / 100, context.accentPrimary),
                   const SizedBox(height: AppSpacing.sm),
-                  _buildParamRow(context, '冷却时间', '${rule.cooldown}分钟', (rule.cooldown / 180).clamp(0.0, 1.0), context.info),
+                  _buildParamRow(context, '冷却时间', '$cooldown分钟', (cooldown / 180).clamp(0.0, 1.0), context.info),
                 ],
               ),
             ),
@@ -209,7 +214,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 GestureDetector(
-                  onTap: () => _showTestResult(context, rule),
+                  onTap: () => _testRule(id, name),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
@@ -228,7 +233,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                 ),
                 const Spacer(),
                 GestureDetector(
-                  onTap: () => _showDeleteConfirm(context, rule),
+                  onTap: () => _deleteRule(id, name),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
@@ -290,14 +295,15 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
     }
   }
 
-  void _showRuleEditor(BuildContext context, ProactiveRule? existing) {
+  void _showRuleEditor(BuildContext context, Map<String, dynamic>? existing) {
     final isEdit = existing != null;
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final triggerCtrl = TextEditingController(text: existing?.trigger ?? '');
-    final timeCtrl = TextEditingController(text: existing?.time ?? '08:00');
-    int probability = existing?.probability ?? 80;
-    int cooldown = existing?.cooldown ?? 60;
-    String category = existing?.category ?? '日常';
+    final nameCtrl = TextEditingController(text: existing?['name']?.toString() ?? '');
+    final triggerCtrl = TextEditingController(text: existing?['trigger']?.toString() ?? '');
+    final timeCtrl = TextEditingController(text: existing?['time']?.toString() ?? '08:00');
+    int probability = (existing?['probability'] as num?)?.toInt() ?? 80;
+    int cooldown = (existing?['cooldown'] as num?)?.toInt() ?? 60;
+    String category = existing?['category']?.toString() ?? '日常';
+    final id = existing?['id']?.toString() ?? '';
 
     showModalBottomSheet(
       context: context,
@@ -399,37 +405,29 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
-                onPressed: () {
+                onPressed: () async {
                   if (nameCtrl.text.trim().isEmpty) return;
                   Navigator.pop(ctx);
-                  setState(() {
-                    if (isEdit) {
-                      final idx = _rules.indexWhere((r) => r.id == existing.id);
-                      _rules[idx] = ProactiveRule(
-                        id: existing.id,
-                        name: nameCtrl.text.trim(),
-                        trigger: triggerCtrl.text.trim(),
-                        time: timeCtrl.text.trim(),
-                        probability: probability,
-                        cooldown: cooldown,
-                        isEnabled: existing.isEnabled,
-                        category: category,
-                      );
-                    } else {
-                      _rules.add(ProactiveRule(
-                        id: 'pr${DateTime.now().millisecondsSinceEpoch}',
-                        name: nameCtrl.text.trim(),
-                        trigger: triggerCtrl.text.trim(),
-                        time: timeCtrl.text.trim(),
-                        probability: probability,
-                        cooldown: cooldown,
-                        category: category,
-                      ));
-                    }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(isEdit ? '规则已更新' : '规则已创建'), duration: const Duration(seconds: 1)),
-                  );
+                  final svc = ref.read(proactiveServiceProvider);
+                  final data = {
+                    'name': nameCtrl.text.trim(),
+                    'trigger': triggerCtrl.text.trim(),
+                    'time': timeCtrl.text.trim(),
+                    'probability': probability,
+                    'cooldown': cooldown,
+                    'category': category,
+                  };
+                  if (isEdit) {
+                    await svc.updateRule(id, data);
+                  } else {
+                    await svc.createRule(data);
+                  }
+                  setState(() {});
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isEdit ? '规则已更新' : '规则已创建'), duration: const Duration(seconds: 1)),
+                    );
+                  }
                 },
               ),
             ],
@@ -439,108 +437,40 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
     );
   }
 
-  void _showTestResult(BuildContext context, ProactiveRule rule) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('测试结果', style: AppTypography.cardTitle(context)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                color: context.success.withValues(alpha: 0.08),
-                borderRadius: AppRadius.brMedium,
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.check_circle, size: 40, color: context.success),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text('触发成功', style: AppTypography.cardTitle(context).copyWith(color: context.success)),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _buildResultRow(context, '规则', rule.name),
-            _buildResultRow(context, '触发时间', rule.time),
-            _buildResultRow(context, '概率判定', '通过 (${rule.probability}%)'),
-            _buildResultRow(context, '冷却检查', '已通过'),
-            _buildResultRow(context, '模拟消息', '「${rule.trigger}时间到了，记得注意休息哦~」'),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
-      ),
-    );
+  Future<void> _testRule(String id, String name) async {
+    final svc = ref.read(proactiveServiceProvider);
+    await svc.triggerRule(id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已触发规则: $name'), duration: const Duration(seconds: 1)),
+      );
+    }
   }
 
-  Widget _buildResultRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label, style: AppTypography.label(context)),
-          ),
-          Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteConfirm(BuildContext context, ProactiveRule rule) {
-    showDialog(
+  Future<void> _deleteRule(String id, String name) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('删除规则', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除「${rule.name}」吗？', style: AppTypography.bodySmall(context)),
+        content: Text('确定要删除「$name」吗？', style: AppTypography.bodySmall(context)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _rules.removeWhere((r) => r.id == rule.id);
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('规则已删除'), duration: Duration(seconds: 1)),
-              );
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: Text('删除', style: TextStyle(color: context.error)),
           ),
         ],
       ),
     );
-  }
-
-  void _showRestoreDefaultConfirm(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('恢复默认规则', style: AppTypography.cardTitle(context)),
-        content: Text('确定要恢复所有主动消息规则为默认值吗？', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _rules = List.from(MockCharacters.proactiveRules);
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已恢复默认规则'), duration: Duration(seconds: 1)),
-              );
-            },
-            child: Text('恢复', style: TextStyle(color: context.accentPrimary)),
-          ),
-        ],
-      ),
-    );
+    if (confirmed == true) {
+      final svc = ref.read(proactiveServiceProvider);
+      await svc.deleteRule(id);
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('规则已删除'), duration: Duration(seconds: 1)),
+        );
+      }
+    }
   }
 }

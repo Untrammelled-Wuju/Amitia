@@ -9,8 +9,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class PetTasksPage extends ConsumerStatefulWidget {
   const PetTasksPage({super.key});
@@ -20,42 +19,57 @@ class PetTasksPage extends ConsumerStatefulWidget {
 }
 
 class _PetTasksPageState extends ConsumerState<PetTasksPage> {
-  late List<PetTask> _tasks;
+  List<Map<String, dynamic>> _tasks = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _tasks = List.from(MockWorkshop.petTasks);
+    _load();
   }
 
-  String _statusLabel(PetTaskStatus status) {
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final sessions = await svc.workshopSessions();
+      if (mounted) {
+        setState(() { _tasks = sessions; _loading = false; });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  String _statusLabel(String? status) {
     switch (status) {
-      case PetTaskStatus.pending:
+      case 'pending':
         return '待处理';
-      case PetTaskStatus.processing:
+      case 'processing':
         return '处理中';
-      case PetTaskStatus.completed:
+      case 'completed':
         return '已完成';
-      case PetTaskStatus.cancelled:
+      case 'cancelled':
         return '已取消';
+      default:
+        return status ?? '';
     }
   }
 
-  BadgeType _statusBadgeType(PetTaskStatus status) {
+  BadgeType _statusBadgeType(String? status) {
     switch (status) {
-      case PetTaskStatus.pending:
+      case 'pending':
         return BadgeType.neutral;
-      case PetTaskStatus.processing:
+      case 'processing':
         return BadgeType.accent;
-      case PetTaskStatus.completed:
+      case 'completed':
         return BadgeType.success;
-      case PetTaskStatus.cancelled:
+      case 'cancelled':
         return BadgeType.error;
+      default:
+        return BadgeType.neutral;
     }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}';
   }
 
   @override
@@ -78,31 +92,51 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _tasks.isEmpty
-            ? AmitiaEmptyState(
-                icon: Icons.assignment_outlined,
-                title: '暂无任务',
-                subtitle: '点击右上角创建新桌宠',
-                actionText: '创建桌宠',
-                onAction: () => context.push(AppRoutes.workshopPetCreate),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                itemCount: _tasks.length,
-                itemBuilder: (context, index) => _buildTaskCard(context, _tasks[index]),
-              ),
+        child: _buildBody(context),
       ),
     );
   }
 
-  Widget _buildTaskCard(BuildContext context, PetTask task) {
-    final canCancel = task.status == PetTaskStatus.pending || task.status == PetTaskStatus.processing;
-    final canProcess = task.status == PetTaskStatus.pending || task.status == PetTaskStatus.processing;
+  Widget _buildBody(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(child: Text('加载失败: $_error'));
+    }
+    if (_tasks.isEmpty) {
+      return AmitiaEmptyState(
+        icon: Icons.assignment_outlined,
+        title: '暂无任务',
+        subtitle: '点击右上角创建新桌宠',
+        actionText: '创建桌宠',
+        onAction: () => context.push(AppRoutes.workshopPetCreate),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      itemCount: _tasks.length,
+      itemBuilder: (context, index) => _buildTaskCard(context, _tasks[index]),
+    );
+  }
+
+  Widget _buildTaskCard(BuildContext context, Map<String, dynamic> task) {
+    final name = task['name']?.toString() ?? '';
+    final characterName = task['characterName']?.toString() ?? task['character']?.toString() ?? '';
+    final status = task['status']?.toString();
+    final createdAt = task['createdAt']?.toString() ?? '';
+    final completedActions = (task['completedActions'] is num) ? (task['completedActions'] as num).toInt() : 0;
+    final totalActions = (task['totalActions'] is num) ? (task['totalActions'] as num).toInt() : 0;
+    final progress = (task['progress'] is num) ? (task['progress'] as num).toInt() : 0;
+    final sessionId = task['id']?.toString() ?? '';
+
+    final canCancel = status == 'pending' || status == 'processing';
+    final canProcess = status == 'pending' || status == 'processing';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
-        onTap: () => context.push(AppRoutes.petProcessing(task.id)),
+        onTap: () => context.push(AppRoutes.petProcessing(sessionId)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -122,26 +156,26 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(task.name, style: AppTypography.cardTitle(context)),
+                      Text(name, style: AppTypography.cardTitle(context)),
                       const SizedBox(height: 2),
                       Text(
-                        '${task.characterName} · ${_formatDate(task.createdAt)}',
+                        '$characterName · $createdAt',
                         style: AppTypography.caption(context),
                       ),
                     ],
                   ),
                 ),
-                AmitiaStatusBadge(label: _statusLabel(task.status), type: _statusBadgeType(task.status)),
+                AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
-                Text('${task.completedActions}/${task.totalActions} 动作', style: AppTypography.caption(context)),
+                Text('$completedActions/$totalActions 动作', style: AppTypography.caption(context)),
                 const SizedBox(width: AppSpacing.md),
-                Expanded(child: AmitiaProgressBar(progress: task.progress / 100.0)),
+                Expanded(child: AmitiaProgressBar(progress: (progress / 100.0).clamp(0.0, 1.0))),
                 const SizedBox(width: AppSpacing.sm),
-                Text('${task.progress}%', style: AppTypography.caption(context)),
+                Text('$progress%', style: AppTypography.caption(context)),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -154,7 +188,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                       isSecondary: true,
                       height: 38,
                       icon: Icons.play_arrow,
-                      onPressed: () => context.push(AppRoutes.petProcessing(task.id)),
+                      onPressed: () => context.push(AppRoutes.petProcessing(sessionId)),
                     ),
                   )
                 else
@@ -163,7 +197,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                       label: '查看详情',
                       isSecondary: true,
                       height: 38,
-                      onPressed: () => context.push(AppRoutes.petProcessing(task.id)),
+                      onPressed: () => context.push(AppRoutes.petProcessing(sessionId)),
                     ),
                   ),
                 const SizedBox(width: AppSpacing.sm),
@@ -172,7 +206,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                     label: '创建处理任务',
                     height: 38,
                     icon: Icons.add,
-                    onPressed: () => _showCreateProcessingConfirm(task),
+                    onPressed: () => _showCreateProcessingConfirm(sessionId, name),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -184,7 +218,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                       icon: Icons.close,
                       color: context.error,
                       backgroundColor: context.error.withValues(alpha: 0.1),
-                      onPressed: () => _showCancelConfirm(task),
+                      onPressed: () => _showCancelConfirm(sessionId, name),
                     ),
                   ),
               ],
@@ -195,7 +229,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
     );
   }
 
-  void _showCancelConfirm(PetTask task) {
+  void _showCancelConfirm(String sessionId, String name) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -203,7 +237,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('取消任务', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认取消任务「${task.name}」？取消后无法恢复。',
+            '确认取消任务「$name」？取消后无法恢复。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -215,22 +249,14 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
               onPressed: () {
                 Navigator.pop(dialogContext);
                 setState(() {
-                  final idx = _tasks.indexWhere((t) => t.id == task.id);
+                  final idx = _tasks.indexWhere((t) => t['id']?.toString() == sessionId);
                   if (idx >= 0) {
-                    _tasks[idx] = PetTask(
-                      id: task.id,
-                      name: task.name,
-                      characterName: task.characterName,
-                      totalActions: task.totalActions,
-                      completedActions: task.completedActions,
-                      status: PetTaskStatus.cancelled,
-                      progress: task.progress,
-                      createdAt: task.createdAt,
-                    );
+                    _tasks[idx] = Map<String, dynamic>.from(_tasks[idx]);
+                    _tasks[idx]['status'] = 'cancelled';
                   }
                 });
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('任务「${task.name}」已取消')),
+                  SnackBar(content: Text('任务「$name」已取消')),
                 );
               },
               child: Text('取消任务', style: TextStyle(color: context.error)),
@@ -241,7 +267,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
     );
   }
 
-  void _showCreateProcessingConfirm(PetTask task) {
+  void _showCreateProcessingConfirm(String sessionId, String name) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -249,7 +275,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('创建处理任务', style: AppTypography.cardTitle(context)),
           content: Text(
-            '确认为任务「${task.name}」创建处理任务？将为每个动作生成处理子任务。',
+            '确认为任务「$name」创建处理任务？将为每个动作生成处理子任务。',
             style: AppTypography.body(context),
           ),
           actions: [
@@ -261,9 +287,9 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
               onPressed: () {
                 Navigator.pop(dialogContext);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('已为「${task.name}」创建处理任务')),
+                  SnackBar(content: Text('已为「$name」创建处理任务')),
                 );
-                context.push(AppRoutes.petProcessing(task.id));
+                context.push(AppRoutes.petProcessing(sessionId));
               },
               child: Text('创建', style: TextStyle(color: context.accentPrimary)),
             ),

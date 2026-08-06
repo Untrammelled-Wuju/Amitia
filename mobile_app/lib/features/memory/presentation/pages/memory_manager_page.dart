@@ -7,10 +7,9 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/memory.dart';
 
 class MemoryManagerPage extends ConsumerStatefulWidget {
   const MemoryManagerPage({super.key});
@@ -20,25 +19,16 @@ class MemoryManagerPage extends ConsumerStatefulWidget {
 }
 
 class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
-  late List<Memory> _memories;
   bool _batchMode = false;
-  Set<String> _selected = {};
+  final Set<String> _selected = {};
   String _typeFilter = '全部';
   String _importanceFilter = '全部';
-  String _characterFilter = '全部';
   bool _searchVisible = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
   final _types = ['全部', '长期记忆', '情景记忆', '关系记忆', '世界设定'];
   final _importances = ['全部', '高', '较高', '中', '低'];
-  final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
-
-  @override
-  void initState() {
-    super.initState();
-    _memories = List.from(MockData.memories);
-  }
 
   @override
   void dispose() {
@@ -46,17 +36,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     super.dispose();
   }
 
-  List<Memory> get _filteredMemories {
-    return _memories.where((m) {
-      if (_typeFilter != '全部' && m.category != _typeFilter) return false;
-      if (_importanceFilter != '全部' && m.importance != _importanceFilter) return false;
-      if (_searchQuery.isNotEmpty && !m.content.toLowerCase().contains(_searchQuery.toLowerCase())) return false;
-      return true;
-    }).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
+    final memoriesAsync = ref.watch(memoryListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '记忆总览',
@@ -86,36 +68,59 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            if (_searchVisible)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xs),
-                child: AmitiaSearchField(
-                  hintText: '语义搜索记忆...',
-                  controller: _searchController,
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                ),
+        child: memoriesAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  const SizedBox(height: 16),
+                  Text('加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(context).copyWith(color: context.error),
+                    textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  AmitiaButton(label: '重试', onPressed: () => ref.invalidate(memoryListProvider)),
+                ],
               ),
-            _buildFilters(context),
-            if (_batchMode) _buildBatchBar(context),
-            Expanded(
-              child: _filteredMemories.isEmpty
-                  ? AmitiaEmptyState(
-                      icon: Icons.memory,
-                      title: '暂无记忆',
-                      subtitle: '与角色对话后记忆会自动生成',
-                      actionText: '新建记忆',
-                      onAction: () => _showMemoryEditor(context, null),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
-                      itemCount: _filteredMemories.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-                      itemBuilder: (context, index) => _buildMemoryCard(context, _filteredMemories[index]),
-                    ),
             ),
-          ],
+          ),
+          data: (memories) {
+            final filtered = _filterMemories(memories);
+            return Column(
+              children: [
+                if (_searchVisible)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xs),
+                    child: AmitiaSearchField(
+                      hintText: '语义搜索记忆...',
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                    ),
+                  ),
+                _buildFilters(context),
+                if (_batchMode) _buildBatchBar(context),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? AmitiaEmptyState(
+                          icon: Icons.memory,
+                          title: '暂无记忆',
+                          subtitle: '与角色对话后记忆会自动生成',
+                          actionText: '新建记忆',
+                          onAction: () => _showMemoryEditor(context, null),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                          itemBuilder: (context, index) => _buildMemoryCard(context, filtered[index]),
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -124,6 +129,34 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
+  }
+
+  List<MemoryDto> _filterMemories(List<MemoryDto> memories) {
+    return memories.where((m) {
+      if (_typeFilter != '全部' && m.type != _typeFilter) return false;
+      if (_importanceFilter != '全部') {
+        final impStr = _importanceIntToString(m.importance);
+        if (impStr != _importanceFilter) return false;
+      }
+      if (_searchQuery.isNotEmpty && !m.content.toLowerCase().contains(_searchQuery.toLowerCase())) return false;
+      return true;
+    }).toList();
+  }
+
+  String _importanceIntToString(int importance) {
+    if (importance >= 80) return '高';
+    if (importance >= 60) return '较高';
+    if (importance >= 40) return '中';
+    return '低';
+  }
+
+  int _importanceStringToInt(String importance) {
+    switch (importance) {
+      case '高': return 100;
+      case '较高': return 75;
+      case '中': return 50;
+      default: return 25;
+    }
   }
 
   Widget _buildFilters(BuildContext context) {
@@ -137,7 +170,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
             const SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '重要度: $_importanceFilter', _importances, (v) => setState(() => _importanceFilter = v)),
             const SizedBox(width: AppSpacing.sm),
-            _buildFilterChip(context, '角色: $_characterFilter', _characters, (v) => setState(() => _characterFilter = v)),
           ],
         ),
       ),
@@ -222,24 +254,12 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                 child: Text('批量删除', style: TextStyle(fontSize: 13, color: Colors.white)),
               ),
             ),
-          const SizedBox(width: AppSpacing.sm),
-          GestureDetector(
-            onTap: () => _showClearConfirm(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: context.warning,
-                borderRadius: AppRadius.brTag,
-              ),
-              child: Text('清空全部', style: TextStyle(fontSize: 13, color: Colors.white)),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildMemoryCard(BuildContext context, Memory memory) {
+  Widget _buildMemoryCard(BuildContext context, MemoryDto memory) {
     final isSelected = _selected.contains(memory.id);
     return AmitiaCard(
       border: Border.all(
@@ -277,23 +297,19 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               children: [
                 Row(
                   children: [
-                    if (memory.isPinned) ...[
-                      Icon(Icons.push_pin, size: 14, color: context.accentPrimary),
-                      const SizedBox(width: 4),
-                    ],
                     Expanded(child: Text(memory.content, style: AppTypography.body(context), maxLines: 2, overflow: TextOverflow.ellipsis)),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
-                    AmitiaStatusBadge(label: memory.importance, type: _importanceToBadgeType(memory.importance)),
+                    AmitiaStatusBadge(label: _importanceIntToString(memory.importance), type: _importanceToBadgeType(memory.importance)),
                     const SizedBox(width: AppSpacing.sm),
-                    AmitiaStatusBadge(label: memory.category, type: BadgeType.neutral),
+                    AmitiaStatusBadge(label: memory.type, type: BadgeType.neutral),
                     const SizedBox(width: AppSpacing.sm),
-                    Text(memory.source, style: AppTypography.label(context)),
+                    Text(memory.status, style: AppTypography.label(context)),
                     const Spacer(),
-                    Text(_formatTime(memory.time), style: AppTypography.label(context)),
+                    Text(_formatTimeString(memory.createdAt), style: AppTypography.label(context)),
                   ],
                 ),
                 if (!_batchMode) ...[
@@ -331,12 +347,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     );
   }
 
-  void _showMemoryEditor(BuildContext context, Memory? existing) {
+  void _showMemoryEditor(BuildContext context, MemoryDto? existing) {
     final isEdit = existing != null;
     final contentCtrl = TextEditingController(text: existing?.content ?? '');
-    final sourceCtrl = TextEditingController(text: existing?.source ?? '对话');
-    String importance = existing?.importance ?? '中';
-    String category = existing?.category ?? '情景记忆';
+    String importance = existing != null ? _importanceIntToString(existing.importance) : '中';
+    String type = existing?.type ?? '情景记忆';
 
     showModalBottomSheet(
       context: context,
@@ -355,10 +370,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               Text('记忆内容', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: contentCtrl, maxLines: 4, hintText: '输入记忆内容'),
-              const SizedBox(height: AppSpacing.md),
-              Text('来源', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(controller: sourceCtrl, hintText: '如：对话、日程、设定'),
               const SizedBox(height: AppSpacing.md),
               Text('重要程度', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
@@ -385,9 +396,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['长期记忆', '情景记忆', '关系记忆', '世界设定'].map((c) {
-                  final isSelected = category == c;
+                  final isSelected = type == c;
                   return GestureDetector(
-                    onTap: () => setSheetState(() => category = c),
+                    onTap: () => setSheetState(() => type = c),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
@@ -403,24 +414,31 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
-                onPressed: () {
+                onPressed: () async {
                   if (contentCtrl.text.trim().isEmpty) return;
                   Navigator.pop(ctx);
-                  setState(() {
+                  final svc = ref.read(memoryServiceProvider);
+                  final data = {
+                    'content': contentCtrl.text.trim(),
+                    'type': type,
+                    'importance': _importanceStringToInt(importance),
+                    'status': 'active',
+                  };
+                  try {
                     if (isEdit) {
-                      final idx = _memories.indexWhere((m) => m.id == existing.id);
-                      _memories[idx] = Memory(
-                        id: existing.id, content: contentCtrl.text.trim(), source: sourceCtrl.text.trim(),
-                        importance: importance, time: existing.time, category: category, isPinned: existing.isPinned,
-                      );
+                      await svc.update(existing.id, data);
                     } else {
-                      _memories.insert(0, Memory(
-                        id: 'mem${DateTime.now().millisecondsSinceEpoch}', content: contentCtrl.text.trim(),
-                        source: sourceCtrl.text.trim(), importance: importance, time: DateTime.now(), category: category,
-                      ));
+                      await svc.create(data);
                     }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEdit ? '记忆已更新' : '记忆已创建'), duration: const Duration(seconds: 1)));
+                    ref.invalidate(memoryListProvider);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEdit ? '记忆已更新' : '记忆已创建'), duration: const Duration(seconds: 1)));
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: ${e.toString().replaceFirst('Exception: ', '')}')));
+                    }
+                  }
                 },
               ),
             ],
@@ -430,7 +448,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, Memory memory) {
+  void _showDeleteConfirm(BuildContext context, MemoryDto memory) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -439,10 +457,20 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              setState(() => _memories.removeWhere((m) => m.id == memory.id));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('记忆已删除'), duration: Duration(seconds: 1)));
+              try {
+                final svc = ref.read(memoryServiceProvider);
+                await svc.delete(memory.id);
+                ref.invalidate(memoryListProvider);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('记忆已删除'), duration: Duration(seconds: 1)));
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: ${e.toString().replaceFirst('Exception: ', '')}')));
+                }
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),
@@ -460,13 +488,24 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              setState(() {
-                _memories.removeWhere((m) => _selected.contains(m.id));
-                _selected.clear();
-              });
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('批量删除完成'), duration: Duration(seconds: 1)));
+              try {
+                final svc = ref.read(memoryServiceProvider);
+                for (final id in _selected) {
+                  await svc.delete(id);
+                }
+                ref.invalidate(memoryListProvider);
+                if (mounted) {
+                  setState(() { _selected.clear(); _batchMode = false; });
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('批量删除完成'), duration: Duration(seconds: 1)));
+                }
+              } catch (e) {
+                ref.invalidate(memoryListProvider);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: ${e.toString().replaceFirst('Exception: ', '')}')));
+                }
+              }
             },
             child: Text('删除', style: TextStyle(color: context.error)),
           ),
@@ -475,45 +514,25 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     );
   }
 
-  void _showClearConfirm(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('清空全部记忆', style: AppTypography.cardTitle(context)),
-        content: Text('确定要清空所有记忆吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _memories.clear();
-                _selected.clear();
-              });
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已清空全部记忆'), duration: Duration(seconds: 1)));
-            },
-            child: Text('清空', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
+  BadgeType _importanceToBadgeType(int importance) {
+    if (importance >= 80) return BadgeType.error;
+    if (importance >= 60) return BadgeType.warning;
+    if (importance >= 40) return BadgeType.info;
+    return BadgeType.neutral;
   }
 
-  BadgeType _importanceToBadgeType(String importance) {
-    switch (importance) {
-      case '高': return BadgeType.error;
-      case '较高': return BadgeType.warning;
-      case '中': return BadgeType.info;
-      default: return BadgeType.neutral;
+  String _formatTimeString(String timeStr) {
+    if (timeStr.isEmpty) return '';
+    try {
+      final time = DateTime.parse(timeStr);
+      final now = DateTime.now();
+      final diff = now.difference(time);
+      if (diff.inHours < 1) return '刚刚';
+      if (diff.inDays == 0) return '${diff.inHours}小时前';
+      if (diff.inDays < 7) return '${diff.inDays}天前';
+      return '${time.month}/${time.day}';
+    } catch (_) {
+      return timeStr;
     }
-  }
-
-  String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
-    if (diff.inHours < 1) return '刚刚';
-    if (diff.inDays == 0) return '${diff.inHours}小时前';
-    if (diff.inDays < 7) return '${diff.inDays}天前';
-    return '${time.month}/${time.day}';
   }
 }

@@ -8,7 +8,6 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
 
 class PermissionsPage extends ConsumerStatefulWidget {
   const PermissionsPage({super.key});
@@ -23,7 +22,62 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
   @override
   void initState() {
     super.initState();
-    _permissions = List.of(MockData.permissions);
+    _permissions = [
+      PermissionItem(
+        name: '无障碍服务',
+        icon: Icons.accessibility_new,
+        status: '已授权',
+        description: '允许 Amitia 读取屏幕内容并提供辅助',
+      ),
+      PermissionItem(
+        name: '通知读取',
+        icon: Icons.notifications_outlined,
+        status: '已授权',
+        description: '读取系统通知以提供智能提醒',
+      ),
+      PermissionItem(
+        name: '悬浮窗',
+        icon: Icons.picture_in_picture,
+        status: '已授权',
+        description: '在其他应用上方显示悬浮窗',
+      ),
+      PermissionItem(
+        name: '文件访问',
+        icon: Icons.folder_outlined,
+        status: '需要设置',
+        description: '访问设备存储中的文件',
+      ),
+      PermissionItem(
+        name: '麦克风',
+        icon: Icons.mic_outlined,
+        status: '已授权',
+        description: '语音输入和通话',
+      ),
+      PermissionItem(
+        name: '相机',
+        icon: Icons.camera_alt_outlined,
+        status: '未授权',
+        description: '拍照和扫描功能',
+      ),
+      PermissionItem(
+        name: '位置',
+        icon: Icons.location_on_outlined,
+        status: '未授权',
+        description: '获取设备位置信息',
+      ),
+      PermissionItem(
+        name: '电池优化',
+        icon: Icons.battery_std,
+        status: '已授权',
+        description: '忽略电池优化以保持后台运行',
+      ),
+      PermissionItem(
+        name: 'Shizuku',
+        icon: Icons.security,
+        status: '不可用',
+        description: '提供高级系统操作能力',
+      ),
+    ];
   }
 
   BadgeType _badgeType(String status) {

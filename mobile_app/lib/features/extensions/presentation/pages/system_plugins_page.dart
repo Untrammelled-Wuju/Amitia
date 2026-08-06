@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_extensions.dart';
+import '../../../../core/services/providers.dart';
 
 class SystemPluginsPage extends ConsumerStatefulWidget {
   const SystemPluginsPage({super.key});
@@ -19,16 +18,49 @@ class SystemPluginsPage extends ConsumerStatefulWidget {
 }
 
 class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
-  late List<SystemPlugin> _plugins;
+  List<Map<String, dynamic>> _plugins = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _plugins = List.from(MockExtensions.systemPlugins);
+    _loadPlugins();
+  }
+
+  Future<void> _loadPlugins() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final plugins = await svc.plugins();
+      if (mounted) setState(() { _plugins = plugins; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(
+          title: '系统插件',
+          showBackButton: true,
+          fallbackRoute: AppRoutes.extensions,
+        ),
+        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+      );
+    }
+    if (_error != null) {
+      return AmitiaScaffold(
+        appBar: AmitiaAppBar(
+          title: '系统插件',
+          showBackButton: true,
+          fallbackRoute: AppRoutes.extensions,
+        ),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: _error!, onRetry: _loadPlugins)),
+      );
+    }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '系统插件',
@@ -47,7 +79,28 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
     );
   }
 
-  Widget _buildPluginCard(BuildContext context, SystemPlugin plugin) {
+  List<String> _stringList(dynamic list) {
+    if (list is List) {
+      return list.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+    }
+    return [];
+  }
+
+  bool _isEnabled(Map<String, dynamic> plugin) {
+    return (plugin['isEnabled'] as bool?) ?? ((plugin['enabled'] as int?) == 1);
+  }
+
+  Widget _buildPluginCard(BuildContext context, Map<String, dynamic> plugin) {
+    final name = (plugin['name'] ?? '').toString();
+    final description = (plugin['description'] ?? '').toString();
+    final version = (plugin['version'] ?? '').toString();
+    final runtimeStatus = (plugin['runtimeStatus'] ?? plugin['runtime_status'] ?? '运行中').toString();
+    final isEnabled = _isEnabled(plugin);
+    final hooks = _stringList(plugin['hooks']);
+    final events = _stringList(plugin['events']);
+    final schedules = _stringList(plugin['schedules']);
+    final registeredSkills = _stringList(plugin['registeredSkills'] ?? plugin['registered_skills']);
+
     return AmitiaCard(
       onTap: () => _showDetailSheet(plugin),
       child: Column(
@@ -71,13 +124,13 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
                   children: [
                     Row(
                       children: [
-                        Text(plugin.name, style: AppTypography.cardTitle(context)),
+                        Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
                         const SizedBox(width: 8),
-                        Text('v${plugin.version}', style: AppTypography.label(context)),
+                        Text('v$version', style: AppTypography.label(context)),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(plugin.description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -90,21 +143,21 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: plugin.runtimeStatus == '运行中' ? context.success : context.warning,
+                  color: runtimeStatus == '运行中' ? context.success : context.warning,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 6),
-              Text(plugin.runtimeStatus, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w500)),
+              Text(runtimeStatus, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w500)),
               const Spacer(),
               AmitiaStatusBadge(
-                label: plugin.isEnabled ? '已启用' : '已禁用',
-                type: plugin.isEnabled ? BadgeType.success : BadgeType.neutral,
+                label: isEnabled ? '已启用' : '已禁用',
+                type: isEnabled ? BadgeType.success : BadgeType.neutral,
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          _buildInfoChips(context, plugin),
+          _buildInfoChips(context, hooks, events, schedules, registeredSkills),
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
@@ -128,16 +181,16 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
               const SizedBox(width: 8),
               GestureDetector(
                 onTap: () {
-                  if (plugin.isEnabled) {
+                  if (isEnabled) {
                     _showDisableImpactConfirm(plugin);
                   } else {
                     _enablePlugin(plugin);
                   }
                 },
                 child: _ActionButton(
-                  label: plugin.isEnabled ? '禁用' : '启用',
-                  icon: plugin.isEnabled ? Icons.block : Icons.check_circle_outline,
-                  color: plugin.isEnabled ? context.error : context.success,
+                  label: isEnabled ? '禁用' : '启用',
+                  icon: isEnabled ? Icons.block : Icons.check_circle_outline,
+                  color: isEnabled ? context.error : context.success,
                 ),
               ),
               const Spacer(),
@@ -149,91 +202,104 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
     );
   }
 
-  Widget _buildInfoChips(BuildContext context, SystemPlugin plugin) {
+  Widget _buildInfoChips(BuildContext context, List<String> hooks, List<String> events, List<String> schedules, List<String> registeredSkills) {
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: [
-        if (plugin.hooks.isNotEmpty)
-          _InfoChip(label: 'Hook ${plugin.hooks.length}', icon: Icons.link, color: context.accentPrimary),
-        if (plugin.events.isNotEmpty)
-          _InfoChip(label: '事件 ${plugin.events.length}', icon: Icons.event_outlined, color: context.info),
-        if (plugin.schedules.isNotEmpty)
-          _InfoChip(label: '调度 ${plugin.schedules.length}', icon: Icons.schedule, color: context.warning),
-        if (plugin.registeredSkills.isNotEmpty)
-          _InfoChip(label: '技能 ${plugin.registeredSkills.length}', icon: Icons.auto_awesome, color: context.success),
+        if (hooks.isNotEmpty)
+          _InfoChip(label: 'Hook ${hooks.length}', icon: Icons.link, color: context.accentPrimary),
+        if (events.isNotEmpty)
+          _InfoChip(label: '事件 ${events.length}', icon: Icons.event_outlined, color: context.info),
+        if (schedules.isNotEmpty)
+          _InfoChip(label: '调度 ${schedules.length}', icon: Icons.schedule, color: context.warning),
+        if (registeredSkills.isNotEmpty)
+          _InfoChip(label: '技能 ${registeredSkills.length}', icon: Icons.auto_awesome, color: context.success),
       ],
     );
   }
 
-  void _showDetailSheet(SystemPlugin plugin) {
+  void _showDetailSheet(Map<String, dynamic> plugin) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => _PluginDetailSheet(plugin: plugin, onPermissionTap: () {
-        Navigator.pop(context);
+      builder: (ctx) => _PluginDetailSheet(plugin: plugin, onPermissionTap: () {
+        Navigator.pop(ctx);
         _showPermissionSettings(plugin);
       }),
     );
   }
 
-  void _showDisableImpactConfirm(SystemPlugin plugin) {
+  void _showDisableImpactConfirm(Map<String, dynamic> plugin) {
+    final hooks = _stringList(plugin['hooks']);
+    final events = _stringList(plugin['events']);
+    final schedules = _stringList(plugin['schedules']);
+    final registeredSkills = _stringList(plugin['registeredSkills'] ?? plugin['registered_skills']);
     showDialog(
       context: context,
-      builder: (context) => _DisableImpactDialog(
-        plugin: plugin,
-        onConfirm: () {
-          Navigator.pop(context);
-          setState(() {
-            final index = _plugins.indexWhere((p) => p.id == plugin.id);
-            _plugins[index] = SystemPlugin(
-              id: plugin.id,
-              name: plugin.name,
-              description: plugin.description,
-              runtimeStatus: '已暂停',
-              hooks: plugin.hooks,
-              events: plugin.events,
-              schedules: plugin.schedules,
-              registeredSkills: plugin.registeredSkills,
-              isEnabled: false,
-              version: plugin.version,
-            );
-          });
-          ScaffoldMessenger.of(this.context).showSnackBar(
-            SnackBar(content: Text('${plugin.name} 已禁用'), backgroundColor: context.error),
-          );
+      builder: (ctx) => _DisableImpactDialog(
+        pluginName: (plugin['name'] ?? '').toString(),
+        hooksCount: hooks.length,
+        eventsCount: events.length,
+        schedulesCount: schedules.length,
+        registeredSkillsCount: registeredSkills.length,
+        onConfirm: () async {
+          Navigator.pop(ctx);
+          await _disablePlugin(plugin);
         },
       ),
     );
   }
 
-  void _enablePlugin(SystemPlugin plugin) {
-    setState(() {
-      final index = _plugins.indexWhere((p) => p.id == plugin.id);
-      _plugins[index] = SystemPlugin(
-        id: plugin.id,
-        name: plugin.name,
-        description: plugin.description,
-        runtimeStatus: '运行中',
-        hooks: plugin.hooks,
-        events: plugin.events,
-        schedules: plugin.schedules,
-        registeredSkills: plugin.registeredSkills,
-        isEnabled: true,
-        version: plugin.version,
-      );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${plugin.name} 已启用'), backgroundColor: context.success),
-    );
+  Future<void> _enablePlugin(Map<String, dynamic> plugin) async {
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final id = (plugin['id'] ?? '').toString();
+      await svc.enablePlugin(id);
+      _loadPlugins();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${plugin['name'] ?? ''} 已启用'), backgroundColor: context.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('启用失败: $e'), backgroundColor: context.error),
+        );
+      }
+    }
   }
 
-  void _showPermissionSettings(SystemPlugin plugin) {
+  Future<void> _disablePlugin(Map<String, dynamic> plugin) async {
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final id = (plugin['id'] ?? '').toString();
+      await svc.disablePlugin(id);
+      _loadPlugins();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${plugin['name'] ?? ''} 已禁用'), backgroundColor: context.error),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('禁用失败: $e'), backgroundColor: context.error),
+        );
+      }
+    }
+  }
+
+  void _showPermissionSettings(Map<String, dynamic> plugin) {
     showDialog(
       context: context,
-      builder: (context) => _PermissionSettingsDialog(plugin: plugin),
+      builder: (ctx) => _PermissionSettingsDialog(
+        pluginName: (plugin['name'] ?? '').toString(),
+        hooks: _stringList(plugin['hooks']),
+      ),
     );
   }
 }
@@ -293,13 +359,30 @@ class _InfoChip extends StatelessWidget {
 }
 
 class _PluginDetailSheet extends StatelessWidget {
-  final SystemPlugin plugin;
+  final Map<String, dynamic> plugin;
   final VoidCallback onPermissionTap;
 
   const _PluginDetailSheet({required this.plugin, required this.onPermissionTap});
 
+  List<String> _stringList(dynamic list) {
+    if (list is List) {
+      return list.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+    }
+    return [];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final name = (plugin['name'] ?? '').toString();
+    final description = (plugin['description'] ?? '').toString();
+    final version = (plugin['version'] ?? '').toString();
+    final runtimeStatus = (plugin['runtimeStatus'] ?? plugin['runtime_status'] ?? '运行中').toString();
+    final isEnabled = (plugin['isEnabled'] as bool?) ?? ((plugin['enabled'] as int?) == 1);
+    final hooks = _stringList(plugin['hooks']);
+    final events = _stringList(plugin['events']);
+    final schedules = _stringList(plugin['schedules']);
+    final registeredSkills = _stringList(plugin['registeredSkills'] ?? plugin['registered_skills']);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
       child: Column(
@@ -326,43 +409,43 @@ class _PluginDetailSheet extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(plugin.name, style: AppTypography.cardTitle(context)),
+                    Text(name, style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text('v${plugin.version}', style: AppTypography.label(context)),
+                    Text('v$version', style: AppTypography.label(context)),
                   ],
                 ),
               ),
               AmitiaStatusBadge(
-                label: plugin.runtimeStatus,
-                type: plugin.runtimeStatus == '运行中' ? BadgeType.success : BadgeType.warning,
+                label: '$runtimeStatus ${isEnabled ? '· 已启用' : '· 已禁用'}',
+                type: runtimeStatus == '运行中' ? BadgeType.success : BadgeType.warning,
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(plugin.description, style: AppTypography.bodySmall(context)),
+          Text(description, style: AppTypography.bodySmall(context)),
           const SizedBox(height: 16),
-          if (plugin.hooks.isNotEmpty) ...[
+          if (hooks.isNotEmpty) ...[
             _SectionLabel(label: 'Hook', icon: Icons.link),
             const SizedBox(height: 6),
-            ...plugin.hooks.map((h) => _ListItem(text: h)),
+            ...hooks.map((h) => _ListItem(text: h)),
           ],
-          if (plugin.events.isNotEmpty) ...[
+          if (events.isNotEmpty) ...[
             const SizedBox(height: 12),
             _SectionLabel(label: '事件', icon: Icons.event_outlined),
             const SizedBox(height: 6),
-            ...plugin.events.map((e) => _ListItem(text: e)),
+            ...events.map((e) => _ListItem(text: e)),
           ],
-          if (plugin.schedules.isNotEmpty) ...[
+          if (schedules.isNotEmpty) ...[
             const SizedBox(height: 12),
             _SectionLabel(label: '调度', icon: Icons.schedule),
             const SizedBox(height: 6),
-            ...plugin.schedules.map((s) => _ListItem(text: s)),
+            ...schedules.map((s) => _ListItem(text: s)),
           ],
-          if (plugin.registeredSkills.isNotEmpty) ...[
+          if (registeredSkills.isNotEmpty) ...[
             const SizedBox(height: 12),
             _SectionLabel(label: '注册技能', icon: Icons.auto_awesome),
             const SizedBox(height: 6),
-            ...plugin.registeredSkills.map((s) => _ListItem(text: s)),
+            ...registeredSkills.map((s) => _ListItem(text: s)),
           ],
           const SizedBox(height: 20),
           Row(
@@ -431,10 +514,21 @@ class _ListItem extends StatelessWidget {
 }
 
 class _DisableImpactDialog extends StatelessWidget {
-  final SystemPlugin plugin;
+  final String pluginName;
+  final int hooksCount;
+  final int eventsCount;
+  final int schedulesCount;
+  final int registeredSkillsCount;
   final VoidCallback onConfirm;
 
-  const _DisableImpactDialog({required this.plugin, required this.onConfirm});
+  const _DisableImpactDialog({
+    required this.pluginName,
+    required this.hooksCount,
+    required this.eventsCount,
+    required this.schedulesCount,
+    required this.registeredSkillsCount,
+    required this.onConfirm,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -452,17 +546,17 @@ class _DisableImpactDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('禁用「${plugin.name}」将影响以下功能：', style: AppTypography.bodySmall(context)),
+          Text('禁用「$pluginName」将影响以下功能：', style: AppTypography.bodySmall(context)),
           const SizedBox(height: 12),
-          if (plugin.hooks.isNotEmpty)
-            _ImpactItem(text: '${plugin.hooks.length} 个 Hook 将停止响应', color: context.accentPrimary),
-          if (plugin.events.isNotEmpty)
-            _ImpactItem(text: '${plugin.events.length} 个事件将不再触发', color: context.info),
-          if (plugin.schedules.isNotEmpty)
-            _ImpactItem(text: '${plugin.schedules.length} 个调度任务将暂停', color: context.warning),
-          if (plugin.registeredSkills.isNotEmpty)
-            _ImpactItem(text: '${plugin.registeredSkills.length} 个注册技能将不可用', color: context.error),
-          if (plugin.hooks.isEmpty && plugin.events.isEmpty && plugin.schedules.isEmpty && plugin.registeredSkills.isEmpty)
+          if (hooksCount > 0)
+            _ImpactItem(text: '$hooksCount 个 Hook 将停止响应', color: context.accentPrimary),
+          if (eventsCount > 0)
+            _ImpactItem(text: '$eventsCount 个事件将不再触发', color: context.info),
+          if (schedulesCount > 0)
+            _ImpactItem(text: '$schedulesCount 个调度任务将暂停', color: context.warning),
+          if (registeredSkillsCount > 0)
+            _ImpactItem(text: '$registeredSkillsCount 个注册技能将不可用', color: context.error),
+          if (hooksCount == 0 && eventsCount == 0 && schedulesCount == 0 && registeredSkillsCount == 0)
             _ImpactItem(text: '无直接影响，可安全禁用', color: context.success),
           const SizedBox(height: 12),
           Container(
@@ -511,9 +605,10 @@ class _ImpactItem extends StatelessWidget {
 }
 
 class _PermissionSettingsDialog extends StatefulWidget {
-  final SystemPlugin plugin;
+  final String pluginName;
+  final List<String> hooks;
 
-  const _PermissionSettingsDialog({required this.plugin});
+  const _PermissionSettingsDialog({required this.pluginName, required this.hooks});
 
   @override
   State<_PermissionSettingsDialog> createState() => _PermissionSettingsDialogState();
@@ -527,10 +622,10 @@ class _PermissionSettingsDialogState extends State<_PermissionSettingsDialog> {
     super.initState();
     _permissions = {
       '文件系统访问': true,
-      '网络访问': widget.plugin.hooks.any((h) => h.contains('message')),
+      '网络访问': widget.hooks.any((h) => h.contains('message')),
       '消息读取': true,
-      '记忆访问': widget.plugin.name.contains('记忆'),
-      '情感分析': widget.plugin.name.contains('情感'),
+      '记忆访问': widget.pluginName.contains('记忆'),
+      '情感分析': widget.pluginName.contains('情感'),
     };
   }
 
@@ -539,7 +634,7 @@ class _PermissionSettingsDialogState extends State<_PermissionSettingsDialog> {
     return AlertDialog(
       backgroundColor: context.surfacePrimary,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-      title: Text('${widget.plugin.name} - 权限', style: AppTypography.cardTitle(context)),
+      title: Text('${widget.pluginName} - 权限', style: AppTypography.cardTitle(context)),
       content: SizedBox(
         width: double.maxFinite,
         child: Column(
@@ -557,7 +652,7 @@ class _PermissionSettingsDialogState extends State<_PermissionSettingsDialog> {
           onPressed: () {
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('${widget.plugin.name} 权限已更新'), backgroundColor: context.success),
+              SnackBar(content: Text('${widget.pluginName} 权限已更新'), backgroundColor: context.success),
             );
           },
           child: Text('保存', style: TextStyle(color: context.accentPrimary)),

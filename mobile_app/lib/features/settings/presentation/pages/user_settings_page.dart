@@ -7,7 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class UserSettingsPage extends ConsumerStatefulWidget {
   const UserSettingsPage({super.key});
@@ -21,79 +21,97 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
   late String _nickname;
   late String _userLabel;
   late String _bio;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    final u = MockSettings.userSettings;
-    _username = u.username;
-    _nickname = u.nickname;
-    _userLabel = u.userLabel;
-    _bio = u.bio;
+    _username = '';
+    _nickname = '';
+    _userLabel = '';
+    _bio = '';
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final auth = ref.read(authServiceProvider);
+    final user = await auth.currentUser;
+    if (user != null && mounted) {
+      setState(() {
+        _username = user.username;
+        _nickname = user.username;
+        _userLabel = user.username;
+        _loading = false;
+      });
+    } else if (mounted) {
+      setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '用户设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        children: [
-          const SizedBox(height: AppSpacing.lg),
-          Center(
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: context.accentPrimary,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  _nickname.isNotEmpty ? _nickname.substring(0, 1) : 'U',
-                  style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              children: [
+                const SizedBox(height: AppSpacing.lg),
+                Center(
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: context.accentPrimary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _nickname.isNotEmpty ? _nickname.substring(0, 1) : 'U',
+                        style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: AppSpacing.md),
+                Center(child: Text(_nickname, style: AppTypography.sectionTitle(context))),
+                const SizedBox(height: 4),
+                Center(child: Text('@$_username', style: AppTypography.caption(context))),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _SectionLabel(text: '基础资料'),
+                const SizedBox(height: AppSpacing.sm),
+                _buildCard([
+                  _buildEditTile('昵称', _nickname, () => _showEditSheet('昵称', _nickname, (v) => setState(() => _nickname = v))),
+                  _divider(),
+                  _buildEditTile('用户名', _username, null),
+                  _divider(),
+                  _buildEditTile('用户称呼', _userLabel, () => _showEditSheet('用户称呼', _userLabel, (v) => setState(() => _userLabel = v))),
+                  _divider(),
+                  _buildEditTile('个人简介', _bio.isEmpty ? '未设置' : _bio, () => _showEditSheet('个人简介', _bio, (v) => setState(() => _bio = v), maxLines: 3)),
+                ]),
+                const SizedBox(height: AppSpacing.sectionGap),
+                _SectionLabel(text: '账号安全'),
+                const SizedBox(height: AppSpacing.sm),
+                _buildCard([
+                  _buildNavTile(icon: Icons.lock_outline, title: '修改密码', onTap: _showPasswordSheet),
+                  _divider(),
+                  _buildNavTile(icon: Icons.devices_outlined, title: '登录设备管理', onTap: () => _showTip('登录设备管理')),
+                ]),
+                const SizedBox(height: AppSpacing.sectionGap),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: AmitiaButton(
+                    label: '退出登录',
+                    icon: Icons.logout,
+                    isDestructive: true,
+                    isFullWidth: true,
+                    onPressed: _confirmLogout,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+              ],
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Center(child: Text(_nickname, style: AppTypography.sectionTitle(context))),
-          const SizedBox(height: 4),
-          Center(child: Text('@$_username', style: AppTypography.caption(context))),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SectionLabel(text: '基础资料'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard([
-            _buildEditTile('昵称', _nickname, () => _showEditSheet('昵称', _nickname, (v) => setState(() => _nickname = v))),
-            _divider(),
-            _buildEditTile('用户名', _username, () => _showEditSheet('用户名', _username, (v) => setState(() => _username = v))),
-            _divider(),
-            _buildEditTile('用户称呼', _userLabel, () => _showEditSheet('用户称呼', _userLabel, (v) => setState(() => _userLabel = v))),
-            _divider(),
-            _buildEditTile('个人简介', _bio.isEmpty ? '未设置' : _bio, () => _showEditSheet('个人简介', _bio, (v) => setState(() => _bio = v), maxLines: 3)),
-          ]),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SectionLabel(text: '账号安全'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard([
-            _buildNavTile(icon: Icons.lock_outline, title: '修改密码', onTap: _showPasswordSheet),
-            _divider(),
-            _buildNavTile(icon: Icons.devices_outlined, title: '登录设备管理', onTap: () => _showTip('登录设备管理')),
-          ]),
-          const SizedBox(height: AppSpacing.sectionGap),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: AmitiaButton(
-              label: '退出登录',
-              icon: Icons.logout,
-              isDestructive: true,
-              isFullWidth: true,
-              onPressed: _confirmLogout,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-        ],
-      ),
     );
   }
 
@@ -116,7 +134,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     );
   }
 
-  Widget _buildEditTile(String title, String value, VoidCallback onTap) {
+  Widget _buildEditTile(String title, String value, VoidCallback? onTap) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -126,8 +144,10 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
           children: [
             Expanded(child: Text(title, style: AppTypography.body(context))),
             Text(value, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(width: 4),
-            Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
+            if (onTap != null) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
+            ],
           ],
         ),
       ),
@@ -259,6 +279,8 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
+              final auth = ref.read(authServiceProvider);
+              auth.logout();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('已退出登录'), duration: Duration(seconds: 1)),
               );

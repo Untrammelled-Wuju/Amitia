@@ -9,15 +9,43 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+
+static final _settingsGroups = <SettingGroup>[
+  SettingGroup(title: 'AI 与个性化', items: [
+    SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: 'GPT-4', route: AppRoutes.settingsModels),
+    SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),
+    SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: '亮色', route: AppRoutes.settingsAppearance),
+    SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
+    SettingItem(title: '用户设置', icon: Icons.person_outline, route: AppRoutes.settingsUser),
+    SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: AppRoutes.settingsTemporal),
+  ]),
+  SettingGroup(title: '系统与维护', items: [
+    SettingItem(title: 'Runtime', icon: Icons.terminal, value: '运行中', route: AppRoutes.settingsRuntime),
+    SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: AppRoutes.settingsPermissions),
+    SettingItem(title: '存储管理', icon: Icons.storage_outlined, route: AppRoutes.settingsStorage),
+    SettingItem(title: '安全设置', icon: Icons.security_outlined, route: AppRoutes.settingsSafety),
+    SettingItem(title: '维护工具', icon: Icons.build_circle_outlined, route: AppRoutes.settingsMaintenance),
+    SettingItem(title: '工具箱', icon: Icons.handyman_outlined, subtitle: '运行日志、状态诊断与开发辅助工具', value: '诊断工具', route: AppRoutes.settingsToolbox),
+  ]),
+  SettingGroup(title: '部署与隐私', items: [
+    SettingItem(title: '部署配置', icon: Icons.cloud_upload_outlined, route: AppRoutes.settingsDeployment),
+    SettingItem(title: '隐私扫描', icon: Icons.privacy_tip_outlined, route: AppRoutes.settingsPrivacyScan),
+    SettingItem(title: '系统设置', icon: Icons.settings_applications_outlined, route: AppRoutes.settingsSystem),
+  ]),
+  SettingGroup(title: '关于', items: [
+    SettingItem(title: '备份与恢复', icon: Icons.backup_outlined, route: AppRoutes.settingsBackup),
+    SettingItem(title: '关于 Amitia', icon: Icons.info_outline, value: 'v1.0.0', route: AppRoutes.settingsAbout),
+  ]),
+];
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groups = MockData.mainSettings;
+    final groups = _settingsGroups;
     final isDevMode = ref.watch(isDeveloperModeProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -31,9 +59,7 @@ class SettingsPage extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.pagePadding,
             ),
-            child: _UserInfoCard(
-              onTap: () => context.push(AppRoutes.settingsUser),
-            ),
+            child: _buildUserInfoCard(context, ref),
           ),
           const SizedBox(height: AppSpacing.md),
           for (int i = 0; i < groups.length; i++) ...[
@@ -62,15 +88,101 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-class _UserInfoCard extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _UserInfoCard({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
+  final userAsync = ref.watch(currentUserProvider);
+  return userAsync.when(
+    data: (user) {
+      final username = user?.username ?? '未登录';
+      final initial = username.isNotEmpty ? username.characters.first : '?';
+      return GestureDetector(
+        onTap: () => context.push(AppRoutes.settingsUser),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: context.surfacePrimary,
+            borderRadius: AppRadius.brMedium,
+            border: Border.all(color: context.borderPrimary, width: 0.5),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [context.accentPrimary, context.accentSecondary],
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      username,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: context.success,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '已登录',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
+            ],
+          ),
+        ),
+      );
+    },
+    loading: () => Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        borderRadius: AppRadius.brMedium,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    ),
+    error: (_, __) => GestureDetector(
+      onTap: () => context.push(AppRoutes.settingsUser),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -93,7 +205,7 @@ class _UserInfoCard extends StatelessWidget {
               ),
               child: const Center(
                 child: Text(
-                  '无',
+                  '?',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -104,49 +216,21 @@ class _UserInfoCard extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '无拘',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: context.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: context.success,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '本地运行',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: context.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: Text(
+                '未登录',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: context.textPrimary,
+                ),
               ),
             ),
             Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _DevModeToggle extends StatelessWidget {

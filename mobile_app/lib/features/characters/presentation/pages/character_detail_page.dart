@@ -10,8 +10,9 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/character.dart';
+import '../../../../core/models/memory.dart';
 
 class CharacterDetailPage extends ConsumerStatefulWidget {
   final String characterId;
@@ -24,20 +25,9 @@ class CharacterDetailPage extends ConsumerStatefulWidget {
 
 class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   int _selectedTab = 0;
-  late final Character _character;
-  late final TextEditingController _promptController;
+  final _promptController = TextEditingController();
 
   final _tabs = const ['概览', '设定', '记忆', '关系', '能力', '生活'];
-
-  @override
-  void initState() {
-    super.initState();
-    _character = MockData.characters.firstWhere(
-      (c) => c.id == widget.characterId,
-      orElse: () => MockData.characters.first,
-    );
-    _promptController = TextEditingController(text: _character.prompt);
-  }
 
   @override
   void dispose() {
@@ -47,15 +37,50 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final characterAsync = ref.watch(characterListProvider);
+    final memoriesAsync = ref.watch(memoryListProvider);
+    final isDevMode = ref.watch(isDeveloperModeProvider);
+
+    return characterAsync.when(
+      loading: () => const AmitiaScaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, _) => AmitiaScaffold(
+        body: Center(child: Text('加载失败: $err')),
+      ),
+      data: (characters) {
+        final character = characters.cast<CharacterDto?>().firstWhere(
+          (c) => c?.id == widget.characterId,
+          orElse: () => characters.isNotEmpty ? characters.first : null,
+        );
+        if (character == null) {
+          return const AmitiaScaffold(
+            body: Center(child: Text('角色不存在')),
+          );
+        }
+        _promptController.text = character.personality;
+
+        return memoriesAsync.when(
+          loading: () => const AmitiaScaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+          error: (_, __) => _buildScaffold(context, character, [], isDevMode),
+          data: (memories) => _buildScaffold(context, character, memories.take(5).toList(), isDevMode),
+        );
+      },
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, CharacterDto character, List<MemoryDto> memories, bool isDevMode) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: _character.name,
+        title: character.name,
         showBackButton: true,
         fallbackRoute: AppRoutes.characters,
         actions: [
           AmitiaIconButton(
             icon: Icons.more_horiz,
-            onPressed: () => _showCharacterActionsSheet(context),
+            onPressed: () => _showCharacterActionsSheet(context, character),
           ),
         ],
       ),
@@ -63,7 +88,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         top: false,
         child: Column(
           children: [
-            _buildInfoSection(context),
+            _buildInfoSection(context, character),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.pagePadding,
@@ -82,7 +107,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               ),
             ),
             Expanded(
-              child: _buildTabContent(context),
+              child: _buildTabContent(context, character, memories, isDevMode),
             ),
           ],
         ),
@@ -90,9 +115,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildInfoSection(BuildContext context) {
-    final color = Color(int.parse('FF${_character.avatarColor.replaceAll('#', '')}', radix: 16));
-    final isOnline = _character.status == '在线';
+  Widget _buildInfoSection(BuildContext context, CharacterDto character) {
+    final isOnline = character.status == '在线';
+    final initial = character.name.isNotEmpty ? character.name[0] : '?';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -109,12 +134,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: color,
+                  color: context.accentPrimary,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: Text(
-                    _character.avatarInitial,
+                    initial,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 28,
@@ -144,18 +169,18 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_character.name, style: AppTypography.sectionTitle(context)),
+                Text(character.name, style: AppTypography.sectionTitle(context)),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     AmitiaStatusBadge(
-                      label: _character.status,
+                      label: character.status,
                       type: isOnline ? BadgeType.success : BadgeType.neutral,
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Flexible(
                       child: Text(
-                        '· ${_character.mood}',
+                        '· ${character.speakingStyle}',
                         style: AppTypography.caption(context),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -164,7 +189,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _character.description,
+                  character.description,
                   style: AppTypography.caption(context),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -177,26 +202,26 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildTabContent(BuildContext context) {
+  Widget _buildTabContent(BuildContext context, CharacterDto character, List<MemoryDto> memories, bool isDevMode) {
     switch (_selectedTab) {
       case 0:
-        return _buildOverviewTab(context);
+        return _buildOverviewTab(context, character, memories, isDevMode);
       case 1:
-        return _buildSettingsTab(context);
+        return _buildSettingsTab(context, character);
       case 2:
-        return _buildMemoryTab(context);
+        return _buildMemoryTab(context, memories);
       case 3:
-        return _buildRelationTab(context);
+        return _buildRelationTab(context, character);
       case 4:
-        return _buildAbilityTab(context);
+        return _buildAbilityTab(context, character);
       case 5:
-        return _buildLifeTab(context);
+        return _buildLifeTab(context, character);
       default:
         return const SizedBox.shrink();
     }
   }
 
-  Widget _buildOverviewTab(BuildContext context) {
+  Widget _buildOverviewTab(BuildContext context, CharacterDto character, List<MemoryDto> memories, bool isDevMode) {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -206,12 +231,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('基本资料', style: AppTypography.cardTitle(context)),
               const SizedBox(height: AppSpacing.sm),
-              _buildInfoRow(context, '名字', _character.name),
-              _buildInfoRow(context, '身份', _character.identity),
-              _buildInfoRow(context, '性格', _character.personality),
-              _buildInfoRow(context, '当前心情', _character.mood),
-              _buildInfoRow(context, '所在位置', _character.location),
-              _buildInfoRow(context, '当前活动', _character.currentActivity),
+              _buildInfoRow(context, '名字', character.name),
+              _buildInfoRow(context, '身份', character.identity),
+              _buildInfoRow(context, '性格', character.personality),
+              _buildInfoRow(context, '说话方式', character.speakingStyle),
             ],
           ),
         ),
@@ -220,9 +243,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           child: IntrinsicHeight(
             child: Row(
               children: [
-                _buildStatItem(context, '${_character.relationshipDays}', '关系天数'),
+                _buildStatItem(context, character.createdAt, '创建时间'),
                 VerticalDivider(width: 1, color: context.borderPrimary),
-                _buildStatItem(context, '${_character.messageCount}', '对话数量'),
+                _buildStatItem(context, character.voiceType ?? '默认', '语音类型'),
               ],
             ),
           ),
@@ -234,17 +257,19 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('最近记忆', style: AppTypography.cardTitle(context)),
               const SizedBox(height: AppSpacing.xs),
-              ...MockData.memories.take(3).map((m) => _buildMemoryItem(context, m)),
+              ...memories.take(3).map((m) => _buildMemoryItem(context, m)),
+              if (memories.isEmpty)
+                Text('暂无记忆', style: AppTypography.caption(context)),
             ],
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        _buildManagementSection(context),
+        _buildManagementSection(context, character, isDevMode),
       ],
     );
   }
 
-  Widget _buildSettingsTab(BuildContext context) {
+  Widget _buildSettingsTab(BuildContext context, CharacterDto character) {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -254,11 +279,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('角色设定', style: AppTypography.cardTitle(context)),
               const SizedBox(height: AppSpacing.sm),
-              _buildInfoRow(context, '名字', _character.name),
-              _buildInfoRow(context, '身份', _character.identity),
-              _buildInfoRow(context, '性格', _character.personality),
-              _buildInfoRow(context, '说话方式', _character.speakingStyle),
-              _buildInfoRow(context, '用户关系', _character.userRelation),
+              _buildInfoRow(context, '名字', character.name),
+              _buildInfoRow(context, '身份', character.identity),
+              _buildInfoRow(context, '性格', character.personality),
+              _buildInfoRow(context, '说话方式', character.speakingStyle),
             ],
           ),
         ),
@@ -267,7 +291,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('提示词', style: AppTypography.cardTitle(context)),
+              Text('性格提示词', style: AppTypography.cardTitle(context)),
               const SizedBox(height: AppSpacing.sm),
               AmitiaTextField(
                 controller: _promptController,
@@ -281,7 +305,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildMemoryTab(BuildContext context) {
+  Widget _buildMemoryTab(BuildContext context, List<MemoryDto> memories) {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -291,7 +315,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('最近记忆', style: AppTypography.cardTitle(context)),
               const SizedBox(height: AppSpacing.xs),
-              ...MockData.memories.take(5).map((m) => _buildMemoryItem(context, m)),
+              ...memories.map((m) => _buildMemoryItem(context, m)),
+              if (memories.isEmpty)
+                Text('暂无记忆', style: AppTypography.caption(context)),
             ],
           ),
         ),
@@ -299,7 +325,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildRelationTab(BuildContext context) {
+  Widget _buildRelationTab(BuildContext context, CharacterDto character) {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -307,15 +333,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           child: IntrinsicHeight(
             child: Row(
               children: [
-                _buildStatItem(context, '${_character.relationshipDays}', '关系天数'),
+                _buildStatItem(context, character.createdAt, '创建时间'),
                 VerticalDivider(width: 1, color: context.borderPrimary),
-                _buildStatItem(context, '${_character.messageCount}', '对话数量'),
-                VerticalDivider(width: 1, color: context.borderPrimary),
-                _buildStatItem(
-                  context,
-                  '${(_character.messageCount / _character.relationshipDays).round()}',
-                  '日均消息',
-                ),
+                _buildStatItem(context, character.isActive == 1 ? '是' : '否', '活跃状态'),
               ],
             ),
           ),
@@ -331,7 +351,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
                 children: [
-                  AmitiaStatusBadge(label: _character.userRelation, type: BadgeType.accent),
+                  AmitiaStatusBadge(label: 'AI伙伴', type: BadgeType.accent),
                   AmitiaStatusBadge(label: '高频互动', type: BadgeType.info),
                   AmitiaStatusBadge(label: '信任伙伴', type: BadgeType.success),
                   AmitiaStatusBadge(label: '共同成长', type: BadgeType.warning),
@@ -344,17 +364,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildAbilityTab(BuildContext context) {
-    final mcpExtensions = MockData.installedExtensions
-        .where((e) => e.type == ExtensionType.mcp && e.isEnabled)
-        .toList();
-    final skillExtensions = MockData.installedExtensions
-        .where((e) => e.type == ExtensionType.skill && e.isEnabled)
-        .toList();
-    final pluginExtensions = MockData.installedExtensions
-        .where((e) => e.type == ExtensionType.plugin)
-        .toList();
-
+  Widget _buildAbilityTab(BuildContext context, CharacterDto character) {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -367,29 +377,15 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         const SizedBox(height: AppSpacing.sm),
         _buildAbilitySection(
           context,
-          'MCP',
-          mcpExtensions.isEmpty ? '暂无' : mcpExtensions.map((e) => e.name).join('、'),
-          Icons.extension_outlined,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _buildAbilitySection(
-          context,
-          'Skill',
-          skillExtensions.isEmpty ? '暂无' : skillExtensions.map((e) => e.name).join('、'),
-          Icons.auto_awesome_outlined,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _buildAbilitySection(
-          context,
-          '插件',
-          pluginExtensions.isEmpty ? '暂无' : pluginExtensions.map((e) => e.name).join('、'),
-          Icons.dashboard_outlined,
+          '语音类型',
+          character.voiceType ?? '默认',
+          Icons.record_voice_over_outlined,
         ),
       ],
     );
   }
 
-  Widget _buildLifeTab(BuildContext context) {
+  Widget _buildLifeTab(BuildContext context, CharacterDto character) {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -399,8 +395,8 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('当前状态', style: AppTypography.cardTitle(context)),
               const SizedBox(height: AppSpacing.sm),
-              _buildInfoRow(context, '当前活动', _character.currentActivity),
-              _buildInfoRow(context, '所在位置', _character.location),
+              _buildInfoRow(context, '状态', character.status),
+              _buildInfoRow(context, '活跃', character.isActive == 1 ? '是' : '否'),
             ],
           ),
         ),
@@ -436,7 +432,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(value, style: AppTypography.bodySmall(context)),
+            child: Text(value.isEmpty ? '-' : value, style: AppTypography.bodySmall(context)),
           ),
         ],
       ),
@@ -448,7 +444,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       child: Column(
         children: [
           Text(
-            value,
+            value.isEmpty ? '-' : value,
             style: AppTypography.sectionTitle(context).copyWith(color: context.accentPrimary),
           ),
           const SizedBox(height: 2),
@@ -458,7 +454,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildMemoryItem(BuildContext context, Memory memory) {
+  Widget _buildMemoryItem(BuildContext context, MemoryDto memory) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -486,7 +482,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${memory.category} · ${_formatMemoryTime(memory.time)}',
+                  '${memory.type} · ${memory.importance}',
                   style: AppTypography.label(context),
                 ),
               ],
@@ -548,19 +544,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  String _formatMemoryTime(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
-    if (diff.inDays == 0) {
-      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays}天前';
-    }
-    return '${time.month}/${time.day}';
-  }
-
-  Widget _buildManagementSection(BuildContext context) {
-    final isDevMode = ref.watch(isDeveloperModeProvider);
+  Widget _buildManagementSection(BuildContext context, CharacterDto character, bool isDevMode) {
     final entries = <_ManageEntry>[
       _ManageEntry(
         title: '生活规则',
@@ -633,7 +617,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  void _showCharacterActionsSheet(BuildContext context) {
+  void _showCharacterActionsSheet(BuildContext context, CharacterDto character) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -665,7 +649,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   title: '设为当前角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _setAsCurrent();
+                    _setAsCurrent(character);
                   },
                 ),
                 AmitiaListTile(
@@ -673,7 +657,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   title: '复制角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _copyCharacter();
+                    _copyCharacter(character);
                   },
                 ),
                 AmitiaListTile(
@@ -681,15 +665,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   title: '导出角色包',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _exportCharacter();
-                  },
-                ),
-                AmitiaListTile(
-                  leading: _buildActionIcon(context, Icons.archive_outlined, context.accentPrimary),
-                  title: '归档角色',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _archiveCharacter();
+                    _exportCharacter(character);
                   },
                 ),
                 AmitiaListTile(
@@ -697,7 +673,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   title: '删除角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showDeleteConfirm(context);
+                    _showDeleteConfirm(context, character);
                   },
                 ),
                 const SizedBox(height: 8),
@@ -721,32 +697,35 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  void _setAsCurrent() {
+  Future<void> _setAsCurrent(CharacterDto character) async {
     ref.read(currentCharacterIdProvider.notifier).state = widget.characterId;
+    final svc = ref.read(characterServiceProvider);
+    await svc.setActive(widget.characterId);
+    ref.invalidate(characterListProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已将「${character.name}」设为当前角色')),
+      );
+    }
+  }
+
+  void _copyCharacter(CharacterDto character) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已将「${_character.name}」设为当前角色')),
+      SnackBar(content: Text('已复制角色「${character.name}」')),
     );
   }
 
-  void _copyCharacter() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已复制角色「${_character.name}」')),
-    );
+  Future<void> _exportCharacter(CharacterDto character) async {
+    final svc = ref.read(characterDetailServiceProvider);
+    final result = await svc.exportPack(widget.characterId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result != null ? '已导出角色包：${character.name}' : '导出失败')),
+      );
+    }
   }
 
-  void _exportCharacter() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('正在导出角色包：${_character.name}')),
-    );
-  }
-
-  void _archiveCharacter() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已归档角色「${_character.name}」')),
-    );
-  }
-
-  void _showDeleteConfirm(BuildContext context) {
+  void _showDeleteConfirm(BuildContext context, CharacterDto character) {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -755,7 +734,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
           title: Text('删除角色', style: AppTypography.cardTitle(dialogContext)),
           content: Text(
-            '确定要删除角色「${_character.name}」吗？所有相关数据将被清除，此操作不可恢复。',
+            '确定要删除角色「${character.name}」吗？所有相关数据将被清除，此操作不可恢复。',
             style: AppTypography.body(dialogContext),
           ),
           actions: [
@@ -764,15 +743,22 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               child: Text('取消', style: TextStyle(color: dialogContext.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('已删除角色：${_character.name}'),
-                    backgroundColor: context.error,
-                  ),
-                );
-                Navigator.of(context).pop();
+                final svc = ref.read(characterServiceProvider);
+                final ok = await svc.delete(widget.characterId);
+                if (ok) {
+                  ref.invalidate(characterListProvider);
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(ok ? '已删除角色：${character.name}' : '删除失败'),
+                      backgroundColor: ok ? null : context.error,
+                    ),
+                  );
+                  if (ok) Navigator.of(context).pop();
+                }
               },
               child: Text('删除', style: TextStyle(color: dialogContext.error)),
             ),

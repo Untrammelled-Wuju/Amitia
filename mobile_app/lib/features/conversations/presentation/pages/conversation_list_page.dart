@@ -7,10 +7,9 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/conversation.dart';
 
 class ConversationListPage extends ConsumerStatefulWidget {
   const ConversationListPage({super.key});
@@ -21,14 +20,7 @@ class ConversationListPage extends ConsumerStatefulWidget {
 
 class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   final _searchController = TextEditingController();
-  List<Conversation> _filtered = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _filtered = List.from(MockData.conversations);
-    _searchController.addListener(_onSearch);
-  }
+  String _searchQuery = '';
 
   @override
   void dispose() {
@@ -36,36 +28,18 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     super.dispose();
   }
 
-  void _onSearch() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      if (query.isEmpty) {
-        _filtered = List.from(MockData.conversations);
-      } else {
-        _filtered = MockData.conversations.where((c) {
-          return c.title.toLowerCase().contains(query) ||
-              c.lastMessage.toLowerCase().contains(query);
-        }).toList();
-      }
-    });
-  }
-
-  Map<String, List<Conversation>> _groupConversations(List<Conversation> conversations) {
+  Map<String, List<ConversationDto>> _groupConversations(List<ConversationDto> conversations) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
 
-    final pinned = <Conversation>[];
-    final todayList = <Conversation>[];
-    final yesterdayList = <Conversation>[];
-    final earlier = <Conversation>[];
+    final todayList = <ConversationDto>[];
+    final yesterdayList = <ConversationDto>[];
+    final earlier = <ConversationDto>[];
 
     for (final conv in conversations) {
-      if (conv.isPinned) {
-        pinned.add(conv);
-        continue;
-      }
-      final convDate = DateTime(conv.lastTime.year, conv.lastTime.month, conv.lastTime.day);
+      final updatedAt = DateTime.tryParse(conv.updatedAt) ?? now;
+      final convDate = DateTime(updatedAt.year, updatedAt.month, updatedAt.day);
       if (convDate == today) {
         todayList.add(conv);
       } else if (convDate == yesterday) {
@@ -75,15 +49,16 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       }
     }
 
-    final groups = <String, List<Conversation>>{};
-    if (pinned.isNotEmpty) groups['置顶'] = pinned;
+    final groups = <String, List<ConversationDto>>{};
     if (todayList.isNotEmpty) groups['今天'] = todayList;
     if (yesterdayList.isNotEmpty) groups['昨天'] = yesterdayList;
     if (earlier.isNotEmpty) groups['更早'] = earlier;
     return groups;
   }
 
-  String _formatTime(DateTime time) {
+  String _formatTime(String updatedAt) {
+    final time = DateTime.tryParse(updatedAt);
+    if (time == null) return '';
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final convDate = DateTime(time.year, time.month, time.day);
@@ -98,7 +73,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = _groupConversations(_filtered);
+    final conversationsAsync = ref.watch(conversationListProvider);
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -125,6 +100,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                     child: AmitiaSearchField(
                       controller: _searchController,
                       hintText: '搜索对话',
+                      onChanged: (v) => setState(() => _searchQuery = v),
                     ),
                   ),
                 ),
@@ -139,44 +115,78 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
             ),
           ),
           Expanded(
-            child: _filtered.isEmpty
-                ? AmitiaEmptyState(
+            child: conversationsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                      const SizedBox(height: 16),
+                      Text(
+                        '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                        style: AppTypography.body(context).copyWith(color: context.error),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      AmitiaButton(
+                        label: '重试',
+                        onPressed: () => ref.invalidate(conversationListProvider),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (conversations) {
+                final filtered = _searchQuery.isEmpty
+                    ? conversations
+                    : conversations.where((c) {
+                        return c.title.toLowerCase().contains(_searchQuery.toLowerCase());
+                      }).toList();
+                final groups = _groupConversations(filtered);
+                if (filtered.isEmpty) {
+                  return AmitiaEmptyState(
                     icon: Icons.chat_bubble_outline,
                     title: '没有找到对话',
                     subtitle: '试试其他关键词，或者新建一个对话',
-                  )
-                : ListView(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                    children: groups.entries.map((entry) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.pagePadding,
-                              AppSpacing.md,
-                              AppSpacing.pagePadding,
-                              AppSpacing.xs,
-                            ),
-                            child: Text(entry.key, style: AppTypography.label(context)),
+                  );
+                }
+                return ListView(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                  children: groups.entries.map((entry) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.pagePadding,
+                            AppSpacing.md,
+                            AppSpacing.pagePadding,
+                            AppSpacing.xs,
                           ),
-                          ...entry.value.map((conv) => _ConversationItem(
-                                conversation: conv,
-                                timeText: _formatTime(conv.lastTime),
-                                onTap: () => context.go(AppRoutes.chat),
-                                onMore: () => _showActionsSheet(conv),
-                              )),
-                        ],
-                      );
-                    }).toList(),
-                  ),
+                          child: Text(entry.key, style: AppTypography.label(context)),
+                        ),
+                        ...entry.value.map((conv) => _ConversationItem(
+                              conversation: conv,
+                              timeText: _formatTime(conv.updatedAt),
+                              onTap: () => context.go(AppRoutes.chat),
+                              onMore: () => _showActionsSheet(conv),
+                            )),
+                      ],
+                    );
+                  }).toList(),
+                );
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _showActionsSheet(Conversation conv) {
+  void _showActionsSheet(ConversationDto conv) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -208,11 +218,6 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 _SheetActionItem(
-                  icon: conv.isPinned ? Icons.push_pin_outlined : Icons.push_pin,
-                  label: conv.isPinned ? '取消置顶' : '置顶',
-                  onTap: () => Navigator.pop(sheetContext),
-                ),
-                _SheetActionItem(
                   icon: Icons.edit_outlined,
                   label: '重命名',
                   onTap: () => Navigator.pop(sheetContext),
@@ -234,7 +239,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
 }
 
 class _ConversationItem extends StatelessWidget {
-  final Conversation conversation;
+  final ConversationDto conversation;
   final String timeText;
   final VoidCallback onTap;
   final VoidCallback onMore;
@@ -248,14 +253,6 @@ class _ConversationItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final character = MockData.characters.firstWhere(
-      (c) => c.id == conversation.characterId,
-      orElse: () => MockData.characters.first,
-    );
-    final avatarColor = Color(
-      int.parse('FF${character.avatarColor.replaceAll('#', '')}', radix: 16),
-    );
-
     return GestureDetector(
       onTap: onTap,
       onLongPress: onMore,
@@ -276,12 +273,12 @@ class _ConversationItem extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: avatarColor,
+                color: context.accentPrimary,
                 shape: BoxShape.circle,
               ),
               child: Center(
                 child: Text(
-                  character.avatarInitial,
+                  conversation.title.isNotEmpty ? conversation.title[0] : '?',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -295,27 +292,19 @@ class _ConversationItem extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      if (conversation.isPinned) ...[
-                        Icon(Icons.push_pin, size: 12, color: context.accentPrimary),
-                        const SizedBox(width: 4),
-                      ],
-                      Flexible(
-                        child: Text(
-                          conversation.title,
-                          style: AppTypography.body(context).copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  Flexible(
+                    child: Text(
+                      conversation.title,
+                      style: AppTypography.body(context).copyWith(
+                        fontWeight: FontWeight.w500,
                       ),
-                    ],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    conversation.lastMessage,
+                    '${conversation.messageCount} 条消息',
                     style: AppTypography.caption(context),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

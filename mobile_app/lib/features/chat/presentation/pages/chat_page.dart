@@ -9,8 +9,8 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -20,15 +20,9 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
-  late List<ChatMessage> _messages;
+  final List<ChatMessage> _messages = [];
   final _scrollController = ScrollController();
   final Map<String, String> _agentTaskStatus = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _messages = List.from(MockData.chatMessages);
-  }
 
   @override
   void dispose() {
@@ -122,26 +116,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _replyAfter(ChatMessage userMessage) {
-    final String reply;
-    switch (userMessage.type) {
-      case MessageType.file:
-        reply = '收到你的文件「${userMessage.fileName ?? ''}」，需要我帮你分析或处理吗？';
-      case MessageType.image:
-        reply = '收到图片，我看了一下，内容看起来很清晰。需要我帮你做点什么吗？';
-      default:
-        if (userMessage.content.startsWith('__mock:audio|')) {
-          reply = '收到你的语音消息，我已听取。';
-        } else if (userMessage.content.startsWith('__mock:emote|')) {
-          reply = '😊';
-        } else if (userMessage.content.startsWith('__mock:code|')) {
-          reply = '收到代码，我帮你检查了一下，语法没有问题。需要解释或优化建议吗？';
-        } else {
-          reply = '收到你的消息了，让我想想怎么回复你……';
-        }
+    final chatApi = ref.read(chatServiceProvider);
+    final content = userMessage.content;
+
+    String strippedContent = content;
+    if (content.startsWith('__mock:audio|')) {
+      strippedContent = '[语音消息]';
+    } else if (content.startsWith('__mock:emote|')) {
+      strippedContent = '[表情]';
+    } else if (content.startsWith('__mock:code|')) {
+      strippedContent = content.substring('__mock:code|'.length);
     }
-    Future.delayed(const Duration(milliseconds: 600), () {
+
+    chatApi.chat(strippedContent).then((response) {
       if (!mounted) return;
       final replyTime = DateTime.now();
+      String reply = '已收到你的消息';
+      if (response != null) {
+        reply = response['reply'] as String? ??
+            response['content'] as String? ??
+            response['message'] as String? ??
+            '已收到你的消息';
+      }
       setState(() {
         _messages.add(
           ChatMessage(
@@ -150,6 +146,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             type: MessageType.text,
             content: reply,
             time: replyTime,
+          ),
+        );
+      });
+      _scrollToBottom();
+    }).catchError((err) {
+      if (!mounted) return;
+      final replyTime = DateTime.now();
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            id: 'a${replyTime.millisecondsSinceEpoch}',
+            role: MessageRole.assistant,
+            type: MessageType.text,
+            content: '连接失败: ${err.toString().replaceFirst('Exception: ', '')}',
+            time: replyTime,
+            status: MessageStatus.error,
           ),
         );
       });
@@ -352,10 +364,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
     final characterId = ref.watch(currentCharacterIdProvider);
-    final character = MockData.characters.firstWhere(
-      (c) => c.id == characterId,
-      orElse: () => MockData.characters.first,
+    final charactersAsync = ref.watch(characterListProvider);
+
+    final character = charactersAsync.when(
+      loading: () => null,
+      error: (_, __) => null,
+      data: (characters) {
+        return characters.where((c) => c.id == characterId).firstOrNull;
+      },
     );
+
+    final avatarInitial = character?.name.isNotEmpty == true ? character!.name[0] : '?';
+    final avatarColor = Color((character!.name.hashCode & 0xFFFFFF) | 0xFF000000);
+    final characterName = character?.name ?? '';
 
     return AmitiaScaffold(
       resizeToAvoidBottomInset: false,
@@ -381,9 +402,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             return AmitiaMessageBubble(
                               message: message,
                               showAvatar: _shouldShowAvatar(index),
-                              avatarInitial: character.avatarInitial,
-                              avatarColor: character.avatarColor,
-                              characterName: character.name,
+                              avatarInitial: avatarInitial,
+                              avatarColor: avatarColor,
+                              characterName: characterName,
                               onRetry: message.status == MessageStatus.error
                                   ? () => _retryMessage(index)
                                   : null,
@@ -441,7 +462,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             right: 0,
             child: _ChatTopBar(
               onOpenDrawer: () => _openDrawer(context),
-              onNewConversation: () => context.go(AppRoutes.chat),
+              onNewConversation: () {
+                final chatApi = ref.read(chatServiceProvider);
+                chatApi.createConversation(characterId).then((conv) {
+                  if (conv != null && mounted) {
+                    setState(() {
+                      _messages.clear();
+                      _agentTaskStatus.clear();
+                    });
+                  }
+                });
+              },
               onMore: () => _showChatActionsSheet(context),
             ),
           ),

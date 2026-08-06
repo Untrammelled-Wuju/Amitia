@@ -8,10 +8,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "github.com/glebarez/sqlite"
@@ -27,10 +28,9 @@ func createR65Junction(t *testing.T, junctionPath string, targetPath string) {
 	if err := os.MkdirAll(targetPath, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	command := fmt.Sprintf(`mklink /J "%s" "%s"`, junctionPath, targetPath)
 	output, err := exec.Command("cmd.exe", "/d", "/c", "mklink", "/J", junctionPath, targetPath).CombinedOutput()
 	if err != nil {
-		t.Fatalf("create Junction: command=%s err=%v; output=%s", command, err, string(output))
+		t.Fatalf("create junction: %v; output=%s", err, string(output))
 	}
 	t.Cleanup(func() { _ = os.Remove(junctionPath) })
 }
@@ -147,7 +147,7 @@ func TestR6_5_PublishRestoreFileRejectsSourceJunction(t *testing.T) {
 		t.Fatalf("prepare must succeed: %v", err)
 	}
 
-	err = publishRestoreFileNoReplace(junctionSource, validated, hash)
+	err = publishRestoreFileNoReplace(extRoot, junctionSource, validated, hash)
 	if err == nil {
 		t.Fatal("must reject publish from a junction/reparse point source")
 	}
@@ -265,5 +265,163 @@ func TestR6_5_RejectsMountPointInsertedAfterPrepare(t *testing.T) {
 	defer os.Rename(filepath.Dir(target), mountPoint)
 	if err := revalidateRestorePathProof(validated, true); err == nil {
 		t.Fatal("mount point inserted after prepare must be rejected")
+	}
+}
+
+func TestR65RejectsJunctionInIntermediateParent(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+	outside := filepath.Join(filepath.Dir(extRoot), "r65-outside-intermediate")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+
+	safeDir := filepath.Join(extRoot, "safe")
+	if err := os.MkdirAll(safeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	junction := filepath.Join(safeDir, "junction")
+	createR65Junction(t, junction, outside)
+
+	target := filepath.Join(junction, "child", "file.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err == nil {
+		_ = validated.Close()
+		t.Fatal("junction in intermediate parent must be rejected before handle acquisition")
+	}
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeResourceRestoreReparsePointForbidden {
+		t.Fatalf("expected PackageErrCodeResourceRestoreReparsePointForbidden, got %v", err)
+	}
+}
+
+func TestR65RejectsJunctionAsSourceParent(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+	outside := filepath.Join(filepath.Dir(extRoot), "r65-outside-source-parent")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+
+	safeDir := filepath.Join(extRoot, "safe")
+	if err := os.MkdirAll(safeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	junction := filepath.Join(safeDir, "junction")
+	createR65Junction(t, junction, outside)
+
+	body := []byte("source body")
+	if err := os.WriteFile(filepath.Join(outside, "source.bin"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(junction, "source.bin")
+
+	target := filepath.Join(extRoot, "target.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	hash := r65HashContent(body)
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash)
+	if err == nil {
+		t.Fatal("junction as source parent must be rejected")
+	}
+	var pkgErr *PackageError
+	if !errors.As(err, &pkgErr) || pkgErr.Code != PackageErrCodeResourceRestoreReparsePointForbidden {
+		t.Fatalf("expected PackageErrCodeResourceRestoreReparsePointForbidden, got %v", err)
+	}
+}
+
+func TestR65RejectsJunctionInsertedAfterValidation(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+	target := filepath.Join(extRoot, "target.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+
+	srcDir := filepath.Join(extRoot, "src-dir")
+	if err := os.MkdirAll(srcDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(filepath.Dir(extRoot), "r65-outside-late")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+
+	backup := srcDir + ".backup"
+	if err := os.Rename(srcDir, backup); err != nil {
+		t.Fatal(err)
+	}
+	createR65Junction(t, srcDir, outside)
+	t.Cleanup(func() { _ = os.Rename(backup, srcDir) })
+
+	body := []byte("late junction body")
+	if err := os.WriteFile(filepath.Join(outside, "source.bin"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(srcDir, "source.bin")
+
+	hash := r65HashContent(body)
+	err = publishRestoreFileNoReplace(extRoot, sourcePath, validated, hash)
+	if err == nil {
+		t.Fatal("junction inserted after validation must be rejected")
+	}
+}
+
+func TestR65PublishDoesNotFollowJunctionToOutside(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+	outside := filepath.Join(filepath.Dir(extRoot), "r65-outside-publish")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+
+	safeDir := filepath.Join(extRoot, "safe")
+	if err := os.MkdirAll(safeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	junction := filepath.Join(safeDir, "junction")
+	createR65Junction(t, junction, outside)
+
+	sourcePath := filepath.Join(safeDir, "source.bin")
+	body := []byte("publish body")
+	if err := os.WriteFile(sourcePath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	target := filepath.Join(junction, "child", "file.bin")
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err == nil {
+		_ = validated.Close()
+		t.Fatal("target behind junction must be rejected before publish")
+	}
+
+	entries, readErr := os.ReadDir(outside)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, entry := range entries {
+		if entry.Name() == "child" ||
+			entry.Name() == "file.bin" ||
+			strings.Contains(entry.Name(), ".amitia-restore-") {
+			t.Fatalf("junction escape: outside directory contains %s", entry.Name())
+		}
+	}
+}
+
+func TestR65WindowsDirectorySyncDoesNotRequireFlushFileBuffers(t *testing.T) {
+	_, extRoot := r65NewSnapshotStore(t)
+	directory, err := openPlatformRestoreRoot(extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer directory.close()
+	if err := directory.sync(); err != nil {
+		t.Fatalf("Windows directory sync must not require FlushFileBuffers: %v", err)
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/plugin_migration"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/skill_migration"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
@@ -1027,7 +1028,7 @@ func verifyDevModeConsole(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("dev_mode.WorkspaceRegistry must not be nil")
 	}
 
-	pipeline := dev_mode.NewRebuildPipeline("node")
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver())
 	if pipeline == nil {
 		return nil, fmt.Errorf("dev_mode.RebuildPipeline must not be nil")
 	}
@@ -1267,7 +1268,7 @@ func verifySDKCLI(ctx context.Context) ([]string, error) {
 	if registry == nil {
 		return nil, fmt.Errorf("dev_mode.WorkspaceRegistry must not be nil for SDK/CLI workflow")
 	}
-	pipeline := dev_mode.NewRebuildPipeline("node")
+	pipeline := dev_mode.NewRebuildPipeline(script_host.UnavailableNodeResolver())
 	if pipeline == nil {
 		return nil, fmt.Errorf("dev_mode.RebuildPipeline must not be nil for CLI build workflow")
 	}

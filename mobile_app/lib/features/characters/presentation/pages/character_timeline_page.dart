@@ -9,38 +9,15 @@ import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class CharacterTimelinePage extends ConsumerStatefulWidget {
+class CharacterTimelinePage extends ConsumerWidget {
   final String characterId;
 
   const CharacterTimelinePage({super.key, required this.characterId});
 
   @override
-  ConsumerState<CharacterTimelinePage> createState() => _CharacterTimelinePageState();
-}
-
-class _CharacterTimelinePageState extends ConsumerState<CharacterTimelinePage> {
-  late List<TimelineEvent> _events;
-
-  @override
-  void initState() {
-    super.initState();
-    _events = MockCharacters.timelineEvents(widget.characterId);
-  }
-
-  Map<String, List<TimelineEvent>> get _groupedEvents {
-    final groups = <String, List<TimelineEvent>>{};
-    for (final e in _events) {
-      final dateKey = _formatDate(e.time);
-      groups.putIfAbsent(dateKey, () => []).add(e);
-    }
-    return groups;
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '时间线',
@@ -56,26 +33,62 @@ class _CharacterTimelinePageState extends ConsumerState<CharacterTimelinePage> {
       ),
       body: SafeArea(
         top: false,
-        child: _events.isEmpty
-            ? AmitiaEmptyState(
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _loadTimeline(ref),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('加载失败: ${snapshot.error}'));
+            }
+            final events = snapshot.data ?? [];
+            if (events.isEmpty) {
+              return AmitiaEmptyState(
                 icon: Icons.timeline,
                 title: '暂无时间线事件',
                 subtitle: '角色互动后将自动生成时间线',
-              )
-            : ListView(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                children: [
-                  ..._groupedEvents.entries.map((entry) {
-                    return _buildDateGroup(context, entry.key, entry.value);
-                  }),
-                  const SizedBox(height: AppSpacing.xxl),
-                ],
-              ),
+              );
+            }
+            final grouped = _groupEventsByDate(events);
+            return ListView(
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              children: [
+                ...grouped.entries.map((entry) => _buildDateGroup(context, entry.key, entry.value)),
+                const SizedBox(height: AppSpacing.xxl),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildDateGroup(BuildContext context, String date, List<TimelineEvent> events) {
+  Future<List<Map<String, dynamic>>> _loadTimeline(WidgetRef ref) async {
+    final memorySvc = ref.read(memoryServiceProvider);
+    final timelineData = await memorySvc.timeline();
+    final companionSvc = ref.read(companionServiceProvider);
+    final fixedEvents = await companionSvc.todaySchedule();
+    final allEvents = <Map<String, dynamic>>[...timelineData, ...fixedEvents];
+    allEvents.sort((a, b) {
+      final timeA = DateTime.tryParse(a['time']?.toString() ?? '') ?? DateTime(2000);
+      final timeB = DateTime.tryParse(b['time']?.toString() ?? '') ?? DateTime(2000);
+      return timeB.compareTo(timeA);
+    });
+    return allEvents;
+  }
+
+  Map<String, List<Map<String, dynamic>>> _groupEventsByDate(List<Map<String, dynamic>> events) {
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final e in events) {
+      final time = DateTime.tryParse(e['time']?.toString() ?? '') ?? DateTime.now();
+      final dateKey = _formatDate(time);
+      groups.putIfAbsent(dateKey, () => []).add(e);
+    }
+    return groups;
+  }
+
+  Widget _buildDateGroup(BuildContext context, String date, List<Map<String, dynamic>> events) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -115,7 +128,13 @@ class _CharacterTimelinePageState extends ConsumerState<CharacterTimelinePage> {
     );
   }
 
-  Widget _buildTimelineItem(BuildContext context, TimelineEvent event) {
+  Widget _buildTimelineItem(BuildContext context, Map<String, dynamic> event) {
+    final time = DateTime.tryParse(event['time']?.toString() ?? '') ?? DateTime.now();
+    final type = event['type']?.toString() ?? '互动';
+    final title = event['title']?.toString() ?? event['name']?.toString() ?? '';
+    final description = event['description']?.toString() ?? '';
+    final emotion = event['emotion']?.toString();
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
@@ -125,7 +144,7 @@ class _CharacterTimelinePageState extends ConsumerState<CharacterTimelinePage> {
             width: 42,
             padding: const EdgeInsets.only(top: 14),
             child: Text(
-              '${event.time.hour.toString().padLeft(2, '0')}:${event.time.minute.toString().padLeft(2, '0')}',
+              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
               style: AppTypography.label(context),
               textAlign: TextAlign.center,
             ),
@@ -137,7 +156,7 @@ class _CharacterTimelinePageState extends ConsumerState<CharacterTimelinePage> {
               width: 10,
               height: 10,
               decoration: BoxDecoration(
-                color: _getTypeColor(context, event.type),
+                color: _getTypeColor(context, type),
                 shape: BoxShape.circle,
                 border: Border.all(color: context.surfacePrimary, width: 2),
               ),
@@ -151,82 +170,28 @@ class _CharacterTimelinePageState extends ConsumerState<CharacterTimelinePage> {
                 children: [
                   Row(
                     children: [
-                      Icon(_getTypeIcon(event.type), size: 16, color: _getTypeColor(context, event.type)),
+                      Icon(_getTypeIcon(type), size: 16, color: _getTypeColor(context, type)),
                       const SizedBox(width: AppSpacing.xs),
                       Expanded(
-                        child: Text(event.title, style: AppTypography.cardTitle(context)),
+                        child: Text(title, style: AppTypography.cardTitle(context)),
                       ),
-                      AmitiaStatusBadge(label: event.type, type: _getTypeBadge(event.type)),
+                      AmitiaStatusBadge(label: type, type: _getTypeBadge(type)),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(event.description, style: AppTypography.caption(context)),
-                  if (event.emotion != null) ...[
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(description, style: AppTypography.caption(context)),
+                  ],
+                  if (emotion != null) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
                         Icon(Icons.mood_outlined, size: 14, color: context.warning),
                         const SizedBox(width: 4),
-                        Text('情绪：${event.emotion}', style: AppTypography.label(context).copyWith(color: context.warning)),
+                        Text('情绪：$emotion', style: AppTypography.label(context).copyWith(color: context.warning)),
                       ],
                     ),
                   ],
-                  const SizedBox(height: AppSpacing.sm),
-                  Row(
-                    children: [
-                      if (event.type == '记忆')
-                        GestureDetector(
-                          onTap: () => context.push(AppRoutes.memoryManager),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: context.accentSoft,
-                              borderRadius: AppRadius.brTag,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.memory, size: 12, color: context.accentPrimary),
-                                const SizedBox(width: 4),
-                                Text('查看记忆', style: TextStyle(fontSize: 11, color: context.accentPrimary)),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        GestureDetector(
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('查看「${event.title}」详情'), duration: const Duration(seconds: 1)),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: context.accentSoft,
-                              borderRadius: AppRadius.brTag,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.info_outline, size: 12, color: context.accentPrimary),
-                                const SizedBox(width: 4),
-                                Text('详情', style: TextStyle(fontSize: 11, color: context.accentPrimary)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已收藏'), duration: Duration(seconds: 1)),
-                          );
-                        },
-                        child: Icon(Icons.bookmark_border, size: 16, color: context.textTertiary),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),

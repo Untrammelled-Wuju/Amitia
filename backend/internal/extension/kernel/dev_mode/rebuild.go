@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
 type RevisionID string
@@ -59,26 +61,26 @@ type BuildOptions struct {
 }
 
 type RebuildPipeline struct {
-	mu         sync.Mutex
-	registry   *WorkspaceRegistry
-	revisions  map[WorkspaceID]RevisionID
-	building   map[WorkspaceID]bool
-	history    map[WorkspaceID][]Revision
-	maxHistory int
-	nodePath   string
-	tscPath    string
+	mu                      sync.Mutex
+	registry                *WorkspaceRegistry
+	revisions               map[WorkspaceID]RevisionID
+	building                map[WorkspaceID]bool
+	history                 map[WorkspaceID][]Revision
+	maxHistory              int
+	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
+	tscPath                 string
 }
 
-func NewRebuildPipeline(nodePath string) *RebuildPipeline {
-	if nodePath == "" {
-		nodePath = "node"
+func NewRebuildPipeline(nodeResolver script_host.NodeEnvironmentResolver) *RebuildPipeline {
+	if nodeResolver == nil {
+		nodeResolver = script_host.UnavailableNodeResolver()
 	}
 	return &RebuildPipeline{
-		revisions:  make(map[WorkspaceID]RevisionID),
-		building:   make(map[WorkspaceID]bool),
-		history:    make(map[WorkspaceID][]Revision),
-		maxHistory: 10,
-		nodePath:   nodePath,
+		revisions:               make(map[WorkspaceID]RevisionID),
+		building:                make(map[WorkspaceID]bool),
+		history:                 make(map[WorkspaceID][]Revision),
+		maxHistory:              10,
+		nodeEnvironmentResolver: nodeResolver,
 	}
 }
 
@@ -233,23 +235,46 @@ func (p *RebuildPipeline) compileTypeScript(ctx context.Context, workspacePath, 
 
 	p.mu.Lock()
 	tsc := p.tscPath
-	nodeBin := p.nodePath
+	resolver := p.nodeEnvironmentResolver
 	p.mu.Unlock()
 
 	if tsc == "" {
-		candidate := filepath.Join(workspacePath, "node_modules", "typescript", "bin", "tsc")
-		if _, err := os.Stat(candidate); err == nil {
-			tsc = candidate
-		} else {
-			tsc = "tsc"
+		candidates := []string{
+			filepath.Join(workspacePath, "node_modules", "typescript", "bin", "tsc"),
+			filepath.Join(workspacePath, "node_modules", "typescript", "bin", "tsc.js"),
+		}
+		tsc = ""
+		for _, cand := range candidates {
+			if info, err := os.Stat(cand); err == nil && !info.IsDir() && isTSCJSFile(cand) {
+				tsc = cand
+				break
+			}
+		}
+		if tsc == "" {
+			return []BuildError{{
+				Message: "TypeScript compiler not found in workspace",
+				Code:    "typescript_compiler_not_found",
+			}}
+		}
+	} else {
+		if err := validateTSCPath(tsc); err != nil {
+			return []BuildError{{
+				Message: err.Error(),
+				Code:    "typescript_compiler_invalid",
+			}}
 		}
 	}
-	if nodeBin == "" {
-		nodeBin = "node"
+
+	nodeEnv, err := resolver.Resolve(ctx)
+	if err != nil {
+		return []BuildError{{
+			Message: fmt.Sprintf("node environment unavailable: %v", err),
+			Code:    "node_environment_unavailable",
+		}}
 	}
 
 	args := []string{tsc, "--project", workspacePath, "--outDir", outputPath, "--sourceMap"}
-	cmd := exec.CommandContext(ctx, nodeBin, args...)
+	cmd := exec.CommandContext(ctx, nodeEnv.NodeBinary, args...)
 	cmd.Dir = workspacePath
 	var combined bytes.Buffer
 	cmd.Stdout = &combined
@@ -266,6 +291,36 @@ func (p *RebuildPipeline) compileTypeScript(ctx context.Context, workspacePath, 
 		}}
 	}
 	return parseTSCErrors(out)
+}
+
+func isTSCJSFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".js", ".mjs", ".cjs":
+		return true
+	}
+	return false
+}
+
+func validateTSCPath(tsc string) error {
+	tsc = strings.TrimSpace(tsc)
+	if tsc == "" {
+		return errors.New("tsc path is empty")
+	}
+	if !filepath.IsAbs(tsc) {
+		return errors.New("tsc path must be absolute: " + tsc)
+	}
+	info, err := os.Stat(tsc)
+	if err != nil {
+		return fmt.Errorf("tsc path not found: %s: %w", tsc, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("tsc path is a directory: %s", tsc)
+	}
+	if !isTSCJSFile(tsc) {
+		return fmt.Errorf("tsc path has unsupported extension: %s", filepath.Ext(tsc))
+	}
+	return nil
 }
 
 var tscErrorRe = regexp.MustCompile(`^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$`)

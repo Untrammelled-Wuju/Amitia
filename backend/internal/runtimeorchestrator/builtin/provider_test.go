@@ -170,22 +170,22 @@ func TestQdrantProviderStopIsIdempotent(t *testing.T) {
 }
 
 type fakeSurrealDep struct {
-	mu              sync.Mutex
-	startCalls      int
-	waitCalls       int
-	clientCalls     int
-	svcCalls        int
-	monitorCalls    int
+	mu               sync.Mutex
+	startCalls       int
+	waitCalls        int
+	clientCalls      int
+	svcCalls         int
+	monitorCalls     int
 	stopMonitorCalls int
-	stopCalls       int
-	setShuttingDown int
-	cfg             config.SurrealConfig
-	startErr        error
-	waitErr         error
-	lastSvc         graph.Service
-	restartCb       func()
-	healthErr       error
-	newClientFn     func(config.SurrealConfig) (*graph.Client, error)
+	stopCalls        int
+	setShuttingDown  int
+	cfg              config.SurrealConfig
+	startErr         error
+	waitErr          error
+	lastSvc          graph.Service
+	restartCb        func()
+	healthErr        error
+	newClientFn      func(config.SurrealConfig) (*graph.Client, error)
 }
 
 func (f *fakeSurrealDep) NewClient(cfg config.SurrealConfig) (*graph.Client, error) {
@@ -255,7 +255,7 @@ func (f *fakeSurrealDep) HealthCheck(ctx context.Context, cfg config.SurrealConf
 type fakeGraphService struct{}
 
 func (*fakeGraphService) SyncNode(_, _ string, _ string, _ map[string]interface{}) error { return nil }
-func (*fakeGraphService) SyncEdge(_, _ string, _ string, _ float64) error               { return nil }
+func (*fakeGraphService) SyncEdge(_, _ string, _ string, _ float64) error                { return nil }
 func (*fakeGraphService) DeleteNode(_ string) error                                      { return nil }
 func (*fakeGraphService) DeleteNodeIfOrphan(_ string) error                              { return nil }
 func (*fakeGraphService) DeleteNodesByProperty(_, _ string, _ string) error              { return nil }
@@ -265,7 +265,7 @@ func (*fakeGraphService) QueryNeighbors(_ string, _ int, _ string) (map[string]i
 func (*fakeGraphService) FindPaths(_, _ string, _ int) ([]map[string]interface{}, error) {
 	return nil, nil
 }
-func (*fakeGraphService) DeleteOrphanNodes() error                      { return nil }
+func (*fakeGraphService) DeleteOrphanNodes() error                          { return nil }
 func (*fakeGraphService) GetStats(_ string) (map[string]interface{}, error) { return nil, nil }
 func (*fakeGraphService) GetAllNodes(_ string) ([]map[string]interface{}, error) {
 	return nil, nil

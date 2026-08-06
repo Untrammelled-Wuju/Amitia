@@ -3,6 +3,8 @@
 package qdrant
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,70 +12,92 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/runtimehost"
-	"github.com/u-ai/backend/log"
-	"github.com/u-ai/backend/pkg/platform"
+	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
 	"github.com/u-ai/backend/pkg/util"
 )
 
-// BuildQdrantProcessSpec prepares the Qdrant ProcessSpec but does NOT start Qdrant.
-// The caller (typically a runtimehost.ProcessSupervisor-based provider) handles actual execution.
-func BuildQdrantProcessSpec(instanceID string) (runtimehost.ProcessSpec, error) {
+// BuildQdrantProcessSpec prepares the Qdrant ProcessSpec using the runtimehost to resolve binary paths via qdrantenv.
+// It does NOT start Qdrant; the caller (typically a ProcessSupervisor-based adapter) handles execution and lifecycle.
+func BuildQdrantProcessSpec(host runtimehost.RuntimeHost) (runtimehost.ProcessSpec, error) {
+	if host == nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("BuildQdrantProcessSpec: host is nil")
+	}
+	if config.AppCfg == nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("BuildQdrantProcessSpec: config.AppCfg is nil")
+	}
+
+	instanceID := host.RuntimeInstanceID()
 	if instanceID == "" {
 		instanceID = "qdrant-unsigned"
 	}
-	cfg := config.AppCfg.Providers.VectorStore.Qdrant
-	workDir := util.RuntimeRoot()
-	qdrantDir := filepath.Join(workDir, "qdrant")
-	configDir := filepath.Join(qdrantDir, "config")
-	configPath := filepath.Join(configDir, "config.yaml")
 
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("create qdrant config dir: %w", err)
+	vectorCfg := &config.AppCfg.Providers.VectorStore
+
+	resolver, err := qdrantenv.NewResolver(qdrantenv.ResolveContext{
+		Config: config.AppCfg,
+		Host:   host,
+	})
+	if err != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("create qdrantenv resolver: %w", err)
 	}
 
-	configContent := fmt.Sprintf("service:\n  http_port: %d\n  grpc_port: %d\nstorage:\n  storage_path: %s\n",
-		cfg.Port, cfg.Port+1, resolveQdrantDataDir(qdrantDir))
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("write qdrant config: %w", err)
-	}
-
-	qdrantPath := resolveQdrantBinaryPath(qdrantDir)
-	if _, err := os.Stat(qdrantPath); os.IsNotExist(err) {
-		if err := ensureQdrantBinary(qdrantPath, qdrantDir); err != nil {
-			return runtimehost.ProcessSpec{}, err
+	env, err := resolver.Resolve(context.Background())
+	if err != nil {
+		if errors.Is(err, qdrantenv.ErrQdrantBinaryNotInstalled) && !env.Explicit {
+			installer := qdrantenv.NewInstaller(nil, util.UnzipFile)
+			if instErr := installer.EnsureInstalled(qdrantenv.InstallRequest{Target: env}); instErr != nil {
+				return runtimehost.ProcessSpec{}, fmt.Errorf("ensure qdrant installed: %w", instErr)
+			}
+			resolver.Invalidate()
+			env, err = resolver.Resolve(context.Background())
+		}
+		if err != nil {
+			return runtimehost.ProcessSpec{}, fmt.Errorf("resolve qdrant environment: %w", err)
 		}
 	}
 
+	if env.BinaryPath == "" {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("BuildQdrantProcessSpec: resolved binary path is empty")
+	}
+	if env.DistributionRoot == "" {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("BuildQdrantProcessSpec: resolved distribution root is empty")
+	}
+
+	qdrantDir := env.DistributionRoot
+	configDir := filepath.Join(qdrantDir, "config")
+	configPath := filepath.Join(configDir, "config.yaml")
+
+	if mkErr := os.MkdirAll(configDir, 0755); mkErr != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("create qdrant config dir: %w", mkErr)
+	}
+
+	configContent := fmt.Sprintf("service:\n  http_port: %d\n  grpc_port: %d\nstorage:\n  storage_path: %s\n",
+		vectorCfg.Qdrant.Port, vectorCfg.Qdrant.Port+1, resolveQdrantDataDir(qdrantDir))
+	if wErr := os.WriteFile(configPath, []byte(configContent), 0644); wErr != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("write qdrant config: %w", wErr)
+	}
+
 	dataDir := resolveQdrantDataDir(qdrantDir)
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("create qdrant data dir: %w", err)
+	if mkErr := os.MkdirAll(dataDir, 0755); mkErr != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("create qdrant data dir: %w", mkErr)
 	}
 
-	workingDir := resolveQdrantWorkDir(qdrantDir)
-	if !filepath.IsAbs(workingDir) {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("working_dir must be absolute: %s", workingDir)
-	}
-	if !filepath.IsAbs(qdrantPath) {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("executable must be absolute: %s", qdrantPath)
-	}
-
-	healthURL := fmt.Sprintf("http://127.0.0.1:%d/readyz", cfg.Port)
+	healthURL := fmt.Sprintf("http://127.0.0.1:%d/readyz", vectorCfg.Qdrant.Port)
 
 	return runtimehost.ProcessSpec{
 		ID:         runtimehost.ProcessIDQdrant,
-		Executable: qdrantPath,
+		Executable: env.BinaryPath,
 		Args:       []string{"--config-path", configPath},
-		WorkingDir: workingDir,
+		WorkingDir: qdrantDir,
 		Environment: runtimehost.EnvironmentSpec{
 			Policy: runtimehost.EnvPolicyMinimal,
 			Values: map[string]string{
 				"AMITIA_PROCESS_ID":          "amitia.qdrant",
 				"AMITIA_RUNTIME_INSTANCE_ID": instanceID,
-				"AMITIA_HOST_PLATFORM":       string(platform.Get().Descriptor().Host),
 			},
 		},
 		Ports: []runtimehost.LoopbackPortClaim{
-			{Host: "127.0.0.1", Port: cfg.Port, Protocol: "tcp"},
+			{Host: "127.0.0.1", Port: vectorCfg.Qdrant.Port, Protocol: "tcp"},
 		},
 		StartupTimeout:  runtimehost.DefaultStartupTimeout,
 		StopGracePeriod: runtimehost.DefaultStopGracePeriod,
@@ -86,15 +110,15 @@ func BuildQdrantProcessSpec(instanceID string) (runtimehost.ProcessSpec, error) 
 			MaxDelay:    30 * time.Second,
 			ResetAfter:  5 * time.Minute,
 		},
-		OnStdout: func(line string) {
-			if line != "" {
-				log.Info("[Qdrant]", line)
-			}
-		},
-		OnStderr: func(line string) {
-			if line != "" {
-				log.Error("[Qdrant]", line)
-			}
-		},
 	}, nil
+}
+
+func resolveQdrantDataDir(qdrantDir string) string {
+	if cfgDir := config.AppCfg.Providers.VectorStore.Qdrant.DataDir; cfgDir != "" {
+		if filepath.IsAbs(cfgDir) {
+			return cfgDir
+		}
+		return filepath.Join(qdrantDir, cfgDir)
+	}
+	return filepath.Join(qdrantDir, "data")
 }

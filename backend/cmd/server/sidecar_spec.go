@@ -36,7 +36,7 @@ func buildWeChatSidecarSpec(instanceID string) (runtimehost.ProcessSpec, error) 
 	var (
 		workingDir string
 		executable string
-		args      []string
+		args       []string
 	)
 	if inBundle {
 		bundledRoot := runtimeRoot
@@ -117,7 +117,7 @@ func buildQQSidecarSpec(instanceID string) (runtimehost.ProcessSpec, error) {
 	var (
 		workingDir string
 		executable string
-		args      []string
+		args       []string
 	)
 	if inBundle {
 		bundledRoot := runtimeRoot

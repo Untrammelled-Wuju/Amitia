@@ -8,8 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
 class UpdatesPage extends ConsumerStatefulWidget {
   const UpdatesPage({super.key});
@@ -23,9 +22,52 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
   bool _isDownloading = false;
   bool _isInstalling = false;
   bool _isInstalled = false;
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic>? _updateInfo;
+  List<Map<String, dynamic>> _updateHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final versionData = await svc.version();
+      if (mounted) {
+        if (versionData != null) {
+          _updateInfo = versionData;
+          final history = versionData['history'];
+          if (history is List) {
+            _updateHistory = history.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        setState(() {
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
         title: '更新中心',
@@ -41,7 +83,7 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
             const SizedBox(height: AppSpacing.xl),
             const AmitiaSectionHeader(title: '更新历史'),
             const SizedBox(height: AppSpacing.sm),
-            ...MockKernel.updateHistory.map((u) => _buildHistoryItem(context, u)),
+            ..._updateHistory.map((u) => _buildHistoryItem(context, u)),
           ],
         ),
       ),
@@ -49,7 +91,9 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
   }
 
   Widget _buildAvailableUpdateCard(BuildContext context) {
-    final update = MockKernel.availableUpdate;
+    final version = _updateInfo?['version'] as String? ?? '1.0.0';
+    final releaseDate = _updateInfo?['release_date'] as String? ?? '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
@@ -74,9 +118,9 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('v${update.version}', style: AppTypography.cardTitle(context).copyWith(fontSize: 18)),
+                      Text('v$version', style: AppTypography.cardTitle(context).copyWith(fontSize: 18)),
                       const SizedBox(height: 2),
-                      Text('发布于 ${_formatDate(update.date)}', style: AppTypography.caption(context)),
+                      Text('发布于 $releaseDate', style: AppTypography.caption(context)),
                     ],
                   ),
                 ),
@@ -166,7 +210,11 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
     }).toList();
   }
 
-  Widget _buildHistoryItem(BuildContext context, UpdateInfo update) {
+  Widget _buildHistoryItem(BuildContext context, Map<String, dynamic> update) {
+    final version = update['version'] as String? ?? '';
+    final date = update['date'] as String? ?? '';
+    final status = update['status'] as String? ?? '已安装';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
@@ -176,27 +224,27 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: _historyColor(context, update.status).withValues(alpha: 0.1),
+                color: _historyColor(context, status).withValues(alpha: 0.1),
                 borderRadius: AppRadius.brSmall,
               ),
-              child: Icon(_historyIcon(update.status), size: 22, color: _historyColor(context, update.status)),
+              child: Icon(_historyIcon(status), size: 22, color: _historyColor(context, status)),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('v${update.version}', style: AppTypography.cardTitle(context)),
+                  Text('v$version', style: AppTypography.cardTitle(context)),
                   const SizedBox(height: 2),
-                  Text(update.date != null ? _formatDate(update.date) : '未知日期', style: AppTypography.label(context)),
+                  Text(date, style: AppTypography.label(context)),
                 ],
               ),
             ),
             AmitiaStatusBadge(
-              label: update.status,
-              type: update.status == '已安装'
+              label: status,
+              type: status == '已安装'
                   ? BadgeType.success
-                  : update.status == '已回滚'
+                  : status == '已回滚'
                       ? BadgeType.warning
                       : BadgeType.neutral,
             ),
@@ -226,11 +274,6 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
       default:
         return Icons.history;
     }
-  }
-
-  String _formatDate(DateTime? date) {
-    if (date == null) return '未知';
-    return '${date.year}/${date.month}/${date.day}';
   }
 
   void _startDownload() {

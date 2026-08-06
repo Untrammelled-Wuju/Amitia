@@ -902,17 +902,15 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 500, fmt.Errorf("kernel: resource %s content hash mismatch at stage content_verification: expected %s got %s", entry.Resource.ResourceID, entry.ContentHash, actualHash))
 		}
 		restorePath := resolveResourceRestorePath(entry)
-		validated, prepareErr := prepareRestoreTargetPath(restorePath, absExtRoot)
-		if prepareErr != nil {
-			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path validation failed for resource %s at stage path_validation: %w", entry.Resource.ResourceID, prepareErr))
-		}
-		publishErr := publishRestoreBytesNoReplace(validated, data, entry.ContentHash)
-		closeErr := validated.Close()
-		if publishErr != nil {
-			return NewPackageError(PackageErrCodeResourceRestoreTargetChanged, 409, fmt.Errorf("kernel: publish restored resource %s at stage publish: %w", entry.Resource.ResourceID, publishErr))
-		}
-		if closeErr != nil {
-			return NewPackageError(PackageErrCodeResourceRestoreIncomplete, 409, fmt.Errorf("kernel: close restore path handles for resource %s: %w", entry.Resource.ResourceID, closeErr))
+		if err := func() error {
+			validated, prepareErr := prepareRestoreTargetPath(restorePath, absExtRoot)
+			if prepareErr != nil {
+				return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path validation failed for resource %s at stage path_validation: %w", entry.Resource.ResourceID, prepareErr))
+			}
+			defer validated.Close()
+			return publishRestoreBytesNoReplace(validated, data, entry.ContentHash)
+		}(); err != nil {
+			return NewPackageError(PackageErrCodeResourceRestoreTargetChanged, 409, fmt.Errorf("kernel: publish restored resource %s at stage publish: %w", entry.Resource.ResourceID, err))
 		}
 	}
 	current, err := r.container.ResourceRepository.ListResources(ctx, extensionID)

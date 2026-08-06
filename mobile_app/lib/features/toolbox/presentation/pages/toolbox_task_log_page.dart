@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -6,32 +7,73 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/providers.dart';
 
-class ToolboxTaskLogPage extends StatelessWidget {
+class _TaskEntry {
+  final String name;
+  final String status;
+  final String time;
+  final String description;
+  const _TaskEntry({required this.name, required this.status, required this.time, required this.description});
+}
+
+class ToolboxTaskLogPage extends ConsumerStatefulWidget {
   const ToolboxTaskLogPage({super.key});
 
-  static const _logs = <(String, String, String, String)>[
-    ('整理下载目录', '成功', '09:32', '已整理 156 个文件，分类为 8 个文件夹'),
-    ('生成周报摘要', '成功', '09:00', '已生成本周工作摘要，包含 5 个主要进展'),
-    ('备份工作文档', '成功', '昨天 18:00', '已备份 89 个文档到指定目录'),
-    ('安装开发工具包', '已取消', '昨天 10:20', '用户取消操作'),
-    ('分析产品需求文档', '成功', '前天 16:30', '已提取 3 个模块的关键信息'),
-    ('调试 API 接口', '失败', '前天 11:30', '请求头格式错误，已记录详情'),
-  ];
+  @override
+  ConsumerState<ToolboxTaskLogPage> createState() => _ToolboxTaskLogPageState();
+}
+
+class _ToolboxTaskLogPageState extends ConsumerState<ToolboxTaskLogPage> {
+  List<_TaskEntry> _logs = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final api = ref.read(apiClientProvider);
+      final resp = await api.get<List<dynamic>>('/api/agent/tasks');
+      final items = resp.data ?? [];
+      final logs = items.map((e) {
+        final m = e as Map<String, dynamic>? ?? {};
+        return _TaskEntry(
+          name: (m['name'] ?? m['taskName'] ?? m['title'] ?? '').toString(),
+          status: (m['status'] ?? m['state'] ?? '未知').toString(),
+          time: (m['completedAt'] ?? m['updatedAt'] ?? m['time'] ?? '').toString(),
+          description: (m['result'] ?? m['description'] ?? m['message'] ?? '').toString(),
+        );
+      }).toList();
+      if (mounted) {
+        setState(() { _logs = logs; _loading = false; });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
 
   BadgeType _badge(String s) {
-    switch (s) {
-      case '成功':
-        return BadgeType.success;
-      case '失败':
-        return BadgeType.error;
-      default:
-        return BadgeType.neutral;
-    }
+    final lower = s.toLowerCase();
+    if (lower == '成功' || lower == 'success' || lower == 'completed' || lower == 'done') return BadgeType.success;
+    if (lower == '失败' || lower == 'error' || lower == 'failed') return BadgeType.error;
+    if (lower == '执行中' || lower == 'running' || lower == 'in_progress' || lower == 'processing') return BadgeType.info;
+    return BadgeType.neutral;
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState(message: '正在加载任务日志...');
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_logs.isEmpty) {
+      return const AmitiaEmptyState(icon: Icons.task_outlined, title: '暂无任务记录', subtitle: 'Agent 执行任务后将在此显示');
+    }
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '任务日志', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView.separated(
@@ -52,14 +94,14 @@ class ToolboxTaskLogPage extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Expanded(child: Text(l.$1, style: AppTypography.cardTitle(context))),
-                    AmitiaStatusBadge(label: l.$2, type: _badge(l.$2)),
+                    Expanded(child: Text(l.name, style: AppTypography.cardTitle(context))),
+                    AmitiaStatusBadge(label: l.status, type: _badge(l.status)),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(l.$4, style: AppTypography.caption(context)),
+                Text(l.description, style: AppTypography.caption(context)),
                 const SizedBox(height: 4),
-                Text('完成于 ${l.$3}', style: AppTypography.label(context)),
+                Text('完成于 ${l.time}', style: AppTypography.label(context)),
               ],
             ),
           );

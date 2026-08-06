@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ErrVectorStoreDisabled      = errors.New("qdrantenv: vector store provider disabled")
+	ErrVectorStoreDisabled       = errors.New("qdrantenv: vector store provider disabled")
 	ErrQdrantProviderNotSelected = errors.New("qdrantenv: qdrant process provider not selected")
 	ErrHostCapabilityUnsupported = errors.New("qdrantenv: host capability unsupported")
 	ErrUnsupportedGuestPlatform  = errors.New("qdrantenv: unsupported guest platform for qdrant")

@@ -229,7 +229,7 @@ func TestR6_5_PublishRestoreFileNoReplaceRemovesSource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := publishRestoreFileNoReplace(source, validated, hash); err != nil {
+	if err := publishRestoreFileNoReplace(extRoot, source, validated, hash); err != nil {
 		t.Fatalf("publishRestoreFileNoReplace must succeed: %v", err)
 	}
 

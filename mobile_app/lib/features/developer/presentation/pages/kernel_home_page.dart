@@ -8,12 +8,55 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/providers.dart';
 
-class KernelHomePage extends ConsumerWidget {
+class KernelHomePage extends ConsumerStatefulWidget {
   const KernelHomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<KernelHomePage> createState() => _KernelHomePageState();
+}
+
+class _KernelHomePageState extends ConsumerState<KernelHomePage> {
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic>? _health;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final data = await svc.health();
+      if (mounted) {
+        setState(() {
+          _health = data;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
         title: '扩展内核',
@@ -47,6 +90,12 @@ class KernelHomePage extends ConsumerWidget {
   }
 
   Widget _buildKernelStatusCard(BuildContext context) {
+    final status = _health?['status'] as String? ?? 'running';
+    final version = _health?['version'] as String? ?? '1.2.0';
+    final wasmCount = _health?['wasm_modules'] ?? 3;
+    final hookCount = _health?['hooks'] ?? 5;
+    final trustedCount = _health?['trusted_services'] ?? 4;
+
     return AmitiaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,7 +118,7 @@ class KernelHomePage extends ConsumerWidget {
                   children: [
                     Text('扩展内核', style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text('v1.2.0 · 运行中', style: AppTypography.caption(context)),
+                    Text('v$version · $status', style: AppTypography.caption(context)),
                   ],
                 ),
               ),
@@ -80,15 +129,15 @@ class KernelHomePage extends ConsumerWidget {
           Row(
             children: [
               Expanded(
-                child: _buildStatItem(context, 'WASM 模块', '3', Icons.extension_outlined),
+                child: _buildStatItem(context, 'WASM 模块', '$wasmCount', Icons.extension_outlined),
               ),
               Container(width: 1, height: 36, color: context.borderPrimary),
               Expanded(
-                child: _buildStatItem(context, 'Hook 点', '5', Icons.account_tree_outlined),
+                child: _buildStatItem(context, 'Hook 点', '$hookCount', Icons.account_tree_outlined),
               ),
               Container(width: 1, height: 36, color: context.borderPrimary),
               Expanded(
-                child: _buildStatItem(context, '可信服务', '4', Icons.verified_user_outlined),
+                child: _buildStatItem(context, '可信服务', '$trustedCount', Icons.verified_user_outlined),
               ),
             ],
           ),

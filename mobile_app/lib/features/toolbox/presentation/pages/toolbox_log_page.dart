@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -6,13 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-
-class ToolboxLogPage extends StatefulWidget {
-  const ToolboxLogPage({super.key});
-
-  @override
-  State<ToolboxLogPage> createState() => _ToolboxLogPageState();
-}
+import '../../../../core/services/providers.dart';
 
 class _LogEntry {
   final String time;
@@ -22,26 +17,53 @@ class _LogEntry {
   const _LogEntry({required this.time, required this.level, required this.module, required this.content});
 }
 
-class _ToolboxLogPageState extends State<ToolboxLogPage> {
+class ToolboxLogPage extends ConsumerStatefulWidget {
+  const ToolboxLogPage({super.key});
+
+  @override
+  ConsumerState<ToolboxLogPage> createState() => _ToolboxLogPageState();
+}
+
+class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
   final _searchCtrl = TextEditingController();
   String _levelFilter = '全部';
-  List<_LogEntry> _logs = const [
-    _LogEntry(time: '09:28:15', level: 'INFO', module: 'Backend', content: 'Go 后端服务已启动，监听 :18899'),
-    _LogEntry(time: '09:28:18', level: 'INFO', module: 'SurrealDB', content: '数据库连接成功，schema 已就绪'),
-    _LogEntry(time: '09:28:20', level: 'INFO', module: 'Qdrant', content: '向量集合 amitia_memory 加载完成，共 1284 条'),
-    _LogEntry(time: '09:29:02', level: 'WARN', module: 'MCP', content: 'MCP Runtime 未配置任何服务，相关能力不可用'),
-    _LogEntry(time: '09:30:11', level: 'DEBUG', module: 'Router', content: '路由跳转 /chat -> /settings'),
-    _LogEntry(time: '09:31:45', level: 'ERROR', module: 'LLM', content: '调用 GPT-4 超时，已切换至备选模型 Claude'),
-    _LogEntry(time: '09:32:03', level: 'INFO', module: 'Agent', content: '任务「整理下载目录」开始执行'),
-    _LogEntry(time: '09:32:50', level: 'DEBUG', module: 'FileSystem', content: '扫描完成，发现 1247 个文件'),
-    _LogEntry(time: '09:33:21', level: 'WARN', module: 'Memory', content: '情景记忆容量已达 80%，建议清理'),
-    _LogEntry(time: '09:34:00', level: 'INFO', module: 'Backend', content: '心跳检测正常，延迟 12ms'),
-  ];
+  List<_LogEntry> _logs = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final api = ref.read(apiClientProvider);
+      final resp = await api.get<List<dynamic>>('/api/system/logs');
+      final items = resp.data ?? [];
+      final logs = items.map((e) {
+        final m = e as Map<String, dynamic>? ?? {};
+        return _LogEntry(
+          time: (m['time'] ?? m['timestamp'] ?? '').toString(),
+          level: (m['level'] ?? 'INFO').toString(),
+          module: (m['module'] ?? m['source'] ?? m['service'] ?? 'System').toString(),
+          content: (m['message'] ?? m['content'] ?? m['msg'] ?? '').toString(),
+        );
+      }).toList();
+      if (mounted) {
+        setState(() { _logs = logs; _loading = false; });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
   }
 
   List<_LogEntry> get _filtered {
@@ -54,10 +76,11 @@ class _ToolboxLogPageState extends State<ToolboxLogPage> {
   }
 
   Color _levelColor(String level) {
-    switch (level) {
+    switch (level.toUpperCase()) {
       case 'ERROR':
         return Colors.red;
       case 'WARN':
+      case 'WARNING':
         return Colors.orange;
       case 'DEBUG':
         return Colors.blueGrey;
@@ -68,6 +91,9 @@ class _ToolboxLogPageState extends State<ToolboxLogPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState(message: '正在加载日志...');
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '运行日志', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: Column(
@@ -133,7 +159,7 @@ class _ToolboxLogPageState extends State<ToolboxLogPage> {
           const SizedBox(height: AppSpacing.sm),
           Expanded(
             child: _filtered.isEmpty
-                ? AmitiaEmptyState(icon: Icons.inbox_outlined, title: '暂无日志', subtitle: '尝试调整筛选或清空搜索')
+                ? const AmitiaEmptyState(icon: Icons.inbox_outlined, title: '暂无日志', subtitle: '尝试调整筛选或清空搜索')
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.xl),
                     itemCount: _filtered.length,

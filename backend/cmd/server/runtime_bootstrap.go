@@ -21,15 +21,15 @@ import (
 )
 
 type runtimeBootstrap struct {
-	host              runtimehost.RuntimeHost
-	orchestrator      *runtimeorchestrator.RuntimeOrchestrator
-	resources         *util.RuntimePaths
-	graphMu           sync.RWMutex
-	graphSvc          graph.Service
-	stopOnce          sync.Once
-	runError          error
-	processMgr        *process.DefaultProcessManager
-	nodeEnvironment   nodeenv.Resolver
+	host            runtimehost.RuntimeHost
+	orchestrator    *runtimeorchestrator.RuntimeOrchestrator
+	resources       *util.RuntimePaths
+	graphMu         sync.RWMutex
+	graphSvc        graph.Service
+	stopOnce        sync.Once
+	runError        error
+	processMgr      *process.DefaultProcessManager
+	nodeEnvironment nodeenv.Resolver
 }
 
 func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
@@ -152,17 +152,18 @@ func (a *vectorStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentD
 }
 
 func (a *vectorStoreProviderAdapter) Start(ctx context.Context) error {
-	spec, err := qdrantDB.BuildQdrantProcessSpec(a.host.RuntimeInstanceID())
+	spec, err := qdrantDB.BuildQdrantProcessSpec(a.host)
 	if err != nil {
 		return fmt.Errorf("build qdrant spec: %w", err)
 	}
-	if err := a.host.Processes().Register(spec); err != nil {
+	supervisor := a.host.Processes()
+	if err := supervisor.Register(spec); err != nil {
 		return fmt.Errorf("register qdrant process: %w", err)
 	}
-	if err := a.host.Processes().Start(ctx, spec.ID); err != nil {
+	if err := supervisor.Start(ctx, spec.ID); err != nil {
 		return fmt.Errorf("start qdrant process: %w", err)
 	}
-	if err := a.host.Processes().WaitReady(ctx, spec.ID); err != nil {
+	if err := supervisor.WaitReady(ctx, spec.ID); err != nil {
 		return fmt.Errorf("wait for qdrant ready: %w", err)
 	}
 	if err := qdrantDB.InitClient(); err != nil {

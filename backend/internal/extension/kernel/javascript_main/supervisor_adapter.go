@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package javascript_main
 
 import (
@@ -9,28 +11,31 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
 type SupervisorFactory struct {
-	factory        *RuntimeFactory
-	nodePath       string
-	pluginHostPath string
+	factory                 *RuntimeFactory
+	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
+	hostArtifactResolver    script_host.ArtifactResolver
 }
 
-func NewSupervisorFactory(factory *RuntimeFactory, nodePath, pluginHostPath string) *SupervisorFactory {
-	return &SupervisorFactory{
-		factory:        factory,
-		nodePath:       nodePath,
-		pluginHostPath: pluginHostPath,
+func NewSupervisorFactory(
+	factory *RuntimeFactory,
+	nodeResolver script_host.NodeEnvironmentResolver,
+	artifactResolver script_host.ArtifactResolver,
+) *SupervisorFactory {
+	if nodeResolver == nil {
+		nodeResolver = script_host.UnavailableNodeResolver()
 	}
-}
-
-func (f *SupervisorFactory) SetNodePath(path string) {
-	f.nodePath = path
-}
-
-func (f *SupervisorFactory) SetPluginHostPath(path string) {
-	f.pluginHostPath = path
+	if artifactResolver == nil {
+		artifactResolver = script_host.UnavailableArtifactResolver()
+	}
+	return &SupervisorFactory{
+		factory:                 factory,
+		nodeEnvironmentResolver: nodeResolver,
+		hostArtifactResolver:    artifactResolver,
+	}
 }
 
 func (f *SupervisorFactory) Type() domain.RuntimeType {
@@ -58,12 +63,25 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 		return nil, err
 	}
 
+	nodeEnv, err := f.nodeEnvironmentResolver.Resolve(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("javascript_main: resolve node: %w", err)
+	}
+
+	artifact, err := f.hostArtifactResolver.Resolve(ctx, script_host.KindPluginHost)
+	if err != nil {
+		return nil, fmt.Errorf("javascript_main: resolve plugin host: %w", err)
+	}
+
 	req := CreateHostRequest{
 		ExtensionID:    string(spec.ExtensionID),
 		ModuleID:       string(spec.ModuleID),
 		Entry:          spec.EntryPoint,
 		DefinitionHash: spec.DefinitionHash,
 		Generation:     int(spec.Generation),
+		NodePath:       nodeEnv.NodeBinary,
+		PluginHostPath:  artifact.EntryPath,
+		WorkingDirectory: artifact.DistributionRoot,
 		ResourceLimits: runtime.ResourceLimits{
 			MaxMemoryMB:        int(spec.Limits.MaxMemoryBytes / (1024 * 1024)),
 			MaxConcurrentCalls: spec.Limits.MaxConcurrentCalls,
@@ -77,11 +95,6 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 	if err != nil {
 		return nil, fmt.Errorf("javascript_main: create host: %w", err)
 	}
-
-	host.mu.Lock()
-	host.nodePath = f.nodePath
-	host.pluginHostPath = f.pluginHostPath
-	host.mu.Unlock()
 
 	return &managedPluginHost{host: host}, nil
 }

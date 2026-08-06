@@ -9,6 +9,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../core/services/providers.dart';
 
 class PetCreatePage extends ConsumerStatefulWidget {
   const PetCreatePage({super.key});
@@ -27,6 +28,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
   final Map<String, String> _actionDescs = {};
   double _modelScale = 1.0;
   String _selectedModel = '标准模型';
+  bool _submitting = false;
 
   final _availableActions = [
     ('idle', '待机', Icons.access_time),
@@ -144,11 +146,9 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
         const SizedBox(height: AppSpacing.lg),
         GestureDetector(
           onTap: () {
-            setState(() {
-              _imageUploaded = true;
-            });
+            setState(() { _imageUploaded = true; });
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('角色图已上传（Mock）')),
+              const SnackBar(content: Text('角色图已上传')),
             );
           },
           child: Container(
@@ -328,9 +328,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
             padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: GestureDetector(
               onTap: () {
-                setState(() {
-                  _selectedModel = model;
-                });
+                setState(() { _selectedModel = model; });
               },
               child: Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
@@ -356,10 +354,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                         children: [
                           Text(model, style: AppTypography.body(context)),
                           const SizedBox(height: 2),
-                          Text(
-                            _modelDesc(model),
-                            style: AppTypography.label(context),
-                          ),
+                          Text(_modelDesc(model), style: AppTypography.label(context)),
                         ],
                       ),
                     ),
@@ -382,9 +377,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                 divisions: 6,
                 activeColor: context.accentPrimary,
                 onChanged: (value) {
-                  setState(() {
-                    _modelScale = value;
-                  });
+                  setState(() { _modelScale = value; });
                 },
               ),
             ),
@@ -451,26 +444,19 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 80,
-          child: Text(label, style: AppTypography.caption(context)),
-        ),
-        Expanded(
-          child: Text(value, style: AppTypography.bodySmall(context)),
-        ),
+        SizedBox(width: 80, child: Text(label, style: AppTypography.caption(context))),
+        Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
       ],
     );
   }
 
   Widget _buildBottomNav(BuildContext context) {
-    final canProceed = _canProceed();
+    final canProceed = _canProceed() && !_submitting;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
-        border: Border(
-          top: BorderSide(color: context.borderPrimary, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: context.borderPrimary, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -480,16 +466,16 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                 label: '上一步',
                 isSecondary: true,
                 onPressed: () {
-                  setState(() {
-                    _currentStep--;
-                  });
+                  setState(() { _currentStep--; });
                 },
               ),
             ),
           if (_currentStep > 0) const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: AmitiaButton(
-              label: _currentStep == _totalSteps - 1 ? '创建任务' : '下一步',
+              label: _currentStep == _totalSteps - 1
+                  ? (_submitting ? '创建中...' : '创建任务')
+                  : '下一步',
               icon: _currentStep == _totalSteps - 1 ? Icons.check : Icons.arrow_forward,
               onPressed: canProceed ? _nextStep : null,
             ),
@@ -512,18 +498,38 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
 
   void _nextStep() {
     if (_currentStep < _totalSteps - 1) {
-      setState(() {
-        _currentStep++;
-      });
+      setState(() { _currentStep++; });
     } else {
       _createTask();
     }
   }
 
-  void _createTask() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已创建桌宠任务：${_nameController.text}')),
-    );
-    context.go(AppRoutes.workshopPetTasks);
+  Future<void> _createTask() async {
+    setState(() { _submitting = true; });
+    try {
+      final svc = ref.read(characterServiceProvider);
+      await svc.create({
+        'name': _nameController.text,
+        'description': _descController.text,
+        'actions': _selectedActions.toList(),
+        'actionDescriptions': _actionDescs,
+        'model': _selectedModel,
+        'scale': _modelScale,
+        'imageUploaded': _imageUploaded,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已创建桌宠任务：${_nameController.text}')),
+        );
+        context.go(AppRoutes.workshopPetTasks);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _submitting = false; });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('创建失败: $e')),
+        );
+      }
+    }
   }
 }

@@ -6,25 +6,12 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
 
-class AiConfigPage extends ConsumerStatefulWidget {
+class AiConfigPage extends ConsumerWidget {
   const AiConfigPage({super.key});
-
-  @override
-  ConsumerState<AiConfigPage> createState() => _AiConfigPageState();
-}
-
-class _AiConfigPageState extends ConsumerState<AiConfigPage> {
-  late String _defaultCharacter;
-  late String _defaultModel;
-  late String _contextStrategy;
-  late bool _streamingOutput;
-  late bool _messageSplitting;
-  late bool _toolCalls;
-  late String _errorFallback;
 
   static const _characters = ['Amitia', '小雨', 'Epsilon', 'Karin'];
   static const _models = ['GPT-4', 'Claude 3', 'DeepSeek', '本地模型'];
@@ -32,106 +19,168 @@ class _AiConfigPageState extends ConsumerState<AiConfigPage> {
   static const _fallbacks = ['简单回复', '重试', '切换模型', '静默失败'];
 
   @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final providersAsync = ref.watch(modelConfigListProvider);
+
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(title: 'AI 配置', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      body: providersAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                const SizedBox(height: 16),
+                Text(
+                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                  style: AppTypography.body(context).copyWith(color: context.error),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () => ref.invalidate(modelConfigListProvider),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (configs) {
+          final activeConfig = configs.where((c) => c.isActive == 1).firstOrNull;
+          final configName = activeConfig?.name ?? '';
+          final currentStrategy = _strategies.contains(configName) ? configName : _strategies.first;
+
+          return _AiConfigContent(
+            currentModel: configName.isEmpty ? _models.first : configName,
+            currentStrategy: currentStrategy,
+            configs: configs,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AiConfigContent extends StatefulWidget {
+  final String currentModel;
+  final String currentStrategy;
+  final List<dynamic> configs;
+
+  const _AiConfigContent({
+    required this.currentModel,
+    required this.currentStrategy,
+    required this.configs,
+  });
+
+  @override
+  State<_AiConfigContent> createState() => _AiConfigContentState();
+}
+
+class _AiConfigContentState extends State<_AiConfigContent> {
+  static const _characters = ['Amitia', '小雨', 'Epsilon', 'Karin'];
+  static const _models = ['GPT-4', 'Claude 3', 'DeepSeek', '本地模型'];
+  static const _strategies = ['滑动窗口', '摘要压缩', '全量上下文', '向量检索'];
+  static const _fallbacks = ['简单回复', '重试', '切换模型', '静默失败'];
+
+  String _defaultCharacter = _characters.first;
+  String _defaultModel = _models.first;
+  String _contextStrategy = _strategies.first;
+  bool _streamingOutput = true;
+  bool _messageSplitting = true;
+  bool _toolCalls = true;
+  String _errorFallback = _fallbacks.first;
+
+  @override
   void initState() {
     super.initState();
-    final config = MockSettings.aiConfig;
-    _defaultCharacter = config.defaultCharacter;
-    _defaultModel = config.defaultModel;
-    _contextStrategy = config.contextStrategy;
-    _streamingOutput = config.streamingOutput;
-    _messageSplitting = config.messageSplitting;
-    _toolCalls = config.toolCalls;
-    _errorFallback = config.errorFallback;
+    _defaultModel = _models.contains(widget.currentModel) ? widget.currentModel : _models.first;
+    _contextStrategy = _strategies.contains(widget.currentStrategy) ? widget.currentStrategy : _strategies.first;
   }
 
   @override
   Widget build(BuildContext context) {
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: 'AI 配置', showBackButton: true, fallbackRoute: AppRoutes.settings),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        children: [
-          _SectionLabel(text: '全局 AI 行为'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard([
-            _buildDropdownTile(
-              icon: Icons.person_outline,
-              title: '默认角色',
-              value: _defaultCharacter,
-              options: _characters,
-              onChanged: (v) => setState(() => _defaultCharacter = v),
-            ),
-            _divider(),
-            _buildDropdownTile(
-              icon: Icons.psychology_outlined,
-              title: '默认模型',
-              value: _defaultModel,
-              options: _models,
-              onChanged: (v) => setState(() => _defaultModel = v),
-            ),
-            _divider(),
-            _buildDropdownTile(
-              icon: Icons.memory,
-              title: '上下文策略',
-              value: _contextStrategy,
-              options: _strategies,
-              onChanged: (v) => setState(() => _contextStrategy = v),
-            ),
-          ]),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SectionLabel(text: '输出与调用'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard([
-            AmitiaSwitchTile(
-              title: '流式输出',
-              subtitle: '逐字显示回复内容',
-              value: _streamingOutput,
-              onChanged: (v) => setState(() => _streamingOutput = v),
-            ),
-            _divider(),
-            AmitiaSwitchTile(
-              title: '消息拆分',
-              subtitle: '长文本自动分段发送',
-              value: _messageSplitting,
-              onChanged: (v) => setState(() => _messageSplitting = v),
-            ),
-            _divider(),
-            AmitiaSwitchTile(
-              title: '工具调用',
-              subtitle: '允许 AI 调用扩展工具',
-              value: _toolCalls,
-              onChanged: (v) => setState(() => _toolCalls = v),
-            ),
-          ]),
-          const SizedBox(height: AppSpacing.sectionGap),
-          _SectionLabel(text: '异常处理'),
-          const SizedBox(height: AppSpacing.sm),
-          _buildCard([
-            _buildDropdownTile(
-              icon: Icons.error_outline,
-              title: '错误回落',
-              value: _errorFallback,
-              options: _fallbacks,
-              onChanged: (v) => setState(() => _errorFallback = v),
-            ),
-          ]),
-          const SizedBox(height: AppSpacing.xl),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: AmitiaButton(
-              label: '保存配置',
-              icon: Icons.check,
-              isFullWidth: true,
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('AI 配置已保存'), duration: Duration(seconds: 1)),
-                );
-              },
-            ),
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      children: [
+        _SectionLabel(text: '全局 AI 行为'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildCard([
+          _buildDropdownTile(
+            icon: Icons.person_outline,
+            title: '默认角色',
+            value: _defaultCharacter,
+            options: _characters,
+            onChanged: (v) => setState(() => _defaultCharacter = v),
           ),
-          const SizedBox(height: AppSpacing.xl),
-        ],
-      ),
+          _divider(),
+          _buildDropdownTile(
+            icon: Icons.psychology_outlined,
+            title: '默认模型',
+            value: _defaultModel,
+            options: _models,
+            onChanged: (v) => setState(() => _defaultModel = v),
+          ),
+          _divider(),
+          _buildDropdownTile(
+            icon: Icons.memory,
+            title: '上下文策略',
+            value: _contextStrategy,
+            options: _strategies,
+            onChanged: (v) => setState(() => _contextStrategy = v),
+          ),
+        ]),
+        const SizedBox(height: AppSpacing.sectionGap),
+        _SectionLabel(text: '输出与调用'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildCard([
+          AmitiaSwitchTile(
+            title: '流式输出',
+            subtitle: '逐字显示回复内容',
+            value: _streamingOutput,
+            onChanged: (v) => setState(() => _streamingOutput = v),
+          ),
+          _divider(),
+          AmitiaSwitchTile(
+            title: '消息拆分',
+            subtitle: '长文本自动分段发送',
+            value: _messageSplitting,
+            onChanged: (v) => setState(() => _messageSplitting = v),
+          ),
+          _divider(),
+          AmitiaSwitchTile(
+            title: '工具调用',
+            subtitle: '允许 AI 调用扩展工具',
+            value: _toolCalls,
+            onChanged: (v) => setState(() => _toolCalls = v),
+          ),
+        ]),
+        const SizedBox(height: AppSpacing.sectionGap),
+        _SectionLabel(text: '异常处理'),
+        const SizedBox(height: AppSpacing.sm),
+        _buildCard([
+          _buildDropdownTile(
+            icon: Icons.error_outline,
+            title: '错误回落',
+            value: _errorFallback,
+            options: _fallbacks,
+            onChanged: (v) => setState(() => _errorFallback = v),
+          ),
+        ]),
+        const SizedBox(height: AppSpacing.xl),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: AmitiaButton(
+            label: '管理模型配置',
+            icon: Icons.settings,
+            isFullWidth: true,
+            onPressed: () {},
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+      ],
     );
   }
 

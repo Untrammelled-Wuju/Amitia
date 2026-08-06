@@ -124,7 +124,7 @@ func main() {
 		os.Exit(1)
 	}
 	bootstrap.SetGraphService(graphSvc)
-	services, err := NewAppServices(ctx, graphSvc)
+	services, err := NewAppServices(ctx, graphSvc, bootstrap)
 	if err != nil {
 		log.Error("应用服务初始化失败:", err)
 		_ = bootstrap.StopAll(context.Background())

@@ -25,13 +25,13 @@ const (
 type CandidateResult string
 
 const (
-	CandidateResultSelected         CandidateResult = "selected"
-	CandidateResultNotFound         CandidateResult = "not-found"
-	CandidateResultInvalidFile      CandidateResult = "invalid-file"
-	CandidateResultNotExecutable    CandidateResult = "not-executable"
+	CandidateResultSelected           CandidateResult = "selected"
+	CandidateResultNotFound           CandidateResult = "not-found"
+	CandidateResultInvalidFile        CandidateResult = "invalid-file"
+	CandidateResultNotExecutable      CandidateResult = "not-executable"
 	CandidateResultUnsupportedWrapper CandidateResult = "unsupported-wrapper"
-	CandidateResultRootUnavailable  CandidateResult = "root-unavailable"
-	CandidateResultSkipped          CandidateResult = "skipped"
+	CandidateResultRootUnavailable    CandidateResult = "root-unavailable"
+	CandidateResultSkipped            CandidateResult = "skipped"
 )
 
 type CandidateDiagnostic struct {
@@ -43,11 +43,11 @@ type CandidateDiagnostic struct {
 }
 
 type DetectionSnapshot struct {
-	State      DetectionState
+	State       DetectionState
 	Environment Environment
 	Diagnostics []CandidateDiagnostic
-	LastError  string
-	DetectedAt time.Time
+	LastError   string
+	DetectedAt  time.Time
 }
 
 func (s DetectionSnapshot) clone() DetectionSnapshot {

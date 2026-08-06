@@ -8,8 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/voice.dart';
 
 class CharacterVoicePage extends ConsumerStatefulWidget {
   final String characterId;
@@ -21,22 +21,10 @@ class CharacterVoicePage extends ConsumerStatefulWidget {
 }
 
 class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
-  late List<CharacterVoiceConfig> _voices;
-  late String _currentVoiceId;
   double _speed = 1.0;
-  double _pitch = 1.1;
-  double _volume = 0.8;
-
-  @override
-  void initState() {
-    super.initState();
-    _voices = MockCharacters.voiceConfigs(widget.characterId);
-    _currentVoiceId = _voices.firstWhere((v) => v.isCurrent, orElse: () => _voices.first).id;
-    final current = _voices.firstWhere((v) => v.id == _currentVoiceId);
-    _speed = current.speed;
-    _pitch = current.pitch;
-    _volume = current.volume;
-  }
+  double _pitch = 1.0;
+  String? _activeConfigId;
+  List<VoiceConfigDto> _configs = [];
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +86,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
           AmitiaButton(
             label: '开始',
             isSecondary: true,
-            onPressed: () => _showVoiceCloneDialog(context),
+            onPressed: () => _startVoiceClone(context),
           ),
         ],
       ),
@@ -111,13 +99,34 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
       children: [
         AmitiaSectionHeader(title: '预设音色'),
         const SizedBox(height: AppSpacing.sm),
-        ..._voices.map((v) => _buildVoiceItem(context, v)),
+        FutureBuilder<List<VoiceConfigDto>>(
+          future: ref.read(ttsServiceProvider).listConfigs(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Text('加载失败: ${snapshot.error}', style: AppTypography.caption(context));
+            }
+            _configs = snapshot.data ?? [];
+            if (_configs.isEmpty) {
+              return Text('暂无音色配置', style: AppTypography.caption(context));
+            }
+            return Column(
+              children: _configs.map((v) => _buildVoiceItem(context, v)).toList(),
+            );
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildVoiceItem(BuildContext context, CharacterVoiceConfig voice) {
-    final isCurrent = voice.id == _currentVoiceId;
+  Widget _buildVoiceItem(BuildContext context, VoiceConfigDto voice) {
+    final isCurrent = voice.id == _activeConfigId || voice.isActive == 1;
+    if (_activeConfigId == null && voice.isActive == 1) {
+      _activeConfigId = voice.id;
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
@@ -155,7 +164,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text('预设：${voice.preset}', style: AppTypography.caption(context)),
+                  Text('提供商：${voice.provider} · 音色：${voice.voiceId}', style: AppTypography.caption(context)),
                 ],
               ),
             ),
@@ -163,7 +172,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
               icon: Icons.play_circle_outline,
               size: 26,
               color: context.accentPrimary,
-              onPressed: () => _showPreviewSheet(context, voice),
+              onPressed: () => _testVoice(voice),
             ),
             AmitiaIconButton(
               icon: Icons.edit_outlined,
@@ -175,20 +184,23 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                 icon: Icons.delete_outline,
                 size: 18,
                 color: context.error,
-                onPressed: () => _showDeleteConfirm(context, voice),
+                onPressed: () => _deleteVoice(voice),
               ),
           ],
         ),
-        onTap: () {
+        onTap: () async {
+          final svc = ref.read(ttsServiceProvider);
+          await svc.activate(voice.id);
           setState(() {
-            _currentVoiceId = voice.id;
-            _speed = voice.speed;
-            _pitch = voice.pitch;
-            _volume = voice.volume;
+            _activeConfigId = voice.id;
+            _speed = voice.speed.toDouble();
+            _pitch = voice.pitch.toDouble();
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已切换到「${voice.name}」'), duration: const Duration(seconds: 1)),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('已切换到「${voice.name}」'), duration: const Duration(seconds: 1)),
+            );
+          }
         },
       ),
     );
@@ -206,19 +218,13 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
               _buildSliderRow(context, '语速', _speed, 0.5, 2.0, 'x', (v) => setState(() => _speed = v)),
               const Divider(height: AppSpacing.lg),
               _buildSliderRow(context, '音调', _pitch, 0.5, 2.0, 'x', (v) => setState(() => _pitch = v)),
-              const Divider(height: AppSpacing.lg),
-              _buildSliderRow(context, '音量', _volume, 0.0, 1.0, '%', (v) => setState(() => _volume = v)),
               const SizedBox(height: AppSpacing.md),
               AmitiaButton(
                 label: '试听当前参数',
                 icon: Icons.volume_up,
                 isFullWidth: true,
                 isSecondary: true,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('正在试听...（Mock）'), duration: Duration(seconds: 2)),
-                  );
-                },
+                onPressed: () => _testCurrentVoice(context),
               ),
             ],
           ),
@@ -244,7 +250,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
           children: [
             Text(label, style: AppTypography.body(context)),
             Text(
-              suffix == '%' ? '${(value * 100).round()}%' : '${value.toStringAsFixed(1)}$suffix',
+              '${value.toStringAsFixed(1)}$suffix',
               style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600),
             ),
           ],
@@ -261,114 +267,75 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
     );
   }
 
-  void _showPreviewSheet(BuildContext context, CharacterVoiceConfig voice) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: context.borderPrimary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: context.accentSoft,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.graphic_eq, size: 40, color: context.accentPrimary),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(voice.name, style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.xs),
-            Text('预设：${voice.preset}', style: AppTypography.caption(context)),
-            const SizedBox(height: AppSpacing.xl),
-            AmitiaButton(
-              label: '播放',
-              icon: Icons.play_arrow,
-              isFullWidth: true,
-              onPressed: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('正在播放「${voice.name}」试听...（Mock）'), duration: const Duration(seconds: 2)),
-                );
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            AmitiaButton(
-              label: '关闭',
-              isFullWidth: true,
-              isSecondary: true,
-              onPressed: () => Navigator.pop(ctx),
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _testVoice(VoiceConfigDto voice) async {
+    final svc = ref.read(ttsServiceProvider);
+    await svc.test(voice.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('正在测试「${voice.name}」...'), duration: const Duration(seconds: 2)),
+      );
+    }
   }
 
-  void _showVoiceCloneDialog(BuildContext context) {
-    showDialog(
+  Future<void> _testCurrentVoice(BuildContext context) async {
+    if (_activeConfigId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先选择一个音色')),
+      );
+      return;
+    }
+    final svc = ref.read(ttsServiceProvider);
+    await svc.synthesize('你好，这是一段语音测试。', voiceId: _activeConfigId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在试听...'), duration: Duration(seconds: 2)),
+      );
+    }
+  }
+
+  Future<void> _startVoiceClone(BuildContext context) async {
+    final result = await ref.read(characterDetailServiceProvider).uploadAvatar(widget.characterId, 'voice_sample.wav');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result != null ? '声音复刻已启动' : '请先上传语音样本')),
+      );
+    }
+  }
+
+  Future<void> _deleteVoice(VoiceConfigDto voice) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('声音复刻', style: AppTypography.cardTitle(context)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('请上传3-10秒的清晰语音样本', style: AppTypography.bodySmall(context)),
-            const SizedBox(height: AppSpacing.md),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              decoration: BoxDecoration(
-                color: context.surfaceSecondary,
-                borderRadius: AppRadius.brMedium,
-                border: Border.all(color: context.borderPrimary, width: 1, style: BorderStyle.solid),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.cloud_upload_outlined, size: 40, color: context.textTertiary),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text('点击或拖拽上传音频文件', style: AppTypography.caption(context)),
-                  Text('支持 MP3、WAV、M4A', style: AppTypography.label(context)),
-                ],
-              ),
-            ),
-          ],
-        ),
+        title: Text('删除音色', style: AppTypography.cardTitle(context)),
+        content: Text('确定要删除「${voice.name}」吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('请先上传语音样本（Mock）'), duration: Duration(seconds: 2)),
-              );
-            },
-            child: Text('开始复刻', style: TextStyle(color: context.accentPrimary)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('删除', style: TextStyle(color: context.error)),
           ),
         ],
       ),
     );
+    if (confirmed == true) {
+      final svc = ref.read(ttsServiceProvider);
+      await svc.deleteConfig(voice.id);
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('音色已删除'), duration: Duration(seconds: 1)),
+        );
+      }
+    }
   }
 
-  void _showVoiceEditor(BuildContext context, CharacterVoiceConfig? existing) {
+  void _showVoiceEditor(BuildContext context, VoiceConfigDto? existing) {
     final isEdit = existing != null;
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final presetCtrl = TextEditingController(text: existing?.preset ?? '');
-    double speed = existing?.speed ?? 1.0;
-    double pitch = existing?.pitch ?? 1.0;
-    double volume = existing?.volume ?? 0.8;
+    final providerCtrl = TextEditingController(text: existing?.provider ?? '');
+    final voiceIdCtrl = TextEditingController(text: existing?.voiceId ?? '');
+    int speed = existing?.speed ?? 1;
+    int pitch = existing?.pitch ?? 1;
 
     showModalBottomSheet(
       context: context,
@@ -402,100 +369,63 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
               const SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: nameCtrl, hintText: '输入音色名称'),
               const SizedBox(height: AppSpacing.md),
-              Text('预设类型', style: AppTypography.label(context)),
+              Text('提供商', style: AppTypography.label(context)),
               const SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(controller: presetCtrl, hintText: '如：温柔、活力、沉稳'),
+              AmitiaTextField(controller: providerCtrl, hintText: '如：OpenAI, Azure'),
               const SizedBox(height: AppSpacing.md),
-              Text('语速 (${speed.toStringAsFixed(1)}x)', style: AppTypography.label(context)),
+              Text('音色ID', style: AppTypography.label(context)),
+              const SizedBox(height: AppSpacing.xs),
+              AmitiaTextField(controller: voiceIdCtrl, hintText: '如：alloy, nova'),
+              const SizedBox(height: AppSpacing.md),
+              Text('语速: $speed', style: AppTypography.label(context)),
               Slider(
-                value: speed,
-                min: 0.5,
-                max: 2.0,
-                divisions: 15,
+                value: speed.toDouble(),
+                min: 1,
+                max: 3,
+                divisions: 4,
                 activeColor: context.accentPrimary,
-                onChanged: (v) => setSheetState(() => speed = v),
+                onChanged: (v) => setSheetState(() => speed = v.round()),
               ),
-              Text('音调 (${pitch.toStringAsFixed(1)}x)', style: AppTypography.label(context)),
+              Text('音调: $pitch', style: AppTypography.label(context)),
               Slider(
-                value: pitch,
-                min: 0.5,
-                max: 2.0,
-                divisions: 15,
+                value: pitch.toDouble(),
+                min: 1,
+                max: 3,
+                divisions: 4,
                 activeColor: context.accentPrimary,
-                onChanged: (v) => setSheetState(() => pitch = v),
-              ),
-              Text('音量 (${(volume * 100).round()}%)', style: AppTypography.label(context)),
-              Slider(
-                value: volume,
-                min: 0.0,
-                max: 1.0,
-                divisions: 20,
-                activeColor: context.accentPrimary,
-                onChanged: (v) => setSheetState(() => volume = v),
+                onChanged: (v) => setSheetState(() => pitch = v.round()),
               ),
               const SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '添加',
                 isFullWidth: true,
-                onPressed: () {
+                onPressed: () async {
                   if (nameCtrl.text.trim().isEmpty) return;
                   Navigator.pop(ctx);
-                  setState(() {
-                    if (isEdit) {
-                      final idx = _voices.indexWhere((v) => v.id == existing.id);
-                      _voices[idx] = CharacterVoiceConfig(
-                        id: existing.id,
-                        name: nameCtrl.text.trim(),
-                        preset: presetCtrl.text.trim(),
-                        speed: speed,
-                        pitch: pitch,
-                        volume: volume,
-                        isCurrent: existing.isCurrent,
-                      );
-                    } else {
-                      _voices.add(CharacterVoiceConfig(
-                        id: 'v${DateTime.now().millisecondsSinceEpoch}',
-                        name: nameCtrl.text.trim(),
-                        preset: presetCtrl.text.trim(),
-                        speed: speed,
-                        pitch: pitch,
-                        volume: volume,
-                      ));
-                    }
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(isEdit ? '音色已更新' : '音色已添加'), duration: const Duration(seconds: 1)),
-                  );
+                  final svc = ref.read(ttsServiceProvider);
+                  final data = {
+                    'name': nameCtrl.text.trim(),
+                    'provider': providerCtrl.text.trim(),
+                    'voiceId': voiceIdCtrl.text.trim(),
+                    'speed': speed,
+                    'pitch': pitch,
+                  };
+                  if (isEdit) {
+                    await svc.updateConfig(existing.id, data);
+                  } else {
+                    await svc.createConfig(data);
+                  }
+                  setState(() {});
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isEdit ? '音色已更新' : '音色已添加'), duration: const Duration(seconds: 1)),
+                    );
+                  }
                 },
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showDeleteConfirm(BuildContext context, CharacterVoiceConfig voice) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('删除音色', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除「${voice.name}」吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _voices.removeWhere((v) => v.id == voice.id);
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('音色已删除'), duration: Duration(seconds: 1)),
-              );
-            },
-            child: Text('删除', style: TextStyle(color: context.error)),
-          ),
-        ],
       ),
     );
   }

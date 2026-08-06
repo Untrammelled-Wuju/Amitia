@@ -3,6 +3,8 @@ package task_runtime
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
 type TaskIdempotency string
@@ -238,17 +240,17 @@ type TaskQueueEntry struct {
 }
 
 type TaskRuntimeConfig struct {
-	GlobalMaxConcurrent        int
-	PerExtensionMaxConcurrent  int
-	PerDefinitionMaxConcurrent int
+	GlobalMaxConcurrent         int
+	PerExtensionMaxConcurrent   int
+	PerDefinitionMaxConcurrent  int
 	DefaultTimeout             time.Duration
 	MaxProgressPerSecond       int
 	MaxCheckpointBytes         int
 	MaxInlineResultBytes       int
 	MaxRetryAttempts           int
 	WorkspaceRoot              string
-	NodePath                   string
-	TaskHostPath               string
+	NodeEnvironmentResolver    script_host.NodeEnvironmentResolver
+	HostArtifactResolver       script_host.ArtifactResolver
 	LeaseDuration              time.Duration
 	CancelGracePeriod          time.Duration
 }
@@ -264,8 +266,6 @@ func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
 		MaxInlineResultBytes:       256 << 10,
 		MaxRetryAttempts:           3,
 		WorkspaceRoot:              "",
-		NodePath:                   "",
-		TaskHostPath:               "",
 		LeaseDuration:              2 * time.Minute,
 		CancelGracePeriod:          10 * time.Second,
 	}

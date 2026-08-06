@@ -11,18 +11,18 @@ import (
 )
 
 var (
-	ErrScriptRuntimeDisabled      = errors.New("nodeenv: script runtime provider disabled")
-	ErrNodeProviderNotSelected    = errors.New("nodeenv: node process provider not selected")
-	ErrHostCapabilityUnsupported  = errors.New("nodeenv: host capability unsupported")
-	ErrUnsupportedGuestPlatform   = errors.New("nodeenv: unsupported guest platform for node")
-	ErrRuntimeRootUnavailable     = errors.New("nodeenv: runtime root unavailable")
-	ErrNodeNotFound               = errors.New("nodeenv: node binary not found")
-	ErrInvalidNodeBinary          = errors.New("nodeenv: invalid node binary")
-	ErrNodeNotExecutable          = errors.New("nodeenv: node binary not executable")
-	ErrInvalidPackageManagerCLI   = errors.New("nodeenv: invalid package manager CLI")
-	ErrShellWrapperUnsupported    = errors.New("nodeenv: shell wrapper not supported as package manager entry")
-	ErrInvalidWorkDir             = errors.New("nodeenv: invalid work directory")
-	ErrNativeResourceNotAllowed   = errors.New("nodeenv: native resource cannot be used as node path")
+	ErrScriptRuntimeDisabled     = errors.New("nodeenv: script runtime provider disabled")
+	ErrNodeProviderNotSelected   = errors.New("nodeenv: node process provider not selected")
+	ErrHostCapabilityUnsupported = errors.New("nodeenv: host capability unsupported")
+	ErrUnsupportedGuestPlatform  = errors.New("nodeenv: unsupported guest platform for node")
+	ErrRuntimeRootUnavailable    = errors.New("nodeenv: runtime root unavailable")
+	ErrNodeNotFound              = errors.New("nodeenv: node binary not found")
+	ErrInvalidNodeBinary         = errors.New("nodeenv: invalid node binary")
+	ErrNodeNotExecutable         = errors.New("nodeenv: node binary not executable")
+	ErrInvalidPackageManagerCLI  = errors.New("nodeenv: invalid package manager CLI")
+	ErrShellWrapperUnsupported   = errors.New("nodeenv: shell wrapper not supported as package manager entry")
+	ErrInvalidWorkDir            = errors.New("nodeenv: invalid work directory")
+	ErrNativeResourceNotAllowed  = errors.New("nodeenv: native resource cannot be used as node path")
 )
 
 type unsupportedGuestError struct {
@@ -62,7 +62,7 @@ func (e *nodeNotFoundError) Is(target error) bool {
 }
 
 type invalidNodeBinaryError struct {
-	path string
+	path   string
 	reason string
 }
 

@@ -8,8 +8,13 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../shared/models/models.dart';
-import '../../../../shared/mock_data/mock_data.dart';
+
+final _runtimeHealthProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final svc = ref.read(systemServiceProvider);
+  return svc.health();
+});
 
 class RuntimePage extends ConsumerStatefulWidget {
   const RuntimePage({super.key});
@@ -21,18 +26,55 @@ class RuntimePage extends ConsumerStatefulWidget {
 class _RuntimePageState extends ConsumerState<RuntimePage> {
   late String _status;
   late String _backendStatus;
+  late String _version;
+  late String _storageUsage;
   late List<RuntimeComponent> _components;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
-    final info = MockData.runtimeInfo;
-    _status = info.status;
-    _backendStatus = info.backendStatus;
-    _components = List.of(info.components);
+    _status = '';
+    _backendStatus = '';
+    _version = '';
+    _storageUsage = '';
+    _components = [];
+    _loadHealth();
   }
 
-  bool get _isRunning => _status == '运行中';
+  Future<void> _loadHealth() async {
+    try {
+      final data = await ref.read(systemServiceProvider).health();
+      if (!mounted) return;
+      if (data != null) {
+        setState(() {
+          _status = data['status'] as String? ?? data['runtime_status'] as String? ?? '';
+          _version = data['version'] as String? ?? data['runtime_version'] as String? ?? '';
+          _backendStatus = data['backend'] as String? ?? data['backend_status'] as String? ?? '';
+          _storageUsage = data['storage'] as String? ?? data['storage_usage'] as String? ?? '';
+          final comps = data['components'] as List<dynamic>?;
+          if (comps != null) {
+            _components = comps.map((c) {
+              if (c is Map<String, dynamic>) {
+                return RuntimeComponent(
+                  name: c['name'] as String? ?? '',
+                  status: c['status'] as String? ?? '',
+                );
+              }
+              return const RuntimeComponent(name: '', status: '');
+            }).toList();
+          }
+          _initialized = true;
+        });
+      } else {
+        setState(() => _initialized = true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _initialized = true);
+    }
+  }
+
+  bool get _isRunning => _status == '运行中' || _status == 'ok' || _status == 'healthy' || _status == '已安装';
 
   void _start() {
     setState(() {
@@ -62,7 +104,6 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
 
   @override
   Widget build(BuildContext context) {
-    final info = MockData.runtimeInfo;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'Ubuntu Runtime', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
@@ -70,9 +111,9 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
         children: [
           _StatusCard(
             status: _status,
-            version: info.version,
+            version: _version,
             backendStatus: _backendStatus,
-            storageUsage: info.storageUsage,
+            storageUsage: _storageUsage,
           ),
           const SizedBox(height: AppSpacing.sectionGap),
           Text('运行组件', style: AppTypography.sectionTitle(context)),
@@ -83,19 +124,24 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
               borderRadius: AppRadius.brMedium,
               border: Border.all(color: context.borderPrimary, width: 0.5),
             ),
-            child: Column(
-              children: [
-                for (int i = 0; i < _components.length; i++) ...[
-                  _ComponentTile(component: _components[i]),
-                  if (i < _components.length - 1)
-                    Divider(
-                      height: 1,
-                      indent: AppSpacing.lg,
-                      color: context.borderSecondary,
-                    ),
-                ],
-              ],
-            ),
+            child: _components.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(AppSpacing.cardPadding),
+                    child: Text('暂无组件信息', style: AppTypography.caption(context)),
+                  )
+                : Column(
+                    children: [
+                      for (int i = 0; i < _components.length; i++) ...[
+                        _ComponentTile(component: _components[i]),
+                        if (i < _components.length - 1)
+                          Divider(
+                            height: 1,
+                            indent: AppSpacing.lg,
+                            color: context.borderSecondary,
+                          ),
+                      ],
+                    ],
+                  ),
           ),
           const SizedBox(height: AppSpacing.sectionGap),
           Text('操作', style: AppTypography.sectionTitle(context)),

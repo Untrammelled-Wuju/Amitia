@@ -169,7 +169,7 @@ func (s *defaultProcessSupervisor) Start(ctx context.Context, id ProcessID) erro
 
 	mp.mu.Lock()
 	mp.state = StateStarting
-	s.mu.Unlock()
+	mp.mu.Unlock()
 
 	envSlice := make([]string, 0, len(env))
 	for k, v := range env {
