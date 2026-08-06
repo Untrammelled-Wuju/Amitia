@@ -3,6 +3,9 @@
 package process
 
 import (
+	"errors"
+	"fmt"
+	"os"
 	"os/exec"
 	"syscall"
 	"unsafe"
@@ -63,6 +66,44 @@ func closeProcessTree(handle ProcessTreeHandle) {
 	if handle != 0 {
 		windows.CloseHandle(windows.Handle(handle))
 	}
+}
+
+func requestGracefulStopSupported() bool { return false }
+
+func processTreeSupported() bool { return true }
+
+func procSignalTerm(proc *os.Process) error {
+	if proc == nil {
+		return errors.New("process: nil process")
+	}
+	// Try to send Ctrl+Break to the process group
+	err := windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(proc.Pid))
+	if err != nil {
+		return fmt.Errorf("process: %w", err)
+	}
+	return nil
+}
+
+const stillActive = 259 // STATUS_PENDING
+
+func forceStopProcessTree(pid int, handle ProcessTreeHandle) error {
+	return terminateProcessTree(pid, handle)
+}
+
+func isProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(handle)
+	var code uint32
+	if err := windows.GetExitCodeProcess(handle, &code); err != nil {
+		return false
+	}
+	return code == stillActive
 }
 
 func detectIsolation() PlatformIsolationReport {

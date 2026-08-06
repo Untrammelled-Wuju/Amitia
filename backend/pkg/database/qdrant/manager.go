@@ -1,16 +1,12 @@
 package qdrant
 
 import (
+	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sync"
-	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -19,25 +15,17 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-var (
-	qdrantCmd          *exec.Cmd
-	qdrantMu           sync.Mutex
-	qdrantMonitorStop  chan struct{}
-	qdrantRestartFn    func()
-	qdrantShuttingDown atomic.Bool
-)
+func SetQdrantShuttingDown() {}
 
-func SetQdrantShuttingDown() {
-	qdrantShuttingDown.Store(true)
+func IsQdrantShuttingDown() bool { return false }
+
+// StartQdrant is deprecated. Use BuildQdrantProcessSpec and the runtimehost.ProcessSupervisor.
+func StartQdrant() error {
+	return errors.New("qdrant: use BuildQdrantProcessSpec instead")
 }
 
-func IsQdrantShuttingDown() bool {
-	return qdrantShuttingDown.Load()
-}
-
-func SetQdrantRestartCallback(fn func()) {
-	qdrantRestartFn = fn
-}
+// StopQdrant is deprecated. Use runtimehost.ProcessSupervisor.Stop.
+func StopQdrant() {}
 
 type qdrantWriter struct{}
 
@@ -50,34 +38,6 @@ func (w *qdrantWriter) Write(p []byte) (int, error) {
 		log.Info("[Qdrant]", lines)
 	}
 	return len(p), nil
-}
-
-func killExistingQdrant(port int) {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
-	if err != nil {
-		return
-	}
-	conn.Close()
-
-	log.Warn("检测到旧Qdrant进程，正在终止...")
-	if runtime.GOOS == "windows" {
-		exec.Command("taskkill", "/F", "/IM", "qdrant.exe").Run()
-	} else {
-		exec.Command("pkill", "-9", "qdrant").Run()
-	}
-	time.Sleep(2 * time.Second)
-
-	for i := 0; i < 10; i++ {
-		conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
-		if err != nil {
-			log.Info("旧Qdrant已释放端口", port)
-			return
-		}
-		conn.Close()
-		time.Sleep(1 * time.Second)
-	}
-	log.Warn("旧Qdrant未能在10秒内释放端口，继续启动...")
 }
 
 func resolveQdrantBinaryPath(qdrantDir string) string {
@@ -175,52 +135,6 @@ func resolveQdrantDataDir(qdrantDir string) string {
 	return filepath.Join(qdrantDir, "data")
 }
 
-func StartQdrant() error {
-	qdrantMu.Lock()
-	defer qdrantMu.Unlock()
-	return startQdrantInternal()
-}
-
-func startQdrantInternal() error {
-	cfg := config.AppCfg.Providers.VectorStore.Qdrant
-	workDir := util.RuntimeRoot()
-
-	killExistingQdrant(cfg.Port)
-
-	qdrantDir := filepath.Join(workDir, "qdrant")
-	configDir := filepath.Join(qdrantDir, "config")
-	configPath := filepath.Join(configDir, "config.yaml")
-
-	_ = os.MkdirAll(configDir, 0755)
-
-	configContent := fmt.Sprintf("service:\n  http_port: %d\n  grpc_port: %d\nstorage:\n  storage_path: %s\n", cfg.Port, cfg.Port+1, resolveQdrantDataDir(qdrantDir))
-	_ = os.WriteFile(configPath, []byte(configContent), 0644)
-
-	qdrantPath := resolveQdrantBinaryPath(qdrantDir)
-
-	if _, err := os.Stat(qdrantPath); os.IsNotExist(err) {
-		if err := ensureQdrantBinary(qdrantPath, qdrantDir); err != nil {
-			return err
-		}
-	}
-
-	dataDir := resolveQdrantDataDir(qdrantDir)
-	_ = os.MkdirAll(dataDir, 0755)
-
-	cmd := exec.Command(qdrantPath, "--config-path", configPath)
-	cmd.Dir = resolveQdrantWorkDir(qdrantDir)
-	cmd.Stdout = &qdrantWriter{}
-	cmd.Stderr = &qdrantWriter{}
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("启动Qdrant失败: %w", err)
-	}
-
-	qdrantCmd = cmd
-	log.Info("Qdrant已启动", "port", cfg.Port, "pid", cmd.Process.Pid)
-	return nil
-}
-
 func isQdrantAlive(port int) bool {
 	url := fmt.Sprintf("http://127.0.0.1:%d/readyz", port)
 	client := http.Client{Timeout: 2 * time.Second}
@@ -230,77 +144,6 @@ func isQdrantAlive(port int) bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode == 200
-}
-
-func StartQdrantMonitor() {
-	if qdrantMonitorStop != nil {
-		return
-	}
-	qdrantMonitorStop = make(chan struct{})
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Warn("Qdrant监控协程异常恢复:", r)
-			}
-		}()
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if IsQdrantShuttingDown() {
-					return
-				}
-				qdrantMu.Lock()
-				needRestart := false
-				if qdrantCmd == nil || qdrantCmd.Process == nil {
-					needRestart = true
-				} else if !isQdrantAlive(config.AppCfg.Providers.VectorStore.Qdrant.Port) {
-					needRestart = true
-				}
-				if needRestart && !IsQdrantShuttingDown() {
-					log.Warn("检测到Qdrant进程异常，尝试重启...")
-					if err := startQdrantInternal(); err != nil {
-						log.Error("Qdrant重启失败:", err)
-						qdrantMu.Unlock()
-						continue
-					}
-					if err := WaitForQdrant(config.AppCfg.Providers.VectorStore.Qdrant.Port); err != nil {
-						log.Error("等待Qdrant就绪超时:", err)
-						qdrantMu.Unlock()
-						continue
-					}
-					if err := InitClient(); err != nil {
-						log.Error("Qdrant客户端重新初始化失败:", err)
-						qdrantMu.Unlock()
-						continue
-					}
-					if err := EnsureCollections(); err != nil {
-						log.Error("Qdrant集合重建失败:", err)
-						qdrantMu.Unlock()
-						continue
-					}
-					log.Info("Qdrant已自动恢复")
-					qdrantMu.Unlock()
-					if qdrantRestartFn != nil {
-						qdrantRestartFn()
-					}
-				} else {
-					qdrantMu.Unlock()
-				}
-			case <-qdrantMonitorStop:
-				return
-			}
-		}
-	}()
-	log.Info("Qdrant进程监控已启动")
-}
-
-func StopQdrantMonitor() {
-	if qdrantMonitorStop != nil {
-		close(qdrantMonitorStop)
-		qdrantMonitorStop = nil
-	}
 }
 
 func IsLinuxARM64() bool {
@@ -334,26 +177,6 @@ func ensureQdrantBinary(qdrantPath, qdrantDir string) error {
 	}
 
 	return fmt.Errorf("Qdrant程序不存在: %s", qdrantPath)
-}
-
-func StopQdrant() {
-	StopQdrantMonitor()
-	if qdrantCmd == nil || qdrantCmd.Process == nil {
-		return
-	}
-	_ = qdrantCmd.Process.Signal(syscall.SIGTERM)
-	done := make(chan struct{})
-	go func() {
-		_, _ = qdrantCmd.Process.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		_ = qdrantCmd.Process.Kill()
-		log.Warn("强制终止Qdrant进程(超时)")
-	}
-	log.Info("Qdrant已停止")
 }
 
 func WaitForQdrant(port int) error {

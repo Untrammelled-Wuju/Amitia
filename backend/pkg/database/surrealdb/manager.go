@@ -3,16 +3,12 @@
 package surrealdb
 
 import (
+	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sync"
-	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -21,23 +17,28 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-var surrealCmd *exec.Cmd
-var surrealMu sync.Mutex
-var surrealMonitorStop chan struct{}
-var surrealRestartFn func()
-var surrealShuttingDown atomic.Bool
+// SetSurrealShuttingDown is a no-op. Process shutdown is managed by ProcessSupervisor.
+func SetSurrealShuttingDown() {}
 
-func SetSurrealShuttingDown() {
-	surrealShuttingDown.Store(true)
+// IsSurrealShuttingDown always returns false. Process lifecycle is managed by ProcessSupervisor.
+func IsSurrealShuttingDown() bool { return false }
+
+// SetSurrealRestartCallback is a no-op. Restart callbacks are managed by ProcessSupervisor.
+func SetSurrealRestartCallback(_ func()) {}
+
+// StartSurreal is deprecated. Use BuildSurrealProcessSpec and the runtimehost.ProcessSupervisor.
+func StartSurreal() error {
+	return errors.New("surrealdb: use BuildSurrealProcessSpec instead")
 }
 
-func IsSurrealShuttingDown() bool {
-	return surrealShuttingDown.Load()
-}
+// StopSurreal is deprecated. Use runtimehost.ProcessSupervisor.Stop.
+func StopSurreal() {}
 
-func SetSurrealRestartCallback(fn func()) {
-	surrealRestartFn = fn
-}
+// StartSurrealMonitor is a no-op. Health monitoring is handled by ProcessSupervisor.
+func StartSurrealMonitor() {}
+
+// StopSurrealMonitor is a no-op. Health monitoring is handled by ProcessSupervisor.
+func StopSurrealMonitor() {}
 
 type surrealWriter struct{}
 
@@ -50,34 +51,6 @@ func (w *surrealWriter) Write(p []byte) (int, error) {
 		log.Info("[SurrealDB]", lines)
 	}
 	return len(p), nil
-}
-
-func killExistingSurreal(port int) {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
-	if err != nil {
-		return
-	}
-	conn.Close()
-
-	log.Warn("检测到旧SurrealDB进程，正在终止...")
-	if runtime.GOOS == "windows" {
-		exec.Command("taskkill", "/F", "/IM", "surreal.exe").Run()
-	} else {
-		exec.Command("pkill", "-9", "surreal").Run()
-	}
-	time.Sleep(2 * time.Second)
-
-	for i := 0; i < 10; i++ {
-		conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
-		if err != nil {
-			log.Info("旧SurrealDB已释放端口", port)
-			return
-		}
-		conn.Close()
-		time.Sleep(1 * time.Second)
-	}
-	log.Warn("旧SurrealDB未能在10秒内释放端口，继续启动...")
 }
 
 func resolveSurrealBinaryPath(surrealDir string) string {
@@ -165,130 +138,7 @@ func resolveSurrealWorkDir(surrealDir string) string {
 	return surrealDir
 }
 
-func StartSurreal() error {
-	surrealMu.Lock()
-	defer surrealMu.Unlock()
-
-	return startSurrealInternal()
-}
-
-func startSurrealInternal() error {
-	cfg := config.AppCfg.Providers.GraphStore.SurrealDB
-	workDir := util.RuntimeRoot()
-
-	killExistingSurreal(cfg.Port)
-
-	surrealDir := filepath.Join(workDir, "surrealdb")
-
-	surrealPath := resolveSurrealBinaryPath(surrealDir)
-
-	if _, err := os.Stat(surrealPath); os.IsNotExist(err) {
-		if err := ensureSurrealBinary(surrealPath, surrealDir); err != nil {
-			return err
-		}
-	}
-
-	bindAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-
-	storagePath := cfg.DataPath
-	if storagePath != "" && storagePath != "memory" {
-		absPath := util.ResolveRuntimePath(workDir, storagePath)
-		os.MkdirAll(absPath, 0755)
-		storagePath = "surrealkv:" + absPath
-	}
-
-	cmd := exec.Command(surrealPath, "start",
-		"--log", "info",
-		"--user", cfg.Username,
-		"--pass", cfg.Password,
-		"--bind", bindAddr,
-		storagePath,
-	)
-	cmd.Dir = resolveSurrealWorkDir(surrealDir)
-	cmd.Stdout = &surrealWriter{}
-	cmd.Stderr = &surrealWriter{}
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("启动SurrealDB失败: %w", err)
-	}
-
-	surrealCmd = cmd
-	log.Info("SurrealDB已启动", "port", cfg.Port, "pid", cmd.Process.Pid)
-	return nil
-}
-
-func isSurrealAlive(port int) bool {
-	url := fmt.Sprintf("http://127.0.0.1:%d/health", port)
-	client := http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return false
-	}
-	resp.Body.Close()
-	return resp.StatusCode == 200
-}
-
-func StartSurrealMonitor() {
-	if surrealMonitorStop != nil {
-		return
-	}
-	surrealMonitorStop = make(chan struct{})
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Warn("SurrealDB监控协程异常恢复:", r)
-			}
-		}()
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if IsSurrealShuttingDown() {
-					return
-				}
-				surrealMu.Lock()
-				needRestart := false
-				if surrealCmd == nil || surrealCmd.Process == nil {
-					needRestart = true
-				} else if !isSurrealAlive(config.AppCfg.Providers.GraphStore.SurrealDB.Port) {
-					needRestart = true
-				}
-				if needRestart && !IsSurrealShuttingDown() {
-					log.Warn("检测到SurrealDB进程异常，尝试重启...")
-					if err := startSurrealInternal(); err != nil {
-						log.Error("SurrealDB重启失败:", err)
-						surrealMu.Unlock()
-						continue
-					}
-					if err := WaitForSurreal(config.AppCfg.Providers.GraphStore.SurrealDB.Port); err != nil {
-						log.Error("等待SurrealDB就绪超时:", err)
-						surrealMu.Unlock()
-						continue
-					}
-					log.Info("SurrealDB已自动恢复")
-					surrealMu.Unlock()
-					if surrealRestartFn != nil {
-						surrealRestartFn()
-					}
-				} else {
-					surrealMu.Unlock()
-				}
-			case <-surrealMonitorStop:
-				return
-			}
-		}
-	}()
-	log.Info("SurrealDB进程监控已启动")
-}
-
-func StopSurrealMonitor() {
-	if surrealMonitorStop != nil {
-		close(surrealMonitorStop)
-		surrealMonitorStop = nil
-	}
-}
-
+// IsLinuxARM64 reports whether the current platform is Linux ARM64.
 func IsLinuxARM64() bool {
 	return runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
 }
@@ -322,29 +172,7 @@ func ensureSurrealBinary(surrealPath, surrealDir string) error {
 	return fmt.Errorf("SurrealDB程序不存在: %s", surrealPath)
 }
 
-func StopSurreal() {
-	StopSurrealMonitor()
-	surrealMu.Lock()
-	defer surrealMu.Unlock()
-
-	if surrealCmd == nil || surrealCmd.Process == nil {
-		return
-	}
-	_ = surrealCmd.Process.Signal(syscall.SIGTERM)
-	done := make(chan struct{})
-	go func() {
-		_, _ = surrealCmd.Process.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		_ = surrealCmd.Process.Kill()
-		log.Warn("强制终止SurrealDB进程(超时)")
-	}
-	log.Info("SurrealDB已停止")
-}
-
+// WaitForSurreal polls the SurrealDB health endpoint until it responds OK.
 func WaitForSurreal(port int) error {
 	url := fmt.Sprintf("http://127.0.0.1:%d/health", port)
 	client := http.Client{Timeout: 500 * time.Millisecond}

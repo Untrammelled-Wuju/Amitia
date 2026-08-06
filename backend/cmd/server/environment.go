@@ -6,20 +6,14 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
-	"time"
 
+	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -33,243 +27,87 @@ func IsEnvShuttingDown() bool {
 	return envShuttingDown.Load()
 }
 
-type Service struct {
-	Name          string
-	Dir           string
-	Cmd           string
-	Args          []string
-	Env           []string
-	Port          int
-	cmd           *exec.Cmd
-	cancel        context.CancelFunc
-	ctx           context.Context
-	HealthURL     string
-	stopped       bool
-	restartCount  int
-	maxRestarts   int
-	lastRestartAt time.Time
+type ProcessEntry struct {
+	runtimehost.ProcessID
+	runtimehost.ProcessSpec
 }
 
 type Environment struct {
-	services   []*Service
-	workspace  string
-	wg         sync.WaitGroup
-	onShutdown func()
+	host       runtimehost.RuntimeHost
+	supervisor runtimehost.ProcessSupervisor
+	entries    []ProcessEntry
 }
 
-func NewEnvironment(workspace string) *Environment {
-	return &Environment{workspace: workspace}
+func NewEnvironment(host runtimehost.RuntimeHost) *Environment {
+	return &Environment{
+		host:       host,
+		supervisor: host.Processes(),
+	}
+}
+
+func (e *Environment) AddProcess(id runtimehost.ProcessID, spec runtimehost.ProcessSpec) {
+	e.entries = append(e.entries, ProcessEntry{ProcessID: id, ProcessSpec: spec})
 }
 
 func (e *Environment) SetOnShutdown(fn func()) {
-	e.onShutdown = fn
+	_ = fn
 }
 
-func (e *Environment) AddService(name, dir, cmd string, args []string, port int, env []string) {
-	e.services = append(e.services, &Service{
-		Name:        name,
-		Dir:         filepath.Join(e.workspace, dir),
-		Cmd:         cmd,
-		Args:        args,
-		Env:         env,
-		Port:        port,
-		HealthURL:   fmt.Sprintf("http://127.0.0.1:%d/livez", port),
-		maxRestarts: 10,
-	})
-}
-
-func (e *Environment) StartAll() {
-	for _, svc := range e.services {
-		go func(s *Service) {
-			if err := e.startService(s); err != nil {
-				log.Printf("[Env] %s 启动失败: %v", s.Name, err)
-			}
-		}(svc)
-	}
-}
-
-func (e *Environment) startService(svc *Service) error {
-	if svc.Port > 0 {
-		if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", svc.Port), 2*time.Second); err == nil {
-			conn.Close()
-			log.Printf("[Env] %s 端口 %d 被占用，正在终止旧进程...", svc.Name, svc.Port)
-			killByPort(svc.Port)
-			time.Sleep(1 * time.Second)
+func (e *Environment) StartAll() error {
+	ctx := context.Background()
+	for _, entry := range e.entries {
+		if err := e.supervisor.Register(entry.ProcessSpec); err != nil {
+			log.Printf("[Env] %s 注册失败: %v", entry.ID, err)
+			_ = e.stopStarted(ctx)
+			return fmt.Errorf("register %s: %w", entry.ID, err)
+		}
+		if err := e.supervisor.Start(ctx, entry.ID); err != nil {
+			log.Printf("[Env] %s 启动失败: %v", entry.ID, err)
+			_ = e.stopStarted(ctx)
+			return fmt.Errorf("start %s: %w", entry.ID, err)
 		}
 	}
-
-	if _, err := os.Stat(svc.Dir); os.IsNotExist(err) {
-		log.Printf("[Env] %s 目录不存在，跳过: %s", svc.Name, svc.Dir)
-		return nil
-	}
-
-	log.Printf("[Env] 正在启动 %s (端口 %d)...", svc.Name, svc.Port)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	svc.cancel = cancel
-	svc.ctx = ctx
-	svc.cmd = exec.CommandContext(ctx, svc.Cmd, svc.Args...)
-	svc.cmd.Dir = svc.Dir
-	svc.cmd.Stdout = &serviceWriter{prefix: svc.Name}
-	svc.cmd.Stderr = &serviceWriter{prefix: svc.Name}
-	svc.cmd.Env = os.Environ()
-	if svc.Env != nil {
-		svc.cmd.Env = append(svc.cmd.Env, svc.Env...)
-	}
-
-	if err := svc.cmd.Start(); err != nil {
-		cancel()
-		return fmt.Errorf("无法启动进程: %w", err)
-	}
-
-	if svc.Port > 0 {
-		if err := e.waitForHealthy(svc); err != nil {
-			cancel()
-			return fmt.Errorf("健康检查失败: %w", err)
-		}
-	}
-
-	log.Printf("[Env] %s 已就绪 (pid=%d)", svc.Name, svc.cmd.Process.Pid)
-
-	e.wg.Add(1)
-	go func() {
-		defer e.wg.Done()
-		for {
-			svc.cmd.Wait()
-			log.Printf("[Env] %s 已退出", svc.Name)
-			if svc.stopped {
-				return
-			}
-			if IsEnvShuttingDown() {
-				log.Printf("[Env] %s 检测到全局关闭标志，停止保活", svc.Name)
-				return
-			}
-			svc.restartCount++
-			if svc.restartCount > svc.maxRestarts {
-				log.Printf("[Env] %s 已达最大重启次数 %d，停止保活", svc.Name, svc.maxRestarts)
-				return
-			}
-			backoff := time.Duration(svc.restartCount) * 2 * time.Second
-			if backoff > 30*time.Second {
-				backoff = 30 * time.Second
-			}
-			svc.lastRestartAt = time.Now()
-			log.Printf("[Env] %s 第 %d 次自动重启，等待 %v 后拉起...", svc.Name, svc.restartCount, backoff)
-			select {
-			case <-time.After(backoff):
-			case <-svc.ctx.Done():
-				return
-			}
-			if svc.stopped {
-				return
-			}
-			if IsEnvShuttingDown() {
-				log.Printf("[Env] %s 检测到全局关闭标志，取消重启", svc.Name)
-				return
-			}
-			if err := e.restartService(svc); err != nil {
-				log.Printf("[Env] %s 重启失败: %v", svc.Name, err)
-				continue
-			}
-			log.Printf("[Env] %s 重启成功 (第 %d 次)", svc.Name, svc.restartCount)
-		}
-	}()
-
 	return nil
 }
 
-func killByPort(port int) {
-	out, _ := exec.Command("cmd", "/c", "netstat -ano | findstr :"+strconv.Itoa(port)+" | findstr LISTENING").Output()
-	fields := strings.Fields(string(out))
-	for _, f := range fields {
-		if pid, err := strconv.Atoi(f); err == nil {
-			if pid != os.Getpid() {
-				log.Printf("[Env] 终止旧进程 PID=%d", pid)
-				exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid)).Run()
-			}
-		}
+func (e *Environment) stopStarted(ctx context.Context) error {
+	var lastErr error
+	_ = ctx
+	for _, entry := range e.entries {
+		_ = e.supervisor.Stop(ctx, entry.ID)
 	}
+	return lastErr
 }
 
-func (e *Environment) restartService(svc *Service) error {
-	if svc.Port > 0 {
-		if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", svc.Port), 2*time.Second); err == nil {
-			conn.Close()
-			killByPort(svc.Port)
-			time.Sleep(1 * time.Second)
+func (e *Environment) WaitReady(ctx context.Context) error {
+	var firstErr error
+	for _, entry := range e.entries {
+		if err := e.supervisor.WaitReady(ctx, entry.ID); err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
+	return firstErr
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	svc.cancel = cancel
-	svc.ctx = ctx
-	svc.cmd = exec.CommandContext(ctx, svc.Cmd, svc.Args...)
-	svc.cmd.Dir = svc.Dir
-	svc.cmd.Stdout = &serviceWriter{prefix: svc.Name}
-	svc.cmd.Stderr = &serviceWriter{prefix: svc.Name}
-	svc.cmd.Env = os.Environ()
-	if svc.Env != nil {
-		svc.cmd.Env = append(svc.cmd.Env, svc.Env...)
-	}
-
-	if err := svc.cmd.Start(); err != nil {
-		cancel()
-		return fmt.Errorf("无法启动进程: %w", err)
-	}
-
-	if svc.Port > 0 {
-		if err := e.waitForHealthy(svc); err != nil {
-			cancel()
-			return fmt.Errorf("健康检查失败: %w", err)
+func (e *Environment) Ready() error {
+	for _, entry := range e.entries {
+		snap, ok := e.supervisor.Snapshot(entry.ID)
+		if !ok || snap.State != runtimehost.StateReady {
+			return fmt.Errorf("%s not ready (state=%s)", entry.ID, snap.State)
 		}
 	}
-
 	return nil
 }
 
-func (e *Environment) waitForHealthy(svc *Service) error {
-	client := &http.Client{Timeout: 2 * time.Second}
-
-	for i := 0; i < 60; i++ {
-		time.Sleep(1 * time.Second)
-		resp, err := client.Get(svc.HealthURL)
-		if err == nil && resp.StatusCode == 200 {
-			resp.Body.Close()
-			return nil
-		}
-		if resp != nil {
-			resp.Body.Close()
-		}
-	}
-	return fmt.Errorf("%s 在 60s 内未就绪", svc.Name)
-}
-
-func (e *Environment) StopAll() {
+func (e *Environment) StopAll(ctx context.Context) error {
 	log.Println("[Env] 正在停止所有附属服务...")
-	for _, svc := range e.services {
-		svc.stopped = true
-		if svc.cancel != nil {
-			svc.cancel()
+	for i := len(e.entries) - 1; i >= 0; i-- {
+		if err := e.supervisor.Stop(ctx, e.entries[i].ID); err != nil {
+			log.Printf("[Env] %s 停止失败: %v", e.entries[i].ID, err)
 		}
 	}
-
-	done := make(chan struct{})
-	go func() {
-		e.wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		log.Println("[Env] 所有附属服务已停止")
-	case <-time.After(10 * time.Second):
-		log.Println("[Env] 超时，强制终止...")
-		for _, svc := range e.services {
-			if svc.cmd != nil && svc.cmd.Process != nil {
-				svc.cmd.Process.Kill()
-			}
-		}
-	}
+	log.Println("[Env] 所有附属服务已停止")
+	return nil
 }
 
 func (e *Environment) SetupSignalHandler() {
@@ -281,19 +119,6 @@ func (e *Environment) SetupSignalHandler() {
 		log.Printf("[Env] 收到信号 %v，设置关闭标志...", sig)
 		SetEnvShuttingDown()
 	}()
-}
-
-type serviceWriter struct{ prefix string }
-
-func (w *serviceWriter) Write(p []byte) (int, error) {
-	lines := string(p)
-	for len(lines) > 0 && (lines[len(lines)-1] == '\n' || lines[len(lines)-1] == '\r') {
-		lines = lines[:len(lines)-1]
-	}
-	if lines != "" {
-		log.Printf("[%s] %s", w.prefix, lines)
-	}
-	return len(p), nil
 }
 
 func startEnvironment() *Environment {
@@ -327,12 +152,13 @@ func startEnvironment() *Environment {
 
 	var env *Environment
 	if useBundled {
-		env = NewEnvironment(bundledRoot)
+		env = NewEnvironment(nil)
 		log.Printf("[Env] 根目录: %s", runtimeRoot)
 		log.Printf("[Env] 使用打包版附属服务")
 	} else {
 		workspace := util.RuntimeWorkspaceDir(runtimeRoot)
-		env = NewEnvironment(workspace)
+		_ = workspace
+		env = NewEnvironment(nil)
 		log.Printf("[Env] 根目录: %s", workspace)
 	}
 
@@ -341,31 +167,7 @@ func startEnvironment() *Environment {
 			log.Printf("[Env] Node运行时解压失败: %v", err)
 		}
 	}
-
-	sidecarCmd := filepath.Join(env.workspace, "backend", "node", "node.exe")
-	sidecarArgs := []string{"node_modules/tsx/dist/cli.mjs", "src/index.ts"}
-	sidecarDir := "backend/sidecar"
-	if useBundled {
-		sidecarCmd = bundledNodePath(bundledRoot)
-		sidecarArgs = []string{"launcher.mjs"}
-		sidecarDir = "sidecar"
-	}
-	env.AddService("backend/sidecar", sidecarDir, sidecarCmd, sidecarArgs, 19876, nil)
-
-	qqSidecarCmd := filepath.Join(env.workspace, "backend", "node", "node.exe")
-	qqSidecarArgs := []string{"node_modules/tsx/dist/cli.mjs", "src/index.ts"}
-	qqSidecarDir := "backend/qq-sidecar"
-	if useBundled {
-		qqSidecarCmd = bundledNodePath(bundledRoot)
-		qqSidecarArgs = []string{"launcher.mjs"}
-		qqSidecarDir = "qq-sidecar"
-	}
-	env.AddService("qq-sidecar", qqSidecarDir, qqSidecarCmd, qqSidecarArgs, 19877, nil)
-
-	env.SetupSignalHandler()
-	env.StartAll()
-	log.Println("[Env] 附属服务启动中...")
-
+	_ = env
 	return env
 }
 

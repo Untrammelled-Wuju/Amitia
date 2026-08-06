@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -63,33 +62,44 @@ func (windowsPlatform) IsAndroidEmbedded() bool {
 	return false
 }
 
-func (windowsPlatform) KillExistingServer(addr string) error {
+func (p windowsPlatform) KillExistingServer(addr string) error {
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
 	if err != nil {
 		return nil
 	}
 	conn.Close()
 
-	_, port, splitErr := net.SplitHostPort(addr)
-	if splitErr != nil {
+	if _, _, splitErr := net.SplitHostPort(addr); splitErr != nil {
 		return fmt.Errorf("parse addr failed: %w", splitErr)
 	}
 
-	out, _ := exec.Command("cmd", "/c", "netstat -ano | findstr :"+port+" | findstr LISTENING").Output()
-	fields := strings.Fields(string(out))
-	selfPid := os.Getpid()
-	for _, f := range fields {
-		pid, err2 := strconv.Atoi(f)
-		if err2 != nil {
-			continue
+	dataDir := p.DefaultDataDir()
+	if pid, pidErr := p.ReadPidFile(dataDir); pidErr == nil && pid > 0 {
+		if pid == os.Getpid() {
+			return fmt.Errorf("port occupied by current process pid=%d", pid)
 		}
-		if pid == selfPid {
-			continue
+		if proc, findErr := os.FindProcess(pid); findErr == nil {
+			_ = proc.Signal(os.Interrupt)
+			done := make(chan struct{})
+			go func() {
+				_, _ = proc.Wait()
+				close(done)
+			}()
+			select {
+			case <-done:
+				time.Sleep(1 * time.Second)
+				return nil
+			case <-time.After(2 * time.Second):
+				_ = proc.Kill()
+				time.Sleep(1 * time.Second)
+				return nil
+			}
 		}
-		_ = exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid)).Run()
+		_ = p.RemovePidFile(dataDir)
+		return fmt.Errorf("port occupied by pid=%d (process not responsive)", pid)
 	}
-	time.Sleep(2 * time.Second)
-	return nil
+
+	return fmt.Errorf("port occupied by unknown process (no valid pid file found)")
 }
 
 func (windowsPlatform) WritePidFile(dataDir string) error {

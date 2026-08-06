@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package process
 
 import (
@@ -7,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -70,6 +71,9 @@ func (m *DefaultProcessManager) Start(ctx context.Context, config ProcessConfig)
 				config.OnStdout(line)
 			}
 		}
+		if scanErr := scanner.Err(); scanErr != nil && config.OnScannerError != nil {
+			config.OnScannerError(scanErr)
+		}
 	}()
 
 	stderrWG.Add(1)
@@ -82,6 +86,9 @@ func (m *DefaultProcessManager) Start(ctx context.Context, config ProcessConfig)
 			if config.OnStderr != nil {
 				config.OnStderr(line)
 			}
+		}
+		if scanErr := scanner.Err(); scanErr != nil && config.OnScannerError != nil {
+			config.OnScannerError(scanErr)
 		}
 	}()
 
@@ -99,64 +106,79 @@ func (m *DefaultProcessManager) Start(ctx context.Context, config ProcessConfig)
 			}
 		}
 		mp.markExited(exitCode, err)
+		cancel()
 	}()
 
 	return mp, nil
 }
 
 func (m *DefaultProcessManager) Stop(pid int, handle ProcessTreeHandle, gracePeriod time.Duration) error {
+	return m.StopContext(context.Background(), pid, handle, gracePeriod)
+}
+
+func (m *DefaultProcessManager) StopContext(ctx context.Context, pid int, handle ProcessTreeHandle, gracePeriod time.Duration) error {
 	if pid <= 0 {
-		return fmt.Errorf("process: invalid pid %d", pid)
+		return nil
 	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
+	if !m.IsAlive(pid) {
 		return nil
 	}
 
-	if err := sendTermination(proc); err != nil {
-	}
+	gracefulErr := requestGracefulStop(pid)
+	_ = gracefulErr
 
-	timer := time.NewTimer(gracePeriod)
-	defer timer.Stop()
-	deadline := time.Now().Add(gracePeriod)
-	for {
-		if !m.IsAlive(pid) {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			break
-		}
-		select {
-		case <-timer.C:
+	done := make(chan struct{})
+	go func() {
+		deadline := time.Now().Add(gracePeriod)
+		for {
 			if !m.IsAlive(pid) {
-				return nil
+				close(done)
+				return
 			}
 			if time.Now().After(deadline) {
-				goto forceKill
+				break
 			}
-			timer.Reset(time.Until(deadline))
-		case <-time.After(100 * time.Millisecond):
+			select {
+			case <-done:
+				return
+			case <-time.After(50 * time.Millisecond):
+			}
 		}
-	}
+		forceStopProcessTree(pid, handle)
+		close(done)
+	}()
 
-forceKill:
-	if err := terminateProcessTree(pid, handle); err != nil {
-		_ = proc.Kill()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		forceStopProcessTree(pid, handle)
+		return ctx.Err()
 	}
-	return nil
 }
 
 func (m *DefaultProcessManager) IsAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
+	return isProcessAlive(pid)
+}
+
+func (m *DefaultProcessManager) IsProcessAlive(pid int) bool {
+	if pid <= 0 {
 		return false
 	}
-	return proc.Signal(syscall.Signal(0)) == nil
+	return isProcessAlive(pid)
 }
 
 func sendTermination(proc *os.Process) error {
-	return proc.Signal(syscall.SIGTERM)
+	return procSignalTerm(proc)
+}
+
+func requestGracefulStop(pid int) error {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return procSignalTerm(proc)
 }

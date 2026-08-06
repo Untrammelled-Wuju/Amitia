@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -79,36 +78,25 @@ func (p linuxPlatform) KillExistingServer(addr string) error {
 	}
 	conn.Close()
 
-	_, port, splitErr := net.SplitHostPort(addr)
-	if splitErr != nil {
+	if _, _, splitErr := net.SplitHostPort(addr); splitErr != nil {
 		return fmt.Errorf("parse addr failed: %w", splitErr)
 	}
 
 	dataDir := p.DefaultDataDir()
 
 	if pid, pidErr := p.ReadPidFile(dataDir); pidErr == nil && pid > 0 {
+		if pid == os.Getpid() {
+			return fmt.Errorf("port occupied by current process pid=%d", pid)
+		}
 		if killErr := killPid(pid); killErr == nil {
 			time.Sleep(2 * time.Second)
 			return nil
 		}
+		_ = p.RemovePidFile(dataDir)
+		return fmt.Errorf("port occupied by pid=%d (process not responsive)", pid)
 	}
 
-	if path, lookupErr := exec.LookPath("fuser"); lookupErr == nil {
-		_ = exec.Command(path, "-k", port+"/tcp").Run()
-		time.Sleep(2 * time.Second)
-		return nil
-	}
-
-	if path, lookupErr := exec.LookPath("lsof"); lookupErr == nil {
-		out, _ := exec.Command(path, "-ti", ":"+port).Output()
-		for _, raw := range strings.Fields(string(out)) {
-			if pid, err2 := strconv.Atoi(raw); err2 == nil {
-				_ = killPid(pid)
-			}
-		}
-		time.Sleep(2 * time.Second)
-	}
-	return nil
+	return fmt.Errorf("port occupied by unknown process (no valid pid file found)")
 }
 
 func (linuxPlatform) WritePidFile(dataDir string) error {
