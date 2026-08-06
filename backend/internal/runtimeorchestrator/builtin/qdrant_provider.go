@@ -11,9 +11,9 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantlayout"
-	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 )
 
 type QdrantDependency interface {
@@ -70,13 +70,13 @@ func (f *QdrantProviderFactory) Build(ctx runtimeorchestrator.ProviderBuildConte
 	}
 
 	return &qdrantProvider{
-		config:          &ctx.Config.Providers.VectorStore,
-		host:            ctx.Host,
-		envResolver:     envResolver,
-		layoutResolver:  layoutResolver,
+		config:           &ctx.Config.Providers.VectorStore,
+		host:             ctx.Host,
+		envResolver:      envResolver,
+		layoutResolver:   layoutResolver,
 		directoryManager: qdrantlayout.NewDirectoryManager(nil),
-		configRenderer:  qdrantconfig.NewRenderer(),
-		configWriter:    qdrantconfig.NewWriter(nil),
+		configRenderer:   qdrantconfig.NewRenderer(),
+		configWriter:     qdrantconfig.NewWriter(nil),
 	}, nil
 }
 
@@ -182,6 +182,14 @@ func (p *qdrantProvider) Stop(ctx context.Context) error {
 	p.stopped = true
 	return nil
 }
+
+type phaseError struct {
+	phase string
+	err   error
+}
+
+func (e phaseError) Error() string { return e.phase + ": " + e.err.Error() }
+func (e phaseError) Unwrap() error { return e.err }
 
 func unwrapNotInstalled(err error) (error, bool) {
 	for err != nil {

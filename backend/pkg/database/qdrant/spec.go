@@ -10,14 +10,14 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantlayout"
-	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 	"github.com/u-ai/backend/pkg/util"
 )
 
-// BuildQdrantProcessSpec prepares the Qdrant ProcessSpec using the runtimehost to resolve binary paths.
-// It uses qdrantlayout to determine all directory paths and qdrantconfig to generate the Qdrant config.
+// BuildQdrantProcessSpec prepares the Qdrant ProcessSpec using the runtimehost to resolve binary paths via qdrantenv.
+// It does NOT start Qdrant; the caller (typically a ProcessSupervisor-based adapter) handles execution and lifecycle.
 func BuildQdrantProcessSpec(host runtimehost.RuntimeHost) (runtimehost.ProcessSpec, error) {
 	if host == nil {
 		return runtimehost.ProcessSpec{}, fmt.Errorf("BuildQdrantProcessSpec: host is nil")
@@ -64,21 +64,21 @@ func BuildQdrantProcessSpec(host runtimehost.RuntimeHost) (runtimehost.ProcessSp
 	}
 
 	layoutResolver, err := qdrantlayout.NewResolver(qdrantlayout.ResolveContext{
-		Config: config.AppCfg,
-		Host:   host,
+		Config:    config.AppCfg,
+		Host:      host,
+		Inspector: nil,
 	})
 	if err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("create layout resolver: %w", err)
+		return runtimehost.ProcessSpec{}, fmt.Errorf("create qdrantlayout resolver: %w", err)
 	}
 
 	layout, err := layoutResolver.Resolve(context.Background(), env)
 	if err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("resolve layout: %w", err)
+		return runtimehost.ProcessSpec{}, fmt.Errorf("resolve qdrant layout: %w", err)
 	}
 
-	dm := qdrantlayout.NewDirectoryManager(nil)
-	if err := dm.Ensure(context.Background(), layout); err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("ensure directories: %w", err)
+	if err := qdrantlayout.NewDirectoryManager(nil).Ensure(context.Background(), layout); err != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("ensure qdrant directories: %w", err)
 	}
 
 	doc := qdrantconfig.Document{
@@ -88,15 +88,13 @@ func BuildQdrantProcessSpec(host runtimehost.RuntimeHost) (runtimehost.ProcessSp
 		SnapshotPath: layout.SnapshotsDir,
 	}
 
-	renderer := qdrantconfig.NewRenderer()
-	configBytes, err := renderer.Render(doc)
+	configBytes, err := qdrantconfig.NewRenderer().Render(doc)
 	if err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("render config: %w", err)
+		return runtimehost.ProcessSpec{}, fmt.Errorf("render qdrant config: %w", err)
 	}
 
-	writer := qdrantconfig.NewWriter(nil)
-	if err := writer.Write(context.Background(), layout.ConfigPath, configBytes); err != nil {
-		return runtimehost.ProcessSpec{}, fmt.Errorf("write config: %w", err)
+	if err := qdrantconfig.NewWriter(nil).Write(context.Background(), layout.ConfigPath, configBytes); err != nil {
+		return runtimehost.ProcessSpec{}, fmt.Errorf("write qdrant config: %w", err)
 	}
 
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/readyz", vectorCfg.Qdrant.Port)

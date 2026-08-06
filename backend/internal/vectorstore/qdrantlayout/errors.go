@@ -8,18 +8,18 @@ import (
 )
 
 var (
-	ErrQdrantNotInstalled        = errors.New("qdrantlayout: qdrant is not installed")
-	ErrResourceRootUnavailable   = errors.New("qdrantlayout: resource root is unavailable")
-	ErrInvalidLayout             = errors.New("qdrantlayout: invalid layout")
-	ErrPathOverlap               = errors.New("qdrantlayout: path overlap detected")
-	ErrUnsafeRootPath            = errors.New("qdrantlayout: path must not be filesystem root")
-	ErrDirectoryCreationFailed   = errors.New("qdrantlayout: directory creation failed")
-	ErrLegacyDataConflict        = errors.New("qdrantlayout: legacy data conflict")
-	ErrMigrationInProgress       = errors.New("qdrantlayout: migration already in progress")
-	ErrMigrationFailed           = errors.New("qdrantlayout: migration failed")
+	ErrQdrantNotInstalled          = errors.New("qdrantlayout: qdrant is not installed")
+	ErrResourceRootUnavailable     = errors.New("qdrantlayout: resource root is unavailable")
+	ErrInvalidLayout               = errors.New("qdrantlayout: invalid layout")
+	ErrPathOverlap                 = errors.New("qdrantlayout: path overlap detected")
+	ErrUnsafeRootPath              = errors.New("qdrantlayout: path must not be filesystem root")
+	ErrDirectoryCreationFailed     = errors.New("qdrantlayout: directory creation failed")
+	ErrLegacyDataConflict          = errors.New("qdrantlayout: legacy data conflict")
+	ErrMigrationInProgress         = errors.New("qdrantlayout: migration already in progress")
+	ErrMigrationFailed             = errors.New("qdrantlayout: migration failed")
 	ErrMigrationVerificationFailed = errors.New("qdrantlayout: migration verification failed")
-	ErrConfigRenderFailed        = errors.New("qdrantlayout: config render failed")
-	ErrConfigWriteFailed         = errors.New("qdrantlayout: config write failed")
+	ErrConfigRenderFailed          = errors.New("qdrantlayout: config render failed")
+	ErrConfigWriteFailed           = errors.New("qdrantlayout: config write failed")
 )
 
 type resourceRootUnavailableError struct {
@@ -56,8 +56,8 @@ func newInvalidLayout(reason string) error {
 }
 
 type pathOverlapError struct {
-	pathA  string
-	pathB  string
+	pathA string
+	pathB string
 }
 
 func (e *pathOverlapError) Error() string {

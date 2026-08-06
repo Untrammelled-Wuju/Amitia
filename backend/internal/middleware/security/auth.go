@@ -47,11 +47,12 @@ const (
 )
 
 var maintenanceAllowedPaths = map[string]bool{
-	"/api/health":    true,
-	"/api/doctor":    true,
-	"/api/migration": true,
-	"/api/backup":    true,
-	"/api/export":    true,
+	"/api/health":       true,
+	"/api/doctor":       true,
+	"/api/migration":    true,
+	"/api/backup":       true,
+	"/api/export":       true,
+	"/api/maintenance":  true,
 }
 
 var ErrNotFound = errors.New("not found")

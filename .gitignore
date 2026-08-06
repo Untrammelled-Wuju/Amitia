@@ -120,6 +120,11 @@ backend/pkg.zip
 # Temp archives
 backend-src.zip
 backend-src.zip.tmp
+backend-source.zip
+
+# QQ sidecar device fingerprints & login artifacts (runtime data)
+**/device.json
+**/qrcode.png
 
 # Test binaries
 backend/worker.test.exe
@@ -162,3 +167,13 @@ test_nodeenv_race.txt
 # AI tooling workspace config
 .reasonix/
 reasonix.toml
+
+# Backend runtime data (DB, secrets, migration backups, installed extensions)
+backend/data/
+backend/cmd/data/
+**/migration_backups/
+**/migration_backups_prev/
+**/mcp-secrets.key
+**/local-token
+data.db/
+backend/data.db/

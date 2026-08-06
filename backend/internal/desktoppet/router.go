@@ -16,11 +16,11 @@ func RegisterDesktopPetRouter(r *gin.RouterGroup, ctx *app.AppContext, registry 
 	svc := NewService(repo, ctx.DB)
 	if registry == nil {
 		registry = security.NewPathRootRegistry()
+		_ = registry.CreateAndRegister(security.RootGenerationArtifacts, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "generation-artifacts"))
+		_ = registry.CreateAndRegister(security.RootQualityReports, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "quality-reports"))
+		_ = registry.CreateAndRegister(security.RootReleasePublished, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "release-published"))
+		_ = registry.CreateAndRegister(security.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
 	}
-	_ = registry.Register(security.RootGenerationArtifacts, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "generation-artifacts"))
-	_ = registry.Register(security.RootQualityReports, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "quality-reports"))
-	_ = registry.Register(security.RootReleasePublished, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "releases"))
-	_ = registry.Register(security.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	handler := NewHandler(svc, responder, guard)

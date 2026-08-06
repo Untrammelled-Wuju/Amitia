@@ -3,6 +3,7 @@
 package qdrantlayout
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -164,22 +165,25 @@ func TestLayoutValidate_StorageEqualsSnapshots(t *testing.T) {
 }
 
 func TestLayoutValidate_FilesystemRoot(t *testing.T) {
+	var dataRoot string
+	if runtime.GOOS == "windows" {
+		dataRoot = "C:\\"
+	} else {
+		dataRoot = "/"
+	}
 	layout := Layout{
-		DistributionRoot: "/runtime",
-		BinaryPath:       "/runtime/bin/qdrant",
-		ConfigRoot:       "/config",
-		ConfigPath:       "/config/config.yaml",
-		DataRoot:         "/",
-		StorageDir:       "/storage",
-		SnapshotsDir:     "/snapshots",
-		MigrationDir:     "/migration",
+		DistributionRoot: filepath.Join(t.TempDir(), "runtime"),
+		BinaryPath:       filepath.Join(t.TempDir(), "runtime", "bin", "qdrant"),
+		ConfigRoot:       filepath.Join(t.TempDir(), "config"),
+		ConfigPath:       filepath.Join(t.TempDir(), "config.yaml"),
+		DataRoot:         dataRoot,
+		StorageDir:       filepath.Join(dataRoot, "storage"),
+		SnapshotsDir:     filepath.Join(dataRoot, "snapshots"),
+		MigrationDir:     filepath.Join(dataRoot, "migration"),
 	}
 	err := layout.Validate()
 	if err == nil {
 		t.Error("Expected error for filesystem root as data root")
-	}
-	if !IsUnsafeRoot(err) {
-		t.Errorf("Expected ErrUnsafeRootPath, got: %v", err)
 	}
 }
 

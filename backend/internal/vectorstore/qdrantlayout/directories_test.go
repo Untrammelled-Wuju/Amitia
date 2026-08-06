@@ -3,6 +3,7 @@
 package qdrantlayout
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,7 +30,7 @@ func TestDirectoryManager_EnsureAll(t *testing.T) {
 	}
 
 	dm := NewDirectoryManager(nil)
-	if err := dm.Ensure(nil, layout); err != nil {
+	if err := dm.Ensure(context.Background(), layout); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
 
@@ -57,10 +58,10 @@ func TestDirectoryManager_Idempotent(t *testing.T) {
 	layout := buildTestLayout(base)
 
 	dm := NewDirectoryManager(nil)
-	if err := dm.Ensure(nil, layout); err != nil {
+	if err := dm.Ensure(context.Background(), layout); err != nil {
 		t.Fatalf("First Ensure: %v", err)
 	}
-	if err := dm.Ensure(nil, layout); err != nil {
+	if err := dm.Ensure(context.Background(), layout); err != nil {
 		t.Fatalf("Second Ensure: %v", err)
 	}
 }
@@ -79,7 +80,7 @@ func TestDirectoryManager_FileConflict(t *testing.T) {
 	}
 
 	dm := NewDirectoryManager(nil)
-	err := dm.Ensure(nil, layout)
+	err := dm.Ensure(context.Background(), layout)
 	if err == nil {
 		t.Error("Expected error when path exists as file")
 	}

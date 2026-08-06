@@ -3,6 +3,7 @@
 package security
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -26,14 +27,16 @@ func NewLocalCredentialStore(tokenFile string) (*LocalCredentialStore, error) {
 		return nil, errors.New("local token file is required")
 	}
 
-	data, err := os.ReadFile(tokenFile)
-	if err != nil {
-		return nil, fmt.Errorf("read local token: %w", err)
-	}
-
-	token := strings.TrimSpace(string(data))
+	token := strings.TrimSpace(readInstanceFile(tokenFile))
 	if len(token) < 32 {
-		return nil, errors.New("local token is too short")
+		generated, err := newLocalToken()
+		if err != nil {
+			return nil, fmt.Errorf("generate local token: %w", err)
+		}
+		if err := atomicWriteCredential(tokenFile, generated); err != nil {
+			return nil, fmt.Errorf("write local token: %w", err)
+		}
+		token = generated
 	}
 
 	return &LocalCredentialStore{
@@ -41,6 +44,14 @@ func NewLocalCredentialStore(tokenFile string) (*LocalCredentialStore, error) {
 		token:     token,
 		version:   credentialVersion(token),
 	}, nil
+}
+
+func newLocalToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func credentialVersion(token string) string {

@@ -7,7 +7,7 @@ storage:
   dataDir: "AmitiaData/data"
 
 jwt:
-  secret: "Am1t1a-D3skt0p-L0c4l-S3cr3t-K3y-2026"
+  secret: "zTMPXMQGsKBp0WuYlEWHZNLaUOd2lPbFeRSu1fRNrBU"
   issuer: "amitia"
   audience: "amitia-api"
   expireDays: 7
@@ -19,7 +19,7 @@ app:
 
 security:
   mode: "local_single_user"
-  localToken: "c3j22EREBHyFPEcP09s6C5cPSa-xxY3Vfslq2xZILbI"
+  localToken: "9tCnnqQaku7MnpimQtuxd8DiDcntIPZTdbMuYG8Kp-I"
 
 providers:
   scriptRuntime:
@@ -32,7 +32,7 @@ providers:
     provider: "builtin.qdrant-process"
     qdrant:
       host: "127.0.0.1"
-      port: 19178
+      port: 9178
       binaryPath: ""
       configDir: ""
       dataDir: ""

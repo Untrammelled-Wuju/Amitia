@@ -3,7 +3,9 @@
 package security
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -33,27 +35,79 @@ func NewDesktopInstanceStore(
 		"desktop-instance-id",
 	)
 
-	data, err := os.ReadFile(instanceFile)
-	if err != nil {
+	dir := filepath.Dir(instanceFile)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf(
-			"read desktop instance id: %w",
+			"create desktop instance dir: %w",
 			err,
 		)
 	}
 
 	instanceID := strings.TrimSpace(
-		string(data),
+		readInstanceFile(instanceFile),
 	)
 	if instanceID == "" {
-		return nil, errors.New(
-			"desktop instance id is empty",
-		)
+		generated, err := newInstanceID()
+		if err != nil {
+			return nil, fmt.Errorf(
+				"generate desktop instance id: %w",
+				err,
+			)
+		}
+		if err := writeInstanceFile(
+			instanceFile,
+			generated,
+		); err != nil {
+			return nil, fmt.Errorf(
+				"write desktop instance id: %w",
+				err,
+			)
+		}
+		instanceID = generated
 	}
 
 	return &DesktopInstanceStore{
 		instanceFile: instanceFile,
 		instanceID:   instanceID,
 	}, nil
+}
+
+func readInstanceFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func newInstanceID() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(
+		b,
+	), nil
+}
+
+func writeInstanceFile(path string, value string) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(
+		tmp,
+		[]byte(value),
+		0o600,
+	); err != nil {
+		return err
+	}
+	if file, err := os.OpenFile(
+		tmp,
+		os.O_WRONLY,
+		0o600,
+	); err == nil {
+		_ = file.Sync()
+		_ = file.Close()
+	}
+	return os.Rename(tmp, path)
 }
 
 func (

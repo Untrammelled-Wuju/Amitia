@@ -92,4 +92,3 @@ func isEmptyDir(path string) (bool, error) {
 	}
 	return false, nil
 }
-

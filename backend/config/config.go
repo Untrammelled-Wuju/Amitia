@@ -36,10 +36,10 @@ type ProvidersConfig struct {
 }
 
 type ScriptRuntimeProviderConfig struct {
-	Enabled  bool                `mapstructure:"enabled"`
-	Required bool                `mapstructure:"required"`
-	Provider string              `mapstructure:"provider"`
-	Node     NodeProcessConfig   `mapstructure:"node"`
+	Enabled  bool              `mapstructure:"enabled"`
+	Required bool              `mapstructure:"required"`
+	Provider string            `mapstructure:"provider"`
+	Node     NodeProcessConfig `mapstructure:"node"`
 }
 
 type NodeProcessConfig struct {
@@ -50,17 +50,17 @@ type NodeProcessConfig struct {
 }
 
 type VectorStoreProviderConfig struct {
-	Enabled  bool            `mapstructure:"enabled"`
-	Required bool            `mapstructure:"required"`
-	Provider string          `mapstructure:"provider"`
-	Qdrant   QdrantConfig    `mapstructure:"qdrant"`
+	Enabled  bool         `mapstructure:"enabled"`
+	Required bool         `mapstructure:"required"`
+	Provider string       `mapstructure:"provider"`
+	Qdrant   QdrantConfig `mapstructure:"qdrant"`
 }
 
 type GraphStoreProviderConfig struct {
-	Enabled  bool            `mapstructure:"enabled"`
-	Required bool            `mapstructure:"required"`
-	Provider string          `mapstructure:"provider"`
-	SurrealDB SurrealConfig  `mapstructure:"surrealdb"`
+	Enabled   bool          `mapstructure:"enabled"`
+	Required  bool          `mapstructure:"required"`
+	Provider  string        `mapstructure:"provider"`
+	SurrealDB SurrealConfig `mapstructure:"surrealdb"`
 }
 
 type ComponentsConfig struct {
@@ -70,9 +70,9 @@ type ComponentsConfig struct {
 }
 
 type ProcessComponentConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	EntryURI  string `mapstructure:"entryUri"`
-	WorkURI   string `mapstructure:"workUri"`
+	Enabled  bool   `mapstructure:"enabled"`
+	EntryURI string `mapstructure:"entryUri"`
+	WorkURI  string `mapstructure:"workUri"`
 }
 
 type SidecarsConfig struct {
@@ -202,19 +202,19 @@ type ManagedSidecarConfig struct {
 }
 
 type DesktopPetRuntimeConfig struct {
-	Enabled              bool `mapstructure:"enabled"`
-	LoopbackOnly         bool `mapstructure:"loopbackOnly"`
-	AllowRemote          bool `mapstructure:"allowRemote"`
-	HeartbeatIntervalMs  int  `mapstructure:"heartbeatIntervalMs"`
-	HeartbeatTimeoutMs   int  `mapstructure:"heartbeatTimeoutMs"`
-	MaxMessageBytes      int  `mapstructure:"maxMessageBytes"`
-	RegisterTimeoutSec   int  `mapstructure:"registerTimeoutSec"`
-	SendQueueSize        int  `mapstructure:"sendQueueSize"`
-	CommandTimeoutSec    int  `mapstructure:"commandTimeoutSec"`
-	MaxRetryAttempts     int  `mapstructure:"maxRetryAttempts"`
-	RetryBaseDelayMs     int  `mapstructure:"retryBaseDelayMs"`
-	RetryMaxDelayMs      int  `mapstructure:"retryMaxDelayMs"`
-	CommandRetentionHours int `mapstructure:"commandRetentionHours"`
+	Enabled               bool `mapstructure:"enabled"`
+	LoopbackOnly          bool `mapstructure:"loopbackOnly"`
+	AllowRemote           bool `mapstructure:"allowRemote"`
+	HeartbeatIntervalMs   int  `mapstructure:"heartbeatIntervalMs"`
+	HeartbeatTimeoutMs    int  `mapstructure:"heartbeatTimeoutMs"`
+	MaxMessageBytes       int  `mapstructure:"maxMessageBytes"`
+	RegisterTimeoutSec    int  `mapstructure:"registerTimeoutSec"`
+	SendQueueSize         int  `mapstructure:"sendQueueSize"`
+	CommandTimeoutSec     int  `mapstructure:"commandTimeoutSec"`
+	MaxRetryAttempts      int  `mapstructure:"maxRetryAttempts"`
+	RetryBaseDelayMs      int  `mapstructure:"retryBaseDelayMs"`
+	RetryMaxDelayMs       int  `mapstructure:"retryMaxDelayMs"`
+	CommandRetentionHours int  `mapstructure:"commandRetentionHours"`
 }
 
 type SecurityRuntimeConfig struct {

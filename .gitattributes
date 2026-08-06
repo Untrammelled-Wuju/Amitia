@@ -1,0 +1,40 @@
+# Normalize line endings
+* text=auto
+
+# Source code
+*.go text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.vue text eol=lf
+*.js text eol=lf
+*.dart text eol=lf
+
+# Shell scripts must stay LF
+*.sh text eol=lf
+
+# PowerShell
+*.ps1 text eol=crlf
+
+# Config files
+*.json text
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text
+
+# Git internals
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# Binaries / archives
+*.exe binary
+*.dll binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.key binary
+*.db binary
+*.amitiax binary
+*.extension-key binary

@@ -8,8 +8,8 @@ type Layout struct {
 	DistributionRoot string
 	BinaryPath       string
 
-	ConfigRoot  string
-	ConfigPath  string
+	ConfigRoot string
+	ConfigPath string
 
 	DataRoot     string
 	StorageDir   string

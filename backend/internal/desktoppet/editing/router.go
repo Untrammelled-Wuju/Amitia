@@ -19,8 +19,8 @@ func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *se
 	svc := NewService(repo, assetStore, genAdapter, procAdapter, qualAdapter, ctx.DB, dataDir)
 	if registry == nil {
 		registry = security.NewPathRootRegistry()
+		_ = registry.CreateAndRegister(security.RootEditingAssets, filepath.Join(dataDir, "desktop-pets", "editing-assets"))
 	}
-	_ = registry.Register(security.RootEditingAssets, filepath.Join(dataDir, "desktop-pets", "editing", "assets"))
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	registerRoutes(r, svc, responder, guard)
@@ -29,8 +29,8 @@ func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *se
 func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard security.OwnershipGuard, registry *security.PathRootRegistry) {
 	if registry == nil {
 		registry = security.NewPathRootRegistry()
+		_ = registry.CreateAndRegister(security.RootEditingAssets, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "editing-assets"))
 	}
-	_ = registry.Register(security.RootEditingAssets, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "editing", "assets"))
 	responder := security.NewSafeArtifactResponder(registry)
 	registerRoutes(r, svc, responder, guard)
 }

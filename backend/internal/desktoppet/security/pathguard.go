@@ -71,6 +71,13 @@ func (r *PathRootRegistry) Register(kind StorageRootKind, root string) error {
 	return nil
 }
 
+func (r *PathRootRegistry) CreateAndRegister(kind StorageRootKind, absolutePath string) error {
+	if err := os.MkdirAll(absolutePath, 0o700); err != nil {
+		return err
+	}
+	return r.Register(kind, absolutePath)
+}
+
 func (r *PathRootRegistry) Root(kind StorageRootKind) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -57,7 +57,7 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 
 	args := []string{
 		"start",
-		"file:" + dataPath,
+		"surrealkv:" + dataPath,
 		"--bind", fmt.Sprintf("0.0.0.0:%d", cfg.Port),
 		"--user", cfg.Username,
 		"--pass", cfg.Password,
