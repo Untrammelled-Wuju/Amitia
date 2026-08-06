@@ -3,13 +3,14 @@
 package kernel
 
 import (
-	"crypto/rand"
-	"fmt"
-	"os"
-	"path/filepath"
-	"syscall"
+"crypto/rand"
+"fmt"
+"os"
+"path/filepath"
+"strings"
+"syscall"
 
-	"golang.org/x/sys/unix"
+"golang.org/x/sys/unix"
 )
 
 type platformPathIdentity struct {
@@ -63,32 +64,53 @@ func openPlatformRestoreRoot(absolutePath string) (*platformRestoreDirectory, er
 	return &platformRestoreDirectory{file: file, pathIdentity: identity}, nil
 }
 
-func (directory *platformRestoreDirectory) openOrCreateChildDirectory(name string) (*platformRestoreDirectory, bool, error) {
+func (directory *platformRestoreDirectory) openExistingChildDirectory(name string) (*platformRestoreDirectory, error) {
 	if directory == nil || directory.file == nil || directory.closed {
-		return nil, false, fmt.Errorf("kernel: restore directory handle unavailable")
+		return nil, fmt.Errorf("kernel: restore directory handle unavailable")
 	}
 	if err := validatePlatformPathComponent(name); err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	fd, err := unix.Openat(int(directory.file.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-	created := false
-	if err != nil && err == unix.ENOENT {
-		if err = unix.Mkdirat(int(directory.file.Fd()), name, 0o700); err != nil && err != unix.EEXIST {
-			return nil, false, err
-		}
-		created = err == nil
-		fd, err = unix.Openat(int(directory.file.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-	}
 	if err != nil {
-		return nil, false, err
+		if err == unix.ENOENT {
+			return nil, os.ErrNotExist
+		}
+		return nil, err
 	}
 	file := os.NewFile(uintptr(fd), name)
 	identity, err := captureUnixHandleIdentity(file, true)
 	if err != nil {
 		_ = file.Close()
-		return nil, false, err
+		return nil, err
 	}
-	return &platformRestoreDirectory{file: file, pathIdentity: identity}, created, nil
+	return &platformRestoreDirectory{file: file, pathIdentity: identity}, nil
+}
+
+func (directory *platformRestoreDirectory) createChildDirectoryExclusive(name string) (*platformRestoreDirectory, error) {
+	if directory == nil || directory.file == nil || directory.closed {
+		return nil, fmt.Errorf("kernel: restore directory handle unavailable")
+	}
+	if err := validatePlatformPathComponent(name); err != nil {
+		return nil, err
+	}
+	err := unix.Mkdirat(int(directory.file.Fd()), name, 0o700)
+	if err != nil {
+		if err == unix.EEXIST {
+			return nil, NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: missing restore directory %s appeared concurrently", name),
+			)
+		}
+		return nil, err
+	}
+	child, err := directory.openExistingChildDirectory(name)
+	if err != nil {
+		_ = unix.Unlinkat(int(directory.file.Fd()), name, unix.AT_REMOVEDIR)
+		return nil, err
+	}
+	return child, nil
 }
 
 func (directory *platformRestoreDirectory) openRegularFile(name string) (*os.File, platformPathIdentity, error) {
@@ -181,16 +203,37 @@ func (directory *platformRestoreDirectory) identity() platformPathIdentity {
 }
 
 func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*platformRestoreDirectory, string, error) {
-	parent, err := openPlatformRestoreRoot(filepath.Dir(absoluteFilePath))
-	if err != nil {
-		return nil, "", err
+	absoluteRoot = filepath.Clean(absoluteRoot)
+	absoluteFilePath = filepath.Clean(absoluteFilePath)
+	if !pathIsWithinRoot(absoluteRoot, absoluteFilePath) {
+		return nil, "", fmt.Errorf("kernel: file path %s escapes root %s", absoluteFilePath, absoluteRoot)
 	}
 	name := filepath.Base(absoluteFilePath)
 	if err := validatePlatformPathComponent(name); err != nil {
-		_ = parent.close()
 		return nil, "", err
 	}
-	return parent, name, nil
+	current, err := openPlatformRestoreRoot(absoluteRoot)
+	if err != nil {
+		return nil, "", err
+	}
+	relativeParent, err := filepath.Rel(absoluteRoot, filepath.Dir(absoluteFilePath))
+	if err != nil {
+		_ = current.close()
+		return nil, "", err
+	}
+	if relativeParent == "." {
+		return current, name, nil
+	}
+	for _, component := range strings.Split(filepath.Clean(relativeParent), string(filepath.Separator)) {
+		child, err := current.openExistingChildDirectory(component)
+		if err != nil {
+			_ = current.close()
+			return nil, "", err
+		}
+		_ = current.close()
+		current = child
+	}
+	return current, name, nil
 }
 
 func (

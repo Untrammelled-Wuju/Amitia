@@ -206,13 +206,13 @@ func (s *ResourceSnapshotStore) QuarantineNewResources(ctx context.Context, exte
 	for _, entry := range snapshotEntries {
 		snapshotIDs[entry.Resource.ResourceID] = struct{}{}
 	}
-	quarantineDir := filepath.Join(s.extRoot, "quarantine", "resources", operationID)
-	if err := os.MkdirAll(quarantineDir, 0755); err != nil {
-		return nil, fmt.Errorf("kernel: create quarantine directory: %w", err)
-	}
 	absExtRoot, err := filepath.Abs(s.extRoot)
 	if err != nil {
 		return nil, fmt.Errorf("kernel: resolve ext root: %w", err)
+	}
+	quarantineDir := filepath.Join(s.extRoot, "quarantine", "resources", operationID)
+	if err := createPlatformDirectoryPath(absExtRoot, quarantineDir); err != nil {
+		return nil, fmt.Errorf("kernel: create quarantine directory safely: %w", err)
 	}
 	contentStore := NewResourceContentStore(s.extRoot)
 	var entries []ResourceQuarantineEntry
@@ -671,33 +671,6 @@ func (s *ResourceSnapshotStore) RecoverPreparingQuarantine(ctx context.Context, 
 
 func restoreQuarantinedFileSafely(sourceRoot string, entry ResourceQuarantineEntry, validated *validatedRestorePath) error {
 	return publishRestoreFileNoReplace(sourceRoot, entry.QuarantinePath, validated, entry.ContentHash)
-}
-
-func copyFileAndRemove(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return fmt.Errorf("kernel: stat source file: %w", err)
-	}
-	if !srcInfo.Mode().IsRegular() {
-		return fmt.Errorf("kernel: source %s is not a regular file", src)
-	}
-	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscallNofollow(), 0600)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return err
-	}
-	if syncErr := dstFile.Sync(); syncErr != nil {
-		return syncErr
-	}
-	return os.Remove(src)
 }
 
 func copyFileAndRemoveByHandle(sourceRoot string, sourcePath string, targetRoot string, targetPath string) error {
@@ -1366,95 +1339,103 @@ func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
 		)
 	}
 
+	if len(validated.PlatformComponents) == 0 {
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore platform proof missing"),
+		)
+	}
+
 	root, err := openPlatformRestoreRoot(validated.AbsoluteRoot)
 	if err != nil {
 		return NewPackageError(PackageErrCodeResourceRestorePathRace, 409, fmt.Errorf("kernel: open restore root handle: %w", err))
 	}
+
 	validated.DirectoryChain = append(validated.DirectoryChain, root)
 
-	if len(validated.PlatformComponents) == 0 {
+	if !root.identity().same(validated.PlatformComponents[0].Identity) {
 		_ = root.close()
 		return NewPackageError(
 			PackageErrCodeResourceRestorePathRace,
 			409,
-			fmt.Errorf("kernel: restore root platform identity missing"),
+			fmt.Errorf("kernel: restore root identity changed"),
 		)
 	}
 
-	expectedRootIdentity := validated.PlatformComponents[0].Identity
-	if !root.identity().same(expectedRootIdentity) {
-		_ = root.close()
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore root identity changed between validation and handle acquisition"),
-		)
-	}
-
-	current := root
 	relativeParent, err := filepath.Rel(validated.AbsoluteRoot, validated.AbsParentDir)
 	if err != nil {
 		return err
 	}
 
 	if relativeParent == "." {
-		validated.ParentDirectory = current
+		validated.ParentDirectory = root
 		return nil
 	}
 
-	missing := make(map[string]bool, len(validated.MissingComponents))
-	for _, component := range validated.MissingComponents {
-		missing[component] = true
+	components := strings.Split(filepath.Clean(relativeParent), string(filepath.Separator))
+
+	missingCount := len(validated.MissingComponents)
+	existingCount := len(components) - missingCount
+
+	if existingCount < 0 || len(validated.PlatformComponents) != existingCount+1 {
+		_ = root.close()
+		return NewPackageError(
+			PackageErrCodeResourceRestorePathRace,
+			409,
+			fmt.Errorf("kernel: restore component proof length mismatch"),
+		)
 	}
 
-	currentPath := validated.AbsoluteRoot
-	existingIndex := 1
+	for index, expected := range validated.MissingComponents {
+		actual := components[existingCount+index]
+		if actual != expected {
+			_ = root.close()
+			return NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: restore missing component proof mismatch"),
+			)
+		}
+	}
 
-	for _, component := range strings.Split(filepath.Clean(relativeParent), string(filepath.Separator)) {
+	current := root
+	currentPath := validated.AbsoluteRoot
+
+	for index, component := range components {
 		currentPath = filepath.Join(currentPath, component)
 
-		child, created, err := current.openOrCreateChildDirectory(component)
-		if err != nil {
-			return NewPackageError(PackageErrCodeResourceRestorePathRace, 409, fmt.Errorf("kernel: open or create restore directory %s relative to validated handle: %w", component, err))
-		}
+		var child *platformRestoreDirectory
 
-		if missing[component] {
-			if !created {
+		if index < existingCount {
+			child, err = current.openExistingChildDirectory(component)
+			if err != nil {
+				return NewPackageError(
+					PackageErrCodeResourceRestorePathRace,
+					409,
+					fmt.Errorf("kernel: validated restore directory %s disappeared or changed: %w", currentPath, err),
+				)
+			}
+
+			expected := validated.PlatformComponents[index+1]
+			if filepath.Clean(expected.Path) != filepath.Clean(currentPath) || !child.identity().same(expected.Identity) {
 				_ = child.close()
 				return NewPackageError(
 					PackageErrCodeResourceRestorePathRace,
 					409,
-					fmt.Errorf("kernel: missing restore directory %s appeared concurrently", component),
+					fmt.Errorf("kernel: validated directory identity changed: %s", currentPath),
 				)
 			}
+		} else {
+			child, err = current.createChildDirectoryExclusive(component)
+			if err != nil {
+				return err
+			}
+
 			validated.PlatformComponents = append(validated.PlatformComponents, validatedPlatformPathComponent{
 				Path:     currentPath,
 				Identity: child.identity(),
 			})
-			validated.DirectoryChain = append(validated.DirectoryChain, child)
-			current = child
-			continue
-		}
-
-		if existingIndex >= len(validated.PlatformComponents) {
-			_ = child.close()
-			return NewPackageError(
-				PackageErrCodeResourceRestorePathRace,
-				409,
-				fmt.Errorf("kernel: validated directory identity missing for %s", component),
-			)
-		}
-
-		expected := validated.PlatformComponents[existingIndex]
-		existingIndex++
-
-		if !child.identity().same(expected.Identity) {
-			_ = child.close()
-			return NewPackageError(
-				PackageErrCodeResourceRestorePathRace,
-				409,
-				fmt.Errorf("kernel: validated directory identity changed: %s", expected.Path),
-			)
 		}
 
 		validated.DirectoryChain = append(validated.DirectoryChain, child)
@@ -1463,6 +1444,51 @@ func createRestoreDirectoriesSafely(validated *validatedRestorePath) error {
 
 	validated.ParentDirectory = current
 	return nil
+}
+
+func createPlatformDirectoryPath(absoluteRoot string, absoluteDirectory string) error {
+	absoluteRoot = filepath.Clean(absoluteRoot)
+	absoluteDirectory = filepath.Clean(absoluteDirectory)
+
+	if !pathIsWithinRoot(absoluteRoot, absoluteDirectory) {
+		return NewPackageError(
+			PackageErrCodeResourceSnapshotPathInvalid,
+			400,
+			fmt.Errorf("kernel: directory %s escapes root %s", absoluteDirectory, absoluteRoot),
+		)
+	}
+
+	current, err := openPlatformRestoreRoot(absoluteRoot)
+	if err != nil {
+		return err
+	}
+
+	relative, err := filepath.Rel(absoluteRoot, absoluteDirectory)
+	if err != nil {
+		_ = current.close()
+		return err
+	}
+
+	if relative == "." {
+		return current.close()
+	}
+
+	for _, component := range strings.Split(filepath.Clean(relative), string(filepath.Separator)) {
+		child, openErr := current.openExistingChildDirectory(component)
+		if errors.Is(openErr, os.ErrNotExist) {
+			child, openErr = current.createChildDirectoryExclusive(component)
+		}
+
+		if openErr != nil {
+			_ = current.close()
+			return openErr
+		}
+
+		_ = current.close()
+		current = child
+	}
+
+	return current.close()
 }
 
 func prepareRestoreTargetPath(targetPath string, extRoot string) (*validatedRestorePath, error) {
@@ -1532,362 +1558,6 @@ func computeOpenFileContentHash(file *os.File) (string, error) {
 		return "", err
 	}
 	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
-}
-
-func captureRegularFilePlatformIdentity(path string) (platformPathIdentity, error) {
-	return capturePlatformPathIdentity(path, false)
-}
-
-func createPreparedRestoreTemp(validated *validatedRestorePath, source io.Reader, expectedHash string) (string, platformPathIdentity, error) {
-	if err := revalidateRestorePathProof(validated, true); err != nil {
-		return "", platformPathIdentity{}, err
-	}
-
-	temp, err := validated.ParentDirectory.createTempFile(".amitia-restore-")
-	if err != nil {
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			500,
-			fmt.Errorf("kernel: create restore temp in %s: %w", validated.AbsParentDir, err),
-		)
-	}
-	tempFile := temp.File
-
-	tempPath := filepath.Join(validated.AbsParentDir, temp.Name)
-
-	cleanup := func() {
-		_ = tempFile.Close()
-		_ = os.Remove(tempPath)
-	}
-
-	if filepath.Clean(filepath.Dir(tempPath)) != validated.AbsParentDir {
-		cleanup()
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore temp escaped validated parent"),
-		)
-	}
-
-	hasher := sha256.New()
-
-	_, err = io.Copy(io.MultiWriter(tempFile, hasher), source)
-
-	if err != nil {
-		cleanup()
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			500,
-			fmt.Errorf("kernel: write restore temp: %w", err),
-		)
-	}
-
-	actualHash := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
-
-	if actualHash != expectedHash {
-		cleanup()
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceSnapshotHashMismatch,
-			409,
-			fmt.Errorf("kernel: restore temp hash mismatch: expected=%s actual=%s", expectedHash, actualHash),
-		)
-	}
-
-	if err := tempFile.Sync(); err != nil {
-		cleanup()
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			500,
-			fmt.Errorf("kernel: sync restore temp: %w", err),
-		)
-	}
-
-	if err := tempFile.Close(); err != nil {
-		_ = os.Remove(tempPath)
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			500,
-			fmt.Errorf("kernel: close restore temp: %w", err),
-		)
-	}
-
-	tempInfo, err := os.Lstat(tempPath)
-	if err != nil || !tempInfo.Mode().IsRegular() || tempInfo.Mode()&os.ModeSymlink != 0 {
-		_ = os.Remove(tempPath)
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore temp changed after close: %v", err),
-		)
-	}
-
-	tempIdentity, err := captureRegularFilePlatformIdentity(tempPath)
-	if err != nil {
-		_ = os.Remove(tempPath)
-		return "", platformPathIdentity{}, NewPackageError(
-			PackageErrCodeResourceRestoreReparsePointForbidden,
-			400,
-			fmt.Errorf("kernel: restore temp %s failed platform verification: %w", tempPath, err),
-		)
-	}
-
-	if err := revalidateRestorePathProof(validated, true); err != nil {
-		_ = os.Remove(tempPath)
-		return "", platformPathIdentity{}, err
-	}
-
-	return tempPath, tempIdentity, nil
-}
-
-func publishPreparedRestoreTempNoReplace(validated *validatedRestorePath, tempPath string, tempIdentity platformPathIdentity, expectedHash string) error {
-	if validated != nil && validated.ParentDirectory != nil {
-		tempFile, identity, err := validated.ParentDirectory.openRegularFile(filepath.Base(tempPath))
-		if err != nil {
-			return err
-		}
-		if !identity.same(tempIdentity) {
-			_ = tempFile.Close()
-			return NewPackageError(PackageErrCodeResourceRestorePathRace, 409, fmt.Errorf("kernel: restore temp identity changed before publish"))
-		}
-		return publishPreparedRestoreTempHandleNoReplace(validated, &preparedRestoreTemp{Name: filepath.Base(tempPath), File: tempFile, Identity: identity}, expectedHash)
-	}
-	if validated == nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore path proof missing"),
-		)
-	}
-
-	if filepath.Clean(filepath.Dir(tempPath)) != validated.AbsParentDir {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore temp is outside validated parent"),
-		)
-	}
-
-	removePreparedTemp := true
-
-	defer func() {
-		if !removePreparedTemp {
-			return
-		}
-
-		if err := validatePlatformPathIdentity(tempPath, tempIdentity, false); err == nil {
-			_ = os.Remove(tempPath)
-		}
-	}()
-
-	if err := validatePlatformPathIdentity(tempPath, tempIdentity, false); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore temp identity changed before publish: %w", err),
-		)
-	}
-
-	tempHash, err := computeFileContentHash(tempPath)
-	if err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceSnapshotHashComputeFailed,
-			500,
-			fmt.Errorf("kernel: hash restore temp before publish: %w", err),
-		)
-	}
-
-	if tempHash != expectedHash {
-		return NewPackageError(
-			PackageErrCodeResourceSnapshotHashMismatch,
-			409,
-			fmt.Errorf("kernel: restore temp changed before publish"),
-		)
-	}
-
-	alreadyPresent, err := inspectRestoreTarget(validated, expectedHash)
-	if err != nil {
-		return err
-	}
-
-	if alreadyPresent {
-		return nil
-	}
-
-	if err := revalidateRestorePathProof(validated, true); err != nil {
-		return err
-	}
-
-	linkErr := fmt.Errorf("kernel: legacy path publish disabled")
-
-	if linkErr != nil {
-		if os.IsExist(linkErr) {
-			alreadyPresent, inspectErr := inspectRestoreTarget(validated, expectedHash)
-			if inspectErr != nil {
-				return inspectErr
-			}
-
-			if alreadyPresent {
-				return nil
-			}
-
-			return NewPackageError(
-				PackageErrCodeResourceRestoreTargetChanged,
-				409,
-				fmt.Errorf("kernel: restore target appeared during no-replace publish"),
-			)
-		}
-
-		return NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			500,
-			fmt.Errorf("kernel: no-replace hard link %s -> %s: %w", tempPath, validated.AbsTargetPath, linkErr),
-		)
-	}
-
-	targetIdentity, err := captureRegularFilePlatformIdentity(validated.AbsTargetPath)
-	if err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreReparsePointForbidden,
-			400,
-			fmt.Errorf("kernel: published target failed platform verification: %w", err),
-		)
-	}
-
-	if !tempIdentity.same(targetIdentity) {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: published target does not share temp filesystem identity"),
-		)
-	}
-
-	targetInfo, err := os.Lstat(validated.AbsTargetPath)
-	if err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: published restore target disappeared: %w", err),
-		)
-	}
-
-	tempInfo, err := os.Lstat(tempPath)
-	if err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore temp disappeared after link: %w", err),
-		)
-	}
-
-	if targetInfo.Mode()&os.ModeSymlink != 0 || !targetInfo.Mode().IsRegular() {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: published restore target changed type"),
-		)
-	}
-
-	if !os.SameFile(tempInfo, targetInfo) {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: published target is not the prepared temp inode"),
-		)
-	}
-
-	targetHash, err := computeFileContentHash(validated.AbsTargetPath)
-	if err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceSnapshotHashComputeFailed,
-			500,
-			fmt.Errorf("kernel: hash published restore target: %w", err),
-		)
-	}
-
-	if targetHash != expectedHash {
-		return NewPackageError(
-			PackageErrCodeResourceSnapshotHashMismatch,
-			409,
-			fmt.Errorf("kernel: published restore target hash mismatch"),
-		)
-	}
-
-	if err := fsyncDir(validated.AbsParentDir); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			409,
-			fmt.Errorf("kernel: fsync restore parent after publish: %w", err),
-		)
-	}
-
-	removePreparedTemp = false
-
-	if err := os.Remove(tempPath); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			409,
-			fmt.Errorf("kernel: remove restore temp after publish: %w", err),
-		)
-	}
-
-	if err := fsyncDir(validated.AbsParentDir); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			409,
-			fmt.Errorf("kernel: fsync restore parent after temp removal: %w", err),
-		)
-	}
-
-	if err := revalidateRestorePathProof(validated, true); err != nil {
-		return err
-	}
-
-	alreadyPresent, err = inspectRestoreTarget(validated, expectedHash)
-	if err != nil {
-		return err
-	}
-
-	if !alreadyPresent {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			409,
-			fmt.Errorf("kernel: restore target missing after successful publish"),
-		)
-	}
-
-	return nil
-}
-
-func publishRestoreBytesNoReplace(validated *validatedRestorePath, data []byte, expectedHash string) error {
-	temp, err := createPreparedRestoreTempHandle(validated, bytes.NewReader(data), expectedHash)
-	if err != nil {
-		return err
-	}
-	return publishPreparedRestoreTempHandleNoReplace(validated, temp, expectedHash)
-}
-
-func publishRestoreFileNoReplace(sourceRoot string, sourcePath string, validated *validatedRestorePath, expectedHash string) error {
-	sourceParent, sourceName, err := openPlatformFileParent(sourceRoot, sourcePath)
-	if err != nil {
-		return fmt.Errorf("kernel: open restore source parent: %w", err)
-	}
-	defer sourceParent.close()
-	source, _, err := sourceParent.openRegularFile(sourceName)
-	if err != nil {
-		return fmt.Errorf("kernel: open restore source: %w", err)
-	}
-	defer source.Close()
-	temp, err := createPreparedRestoreTempHandle(validated, source, expectedHash)
-	if err != nil {
-		return err
-	}
-	if err := publishPreparedRestoreTempHandleNoReplace(validated, temp, expectedHash); err != nil {
-		return err
-	}
-	if err := sourceParent.removeChild(sourceName); err != nil {
-		return fmt.Errorf("kernel: remove restored source: %w", err)
-	}
-	return sourceParent.sync()
 }
 
 func createPreparedRestoreTempHandle(validated *validatedRestorePath, source io.Reader, expectedHash string) (*preparedRestoreTemp, error) {
@@ -1976,89 +1646,3 @@ func publishPreparedRestoreTempHandleNoReplace(validated *validatedRestorePath, 
 	return validated.ParentDirectory.sync()
 }
 
-func publishRestoreFileNoReplaceLegacy(sourcePath string, validated *validatedRestorePath, expectedHash string) error {
-	if validated == nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: restore path proof missing"),
-		)
-	}
-
-	sourceIdentity, err := captureRegularFilePlatformIdentity(sourcePath)
-	if err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreReparsePointForbidden,
-			400,
-			fmt.Errorf("kernel: quarantine source %s failed platform verification: %w", sourcePath, err),
-		)
-	}
-
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return fmt.Errorf("kernel: open restore source: %w", err)
-	}
-
-	sourceFileInfo, err := source.Stat()
-	if err != nil {
-		_ = source.Close()
-		return fmt.Errorf("kernel: stat restore source %s: %w", sourcePath, err)
-	}
-
-	if sourceFileInfo.Mode()&os.ModeSymlink != 0 || !sourceFileInfo.Mode().IsRegular() {
-		_ = source.Close()
-		return fmt.Errorf("kernel: restore source %s is not a regular file", sourcePath)
-	}
-
-	if err := validatePlatformPathIdentity(sourcePath, sourceIdentity, false); err != nil {
-		_ = source.Close()
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: quarantine source changed after open: %w", err),
-		)
-	}
-
-	tempPath, tempIdentity, tempErr := createPreparedRestoreTemp(validated, source, expectedHash)
-
-	closeErr := source.Close()
-
-	if tempErr != nil {
-		return tempErr
-	}
-
-	if closeErr != nil {
-		_ = os.Remove(tempPath)
-		return closeErr
-	}
-
-	if err := publishPreparedRestoreTempNoReplace(validated, tempPath, tempIdentity, expectedHash); err != nil {
-		return err
-	}
-
-	if err := validatePlatformPathIdentity(sourcePath, sourceIdentity, false); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestorePathRace,
-			409,
-			fmt.Errorf("kernel: quarantine source changed before cleanup: %w", err),
-		)
-	}
-
-	if err := os.Remove(sourcePath); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			409,
-			fmt.Errorf("kernel: target published but source cleanup failed: %w", err),
-		)
-	}
-
-	if err := fsyncDir(filepath.Dir(sourcePath)); err != nil {
-		return NewPackageError(
-			PackageErrCodeResourceRestoreIncomplete,
-			409,
-			fmt.Errorf("kernel: fsync source parent after cleanup: %w", err),
-		)
-	}
-
-	return nil
-}

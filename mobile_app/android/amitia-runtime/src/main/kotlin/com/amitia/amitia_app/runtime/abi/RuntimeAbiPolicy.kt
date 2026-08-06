@@ -6,18 +6,19 @@ data class RuntimeAbiPolicy(
     val requires64BitProcess: Boolean
 ) {
     companion object {
-        fun amitiaAndroid(): RuntimeAbiPolicy {
-            return RuntimeAbiPolicy(
-                allowedAbis = setOf("arm64-v8a"),
-                required64BitAbi = "arm64-v8a",
-                requires64BitProcess = true
-            )
-        }
+        val AMITIA_ANDROID: RuntimeAbiPolicy = RuntimeAbiPolicy(
+            allowedAbis = setOf("arm64-v8a"),
+            required64BitAbi = "arm64-v8a",
+            requires64BitProcess = true
+        )
+
+        fun amitiaAndroid(): RuntimeAbiPolicy = AMITIA_ANDROID
     }
 
     init {
         require(allowedAbis.isNotEmpty()) { "allowedAbis must not be empty" }
         require(required64BitAbi.isNotEmpty()) { "required64BitAbi must not be empty" }
+        require(required64BitAbi in allowedAbis) { "required64BitAbi must be in allowedAbis" }
         for (abi in allowedAbis) {
             require(abi.isNotBlank()) { "abi must not be blank" }
             require(!abi.equals("armeabi-v7a", ignoreCase = true)) { "armeabi-v7a is not supported" }

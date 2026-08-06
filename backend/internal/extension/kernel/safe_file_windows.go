@@ -87,27 +87,62 @@ func openPlatformRestoreRoot(absolutePath string) (*platformRestoreDirectory, er
 	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, nil
 }
 
-func (directory *platformRestoreDirectory) openOrCreateChildDirectory(name string) (*platformRestoreDirectory, bool, error) {
+func (directory *platformRestoreDirectory) openExistingChildDirectory(name string) (*platformRestoreDirectory, error) {
 	if directory == nil || directory.closed {
-		return nil, false, fmt.Errorf("kernel: restore directory handle unavailable")
+		return nil, fmt.Errorf("kernel: restore directory handle unavailable")
 	}
-	access := uint32(windows.FILE_LIST_DIRECTORY | windowsFileAddFile | windowsFileAddSubdirectory | windows.FILE_READ_ATTRIBUTES | windows.SYNCHRONIZE)
-	options := uint32(windows.FILE_DIRECTORY_FILE | windows.FILE_OPEN_REPARSE_POINT | windows.FILE_SYNCHRONOUS_IO_NONALERT)
-	handle, err := ntCreateRelative(directory.handle, name, access, windows.FILE_ATTRIBUTE_DIRECTORY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_OPEN, options)
-	created := false
-	if err != nil && isWindowsPathNotExist(err) {
-		handle, err = ntCreateRelative(directory.handle, name, access, windows.FILE_ATTRIBUTE_DIRECTORY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_CREATE, options)
-		created = err == nil
-	}
+	handle, err := ntCreateRelative(
+		directory.handle,
+		name,
+		windows.FILE_LIST_DIRECTORY|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
+		windows.FILE_ATTRIBUTE_DIRECTORY,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		windows.FILE_OPEN,
+		windows.FILE_DIRECTORY_FILE|windows.FILE_OPEN_REPARSE_POINT|windows.FILE_SYNCHRONOUS_IO_NONALERT,
+	)
 	if err != nil {
-		return nil, false, err
+		if isWindowsPathNotExist(err) {
+			return nil, os.ErrNotExist
+		}
+		return nil, err
 	}
 	identity, err := captureWindowsHandleIdentity(handle, true)
 	if err != nil {
 		_ = windows.CloseHandle(handle)
-		return nil, false, err
+		return nil, err
 	}
-	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, created, nil
+	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, nil
+}
+
+func (directory *platformRestoreDirectory) createChildDirectoryExclusive(name string) (*platformRestoreDirectory, error) {
+	if directory == nil || directory.closed {
+		return nil, fmt.Errorf("kernel: restore directory handle unavailable")
+	}
+	handle, err := ntCreateRelative(
+		directory.handle,
+		name,
+		windows.FILE_LIST_DIRECTORY|windows.FILE_ADD_FILE|windows.FILE_ADD_SUBDIRECTORY|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE,
+		windows.FILE_ATTRIBUTE_DIRECTORY,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		windows.FILE_CREATE,
+		windows.FILE_DIRECTORY_FILE|windows.FILE_OPEN_REPARSE_POINT|windows.FILE_SYNCHRONOUS_IO_NONALERT,
+	)
+	if err != nil {
+		if errors.Is(err, windows.ERROR_FILE_EXISTS) || errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+			return nil, NewPackageError(
+				PackageErrCodeResourceRestorePathRace,
+				409,
+				fmt.Errorf("kernel: missing restore directory %s appeared concurrently", name),
+			)
+		}
+		return nil, err
+	}
+	identity, err := captureWindowsHandleIdentity(handle, true)
+	if err != nil {
+		_ = windows.CloseHandle(handle)
+		return nil, err
+	}
+	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, nil
 }
 
 func (directory *platformRestoreDirectory) openRegularFile(name string) (*os.File, platformPathIdentity, error) {
@@ -227,32 +262,29 @@ func (directory *platformRestoreDirectory) identity() platformPathIdentity {
 	return directory.pathIdentity
 }
 func openPlatformFileParent(absoluteRoot string, absoluteFilePath string) (*platformRestoreDirectory, string, error) {
-	parent, err := openPlatformRestoreRoot(absoluteRoot)
-	if err != nil {
-		return nil, "", err
+	absoluteRoot = filepath.Clean(absoluteRoot)
+	absoluteFilePath = filepath.Clean(absoluteFilePath)
+	if !pathIsWithinRoot(absoluteRoot, absoluteFilePath) {
+		return nil, "", fmt.Errorf("kernel: file path %s escapes root %s", absoluteFilePath, absoluteRoot)
 	}
 	name := filepath.Base(absoluteFilePath)
 	if err := validatePlatformPathComponent(name); err != nil {
-		_ = parent.close()
+		return nil, "", err
+	}
+	current, err := openPlatformRestoreRoot(absoluteRoot)
+	if err != nil {
 		return nil, "", err
 	}
 	relativeParent, err := filepath.Rel(absoluteRoot, filepath.Dir(absoluteFilePath))
 	if err != nil {
-		_ = parent.close()
+		_ = current.close()
 		return nil, "", err
 	}
 	if relativeParent == "." {
-		return parent, name, nil
+		return current, name, nil
 	}
-	if relativeParent == ".." ||
-		strings.HasPrefix(relativeParent, ".."+string(filepath.Separator)) ||
-		filepath.IsAbs(relativeParent) {
-		_ = parent.close()
-		return nil, "", fmt.Errorf("kernel: file parent %s escapes root %s", absoluteFilePath, absoluteRoot)
-	}
-	current := parent
 	for _, component := range strings.Split(filepath.Clean(relativeParent), string(filepath.Separator)) {
-		child, _, err := current.openOrCreateChildDirectory(component)
+		child, err := current.openExistingChildDirectory(component)
 		if err != nil {
 			_ = current.close()
 			return nil, "", err

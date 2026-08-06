@@ -386,13 +386,19 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 	return nil
 }
 
-func startWorkerAsync(w interface{ Start(ctx context.Context) }) {
+func startWorkerAsync(ctx context.Context, w interface{ Start(ctx context.Context) }, onPanic func(name string, r any)) {
 	if w == nil {
 		return
 	}
 	go func() {
-		defer func() { recover() }()
-		w.Start(context.Background())
+		defer func() {
+			if r := recover(); r != nil {
+				if onPanic != nil {
+					onPanic(fmt.Sprintf("%T", w), r)
+				}
+			}
+		}()
+		w.Start(ctx)
 	}()
 }
 
