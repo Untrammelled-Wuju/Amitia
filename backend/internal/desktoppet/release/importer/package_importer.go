@@ -369,7 +369,11 @@ func (pi *PackageImporter) runImportSaga(
 	sourcePath string,
 	journal *release.ReleasePublishJournal,
 	publishedPath *string,
+	operationID string,
 ) error {
+	petID := releaseRecord.PetID
+	releaseID := releaseRecord.ID
+
 	txErr := pi.repo.Transaction(func(tx *gorm.DB) error {
 		if err := pi.repo.CreatePetIdentityTx(tx, *identity); err != nil {
 			if !isDuplicateKeyError(err) {
@@ -385,6 +389,7 @@ func (pi *PackageImporter) runImportSaga(
 			*identity = existingIdentity
 			releaseRecord.PetID = (*identity).ID
 			buildOp.PetID = (*identity).ID
+			petID = (*identity).ID
 		}
 
 		nextSeq := (*identity).NextReleaseSequence
@@ -422,25 +427,90 @@ func (pi *PackageImporter) runImportSaga(
 	}
 
 	buildOp.State = release.BuildOpStatePublishing
-	buildOp.Stage = release.BuildOpStageFilesPublished
+	buildOp.Stage = release.BuildOpStageWorkspaceCreated
 	buildOp.UpdatedAt = formatImportTimestamp(time.Now())
 	_ = pi.repo.UpdateBuildOperation(buildOp)
 
-	publishedErr := pi.publishFiles(sourcePath, validation.Manifest, releaseRecord.PetID, releaseRecord.ID)
-	if publishedErr != nil {
-		pi.failJournal(journal, publishedErr)
-		pi.compensateFailedImport(releaseRecord.PetID, releaseRecord.ID, buildOp)
-		return release.NewReleaseError("PUBLISH_FAILED", "发布文件失败", publishedErr)
+	if err := pi.storage.EnsureWorkspaceDir(operationID); err != nil {
+		pi.failJournal(journal, err)
+		pi.compensateFailedImport(petID, releaseID, buildOp)
+		return release.NewReleaseError("WORKSPACE_CREATE_FAILED", "创建工作区失败", err)
 	}
 
-	publishedPathVal, err := pi.storage.PublishedDir(releaseRecord.PetID, releaseRecord.ID)
+	workspaceDir, err := pi.storage.WorkspaceDir(operationID)
+	if err != nil {
+		pi.failJournal(journal, err)
+		pi.compensateFailedImport(petID, releaseID, buildOp)
+		return release.NewReleaseError("WORKSPACE_DIR_FAILED", "获取工作区路径失败", err)
+	}
+
+	reader := packageformat.NewArchiveReader(packageformat.DefaultArchiveLimits())
+	if err := reader.ExtractArchive(sourcePath, workspaceDir); err != nil {
+		pi.failJournal(journal, err)
+		pi.storage.RemoveWorkspaceDir(operationID)
+		pi.compensateFailedImport(petID, releaseID, buildOp)
+		return release.NewReleaseError("WORKSPACE_EXTRACT_FAILED", "解压到工作区失败", err)
+	}
+
+	fileRecords, totalBytes, fileCount, err := pi.hashWorkspaceFiles(workspaceDir, releaseID, validation.Manifest)
+	if err != nil {
+		pi.failJournal(journal, err)
+		pi.storage.RemoveWorkspaceDir(operationID)
+		pi.compensateFailedImport(petID, releaseID, buildOp)
+		return release.NewReleaseError("WORKSPACE_HASH_FAILED", "计算工作区文件哈希失败", err)
+	}
+
+	if len(fileRecords) > 0 {
+		if err := pi.repo.CreateReleaseFiles(fileRecords); err != nil {
+			pi.failJournal(journal, err)
+			pi.storage.RemoveWorkspaceDir(operationID)
+			pi.compensateFailedImport(petID, releaseID, buildOp)
+			return release.NewReleaseError("FILE_RECORD_CREATE_FAILED", "创建文件记录失败", err)
+		}
+	}
+
+	releaseRecord.TotalBytes = totalBytes
+	releaseRecord.FileCount = fileCount
+	_ = pi.repo.UpdateRelease(releaseRecord)
+
+	buildOp.Stage = release.BuildOpStageStagingBuilt
+	_ = pi.repo.UpdateBuildOperation(buildOp)
+
+	if err := pi.storage.EnsureStagingDir(releaseID); err != nil {
+		pi.failJournal(journal, err)
+		pi.storage.RemoveWorkspaceDir(operationID)
+		pi.compensateFailedImport(petID, releaseID, buildOp)
+		return release.NewReleaseError("STAGING_ENSURE_FAILED", "创建暂存目录失败", err)
+	}
+
+	if err := pi.storage.MoveWorkspaceToStaging(operationID, releaseID); err != nil {
+		pi.failJournal(journal, err)
+		pi.storage.RemoveWorkspaceDir(operationID)
+		pi.compensateFailedImport(petID, releaseID, buildOp)
+		return release.NewReleaseError("WORKSPACE_TO_STAGING_FAILED", "工作区到暂存移动失败", err)
+	}
+
+	buildOp.Stage = release.BuildOpStageStagingMoved
+	_ = pi.repo.UpdateBuildOperation(buildOp)
+
+	if err := pi.storage.AtomicRenameStagingToPublished(petID, releaseID); err != nil {
+		pi.failJournal(journal, err)
+		pi.storage.RemoveStagingDir(releaseID)
+		pi.compensateFailedImport(petID, releaseID, buildOp)
+		return release.NewReleaseError("ATOMIC_PUBLISH_FAILED", "原子发布失败", err)
+	}
+
+	pi.storage.RemoveWorkspaceDir(operationID)
+
+	publishedPathVal, err := pi.storage.PublishedDir(petID, releaseID)
 	if err != nil {
 		pi.failJournal(journal, err)
 		return release.NewReleaseError("PUBLISH_PATH_FAILED", "获取发布路径失败", err)
 	}
 	*publishedPath = publishedPathVal
+
 	if pi.journalManager != nil && journal != nil {
-		_ = pi.journalManager.UpdateStage(journal, release.JournalStageFilesPublished, releaseRecord.ContentRootHash, sourcePath, *publishedPath)
+		_ = pi.journalManager.UpdateStage(journal, release.JournalStageFilesPublished, releaseRecord.ContentRootHash, workspaceDir, *publishedPath)
 	}
 
 	return nil
@@ -457,6 +527,12 @@ func (pi *PackageImporter) compensateFailedImport(petID, releaseID string, build
 	if petID != "" && releaseID != "" {
 		pi.storage.RemovePublishedDir(petID, releaseID)
 	}
+	if releaseID != "" {
+		pi.storage.RemoveStagingDir(releaseID)
+	}
+	if buildOp != nil && buildOp.ID != "" {
+		pi.storage.RemoveWorkspaceDir(buildOp.ID)
+	}
 	pi.markOperationFailed(buildOp, "COMPENSATED", fmt.Errorf("发布失败已补偿"))
 	if releaseID != "" {
 		if releaseRecord, err := pi.repo.GetRelease(releaseID); err == nil && releaseRecord != nil {
@@ -468,65 +544,39 @@ func (pi *PackageImporter) compensateFailedImport(petID, releaseID string, build
 	}
 }
 
-func (pi *PackageImporter) publishFiles(sourcePath string, manifest *packageformat.Manifest, petID, releaseID string) error {
-	archive, err := zip.OpenReader(sourcePath)
-	if err != nil {
-		return err
-	}
-	defer archive.Close()
-
-	destDir, err := pi.storage.PublishedDir(petID, releaseID)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(destDir, 0o700); err != nil {
-		return err
-	}
-
+func (pi *PackageImporter) hashWorkspaceFiles(workspaceDir, releaseID string, manifest *packageformat.Manifest) ([]release.ReleaseFileData, int64, int, error) {
 	var fileRecords []release.ReleaseFileData
+	var totalBytes int64
+	var fileCount int
 	now := formatImportTimestamp(time.Now())
-	for _, file := range archive.File {
-		clean := path.Clean(strings.ReplaceAll(file.Name, `\`, "/"))
+
+	err := filepath.Walk(workspaceDir, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, relErr := filepath.Rel(workspaceDir, filePath)
+		if relErr != nil {
+			return relErr
+		}
+		clean := path.Clean(strings.ReplaceAll(relPath, `\`, "/"))
 		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
-			return fmt.Errorf("archive path escape: %s", file.Name)
-		}
-		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(filepath.Join(destDir, clean), 0o700); err != nil {
-				return err
-			}
-			continue
+			return fmt.Errorf("workspace path escape: %s", relPath)
 		}
 
-		reader, err := file.Open()
-		if err != nil {
-			return err
+		file, openErr := os.Open(filePath)
+		if openErr != nil {
+			return openErr
 		}
-
-		destPath := filepath.Join(destDir, clean)
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o700); err != nil {
-			reader.Close()
-			return err
-		}
-
-		writer, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-		if err != nil {
-			reader.Close()
-			return err
-		}
+		defer file.Close()
 
 		hash := sha256.New()
-		multiWriter := io.MultiWriter(writer, hash)
-		written, err := io.Copy(multiWriter, reader)
-		closeReadErr := reader.Close()
-		closeWriteErr := writer.Close()
-		if err != nil {
-			return err
-		}
-		if closeReadErr != nil {
-			return closeReadErr
-		}
-		if closeWriteErr != nil {
-			return closeWriteErr
+		written, copyErr := io.Copy(hash, file)
+		if copyErr != nil {
+			return copyErr
 		}
 
 		fileHash := hex.EncodeToString(hash.Sum(nil))
@@ -548,15 +598,16 @@ func (pi *PackageImporter) publishFiles(sourcePath string, manifest *packageform
 			FrameID:   frameID,
 			CreatedAt: now,
 		})
-	}
 
-	if len(fileRecords) > 0 {
-		if err := pi.repo.CreateReleaseFiles(fileRecords); err != nil {
-			return err
-		}
-	}
+		totalBytes += written
+		fileCount++
+		return nil
+	})
 
-	return nil
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return fileRecords, totalBytes, fileCount, nil
 }
 
 func (pi *PackageImporter) computeArchiveStats(sourcePath string, manifest *packageformat.Manifest) (int64, int, error) {

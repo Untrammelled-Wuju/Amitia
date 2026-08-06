@@ -85,7 +85,9 @@ const (
 
 const (
 	BuildOpStageSnapshotCreated   = "snapshot_created"
+	BuildOpStageWorkspaceCreated  = "workspace_created"
 	BuildOpStageStagingBuilt      = "staging_built"
+	BuildOpStageStagingMoved      = "staging_moved"
 	BuildOpStageValidated         = "validated"
 	BuildOpStageFilesPublished    = "files_published"
 	BuildOpStageDatabaseCommitted = "database_committed"

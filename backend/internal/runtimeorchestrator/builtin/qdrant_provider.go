@@ -4,8 +4,8 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 	"sync"
-	"time"
 
 	"github.com/qdrant/go-client/qdrant"
 	"github.com/u-ai/backend/config"
@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
+	"github.com/u-ai/backend/internal/vectorstore/qdranthealth"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantlayout"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantprocess"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantprofile"
@@ -133,7 +134,47 @@ type qdrantProvider struct {
 	stopped      bool
 
 	lifecycleMu sync.Mutex
-	activeLease qdrantprocess.Lease
+	activeLease  qdrantprocess.Lease
+	coordinator  *qdranthealth.Coordinator
+	processGuard *qdrantProcessGuard
+}
+
+type qdrantProcessGuard struct {
+	mu      sync.Mutex
+	started bool
+	exited  bool
+	pid     int
+}
+
+func (g *qdrantProcessGuard) IsStarted() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.started
+}
+
+func (g *qdrantProcessGuard) IsExited() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.exited
+}
+
+func (g *qdrantProcessGuard) PID() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.pid
+}
+
+func (g *qdrantProcessGuard) MarkStarted(pid int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.started = true
+	g.pid = pid
+}
+
+func (g *qdrantProcessGuard) MarkExited() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.exited = true
 }
 
 func (p *qdrantProvider) Descriptor() runtimeorchestrator.ComponentDescriptor {
@@ -221,6 +262,126 @@ func (p *qdrantProvider) Start(ctx context.Context) error {
 	}
 
 	p.started = true
+
+	if err := p.startProcessWithHealthCheck(ctx, env, layout, lease); err != nil {
+		p.releaseLeaseOnFailure(ctx, lease)
+		return phaseError{phase: "qdrant:start-process-health", err: err}
+	}
+
+	return nil
+}
+
+func (p *qdrantProvider) startProcessWithHealthCheck(ctx context.Context, env qdrantenv.Environment, layout qdrantlayout.Layout, lease qdrantprocess.Lease) error {
+	target := qdranthealth.NewTarget("127.0.0.1", p.config.Qdrant.Port)
+	policy := p.selectHealthPolicy()
+
+	if p.processGuard == nil {
+		p.processGuard = &qdrantProcessGuard{}
+	}
+
+	controller := &qdrantProcessController{provider: p}
+	p.coordinator = qdranthealth.NewCoordinator(target, policy, p.processGuard, controller)
+
+	supervisor := p.host.Processes()
+	processSpec := runtimehost.ProcessSpec{
+		ID:         runtimehost.ProcessIDQdrant,
+		Executable: env.BinaryPath,
+		Args:       buildProcessArgs(layout.ConfigPath),
+		WorkingDir: layout.StorageDir,
+		Environment: runtimehost.EnvironmentSpec{
+			Policy: runtimehost.EnvPolicyExplicit,
+			Values: p.buildProcessEnv(),
+		},
+		Ports: []runtimehost.LoopbackPortClaim{
+			{Host: "127.0.0.1", Port: p.config.Qdrant.Port, Protocol: "tcp"},
+			{Host: "127.0.0.1", Port: p.config.Qdrant.Port + 1, Protocol: "tcp"},
+		},
+		StartupTimeout: policy.StartupTimeout,
+	}
+
+	if err := supervisor.Register(processSpec); err != nil {
+		return fmt.Errorf("register qdrant process: %w", err)
+	}
+
+	if err := supervisor.Start(ctx, runtimehost.ProcessIDQdrant); err != nil {
+		return fmt.Errorf("start qdrant process: %w", err)
+	}
+
+	snap, _ := supervisor.Snapshot(runtimehost.ProcessIDQdrant)
+	if snap.PID > 0 {
+		p.processGuard.MarkStarted(snap.PID)
+	}
+
+	_, err := p.coordinator.WaitReady(ctx)
+	if err != nil {
+		p.processGuard.MarkExited()
+		return fmt.Errorf("qdrant ready check failed: %w", err)
+	}
+
+	client, clientErr := qdrant.NewClient(&qdrant.Config{
+		Host: "127.0.0.1",
+		Port: int(p.config.Qdrant.Port),
+	})
+	if clientErr != nil {
+		return fmt.Errorf("create qdrant client: %w", clientErr)
+	}
+
+	p.capabilityMu.Lock()
+	p.client = client
+	p.capabilityMu.Unlock()
+
+	return nil
+}
+
+func (p *qdrantProvider) selectHealthPolicy() qdranthealth.Policy {
+	if resolvedProfile, err := p.profileResolver.Resolve(context.Background(), p.config.Qdrant.ResourceProfile); err == nil {
+		if resolvedProfile.Settings != nil {
+			switch resolvedProfile.Settings.ID {
+			case qdrantprofile.ProfileMobileCompact:
+				return qdranthealth.MobileCompactPolicy()
+			case qdrantprofile.ProfileMobileBalanced:
+				return qdranthealth.MobileBalancedPolicy()
+			case qdrantprofile.ProfileMobilePerformance:
+				return qdranthealth.MobilePerformancePolicy()
+			}
+		}
+	}
+	return qdranthealth.DesktopPolicy()
+}
+
+func buildProcessArgs(configPath string) []string {
+	args := []string{"--config-path", configPath}
+	return args
+}
+
+func (p *qdrantProvider) buildProcessEnv() map[string]string {
+	values := make(map[string]string)
+	return values
+}
+
+type qdrantProcessController struct {
+	provider *qdrantProvider
+}
+
+func (c *qdrantProcessController) Stop(ctx context.Context) error {
+	supervisor := c.provider.host.Processes()
+	if supervisor != nil {
+		return supervisor.Stop(ctx, runtimehost.ProcessIDQdrant)
+	}
+	return nil
+}
+
+func (c *qdrantProcessController) ReleaseLease(ctx context.Context) error {
+	c.provider.lifecycleMu.Lock()
+	lease := c.provider.activeLease
+	if lease != nil {
+		c.provider.activeLease = nil
+	}
+	c.provider.lifecycleMu.Unlock()
+
+	if lease != nil {
+		return lease.Release(ctx)
+	}
 	return nil
 }
 
@@ -234,19 +395,30 @@ func (p *qdrantProvider) releaseLeaseOnFailure(ctx context.Context, lease qdrant
 }
 
 func (p *qdrantProvider) Ready(ctx context.Context) error {
-	if p.client == nil {
-		return runtimeorchestrator.DescriptorFailure("", "qdrant client not initialized")
-	}
 	p.capabilityMu.RLock()
 	client := p.client
 	p.capabilityMu.RUnlock()
 
-	hCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	if _, err := client.HealthCheck(hCtx); err != nil {
-		return err
+	if client == nil {
+		return runtimeorchestrator.DescriptorFailure("", "qdrant client not initialized")
 	}
+
+	if p.coordinator != nil && !p.coordinator.IsReady() {
+		return runtimeorchestrator.DescriptorFailure("", "qdrant coordinator reports not ready")
+	}
+
 	return nil
+}
+
+func (p *qdrantProvider) HealthCheck(ctx context.Context) qdranthealth.Snapshot {
+	p.lifecycleMu.Lock()
+	c := p.coordinator
+	p.lifecycleMu.Unlock()
+
+	if c == nil {
+		return qdranthealth.NewSnapshot(qdranthealth.StateProcessNotStarted, qdranthealth.Target{})
+	}
+	return c.HealthCheck(ctx)
 }
 
 func (p *qdrantProvider) Stop(ctx context.Context) error {
@@ -257,6 +429,14 @@ func (p *qdrantProvider) Stop(ctx context.Context) error {
 		return nil
 	}
 	p.stopped = true
+
+	if p.coordinator != nil {
+		p.coordinator.Stop()
+	}
+
+	if p.processGuard != nil {
+		p.processGuard.MarkExited()
+	}
 
 	if p.activeLease != nil {
 		rec := p.activeLease.Record()
@@ -272,6 +452,13 @@ func (p *qdrantProvider) Stop(ctx context.Context) error {
 		_ = p.activeLease.Release(ctx)
 		p.activeLease = nil
 	}
+
+	p.capabilityMu.Lock()
+	p.client = nil
+	p.capabilityMu.Unlock()
+
+	p.coordinator = nil
+	p.processGuard = nil
 	return nil
 }
 
