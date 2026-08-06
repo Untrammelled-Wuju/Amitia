@@ -98,3 +98,30 @@ func TestGraphStoreProviderDescriptor(t *testing.T) {
 		t.Fatal("graph store should be optional")
 	}
 }
+
+func TestRuntimeBootstrapCreatesNodeEnvironmentResolver(t *testing.T) {
+	paths := &util.RuntimePaths{}
+	b, err := newRuntimeBootstrap(paths)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if b.NodeEnvironmentResolver() == nil {
+		t.Fatal("expected non-nil node environment resolver")
+	}
+}
+
+func TestRuntimeBootstrapDoesNotRequireInstalledNode(t *testing.T) {
+	paths := &util.RuntimePaths{}
+	b, err := newRuntimeBootstrap(paths)
+	if err != nil {
+		t.Fatalf("bootstrap should succeed without installed node: %v", err)
+	}
+	resolver := b.NodeEnvironmentResolver()
+	if resolver == nil {
+		t.Fatal("expected non-nil resolver")
+	}
+	snap := resolver.Snapshot()
+	if snap.State != "not-started" {
+		t.Fatalf("expected not-started state before Resolve, got %s", snap.State)
+	}
+}

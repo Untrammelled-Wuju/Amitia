@@ -37,6 +37,7 @@ func newR62SnapshotFixture(t *testing.T, rows []r62Row) *r62SnapshotFixture {
 	var jsonlLines []string
 	for _, row := range rows {
 		payload := map[string]interface{}{
+			"entity_id":    row.EntityID,
 			"entity_value": row.Value,
 			"amount":       row.Amount,
 		}
@@ -278,6 +279,29 @@ func TestR62ManifestRejectsEmptySetHashMismatch(t *testing.T) {
 	}
 }
 
+func TestR62ManifestRejectsMissingEmptySetHash(t *testing.T) {
+	fixture := newR62SnapshotFixture(t, []r62Row{
+		{EntityID: "record-1", Value: "value-1", Amount: 1},
+	})
+
+	fixture.Manifest.EmptySetHash = ""
+
+	err := validateUserDataTableSnapshotManifest(
+		fixture.Manifest,
+		fixture.ExtensionID,
+		fixture.TableName,
+		fixture.JSONL,
+		fixture.RawRecords,
+		fixture.ParsedRecords,
+	)
+	if err == nil {
+		t.Fatal("missing emptySetHash must fail")
+	}
+	if !IsPackageErrorCode(err, PackageErrCodeUserDataAggregateHashMismatch) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestR62ManifestRejectsNamespaceHashMismatch(t *testing.T) {
 	fixture := newR62SnapshotFixture(t, []r62Row{
 		{EntityID: "record-1", Value: "value-1", Amount: 1},
@@ -295,6 +319,29 @@ func TestR62ManifestRejectsNamespaceHashMismatch(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("namespace hash mismatch must fail")
+	}
+	if !IsPackageErrorCode(err, PackageErrCodeUserDataJournalHashMismatch) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestR62ManifestRejectsMissingNamespaceHash(t *testing.T) {
+	fixture := newR62SnapshotFixture(t, []r62Row{
+		{EntityID: "record-1", Value: "value-1", Amount: 1},
+	})
+
+	fixture.Manifest.NamespaceHash = ""
+
+	err := validateUserDataTableSnapshotManifest(
+		fixture.Manifest,
+		fixture.ExtensionID,
+		fixture.TableName,
+		fixture.JSONL,
+		fixture.RawRecords,
+		fixture.ParsedRecords,
+	)
+	if err == nil {
+		t.Fatal("missing namespaceHash must fail")
 	}
 	if !IsPackageErrorCode(err, PackageErrCodeUserDataJournalHashMismatch) {
 		t.Fatalf("unexpected error: %v", err)

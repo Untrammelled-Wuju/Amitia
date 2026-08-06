@@ -10,6 +10,8 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/models/character.dart';
 import '../../../../shared/models/models.dart';
 import '../../../../shared/mock_data/mock_data.dart';
 
@@ -21,15 +23,16 @@ class CharacterListPage extends ConsumerStatefulWidget {
 }
 
 class _CharacterListPageState extends ConsumerState<CharacterListPage> {
-  String _defaultCharacterId = 'c1';
+  String? _defaultCharacterId;
   final Set<String> _archivedIds = {};
+  List<CharacterDto> _characters = [];
 
-  List<Character> get _activeCharacters =>
-      MockData.characters.where((c) => !_archivedIds.contains(c.id)).toList();
+  List<CharacterDto> get _activeCharacters =>
+      _characters.where((c) => !_archivedIds.contains(c.id)).toList();
 
   @override
   Widget build(BuildContext context) {
-    final characters = _activeCharacters;
+    final charactersAsync = ref.watch(characterListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '角色',
@@ -49,27 +52,64 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
               child: const AmitiaSearchField(hintText: '搜索角色'),
             ),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  AppSpacing.xs,
-                  AppSpacing.pagePadding,
-                  AppSpacing.md,
+              child: charactersAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                        const SizedBox(height: 16),
+                        Text(
+                          '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                          style: AppTypography.body(context).copyWith(color: context.error),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        AmitiaButton(
+                          label: '重试',
+                          onPressed: () => ref.invalidate(characterListProvider),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                itemCount: characters.length,
-                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final character = characters[index];
-                  final isDefault = character.id == _defaultCharacterId;
-                  return AmitiaCharacterCard(
-                    name: isDefault ? '${character.name} (默认)' : character.name,
-                    status: character.status,
-                    identity: character.identity,
-                    avatarInitial: character.avatarInitial,
-                    avatarColor: character.avatarColor,
-                    mood: character.mood,
-                    lastActive: _getLastActive(character),
-                    onTap: () => context.push(AppRoutes.character(character.id)),
+                data: (characters) {
+                  _defaultCharacterId ??= characters.isNotEmpty ? characters.first.id : null;
+                  final activeChars = characters.where((c) => !_archivedIds.contains(c.id)).toList();
+                  if (activeChars.isEmpty) {
+                    return Center(
+                      child: Text(
+                        '暂无角色，请先创建',
+                        style: AppTypography.body(context).copyWith(color: context.textSecondary),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      AppSpacing.xs,
+                      AppSpacing.pagePadding,
+                      AppSpacing.md,
+                    ),
+                    itemCount: activeChars.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                    itemBuilder: (context, index) {
+                      final character = activeChars[index];
+                      final isDefault = character.id == _defaultCharacterId;
+                      return AmitiaCharacterCard(
+                        name: isDefault ? '${character.name} (默认)' : character.name,
+                        status: character.status,
+                        identity: character.identity,
+                        avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
+                        avatarColor: '#7668EE',
+                        mood: '',
+                        lastActive: _getLastActive(character.isActive == 1),
+                        onTap: () => context.push(AppRoutes.character(character.id)),
+                      );
+                    },
                   );
                 },
               ),
@@ -109,11 +149,11 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     );
   }
 
-  String _getLastActive(Character character) {
-    if (character.status == '在线') {
+  String _getLastActive(bool isOnline) {
+    if (isOnline) {
       return '刚刚活跃';
     }
-    return '2小时前活跃';
+    return '离线';
   }
 
   void _showManageSheet(BuildContext context) {
@@ -314,7 +354,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   void _showCharacterSelection(
     BuildContext context,
     String title,
-    ValueChanged<Character> onSelected,
+    ValueChanged<CharacterDto> onSelected,
   ) {
     final characters = _activeCharacters;
     showModalBottomSheet(
@@ -406,31 +446,9 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     );
   }
 
-  void _handleDelete(BuildContext context, Character character) {
+  void _handleDelete(BuildContext context, CharacterDto character) {
     if (character.id == _defaultCharacterId) {
-      final others = _activeCharacters.where((c) => c.id != character.id).toList();
-      if (others.isEmpty) {
-        amitiaSnackBar(context, '无法删除最后一个角色');
-        return;
-      }
       amitiaSnackBar(context, '删除默认角色需要先选择替代角色');
-      _showCharacterSelection(context, '选择替代默认角色', (replacement) {
-        showAmitiaConfirmDialog(
-          context,
-          title: '删除角色',
-          message: '确定要删除 ${character.name} 并将 ${replacement.name} 设为默认吗？此操作不可撤销。',
-          confirmLabel: '删除',
-          isDestructive: true,
-        ).then((confirmed) {
-          if (confirmed == true) {
-            setState(() {
-              MockData.characters.removeWhere((c) => c.id == character.id);
-              _defaultCharacterId = replacement.id;
-            });
-            amitiaSnackBar(context, '${character.name} 已删除，${replacement.name} 已设为默认');
-          }
-        });
-      });
     } else {
       showAmitiaConfirmDialog(
         context,
@@ -441,8 +459,9 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       ).then((confirmed) {
         if (confirmed == true) {
           setState(() {
-            MockData.characters.removeWhere((c) => c.id == character.id);
+            _archivedIds.add(character.id);
           });
+          ref.invalidate(characterListProvider);
           amitiaSnackBar(context, '${character.name} 已删除');
         }
       });

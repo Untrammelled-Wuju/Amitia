@@ -50,10 +50,10 @@ type UserDataTableIdentity struct {
 }
 
 type UserDataBatchChainSpec struct {
-	Identity             UserDataTableIdentity
-	DataExportReference  string
-	BatchSize            int64
-	GenesisHash          string
+	Identity            UserDataTableIdentity
+	DataExportReference string
+	BatchSize           int64
+	GenesisHash         string
 }
 
 type UserDataBatchChainResult struct {
@@ -76,14 +76,14 @@ type userDataBatchRecordDigest struct {
 }
 
 type userDataBatchHashPayload struct {
-	Domain                string                    `json:"domain"`
-	BatchAlgorithmVersion string                    `json:"batchAlgorithmVersion"`
-	TableIdentity         UserDataTableIdentity      `json:"tableIdentity"`
-	DataExportReference   string                    `json:"dataExportReference"`
-	BatchIndex            int64                     `json:"batchIndex"`
-	CursorBefore          int64                     `json:"cursorBefore"`
-	CursorAfter           int64                     `json:"cursorAfter"`
-	PreviousBatchHash     string                    `json:"previousBatchHash"`
+	Domain                string                      `json:"domain"`
+	BatchAlgorithmVersion string                      `json:"batchAlgorithmVersion"`
+	TableIdentity         UserDataTableIdentity       `json:"tableIdentity"`
+	DataExportReference   string                      `json:"dataExportReference"`
+	BatchIndex            int64                       `json:"batchIndex"`
+	CursorBefore          int64                       `json:"cursorBefore"`
+	CursorAfter           int64                       `json:"cursorAfter"`
+	PreviousBatchHash     string                      `json:"previousBatchHash"`
 	Records               []userDataBatchRecordDigest `json:"records"`
 }
 
@@ -1072,26 +1072,26 @@ func (s *UserDataSnapshotStore) getOrCreateRestoreJournal(
 	}
 
 	var (
-		storedExtensionID    string
-		storedTotalRows      int64
-		state                string
-		startedAt            string
-		updatedAt            string
-		errorDetail          string
-		cursor               string
-		batchHash            string
-		prevBatchHash        string
-		batchAlgorithmVer    string
-		namespaceHash        string
-		expectedAggHash      string
-		aggregateHash        string
-		dataExportRef        string
-		importedRows         int64
-		appliedCount         int64
-		batchIndex           int64
-		batchSize            int64
-		genesisHash          string
-		expectedFinalBatch   string
+		storedExtensionID  string
+		storedTotalRows    int64
+		state              string
+		startedAt          string
+		updatedAt          string
+		errorDetail        string
+		cursor             string
+		batchHash          string
+		prevBatchHash      string
+		batchAlgorithmVer  string
+		namespaceHash      string
+		expectedAggHash    string
+		aggregateHash      string
+		dataExportRef      string
+		importedRows       int64
+		appliedCount       int64
+		batchIndex         int64
+		batchSize          int64
+		genesisHash        string
+		expectedFinalBatch string
 	)
 
 	err := s.db.QueryRowContext(ctx,
@@ -1677,7 +1677,10 @@ func (s *UserDataSnapshotStore) computeAggregateHashFromDB(ctx context.Context, 
 	if err != nil {
 		return "", fmt.Errorf("kernel: get columns for aggregate hash %s: %w", table, err)
 	}
-	idColumn := detectIDColumnName(columns)
+	if detectIDColumnName(columns) == "" {
+		return "", NewPackageError(PackageErrCodeUserDataEntityIDMissing, 422,
+			fmt.Errorf("kernel: table %s has no id or entity_id column during aggregate verification", table))
+	}
 	hashes := make([]string, 0, 64)
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
@@ -1690,9 +1693,6 @@ func (s *UserDataSnapshotStore) computeAggregateHashFromDB(ctx context.Context, 
 		}
 		payload := make(map[string]interface{}, len(columns))
 		for i, col := range columns {
-			if col == idColumn {
-				continue
-			}
 			payload[col] = normalizeSQLValue(values[i])
 		}
 		hashes = append(hashes, computeUserDataPayloadHash(payload))
@@ -1875,24 +1875,34 @@ func validateUserDataTableSnapshotManifest(manifest UserDataTableManifest, exten
 		LogicalEntityType:      resolver.LogicalEntityType,
 		NamespacePolicyVersion: "v1",
 	})
-	if manifest.NamespaceHash != "" && manifest.NamespaceHash != expectedNamespaceHash {
+	if manifest.NamespaceHash == "" {
+		return NewPackageError(PackageErrCodeUserDataJournalHashMismatch, 422,
+			fmt.Errorf("kernel: manifest namespace hash missing for table %s", table))
+	}
+	if manifest.NamespaceHash != expectedNamespaceHash {
 		return NewPackageError(PackageErrCodeUserDataJournalHashMismatch, 422,
 			fmt.Errorf("kernel: manifest namespace hash mismatch for table %s: expected=%s actual=%s", table, expectedNamespaceHash, manifest.NamespaceHash))
 	}
-	if manifest.EmptySetHash != "" {
-		expectedEmptySetHash := computeUserDataEmptySetHash(UserDataTableIdentity{
-			Domain:                userDataEmptySetDomain,
-			SchemaVersion:         userDataRecordSchemaVersion,
-			ExtensionID:           extensionID,
-			CanonicalTable:        resolver.CanonicalTable,
-			EntityType:            resolver.LogicalEntityType,
-			NamespaceHash:         manifest.NamespaceHash,
-			BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
-		})
-		if manifest.EmptySetHash != expectedEmptySetHash {
-			return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
-				fmt.Errorf("kernel: manifest empty set hash mismatch for table %s: expected=%s actual=%s", table, expectedEmptySetHash, manifest.EmptySetHash))
-		}
+	if manifest.EmptySetHash == "" {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: manifest empty set hash missing for table %s", table))
+	}
+	expectedEmptySetHash := computeUserDataEmptySetHash(UserDataTableIdentity{
+		Domain:                userDataEmptySetDomain,
+		SchemaVersion:         userDataRecordSchemaVersion,
+		ExtensionID:           extensionID,
+		CanonicalTable:        resolver.CanonicalTable,
+		EntityType:            resolver.LogicalEntityType,
+		NamespaceHash:         expectedNamespaceHash,
+		BatchAlgorithmVersion: userDataBatchHashAlgorithmVersion,
+	})
+	if expectedEmptySetHash == "" {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 500,
+			fmt.Errorf("kernel: failed to calculate empty set hash for table %s", table))
+	}
+	if manifest.EmptySetHash != expectedEmptySetHash {
+		return NewPackageError(PackageErrCodeUserDataAggregateHashMismatch, 409,
+			fmt.Errorf("kernel: manifest empty set hash mismatch for table %s: expected=%s actual=%s", table, expectedEmptySetHash, manifest.EmptySetHash))
 	}
 	if manifest.BatchAlgorithmVersion != userDataBatchHashAlgorithmVersion {
 		return NewPackageError(PackageErrCodeUserDataBatchHashMismatch, 409,

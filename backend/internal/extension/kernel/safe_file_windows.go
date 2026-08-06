@@ -3,10 +3,13 @@
 package kernel
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -17,6 +20,223 @@ type platformPathIdentity struct {
 	FileIndexLow       uint32
 
 	IsDirectory bool
+}
+
+type preparedRestoreTemp struct {
+	Name     string
+	File     *os.File
+	Identity platformPathIdentity
+}
+
+const (
+	windowsFileAddFile         = 0x0002
+	windowsFileAddSubdirectory = 0x0004
+)
+
+type platformRestoreDirectory struct {
+	handle       windows.Handle
+	pathIdentity platformPathIdentity
+	closed       bool
+}
+
+func captureWindowsHandleIdentity(handle windows.Handle, requireDirectory bool) (platformPathIdentity, error) {
+	var information windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(handle, &information); err != nil {
+		return platformPathIdentity{}, err
+	}
+	if err := validateWindowsPathInformation("<handle>", information, requireDirectory); err != nil {
+		return platformPathIdentity{}, err
+	}
+	return platformPathIdentity{VolumeSerialNumber: information.VolumeSerialNumber, FileIndexHigh: information.FileIndexHigh, FileIndexLow: information.FileIndexLow, IsDirectory: requireDirectory}, nil
+}
+
+func ntCreateRelative(parent windows.Handle, name string, access uint32, attributes uint32, share uint32, disposition uint32, options uint32) (windows.Handle, error) {
+	if parent == windows.InvalidHandle {
+		return windows.InvalidHandle, fmt.Errorf("kernel: invalid Windows parent handle")
+	}
+	if err := validatePlatformPathComponent(name); err != nil {
+		return windows.InvalidHandle, err
+	}
+	objectName, err := windows.NewNTUnicodeString(name)
+	if err != nil {
+		return windows.InvalidHandle, err
+	}
+	oa := windows.OBJECT_ATTRIBUTES{Length: uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})), RootDirectory: parent, ObjectName: objectName, Attributes: windows.OBJ_CASE_INSENSITIVE | windows.OBJ_DONT_REPARSE}
+	var handle windows.Handle
+	var status windows.IO_STATUS_BLOCK
+	if err := windows.NtCreateFile(&handle, access, &oa, &status, nil, attributes, share, disposition, options, 0, 0); err != nil {
+		return windows.InvalidHandle, err
+	}
+	return handle, nil
+}
+
+func openPlatformRestoreRoot(absolutePath string) (*platformRestoreDirectory, error) {
+	pointer, err := windows.UTF16PtrFromString(absolutePath)
+	if err != nil {
+		return nil, err
+	}
+	handle, err := windows.CreateFile(pointer, windows.FILE_LIST_DIRECTORY|windowsFileAddFile|windowsFileAddSubdirectory|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OPEN_REPARSE_POINT|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := captureWindowsHandleIdentity(handle, true)
+	if err != nil {
+		_ = windows.CloseHandle(handle)
+		return nil, err
+	}
+	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, nil
+}
+
+func (directory *platformRestoreDirectory) openOrCreateChildDirectory(name string) (*platformRestoreDirectory, bool, error) {
+	if directory == nil || directory.closed {
+		return nil, false, fmt.Errorf("kernel: restore directory handle unavailable")
+	}
+	access := uint32(windows.FILE_LIST_DIRECTORY | windowsFileAddFile | windowsFileAddSubdirectory | windows.FILE_READ_ATTRIBUTES | windows.SYNCHRONIZE)
+	options := uint32(windows.FILE_DIRECTORY_FILE | windows.FILE_OPEN_REPARSE_POINT | windows.FILE_SYNCHRONOUS_IO_NONALERT)
+	handle, err := ntCreateRelative(directory.handle, name, access, windows.FILE_ATTRIBUTE_DIRECTORY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_OPEN, options)
+	created := false
+	if err != nil && isWindowsPathNotExist(err) {
+		handle, err = ntCreateRelative(directory.handle, name, access, windows.FILE_ATTRIBUTE_DIRECTORY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_CREATE, options)
+		created = err == nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	identity, err := captureWindowsHandleIdentity(handle, true)
+	if err != nil {
+		_ = windows.CloseHandle(handle)
+		return nil, false, err
+	}
+	return &platformRestoreDirectory{handle: handle, pathIdentity: identity}, created, nil
+}
+
+func (directory *platformRestoreDirectory) openRegularFile(name string) (*os.File, platformPathIdentity, error) {
+	if directory == nil || directory.closed {
+		return nil, platformPathIdentity{}, fmt.Errorf("kernel: restore directory handle unavailable")
+	}
+	handle, err := ntCreateRelative(directory.handle, name, windows.GENERIC_READ|windows.FILE_READ_ATTRIBUTES|windows.SYNCHRONIZE, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_OPEN, windows.FILE_NON_DIRECTORY_FILE|windows.FILE_OPEN_REPARSE_POINT|windows.FILE_SYNCHRONOUS_IO_NONALERT)
+	if err != nil {
+		if isWindowsPathNotExist(err) {
+			return nil, platformPathIdentity{}, os.ErrNotExist
+		}
+		return nil, platformPathIdentity{}, err
+	}
+	identity, err := captureWindowsHandleIdentity(handle, false)
+	if err != nil {
+		_ = windows.CloseHandle(handle)
+		return nil, platformPathIdentity{}, err
+	}
+	return os.NewFile(uintptr(handle), name), identity, nil
+}
+
+func safeCreateFilePlatform(parent *platformRestoreDirectory, name string) (*os.File, platformPathIdentity, error) {
+	if parent == nil || parent.closed {
+		return nil, platformPathIdentity{}, fmt.Errorf("kernel: restore directory handle unavailable")
+	}
+	handle, err := ntCreateRelative(parent.handle, name, windows.GENERIC_READ|windows.GENERIC_WRITE|windows.FILE_READ_ATTRIBUTES|windows.DELETE|windows.SYNCHRONIZE, windows.FILE_ATTRIBUTE_TEMPORARY, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_CREATE, windows.FILE_NON_DIRECTORY_FILE|windows.FILE_OPEN_REPARSE_POINT|windows.FILE_SYNCHRONOUS_IO_NONALERT)
+	if err != nil {
+		return nil, platformPathIdentity{}, err
+	}
+	identity, err := captureWindowsHandleIdentity(handle, false)
+	if err != nil {
+		_ = windows.CloseHandle(handle)
+		return nil, platformPathIdentity{}, err
+	}
+	return os.NewFile(uintptr(handle), name), identity, nil
+}
+
+func (directory *platformRestoreDirectory) createTempFile(prefix string) (*preparedRestoreTemp, error) {
+	for attempt := 0; attempt < 32; attempt++ {
+		bytes := make([]byte, 16)
+		if _, err := rand.Read(bytes); err != nil {
+			return nil, err
+		}
+		name := fmt.Sprintf("%s%x.tmp", prefix, bytes)
+		file, identity, err := safeCreateFilePlatform(directory, name)
+		if err != nil {
+			if errors.Is(err, windows.ERROR_FILE_EXISTS) {
+				continue
+			}
+			return nil, err
+		}
+		return &preparedRestoreTemp{Name: name, File: file, Identity: identity}, nil
+	}
+	return nil, fmt.Errorf("kernel: create restore temp exhausted retries")
+}
+
+type windowsFileLinkInformationLayout struct {
+	ReplaceIfExists uint8
+	RootDirectory   windows.Handle
+	FileNameLength  uint32
+	FileName        [1]uint16
+}
+
+func buildWindowsFileLinkInformation(root windows.Handle, name string) ([]byte, error) {
+	utf16Name, err := windows.UTF16FromString(name)
+	if err != nil {
+		return nil, err
+	}
+	utf16Name = utf16Name[:len(utf16Name)-1]
+	var layout windowsFileLinkInformationLayout
+	offset := unsafe.Offsetof(layout.FileName)
+	buffer := make([]byte, int(offset)+len(utf16Name)*2)
+	header := (*windowsFileLinkInformationLayout)(unsafe.Pointer(&buffer[0]))
+	header.RootDirectory = root
+	header.FileNameLength = uint32(len(utf16Name) * 2)
+	copy(unsafe.Slice((*uint16)(unsafe.Pointer(&buffer[offset])), len(utf16Name)), utf16Name)
+	return buffer, nil
+}
+func (directory *platformRestoreDirectory) publishTempNoReplace(temp *preparedRestoreTemp, targetName string) error {
+	if directory == nil || temp == nil || temp.File == nil {
+		return fmt.Errorf("kernel: restore publish handles missing")
+	}
+	buffer, err := buildWindowsFileLinkInformation(directory.handle, targetName)
+	if err != nil {
+		return err
+	}
+	var status windows.IO_STATUS_BLOCK
+	return windows.NtSetInformationFile(windows.Handle(temp.File.Fd()), &status, &buffer[0], uint32(len(buffer)), windows.FileLinkInformation)
+}
+func (directory *platformRestoreDirectory) removeChild(name string) error {
+	handle, err := ntCreateRelative(directory.handle, name, windows.DELETE|windows.SYNCHRONIZE, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_OPEN, windows.FILE_NON_DIRECTORY_FILE|windows.FILE_OPEN_REPARSE_POINT|windows.FILE_SYNCHRONOUS_IO_NONALERT)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle)
+	var status windows.IO_STATUS_BLOCK
+	disposition := byte(1)
+	return windows.NtSetInformationFile(handle, &status, &disposition, 1, windows.FileDispositionInformation)
+}
+func (directory *platformRestoreDirectory) sync() error {
+	if directory == nil || directory.closed {
+		return fmt.Errorf("kernel: restore directory handle unavailable")
+	}
+	return windows.FlushFileBuffers(directory.handle)
+}
+func (directory *platformRestoreDirectory) close() error {
+	if directory == nil || directory.closed {
+		return nil
+	}
+	directory.closed = true
+	return windows.CloseHandle(directory.handle)
+}
+func (directory *platformRestoreDirectory) identity() platformPathIdentity {
+	if directory == nil {
+		return platformPathIdentity{}
+	}
+	return directory.pathIdentity
+}
+func openPlatformFileParent(absoluteFilePath string) (*platformRestoreDirectory, string, error) {
+	parent, err := openPlatformRestoreRoot(filepath.Dir(absoluteFilePath))
+	if err != nil {
+		return nil, "", err
+	}
+	name := filepath.Base(absoluteFilePath)
+	if err := validatePlatformPathComponent(name); err != nil {
+		_ = parent.close()
+		return nil, "", err
+	}
+	return parent, name, nil
 }
 
 func (
@@ -60,8 +280,7 @@ func validatePlatformPathComponent(
 		)
 	}
 
-	for _, character :=
-	range component {
+	for _, character := range component {
 		if character == 0 {
 			return fmt.Errorf(
 				"kernel: path component contains null byte",
@@ -101,6 +320,14 @@ func isWindowsPathNotExist(
 		err,
 		windows.ERROR_FILE_NOT_FOUND,
 	) ||
+		errors.Is(
+			err,
+			windows.STATUS_OBJECT_NAME_NOT_FOUND,
+		) ||
+		errors.Is(
+			err,
+			windows.STATUS_OBJECT_PATH_NOT_FOUND,
+		) ||
 		errors.Is(
 			err,
 			windows.ERROR_PATH_NOT_FOUND,
@@ -293,17 +520,13 @@ func capturePlatformPathIdentity(
 	}
 
 	return platformPathIdentity{
-		VolumeSerialNumber:
-		information.VolumeSerialNumber,
+		VolumeSerialNumber: information.VolumeSerialNumber,
 
-		FileIndexHigh:
-		information.FileIndexHigh,
+		FileIndexHigh: information.FileIndexHigh,
 
-		FileIndexLow:
-		information.FileIndexLow,
+		FileIndexLow: information.FileIndexLow,
 
-		IsDirectory:
-		information.FileAttributes&
+		IsDirectory: information.FileAttributes&
 			windows.FILE_ATTRIBUTE_DIRECTORY !=
 			0,
 	}, nil
@@ -378,7 +601,7 @@ func validateReparsePoint(
 	return err
 }
 
-func safeCreateFilePlatform(
+func safeCreateFilePlatformPathLegacy(
 	path string,
 ) (
 	*os.File,

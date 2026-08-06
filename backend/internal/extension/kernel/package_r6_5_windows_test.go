@@ -8,7 +8,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -18,6 +20,19 @@ import (
 func r65HashContent(content []byte) string {
 	sum := sha256.Sum256(content)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func createR65Junction(t *testing.T, junctionPath string, targetPath string) {
+	t.Helper()
+	if err := os.MkdirAll(targetPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	command := fmt.Sprintf(`mklink /J "%s" "%s"`, junctionPath, targetPath)
+	output, err := exec.Command("cmd.exe", "/d", "/c", "mklink", "/J", junctionPath, targetPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("create Junction: command=%s err=%v; output=%s", command, err, string(output))
+	}
+	t.Cleanup(func() { _ = os.Remove(junctionPath) })
 }
 
 func r65NewSnapshotStore(t *testing.T) (*ResourceSnapshotStore, string) {
@@ -40,7 +55,6 @@ func r65NewSnapshotStore(t *testing.T) (*ResourceSnapshotStore, string) {
 	return store, extRoot
 }
 
-
 func TestR6_5_CapturePlatformPathIdentityRejectsJunction(t *testing.T) {
 	_, extRoot := r65NewSnapshotStore(t)
 
@@ -50,9 +64,7 @@ func TestR6_5_CapturePlatformPathIdentityRejectsJunction(t *testing.T) {
 	}
 
 	junctionPath := filepath.Join(extRoot, "junction_link")
-	if err := os.Symlink(realDir, junctionPath); err != nil {
-		t.Skipf("symlink requires privilege: %v", err)
-	}
+	createR65Junction(t, junctionPath, realDir)
 
 	_, err := capturePlatformPathIdentity(junctionPath, true)
 	if err == nil {
@@ -69,9 +81,7 @@ func TestR6_5_PrepareRestorePlatformChainRejectsJunctionInParent(t *testing.T) {
 	}
 
 	junctionParent := filepath.Join(extRoot, "junction_parent")
-	if err := os.Symlink(realParent, junctionParent); err != nil {
-		t.Skipf("symlink requires privilege: %v", err)
-	}
+	createR65Junction(t, junctionParent, realParent)
 
 	target := filepath.Join(junctionParent, "file.bin")
 	_, err := validateRestoreTargetPathPure(target, extRoot)
@@ -118,15 +128,18 @@ func TestR6_5_PublishRestoreFileRejectsSourceJunction(t *testing.T) {
 
 	body := []byte("source body")
 	hash := r65HashContent(body)
-	realSource := filepath.Join(extRoot, "plain.source")
+	realSourceDir := filepath.Join(extRoot, "plain-source")
+	if err := os.MkdirAll(realSourceDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	realSource := filepath.Join(realSourceDir, "plain.source")
 	if err := os.WriteFile(realSource, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	junctionSource := filepath.Join(extRoot, "junction.source")
-	if err := os.Symlink(realSource, junctionSource); err != nil {
-		t.Skipf("symlink requires privilege: %v", err)
-	}
+	junctionSourceDir := filepath.Join(extRoot, "junction-source")
+	createR65Junction(t, junctionSourceDir, realSourceDir)
+	junctionSource := filepath.Join(junctionSourceDir, "plain.source")
 
 	target := filepath.Join(extRoot, "plain.target")
 	validated, err := prepareRestoreTargetPath(target, extRoot)
@@ -201,16 +214,56 @@ func TestR6_5_PublishRejectsAfterParentChainReparseSwap(t *testing.T) {
 		t.Fatal("parent component identity must be a directory")
 	}
 
-	junctionParent := filepath.Join(extRoot, "junction_chain_parent")
-	if err := os.Symlink(realParent, junctionParent); err != nil {
-		t.Skipf("symlink requires privilege: %v", err)
+	backup := realParent + ".backup"
+	if err := os.Rename(realParent, backup); err != nil {
+		t.Fatal(err)
 	}
+	createR65Junction(t, realParent, t.TempDir())
 
 	err = revalidateRestorePathProof(validated, true)
 	if err == nil {
-		t.Fatal("revalidation must detect that a junction now exists near the established chain")
+		t.Fatal("revalidation must detect that the validated parent was replaced by a junction")
 	}
 
 	_ = hash
 	_ = body
+}
+
+func TestR6_5_RejectsMountedFolderInParentChain(t *testing.T) {
+	mountPoint := os.Getenv("AMITIA_R65_MOUNT_POINT")
+	mountTarget := os.Getenv("AMITIA_R65_MOUNT_TARGET")
+	if mountPoint == "" || mountTarget == "" {
+		t.Skip("R6-5 mount point environment is not configured")
+	}
+	extRoot := filepath.Dir(mountPoint)
+	if _, err := validateRestoreTargetPathPure(mountTarget, extRoot); err == nil {
+		t.Fatal("mounted folder in restore parent chain must be rejected")
+	}
+}
+
+func TestR6_5_RejectsMountPointInsertedAfterPrepare(t *testing.T) {
+	mountPoint := os.Getenv("AMITIA_R65_MOUNT_POINT")
+	if mountPoint == "" {
+		t.Skip("R6-5 mount point environment is not configured")
+	}
+	extRoot := filepath.Dir(mountPoint)
+	target := filepath.Join(extRoot, "prepare-before-mount", "file.bin")
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	validated, err := prepareRestoreTargetPath(target, extRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer validated.Close()
+	if err := os.Remove(filepath.Dir(target)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(mountPoint, filepath.Dir(target)); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Rename(filepath.Dir(target), mountPoint)
+	if err := revalidateRestorePathProof(validated, true); err == nil {
+		t.Fatal("mount point inserted after prepare must be rejected")
+	}
 }

@@ -91,6 +91,20 @@ func (s *DesktopSessionService) ensureTable() error {
 	return nil
 }
 
+func (s *DesktopSessionService) ReadinessCheck(ctx context.Context) error {
+	if s.db == nil {
+		return errors.New("database is nil")
+	}
+	sqlDB, err := s.db.DB()
+	if err != nil {
+		return fmt.Errorf("get underlying db: %w", err)
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("database ping failed: %w", err)
+	}
+	return nil
+}
+
 func (s *DesktopSessionService) resolveLocalToken(userID string) (string, error) {
 	tokenFile := filepath.Join(s.dataDir, "security", "local-token")
 	data, err := os.ReadFile(tokenFile)

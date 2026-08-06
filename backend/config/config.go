@@ -519,58 +519,58 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 }
 
 func applyLegacyProviderConfig(v *viper.Viper, cfg *Config) {
-	if v.InConfig("qdrant.host") {
+	if v.InConfig("qdrant.host") && !v.InConfig("providers.vectorStore.qdrant.host") {
 		log.Printf("[Config] 检测到遗留 qdrant 顶层配置，迁移到 providers.vectorStore.qdrant")
 		cfg.Providers.VectorStore.Qdrant.Host = v.GetString("qdrant.host")
 	}
-	if v.InConfig("qdrant.port") {
+	if v.InConfig("qdrant.port") && !v.InConfig("providers.vectorStore.qdrant.port") {
 		cfg.Providers.VectorStore.Qdrant.Port = v.GetInt("qdrant.port")
 	}
-	if v.InConfig("qdrant.binaryPath") {
+	if v.InConfig("qdrant.binaryPath") && !v.InConfig("providers.vectorStore.qdrant.binaryPath") {
 		cfg.Providers.VectorStore.Qdrant.BinaryPath = v.GetString("qdrant.binaryPath")
 	}
-	if v.InConfig("qdrant.dataDir") {
+	if v.InConfig("qdrant.dataDir") && !v.InConfig("providers.vectorStore.qdrant.dataDir") {
 		cfg.Providers.VectorStore.Qdrant.DataDir = v.GetString("qdrant.dataDir")
 	}
-	if v.InConfig("qdrant.collectionName") {
+	if v.InConfig("qdrant.collectionName") && !v.InConfig("providers.vectorStore.qdrant.collectionName") {
 		cfg.Providers.VectorStore.Qdrant.CollectionName = v.GetString("qdrant.collectionName")
 	}
-	if v.InConfig("qdrant.vectorDim") {
+	if v.InConfig("qdrant.vectorDim") && !v.InConfig("providers.vectorStore.qdrant.vectorDim") {
 		cfg.Providers.VectorStore.Qdrant.VectorDim = v.GetInt("qdrant.vectorDim")
 	}
-	if v.InConfig("qdrant.limit") {
+	if v.InConfig("qdrant.limit") && !v.InConfig("providers.vectorStore.qdrant.limit") {
 		cfg.Providers.VectorStore.Qdrant.Limit = v.GetInt("qdrant.limit")
 	}
-	if v.InConfig("qdrant.enabled") {
+	if v.InConfig("qdrant.enabled") && !v.InConfig("providers.vectorStore.qdrant.enabled") {
 		cfg.Providers.VectorStore.Qdrant.Enabled = v.GetBool("qdrant.enabled")
 	}
 
-	if v.InConfig("surrealdb.host") {
+	if v.InConfig("surrealdb.host") && !v.InConfig("providers.graphStore.surrealdb.host") {
 		log.Printf("[Config] 检测到遗留 surrealdb 顶层配置，迁移到 providers.graphStore.surrealdb")
 		cfg.Providers.GraphStore.SurrealDB.Host = v.GetString("surrealdb.host")
 	}
-	if v.InConfig("surrealdb.port") {
+	if v.InConfig("surrealdb.port") && !v.InConfig("providers.graphStore.surrealdb.port") {
 		cfg.Providers.GraphStore.SurrealDB.Port = v.GetInt("surrealdb.port")
 	}
-	if v.InConfig("surrealdb.binaryPath") {
+	if v.InConfig("surrealdb.binaryPath") && !v.InConfig("providers.graphStore.surrealdb.binaryPath") {
 		cfg.Providers.GraphStore.SurrealDB.BinaryPath = v.GetString("surrealdb.binaryPath")
 	}
-	if v.InConfig("surrealdb.namespace") {
+	if v.InConfig("surrealdb.namespace") && !v.InConfig("providers.graphStore.surrealdb.namespace") {
 		cfg.Providers.GraphStore.SurrealDB.Namespace = v.GetString("surrealdb.namespace")
 	}
-	if v.InConfig("surrealdb.database") {
+	if v.InConfig("surrealdb.database") && !v.InConfig("providers.graphStore.surrealdb.database") {
 		cfg.Providers.GraphStore.SurrealDB.Database = v.GetString("surrealdb.database")
 	}
-	if v.InConfig("surrealdb.username") {
+	if v.InConfig("surrealdb.username") && !v.InConfig("providers.graphStore.surrealdb.username") {
 		cfg.Providers.GraphStore.SurrealDB.Username = v.GetString("surrealdb.username")
 	}
-	if v.InConfig("surrealdb.password") {
+	if v.InConfig("surrealdb.password") && !v.InConfig("providers.graphStore.surrealdb.password") {
 		cfg.Providers.GraphStore.SurrealDB.Password = v.GetString("surrealdb.password")
 	}
-	if v.InConfig("surrealdb.dataPath") {
+	if v.InConfig("surrealdb.dataPath") && !v.InConfig("providers.graphStore.surrealdb.dataPath") {
 		cfg.Providers.GraphStore.SurrealDB.DataPath = v.GetString("surrealdb.dataPath")
 	}
-	if v.InConfig("surrealdb.enabled") {
+	if v.InConfig("surrealdb.enabled") && !v.InConfig("providers.graphStore.surrealdb.enabled") {
 		cfg.Providers.GraphStore.SurrealDB.Enabled = v.GetBool("surrealdb.enabled")
 	}
 }

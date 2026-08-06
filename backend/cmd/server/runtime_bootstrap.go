@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 	"github.com/u-ai/backend/pkg/platform"
@@ -19,14 +21,15 @@ import (
 )
 
 type runtimeBootstrap struct {
-	host         runtimehost.RuntimeHost
-	orchestrator *runtimeorchestrator.RuntimeOrchestrator
-	resources    *util.RuntimePaths
-	graphMu      sync.RWMutex
-	graphSvc     graph.Service
-	stopOnce     sync.Once
-	runError     error
-	processMgr   *process.DefaultProcessManager
+	host              runtimehost.RuntimeHost
+	orchestrator      *runtimeorchestrator.RuntimeOrchestrator
+	resources         *util.RuntimePaths
+	graphMu           sync.RWMutex
+	graphSvc          graph.Service
+	stopOnce          sync.Once
+	runError          error
+	processMgr        *process.DefaultProcessManager
+	nodeEnvironment   nodeenv.Resolver
 }
 
 func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
@@ -40,11 +43,21 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 	}
 
 	orch := runtimeorchestrator.New(descriptor)
+
+	nodeResolver, err := nodeenv.NewResolver(nodeenv.ResolveContext{
+		Config: config.AppCfg,
+		Host:   host,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create node environment resolver: %w", err)
+	}
+
 	return &runtimeBootstrap{
-		host:         host,
-		orchestrator: orch,
-		resources:    paths,
-		processMgr:   process.NewDefaultProcessManager(),
+		host:            host,
+		orchestrator:    orch,
+		resources:       paths,
+		processMgr:      process.NewDefaultProcessManager(),
+		nodeEnvironment: nodeResolver,
 	}, nil
 }
 
@@ -114,6 +127,13 @@ func (b *runtimeBootstrap) SetGraphService(svc graph.Service) {
 	b.graphMu.Lock()
 	b.graphSvc = svc
 	b.graphMu.Unlock()
+}
+
+func (b *runtimeBootstrap) NodeEnvironmentResolver() nodeenv.Resolver {
+	if b == nil {
+		return nil
+	}
+	return b.nodeEnvironment
 }
 
 type vectorStoreProviderAdapter struct {

@@ -906,8 +906,13 @@ func (r *Runtime) restorePackageRepositorySnapshots(ctx context.Context, extensi
 		if prepareErr != nil {
 			return NewPackageError(PackageErrCodeResourceSnapshotInvalid, 400, fmt.Errorf("kernel: restore path validation failed for resource %s at stage path_validation: %w", entry.Resource.ResourceID, prepareErr))
 		}
-		if publishErr := publishRestoreBytesNoReplace(validated, data, entry.ContentHash); publishErr != nil {
+		publishErr := publishRestoreBytesNoReplace(validated, data, entry.ContentHash)
+		closeErr := validated.Close()
+		if publishErr != nil {
 			return NewPackageError(PackageErrCodeResourceRestoreTargetChanged, 409, fmt.Errorf("kernel: publish restored resource %s at stage publish: %w", entry.Resource.ResourceID, publishErr))
+		}
+		if closeErr != nil {
+			return NewPackageError(PackageErrCodeResourceRestoreIncomplete, 409, fmt.Errorf("kernel: close restore path handles for resource %s: %w", entry.Resource.ResourceID, closeErr))
 		}
 	}
 	current, err := r.container.ResourceRepository.ListResources(ctx, extensionID)

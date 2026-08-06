@@ -8,6 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/providers.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -21,6 +23,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   int _loginState = 0;
+  String _errorText = '';
 
   @override
   void dispose() {
@@ -44,13 +47,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
 
-    setState(() => _loginState = 1);
+    setState(() {
+      _loginState = 1;
+      _errorText = '';
+    });
 
-    await Future.delayed(const Duration(milliseconds: 1200));
+    try {
+      final auth = ref.read(authServiceProvider);
+      await auth.login(username, password);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (username == 'admin' && password == 'admin') {
       setState(() => _loginState = 2);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -62,11 +69,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await Future.delayed(const Duration(milliseconds: 800));
       if (!mounted) return;
       context.go(AppRoutes.chat);
-    } else {
-      setState(() => _loginState = 3);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loginState = 3;
+        _errorText = e.toString().replaceFirst('Exception: ', '');
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('用户名或密码错误，请重试'),
+          content: Text(_errorText.isNotEmpty ? _errorText : '登录失败，请重试'),
           duration: const Duration(seconds: 2),
           backgroundColor: context.error,
         ),
@@ -231,7 +242,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   onPressed: _login,
                 ),
               const SizedBox(height: AppSpacing.lg),
-              if (_loginState == 3)
+              if (_loginState == 3 && _errorText.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
@@ -244,7 +255,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
-                          '登录失败，请检查用户名和密码',
+                          _errorText,
                           style: AppTypography.caption(context).copyWith(color: context.error),
                         ),
                       ),
@@ -267,37 +278,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ],
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: context.accentSoft,
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline, size: 16, color: context.accentPrimary),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '演示账号',
-                            style: AppTypography.label(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '用户名：admin\n密码：admin',
-                            style: AppTypography.label(context).copyWith(color: context.accentPrimary),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ],

@@ -8,17 +8,21 @@ import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/app_routes.dart';
 import '../../app/drawer_route_state.dart';
+import '../../core/services/providers.dart';
 import 'amitia_misc.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 final currentCharacterIdProvider = StateProvider<String>((ref) => 'c1');
 final isAgentModeProvider = StateProvider<bool>((ref) => false);
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
-final mockStartupStageProvider = StateProvider<MockStartupStage>(
-  (ref) => MockStartupStage.ready,
-);
 
 enum MockStartupStage { firstLaunch, needsLogin, privacyRequired, ready }
+
+final startupStageProvider = Provider<MockStartupStage>((ref) {
+  final isLoggedIn = ref.watch(authStateProvider).valueOrNull ?? false;
+  if (isLoggedIn) return MockStartupStage.ready;
+  return MockStartupStage.needsLogin;
+});
 
 class _CharInfo {
   final String name, status, description, avatarInitial, avatarColor;

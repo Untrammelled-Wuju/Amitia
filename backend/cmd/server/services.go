@@ -87,12 +87,14 @@ import (
 	"github.com/u-ai/backend/internal/psyche/budget"
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
+	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
 )
 
 type AppServices struct {
@@ -153,6 +155,15 @@ type AppServices struct {
 	MCPDependencies       *mcpdependency.Service
 	DesktopInstanceStore  *security.DesktopInstanceStore
 	DeviceRepository      *device.Repository
+	RuntimeOrchestrator   RuntimeOrchestrator
+}
+
+type RuntimeOrchestrator interface {
+	StartPhase(ctx context.Context, phase runtimeorchestrator.ComponentPhase) error
+	StopAll(ctx context.Context) error
+	Snapshot() runtimeorchestrator.RuntimeSnapshot
+	GraphService() graph.Service
+	SetGraphService(svc graph.Service)
 }
 
 type defaultCharacterProvider struct {
@@ -275,24 +286,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 			}
 		}
 	}
-	if kernelContainer.TaskRuntimeService != nil {
-		if err := kernelContainer.TaskRuntimeService.StartupRecovery(context.Background()); err != nil {
-			log.Warn("task runtime recovery warning: ", err)
-		}
-		kernelContainer.TaskRuntimeService.Start(context.Background())
-	}
-	if kernelContainer.EventService != nil {
-		if err := kernelContainer.EventService.Start(context.Background()); err != nil {
-			log.Error("event service start failed: ", err)
-			panic("failed to start event service")
-		}
-	}
-	if kernelContainer.ScheduleService != nil {
-		if err := kernelContainer.ScheduleService.Start(context.Background()); err != nil {
-			log.Error("schedule service start failed: ", err)
-			panic("failed to start schedule service")
-		}
-	}
 	if err := extensionRuntime.AttachKernelFacade(extensionRuntime.Kernel); err != nil {
 		log.Error("extension kernel facade attach failed: ", err)
 		panic("failed to attach extension kernel facade")
@@ -303,10 +296,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 		panic("failed to initialize package artifact maintenance")
 	}
 	kernelContainer.ArtifactMaintenance = artifactMaintenance
-	if err := artifactMaintenance.Start(context.Background()); err != nil {
-		log.Error("failed to start package artifact maintenance: ", err)
-		panic("failed to start package artifact maintenance")
-	}
 	toolFacade := kernel.NewToolFacade(
 		kernelContainer.ToolRegistry,
 		kernelContainer.ExecutionKernel,
@@ -605,7 +594,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 		bridgeInboxRepo, bridgeJournalRepo, baselineCommitter, procRevReader, bridgeOutboxRepo, nil, "worker-main",
 	)
 	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 30*time.Second)
-	go bridgeRecoveryWorker.Start(context.Background())
+	_ = bridgeRecoveryWorker
 
 	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
 	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
@@ -619,16 +608,41 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
-	_ = pathRegistry.Register(desktoppetsecurity.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
+	if err := pathRegistry.Register(desktoppetsecurity.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine")); err != nil {
+		return nil, fmt.Errorf("register import quarantine root: %w", err)
+	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
 	deviceRepo := device.NewRepository(ctx.DB)
 
-	desktopInstanceStore, err := security.NewDesktopInstanceStore(config.AppCfg.Storage.DataDir)
-	if err != nil {
-		return nil, fmt.Errorf("initialize desktop instance store: %w", err)
+	var desktopInstanceStore *security.DesktopInstanceStore
+	if config.AppCfg.Security.Mode == "local_single_user" {
+		desktopInstanceStore, err = security.NewDesktopInstanceStore(config.AppCfg.Storage.DataDir)
+		if err != nil {
+			return nil, fmt.Errorf("initialize desktop instance store: %w", err)
+		}
 	}
 
 	ownershipGuard := desktoppetsecurity.NewSQLiteOwnershipGuard(ctx.DB)
+
+	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
+	if desktopPetRuntime != nil {
+		desktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
+	}
+	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
+		DB:             ctx.DB,
+		RuntimeService: desktopPetRuntime,
+		InstallRepo:    installationRepo,
+		PsycheStore:    psycheStore,
+		DataDir:        processingDataDir,
+		ShadowMode:     false,
+		RuntimeCmdOn:   true,
+	})
+	var behaviorSvc *behavior.BehaviorService
+	if assembleErr != nil {
+		log.Error("failed to assemble behavior engine: ", assembleErr)
+	} else {
+		behaviorSvc = behaviorAssembled.Service
+	}
 
 	safeModeCtrl := readiness.NewSafeModeController()
 	var readinessSvc *readiness.ReadinessService
@@ -637,59 +651,69 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 			DB:        ctx.DB,
 			Extension: extensionRuntime,
 			DesktopSessionReady: func() error {
-				return nil
+				sqlDB, err := ctx.DB.DB()
+				if err != nil {
+					return fmt.Errorf("get underlying db: %w", err)
+				}
+				return sqlDB.PingContext(context.Background())
 			},
 			OwnershipReady: func() error {
 				if ownershipGuard == nil {
-					return errors.New("ownership guard is nil")
+					return fmt.Errorf("ownership guard is nil")
 				}
 				return nil
 			},
 			RuntimeTicketReady: func() error {
-				return nil
+				return bootstrapTicketRepo.ReadinessCheck(context.Background())
 			},
 			RuntimeGatewayReady: func() error {
 				if desktopPetRuntime == nil {
-					return errors.New("runtime service is nil")
+					return fmt.Errorf("runtime service is nil")
 				}
 				return nil
 			},
 			PathGuardReady: func() error {
-				return nil
+				if pathRegistry == nil {
+					return fmt.Errorf("path registry is nil")
+				}
+				return pathRegistry.Validate()
 			},
 			GenerationWorkerReady: func() error {
 				if desktopPetWorker == nil {
-					return errors.New("generation worker is nil")
+					return fmt.Errorf("generation worker is nil")
 				}
 				return nil
 			},
 			ProcessingWorkerReady: func() error {
 				if processingWorker == nil {
-					return errors.New("processing worker is nil")
+					return fmt.Errorf("processing worker is nil")
 				}
 				return nil
 			},
 			QualityWorkerReady: func() error {
 				if qualityWorker == nil {
-					return errors.New("quality worker is nil")
+					return fmt.Errorf("quality worker is nil")
 				}
 				return nil
 			},
 			InstallationWorkerReady: func() error {
 				if installationService == nil {
-					return errors.New("installation service is nil")
+					return fmt.Errorf("installation service is nil")
 				}
 				return nil
 			},
 			BehaviorWorkerReady: func() error {
+				if behaviorSvc == nil {
+					return fmt.Errorf("behavior service is nil")
+				}
 				return nil
 			},
 			MigrationReady: func() error {
-				return nil
+				return checkMigrationState(ctx.DB)
 			},
 			LegacyChainReady: func() error {
 				if !desktoppet.LegacyPackageWritesDisabled {
-					return errors.New("legacy package writes not disabled")
+					return fmt.Errorf("legacy package writes not disabled")
 				}
 				return nil
 			},
@@ -702,25 +726,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 	leaseManager := releasebuild.NewLeaseManager()
 	journalManager := releasebuild.NewPublishJournalManager(releaseRepo)
 	releaseRecoveryWorker := release.NewReleaseRecoveryWorker(releaseRepo, leaseManager, journalManager, releaseStoragePort, releaseEventPublisher)
-	releaseRecoveryWorker.Start(ctx.Context)
+	_ = releaseRecoveryWorker
 	_ = newReleaseService
 	_ = journalManager
-
-	var behaviorSvc *behavior.BehaviorService
-	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
-		DB:             ctx.DB,
-		RuntimeService: desktopPetRuntime,
-		InstallRepo:    installationRepo,
-		PsycheStore:    psycheStore,
-		DataDir:        processingDataDir,
-		ShadowMode:     false,
-		RuntimeCmdOn:   true,
-	})
-	if assembleErr != nil {
-		log.Error("failed to assemble behavior engine: ", assembleErr)
-	} else {
-		behaviorSvc = behaviorAssembled.Service
-	}
 
 	var adapterManager *adapters.AdapterManager
 	if behaviorAssembled != nil && behaviorAssembled.Engine != nil {
@@ -777,7 +785,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service) (*AppServices, 
 		OwnershipGuard:        ownershipGuard,
 		PathRegistry:          pathRegistry,
 		ImportStagingRepo:     importStagingRepo,
-		PackageImporter:       importer.NewPackageImporterWithStaging(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo),
+		PackageImporter:       importer.NewPackageImporterWithJournal(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo, releasebuild.NewPublishJournalManager(releaseRepo)),
 		Readiness:             readinessSvc,
 		SafeMode:              safeModeCtrl,
 		MCPRepository:         mcpRepository,
@@ -811,6 +819,20 @@ func mcpDataDirectory(ctx *app.AppContext) string {
 		}
 	}
 	return filepath.Join(".", "data")
+}
+
+func checkMigrationState(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM schema_migrations WHERE status = ?", "failed").Count(&count).Error; err != nil {
+		return fmt.Errorf("check migration state: %w", err)
+	}
+	if count > 0 {
+		return fmt.Errorf("found %d failed migrations", count)
+	}
+	return nil
 }
 
 type characterOwnerPort struct {
