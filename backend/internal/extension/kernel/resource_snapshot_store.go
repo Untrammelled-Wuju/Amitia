@@ -1677,4 +1677,3 @@ func publishRestoreFileNoReplace(sourceRoot string, sourcePath string, validated
 	}
 	return sourceParent.sync()
 }
-

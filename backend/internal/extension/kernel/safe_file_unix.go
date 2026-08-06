@@ -3,14 +3,14 @@
 package kernel
 
 import (
-"crypto/rand"
-"fmt"
-"os"
-"path/filepath"
-"strings"
-"syscall"
+	"crypto/rand"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
 
-"golang.org/x/sys/unix"
+	"golang.org/x/sys/unix"
 )
 
 type platformPathIdentity struct {

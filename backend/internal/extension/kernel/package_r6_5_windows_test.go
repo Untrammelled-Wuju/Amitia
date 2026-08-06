@@ -23,16 +23,194 @@ func r65HashContent(content []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func createR65Junction(t *testing.T, junctionPath string, targetPath string) {
+func createR65Junction(
+	t *testing.T,
+	junctionPath string,
+	targetPath string,
+) {
 	t.Helper()
-	if err := os.MkdirAll(targetPath, 0o700); err != nil {
+
+	if err :=
+		os.MkdirAll(
+			targetPath,
+			0o700,
+		); err != nil {
 		t.Fatal(err)
 	}
-	output, err := exec.Command("cmd.exe", "/d", "/c", "mklink", "/J", junctionPath, targetPath).CombinedOutput()
+
+	script := "New-Item -ItemType Junction -Path '" +
+		strings.ReplaceAll(junctionPath, "'", "''") +
+		"' -Target '" +
+		strings.ReplaceAll(targetPath, "'", "''") +
+		"' -Force | Out-Null"
+
+	output, err := exec.Command(
+		"powershell.exe",
+		"-NoProfile",
+		"-NonInteractive",
+		"-Command",
+		script,
+	).CombinedOutput()
+
 	if err != nil {
-		t.Fatalf("create junction: %v; output=%s", err, string(output))
+		t.Fatalf(
+			"create junction: %v; output=%s",
+			err,
+			string(output),
+		)
 	}
-	t.Cleanup(func() { _ = os.Remove(junctionPath) })
+
+	t.Cleanup(
+		func() {
+			_ = os.Remove(junctionPath)
+		},
+	)
+}
+
+type r65MountEnvironment struct {
+	MountPoint      string
+	MountTarget     string
+	DiskNumber      string
+	PartitionNumber string
+}
+
+func requireR65MountEnvironment(
+	t *testing.T,
+) r65MountEnvironment {
+	t.Helper()
+
+	environment :=
+		r65MountEnvironment{
+			MountPoint: os.Getenv(
+				"AMITIA_R65_MOUNT_POINT",
+			),
+
+			MountTarget: os.Getenv(
+				"AMITIA_R65_MOUNT_TARGET",
+			),
+
+			DiskNumber: os.Getenv(
+				"AMITIA_R65_DISK_NUMBER",
+			),
+
+			PartitionNumber: os.Getenv(
+				"AMITIA_R65_PARTITION_NUMBER",
+			),
+		}
+
+	missing :=
+		environment.MountPoint == "" ||
+			environment.MountTarget == "" ||
+			environment.DiskNumber == "" ||
+			environment.PartitionNumber == ""
+
+	if !missing {
+		return environment
+	}
+
+	if os.Getenv(
+		"AMITIA_R65_REQUIRE_MOUNT_TESTS",
+	) == "1" {
+		t.Fatal(
+			"R6-5 mount environment is incomplete in mandatory verification mode",
+		)
+	}
+
+	t.Skip(
+		"R6-5 mount environment is not configured",
+	)
+
+	return r65MountEnvironment{}
+}
+
+func addR65PartitionAccessPath(
+	t *testing.T,
+	diskNumber string,
+	partitionNumber string,
+	path string,
+) {
+	t.Helper()
+
+	script := []string{
+		"& {",
+		"param($disk, $partition, $path)",
+		"",
+		"$ErrorActionPreference = 'Stop'",
+		"",
+		"New-Item",
+		"  -ItemType Directory",
+		"  -Path $path",
+		"  -Force |",
+		"Out-Null",
+		"",
+		"Add-PartitionAccessPath",
+		"  -DiskNumber ([int]$disk)",
+		"  -PartitionNumber ([int]$partition)",
+		"  -AccessPath ($path.TrimEnd('\\') + '\\')",
+		"}",
+	}
+	command := strings.Join(script, "\n")
+
+	output, err := exec.Command(
+		"powershell.exe",
+		"-NoProfile",
+		"-NonInteractive",
+		"-Command",
+		command,
+		diskNumber,
+		partitionNumber,
+		path,
+	).CombinedOutput()
+
+	if err != nil {
+		t.Fatalf(
+			"add partition access path: %v; output=%s",
+			err,
+			string(output),
+		)
+	}
+}
+
+func removeR65PartitionAccessPath(
+	t *testing.T,
+	diskNumber string,
+	partitionNumber string,
+	path string,
+) {
+	t.Helper()
+
+	script := []string{
+		"& {",
+		"param($disk, $partition, $path)",
+		"",
+		"$ErrorActionPreference = 'Stop'",
+		"",
+		"Remove-PartitionAccessPath",
+		"  -DiskNumber ([int]$disk)",
+		"  -PartitionNumber ([int]$partition)",
+		"  -AccessPath ($path.TrimEnd('\\') + '\\')",
+		"}",
+	}
+	command := strings.Join(script, "\n")
+
+	output, err := exec.Command(
+		"powershell.exe",
+		"-NoProfile",
+		"-NonInteractive",
+		"-Command",
+		command,
+		diskNumber,
+		partitionNumber,
+		path,
+	).CombinedOutput()
+
+	if err != nil {
+		t.Fatalf(
+			"remove partition access path: %v; output=%s",
+			err,
+			string(output),
+		)
+	}
 }
 
 func r65NewSnapshotStore(t *testing.T) (*ResourceSnapshotStore, string) {
@@ -232,42 +410,105 @@ func TestR6_5_PublishRejectsAfterParentChainReparseSwap(t *testing.T) {
 	_ = body
 }
 
-func TestR6_5_RejectsMountedFolderInParentChain(t *testing.T) {
-	mountPoint := os.Getenv("AMITIA_R65_MOUNT_POINT")
-	mountTarget := os.Getenv("AMITIA_R65_MOUNT_TARGET")
-	if mountPoint == "" || mountTarget == "" {
-		t.Skip("R6-5 mount point environment is not configured")
-	}
-	extRoot := filepath.Dir(mountPoint)
-	if _, err := validateRestoreTargetPathPure(mountTarget, extRoot); err == nil {
-		t.Fatal("mounted folder in restore parent chain must be rejected")
+func TestR6_5_RejectsMountedFolderInParentChain(
+	t *testing.T,
+) {
+	environment :=
+		requireR65MountEnvironment(t)
+
+	extRoot :=
+		filepath.Dir(
+			environment.MountPoint,
+		)
+
+	if _,
+		err :=
+		validateRestoreTargetPathPure(
+			environment.MountTarget,
+			extRoot,
+		); err == nil {
+		t.Fatal(
+			"mounted folder in restore parent chain must be rejected",
+		)
 	}
 }
 
-func TestR6_5_RejectsMountPointInsertedAfterPrepare(t *testing.T) {
-	mountPoint := os.Getenv("AMITIA_R65_MOUNT_POINT")
-	if mountPoint == "" {
-		t.Skip("R6-5 mount point environment is not configured")
-	}
-	extRoot := filepath.Dir(mountPoint)
-	target := filepath.Join(extRoot, "prepare-before-mount", "file.bin")
-	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+func TestR6_5_RejectsMountPointInsertedAfterPrepare(
+	t *testing.T,
+) {
+	environment :=
+		requireR65MountEnvironment(t)
+
+	extRoot :=
+		filepath.Dir(
+			environment.MountPoint,
+		)
+
+	parent :=
+		filepath.Join(
+			extRoot,
+			"prepare-before-mount",
+		)
+
+	if err :=
+		os.MkdirAll(
+			parent,
+			0o700,
+		); err != nil {
 		t.Fatal(err)
 	}
-	validated, err := prepareRestoreTargetPath(target, extRoot)
+
+	target :=
+		filepath.Join(
+			parent,
+			"file.bin",
+		)
+
+	validated,
+		err :=
+		prepareRestoreTargetPath(
+			target,
+			extRoot,
+		)
+
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer validated.Close()
-	if err := os.Remove(filepath.Dir(target)); err != nil {
-		t.Fatal(err)
+
+	if err :=
+		os.Remove(
+			parent,
+		); err != nil {
+		t.Fatalf(
+			"remove original validated parent: %v",
+			err,
+		)
 	}
-	if err := os.Rename(mountPoint, filepath.Dir(target)); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Rename(filepath.Dir(target), mountPoint)
-	if err := revalidateRestorePathProof(validated, true); err == nil {
-		t.Fatal("mount point inserted after prepare must be rejected")
+
+	addR65PartitionAccessPath(
+		t,
+		environment.DiskNumber,
+		environment.PartitionNumber,
+		parent,
+	)
+
+	defer removeR65PartitionAccessPath(
+		t,
+		environment.DiskNumber,
+		environment.PartitionNumber,
+		parent,
+	)
+
+	if err :=
+		revalidateRestorePathProof(
+			validated,
+			true,
+		); err == nil {
+		t.Fatal(
+			"mount point inserted after prepare must be rejected",
+		)
 	}
 }
 
