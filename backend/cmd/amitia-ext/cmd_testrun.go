@@ -1,6 +1,9 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -82,18 +85,25 @@ func runTest(args []string, output *Output) int {
 		return ExitSuccess
 	}
 
-	env := buildTestEnv(*hostVersion, *platform, *runtimeVersion)
-
-	nodePath, err := exec.LookPath("node")
+	deps, err := NewRuntimeDependencies()
 	if err != nil {
-		output.fail(ExitEnv, "未找到 node 可执行文件（扩展测试运行时需要 Node.js）")
+		output.fail(ExitEnv, fmt.Sprintf("运行时依赖初始化失败: %v", err))
 	}
+
+	env, err := deps.NodeResolver.Resolve(context.Background())
+	if err != nil || env.NodeBinary == "" {
+		output.fail(ExitEnv, "未找到管理 Node.js 可执行文件（扩展测试运行时需要 Node.js）")
+	}
+
+	nodePath := env.NodeBinary
+
+	envVars := buildTestEnv(*hostVersion, *platform, *runtimeVersion)
 
 	summary := testRunSummary{}
 	overallStart := time.Now()
 
 	for _, tf := range testFiles {
-		result := runOneTestFile(nodePath, tf, env, output)
+		result := runOneTestFile(nodePath, tf, envVars, output)
 		summary.Cases = append(summary.Cases, result)
 		summary.Total++
 		switch result.Status {
@@ -113,6 +123,8 @@ func runTest(args []string, output *Output) int {
 		"failed":   summary.Failed,
 		"skipped":  summary.Skipped,
 		"duration": summary.Duration,
+		"nodePath": nodePath,
+		"nodeSource": string(env.Source),
 		"cases":    summary.Cases,
 	}
 	if *hostVersion != "" || *platform != "" || *runtimeVersion != "" {

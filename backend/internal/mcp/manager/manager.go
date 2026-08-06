@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/mcp/client"
 	"github.com/u-ai/backend/internal/mcp/protocol"
 	"github.com/u-ai/backend/internal/mcp/transport"
+	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 )
 
 type OAuthTokens interface {
@@ -32,6 +33,7 @@ type DefaultFactory struct {
 	Repository *mcp.Repository
 	Secrets    auth.SecretStore
 	OAuth      OAuthTokens
+	Commands   commandenv.Resolver
 }
 
 func (f DefaultFactory) Build(ctx context.Context, server mcp.Server) (transport.MCPTransport, error) {
@@ -51,11 +53,41 @@ func (f DefaultFactory) Build(ctx context.Context, server mcp.Server) (transport
 		if err := json.Unmarshal([]byte(server.ArgsJSON), &args); err != nil {
 			return nil, fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: args")
 		}
+		if f.Commands != nil {
+			req := commandenv.Request{Command: server.Command, Args: args}
+			inv, err := f.Commands.Resolve(ctx, req)
+			if err != nil {
+				return nil, fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: command resolve failed: %w", err)
+			}
+			environment, err := f.stdioEnvironment(ctx, server)
+			if err != nil {
+				return nil, err
+			}
+			cfg := transport.StdioConfig{
+				Executable:     inv.Executable,
+				Args:           inv.Args,
+				OriginalCommand: server.Command,
+				WorkDir:        server.WorkDir,
+				Environment:    environment,
+				StartTimeout:   10 * time.Second,
+				ShutdownTimeout: 3 * time.Second,
+				MaxMessageBytes: 4 << 20,
+			}
+			return transport.NewStdio(cfg), nil
+		}
 		environment, err := f.stdioEnvironment(ctx, server)
 		if err != nil {
 			return nil, err
 		}
-		return transport.NewStdio(transport.StdioConfig{Command: server.Command, Args: args, WorkDir: server.WorkDir, Environment: environment, StartTimeout: 10 * time.Second, ShutdownTimeout: 3 * time.Second, MaxMessageBytes: 4 << 20}), nil
+		return transport.NewStdio(transport.StdioConfig{
+			Command:         server.Command,
+			Args:            args,
+			WorkDir:         server.WorkDir,
+			Environment:     environment,
+			StartTimeout:    10 * time.Second,
+			ShutdownTimeout: 3 * time.Second,
+			MaxMessageBytes: 4 << 20,
+		}), nil
 	default:
 		return nil, fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: transport")
 	}

@@ -424,6 +424,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	}))
 	desktopPetWriteGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 	{
+		desktoppet.RegisterDesktopPetWriteRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
 		processing.RegisterProcessingRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
 		editing.RegisterEditingRouterWithService(desktopPetWriteGroup, services.EditingService, services.OwnershipGuard, services.PathRegistry)
 		quality.RegisterQualityRouter(desktopPetWriteGroup, services.QualityService, services.OwnershipGuard)

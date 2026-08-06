@@ -106,8 +106,7 @@ func (
 		)
 	}
 
-	if err := s.config.Validate();
-		err != nil {
+	if err := s.config.Validate(); err != nil {
 		return err
 	}
 
@@ -120,8 +119,7 @@ func (
 	ctx context.Context,
 ) error {
 	if err :=
-		s.ValidateDependencies();
-		err != nil {
+		s.ValidateDependencies(); err != nil {
 		return err
 	}
 
@@ -275,7 +273,7 @@ func (s *Service) GetRuntimeStatus(ctx context.Context, userID, runtimeID string
 }
 
 func (s *Service) ListRuntimeStatuses(ctx context.Context, userID string) ([]StatusView, error) {
-	conns := s.registry.ListAll()
+	conns := s.registry.ListForUser(userID)
 	views := make([]StatusView, 0, len(conns))
 	for _, conn := range conns {
 		view := StatusView{

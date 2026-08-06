@@ -18,6 +18,8 @@ import (
 
 type StdioConfig struct {
 	Command              string
+	Executable           string
+	OriginalCommand      string
 	Args                 []string
 	WorkDir              string
 	Environment          map[string]string
@@ -67,14 +69,17 @@ func (t *Stdio) Start(ctx context.Context) error {
 	}
 	t.state = StateStarting
 	t.mu.Unlock()
-	if err := validateStdioCommand(t.config.Command); err != nil {
+	cmdStr := t.config.OriginalCommand
+	if cmdStr == "" {
+		cmdStr = t.config.Command
+	}
+	if err := validateStdioCommand(cmdStr); err != nil {
 		t.setState(StateError)
 		return err
 	}
-	commandPath, err := exec.LookPath(t.config.Command)
-	if err != nil {
+	if err := validateStdioExecutable(t.config.Executable); err != nil {
 		t.setState(StateError)
-		return fmt.Errorf("MCP_STDIO_PROCESS_EXITED: command not found")
+		return err
 	}
 	if t.config.WorkDir != "" {
 		info, statErr := os.Stat(t.config.WorkDir)
@@ -84,14 +89,15 @@ func (t *Stdio) Start(ctx context.Context) error {
 		}
 	}
 	processCtx, processCancel := context.WithCancel(context.Background())
-	command := exec.CommandContext(processCtx, commandPath, append([]string(nil), t.config.Args...)...)
+	command := exec.CommandContext(processCtx, t.config.Executable, append([]string(nil), t.config.Args...)...)
 	command.Dir = t.config.WorkDir
-	command.Env, err = minimalEnvironment(t.config.Environment)
-	if err != nil {
+	envStrs, envErr := minimalEnvironment(t.config.Environment)
+	if envErr != nil {
 		processCancel()
 		t.setState(StateError)
-		return err
+		return envErr
 	}
+	command.Env = envStrs
 	configureProcess(command)
 	stdin, err := command.StdinPipe()
 	if err != nil {
@@ -319,6 +325,21 @@ func validateStdioCommand(command string) error {
 	forbidden := map[string]struct{}{"sh": {}, "bash": {}, "zsh": {}, "fish": {}, "cmd": {}, "powershell": {}, "pwsh": {}}
 	if _, blocked := forbidden[base]; blocked {
 		return fmt.Errorf("MCP_STDIO_COMMAND_NOT_ALLOWED: shell commands are forbidden")
+	}
+	return nil
+}
+
+func validateStdioExecutable(executable string) error {
+	trimmed := strings.TrimSpace(executable)
+	if trimmed == "" {
+		return fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: executable path is required")
+	}
+	info, err := os.Stat(trimmed)
+	if err != nil {
+		return fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: executable not found: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: executable is a directory")
 	}
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
+	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 	"github.com/u-ai/backend/pkg/platform"
@@ -21,15 +22,16 @@ import (
 )
 
 type runtimeBootstrap struct {
-	host            runtimehost.RuntimeHost
-	orchestrator    *runtimeorchestrator.RuntimeOrchestrator
-	resources       *util.RuntimePaths
-	graphMu         sync.RWMutex
-	graphSvc        graph.Service
-	stopOnce        sync.Once
-	runError        error
-	processMgr      *process.DefaultProcessManager
-	nodeEnvironment nodeenv.Resolver
+	host              runtimehost.RuntimeHost
+	orchestrator      *runtimeorchestrator.RuntimeOrchestrator
+	resources         *util.RuntimePaths
+	graphMu           sync.RWMutex
+	graphSvc          graph.Service
+	stopOnce          sync.Once
+	runError          error
+	processMgr        *process.DefaultProcessManager
+	nodeEnvironment   nodeenv.Resolver
+	artifactResolver sidecar.ArtifactResolver
 }
 
 func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
@@ -52,12 +54,20 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 		return nil, fmt.Errorf("create node environment resolver: %w", err)
 	}
 
+	artifactResolver, err := sidecar.NewArtifactResolver(sidecar.ResolveContext{
+		Host: host,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create sidecar artifact resolver: %w", err)
+	}
+
 	return &runtimeBootstrap{
-		host:            host,
-		orchestrator:    orch,
-		resources:       paths,
-		processMgr:      process.NewDefaultProcessManager(),
-		nodeEnvironment: nodeResolver,
+		host:              host,
+		orchestrator:      orch,
+		resources:         paths,
+		processMgr:        process.NewDefaultProcessManager(),
+		nodeEnvironment:   nodeResolver,
+		artifactResolver: artifactResolver,
 	}, nil
 }
 
@@ -82,7 +92,7 @@ func (b *runtimeBootstrap) RegisterInfrastructure(sqlDB *sql.DB, graphSvc graph.
 	if err := b.orchestrator.Register(&sqliteComponent{db: sqlDB}); err != nil {
 		return fmt.Errorf("register sqlite: %w", err)
 	}
-	if err := b.orchestrator.Register(newSidecarComponent(b.host)); err != nil {
+	if err := b.orchestrator.Register(newSidecarComponent(b.host, b.nodeEnvironment, b.artifactResolver)); err != nil {
 		return fmt.Errorf("register sidecars: %w", err)
 	}
 	return nil
@@ -134,6 +144,13 @@ func (b *runtimeBootstrap) NodeEnvironmentResolver() nodeenv.Resolver {
 		return nil
 	}
 	return b.nodeEnvironment
+}
+
+func (b *runtimeBootstrap) SidecarArtifactResolver() sidecar.ArtifactResolver {
+	if b == nil {
+		return nil
+	}
+	return b.artifactResolver
 }
 
 type vectorStoreProviderAdapter struct {

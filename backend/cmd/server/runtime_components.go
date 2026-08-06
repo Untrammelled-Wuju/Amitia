@@ -11,6 +11,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
+	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
 )
 
 type sqliteComponent struct {
@@ -42,12 +44,14 @@ func (c *sqliteComponent) Stop(ctx context.Context) error {
 }
 
 type sidecarComponent struct {
-	host runtimehost.RuntimeHost
-	mu   sync.Mutex
+	host             runtimehost.RuntimeHost
+	nodeResolver     nodeenv.Resolver
+	artifactResolver sidecar.ArtifactResolver
+	mu               sync.Mutex
 }
 
-func newSidecarComponent(host runtimehost.RuntimeHost) *sidecarComponent {
-	return &sidecarComponent{host: host}
+func newSidecarComponent(host runtimehost.RuntimeHost, nodeResolver nodeenv.Resolver, artifactResolver sidecar.ArtifactResolver) *sidecarComponent {
+	return &sidecarComponent{host: host, nodeResolver: nodeResolver, artifactResolver: artifactResolver}
 }
 
 func (s *sidecarComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
@@ -72,7 +76,7 @@ func (s *sidecarComponent) Start(ctx context.Context) error {
 	qqEnabled := config.AppCfg.Components.Sidecars.QQ.Enabled
 
 	if wechatEnabled {
-		spec, err := buildWeChatSidecarSpec(s.host.RuntimeInstanceID())
+		spec, err := buildWeChatSidecarSpec(s.host.RuntimeInstanceID(), s.nodeResolver, s.artifactResolver)
 		if err != nil {
 			return fmt.Errorf("wechat spec: %w", err)
 		}
@@ -84,7 +88,7 @@ func (s *sidecarComponent) Start(ctx context.Context) error {
 		}
 	}
 	if qqEnabled {
-		spec, err := buildQQSidecarSpec(s.host.RuntimeInstanceID())
+		spec, err := buildQQSidecarSpec(s.host.RuntimeInstanceID(), s.nodeResolver, s.artifactResolver)
 		if err != nil {
 			if wechatEnabled {
 				supervisor.Stop(ctx, runtimehost.ProcessIDSidecarWeChat)
@@ -363,11 +367,11 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		}
 		c.state.runtimeOk = true
 	}
-	startWorkerAsync(svc.DesktopPetWorker)
-	startWorkerAsync(svc.ProcessingWorker)
-	startWorkerAsync(svc.QualityWorker)
-	startWorkerAsync(svc.RegenerationWorker)
-	startWorkerAsync(svc.BridgeRecoveryWorker)
+	startWorkerAsync(ctx, svc.DesktopPetWorker, logWorkerPanic)
+	startWorkerAsync(ctx, svc.ProcessingWorker, logWorkerPanic)
+	startWorkerAsync(ctx, svc.QualityWorker, logWorkerPanic)
+	startWorkerAsync(ctx, svc.RegenerationWorker, logWorkerPanic)
+	startWorkerAsync(ctx, svc.BridgeRecoveryWorker, logWorkerPanic)
 	if svc.ReleaseRecoveryWorker != nil {
 		svc.ReleaseRecoveryWorker.Start(ctx)
 		c.state.releaseRecoveryWorkerOk = true
@@ -453,4 +457,8 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 	if c.state.runtimeOk && svc.DesktopPetRuntime != nil {
 		_ = svc.DesktopPetRuntime.Close(ctx)
 	}
+}
+
+func logWorkerPanic(name string, r any) {
+	fmt.Printf("[worker-panic] %s recovered: %v\n", name, r)
 }

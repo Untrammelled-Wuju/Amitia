@@ -46,6 +46,7 @@ func (h *testRuntimeHost) Paths() util.RuntimePaths {
 		Root:      "C:\\AmitiaTest",
 		ConfigDir: "C:\\AmitiaTest\\config",
 		DataDir:   "C:\\AmitiaTest\\data",
+		TempDir:   "C:\\AmitiaTest\\tmp",
 	}
 }
 

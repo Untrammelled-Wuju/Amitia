@@ -88,6 +88,7 @@ import (
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/temporal"
@@ -257,6 +258,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	kernelMemQuerySvc := newKernelMemoryQueryService(memSvc)
 	var nodeResolver script_host.NodeEnvironmentResolver
 	var artifactResolver script_host.ArtifactResolver
+	var commandResolver commandenv.Resolver
 	if bootstrap != nil {
 		nodeResolver = bootstrap.NodeEnvironmentResolver()
 		host := bootstrap.RuntimeHost()
@@ -267,6 +269,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			})
 			if resolverErr != nil {
 				log.Error("failed to create artifact resolver:", resolverErr)
+			}
+			commandResolver, resolverErr = commandenv.NewResolver(commandenv.ResolveContext{
+				NodeResolver: bootstrap.NodeEnvironmentResolver(),
+			})
+			if resolverErr != nil {
+				log.Error("failed to create command resolver:", resolverErr)
 			}
 		}
 	}
@@ -455,13 +463,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		panic("failed to initialize MCP secret store")
 	}
 	oauthManager := mcpauth.NewManager(nil, secretStore, mcpRepository)
-	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
+	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager, Commands: commandResolver}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
 	discoveryService := mcpdiscovery.New(mcpRepository, connectionManager)
 	skillRuntime := mcpskill.New(mcpRepository, extensionRuntime, mcpskill.WithToolFacadeSyncer(newMCPToolFacadeSyncerAdapter(toolFacade)), mcpskill.WithDuplicateRecorder(mcpDuplicateStore))
 	featureService := mcpfeatures.New(mcpRepository, connectionManager)
 	interactionBroker := mcphost.NewBroker(chatSvc)
 	hostService := mcphost.New(mcpRepository, connectionManager, mcphost.NewConfiguredRoots(mcpRepository), interactionBroker, interactionBroker)
-	dependencyService := mcpdependency.New(mcpRepository, connectionManager, discoveryService, skillRuntime)
+	dependencyService := mcpdependency.New(mcpRepository, connectionManager, discoveryService, skillRuntime, commandResolver)
 	extensionRuntime.AgentSkills.SetAfterRemove(func(ctx context.Context, extensionID string) {
 		_, _ = dependencyService.Uninstall(ctx, extensionID)
 	})
@@ -627,8 +635,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
-	if err := pathRegistry.Register(desktoppetsecurity.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine")); err != nil {
-		return nil, fmt.Errorf("register import quarantine root: %w", err)
+	if err := desktoppetsecurity.EnsureAllRequiredRoots(pathRegistry, config.AppCfg.Storage.DataDir); err != nil {
+		return nil, fmt.Errorf("initialize required storage roots: %w", err)
 	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
 	deviceRepo := device.NewRepository(ctx.DB)

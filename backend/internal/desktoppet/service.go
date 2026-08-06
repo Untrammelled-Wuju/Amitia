@@ -337,7 +337,7 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	if err != nil {
 		tx.Rollback()
 		_ = removeAllTaskDir(taskDir)
-		return nil, NewBusinessError(response.OperationFailed, ErrCodeGenerationTaskCreateFailed, "参考资源创建失败: "+err.Error())
+		return nil, NewBusinessError(response.OperationFailed, ErrCodeGenerationTaskCreateFailed, "参考资源创建失败")
 	}
 
 	if err := tx.Model(&GenerationTask{}).Where("id = ?", taskID).Update("reference_asset_id", refAsset.ID).Error; err != nil {
@@ -622,12 +622,9 @@ func (s *service) GetTaskSourceImageRef(taskID string, userID string) (security.
 	if task.SourceImagePath == "" {
 		return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "参考图片不存在")
 	}
-	hash := task.SourceImageHash
-	if hash == "" {
-		fullPath := filepath.Join(config.AppCfg.Storage.DataDir, task.SourceImagePath)
-		if h, err := computeSHA256File(fullPath); err == nil {
-			hash = h
-		}
+	if strings.TrimSpace(task.SourceImageHash) == "" ||
+		task.SourceImageSize <= 0 {
+		return security.ArtifactReference{}, NewBusinessError(response.BusinessError, ErrCodeArtifactUntrusted, "参考图片哈希缺失，拒绝提供")
 	}
 	storageKey := strings.TrimPrefix(task.SourceImagePath, "desktop-pets/")
 	return security.ArtifactReference{
@@ -635,7 +632,7 @@ func (s *service) GetTaskSourceImageRef(taskID string, userID string) (security.
 		OwnerUserID: userID,
 		RootKind:    security.RootGenerationArtifacts,
 		StorageKey:  storageKey,
-		ContentHash: hash,
+		ContentHash: task.SourceImageHash,
 		ByteSize:    int64(task.SourceImageSize),
 		MIME:        task.SourceImageMimeType,
 	}, nil
@@ -744,12 +741,10 @@ func (s *service) GetFrameImageRef(taskID, actionKey string, frameIndex int, use
 	if target.Status != "succeeded" || target.ResultImagePath == "" {
 		return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeFrameNotFound, "帧图片不存在")
 	}
-	hash := target.ResultHash
-	if hash == "" {
-		fullPath := filepath.Join(config.AppCfg.Storage.DataDir, target.ResultImagePath)
-		if h, err := computeSHA256File(fullPath); err == nil {
-			hash = h
-		}
+	if strings.TrimSpace(target.ResultHash) == "" ||
+		target.ResultSize <= 0 ||
+		strings.TrimSpace(target.ResultImagePath) == "" {
+		return security.ArtifactReference{}, NewBusinessError(response.BusinessError, ErrCodeArtifactUntrusted, "帧哈希缺失，拒绝提供")
 	}
 	storageKey := strings.TrimPrefix(target.ResultImagePath, "desktop-pets/")
 	return security.ArtifactReference{
@@ -757,7 +752,7 @@ func (s *service) GetFrameImageRef(taskID, actionKey string, frameIndex int, use
 		OwnerUserID: userID,
 		RootKind:    security.RootGenerationArtifacts,
 		StorageKey:  storageKey,
-		ContentHash: hash,
+		ContentHash: target.ResultHash,
 		ByteSize:    int64(target.ResultSize),
 		MIME:        target.ResultMimeType,
 	}, nil
@@ -813,7 +808,7 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 	if task.ReferenceAssetID != "" {
 		_, err := s.refAssetService.ValidateForTask(context.Background(), taskID, task.UserID, task.CharacterID)
 		if err != nil {
-			return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考资源验证失败: "+err.Error())
+			return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考资源验证失败")
 		}
 	} else {
 		fullPath := filepath.Join(config.AppCfg.Storage.DataDir, task.SourceImagePath)

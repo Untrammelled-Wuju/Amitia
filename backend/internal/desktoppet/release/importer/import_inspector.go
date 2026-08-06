@@ -73,6 +73,10 @@ func (i *ImportInspector) InspectAndMarkReady(
 			return errors.New("archive path escape detected")
 		}
 
+		if clean == "manifest.json" {
+			continue
+		}
+
 		key := strings.ToLower(clean)
 		if _, exists := seen[key]; exists {
 			return errors.New("archive path collision detected")

@@ -55,16 +55,42 @@ func normalizePlatform(p Platform) string {
 }
 
 type BinaryVerifier struct {
-	allowMissingFile bool
+	allowMissingFile   bool
+	managedNodeChecker ManagedNodeChecker
+}
+
+type ManagedNodeChecker interface {
+	IsManagedNode(exePath string) bool
+}
+
+type noOpManagedNodeChecker struct{}
+
+func (noOpManagedNodeChecker) IsManagedNode(exePath string) bool {
+	_ = exePath
+	return false
 }
 
 func NewBinaryVerifier() *BinaryVerifier {
-	return &BinaryVerifier{}
+	return &BinaryVerifier{
+		managedNodeChecker: noOpManagedNodeChecker{},
+	}
+}
+
+func NewBinaryVerifierWithManagedNode(checker ManagedNodeChecker) *BinaryVerifier {
+	if checker == nil {
+		checker = noOpManagedNodeChecker{}
+	}
+	return &BinaryVerifier{
+		managedNodeChecker: checker,
+	}
 }
 
 func (v *BinaryVerifier) Verify(ctx context.Context, exe *PlatformExecutable, basePath string) error {
 	if exe == nil {
 		return errors.New("trusted_service: nil executable")
+	}
+	if isNodeAlias(exe.Path) {
+		return fmt.Errorf("trusted_service: node alias %q not allowed, must use managed node absolute path", exe.Path)
 	}
 	fullPath := exe.Path
 	if !filepath.IsAbs(fullPath) && basePath != "" {
@@ -83,6 +109,9 @@ func (v *BinaryVerifier) Verify(ctx context.Context, exe *PlatformExecutable, ba
 	if !v.checkExecutablePerm(info) {
 		return fmt.Errorf("trusted_service: executable not runnable: %s", fullPath)
 	}
+	if isManagedNodeCandidate(fullPath) && !v.managedNodeChecker.IsManagedNode(fullPath) {
+		return fmt.Errorf("trusted_service: non-managed node executable not allowed: %s", fullPath)
+	}
 	if exe.Sha256 == "" {
 		return errors.New("trusted_service: missing sha256")
 	}
@@ -100,6 +129,32 @@ func (v *BinaryVerifier) Verify(ctx context.Context, exe *PlatformExecutable, ba
 		return fmt.Errorf("%w: missing signature value", ErrInvalidSignature)
 	}
 	return nil
+}
+
+func isNodeAlias(path string) bool {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(trimmed))
+	base = strings.TrimSuffix(base, ".exe")
+	base = strings.TrimSuffix(base, ".cmd")
+	switch base {
+	case "node", "npm", "npx":
+		return true
+	}
+	return false
+}
+
+func isManagedNodeCandidate(fullPath string) bool {
+	base := strings.ToLower(filepath.Base(fullPath))
+	base = strings.TrimSuffix(base, ".exe")
+	base = strings.TrimSuffix(base, ".cmd")
+	switch base {
+	case "node":
+		return true
+	}
+	return false
 }
 
 func (v *BinaryVerifier) hashFile(path string) (string, error) {

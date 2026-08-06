@@ -14,18 +14,10 @@ import (
 	"github.com/u-ai/backend/internal/vectorstore/qdrantconfig"
 	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantlayout"
+	"github.com/u-ai/backend/internal/vectorstore/qdrantprocess"
 )
 
-type QdrantDependency interface {
-	StartQdrant() error
-	WaitForQdrant(port int) error
-	InitClient() error
-	GetClient() *qdrant.Client
-}
-
-type QdrantProviderFactory struct {
-	dep QdrantDependency
-}
+type QdrantProviderFactory struct{}
 
 func NewQdrantProviderFactory() *QdrantProviderFactory {
 	return &QdrantProviderFactory{}
@@ -69,30 +61,51 @@ func (f *QdrantProviderFactory) Build(ctx runtimeorchestrator.ProviderBuildConte
 		return nil, runtimeorchestrator.DescriptorFailure("", err.Error())
 	}
 
+	ownershipRoot, err := qdrantprocess.ResolveOwnershipRoot(ctx.Host)
+	if err != nil {
+		return nil, runtimeorchestrator.DescriptorFailure("", err.Error())
+	}
+
+	ownershipReconciler, err := qdrantprocess.NewReconciler(
+		ownershipRoot,
+		qdrantprocess.NewFileSystem(),
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, runtimeorchestrator.DescriptorFailure("", err.Error())
+	}
+
 	return &qdrantProvider{
-		config:           &ctx.Config.Providers.VectorStore,
-		host:             ctx.Host,
-		envResolver:      envResolver,
-		layoutResolver:   layoutResolver,
-		directoryManager: qdrantlayout.NewDirectoryManager(nil),
-		configRenderer:   qdrantconfig.NewRenderer(),
-		configWriter:     qdrantconfig.NewWriter(nil),
+		config:             &ctx.Config.Providers.VectorStore,
+		host:               ctx.Host,
+		envResolver:        envResolver,
+		layoutResolver:     layoutResolver,
+		directoryManager:   qdrantlayout.NewDirectoryManager(nil),
+		configRenderer:     qdrantconfig.NewRenderer(),
+		configWriter:       qdrantconfig.NewWriter(nil),
+		ownershipReconciler: ownershipReconciler,
 	}, nil
 }
 
 type qdrantProvider struct {
-	config           *config.VectorStoreProviderConfig
-	host             runtimehost.RuntimeHost
-	layoutResolver   qdrantlayout.Resolver
-	envResolver      qdrantenv.Resolver
-	directoryManager qdrantlayout.DirectoryManager
-	configRenderer   qdrantconfig.Renderer
-	configWriter     qdrantconfig.Writer
+	config             *config.VectorStoreProviderConfig
+	host               runtimehost.RuntimeHost
+	layoutResolver     qdrantlayout.Resolver
+	envResolver        qdrantenv.Resolver
+	directoryManager   qdrantlayout.DirectoryManager
+	configRenderer     qdrantconfig.Renderer
+	configWriter       qdrantconfig.Writer
+	ownershipReconciler qdrantprocess.Reconciler
 
 	capabilityMu sync.RWMutex
 	client       *qdrant.Client
 	started      bool
 	stopped      bool
+
+	lifecycleMu sync.Mutex
+	activeLease qdrantprocess.Lease
 }
 
 func (p *qdrantProvider) Descriptor() runtimeorchestrator.ComponentDescriptor {
@@ -118,6 +131,12 @@ func (p *qdrantProvider) Capability() any {
 }
 
 func (p *qdrantProvider) Start(ctx context.Context) error {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+
+	if p.started && p.activeLease != nil {
+		return qdrantprocess.ErrQdrantAlreadyRunning
+	}
 	if p.started {
 		return nil
 	}
@@ -135,7 +154,15 @@ func (p *qdrantProvider) Start(ctx context.Context) error {
 		return phaseError{phase: "qdrant:layout-resolve", err: err}
 	}
 
+	expected := qdrantprocess.NewExpectedProcess(env.BinaryPath, layout.ConfigPath)
+	lease, err := p.ownershipReconciler.Acquire(ctx, expected)
+	if err != nil {
+		return phaseError{phase: "qdrant:acquire-lease", err: err}
+	}
+	p.activeLease = lease
+
 	if err := p.directoryManager.Ensure(ctx, layout); err != nil {
+		p.releaseLeaseOnFailure(ctx, lease)
 		return phaseError{phase: "qdrant:ensure-dirs", err: err}
 	}
 
@@ -148,15 +175,26 @@ func (p *qdrantProvider) Start(ctx context.Context) error {
 
 	configBytes, err := p.configRenderer.Render(doc)
 	if err != nil {
+		p.releaseLeaseOnFailure(ctx, lease)
 		return phaseError{phase: "qdrant:render-config", err: err}
 	}
 
 	if err := p.configWriter.Write(ctx, layout.ConfigPath, configBytes); err != nil {
+		p.releaseLeaseOnFailure(ctx, lease)
 		return phaseError{phase: "qdrant:write-config", err: err}
 	}
 
 	p.started = true
 	return nil
+}
+
+func (p *qdrantProvider) releaseLeaseOnFailure(ctx context.Context, lease qdrantprocess.Lease) {
+	if lease != nil {
+		_ = lease.Release(ctx)
+		if p.activeLease == lease {
+			p.activeLease = nil
+		}
+	}
 }
 
 func (p *qdrantProvider) Ready(ctx context.Context) error {
@@ -176,10 +214,28 @@ func (p *qdrantProvider) Ready(ctx context.Context) error {
 }
 
 func (p *qdrantProvider) Stop(ctx context.Context) error {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+
 	if p.stopped {
 		return nil
 	}
 	p.stopped = true
+
+	if p.activeLease != nil {
+		rec := p.activeLease.Record()
+		_ = p.activeLease.MarkStopping(ctx)
+
+		if rec.Child != nil && rec.Child.PID > 0 {
+			supervisor := p.host.Processes()
+			if supervisor != nil {
+				_ = supervisor.Stop(ctx, runtimehost.ProcessIDQdrant)
+			}
+		}
+		_ = p.activeLease.MarkExited(ctx)
+		_ = p.activeLease.Release(ctx)
+		p.activeLease = nil
+	}
 	return nil
 }
 

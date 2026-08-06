@@ -47,6 +47,24 @@ func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
 	}
 }
 
+func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) *ProcessSupervisor {
+	if verifier == nil {
+		verifier = NewBinaryVerifier()
+	}
+	return &ProcessSupervisor{
+		instances:  make(map[string]*ServiceInstance),
+		defs:       make(map[string]*ServiceRuntimeDefinition),
+		verifier:   verifier,
+		selector:   NewPlatformSelector(),
+		envBuilder: NewEnvBuilder(),
+		healthMon:  NewHealthMonitor(),
+		quarantine: NewQuarantineManager(),
+		procMgr:    process.NewDefaultProcessManager(),
+		rootDir:    rootDir,
+		logger:     func(level, msg string, fields map[string]any) {},
+	}
+}
+
 func (s *ProcessSupervisor) SetLogger(l func(level, msg string, fields map[string]any)) {
 	s.logger = l
 }

@@ -247,8 +247,7 @@ func (
 		make([]string, 0,
 			len(manifest.Actions))
 
-	for _, action :=
-		range manifest.Actions {
+	for _, action := range manifest.Actions {
 		selectedActions =
 			append(
 				selectedActions,
@@ -267,27 +266,19 @@ func (
 	}
 
 	return &ImportValidationResult{
-		IsValid: true,
-		SourcePackageHash:
-			staging.SourceContentHash,
-		SourceManifestHash:
-			hex.EncodeToString(
-				manifestHash[:],
-			),
-		SourceSchemaVersion:
-			manifest.SchemaVersion,
-		Warnings: nil,
-		BindingDecision:
-			manifest.Binding.Policy,
-		LicenseDecision:
-			licenseDecision,
-		RuntimeCompatibility:
-			manifest.Compatibility.
-				MinRuntimeVersion,
-		SelectedActions:
-			selectedActions,
-		Manifest:
-			&manifest,
+		IsValid:           true,
+		SourcePackageHash: staging.SourceContentHash,
+		SourceManifestHash: hex.EncodeToString(
+			manifestHash[:],
+		),
+		SourceSchemaVersion: manifest.SchemaVersion,
+		Warnings:            nil,
+		BindingDecision:     manifest.Binding.Policy,
+		LicenseDecision:     licenseDecision,
+		RuntimeCompatibility: manifest.Compatibility.
+			MinRuntimeVersion,
+		SelectedActions: selectedActions,
+		Manifest:        &manifest,
 	}, nil
 }
 
@@ -348,8 +339,7 @@ func validateManifestFields(
 	actionKeys :=
 		map[string]struct{}{}
 
-	for _, action :=
-		range manifest.Actions {
+	for _, action := range manifest.Actions {
 		key := strings.TrimSpace(
 			action.Key,
 		)
@@ -364,8 +354,7 @@ func validateManifestFields(
 		}
 
 		if _, exists :=
-			actionKeys[key];
-			exists {
+			actionKeys[key]; exists {
 			return errors.New(
 				"duplicate action key",
 			)
@@ -398,8 +387,7 @@ func validateManifestIntegrity(
 	inventoryMap :=
 		make(map[string]inventoryEntry)
 
-	for _, entry :=
-		range inventory {
+	for _, entry := range inventory {
 		inventoryMap[entry.Path] =
 			entry
 	}
@@ -423,8 +411,7 @@ func validateManifestIntegrity(
 	manifestMap := make(map[string]bool)
 	var total int64
 
-	for _, file :=
-		range manifest.Integrity.Files {
+	for _, file := range manifest.Integrity.Files {
 		entry, ok :=
 			inventoryMap[file.Path]
 		if !ok {
@@ -481,8 +468,17 @@ func validateManifestHashes(
 		return errors.New("manifest integrity section missing")
 	}
 
-	declaredManifestHash := strings.TrimSpace(rawIntegrity["manifestHash"].(string))
-	declaredContentRootHash := strings.TrimSpace(rawIntegrity["contentRootHash"].(string))
+	declaredManifestHash, ok := rawIntegrity["manifestHash"].(string)
+	if !ok {
+		return errors.New("manifest integrity.manifestHash must be a non-empty string")
+	}
+	declaredManifestHash = strings.TrimSpace(declaredManifestHash)
+
+	declaredContentRootHash, ok := rawIntegrity["contentRootHash"].(string)
+	if !ok {
+		return errors.New("manifest integrity.contentRootHash must be a non-empty string")
+	}
+	declaredContentRootHash = strings.TrimSpace(declaredContentRootHash)
 
 	rawIntegrity["manifestHash"] = ""
 	rawIntegrity["contentRootHash"] = ""

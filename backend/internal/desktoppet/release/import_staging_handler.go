@@ -95,7 +95,7 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 
 	safeFilename, err := security.SanitizeUploadName(header.Filename)
 	if err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "文件名非法: "+err.Error(), gin.H{"errorCode": "INVALID_FILENAME"})
+		util.ErrorResponse(c, response.InvalidParams, "文件名非法", gin.H{"errorCode": "INVALID_FILENAME"})
 		return
 	}
 	contentType := header.Header.Get("Content-Type")
@@ -279,7 +279,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 		if !failed {
 			log.Warn("import failed but staging state had changed: ", locked.ID)
 		}
-		util.ErrorResponse(c, response.BusinessError, "导入失败: "+err.Error(), gin.H{"errorCode": "IMPORT_FAILED"})
+		util.ErrorResponse(c, response.BusinessError, "导入失败", gin.H{"errorCode": "IMPORT_FAILED"})
 		return
 	}
 

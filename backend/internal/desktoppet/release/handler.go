@@ -34,7 +34,7 @@ type buildReleasePayload struct {
 func (h *Handler) BuildRelease(c *gin.Context) {
 	var payload buildReleasePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": "INVALID_PARAMS"})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": "INVALID_PARAMS"})
 		return
 	}
 	if payload.ProcessingTaskID == "" {
@@ -286,8 +286,8 @@ func writeReleaseError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, gorm.ErrRecordNotFound) {
-		util.ErrorResponse(c, response.NotFound, err.Error(), gin.H{"errorCode": "NOT_FOUND"})
+		util.ErrorResponse(c, response.NotFound, "资源不存在", gin.H{"errorCode": "NOT_FOUND"})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": "INTERNAL_ERROR"})
+	util.ErrorResponse(c, response.InternalError, "服务器内部错误", gin.H{"errorCode": "INTERNAL_ERROR"})
 }

@@ -8,13 +8,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"runtime"
 	"sync/atomic"
 	"syscall"
 
 	"github.com/u-ai/backend/internal/runtimehost"
-	"github.com/u-ai/backend/pkg/util"
 )
 
 var envShuttingDown atomic.Bool
@@ -119,87 +116,4 @@ func (e *Environment) SetupSignalHandler() {
 		log.Printf("[Env] 收到信号 %v，设置关闭标志...", sig)
 		SetEnvShuttingDown()
 	}()
-}
-
-func startEnvironment() *Environment {
-	runtimeRoot := util.RuntimeRoot()
-
-	bundledQQ := filepath.Join(runtimeRoot, "qq-sidecar", "bundle.mjs")
-	bundledWX := filepath.Join(runtimeRoot, "sidecar", "bundle.mjs")
-	sourceQQ := filepath.Join(runtimeRoot, "qq-sidecar", "src", "index.ts")
-	sourceWX := filepath.Join(runtimeRoot, "sidecar", "src", "index.ts")
-	_, qqOk := os.Stat(bundledQQ)
-	_, wxOk := os.Stat(bundledWX)
-	_, qqSourceOk := os.Stat(sourceQQ)
-	_, wxSourceOk := os.Stat(sourceWX)
-	useBundled := qqOk == nil && wxOk == nil && (qqSourceOk != nil || wxSourceOk != nil)
-
-	bundledRoot := runtimeRoot
-	if !useBundled {
-		if exePath, err := os.Executable(); err == nil {
-			exeDir := filepath.Dir(exePath)
-			exeBundledQQ := filepath.Join(exeDir, "qq-sidecar", "bundle.mjs")
-			exeBundledWX := filepath.Join(exeDir, "sidecar", "bundle.mjs")
-			_, exeQQOk := os.Stat(exeBundledQQ)
-			_, exeWXOk := os.Stat(exeBundledWX)
-			if exeQQOk == nil && exeWXOk == nil {
-				useBundled = true
-				bundledRoot = exeDir
-				log.Printf("[Env] 在可执行文件目录找到捆绑侧车: %s", exeDir)
-			}
-		}
-	}
-
-	var env *Environment
-	if useBundled {
-		env = NewEnvironment(nil)
-		log.Printf("[Env] 根目录: %s", runtimeRoot)
-		log.Printf("[Env] 使用打包版附属服务")
-	} else {
-		workspace := util.RuntimeWorkspaceDir(runtimeRoot)
-		_ = workspace
-		env = NewEnvironment(nil)
-		log.Printf("[Env] 根目录: %s", workspace)
-	}
-
-	if useBundled {
-		if err := ensureBundledNode(bundledRoot); err != nil {
-			log.Printf("[Env] Node运行时解压失败: %v", err)
-		}
-	}
-	_ = env
-	return env
-}
-
-func bundledNodePath(root string) string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join(root, "node", "node.exe")
-	}
-	return filepath.Join(root, "node", "node")
-}
-
-func ensureBundledNode(root string) error {
-	nodeExe := "node"
-	zipName := "node.zip"
-	if runtime.GOOS == "windows" {
-		nodeExe = "node.exe"
-		zipName = "node.exe.zip"
-	}
-	nodeDir := filepath.Join(root, "node")
-	nodePath := filepath.Join(nodeDir, nodeExe)
-	if _, err := os.Stat(nodePath); err == nil {
-		return nil
-	}
-	zipPath := filepath.Join(nodeDir, zipName)
-	if _, err := os.Stat(zipPath); err != nil {
-		return fmt.Errorf("node压缩包不存在: %s", zipPath)
-	}
-	log.Printf("[Env] 正在解压Node运行时: %s", zipPath)
-	if err := util.UnzipFile(zipPath, nodeDir); err != nil {
-		return fmt.Errorf("解压Node失败: %w", err)
-	}
-	if _, err := os.Stat(nodePath); err != nil {
-		return fmt.Errorf("解压后未找到Node: %s", nodePath)
-	}
-	return nil
 }

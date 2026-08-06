@@ -109,7 +109,7 @@ func (h *Handler) ActivateRevision(c *gin.Context) {
 	}
 	var req ActivateRevisionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	err = h.service.ActivateRevision(c.Request.Context(), processingTaskID, actionKey, req.RevisionID, req.ExpectedBindingVersion, req.Reason, actor.UserID)
@@ -213,7 +213,7 @@ func (h *Handler) CreateSession(c *gin.Context) {
 	}
 	var req CreateSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	resp, err := h.service.CreateSession(c.Request.Context(), processingTaskID, actionKey, actor.UserID, req)
@@ -257,7 +257,7 @@ func (h *Handler) ApplyOperation(c *gin.Context) {
 	userID := actor.UserID
 	var req ApplyOperationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	resp, err := h.service.ApplyOperation(c.Request.Context(), sessionID, userID, req)
@@ -343,7 +343,7 @@ func (h *Handler) CommitSession(c *gin.Context) {
 	userID := actor.UserID
 	var req CommitSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	resp, err := h.service.CommitSession(c.Request.Context(), sessionID, userID, req)
@@ -406,7 +406,7 @@ func (h *Handler) CreateRegenerationJob(c *gin.Context) {
 	userID := actorID
 	var req CreateRegenerationJobRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	resp, err := h.service.CreateRegenerationJob(c.Request.Context(), sessionID, userID, req)
@@ -493,6 +493,15 @@ func (h *Handler) GetRegenerationJobByID(c *gin.Context) {
 func (h *Handler) ListRegenerationJobs(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit < 1 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
@@ -628,7 +637,7 @@ func (h *Handler) ApplyBackgroundPatch(c *gin.Context) {
 	userID := actor.UserID
 	var req BackgroundApplyPatchPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	req.FrameID = frameID
@@ -675,7 +684,7 @@ func (h *Handler) SetFrameAnchor(c *gin.Context) {
 	userID := actor.UserID
 	var req AnchorSetFramePayload
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	err = h.service.SetFrameAnchor(c.Request.Context(), sessionID, userID, req)
@@ -700,7 +709,7 @@ func (h *Handler) BatchOffsetAnchors(c *gin.Context) {
 	userID := actor.UserID
 	var req AnchorBatchOffsetPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", gin.H{"error": err.Error()})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
 	err = h.service.BatchOffsetAnchors(c.Request.Context(), sessionID, userID, req)
@@ -853,7 +862,7 @@ func writeEditError(c *gin.Context, err error) {
 		util.ErrorResponse(c, httpCode, ee.Message, gin.H{"errorCode": ee.Code, "detail": ee.Detail})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 }
 
 func writeEditOwnershipError(c *gin.Context, err error) {

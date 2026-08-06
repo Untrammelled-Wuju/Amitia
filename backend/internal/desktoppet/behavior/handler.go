@@ -75,7 +75,7 @@ func (h *Handler) SimulateEvent(c *gin.Context) {
 	}
 	var event BehaviorEventEnvelope
 	if err := c.ShouldBindJSON(&event); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
 		return
 	}
 	decision, err := h.service.SimulateEvent(c.Request.Context(), event)
@@ -93,7 +93,7 @@ func (h *Handler) TriggerReconcile(c *gin.Context) {
 	}
 	var req reconcileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
 		return
 	}
 	if req.CharacterID == "" {
@@ -116,7 +116,7 @@ func (h *Handler) SetShadowMode(c *gin.Context) {
 	}
 	var req setModeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
 		return
 	}
 	h.service.SetShadowMode(req.Enabled)
@@ -129,7 +129,7 @@ func (h *Handler) SetRuntimeCommand(c *gin.Context) {
 	}
 	var req setModeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
 		return
 	}
 	h.service.SetRuntimeCommandEnabled(req.Enabled)
@@ -157,7 +157,7 @@ func (h *Handler) ListBindings(c *gin.Context) {
 func (h *Handler) CreateBinding(c *gin.Context) {
 	var binding bindings.BehaviorBinding
 	if err := c.ShouldBindJSON(&binding); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
 		return
 	}
 	actorID, err := middleware.ResolveActorID(c)
@@ -218,7 +218,7 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 
 	var req bindings.BindingUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), nil)
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", nil)
 		return
 	}
 	req.ID = id
@@ -274,7 +274,7 @@ func writeBehaviorError(c *gin.Context, err error) {
 		util.ErrorResponse(c, response.NotFound, "记录不存在", nil)
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 }
 
 func mapBehaviorErrorCode(code string) int {

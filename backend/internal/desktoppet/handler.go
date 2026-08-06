@@ -104,6 +104,15 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
 	data, err := h.service.ListTasks(userID, characterID, status, page, pageSize)
 	if err != nil {
 		writeServiceError(c, err)
@@ -257,6 +266,12 @@ func (h *Handler) GetTaskTransitions(c *gin.Context) {
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	if limit < 1 {
+		limit = 100
+	}
+	if limit > 200 {
+		limit = 200
+	}
 	records, err := h.service.GetTaskTransitions(taskID, limit)
 	if err != nil {
 		writeServiceError(c, err)
@@ -315,7 +330,7 @@ func writeServiceError(c *gin.Context, err error) {
 		util.ErrorResponse(c, be.Code, be.Msg, gin.H{"errorCode": be.ErrCode})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 }
 
 func writeOwnershipError(c *gin.Context, err error) {

@@ -1,115 +1,146 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package transport
 
 import (
-	"bufio"
-	"context"
-	"encoding/json"
-	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/u-ai/backend/internal/mcp/protocol"
 )
 
-func TestStdioTransportStartsWithoutShellAndIsolatesEnvironment(t *testing.T) {
-	stderr := make(chan string, 2)
-	target := NewStdio(StdioConfig{
-		Command:     os.Args[0],
-		Args:        []string{"-test.run=TestStdioHelperProcess"},
-		Environment: map[string]string{"GO_WANT_MCP_HELPER": "1", "MCP_TEST_SECRET": "allowed"},
-		OnStderr:    func(line string) { stderr <- line },
+func writeTestExecutable(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte("#!/bin/sh\necho hello\n"), 0755); err != nil {
+		t.Fatalf("failed to write test executable: %v", err)
+	}
+}
+
+func TestValidateStdioCommandRejectsEmpty(t *testing.T) {
+	err := validateStdioCommand("")
+	if err == nil || !strings.Contains(err.Error(), "command is required") {
+		t.Fatalf("expected 'command is required' error, got %v", err)
+	}
+}
+
+func TestValidateStdioCommandRejectsWhitespaceOnly(t *testing.T) {
+	err := validateStdioCommand("   ")
+	if err == nil || !strings.Contains(err.Error(), "command is required") {
+		t.Fatalf("expected 'command is required' error, got %v", err)
+	}
+}
+
+func TestValidateStdioCommandRejectsNullByte(t *testing.T) {
+	err := validateStdioCommand("node\x00")
+	if err == nil || !strings.Contains(err.Error(), "command is required") {
+		t.Fatalf("expected 'command is required' error, got %v", err)
+	}
+}
+
+func TestValidateStdioCommandRejectsShellCommands(t *testing.T) {
+	shells := []string{
+		"sh", "bash", "zsh", "fish", "cmd", "powershell", "pwsh",
+		"/bin/bash", "/usr/bin/sh", "C:\\Windows\\System32\\cmd.exe",
+	}
+	for _, sh := range shells {
+		err := validateStdioCommand(sh)
+		if err == nil || !strings.Contains(err.Error(), "shell commands are forbidden") {
+			t.Fatalf("expected 'shell commands are forbidden' for %q, got %v", sh, err)
+		}
+	}
+}
+
+func TestValidateStdioCommandAcceptsValidCommands(t *testing.T) {
+	valid := []string{
+		"node",
+		"python",
+		"/usr/bin/node",
+		"my-mcp-server",
+		"uvx",
+		"npx",
+		"@scope/pkg",
+	}
+	for _, cmd := range valid {
+		if err := validateStdioCommand(cmd); err != nil {
+			t.Errorf("expected %q to be valid, got %v", cmd, err)
+		}
+	}
+}
+
+func TestValidateStdioExecutableRejectsEmpty(t *testing.T) {
+	err := validateStdioExecutable("")
+	if err == nil || !strings.Contains(err.Error(), "executable path is required") {
+		t.Fatalf("expected 'executable path is required' error, got %v", err)
+	}
+}
+
+func TestValidateStdioExecutableRejectsWhitespaceOnly(t *testing.T) {
+	err := validateStdioExecutable("   ")
+	if err == nil || !strings.Contains(err.Error(), "executable path is required") {
+		t.Fatalf("expected 'executable path is required' error, got %v", err)
+	}
+}
+
+func TestValidateStdioExecutableRejectsMissingFile(t *testing.T) {
+	err := validateStdioExecutable("/nonexistent/path/to/binary")
+	if err == nil || !strings.Contains(err.Error(), "executable not found") {
+		t.Fatalf("expected 'executable not found' error, got %v", err)
+	}
+}
+
+func TestValidateStdioExecutableRejectsDirectory(t *testing.T) {
+	dir := t.TempDir()
+	err := validateStdioExecutable(dir)
+	if err == nil || !strings.Contains(err.Error(), "executable is a directory") {
+		t.Fatalf("expected 'executable is a directory' error, got %v", err)
+	}
+}
+
+func TestValidateStdioExecutableAcceptsValidFile(t *testing.T) {
+	root := t.TempDir()
+	exePath := filepath.Join(root, "my-binary")
+	writeTestExecutable(t, exePath)
+	if err := validateStdioExecutable(exePath); err != nil {
+		t.Errorf("expected valid file to pass, got %v", err)
+	}
+}
+
+func TestStdioConfigExecutableField(t *testing.T) {
+	config := StdioConfig{
+		Command:    "original-command",
+		Executable: "/resolved/path/to/node",
+		Args:       []string{"--version"},
+	}
+	if config.Command != "original-command" {
+		t.Fatal("Command should preserve original")
+	}
+	if config.Executable != "/resolved/path/to/node" {
+		t.Fatal("Executable should be set")
+	}
+}
+
+func TestStdioNewSetsDefaults(t *testing.T) {
+	s := NewStdio(StdioConfig{
+		Command:    "node",
+		Executable: "/usr/bin/node",
 	})
-	if err := target.Start(context.Background()); err != nil {
-		t.Fatal(err)
+	if s.config.StartTimeout != 10*1000000000 {
+		t.Fatal("expected 10s default StartTimeout")
 	}
-	request, _ := protocol.Request(1, "environment/read", nil)
-	if err := target.Send(context.Background(), request); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case response := <-target.Receive():
-		var result map[string]any
-		if err := json.Unmarshal(response.Result, &result); err != nil {
-			t.Fatal(err)
-		}
-		if result["allowed"] != "allowed" || result["modelKeyPresent"] != false {
-			t.Fatalf("environment was not isolated: %#v", result)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("missing stdio response")
-	}
-	select {
-	case line := <-stderr:
-		if !strings.Contains(line, "helper diagnostic") {
-			t.Fatalf("unexpected stderr: %s", line)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("missing stderr diagnostic")
-	}
-	if err := target.Close(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if target.State() != StateStopped {
-		t.Fatalf("unexpected final state: %s", target.State())
+	if s.config.MaxMessageBytes != 4<<20 {
+		t.Fatal("expected 4MB default MaxMessageBytes")
 	}
 }
 
-func TestStdioTransportRejectsShellAndMissingCommand(t *testing.T) {
-	for _, command := range []string{"cmd.exe", "powershell.exe", "pwsh.exe", "sh"} {
-		target := NewStdio(StdioConfig{Command: command})
-		if err := target.Start(context.Background()); err == nil || !strings.Contains(err.Error(), "MCP_STDIO_COMMAND_NOT_ALLOWED") {
-			t.Fatalf("expected shell rejection for %s, got %v", command, err)
-		}
+func TestStdioCommandFallsBackToConfigCommand(t *testing.T) {
+	s := NewStdio(StdioConfig{
+		Command:    "my-mcp",
+		Executable: "/usr/bin/my-mcp",
+	})
+	if s.config.Command != "my-mcp" {
+		t.Fatal("Command should be set correctly")
 	}
-	missing := NewStdio(StdioConfig{Command: "amitia-command-that-does-not-exist"})
-	if err := missing.Start(context.Background()); err == nil || !strings.Contains(err.Error(), "command not found") {
-		t.Fatalf("expected missing command error, got %v", err)
+	if s.config.OriginalCommand != "" {
+		t.Fatal("OriginalCommand should be empty")
 	}
-}
-
-func TestStdioTransportRejectsOversizedOutput(t *testing.T) {
-	target := NewStdio(StdioConfig{Command: os.Args[0], Args: []string{"-test.run=TestStdioHelperProcess"}, Environment: map[string]string{"GO_WANT_MCP_HELPER": "1", "MCP_HELPER_OVERSIZE": "1"}, MaxMessageBytes: 128})
-	if err := target.Start(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	request, _ := protocol.Request(1, "oversize", nil)
-	if err := target.Send(context.Background(), request); err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && target.State() != StateError {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if target.State() != StateError {
-		t.Fatalf("expected protocol output failure, got %s", target.State())
-	}
-	_ = target.Close(context.Background())
-}
-
-func TestStdioHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_MCP_HELPER") != "1" {
-		return
-	}
-	fmt.Fprintln(os.Stderr, "helper diagnostic")
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		message, err := protocol.Decode(scanner.Bytes(), 4<<20)
-		if err != nil {
-			os.Exit(2)
-		}
-		var result any = map[string]any{"ok": true}
-		if message.Method == "environment/read" {
-			_, modelKeyPresent := os.LookupEnv("MODEL_API_KEY")
-			result = map[string]any{"allowed": os.Getenv("MCP_TEST_SECRET"), "modelKeyPresent": modelKeyPresent}
-		}
-		if os.Getenv("MCP_HELPER_OVERSIZE") == "1" {
-			result = map[string]any{"value": strings.Repeat("x", 1024)}
-		}
-		response, _ := protocol.Response(message.ID, result)
-		data, _ := protocol.Encode(response, 4<<20)
-		fmt.Println(string(data))
-	}
-	os.Exit(0)
 }

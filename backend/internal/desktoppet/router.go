@@ -3,7 +3,7 @@
 package desktoppet
 
 import (
-	"path/filepath"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
@@ -16,28 +16,39 @@ func RegisterDesktopPetRouter(r *gin.RouterGroup, ctx *app.AppContext, registry 
 	svc := NewService(repo, ctx.DB)
 	if registry == nil {
 		registry = security.NewPathRootRegistry()
-		_ = registry.CreateAndRegister(security.RootGenerationArtifacts, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "generation-artifacts"))
-		_ = registry.CreateAndRegister(security.RootQualityReports, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "quality-reports"))
-		_ = registry.CreateAndRegister(security.RootReleasePublished, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "release-published"))
-		_ = registry.CreateAndRegister(security.RootImportQuarantine, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "import-quarantine"))
+		if err := security.EnsureAllRequiredRoots(registry, config.AppCfg.Storage.DataDir); err != nil {
+			panic(fmt.Errorf("initialize required storage roots: %w", err))
+		}
 	}
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	handler := NewHandler(svc, responder, guard)
 
-	g := r.Group("/desktop-pets")
+	readGroup := r.Group("/desktop-pets")
 	{
-		g.GET("/action-definitions", handler.GetActionDefinitions)
-		g.POST("/generation-tasks", handler.CreateTask)
-		g.GET("/generation-tasks", handler.ListTasks)
-		g.GET("/generation-tasks/:taskId", handler.GetTask)
-		g.DELETE("/generation-tasks/:taskId", handler.DeleteTask)
-		g.GET("/generation-tasks/:taskId/reference-image", handler.ReferenceImage)
-		g.POST("/generation-tasks/:taskId/start", handler.StartTask)
-		g.POST("/generation-tasks/:taskId/cancel", handler.CancelTask)
-		g.POST("/generation-tasks/:taskId/actions/:actionKey/retry", handler.RetryAction)
-		g.GET("/generation-tasks/:taskId/events", handler.TaskEventsStream)
-		g.GET("/generation-tasks/:taskId/actions/:actionKey/frames/:frameIndex/image", handler.ActionFrameImage)
-		g.GET("/generation-tasks/:taskId/transitions", handler.GetTaskTransitions)
+		readGroup.GET("/action-definitions", handler.GetActionDefinitions)
+		readGroup.GET("/generation-tasks", handler.ListTasks)
+		readGroup.GET("/generation-tasks/:taskId", handler.GetTask)
+		readGroup.GET("/generation-tasks/:taskId/reference-image", handler.ReferenceImage)
+		readGroup.GET("/generation-tasks/:taskId/events", handler.TaskEventsStream)
+		readGroup.GET("/generation-tasks/:taskId/actions/:actionKey/frames/:frameIndex/image", handler.ActionFrameImage)
+		readGroup.GET("/generation-tasks/:taskId/transitions", handler.GetTaskTransitions)
+	}
+}
+
+func RegisterDesktopPetWriteRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *security.PathRootRegistry) {
+	repo := NewRepository(ctx.DB, ctx)
+	svc := NewService(repo, ctx.DB)
+	responder := security.NewSafeArtifactResponder(registry)
+	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
+	handler := NewHandler(svc, responder, guard)
+
+	writeGroup := r.Group("/desktop-pets")
+	{
+		writeGroup.POST("/generation-tasks", handler.CreateTask)
+		writeGroup.DELETE("/generation-tasks/:taskId", handler.DeleteTask)
+		writeGroup.POST("/generation-tasks/:taskId/start", handler.StartTask)
+		writeGroup.POST("/generation-tasks/:taskId/cancel", handler.CancelTask)
+		writeGroup.POST("/generation-tasks/:taskId/actions/:actionKey/retry", handler.RetryAction)
 	}
 }

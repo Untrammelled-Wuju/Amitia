@@ -40,6 +40,7 @@ const (
 	ErrCodeGenerationStateConflict         = "GENERATION_STATE_CONFLICT"
 	ErrCodeGenerationTaskAlreadyRunning    = "GENERATION_TASK_ALREADY_RUNNING"
 	ErrCodeFrameNotFound                   = "FRAME_NOT_FOUND"
+	ErrCodeArtifactUntrusted               = "DESKTOP_PET_ARTIFACT_UNTRUSTED"
 
 	ErrCodeDataConflict              = "DESKTOP_PET_DATA_CONFLICT"
 	ErrCodeDuplicateIdentity         = "DESKTOP_PET_DUPLICATE_IDENTITY"

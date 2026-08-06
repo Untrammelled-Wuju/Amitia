@@ -197,7 +197,7 @@ func (h *Handler) CreatePackage(c *gin.Context) {
 
 	var payload createPackagePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeProcessingPackageFailed})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeProcessingPackageFailed})
 		return
 	}
 
@@ -250,7 +250,7 @@ func (h *Handler) SwitchAttempt(c *gin.Context) {
 
 	var payload switchAttemptPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeProcessingInvalidAttempt})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeProcessingInvalidAttempt})
 		return
 	}
 	if payload.AttemptNumber < 1 {
@@ -444,7 +444,7 @@ func writeProcessingError(c *gin.Context, err error) {
 		util.ErrorResponse(c, httpCode, pe.Message, gin.H{"errorCode": pe.Code})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 }
 
 func writeProcessingOwnershipError(c *gin.Context, err error) {
@@ -516,7 +516,7 @@ func (h *Handler) ListPackages(c *gin.Context) {
 	if generationTaskID != "" {
 		packages, err := h.service.ListPackagesByGenerationTask(userID, generationTaskID)
 		if err != nil {
-			util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+			util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 			return
 		}
 		util.SuccessResponse(c, gin.H{"items": packages, "total": len(packages)})
@@ -536,7 +536,7 @@ func (h *Handler) ListPackages(c *gin.Context) {
 
 	packages, total, err := h.service.ListPackages(userID, page, pageSize)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 		return
 	}
 	util.SuccessResponse(c, gin.H{"items": packages, "total": total, "page": page, "pageSize": pageSize})

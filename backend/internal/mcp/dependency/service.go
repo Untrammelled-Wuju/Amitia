@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension"
@@ -16,14 +15,16 @@ import (
 	"github.com/u-ai/backend/internal/mcp/discovery"
 	"github.com/u-ai/backend/internal/mcp/manager"
 	"github.com/u-ai/backend/internal/mcp/skill"
+	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"gorm.io/gorm"
 )
 
 type Service struct {
-	repository  *mcp.Repository
-	connections *manager.Manager
-	discovery   *discovery.Service
-	skills      *skill.Runtime
+	repository      *mcp.Repository
+	connections     *manager.Manager
+	discovery       *discovery.Service
+	skills          *skill.Runtime
+	commandResolver commandenv.Resolver
 }
 
 type PreviewRequest struct {
@@ -66,8 +67,14 @@ type InstallResult struct {
 	Missing                []string             `json:"missing"`
 }
 
-func New(repository *mcp.Repository, connections *manager.Manager, discoveryService *discovery.Service, skills *skill.Runtime) *Service {
-	return &Service{repository: repository, connections: connections, discovery: discoveryService, skills: skills}
+func New(repository *mcp.Repository, connections *manager.Manager, discoveryService *discovery.Service, skills *skill.Runtime, commandResolver commandenv.Resolver) *Service {
+	return &Service{
+		repository:      repository,
+		connections:     connections,
+		discovery:       discoveryService,
+		skills:          skills,
+		commandResolver: commandResolver,
+	}
 }
 
 func (s *Service) Preview(ctx context.Context, request PreviewRequest) (Plan, error) {
@@ -80,8 +87,11 @@ func (s *Service) Preview(ctx context.Context, request PreviewRequest) (Plan, er
 		}
 		item := PlanItem{Dependency: dependency, NormalizedIdentity: identity, AuthorizationRequired: dependency.AuthType == "oauth", StartsLocalProcess: dependency.Transport == "stdio", CommandAvailable: dependency.Transport != "stdio", CanAutoConfigure: dependency.Transport == "streamable_http" && dependency.AutoConfigure && dependency.URL != "", NeedsUserConfiguration: dependency.Transport == "" || dependency.Transport == "streamable_http" && dependency.URL == "", RiskLevel: dependencyRisk(dependency)}
 		if dependency.Transport == "stdio" {
-			_, err := exec.LookPath(dependency.Command)
-			item.CommandAvailable = err == nil
+			item.CommandAvailable = false
+			if s.commandResolver != nil {
+				_, err := s.commandResolver.Resolve(ctx, commandenv.Request{Command: dependency.Command, Args: dependency.Args})
+				item.CommandAvailable = err == nil
+			}
 			item.CanAutoConfigure = false
 			item.NeedsUserConfiguration = !item.CommandAvailable
 		}

@@ -36,7 +36,7 @@ func writeQualityError(c *gin.Context, err error) {
 		}
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 }
 
 func writeQualityOwnershipError(c *gin.Context, err error) {

@@ -27,11 +27,101 @@ const (
 	RootProcessingRevisions StorageRootKind = "processing_revisions"
 	RootEditingAssets       StorageRootKind = "editing_assets"
 	RootQualityReports      StorageRootKind = "quality_reports"
+	RootReleaseWorkspaces   StorageRootKind = "release_workspaces"
+	RootReleaseStaging      StorageRootKind = "release_staging"
 	RootReleasePublished    StorageRootKind = "release_published"
+	RootReleaseArchives     StorageRootKind = "release_archives"
 	RootInstallations       StorageRootKind = "installations"
 	RootImportQuarantine    StorageRootKind = "import_quarantine"
 	RootStorageTrash        StorageRootKind = "storage_trash"
 )
+
+var requiredRootKinds = []StorageRootKind{
+	RootGenerationArtifacts,
+	RootProcessingRevisions,
+	RootEditingAssets,
+	RootQualityReports,
+	RootReleaseWorkspaces,
+	RootReleaseStaging,
+	RootReleasePublished,
+	RootReleaseArchives,
+	RootInstallations,
+	RootImportQuarantine,
+	RootStorageTrash,
+}
+
+func AllRequiredRootKinds() []StorageRootKind {
+	out := make([]StorageRootKind, len(requiredRootKinds))
+	copy(out, requiredRootKinds)
+	return out
+}
+
+var defaultRelativePaths = map[StorageRootKind]string{
+	RootGenerationArtifacts: "desktop-pets/generation-artifacts",
+	RootProcessingRevisions: "desktop-pets/processing-revisions",
+	RootEditingAssets:       "desktop-pets/editing-assets",
+	RootQualityReports:      "desktop-pets/quality-reports",
+	RootReleaseWorkspaces:   "desktop-pets/release-workspaces",
+	RootReleaseStaging:      "desktop-pets/release-staging",
+	RootReleasePublished:    "desktop-pets/release-published",
+	RootReleaseArchives:     "desktop-pets/release-archives",
+	RootInstallations:       "desktop-pets/installations",
+	RootImportQuarantine:    "desktop-pets/import-quarantine",
+	RootStorageTrash:        "desktop-pets/storage-trash",
+}
+
+func DefaultRelativePath(kind StorageRootKind) (string, bool) {
+	rel, ok := defaultRelativePaths[kind]
+	return rel, ok
+}
+
+func EnsureAllRequiredRoots(registry *PathRootRegistry, dataDir string) error {
+	if registry == nil || dataDir == "" {
+		return fmt.Errorf("pathguard: ensure required roots: registry or dataDir is empty")
+	}
+	var firstErr error
+	for _, kind := range AllRequiredRootKinds() {
+		rel, ok := DefaultRelativePath(kind)
+		if !ok {
+			continue
+		}
+		absolutePath := filepath.Join(dataDir, rel)
+		if err := os.MkdirAll(absolutePath, 0o700); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("pathguard: mkdir %s: %w", kind, err)
+			continue
+		}
+		if err := registry.CreateAndRegister(kind, absolutePath); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("pathguard: register %s: %w", kind, err)
+		}
+	}
+	return firstErr
+}
+
+func (r *PathRootRegistry) ValidateRequiredRoots(kinds []StorageRootKind) error {
+	if len(kinds) == 0 {
+		kinds = AllRequiredRootKinds()
+	}
+	r.mu.RLock()
+	rootsClone := make(map[StorageRootKind]string, len(r.roots))
+	for k, v := range r.roots {
+		rootsClone[k] = v
+	}
+	r.mu.RUnlock()
+	for _, kind := range kinds {
+		root, ok := rootsClone[kind]
+		if !ok || root == "" {
+			return fmt.Errorf("pathguard: required root %s is not registered", kind)
+		}
+		info, err := os.Lstat(root)
+		if err != nil {
+			return fmt.Errorf("pathguard: required root %s stat: %w", kind, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("pathguard: required root %s is not a directory", kind)
+		}
+	}
+	return nil
+}
 
 type DeleteExpectation struct {
 	EntityType string
@@ -299,10 +389,22 @@ func (s *SafeArtifactResponder) SafeDelete(kind StorageRootKind, storageKey stri
 		return ErrUnsafePath
 	}
 	rel, err := filepath.Rel(root, resolved)
-	if err != nil || !strings.Contains(filepath.ToSlash(rel), expectation.EntityID) {
+	if err == nil && !pathComponentEquals(rel, expectation.EntityID) {
+		err = ErrUnsafePath
+	}
+	if err != nil {
 		return ErrUnsafePath
 	}
 	return s.registry.MoveToTrash(resolved, expectation.EntityID)
+}
+
+func pathComponentEquals(rel, expected string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if part == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func hashFileSHA256(path string) (string, error) {
@@ -379,9 +481,43 @@ func copyFileNoSymlinks(src, dst string, perm fs.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	data, err := os.ReadFile(src)
+	srcInfo, err := os.Lstat(src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, perm)
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return ErrUnsafePath
+	}
+	if !srcInfo.Mode().IsRegular() {
+		return fmt.Errorf("pathguard: not a regular file: %s", src)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".copy-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	_, err = io.Copy(tmp, in)
+	closeErr := tmp.Close()
+	if err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmpName)
+		return closeErr
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }

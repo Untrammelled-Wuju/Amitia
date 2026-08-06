@@ -50,7 +50,7 @@ func (h *Handler) InstallPackage(c *gin.Context) {
 	}
 	var payload installPackagePayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
 	if payload.CharacterID == "" {
@@ -189,7 +189,7 @@ func (h *Handler) UpdateDefaultAction(c *gin.Context) {
 	}
 	var payload updateDefaultActionPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeActionNotFound})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
 	if payload.ActionKey == "" {
@@ -211,7 +211,7 @@ func (h *Handler) UpdateRuntimeSettings(c *gin.Context) {
 	}
 	var payload UpdateRuntimeSettingsRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数解析失败: "+err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
 	actor, err := middleware.GetActorFromContext(c)
@@ -325,7 +325,7 @@ func writeInstallationError(c *gin.Context, err error) {
 		util.ErrorResponse(c, httpCode, ie.Message, gin.H{"errorCode": ie.Code})
 		return
 	}
-	util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+	util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 }
 
 func writeInstallationOwnershipError(c *gin.Context, err error) {

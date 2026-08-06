@@ -130,6 +130,19 @@ func (r *RuntimeRegistry) ListByState(state SessionState) []*Connection {
 	return list
 }
 
+func (r *RuntimeRegistry) ListForUser(userID string) []*Connection {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	list := make([]*Connection, 0)
+	for _, conn := range r.byRuntime {
+		if conn.UserID() == userID {
+			list = append(list, conn)
+		}
+	}
+	return list
+}
+
 func (r *RuntimeRegistry) Count() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
