@@ -1,0 +1,13 @@
+# Cache directories
+.cache/
+.work/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Temporary build outputs
+*.partial
+*.old
+*.tmp

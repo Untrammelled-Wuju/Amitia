@@ -158,9 +158,22 @@ backend/server
 backend/.zip
 backend/dev/
 data/
+backend/qdrant/
+backend/surrealdb/
 qdrant/
 surrealdb/
-runtime/build/
+# Runtime build qdrant/surrealdb component scripts (not backend/qdrant runtime)
+!runtime/build/qdrant/
+!runtime/build/surrealdb/
+# Runtime build scripts (Python)
+!runtime/build/**/*.py
+# Runtime build outputs and caches
+runtime/out/
+runtime/**/.cache/
+runtime/**/.work/
+runtime/**/__pycache__/
+runtime/**/*.pyc
+runtime/build/**/test-local-package/
 test_output.txt
 test_nodeenv_race.txt
 

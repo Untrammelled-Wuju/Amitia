@@ -45,6 +45,13 @@ func killExistingServer(addr string) {
 var triggerShutdown context.CancelFunc
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		os.Exit(handleVersion())
+	}
+	if len(os.Args) > 2 && os.Args[1] == "--version" {
+		fmt.Fprintf(os.Stderr, "error: --version cannot be combined with other arguments\n")
+		os.Exit(1)
+	}
 	runtimeRoot := util.RuntimeRoot()
 	configDir := util.RuntimeConfigDir(runtimeRoot)
 	config.InitConfig(configDir)
