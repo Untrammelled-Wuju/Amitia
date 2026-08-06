@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
@@ -49,14 +50,14 @@ type ImportValidationResult struct {
 	LicenseDecision      string
 	RuntimeCompatibility string
 	SelectedActions      []string
-	Manifest             *PackageManifest
+	Manifest             *packageformat.Manifest
+	ValidationReport     *packageformat.ValidationReport
 }
 
 type ImportPackageRequest struct {
 	UserID          string
 	ImportStagingID string
 	SourceFilePath  string
-	PreferPetID     string
 	IdempotencyKey  string
 }
 
@@ -172,35 +173,14 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 	}
 
 	characterID := manifest.Binding.SourceCharacterID
-	if characterID == "" {
-		characterID = strings.TrimSpace(manifest.PetID)
-	}
-	if characterID == "" {
-		characterID = "imported_" + strings.TrimSpace(manifest.Name)
-	}
 
-	petID := req.PreferPetID
-	if petID == "" {
-		petID = strings.TrimSpace(manifest.PetID)
-	}
+	petID := "pet_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 
 	var identity *release.PetIdentityData
-	if petID != "" {
-		existingIdentity, err := pi.repo.GetPetIdentity(petID)
-		if err == nil && existingIdentity != nil {
-			if existingIdentity.OwnerUserID != req.UserID {
-				return nil, release.NewReleaseError("PET_IDENTITY_OWNER_MISMATCH", "manifest PetID 不属于当前用户", nil)
-			}
-			identity = existingIdentity
-		}
-	}
-
-	if identity == nil {
-		existingByIdentity, err := pi.repo.GetPetIdentityByCharacter(req.UserID, characterID)
-		if err == nil && existingByIdentity != nil {
-			identity = existingByIdentity
-			petID = identity.ID
-		}
+	existingByIdentity, err := pi.repo.GetPetIdentityByCharacter(req.UserID, characterID)
+	if err == nil && existingByIdentity != nil {
+		identity = existingByIdentity
+		petID = identity.ID
 	}
 
 	now := formatImportTimestamp(time.Now())
@@ -208,20 +188,16 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 	releaseID := uuid.NewString()
 
 	if identity == nil {
-		finalPetID := petID
-		if finalPetID == "" {
-			finalPetID = uuid.NewString()
-		}
 		name := strings.TrimSpace(manifest.Name)
 		if name == "" {
-			name = finalPetID
+			name = petID
 		}
 		bindingPolicy := strings.TrimSpace(manifest.Binding.Policy)
 		if bindingPolicy == "" {
 			bindingPolicy = "character_locked"
 		}
 		identity = &release.PetIdentityData{
-			ID:                  finalPetID,
+			ID:                  petID,
 			OwnerUserID:         req.UserID,
 			SourceCharacterID:   characterID,
 			Name:                name,
@@ -233,7 +209,6 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 			CreatedAt:           now,
 			UpdatedAt:           now,
 		}
-		petID = finalPetID
 	}
 
 	sequence := identity.NextReleaseSequence
@@ -242,8 +217,14 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		version = fmt.Sprintf("1.0.%d", sequence)
 	}
 
-	storageKey := pi.storage.PublishedStorageKey(petID, releaseID)
-	archiveKey := pi.storage.ArchiveStorageKey(petID, releaseID)
+	storageKey, err := pi.storage.PublishedStorageKey(petID, releaseID)
+	if err != nil {
+		return nil, release.NewReleaseError("STORAGE_KEY_FAILED", "计算发布存储键失败", err)
+	}
+	archiveKey, err := pi.storage.ArchiveStorageKey(petID, releaseID)
+	if err != nil {
+		return nil, release.NewReleaseError("ARCHIVE_KEY_FAILED", "计算归档存储键失败", err)
+	}
 	contentRootHash := strings.TrimSpace(manifest.Integrity.ContentRootHash)
 	manifestHash := validation.SourceManifestHash
 	totalBytes := manifest.Integrity.TotalBytes
@@ -320,8 +301,9 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 
 	publishedPath := ""
 	stagingPath := sourcePath
+	operationIDForWorkspace := operationID
 
-	if err := pi.runImportSaga(ctx, req, &identity, releaseRecord, buildOp, validation, sourcePath, journal, &publishedPath); err != nil {
+	if err := pi.runImportSaga(ctx, req, &identity, releaseRecord, buildOp, validation, sourcePath, journal, &publishedPath, operationIDForWorkspace); err != nil {
 		return nil, err
 	}
 
@@ -451,7 +433,12 @@ func (pi *PackageImporter) runImportSaga(
 		return release.NewReleaseError("PUBLISH_FAILED", "发布文件失败", publishedErr)
 	}
 
-	*publishedPath = pi.storage.PublishedDir(releaseRecord.PetID, releaseRecord.ID)
+	publishedPathVal, err := pi.storage.PublishedDir(releaseRecord.PetID, releaseRecord.ID)
+	if err != nil {
+		pi.failJournal(journal, err)
+		return release.NewReleaseError("PUBLISH_PATH_FAILED", "获取发布路径失败", err)
+	}
+	*publishedPath = publishedPathVal
 	if pi.journalManager != nil && journal != nil {
 		_ = pi.journalManager.UpdateStage(journal, release.JournalStageFilesPublished, releaseRecord.ContentRootHash, sourcePath, *publishedPath)
 	}
@@ -481,14 +468,17 @@ func (pi *PackageImporter) compensateFailedImport(petID, releaseID string, build
 	}
 }
 
-func (pi *PackageImporter) publishFiles(sourcePath string, manifest *PackageManifest, petID, releaseID string) error {
+func (pi *PackageImporter) publishFiles(sourcePath string, manifest *packageformat.Manifest, petID, releaseID string) error {
 	archive, err := zip.OpenReader(sourcePath)
 	if err != nil {
 		return err
 	}
 	defer archive.Close()
 
-	destDir := pi.storage.PublishedDir(petID, releaseID)
+	destDir, err := pi.storage.PublishedDir(petID, releaseID)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(destDir, 0o700); err != nil {
 		return err
 	}
@@ -569,7 +559,7 @@ func (pi *PackageImporter) publishFiles(sourcePath string, manifest *PackageMani
 	return nil
 }
 
-func (pi *PackageImporter) computeArchiveStats(sourcePath string, manifest *PackageManifest) (int64, int, error) {
+func (pi *PackageImporter) computeArchiveStats(sourcePath string, manifest *packageformat.Manifest) (int64, int, error) {
 	archive, err := zip.OpenReader(sourcePath)
 	if err != nil {
 		return 0, 0, err
@@ -699,7 +689,7 @@ func fileRoleFromPath(filePath string) string {
 	return "data"
 }
 
-func fileActionKeyFromManifest(manifest *PackageManifest, filePath string) string {
+func fileActionKeyFromManifest(manifest *packageformat.Manifest, filePath string) string {
 	if manifest == nil {
 		return ""
 	}
@@ -713,7 +703,7 @@ func fileActionKeyFromManifest(manifest *PackageManifest, filePath string) strin
 	return ""
 }
 
-func fileFrameIDFromManifest(manifest *PackageManifest, filePath string) string {
+func fileFrameIDFromManifest(manifest *packageformat.Manifest, filePath string) string {
 	if manifest == nil {
 		return ""
 	}

@@ -255,16 +255,16 @@ type PetIdentityData struct {
 }
 
 type ReleaseStoragePort interface {
-	StagingDir(releaseID string) string
-	WorkspaceDir(operationID string) string
+	StagingDir(releaseID string) (string, error)
+	WorkspaceDir(operationID string) (string, error)
 	EnsureWorkspaceDir(operationID string) error
 	EnsureStagingDir(releaseID string) error
 	RemoveStagingDir(releaseID string) error
 	RemoveWorkspaceDir(operationID string) error
-	PublishedDir(petID, releaseID string) string
-	PublishedStorageKey(petID, releaseID string) string
-	ArchivePath(petID, releaseID string) string
-	ArchiveStorageKey(petID, releaseID string) string
+	PublishedDir(petID, releaseID string) (string, error)
+	PublishedStorageKey(petID, releaseID string) (string, error)
+	ArchivePath(petID, releaseID string) (string, error)
+	ArchiveStorageKey(petID, releaseID string) (string, error)
 	MoveStagingToPublished(petID, releaseID string) error
 	MoveWorkspaceToStaging(operationID, releaseID string) error
 	RemovePublishedDir(petID, releaseID string) error

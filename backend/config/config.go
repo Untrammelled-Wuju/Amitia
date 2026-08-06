@@ -121,17 +121,18 @@ type ChatConfig struct {
 }
 
 type QdrantConfig struct {
-	Host           string                      `mapstructure:"host"`
-	Port           int                         `mapstructure:"port"`
-	BinaryPath     string                      `mapstructure:"binaryPath"`
-	ConfigDir      string                      `mapstructure:"configDir"`
-	DataDir        string                      `mapstructure:"dataDir"`
-	SnapshotsDir   string                      `mapstructure:"snapshotsDir"`
-	CollectionName string                      `mapstructure:"collectionName"`
-	VectorDim      int                         `mapstructure:"vectorDim"`
-	Limit          int                         `mapstructure:"limit"`
-	Collections    map[string]CollectionConfig `mapstructure:"collections"`
-	Enabled        bool                        `mapstructure:"enabled"`
+	Host             string                      `mapstructure:"host"`
+	Port             int                         `mapstructure:"port"`
+	BinaryPath       string                      `mapstructure:"binaryPath"`
+	ConfigDir        string                      `mapstructure:"configDir"`
+	DataDir          string                      `mapstructure:"dataDir"`
+	SnapshotsDir     string                      `mapstructure:"snapshotsDir"`
+	CollectionName   string                      `mapstructure:"collectionName"`
+	VectorDim        int                         `mapstructure:"vectorDim"`
+	Limit            int                         `mapstructure:"limit"`
+	Collections      map[string]CollectionConfig `mapstructure:"collections"`
+	Enabled          bool                        `mapstructure:"enabled"`
+	ResourceProfile  string                      `mapstructure:"resourceProfile"`
 }
 
 type CollectionConfig struct {
@@ -377,6 +378,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.vectorStore.qdrant.enabled", true)
 	v.SetDefault("providers.vectorStore.qdrant.binaryPath", "")
 	v.SetDefault("providers.vectorStore.qdrant.dataDir", "")
+	v.SetDefault("providers.vectorStore.qdrant.resourceProfile", "auto")
 	v.SetDefault("providers.vectorStore.qdrant.collections.memory_embeddings.name", "memory_embeddings")
 	v.SetDefault("providers.vectorStore.qdrant.collections.memory_embeddings.vectorDim", 2560)
 	v.SetDefault("providers.vectorStore.qdrant.collections.working_memory.name", "working_memory")
@@ -489,6 +491,7 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "providers.vectorStore.qdrant.vectorDim", environments: []string{"AMITIA_QDRANT_VECTOR_DIM"}},
 	{key: "providers.vectorStore.qdrant.limit", environments: []string{"AMITIA_QDRANT_LIMIT"}},
 	{key: "providers.vectorStore.qdrant.enabled", environments: []string{"AMITIA_QDRANT_ENABLED"}},
+	{key: "providers.vectorStore.qdrant.resourceProfile", environments: []string{"QDRANT_RESOURCE_PROFILE"}},
 	{key: "providers.graphStore.enabled", environments: []string{"AMITIA_GRAPH_STORE_ENABLED"}},
 	{key: "providers.graphStore.required", environments: []string{"AMITIA_GRAPH_STORE_REQUIRED"}},
 	{key: "providers.graphStore.provider", environments: []string{"AMITIA_GRAPH_STORE_PROVIDER"}},

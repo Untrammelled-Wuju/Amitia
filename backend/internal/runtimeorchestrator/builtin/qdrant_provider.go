@@ -15,6 +15,8 @@ import (
 	qdrantenv "github.com/u-ai/backend/internal/vectorstore/qdrantenv"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantlayout"
 	"github.com/u-ai/backend/internal/vectorstore/qdrantprocess"
+	"github.com/u-ai/backend/internal/vectorstore/qdrantprofile"
+	"github.com/u-ai/backend/pkg/platform"
 )
 
 type QdrantProviderFactory struct{}
@@ -35,6 +37,18 @@ func (f *QdrantProviderFactory) Requirements() []runtimehost.CapabilityRequireme
 		{ID: runtimehost.CapFilesystemExecutable, Minimum: runtimehost.SupportSupported},
 		{ID: runtimehost.CapNetworkLoopback, Minimum: runtimehost.SupportSupported},
 	}
+}
+
+type descriptorProviderHost struct {
+	host runtimehost.RuntimeHost
+}
+
+func (d descriptorProviderHost) Descriptor() platform.RuntimeDescriptor {
+	return d.host.Descriptor()
+}
+
+func (d descriptorProviderHost) Capabilities() *runtimehost.HostCapabilities {
+	return d.host.Capabilities()
 }
 
 func (f *QdrantProviderFactory) Build(ctx runtimeorchestrator.ProviderBuildContext) (runtimeorchestrator.ProviderInstance, error) {
@@ -77,27 +91,41 @@ func (f *QdrantProviderFactory) Build(ctx runtimeorchestrator.ProviderBuildConte
 		return nil, runtimeorchestrator.DescriptorFailure("", err.Error())
 	}
 
+	descProvider := descriptorProviderHost{host: ctx.Host}
+	profileResolver, err := qdrantprofile.NewResolver(qdrantprofile.ResolveContext{
+		DescriptorProvider: descProvider,
+	})
+	if err != nil {
+		return nil, runtimeorchestrator.DescriptorFailure("", err.Error())
+	}
+
+	envSanitizer := qdrantprofile.NewEnvironmentSanitizer()
+
 	return &qdrantProvider{
-		config:             &ctx.Config.Providers.VectorStore,
-		host:               ctx.Host,
-		envResolver:        envResolver,
-		layoutResolver:     layoutResolver,
-		directoryManager:   qdrantlayout.NewDirectoryManager(nil),
-		configRenderer:     qdrantconfig.NewRenderer(),
-		configWriter:       qdrantconfig.NewWriter(nil),
-		ownershipReconciler: ownershipReconciler,
+		config:               &ctx.Config.Providers.VectorStore,
+		host:                 ctx.Host,
+		envResolver:          envResolver,
+		layoutResolver:       layoutResolver,
+		directoryManager:     qdrantlayout.NewDirectoryManager(nil),
+		configRenderer:       qdrantconfig.NewRenderer(),
+		configWriter:         qdrantconfig.NewWriter(nil),
+		ownershipReconciler:  ownershipReconciler,
+		profileResolver:      profileResolver,
+		environmentSanitizer: envSanitizer,
 	}, nil
 }
 
 type qdrantProvider struct {
-	config             *config.VectorStoreProviderConfig
-	host               runtimehost.RuntimeHost
-	layoutResolver     qdrantlayout.Resolver
-	envResolver        qdrantenv.Resolver
-	directoryManager   qdrantlayout.DirectoryManager
-	configRenderer     qdrantconfig.Renderer
-	configWriter       qdrantconfig.Writer
-	ownershipReconciler qdrantprocess.Reconciler
+	config               *config.VectorStoreProviderConfig
+	host                 runtimehost.RuntimeHost
+	layoutResolver       qdrantlayout.Resolver
+	envResolver          qdrantenv.Resolver
+	directoryManager     qdrantlayout.DirectoryManager
+	configRenderer       qdrantconfig.Renderer
+	configWriter         qdrantconfig.Writer
+	ownershipReconciler  qdrantprocess.Reconciler
+	profileResolver      qdrantprofile.Resolver
+	environmentSanitizer qdrantprofile.EnvironmentSanitizer
 
 	capabilityMu sync.RWMutex
 	client       *qdrant.Client
@@ -141,6 +169,11 @@ func (p *qdrantProvider) Start(ctx context.Context) error {
 		return nil
 	}
 
+	resolvedProfile, err := p.profileResolver.Resolve(ctx, p.config.Qdrant.ResourceProfile)
+	if err != nil {
+		return phaseError{phase: "qdrant:resolve-profile", err: err}
+	}
+
 	env, err := p.envResolver.Resolve(ctx)
 	if err != nil {
 		if qdrantErr, ok := unwrapNotInstalled(err); ok {
@@ -171,6 +204,9 @@ func (p *qdrantProvider) Start(ctx context.Context) error {
 		GRPCPort:     p.config.Qdrant.Port + 1,
 		StoragePath:  layout.StorageDir,
 		SnapshotPath: layout.SnapshotsDir,
+	}
+	if resolvedProfile.Mobile && resolvedProfile.Settings != nil {
+		doc.ResourceProfile = resolvedProfile.Settings
 	}
 
 	configBytes, err := p.configRenderer.Render(doc)

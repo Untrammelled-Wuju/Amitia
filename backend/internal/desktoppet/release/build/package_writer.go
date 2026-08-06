@@ -63,7 +63,7 @@ type PackageWriter interface {
 	MoveStagingToPublished(petID, releaseID string, stagingDir string) error
 	RemoveStagingDir(stagingDir string) error
 	RemovePublishedDir(petID, releaseID string) error
-	PublishedDir(petID, releaseID string) string
-	PublishedStorageKey(petID, releaseID string) string
-	ArchiveStorageKey(petID, releaseID string) string
+	PublishedDir(petID, releaseID string) (string, error)
+	PublishedStorageKey(petID, releaseID string) (string, error)
+	ArchiveStorageKey(petID, releaseID string) (string, error)
 }

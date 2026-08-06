@@ -2,13 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package qdrantconfig
 
-import "path/filepath"
+import (
+	"path/filepath"
+
+	"github.com/u-ai/backend/internal/vectorstore/qdrantprofile"
+)
 
 type Document struct {
 	HTTPPort     int
 	GRPCPort     int
 	StoragePath  string
 	SnapshotPath string
+
+	ResourceProfile *qdrantprofile.Settings
 }
 
 func (d Document) Validate() error {
@@ -35,6 +41,11 @@ func (d Document) Validate() error {
 	}
 	if d.StoragePath == d.SnapshotPath {
 		return newInvalidDocument("storage and snapshot paths must be different")
+	}
+	if d.ResourceProfile != nil {
+		if err := d.ResourceProfile.Validate(); err != nil {
+			return newInvalidDocument(err.Error())
+		}
 	}
 	return nil
 }

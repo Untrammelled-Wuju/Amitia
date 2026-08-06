@@ -37,6 +37,7 @@ providers:
       configDir: ""
       dataDir: ""
       snapshotsDir: ""
+      resourceProfile: auto
       collectionName: "memory_embeddings"
       vectorDim: 1536
       limit: 10

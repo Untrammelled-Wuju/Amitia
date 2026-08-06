@@ -187,7 +187,12 @@ func (o *ReleaseOrchestrator) Build(ctx context.Context, req *BuildReleaseReques
 		return nil, err
 	}
 
-	publishedDir := o.writer.PublishedDir(petID, releaseID)
+	publishedDir, err := o.writer.PublishedDir(petID, releaseID)
+	if err != nil {
+		o.failOperation(op, "publish_dir_failed", err)
+		o.journalManager.MarkFailed(journal, err.Error())
+		return nil, err
+	}
 	if err := o.writer.BuildArchive(publishedDir, petID, releaseID); err != nil {
 		o.writer.RemovePublishedDir(petID, releaseID)
 		o.failOperation(op, "archive_failed", err)
@@ -195,10 +200,23 @@ func (o *ReleaseOrchestrator) Build(ctx context.Context, req *BuildReleaseReques
 		return nil, err
 	}
 
-	o.journalManager.UpdateStage(journal, release.JournalStageFilesPublished,
-		staged.ContentRootHash, "", o.writer.PublishedStorageKey(petID, releaseID))
+	publishedKey, err := o.writer.PublishedStorageKey(petID, releaseID)
+	if err != nil {
+		o.failOperation(op, "storage_key_failed", err)
+		o.journalManager.MarkFailed(journal, err.Error())
+		return nil, err
+	}
+	archiveKey, err := o.writer.ArchiveStorageKey(petID, releaseID)
+	if err != nil {
+		o.failOperation(op, "archive_key_failed", err)
+		o.journalManager.MarkFailed(journal, err.Error())
+		return nil, err
+	}
 
-	op.PublishedPathKey = o.writer.PublishedStorageKey(petID, releaseID)
+	o.journalManager.UpdateStage(journal, release.JournalStageFilesPublished,
+		staged.ContentRootHash, "", publishedKey)
+
+	op.PublishedPathKey = publishedKey
 	op.StagingPathKey = releaseID
 
 	releaseData := &release.ReleaseData{
@@ -211,8 +229,8 @@ func (o *ReleaseOrchestrator) Build(ctx context.Context, req *BuildReleaseReques
 		Lifecycle:             string(release.ReleaseLifecycleReady),
 		ContentRootHash:       staged.ContentRootHash,
 		ManifestHash:          staged.ManifestHash,
-		StorageKey:            o.writer.PublishedStorageKey(petID, releaseID),
-		ArchiveStorageKey:     o.writer.ArchiveStorageKey(petID, releaseID),
+		StorageKey:            publishedKey,
+		ArchiveStorageKey:     archiveKey,
 		TotalBytes:            staged.TotalBytes,
 		FileCount:             staged.FileCount,
 		ActionCount:           len(snapshotResult.ActionSnapshots),
@@ -250,9 +268,9 @@ func (o *ReleaseOrchestrator) Build(ctx context.Context, req *BuildReleaseReques
 	}
 
 	o.journalManager.UpdateStage(journal, release.JournalStageDatabaseCommitted,
-		staged.ContentRootHash, "", o.writer.PublishedStorageKey(petID, releaseID))
+		staged.ContentRootHash, "", publishedKey)
 	o.journalManager.UpdateStage(journal, release.JournalStageCompleted,
-		staged.ContentRootHash, "", o.writer.PublishedStorageKey(petID, releaseID))
+		staged.ContentRootHash, "", publishedKey)
 
 	op.State = release.BuildOpStateCompleted
 	op.Stage = release.BuildOpStageDatabaseCommitted
@@ -409,6 +427,9 @@ func (o *ReleaseOrchestrator) Download(releaseID, userID string) (string, error)
 	if !release.IsInstallable(releaseData.Lifecycle, releaseData.IntegrityStatus, releaseData.CompatibilityStatus) {
 		return "", NewBuildError(ErrCodeReleaseOperationConflict, "Release 不可下载", nil)
 	}
-	archivePath := o.writer.PublishedDir(releaseData.PetID, releaseID)
+	archivePath, err := o.writer.PublishedDir(releaseData.PetID, releaseID)
+	if err != nil {
+		return "", err
+	}
 	return archivePath, nil
 }

@@ -1,0 +1,32 @@
+log_level: "INFO"
+telemetry_disabled: true
+service:
+  max_request_size_mb: 8
+  max_workers: 1
+  host: "127.0.0.1"
+  http_port: 19178
+  grpc_port: 19179
+  enable_cors: false
+  enable_tls: false
+  enable_snapshot_url_recovery: false
+storage:
+  storage_path: REPLACE_STORAGE_PATH
+  snapshots_path: REPLACE_SNAPSHOT_PATH
+  on_disk_payload: true
+  update_concurrency: 1
+  wal:
+    wal_capacity_mb: 8
+    wal_segments_ahead: 0
+  performance:
+    max_search_threads: 1
+    optimizer_cpu_budget: 1
+  optimizers:
+    default_segment_number: 1
+    indexing_threshold_kb: 50000
+    flush_interval_sec: 15
+    max_optimization_threads: 1
+  hnsw_index:
+    max_indexing_threads: 2
+    memory: "cold"
+cluster:
+  enabled: false
