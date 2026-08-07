@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "correctionId": "AMITIA-PARITY-PROTOCOL-V1-CORR1-ID",
+  "historicalProtocolId": "AMITIA-PARITY-PROTOCOL-V1",
+  "historicalProtocolModified": false,
+  "effectiveParityBaseline": "PARITY-2026-08-07-V1-CORR1",
+  "correctionType": "CAPABILITY_IDENTIFIER_CORRECTION",
+  "kernelContractPreserved": true,
+  "correctedCapabilityCount": 502,
+  "historicalCapabilityCount": 506,
+  "retainedNumericIdCount": 502,
+  "newNumericIdCount": 0,
+  "deprecatedNumericIdCount": 4,
+  "aliasCount": 502,
+  "invalidHistoricalIdentifierCount": 316,
+  "unresolvedIdentifierCount": 0,
+  "effectiveForB9P4": true
+}

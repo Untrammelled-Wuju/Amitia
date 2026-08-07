@@ -1,59 +1,26 @@
 {
   "format": "source/namespace/name",
-  "examples": [
-    {
-      "source": "builtin",
-      "namespace": "tool",
-      "name": "resolve_interaction_scope",
-      "full": "builtin/tool/resolve_interaction_scope"
-    },
-    {
-      "source": "builtin",
-      "namespace": "system",
-      "name": "update_full_apk",
-      "full": "builtin/system/update_full_apk"
-    },
-    {
-      "source": "builtin",
-      "namespace": "browser",
-      "name": "close_all_virtual_displays",
-      "full": "builtin/browser/close_all_virtual_displays"
-    },
-    {
-      "source": "builtin",
-      "namespace": "memory",
-      "name": "write_memory",
-      "full": "builtin/memory/write_memory"
-    },
-    {
-      "source": "builtin",
-      "namespace": "character",
-      "name": "execute",
-      "full": "builtin/character/execute"
-    }
+  "validExamples": [
+    "builtin/tool/resolve_interaction_scope",
+    "external/system/update_update_full_apk",
+    "external/browser/control_close_all_virtual_displays",
+    "external/system/update_update_user_preferences",
+    "builtin/tool/register_task_goal"
   ],
   "invalidExamples": [
-    {
-      "id": "CAP.TOOL.EXECUTE.交互范围解析",
-      "reason": "Contains Chinese characters, uses dots, uppercase"
-    },
-    {
-      "id": "CAP.MEMORY.UPDATE.MEMORY WRITE",
-      "reason": "Contains space, uses dots, uppercase"
-    },
-    {
-      "id": "CAP.PROCESS.EXECUTE.EXECUTE_HIDDEN_TERMINAL_COMMAND",
-      "reason": "Uses dots, uppercase - but ASCII valid"
-    },
-    {
-      "id": "builtin/tool/READ",
-      "reason": "Uppercase name segment"
-    }
+    "CAP.TOOL.EXECUTE.交互范围解析",
+    "CAP.MEMORY.UPDATE.MEMORY WRITE"
   ],
   "correctionMapping": {
     "CAP.TOOL.EXECUTE.交互范围解析": "builtin/tool/resolve_interaction_scope",
-    "CAP.SYSTEM.UPDATE.UPDATE_FULL_APK": "external/system/update_full_apk",
-    "CAP.MEMORY.UPDATE.MEMORY WRITE": "internal/memory/write_memory",
-    "CAP.PROCESS.EXECUTE.EXECUTE_HIDDEN_TERMINAL_COMMAND": "external/process/execute_hidden_terminal_command"
+    "CAP.SYSTEM.UPDATE.UPDATE_FULL_APK": "external/system/update_update_full_apk",
+    "CAP.BROWSER.CONTROL.CLOSE_ALL_VIRTUAL_DISPLAYS": "external/browser/control_close_all_virtual_displays",
+    "CAP.SYSTEM.UPDATE.UPDATE_USER_PREFERENCES": "external/system/update_update_user_preferences",
+    "CAP.TOOL.EXECUTE.任务目标注册": "builtin/tool/register_task_goal",
+    "CAP.TOOL.EXECUTE.角色模板管理": "builtin/tool/manage_character_template",
+    "CAP.TOOL.EXECUTE.角色配置管理": "builtin/tool/manage_character_config",
+    "CAP.TOOL.EXECUTE.工作记忆管理": "builtin/tool/manage_working_memory",
+    "CAP.TOOL.EXECUTE.ORM封装": "builtin/tool/orm",
+    "CAP.SYSTEM.INSTALL.INSTALL_APP": "external/system/install_install_app"
   }
 }

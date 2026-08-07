@@ -1,0 +1,44 @@
+{
+  "format": "source/namespace/name",
+  "separator": "/",
+  "segmentCount": 3,
+  "allowedCharacters": "a-z, 0-9, /, ., _, -",
+  "casePolicy": "lowercase",
+  "sourceValues": [
+    "builtin",
+    "external",
+    "plugin",
+    "mcp",
+    "workflow",
+    "computer_use",
+    "provider",
+    "internal",
+    "legacy"
+  ],
+  "namespaceExamples": [
+    "tool",
+    "system",
+    "browser",
+    "memory",
+    "process",
+    "security",
+    "device",
+    "conversation",
+    "search",
+    "extension",
+    "character",
+    "network",
+    "voice",
+    "notification",
+    "file",
+    "model",
+    "agent",
+    "task"
+  ],
+  "nameRules": [
+    "Must be ASCII only",
+    "Must be lowercase",
+    "Must use verb-object pattern",
+    "Must not contain implementation details"
+  ]
+}

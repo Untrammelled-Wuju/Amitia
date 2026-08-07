@@ -1,2026 +1,2059 @@
 [
   {
     "collisionId": "COLL-001",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0102"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0102",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0102"
+      "builtin/tool/general_map_0102"
     ]
   },
   {
     "collisionId": "COLL-002",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0103"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0103",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0103"
+      "builtin/tool/general_map_0103"
     ]
   },
   {
     "collisionId": "COLL-003",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0104"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0104",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0104"
+      "builtin/tool/general_map_0104"
     ]
   },
   {
     "collisionId": "COLL-004",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0107"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0107",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0107"
+      "builtin/tool/general_map_0107"
     ]
   },
   {
     "collisionId": "COLL-005",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0109"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0109",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0109"
+      "builtin/tool/general_map_0109"
     ]
   },
   {
     "collisionId": "COLL-006",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0110"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0110",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0110"
+      "builtin/tool/general_map_0110"
     ]
   },
   {
     "collisionId": "COLL-007",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0112"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0112",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0112"
+      "builtin/tool/general_map_0112"
     ]
   },
   {
     "collisionId": "COLL-008",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0113"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0113",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0113"
+      "builtin/tool/general_map_0113"
     ]
   },
   {
     "collisionId": "COLL-009",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0115"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0115",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0115"
+      "builtin/tool/general_map_0115"
     ]
   },
   {
     "collisionId": "COLL-010",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0116"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0116",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0116"
+      "builtin/tool/general_map_0116"
     ]
   },
   {
     "collisionId": "COLL-011",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0120"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0120",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0120"
+      "builtin/tool/general_map_0120"
     ]
   },
   {
     "collisionId": "COLL-012",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0123"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0123",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0123"
+      "builtin/tool/general_map_0123"
     ]
   },
   {
     "collisionId": "COLL-013",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0124"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0124",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0124"
+      "builtin/tool/general_map_0124"
     ]
   },
   {
     "collisionId": "COLL-014",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0128"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0128",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0128"
+      "builtin/tool/general_map_0128"
     ]
   },
   {
     "collisionId": "COLL-015",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/schema",
     "scopeItems": [
-      "MAP-0132"
+      "MAP-0129"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0129",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0132"
+      "builtin/tool/schema_map_0129"
     ]
   },
   {
     "collisionId": "COLL-016",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0134"
+      "MAP-0132"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0132",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0134"
+      "builtin/tool/general_map_0132"
     ]
   },
   {
     "collisionId": "COLL-017",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0135"
+      "MAP-0134"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0134",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0135"
+      "builtin/tool/general_map_0134"
     ]
   },
   {
     "collisionId": "COLL-018",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0136"
+      "MAP-0135"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0135",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0136"
+      "builtin/tool/general_map_0135"
     ]
   },
   {
     "collisionId": "COLL-019",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0138"
+      "MAP-0136"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0136",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0138"
+      "builtin/tool/general_map_0136"
     ]
   },
   {
     "collisionId": "COLL-020",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0139"
+      "MAP-0138"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0138",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0139"
+      "builtin/tool/general_map_0138"
     ]
   },
   {
     "collisionId": "COLL-021",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0141"
+      "MAP-0139"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0139",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0141"
+      "builtin/tool/general_map_0139"
     ]
   },
   {
     "collisionId": "COLL-022",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0142"
+      "MAP-0141"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0141",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0142"
+      "builtin/tool/general_map_0141"
     ]
   },
   {
     "collisionId": "COLL-023",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0145"
+      "MAP-0142"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0142",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0145"
+      "builtin/tool/general_map_0142"
     ]
   },
   {
     "collisionId": "COLL-024",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0146"
+      "MAP-0145"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0145",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0146"
+      "builtin/tool/general_map_0145"
     ]
   },
   {
     "collisionId": "COLL-025",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0147"
+      "MAP-0146"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0146",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0147"
+      "builtin/tool/general_map_0146"
     ]
   },
   {
     "collisionId": "COLL-026",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0150"
+      "MAP-0147"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0147",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0150"
+      "builtin/tool/general_map_0147"
     ]
   },
   {
     "collisionId": "COLL-027",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0151"
+      "MAP-0150"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0150",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0151"
+      "builtin/tool/general_map_0150"
     ]
   },
   {
     "collisionId": "COLL-028",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0154"
+      "MAP-0151"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0151",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0154"
+      "builtin/tool/general_map_0151"
     ]
   },
   {
     "collisionId": "COLL-029",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0158"
+      "MAP-0154"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0154",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0158"
+      "builtin/tool/general_map_0154"
     ]
   },
   {
     "collisionId": "COLL-030",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0159"
+      "MAP-0158"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0158",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0159"
+      "builtin/tool/general_map_0158"
     ]
   },
   {
     "collisionId": "COLL-031",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0162"
+      "MAP-0159"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0159",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0162"
+      "builtin/tool/general_map_0159"
     ]
   },
   {
     "collisionId": "COLL-032",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0165"
+      "MAP-0162"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0162",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0165"
+      "builtin/tool/general_map_0162"
     ]
   },
   {
     "collisionId": "COLL-033",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0167"
+      "MAP-0165"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0165",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0167"
+      "builtin/tool/general_map_0165"
     ]
   },
   {
     "collisionId": "COLL-034",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0169"
+      "MAP-0167"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0167",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0169"
+      "builtin/tool/general_map_0167"
     ]
   },
   {
     "collisionId": "COLL-035",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0170"
+      "MAP-0169"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0169",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0170"
+      "builtin/tool/general_map_0169"
     ]
   },
   {
     "collisionId": "COLL-036",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0171"
+      "MAP-0170"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0170",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0171"
+      "builtin/tool/general_map_0170"
     ]
   },
   {
     "collisionId": "COLL-037",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0175"
+      "MAP-0171"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0171",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0175"
+      "builtin/tool/general_map_0171"
     ]
   },
   {
     "collisionId": "COLL-038",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0183"
+      "MAP-0175"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0175",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0183"
+      "builtin/tool/general_map_0175"
     ]
   },
   {
     "collisionId": "COLL-039",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0188"
+      "MAP-0183"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0183",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0188"
+      "builtin/tool/general_map_0183"
     ]
   },
   {
     "collisionId": "COLL-040",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0191"
+      "MAP-0188"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0188",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0191"
+      "builtin/tool/general_map_0188"
     ]
   },
   {
     "collisionId": "COLL-041",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0192"
+      "MAP-0191"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0191",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0192"
+      "builtin/tool/general_map_0191"
     ]
   },
   {
     "collisionId": "COLL-042",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0196"
+      "MAP-0192"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0192",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0196"
+      "builtin/tool/general_map_0192"
     ]
   },
   {
     "collisionId": "COLL-043",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0202"
+      "MAP-0196"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0196",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0202"
+      "builtin/tool/general_map_0196"
     ]
   },
   {
     "collisionId": "COLL-044",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0204"
+      "MAP-0202"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0202",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0204"
+      "builtin/tool/general_map_0202"
     ]
   },
   {
     "collisionId": "COLL-045",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0205"
+      "MAP-0204"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0204",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0205"
+      "builtin/tool/general_map_0204"
     ]
   },
   {
     "collisionId": "COLL-046",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0206"
+      "MAP-0205"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0205",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0206"
+      "builtin/tool/general_map_0205"
     ]
   },
   {
     "collisionId": "COLL-047",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0207"
+      "MAP-0206"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0206",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0207"
+      "builtin/tool/general_map_0206"
     ]
   },
   {
     "collisionId": "COLL-048",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0208"
+      "MAP-0207"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0207",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0208"
+      "builtin/tool/general_map_0207"
     ]
   },
   {
     "collisionId": "COLL-049",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0210"
+      "MAP-0208"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0208",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0210"
+      "builtin/tool/general_map_0208"
     ]
   },
   {
     "collisionId": "COLL-050",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0211"
+      "MAP-0210"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0210",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0211"
+      "builtin/tool/general_map_0210"
     ]
   },
   {
     "collisionId": "COLL-051",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0218"
+      "MAP-0211"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0211",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0218"
+      "builtin/tool/general_map_0211"
     ]
   },
   {
     "collisionId": "COLL-052",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0221"
+      "MAP-0218"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0218",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0221"
+      "builtin/tool/general_map_0218"
     ]
   },
   {
     "collisionId": "COLL-053",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0225"
+      "MAP-0221"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0221",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0225"
+      "builtin/tool/general_map_0221"
     ]
   },
   {
     "collisionId": "COLL-054",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0227"
+      "MAP-0225"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0225",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0227"
+      "builtin/tool/general_map_0225"
     ]
   },
   {
     "collisionId": "COLL-055",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0228"
+      "MAP-0227"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0227",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0228"
+      "builtin/tool/general_map_0227"
     ]
   },
   {
     "collisionId": "COLL-056",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0229"
+      "MAP-0228"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0228",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0229"
+      "builtin/tool/general_map_0228"
     ]
   },
   {
     "collisionId": "COLL-057",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0231"
+      "MAP-0229"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0229",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0231"
+      "builtin/tool/general_map_0229"
     ]
   },
   {
     "collisionId": "COLL-058",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0236"
+      "MAP-0231"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0231",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0236"
+      "builtin/tool/general_map_0231"
     ]
   },
   {
     "collisionId": "COLL-059",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0248"
+      "MAP-0236"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0236",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0248"
+      "builtin/tool/general_map_0236"
     ]
   },
   {
     "collisionId": "COLL-060",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/schema",
     "scopeItems": [
-      "MAP-0249"
+      "MAP-0243"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0243",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0249"
+      "builtin/tool/schema_map_0243"
     ]
   },
   {
     "collisionId": "COLL-061",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0251"
+      "MAP-0248"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0248",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0251"
+      "builtin/tool/general_map_0248"
     ]
   },
   {
     "collisionId": "COLL-062",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0259"
+      "MAP-0249"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0249",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0259"
+      "builtin/tool/general_map_0249"
     ]
   },
   {
     "collisionId": "COLL-063",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0263"
+      "MAP-0251"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0251",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0263"
+      "builtin/tool/general_map_0251"
     ]
   },
   {
     "collisionId": "COLL-064",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0266"
+      "MAP-0259"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0259",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0266"
+      "builtin/tool/general_map_0259"
     ]
   },
   {
     "collisionId": "COLL-065",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0268"
+      "MAP-0263"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0263",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0268"
+      "builtin/tool/general_map_0263"
     ]
   },
   {
     "collisionId": "COLL-066",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0269"
+      "MAP-0266"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0266",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0269"
+      "builtin/tool/general_map_0266"
     ]
   },
   {
     "collisionId": "COLL-067",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/agent/psyche",
     "scopeItems": [
-      "MAP-0270"
+      "MAP-0267"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0267",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0270"
+      "builtin/agent/psyche_map_0267"
     ]
   },
   {
     "collisionId": "COLL-068",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0272"
+      "MAP-0268"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0268",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0272"
+      "builtin/tool/general_map_0268"
     ]
   },
   {
     "collisionId": "COLL-069",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0273"
+      "MAP-0269"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0269",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0273"
+      "builtin/tool/general_map_0269"
     ]
   },
   {
     "collisionId": "COLL-070",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0274"
+      "MAP-0270"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0270",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0274"
+      "builtin/tool/general_map_0270"
     ]
   },
   {
     "collisionId": "COLL-071",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0275"
+      "MAP-0272"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0272",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0275"
+      "builtin/tool/general_map_0272"
     ]
   },
   {
     "collisionId": "COLL-072",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0278"
+      "MAP-0273"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0273",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0278"
+      "builtin/tool/general_map_0273"
     ]
   },
   {
     "collisionId": "COLL-073",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0279"
+      "MAP-0274"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0274",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0279"
+      "builtin/tool/general_map_0274"
     ]
   },
   {
     "collisionId": "COLL-074",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0280"
+      "MAP-0275"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0275",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0280"
+      "builtin/tool/general_map_0275"
     ]
   },
   {
     "collisionId": "COLL-075",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0278"
+    ],
+    "resolution": "Appended unique suffix map_0278",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0278"
+    ]
+  },
+  {
+    "collisionId": "COLL-076",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0279"
+    ],
+    "resolution": "Appended unique suffix map_0279",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0279"
+    ]
+  },
+  {
+    "collisionId": "COLL-077",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0280"
+    ],
+    "resolution": "Appended unique suffix map_0280",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0280"
+    ]
+  },
+  {
+    "collisionId": "COLL-078",
     "candidateIdentifier": "external/device/device_info",
     "scopeItems": [
       "MAP-0284"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0284",
     "finalIdentifiers": [
       "external/device/device_info_map_0284"
     ]
   },
   {
-    "collisionId": "COLL-076",
-    "candidateIdentifier": "builtin/tool/cn",
+    "collisionId": "COLL-079",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0288"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0288",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0288"
-    ]
-  },
-  {
-    "collisionId": "COLL-077",
-    "candidateIdentifier": "builtin/tool/cn",
-    "scopeItems": [
-      "MAP-0291"
-    ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
-    "finalIdentifiers": [
-      "builtin/tool/cn_map_0291"
-    ]
-  },
-  {
-    "collisionId": "COLL-078",
-    "candidateIdentifier": "builtin/tool/cn",
-    "scopeItems": [
-      "MAP-0293"
-    ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
-    "finalIdentifiers": [
-      "builtin/tool/cn_map_0293"
-    ]
-  },
-  {
-    "collisionId": "COLL-079",
-    "candidateIdentifier": "builtin/tool/cn",
-    "scopeItems": [
-      "MAP-0296"
-    ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
-    "finalIdentifiers": [
-      "builtin/tool/cn_map_0296"
+      "builtin/tool/general_map_0288"
     ]
   },
   {
     "collisionId": "COLL-080",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0298"
+      "MAP-0291"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0291",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0298"
+      "builtin/tool/general_map_0291"
     ]
   },
   {
     "collisionId": "COLL-081",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0301"
+      "MAP-0293"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0293",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0301"
+      "builtin/tool/general_map_0293"
     ]
   },
   {
     "collisionId": "COLL-082",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0304"
+      "MAP-0296"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0296",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0304"
+      "builtin/tool/general_map_0296"
     ]
   },
   {
     "collisionId": "COLL-083",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0306"
+      "MAP-0298"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0298",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0306"
+      "builtin/tool/general_map_0298"
     ]
   },
   {
     "collisionId": "COLL-084",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0307"
+      "MAP-0301"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0301",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0307"
+      "builtin/tool/general_map_0301"
     ]
   },
   {
     "collisionId": "COLL-085",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0310"
+      "MAP-0304"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0304",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0310"
+      "builtin/tool/general_map_0304"
     ]
   },
   {
     "collisionId": "COLL-086",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0314"
+      "MAP-0306"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0306",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0314"
+      "builtin/tool/general_map_0306"
     ]
   },
   {
     "collisionId": "COLL-087",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0315"
+      "MAP-0307"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0307",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0315"
+      "builtin/tool/general_map_0307"
     ]
   },
   {
     "collisionId": "COLL-088",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0317"
+      "MAP-0310"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0310",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0317"
+      "builtin/tool/general_map_0310"
     ]
   },
   {
     "collisionId": "COLL-089",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0319"
+      "MAP-0314"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0314",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0319"
+      "builtin/tool/general_map_0314"
     ]
   },
   {
     "collisionId": "COLL-090",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0321"
+      "MAP-0315"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0315",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0321"
+      "builtin/tool/general_map_0315"
     ]
   },
   {
     "collisionId": "COLL-091",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0322"
+      "MAP-0317"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0317",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0322"
+      "builtin/tool/general_map_0317"
     ]
   },
   {
     "collisionId": "COLL-092",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0324"
+      "MAP-0319"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0319",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0324"
+      "builtin/tool/general_map_0319"
     ]
   },
   {
     "collisionId": "COLL-093",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0326"
+      "MAP-0321"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0321",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0326"
+      "builtin/tool/general_map_0321"
     ]
   },
   {
     "collisionId": "COLL-094",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0327"
+      "MAP-0322"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0322",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0327"
+      "builtin/tool/general_map_0322"
     ]
   },
   {
     "collisionId": "COLL-095",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0329"
+      "MAP-0324"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0324",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0329"
+      "builtin/tool/general_map_0324"
     ]
   },
   {
     "collisionId": "COLL-096",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0331"
+      "MAP-0326"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0326",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0331"
+      "builtin/tool/general_map_0326"
     ]
   },
   {
     "collisionId": "COLL-097",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0333"
+      "MAP-0327"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0327",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0333"
+      "builtin/tool/general_map_0327"
     ]
   },
   {
     "collisionId": "COLL-098",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0334"
+      "MAP-0329"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0329",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0334"
+      "builtin/tool/general_map_0329"
     ]
   },
   {
     "collisionId": "COLL-099",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0335"
+      "MAP-0331"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0331",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0335"
+      "builtin/tool/general_map_0331"
     ]
   },
   {
     "collisionId": "COLL-100",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0336"
+      "MAP-0333"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0333",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0336"
+      "builtin/tool/general_map_0333"
     ]
   },
   {
     "collisionId": "COLL-101",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0338"
+      "MAP-0334"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0334",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0338"
+      "builtin/tool/general_map_0334"
     ]
   },
   {
     "collisionId": "COLL-102",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0342"
+      "MAP-0335"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0335",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0342"
+      "builtin/tool/general_map_0335"
     ]
   },
   {
     "collisionId": "COLL-103",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0344"
+      "MAP-0336"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0336",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0344"
+      "builtin/tool/general_map_0336"
     ]
   },
   {
     "collisionId": "COLL-104",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0345"
+      "MAP-0338"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0338",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0345"
+      "builtin/tool/general_map_0338"
     ]
   },
   {
     "collisionId": "COLL-105",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0348"
+      "MAP-0342"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0342",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0348"
+      "builtin/tool/general_map_0342"
     ]
   },
   {
     "collisionId": "COLL-106",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0350"
+      "MAP-0344"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0344",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0350"
+      "builtin/tool/general_map_0344"
     ]
   },
   {
     "collisionId": "COLL-107",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0352"
+      "MAP-0345"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0345",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0352"
+      "builtin/tool/general_map_0345"
     ]
   },
   {
     "collisionId": "COLL-108",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0353"
+      "MAP-0348"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0348",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0353"
+      "builtin/tool/general_map_0348"
     ]
   },
   {
     "collisionId": "COLL-109",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0354"
+      "MAP-0350"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0350",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0354"
+      "builtin/tool/general_map_0350"
     ]
   },
   {
     "collisionId": "COLL-110",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0361"
+      "MAP-0352"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0352",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0361"
+      "builtin/tool/general_map_0352"
     ]
   },
   {
     "collisionId": "COLL-111",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0362"
+      "MAP-0353"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0353",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0362"
+      "builtin/tool/general_map_0353"
     ]
   },
   {
     "collisionId": "COLL-112",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0363"
+      "MAP-0354"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0354",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0363"
+      "builtin/tool/general_map_0354"
     ]
   },
   {
     "collisionId": "COLL-113",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0364"
+      "MAP-0361"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0361",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0364"
+      "builtin/tool/general_map_0361"
     ]
   },
   {
     "collisionId": "COLL-114",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0365"
+      "MAP-0362"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0362",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0365"
+      "builtin/tool/general_map_0362"
     ]
   },
   {
     "collisionId": "COLL-115",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0367"
+      "MAP-0363"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0363",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0367"
+      "builtin/tool/general_map_0363"
     ]
   },
   {
     "collisionId": "COLL-116",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0368"
+      "MAP-0364"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0364",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0368"
+      "builtin/tool/general_map_0364"
     ]
   },
   {
     "collisionId": "COLL-117",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0369"
+      "MAP-0365"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0365",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0369"
+      "builtin/tool/general_map_0365"
     ]
   },
   {
     "collisionId": "COLL-118",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0370"
+      "MAP-0367"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0367",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0370"
+      "builtin/tool/general_map_0367"
     ]
   },
   {
     "collisionId": "COLL-119",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0372"
+      "MAP-0368"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0368",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0372"
+      "builtin/tool/general_map_0368"
     ]
   },
   {
     "collisionId": "COLL-120",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0373"
+      "MAP-0369"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0369",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0373"
+      "builtin/tool/general_map_0369"
     ]
   },
   {
     "collisionId": "COLL-121",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0374"
+      "MAP-0370"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0370",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0374"
+      "builtin/tool/general_map_0370"
     ]
   },
   {
     "collisionId": "COLL-122",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0375"
+      "MAP-0372"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0372",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0375"
+      "builtin/tool/general_map_0372"
     ]
   },
   {
     "collisionId": "COLL-123",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0376"
+      "MAP-0373"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0373",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0376"
+      "builtin/tool/general_map_0373"
     ]
   },
   {
     "collisionId": "COLL-124",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0374"
+    ],
+    "resolution": "Appended unique suffix map_0374",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0374"
+    ]
+  },
+  {
+    "collisionId": "COLL-125",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0375"
+    ],
+    "resolution": "Appended unique suffix map_0375",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0375"
+    ]
+  },
+  {
+    "collisionId": "COLL-126",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0376"
+    ],
+    "resolution": "Appended unique suffix map_0376",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0376"
+    ]
+  },
+  {
+    "collisionId": "COLL-127",
     "candidateIdentifier": "external/tool/location_tracking",
     "scopeItems": [
       "MAP-0378"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0378",
     "finalIdentifiers": [
       "external/tool/location_tracking_map_0378"
     ]
   },
   {
-    "collisionId": "COLL-125",
-    "candidateIdentifier": "builtin/tool/cn",
+    "collisionId": "COLL-128",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0379"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0379",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0379"
-    ]
-  },
-  {
-    "collisionId": "COLL-126",
-    "candidateIdentifier": "builtin/tool/cn",
-    "scopeItems": [
-      "MAP-0380"
-    ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
-    "finalIdentifiers": [
-      "builtin/tool/cn_map_0380"
-    ]
-  },
-  {
-    "collisionId": "COLL-127",
-    "candidateIdentifier": "builtin/tool/cn",
-    "scopeItems": [
-      "MAP-0382"
-    ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
-    "finalIdentifiers": [
-      "builtin/tool/cn_map_0382"
-    ]
-  },
-  {
-    "collisionId": "COLL-128",
-    "candidateIdentifier": "builtin/tool/cn",
-    "scopeItems": [
-      "MAP-0389"
-    ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
-    "finalIdentifiers": [
-      "builtin/tool/cn_map_0389"
+      "builtin/tool/general_map_0379"
     ]
   },
   {
     "collisionId": "COLL-129",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0390"
+      "MAP-0380"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0380",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0390"
+      "builtin/tool/general_map_0380"
     ]
   },
   {
     "collisionId": "COLL-130",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0391"
+      "MAP-0382"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0382",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0391"
+      "builtin/tool/general_map_0382"
     ]
   },
   {
     "collisionId": "COLL-131",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0393"
+      "MAP-0389"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0389",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0393"
+      "builtin/tool/general_map_0389"
     ]
   },
   {
     "collisionId": "COLL-132",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0396"
+      "MAP-0390"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0390",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0396"
+      "builtin/tool/general_map_0390"
     ]
   },
   {
     "collisionId": "COLL-133",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0398"
+      "MAP-0391"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0391",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0398"
+      "builtin/tool/general_map_0391"
     ]
   },
   {
     "collisionId": "COLL-134",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0400"
+      "MAP-0393"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0393",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0400"
+      "builtin/tool/general_map_0393"
     ]
   },
   {
     "collisionId": "COLL-135",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0401"
+      "MAP-0396"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0396",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0401"
+      "builtin/tool/general_map_0396"
     ]
   },
   {
     "collisionId": "COLL-136",
-    "candidateIdentifier": "builtin/agent/psychecn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0402"
+      "MAP-0398"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0398",
     "finalIdentifiers": [
-      "builtin/agent/psychecn_map_0402"
+      "builtin/tool/general_map_0398"
     ]
   },
   {
     "collisionId": "COLL-137",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0404"
+      "MAP-0400"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0400",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0404"
+      "builtin/tool/general_map_0400"
     ]
   },
   {
     "collisionId": "COLL-138",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0406"
+      "MAP-0401"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0401",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0406"
+      "builtin/tool/general_map_0401"
     ]
   },
   {
     "collisionId": "COLL-139",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/agent/psyche",
     "scopeItems": [
-      "MAP-0407"
+      "MAP-0402"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0402",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0407"
+      "builtin/agent/psyche_map_0402"
     ]
   },
   {
     "collisionId": "COLL-140",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0412"
+      "MAP-0404"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0404",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0412"
+      "builtin/tool/general_map_0404"
     ]
   },
   {
     "collisionId": "COLL-141",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0415"
+      "MAP-0406"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0406",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0415"
+      "builtin/tool/general_map_0406"
     ]
   },
   {
     "collisionId": "COLL-142",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0420"
+      "MAP-0407"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0407",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0420"
+      "builtin/tool/general_map_0407"
     ]
   },
   {
     "collisionId": "COLL-143",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0422"
+      "MAP-0412"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0412",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0422"
+      "builtin/tool/general_map_0412"
     ]
   },
   {
     "collisionId": "COLL-144",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0425"
+      "MAP-0415"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0415",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0425"
+      "builtin/tool/general_map_0415"
     ]
   },
   {
     "collisionId": "COLL-145",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0427"
+      "MAP-0420"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0420",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0427"
+      "builtin/tool/general_map_0420"
     ]
   },
   {
     "collisionId": "COLL-146",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0431"
+      "MAP-0422"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0422",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0431"
+      "builtin/tool/general_map_0422"
     ]
   },
   {
     "collisionId": "COLL-147",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0433"
+      "MAP-0425"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0425",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0433"
+      "builtin/tool/general_map_0425"
     ]
   },
   {
     "collisionId": "COLL-148",
-    "candidateIdentifier": "builtin/tool/tokencn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0434"
+      "MAP-0427"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0427",
     "finalIdentifiers": [
-      "builtin/tool/tokencn_map_0434"
+      "builtin/tool/general_map_0427"
     ]
   },
   {
     "collisionId": "COLL-149",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0438"
+      "MAP-0431"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0431",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0438"
+      "builtin/tool/general_map_0431"
     ]
   },
   {
     "collisionId": "COLL-150",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0439"
+      "MAP-0433"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0433",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0439"
+      "builtin/tool/general_map_0433"
     ]
   },
   {
     "collisionId": "COLL-151",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/token",
     "scopeItems": [
-      "MAP-0441"
+      "MAP-0434"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0434",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0441"
+      "builtin/tool/token_map_0434"
     ]
   },
   {
     "collisionId": "COLL-152",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0442"
+      "MAP-0438"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0438",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0442"
+      "builtin/tool/general_map_0438"
     ]
   },
   {
     "collisionId": "COLL-153",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0443"
+      "MAP-0439"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0439",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0443"
+      "builtin/tool/general_map_0439"
     ]
   },
   {
     "collisionId": "COLL-154",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0447"
+      "MAP-0441"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0441",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0447"
+      "builtin/tool/general_map_0441"
     ]
   },
   {
     "collisionId": "COLL-155",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0450"
+      "MAP-0442"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0442",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0450"
+      "builtin/tool/general_map_0442"
     ]
   },
   {
     "collisionId": "COLL-156",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0453"
+      "MAP-0443"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0443",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0453"
+      "builtin/tool/general_map_0443"
     ]
   },
   {
     "collisionId": "COLL-157",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0457"
+      "MAP-0447"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0447",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0457"
+      "builtin/tool/general_map_0447"
     ]
   },
   {
     "collisionId": "COLL-158",
-    "candidateIdentifier": "builtin/tool/tokencn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0459"
+      "MAP-0450"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0450",
     "finalIdentifiers": [
-      "builtin/tool/tokencn_map_0459"
+      "builtin/tool/general_map_0450"
     ]
   },
   {
     "collisionId": "COLL-159",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0460"
+      "MAP-0453"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0453",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0460"
+      "builtin/tool/general_map_0453"
     ]
   },
   {
     "collisionId": "COLL-160",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0461"
+      "MAP-0457"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0457",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0461"
+      "builtin/tool/general_map_0457"
     ]
   },
   {
     "collisionId": "COLL-161",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/token",
     "scopeItems": [
-      "MAP-0465"
+      "MAP-0459"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0459",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0465"
+      "builtin/tool/token_map_0459"
     ]
   },
   {
     "collisionId": "COLL-162",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0469"
+      "MAP-0460"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0460",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0469"
+      "builtin/tool/general_map_0460"
     ]
   },
   {
     "collisionId": "COLL-163",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0472"
+      "MAP-0461"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0461",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0472"
+      "builtin/tool/general_map_0461"
     ]
   },
   {
     "collisionId": "COLL-164",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0473"
+      "MAP-0465"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0465",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0473"
+      "builtin/tool/general_map_0465"
     ]
   },
   {
     "collisionId": "COLL-165",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0474"
+      "MAP-0469"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0469",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0474"
+      "builtin/tool/general_map_0469"
     ]
   },
   {
     "collisionId": "COLL-166",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0476"
+      "MAP-0472"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0472",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0476"
+      "builtin/tool/general_map_0472"
     ]
   },
   {
     "collisionId": "COLL-167",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0477"
+      "MAP-0473"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0473",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0477"
+      "builtin/tool/general_map_0473"
     ]
   },
   {
     "collisionId": "COLL-168",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0478"
+      "MAP-0474"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0474",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0478"
+      "builtin/tool/general_map_0474"
     ]
   },
   {
     "collisionId": "COLL-169",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0479"
+      "MAP-0476"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0476",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0479"
+      "builtin/tool/general_map_0476"
     ]
   },
   {
     "collisionId": "COLL-170",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0481"
+      "MAP-0477"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0477",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0481"
+      "builtin/tool/general_map_0477"
     ]
   },
   {
     "collisionId": "COLL-171",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0484"
+      "MAP-0478"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0478",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0484"
+      "builtin/tool/general_map_0478"
     ]
   },
   {
     "collisionId": "COLL-172",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0486"
+      "MAP-0479"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0479",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0486"
+      "builtin/tool/general_map_0479"
     ]
   },
   {
     "collisionId": "COLL-173",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0487"
+      "MAP-0481"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0481",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0487"
+      "builtin/tool/general_map_0481"
     ]
   },
   {
     "collisionId": "COLL-174",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0488"
+      "MAP-0484"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0484",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0488"
+      "builtin/tool/general_map_0484"
     ]
   },
   {
     "collisionId": "COLL-175",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0489"
+      "MAP-0486"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0486",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0489"
+      "builtin/tool/general_map_0486"
     ]
   },
   {
     "collisionId": "COLL-176",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0490"
+      "MAP-0487"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0487",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0490"
+      "builtin/tool/general_map_0487"
     ]
   },
   {
     "collisionId": "COLL-177",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0491"
+      "MAP-0488"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0488",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0491"
+      "builtin/tool/general_map_0488"
     ]
   },
   {
     "collisionId": "COLL-178",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0492"
+      "MAP-0489"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0489",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0492"
+      "builtin/tool/general_map_0489"
     ]
   },
   {
     "collisionId": "COLL-179",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0493"
+      "MAP-0490"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0490",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0493"
+      "builtin/tool/general_map_0490"
     ]
   },
   {
     "collisionId": "COLL-180",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0495"
+      "MAP-0491"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0491",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0495"
+      "builtin/tool/general_map_0491"
     ]
   },
   {
     "collisionId": "COLL-181",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0499"
+      "MAP-0492"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0492",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0499"
+      "builtin/tool/general_map_0492"
     ]
   },
   {
     "collisionId": "COLL-182",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0500"
+      "MAP-0493"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0493",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0500"
+      "builtin/tool/general_map_0493"
     ]
   },
   {
     "collisionId": "COLL-183",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
-      "MAP-0501"
+      "MAP-0495"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0495",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0501"
+      "builtin/tool/general_map_0495"
     ]
   },
   {
     "collisionId": "COLL-184",
-    "candidateIdentifier": "builtin/tool/cn",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0499"
+    ],
+    "resolution": "Appended unique suffix map_0499",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0499"
+    ]
+  },
+  {
+    "collisionId": "COLL-185",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0500"
+    ],
+    "resolution": "Appended unique suffix map_0500",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0500"
+    ]
+  },
+  {
+    "collisionId": "COLL-186",
+    "candidateIdentifier": "builtin/tool/general",
+    "scopeItems": [
+      "MAP-0501"
+    ],
+    "resolution": "Appended unique suffix map_0501",
+    "finalIdentifiers": [
+      "builtin/tool/general_map_0501"
+    ]
+  },
+  {
+    "collisionId": "COLL-187",
+    "candidateIdentifier": "builtin/tool/general",
     "scopeItems": [
       "MAP-0503"
     ],
-    "resolution": "Appended MAP_ID suffix to resolve collision",
+    "resolution": "Appended unique suffix map_0503",
     "finalIdentifiers": [
-      "builtin/tool/cn_map_0503"
+      "builtin/tool/general_map_0503"
     ]
   }
 ]

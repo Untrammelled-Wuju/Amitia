@@ -1,39 +1,35 @@
 {
   "sourcePath": "backend/internal/extension/kernel/capability/id.go",
-  "capabilityIdType": "string (CapabilityID type)",
+  "capabilityIdType": "string (CapabilityID type alias)",
   "builder": "BuildCapabilityID(source CapabilitySource, namespace, name string) string",
   "separator": "/",
   "segmentCount": 3,
-  "allowedCharacters": "a-z, 0-9, /, ., _, - (enforced by asciiOnlyPattern regex)",
+  "allowedCharacters": "a-z, 0-9, /, ., _, -",
   "casePolicy": "lowercase (enforced by strings.ToLower)",
-  "sourceRules": [
+  "sourceValues": [
     "builtin",
-    "legacy",
-    "computer_use",
-    "workflow",
-    "provider",
     "plugin",
+    "mcp",
+    "workflow",
+    "computer_use",
+    "provider",
     "internal",
-    "mcp"
+    "legacy"
   ],
   "namespaceRules": [
-    "Must be non-empty",
-    "Derived from capability domain",
-    "Stability: namespace represents stable capability domain"
+    "Non-empty",
+    "Stability: represents capability domain"
   ],
   "nameRules": [
-    "Must be non-empty",
-    "Represents executable behavior",
-    "Verb-object pattern recommended",
-    "Must not contain implementation details"
+    "Non-empty",
+    "Executable behavior",
+    "No implementation details"
   ],
   "validationFunctions": [
-    "BuildCapabilityID - constructs and normalizes ID",
-    "asciiOnlyPattern - regex: [^a-z0-9/._-]",
-    "strings.ToLower - case normalization",
-    "strings.Trim - removes leading/trailing hyphens"
+    "BuildCapabilityID",
+    "asciiOnlyPattern regex",
+    "strings.ToLower"
   ],
-  "runtimeRegistry": "ToolRegistry in backend/internal/extension/kernel/capability/registry.go",
-  "canonical": true,
-  "note": "Historical B9 IDs used UPPER_CASE with dots; Kernel uses lower_case with slashes. B9P3 adapts B9 to Kernel format."
+  "runtimeRegistry": "ToolRegistry",
+  "canonical": true
 }

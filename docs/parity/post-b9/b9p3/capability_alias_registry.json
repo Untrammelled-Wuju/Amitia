@@ -6,19 +6,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0001",
-      "PROJ-AMITIA"
+      "MAP-0001"
     ]
   },
   {
     "aliasId": "CAP.SYSTEM.UPDATE.UPDATE_FULL_APK",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/system/update_full_apk",
+    "canonicalCapabilityId": "external/system/update_update_full_apk",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0002",
-      "PROJ-OPERIT"
+      "MAP-0002"
     ]
   },
   {
@@ -28,19 +26,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0003",
-      "PROJ-OPERIT"
+      "MAP-0003"
     ]
   },
   {
     "aliasId": "CAP.SYSTEM.UPDATE.UPDATE_USER_PREFERENCES",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/system/update_user_preferences",
+    "canonicalCapabilityId": "external/system/update_update_user_preferences",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0004",
-      "PROJ-OPERIT"
+      "MAP-0004"
     ]
   },
   {
@@ -50,63 +46,57 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0005",
-      "PROJ-AMITIA"
+      "MAP-0005"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色模板管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/character_template_manage",
+    "canonicalCapabilityId": "builtin/tool/manage_character_template",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0006",
-      "PROJ-AMITIA"
+      "MAP-0006"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色配置管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/character_config_manage",
+    "canonicalCapabilityId": "builtin/tool/manage_character_config",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0007",
-      "PROJ-AMITIA"
+      "MAP-0007"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工作记忆管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/working_memory_manage",
+    "canonicalCapabilityId": "builtin/tool/manage_working_memory",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0008",
-      "PROJ-AMITIA"
+      "MAP-0008"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.ORM封装",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/orm_wrapper",
+    "canonicalCapabilityId": "builtin/tool/orm",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0009",
-      "PROJ-AMITIA"
+      "MAP-0009"
     ]
   },
   {
     "aliasId": "CAP.SYSTEM.INSTALL.INSTALL_APP",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/system/install_app",
+    "canonicalCapabilityId": "external/system/install_install_app",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0010",
-      "PROJ-OPERIT"
+      "MAP-0010"
     ]
   },
   {
@@ -116,19 +106,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0011",
-      "PROJ-AMITIA"
+      "MAP-0011"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.链路追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn",
+    "canonicalCapabilityId": "builtin/tool/general",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0012",
-      "PROJ-AMITIA"
+      "MAP-0012"
     ]
   },
   {
@@ -138,19 +126,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0013",
-      "PROJ-OPENMINIS"
+      "MAP-0013"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.TOOL OWNED RESOURCE管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/tool_owned_resource_manage",
+    "canonicalCapabilityId": "builtin/tool/tool_owned_resource",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0014",
-      "PROJ-AMITIA"
+      "MAP-0014"
     ]
   },
   {
@@ -160,8 +146,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0015",
-      "PROJ-OPERIT"
+      "MAP-0015"
     ]
   },
   {
@@ -171,8 +156,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0016",
-      "PROJ-OPENMINIS"
+      "MAP-0016"
     ]
   },
   {
@@ -182,52 +166,47 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0017",
-      "PROJ-OPERIT"
+      "MAP-0017"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.聊天导入",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/chat_import",
+    "canonicalCapabilityId": "builtin/tool/import_chat",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0018",
-      "PROJ-AMITIA"
+      "MAP-0018"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工作流执行器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/workflow_executor",
+    "canonicalCapabilityId": "builtin/tool/execute_workflow",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0019",
-      "PROJ-AMITIA"
+      "MAP-0019"
     ]
   },
   {
     "aliasId": "CAP.PROCESS.EXECUTE.EXECUTE_HIDDEN_TERMINAL_COMMAND",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/process/hidden_terminal_command",
+    "canonicalCapabilityId": "external/process/execute_hidden_terminal_command",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0020",
-      "PROJ-OPERIT"
+      "MAP-0020"
     ]
   },
   {
     "aliasId": "CAP.PROCESS.CREATE.CREATE_TERMINAL_SESSION",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/process/create_terminal_session",
+    "canonicalCapabilityId": "external/process/create_create_terminal_session",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0021",
-      "PROJ-OPERIT"
+      "MAP-0021"
     ]
   },
   {
@@ -237,8 +216,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0022",
-      "PROJ-OPERIT"
+      "MAP-0022"
     ]
   },
   {
@@ -248,8 +226,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0023",
-      "PROJ-OPENMINIS"
+      "MAP-0023"
     ]
   },
   {
@@ -259,8 +236,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0024",
-      "PROJ-OPENMINIS"
+      "MAP-0024"
     ]
   },
   {
@@ -270,8 +246,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0025",
-      "PROJ-OPENMINIS"
+      "MAP-0025"
     ]
   },
   {
@@ -281,8 +256,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0026",
-      "PROJ-OPERIT"
+      "MAP-0026"
     ]
   },
   {
@@ -292,8 +266,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0027",
-      "PROJ-OPERIT"
+      "MAP-0027"
     ]
   },
   {
@@ -303,8 +276,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0028",
-      "PROJ-OPERIT"
+      "MAP-0028"
     ]
   },
   {
@@ -314,19 +286,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0029",
-      "PROJ-AMITIA"
+      "MAP-0029"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.任务计划执行",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/task_plan_execute",
+    "canonicalCapabilityId": "builtin/tool/execute_task_plan",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0030",
-      "PROJ-AMITIA"
+      "MAP-0030"
     ]
   },
   {
@@ -336,8 +306,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0031",
-      "PROJ-OPENMINIS"
+      "MAP-0031"
     ]
   },
   {
@@ -347,8 +316,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0032",
-      "PROJ-OPENMINIS"
+      "MAP-0032"
     ]
   },
   {
@@ -358,8 +326,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0033",
-      "PROJ-OPENMINIS"
+      "MAP-0033"
     ]
   },
   {
@@ -369,8 +336,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0034",
-      "PROJ-OPENMINIS"
+      "MAP-0034"
     ]
   },
   {
@@ -380,41 +346,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0035",
-      "PROJ-OPERIT"
+      "MAP-0035"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.CONCURRENT TOOL EXECUTION",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/tool/concurrent_tool_execute",
+    "canonicalCapabilityId": "external/tool/concurrent_tool_execution",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0036",
-      "PROJ-OPENMINIS"
+      "MAP-0036"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.PRESERVATION.BACKUP_BACKUP",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/preservation_backup_backup",
+    "canonicalCapabilityId": "external/memory/preserve_backup_backup",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0037",
-      "PROJ-OPERIT"
+      "MAP-0037"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.TRANSFER.TRANSFER_DATA",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/transfer_data",
+    "canonicalCapabilityId": "external/memory/transfer_transfer_data",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0039",
-      "PROJ-OPENMINIS"
+      "MAP-0039"
     ]
   },
   {
@@ -424,8 +386,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0040",
-      "PROJ-AMITIA"
+      "MAP-0040"
     ]
   },
   {
@@ -435,8 +396,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0041",
-      "PROJ-OPERIT"
+      "MAP-0041"
     ]
   },
   {
@@ -446,30 +406,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0042",
-      "PROJ-AMITIA"
+      "MAP-0042"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.嵌入配置管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/embedding_config_manage",
+    "canonicalCapabilityId": "builtin/tool/manage_embedding_config",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0043",
-      "PROJ-AMITIA"
+      "MAP-0043"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.分享图生成",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/share_image_generate",
+    "canonicalCapabilityId": "builtin/tool/generate_share_image",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0044",
-      "PROJ-AMITIA"
+      "MAP-0044"
     ]
   },
   {
@@ -479,8 +436,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0045",
-      "PROJ-AMITIA"
+      "MAP-0045"
     ]
   },
   {
@@ -490,8 +446,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0046",
-      "PROJ-OPERIT"
+      "MAP-0046"
     ]
   },
   {
@@ -501,8 +456,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0047",
-      "PROJ-OPERIT"
+      "MAP-0047"
     ]
   },
   {
@@ -512,9 +466,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0048",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS"
+      "MAP-0048"
     ]
   },
   {
@@ -524,8 +476,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0049",
-      "PROJ-AMITIA"
+      "MAP-0049"
     ]
   },
   {
@@ -535,19 +486,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0050",
-      "PROJ-AMITIA"
+      "MAP-0050"
     ]
   },
   {
     "aliasId": "CAP.BROWSER.CAPTURE.CAPTURE_SCREENSHOT",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/browser/capture_screenshot",
+    "canonicalCapabilityId": "external/browser/capture_capture_screenshot",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0051",
-      "PROJ-OPERIT"
+      "MAP-0051"
     ]
   },
   {
@@ -557,8 +506,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0052",
-      "PROJ-AMITIA"
+      "MAP-0052"
     ]
   },
   {
@@ -568,8 +516,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0053",
-      "PROJ-AMITIA"
+      "MAP-0053"
     ]
   },
   {
@@ -579,8 +526,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0054",
-      "PROJ-OPERIT"
+      "MAP-0054"
     ]
   },
   {
@@ -590,19 +536,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0055",
-      "PROJ-OPERIT"
+      "MAP-0055"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.UPDATE.UPDATE_MEMORY",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/update_memory",
+    "canonicalCapabilityId": "external/memory/update_update_memory",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0056",
-      "PROJ-OPERIT"
+      "MAP-0056"
     ]
   },
   {
@@ -612,8 +556,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0057",
-      "PROJ-AMITIA"
+      "MAP-0057"
     ]
   },
   {
@@ -623,8 +566,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0058",
-      "PROJ-AMITIA"
+      "MAP-0058"
     ]
   },
   {
@@ -634,8 +576,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0059",
-      "PROJ-AMITIA"
+      "MAP-0059"
     ]
   },
   {
@@ -645,19 +586,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0060",
-      "PROJ-AMITIA"
+      "MAP-0060"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.UPDATE.UPDATE_MEMORY_LINK",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/update_memory_link",
+    "canonicalCapabilityId": "external/memory/update_update_memory_link",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0061",
-      "PROJ-OPERIT"
+      "MAP-0061"
     ]
   },
   {
@@ -667,19 +606,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0062",
-      "PROJ-OPERIT"
+      "MAP-0062"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.人格特质提示编译",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/personality_prompt_compile",
+    "canonicalCapabilityId": "builtin/tool/compile_personality_prompt",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0063",
-      "PROJ-AMITIA"
+      "MAP-0063"
     ]
   },
   {
@@ -689,8 +626,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0064",
-      "PROJ-OPERIT"
+      "MAP-0064"
     ]
   },
   {
@@ -700,21 +636,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0065",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0065"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.IR中间表示",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/ir_intermediate_representation",
+    "canonicalCapabilityId": "builtin/tool/ir",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0066",
-      "PROJ-AMITIA"
+      "MAP-0066"
     ]
   },
   {
@@ -724,8 +656,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0067",
-      "PROJ-OPERIT"
+      "MAP-0067"
     ]
   },
   {
@@ -735,8 +666,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0068",
-      "PROJ-OPERIT"
+      "MAP-0068"
     ]
   },
   {
@@ -746,8 +676,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0069",
-      "PROJ-AMITIA"
+      "MAP-0069"
     ]
   },
   {
@@ -757,8 +686,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0070",
-      "PROJ-OPERIT"
+      "MAP-0070"
     ]
   },
   {
@@ -768,8 +696,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0071",
-      "PROJ-AMITIA"
+      "MAP-0071"
     ]
   },
   {
@@ -779,8 +706,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0072",
-      "PROJ-AMITIA"
+      "MAP-0072"
     ]
   },
   {
@@ -790,8 +716,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0073",
-      "PROJ-AMITIA"
+      "MAP-0073"
     ]
   },
   {
@@ -801,30 +726,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0074",
-      "PROJ-AMITIA"
+      "MAP-0074"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.通道连接器管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/channel_connector_manage",
+    "canonicalCapabilityId": "builtin/tool/manage_channel_connector",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0075",
-      "PROJ-AMITIA"
+      "MAP-0075"
     ]
   },
   {
     "aliasId": "CAP.PROCESS.EXECUTE.EXECUTE_IN_TERMINAL_SESSION_STREAMING",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/process/in_terminal_session_streaming",
+    "canonicalCapabilityId": "external/process/execute_in_terminal_session_streaming",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0076",
-      "PROJ-OPERIT"
+      "MAP-0076"
     ]
   },
   {
@@ -834,8 +756,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0077",
-      "PROJ-AMITIA"
+      "MAP-0077"
     ]
   },
   {
@@ -845,8 +766,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0078",
-      "PROJ-OPERIT"
+      "MAP-0078"
     ]
   },
   {
@@ -856,8 +776,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0079",
-      "PROJ-OPERIT"
+      "MAP-0079"
     ]
   },
   {
@@ -867,8 +786,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0080",
-      "PROJ-OPERIT"
+      "MAP-0080"
     ]
   },
   {
@@ -878,8 +796,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0081",
-      "PROJ-OPERIT"
+      "MAP-0081"
     ]
   },
   {
@@ -889,8 +806,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0084",
-      "PROJ-AMITIA"
+      "MAP-0084"
     ]
   },
   {
@@ -900,8 +816,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0085",
-      "PROJ-AMITIA"
+      "MAP-0085"
     ]
   },
   {
@@ -911,8 +826,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0086",
-      "PROJ-OPERIT"
+      "MAP-0086"
     ]
   },
   {
@@ -922,30 +836,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0087",
-      "PROJ-AMITIA"
+      "MAP-0087"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.SCHEMA版本追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/schema_version_track",
+    "canonicalCapabilityId": "builtin/tool/schema",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0088",
-      "PROJ-AMITIA"
+      "MAP-0088"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.通道消息存储",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/channel_message_store",
+    "canonicalCapabilityId": "builtin/tool/store_channel_message",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0089",
-      "PROJ-AMITIA"
+      "MAP-0089"
     ]
   },
   {
@@ -955,19 +866,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0090",
-      "PROJ-OPERIT"
+      "MAP-0090"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.消息对话缓冲管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/message_dialog_buffer_manage",
+    "canonicalCapabilityId": "builtin/tool/manage_message_dialog_buffer",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0091",
-      "PROJ-AMITIA"
+      "MAP-0091"
     ]
   },
   {
@@ -977,8 +886,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0092",
-      "PROJ-AMITIA"
+      "MAP-0092"
     ]
   },
   {
@@ -988,30 +896,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0093",
-      "PROJ-OPERIT"
+      "MAP-0093"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.时间线构建",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/timeline_build",
+    "canonicalCapabilityId": "builtin/tool/build_timeline",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0094",
-      "PROJ-AMITIA"
+      "MAP-0094"
     ]
   },
   {
     "aliasId": "CAP.AGENT.EXECUTE.PSYCHE状态更新管道",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/agent/psyche_state_update_pipeline",
+    "canonicalCapabilityId": "builtin/agent/psyche",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0095",
-      "PROJ-AMITIA"
+      "MAP-0095"
     ]
   },
   {
@@ -1021,19 +926,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0096",
-      "PROJ-OPERIT"
+      "MAP-0096"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.交互取消注册",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/interaction_unregister",
+    "canonicalCapabilityId": "builtin/tool/unregister_interaction",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0097",
-      "PROJ-AMITIA"
+      "MAP-0097"
     ]
   },
   {
@@ -1043,19 +946,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0098",
-      "PROJ-AMITIA"
+      "MAP-0098"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.语音预设管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/voice_preset_manage",
+    "canonicalCapabilityId": "builtin/tool/manage_voice_preset",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0099",
-      "PROJ-AMITIA"
+      "MAP-0099"
     ]
   },
   {
@@ -1065,8 +966,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0100",
-      "PROJ-AMITIA"
+      "MAP-0100"
     ]
   },
   {
@@ -1076,41 +976,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0101",
-      "PROJ-OPENMINIS"
+      "MAP-0101"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.技能详情页面",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0102",
+    "canonicalCapabilityId": "builtin/tool/general_map_0102",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0102",
-      "PROJ-AMITIA"
+      "MAP-0102"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆压缩摘要",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0103",
+    "canonicalCapabilityId": "builtin/tool/general_map_0103",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0103",
-      "PROJ-AMITIA"
+      "MAP-0103"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.中间件追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0104",
+    "canonicalCapabilityId": "builtin/tool/general_map_0104",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0104",
-      "PROJ-AMITIA"
+      "MAP-0104"
     ]
   },
   {
@@ -1120,8 +1016,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0105",
-      "PROJ-OPERIT"
+      "MAP-0105"
     ]
   },
   {
@@ -1131,19 +1026,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0106",
-      "PROJ-OPERIT"
+      "MAP-0106"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.向量存储接口",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0107",
+    "canonicalCapabilityId": "builtin/tool/general_map_0107",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0107",
-      "PROJ-AMITIA"
+      "MAP-0107"
     ]
   },
   {
@@ -1153,30 +1046,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0108",
-      "PROJ-OPERIT"
+      "MAP-0108"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.调度优先队列",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0109",
+    "canonicalCapabilityId": "builtin/tool/general_map_0109",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0109",
-      "PROJ-AMITIA"
+      "MAP-0109"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.中间件日志",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0110",
+    "canonicalCapabilityId": "builtin/tool/general_map_0110",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0110",
-      "PROJ-AMITIA"
+      "MAP-0110"
     ]
   },
   {
@@ -1186,30 +1076,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0111",
-      "PROJ-OPENMINIS"
+      "MAP-0111"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.世界书编辑器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0112",
+    "canonicalCapabilityId": "builtin/tool/general_map_0112",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0112",
-      "PROJ-AMITIA"
+      "MAP-0112"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工具权限控制",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0113",
+    "canonicalCapabilityId": "builtin/tool/general_map_0113",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0113",
-      "PROJ-AMITIA"
+      "MAP-0113"
     ]
   },
   {
@@ -1219,30 +1106,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0114",
-      "PROJ-OPENMINIS"
+      "MAP-0114"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆仓库持久化",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0115",
+    "canonicalCapabilityId": "builtin/tool/general_map_0115",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0115",
-      "PROJ-AMITIA"
+      "MAP-0115"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.任务规划调度",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0116",
+    "canonicalCapabilityId": "builtin/tool/general_map_0116",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0116",
-      "PROJ-AMITIA"
+      "MAP-0116"
     ]
   },
   {
@@ -1252,8 +1136,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0117",
-      "PROJ-OPERIT"
+      "MAP-0117"
     ]
   },
   {
@@ -1263,8 +1146,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0118",
-      "PROJ-OPERIT"
+      "MAP-0118"
     ]
   },
   {
@@ -1274,19 +1156,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0119",
-      "PROJ-OPERIT"
+      "MAP-0119"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.幂等调度提交",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0120",
+    "canonicalCapabilityId": "builtin/tool/general_map_0120",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0120",
-      "PROJ-AMITIA"
+      "MAP-0120"
     ]
   },
   {
@@ -1296,8 +1176,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0121",
-      "PROJ-OPENMINIS"
+      "MAP-0121"
     ]
   },
   {
@@ -1307,41 +1186,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0122",
-      "PROJ-OPERIT"
+      "MAP-0122"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型自动故障转移",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0123",
+    "canonicalCapabilityId": "builtin/tool/general_map_0123",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0123",
-      "PROJ-AMITIA"
+      "MAP-0123"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.通道模型层",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0124",
+    "canonicalCapabilityId": "builtin/tool/general_map_0124",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0124",
-      "PROJ-AMITIA"
+      "MAP-0124"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.DELETE.DELETE_MEMORY",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/delete_memory",
+    "canonicalCapabilityId": "external/memory/delete_delete_memory",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0125",
-      "PROJ-OPERIT"
+      "MAP-0125"
     ]
   },
   {
@@ -1351,8 +1226,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0126",
-      "PROJ-OPENMINIS"
+      "MAP-0126"
     ]
   },
   {
@@ -1362,30 +1236,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0127",
-      "PROJ-OPENMINIS"
+      "MAP-0127"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型使用统计",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0128",
+    "canonicalCapabilityId": "builtin/tool/general_map_0128",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0128",
-      "PROJ-AMITIA"
+      "MAP-0128"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.基线SCHEMA",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cnschema",
+    "canonicalCapabilityId": "builtin/tool/schema_map_0129",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0129",
-      "PROJ-AMITIA"
+      "MAP-0129"
     ]
   },
   {
@@ -1395,8 +1266,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0130",
-      "PROJ-OPERIT"
+      "MAP-0130"
     ]
   },
   {
@@ -1406,19 +1276,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0131",
-      "PROJ-OPERIT"
+      "MAP-0131"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.对话会话状态机",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0132",
+    "canonicalCapabilityId": "builtin/tool/general_map_0132",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0132",
-      "PROJ-AMITIA"
+      "MAP-0132"
     ]
   },
   {
@@ -1428,41 +1296,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0133",
-      "PROJ-OPENMINIS"
+      "MAP-0133"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工具执行引擎",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0134",
+    "canonicalCapabilityId": "builtin/tool/general_map_0134",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0134",
-      "PROJ-AMITIA"
+      "MAP-0134"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.语音克隆",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0135",
+    "canonicalCapabilityId": "builtin/tool/general_map_0135",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0135",
-      "PROJ-AMITIA"
+      "MAP-0135"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.隐私扫描",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0136",
+    "canonicalCapabilityId": "builtin/tool/general_map_0136",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0136",
-      "PROJ-AMITIA"
+      "MAP-0136"
     ]
   },
   {
@@ -1472,30 +1336,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0137",
-      "PROJ-OPENMINIS"
+      "MAP-0137"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆向量检索",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0138",
+    "canonicalCapabilityId": "builtin/tool/general_map_0138",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0138",
-      "PROJ-AMITIA"
+      "MAP-0138"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆图数据库",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0139",
+    "canonicalCapabilityId": "builtin/tool/general_map_0139",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0139",
-      "PROJ-AMITIA"
+      "MAP-0139"
     ]
   },
   {
@@ -1505,30 +1366,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0140",
-      "PROJ-OPERIT"
+      "MAP-0140"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.实时语音对话",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0141",
+    "canonicalCapabilityId": "builtin/tool/general_map_0141",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0141",
-      "PROJ-AMITIA"
+      "MAP-0141"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情感影响引擎",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0142",
+    "canonicalCapabilityId": "builtin/tool/general_map_0142",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0142",
-      "PROJ-AMITIA"
+      "MAP-0142"
     ]
   },
   {
@@ -1538,8 +1396,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0143",
-      "PROJ-OPENMINIS"
+      "MAP-0143"
     ]
   },
   {
@@ -1549,41 +1406,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0144",
-      "PROJ-OPENMINIS"
+      "MAP-0144"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工具生命周期管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0145",
+    "canonicalCapabilityId": "builtin/tool/general_map_0145",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0145",
-      "PROJ-AMITIA"
+      "MAP-0145"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.技能处理器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0146",
+    "canonicalCapabilityId": "builtin/tool/general_map_0146",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0146",
-      "PROJ-AMITIA"
+      "MAP-0146"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型错误恢复",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0147",
+    "canonicalCapabilityId": "builtin/tool/general_map_0147",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0147",
-      "PROJ-AMITIA"
+      "MAP-0147"
     ]
   },
   {
@@ -1593,41 +1446,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0148",
-      "PROJ-OPERIT"
+      "MAP-0148"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.DELETE.DELETE_MEMORY_LINK",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/delete_memory_link",
+    "canonicalCapabilityId": "external/memory/delete_delete_memory_link",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0149",
-      "PROJ-OPERIT"
+      "MAP-0149"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.导入预览",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0150",
+    "canonicalCapabilityId": "builtin/tool/general_map_0150",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0150",
-      "PROJ-AMITIA"
+      "MAP-0150"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.加密备份",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0151",
+    "canonicalCapabilityId": "builtin/tool/general_map_0151",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0151",
-      "PROJ-AMITIA"
+      "MAP-0151"
     ]
   },
   {
@@ -1637,9 +1486,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0152",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS"
+      "MAP-0152"
     ]
   },
   {
@@ -1649,19 +1496,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0153",
-      "PROJ-OPERIT"
+      "MAP-0153"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.任务路径分类器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0154",
+    "canonicalCapabilityId": "builtin/tool/general_map_0154",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0154",
-      "PROJ-AMITIA"
+      "MAP-0154"
     ]
   },
   {
@@ -1671,8 +1516,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0155",
-      "PROJ-OPENMINIS"
+      "MAP-0155"
     ]
   },
   {
@@ -1682,8 +1526,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0156",
-      "PROJ-OPERIT"
+      "MAP-0156"
     ]
   },
   {
@@ -1693,30 +1536,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0157",
-      "PROJ-OPERIT"
+      "MAP-0157"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展服务层",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0158",
+    "canonicalCapabilityId": "builtin/tool/general_map_0158",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0158",
-      "PROJ-AMITIA"
+      "MAP-0158"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工作流基线测试",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0159",
+    "canonicalCapabilityId": "builtin/tool/general_map_0159",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0159",
-      "PROJ-AMITIA"
+      "MAP-0159"
     ]
   },
   {
@@ -1726,8 +1566,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0160",
-      "PROJ-OPERIT"
+      "MAP-0160"
     ]
   },
   {
@@ -1737,19 +1576,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0161",
-      "PROJ-OPERIT"
+      "MAP-0161"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.交互最终化",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0162",
+    "canonicalCapabilityId": "builtin/tool/general_map_0162",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0162",
-      "PROJ-AMITIA"
+      "MAP-0162"
     ]
   },
   {
@@ -1759,8 +1596,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0163",
-      "PROJ-OPENMINIS"
+      "MAP-0163"
     ]
   },
   {
@@ -1770,21 +1606,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0164",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0164"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情景记忆服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0165",
+    "canonicalCapabilityId": "builtin/tool/general_map_0165",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0165",
-      "PROJ-AMITIA"
+      "MAP-0165"
     ]
   },
   {
@@ -1794,19 +1626,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0166",
-      "PROJ-OPERIT"
+      "MAP-0166"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.任务候选生成器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0167",
+    "canonicalCapabilityId": "builtin/tool/general_map_0167",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0167",
-      "PROJ-AMITIA"
+      "MAP-0167"
     ]
   },
   {
@@ -1816,41 +1646,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0168",
-      "PROJ-OPERIT"
+      "MAP-0168"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.提示验证器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0169",
+    "canonicalCapabilityId": "builtin/tool/general_map_0169",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0169",
-      "PROJ-AMITIA"
+      "MAP-0169"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.决策可视化",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0170",
+    "canonicalCapabilityId": "builtin/tool/general_map_0170",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0170",
-      "PROJ-AMITIA"
+      "MAP-0170"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工具注册与发现",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0171",
+    "canonicalCapabilityId": "builtin/tool/general_map_0171",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0171",
-      "PROJ-AMITIA"
+      "MAP-0171"
     ]
   },
   {
@@ -1860,19 +1686,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0172",
-      "PROJ-OPERIT"
+      "MAP-0172"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端IPC通信",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cnipccn",
+    "canonicalCapabilityId": "builtin/tool/ipc",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0173",
-      "PROJ-AMITIA"
+      "MAP-0173"
     ]
   },
   {
@@ -1882,19 +1706,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0174",
-      "PROJ-OPERIT"
+      "MAP-0174"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展管理器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0175",
+    "canonicalCapabilityId": "builtin/tool/general_map_0175",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0175",
-      "PROJ-AMITIA"
+      "MAP-0175"
     ]
   },
   {
@@ -1904,8 +1726,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0176",
-      "PROJ-OPERIT"
+      "MAP-0176"
     ]
   },
   {
@@ -1915,10 +1736,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0177",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0177"
     ]
   },
   {
@@ -1928,8 +1746,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0178",
-      "PROJ-OPERIT"
+      "MAP-0178"
     ]
   },
   {
@@ -1939,8 +1756,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0179",
-      "PROJ-OPERIT"
+      "MAP-0179"
     ]
   },
   {
@@ -1950,19 +1766,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0180",
-      "PROJ-OPERIT"
+      "MAP-0180"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.CREATE.CREATE_MEMORY",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/create_memory",
+    "canonicalCapabilityId": "external/memory/create_create_memory",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0181",
-      "PROJ-OPERIT"
+      "MAP-0181"
     ]
   },
   {
@@ -1972,19 +1786,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0182",
-      "PROJ-OPERIT"
+      "MAP-0182"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型提供商管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0183",
+    "canonicalCapabilityId": "builtin/tool/general_map_0183",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0183",
-      "PROJ-AMITIA"
+      "MAP-0183"
     ]
   },
   {
@@ -1994,8 +1806,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0184",
-      "PROJ-OPERIT"
+      "MAP-0184"
     ]
   },
   {
@@ -2005,8 +1816,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0185",
-      "PROJ-OPERIT"
+      "MAP-0185"
     ]
   },
   {
@@ -2016,8 +1826,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0186",
-      "PROJ-OPERIT"
+      "MAP-0186"
     ]
   },
   {
@@ -2027,19 +1836,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0187",
-      "PROJ-OPERIT"
+      "MAP-0187"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端核心管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0188",
+    "canonicalCapabilityId": "builtin/tool/general_map_0188",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0188",
-      "PROJ-AMITIA"
+      "MAP-0188"
     ]
   },
   {
@@ -2049,41 +1856,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0189",
-      "PROJ-OPERIT"
+      "MAP-0189"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.TOOL能力模型",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/toolcn",
+    "canonicalCapabilityId": "builtin/tool/tool",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0190",
-      "PROJ-AMITIA"
+      "MAP-0190"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工作流编译器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0191",
+    "canonicalCapabilityId": "builtin/tool/general_map_0191",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0191",
-      "PROJ-AMITIA"
+      "MAP-0191"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.错误面板",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0192",
+    "canonicalCapabilityId": "builtin/tool/general_map_0192",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0192",
-      "PROJ-AMITIA"
+      "MAP-0192"
     ]
   },
   {
@@ -2093,8 +1896,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0193",
-      "PROJ-OPENMINIS"
+      "MAP-0193"
     ]
   },
   {
@@ -2104,8 +1906,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0194",
-      "PROJ-OPERIT"
+      "MAP-0194"
     ]
   },
   {
@@ -2115,19 +1916,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0195",
-      "PROJ-OPERIT"
+      "MAP-0195"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工具协议定义",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0196",
+    "canonicalCapabilityId": "builtin/tool/general_map_0196",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0196",
-      "PROJ-AMITIA"
+      "MAP-0196"
     ]
   },
   {
@@ -2137,8 +1936,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0197",
-      "PROJ-OPERIT"
+      "MAP-0197"
     ]
   },
   {
@@ -2148,8 +1946,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0198",
-      "PROJ-OPERIT"
+      "MAP-0198"
     ]
   },
   {
@@ -2159,8 +1956,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0199",
-      "PROJ-OPERIT"
+      "MAP-0199"
     ]
   },
   {
@@ -2170,8 +1966,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0200",
-      "PROJ-OPERIT"
+      "MAP-0200"
     ]
   },
   {
@@ -2181,19 +1976,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0201",
-      "PROJ-OPENMINIS"
+      "MAP-0201"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端托盘集成",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0202",
+    "canonicalCapabilityId": "builtin/tool/general_map_0202",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0202",
-      "PROJ-AMITIA"
+      "MAP-0202"
     ]
   },
   {
@@ -2203,63 +1996,57 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0203",
-      "PROJ-OPERIT"
+      "MAP-0203"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆管理器面板",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0204",
+    "canonicalCapabilityId": "builtin/tool/general_map_0204",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0204",
-      "PROJ-AMITIA"
+      "MAP-0204"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.交互编排器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0205",
+    "canonicalCapabilityId": "builtin/tool/general_map_0205",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0205",
-      "PROJ-AMITIA"
+      "MAP-0205"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色仓库持久化",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0206",
+    "canonicalCapabilityId": "builtin/tool/general_map_0206",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0206",
-      "PROJ-AMITIA"
+      "MAP-0206"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.消息管道处理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0207",
+    "canonicalCapabilityId": "builtin/tool/general_map_0207",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0207",
-      "PROJ-AMITIA"
+      "MAP-0207"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.信念清理维护",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0208",
+    "canonicalCapabilityId": "builtin/tool/general_map_0208",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0208",
-      "PROJ-AMITIA"
+      "MAP-0208"
     ]
   },
   {
@@ -2269,30 +2056,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0209",
-      "PROJ-OPENMINIS"
+      "MAP-0209"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.任务候选注册管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0210",
+    "canonicalCapabilityId": "builtin/tool/general_map_0210",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0210",
-      "PROJ-AMITIA"
+      "MAP-0210"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工具运行时适配器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0211",
+    "canonicalCapabilityId": "builtin/tool/general_map_0211",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0211",
-      "PROJ-AMITIA"
+      "MAP-0211"
     ]
   },
   {
@@ -2302,8 +2086,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0212",
-      "PROJ-OPERIT"
+      "MAP-0212"
     ]
   },
   {
@@ -2313,8 +2096,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0213",
-      "PROJ-OPERIT"
+      "MAP-0213"
     ]
   },
   {
@@ -2324,19 +2106,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0214",
-      "PROJ-OPERIT"
+      "MAP-0214"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.TOKEN预算计算器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/tokencn",
+    "canonicalCapabilityId": "builtin/tool/token",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0215",
-      "PROJ-AMITIA"
+      "MAP-0215"
     ]
   },
   {
@@ -2346,8 +2126,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0216",
-      "PROJ-OPERIT"
+      "MAP-0216"
     ]
   },
   {
@@ -2357,19 +2136,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0217",
-      "PROJ-OPENMINIS"
+      "MAP-0217"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.中间件认证",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0218",
+    "canonicalCapabilityId": "builtin/tool/general_map_0218",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0218",
-      "PROJ-AMITIA"
+      "MAP-0218"
     ]
   },
   {
@@ -2379,8 +2156,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0219",
-      "PROJ-OPERIT"
+      "MAP-0219"
     ]
   },
   {
@@ -2390,19 +2166,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0220",
-      "PROJ-OPERIT"
+      "MAP-0220"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情景记忆仓库",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0221",
+    "canonicalCapabilityId": "builtin/tool/general_map_0221",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0221",
-      "PROJ-AMITIA"
+      "MAP-0221"
     ]
   },
   {
@@ -2412,8 +2186,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0222",
-      "PROJ-OPERIT"
+      "MAP-0222"
     ]
   },
   {
@@ -2423,8 +2196,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0223",
-      "PROJ-OPERIT"
+      "MAP-0223"
     ]
   },
   {
@@ -2434,19 +2206,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0224",
-      "PROJ-OPERIT"
+      "MAP-0224"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.权限管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0225",
+    "canonicalCapabilityId": "builtin/tool/general_map_0225",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0225",
-      "PROJ-AMITIA"
+      "MAP-0225"
     ]
   },
   {
@@ -2456,41 +2226,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0226",
-      "PROJ-OPERIT"
+      "MAP-0226"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.向量索引管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0227",
+    "canonicalCapabilityId": "builtin/tool/general_map_0227",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0227",
-      "PROJ-AMITIA"
+      "MAP-0227"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色测试对话",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0228",
+    "canonicalCapabilityId": "builtin/tool/general_map_0228",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0228",
-      "PROJ-AMITIA"
+      "MAP-0228"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.数据库健康检查",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0229",
+    "canonicalCapabilityId": "builtin/tool/general_map_0229",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0229",
-      "PROJ-AMITIA"
+      "MAP-0229"
     ]
   },
   {
@@ -2500,19 +2266,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0230",
-      "PROJ-OPERIT"
+      "MAP-0230"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.通道消息计划",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0231",
+    "canonicalCapabilityId": "builtin/tool/general_map_0231",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0231",
-      "PROJ-AMITIA"
+      "MAP-0231"
     ]
   },
   {
@@ -2522,8 +2286,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0232",
-      "PROJ-OPERIT"
+      "MAP-0232"
     ]
   },
   {
@@ -2533,41 +2296,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0233",
-      "PROJ-OPERIT"
+      "MAP-0233"
     ]
   },
   {
     "aliasId": "CAP.FILE.CREATE.CREATE_FILE",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/file/create_file",
+    "canonicalCapabilityId": "external/file/create_create_file",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0235",
-      "PROJ-OPERIT"
+      "MAP-0235"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情绪语音合成",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0236",
+    "canonicalCapabilityId": "builtin/tool/general_map_0236",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0236",
-      "PROJ-AMITIA"
+      "MAP-0236"
     ]
   },
   {
     "aliasId": "CAP.PROCESS.EXECUTE.EXECUTE_SHELL",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/process/shell",
+    "canonicalCapabilityId": "external/process/execute_shell",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0237",
-      "PROJ-OPERIT"
+      "MAP-0237"
     ]
   },
   {
@@ -2577,8 +2336,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0238",
-      "PROJ-OPENMINIS"
+      "MAP-0238"
     ]
   },
   {
@@ -2588,8 +2346,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0239",
-      "PROJ-OPERIT"
+      "MAP-0239"
     ]
   },
   {
@@ -2599,8 +2356,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0240",
-      "PROJ-OPERIT"
+      "MAP-0240"
     ]
   },
   {
@@ -2610,8 +2366,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0241",
-      "PROJ-OPERIT"
+      "MAP-0241"
     ]
   },
   {
@@ -2621,19 +2376,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0242",
-      "PROJ-OPERIT"
+      "MAP-0242"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展SCHEMA校验",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cnschemacn",
+    "canonicalCapabilityId": "builtin/tool/schema_map_0243",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0243",
-      "PROJ-AMITIA"
+      "MAP-0243"
     ]
   },
   {
@@ -2643,9 +2396,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0244",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0244"
     ]
   },
   {
@@ -2655,8 +2406,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0245",
-      "PROJ-OPERIT"
+      "MAP-0245"
     ]
   },
   {
@@ -2666,8 +2416,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0246",
-      "PROJ-OPERIT"
+      "MAP-0246"
     ]
   },
   {
@@ -2677,30 +2426,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0247",
-      "PROJ-OPERIT"
+      "MAP-0247"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展宿主机",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0248",
+    "canonicalCapabilityId": "builtin/tool/general_map_0248",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0248",
-      "PROJ-AMITIA"
+      "MAP-0248"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展更新检查",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0249",
+    "canonicalCapabilityId": "builtin/tool/general_map_0249",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0249",
-      "PROJ-AMITIA"
+      "MAP-0249"
     ]
   },
   {
@@ -2710,19 +2456,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0250",
-      "PROJ-OPERIT"
+      "MAP-0250"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.事件代理发布",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0251",
+    "canonicalCapabilityId": "builtin/tool/general_map_0251",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0251",
-      "PROJ-AMITIA"
+      "MAP-0251"
     ]
   },
   {
@@ -2732,8 +2476,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0252",
-      "PROJ-OPERIT"
+      "MAP-0252"
     ]
   },
   {
@@ -2743,8 +2486,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0253",
-      "PROJ-OPERIT"
+      "MAP-0253"
     ]
   },
   {
@@ -2754,8 +2496,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0254",
-      "PROJ-OPERIT"
+      "MAP-0254"
     ]
   },
   {
@@ -2765,8 +2506,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0255",
-      "PROJ-OPERIT"
+      "MAP-0255"
     ]
   },
   {
@@ -2776,8 +2516,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0256",
-      "PROJ-OPERIT"
+      "MAP-0256"
     ]
   },
   {
@@ -2787,9 +2526,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0257",
-      "PROJ-OPERIT",
-      "PROJ-AMITIA"
+      "MAP-0257"
     ]
   },
   {
@@ -2799,19 +2536,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0258",
-      "PROJ-OPERIT"
+      "MAP-0258"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.嵌入服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0259",
+    "canonicalCapabilityId": "builtin/tool/general_map_0259",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0259",
-      "PROJ-AMITIA"
+      "MAP-0259"
     ]
   },
   {
@@ -2821,19 +2556,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0260",
-      "PROJ-OPENMINIS"
+      "MAP-0260"
     ]
   },
   {
     "aliasId": "CAP.FILE.READ.READ_FILE_FULL",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/file/read_file_full",
+    "canonicalCapabilityId": "external/file/read_read_file_full",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0261",
-      "PROJ-OPERIT"
+      "MAP-0261"
     ]
   },
   {
@@ -2843,19 +2576,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0262",
-      "PROJ-OPERIT"
+      "MAP-0262"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.交互取消处理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0263",
+    "canonicalCapabilityId": "builtin/tool/general_map_0263",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0263",
-      "PROJ-AMITIA"
+      "MAP-0263"
     ]
   },
   {
@@ -2865,8 +2596,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0264",
-      "PROJ-OPENMINIS"
+      "MAP-0264"
     ]
   },
   {
@@ -2876,118 +2606,107 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0265",
-      "PROJ-OPERIT"
+      "MAP-0265"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.连接池管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0266",
+    "canonicalCapabilityId": "builtin/tool/general_map_0266",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0266",
-      "PROJ-AMITIA"
+      "MAP-0266"
     ]
   },
   {
     "aliasId": "CAP.AGENT.EXECUTE.PSYCHE心理状态系统",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/agent/psychecn",
+    "canonicalCapabilityId": "builtin/agent/psyche_map_0267",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0267",
-      "PROJ-AMITIA"
+      "MAP-0267"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.隐私日志过滤",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0268",
+    "canonicalCapabilityId": "builtin/tool/general_map_0268",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0268",
-      "PROJ-AMITIA"
+      "MAP-0268"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆候选管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0269",
+    "canonicalCapabilityId": "builtin/tool/general_map_0269",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0269",
-      "PROJ-AMITIA"
+      "MAP-0269"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.交互协调引擎",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0270",
+    "canonicalCapabilityId": "builtin/tool/general_map_0270",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0270",
-      "PROJ-AMITIA"
+      "MAP-0270"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.EXECUTE_INTENT",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/tool/intent",
+    "canonicalCapabilityId": "external/tool/execute_intent",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0271",
-      "PROJ-OPERIT"
+      "MAP-0271"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.提示渲染器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0272",
+    "canonicalCapabilityId": "builtin/tool/general_map_0272",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0272",
-      "PROJ-AMITIA"
+      "MAP-0272"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.运行时决策",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0273",
+    "canonicalCapabilityId": "builtin/tool/general_map_0273",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0273",
-      "PROJ-AMITIA"
+      "MAP-0273"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.需求更新管道",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0274",
+    "canonicalCapabilityId": "builtin/tool/general_map_0274",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0274",
-      "PROJ-AMITIA"
+      "MAP-0274"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情感标签系统",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0275",
+    "canonicalCapabilityId": "builtin/tool/general_map_0275",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0275",
-      "PROJ-AMITIA"
+      "MAP-0275"
     ]
   },
   {
@@ -2997,8 +2716,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0276",
-      "PROJ-OPERIT"
+      "MAP-0276"
     ]
   },
   {
@@ -3008,74 +2726,67 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0277",
-      "PROJ-OPERIT"
+      "MAP-0277"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆去重合并",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0278",
+    "canonicalCapabilityId": "builtin/tool/general_map_0278",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0278",
-      "PROJ-AMITIA"
+      "MAP-0278"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息生命周期追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0279",
+    "canonicalCapabilityId": "builtin/tool/general_map_0279",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0279",
-      "PROJ-AMITIA"
+      "MAP-0279"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.恢复服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0280",
+    "canonicalCapabilityId": "builtin/tool/general_map_0280",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0280",
-      "PROJ-AMITIA"
+      "MAP-0280"
     ]
   },
   {
     "aliasId": "CAP.TOOL.SEND.SEND_BROADCAST",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/tool/send_broadcast",
+    "canonicalCapabilityId": "external/tool/send_send_broadcast",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0281",
-      "PROJ-OPERIT"
+      "MAP-0281"
     ]
   },
   {
     "aliasId": "CAP.NETWORK.EXECUTE.扩展DEV CONSOLE API",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/network/cndev_console_api",
+    "canonicalCapabilityId": "builtin/network/dev_console_api",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0282",
-      "PROJ-AMITIA"
+      "MAP-0282"
     ]
   },
   {
     "aliasId": "CAP.NOTIFICATION.SEND.SEND_NOTIFICATION",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/notification/send_notification",
+    "canonicalCapabilityId": "external/notification/send_send_notification",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0283",
-      "PROJ-OPERIT"
+      "MAP-0283"
     ]
   },
   {
@@ -3085,8 +2796,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0284",
-      "PROJ-OPERIT"
+      "MAP-0284"
     ]
   },
   {
@@ -3096,8 +2806,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0285",
-      "PROJ-OPERIT"
+      "MAP-0285"
     ]
   },
   {
@@ -3107,8 +2816,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0286",
-      "PROJ-OPENMINIS"
+      "MAP-0286"
     ]
   },
   {
@@ -3118,20 +2826,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0287",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0287"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色路由注册",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0288",
+    "canonicalCapabilityId": "builtin/tool/general_map_0288",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0288",
-      "PROJ-AMITIA"
+      "MAP-0288"
     ]
   },
   {
@@ -3141,8 +2846,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0289",
-      "PROJ-OPERIT"
+      "MAP-0289"
     ]
   },
   {
@@ -3152,19 +2856,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0290",
-      "PROJ-OPERIT"
+      "MAP-0290"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.特殊事件服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0291",
+    "canonicalCapabilityId": "builtin/tool/general_map_0291",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0291",
-      "PROJ-AMITIA"
+      "MAP-0291"
     ]
   },
   {
@@ -3174,19 +2876,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0292",
-      "PROJ-OPENMINIS"
+      "MAP-0292"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.消息提示构建",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0293",
+    "canonicalCapabilityId": "builtin/tool/general_map_0293",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0293",
-      "PROJ-AMITIA"
+      "MAP-0293"
     ]
   },
   {
@@ -3196,8 +2896,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0294",
-      "PROJ-OPERIT"
+      "MAP-0294"
     ]
   },
   {
@@ -3207,19 +2906,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0295",
-      "PROJ-OPERIT"
+      "MAP-0295"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.技能指标监控",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0296",
+    "canonicalCapabilityId": "builtin/tool/general_map_0296",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0296",
-      "PROJ-AMITIA"
+      "MAP-0296"
     ]
   },
   {
@@ -3229,19 +2926,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0297",
-      "PROJ-OPERIT"
+      "MAP-0297"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.内容安全过滤",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0298",
+    "canonicalCapabilityId": "builtin/tool/general_map_0298",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0298",
-      "PROJ-AMITIA"
+      "MAP-0298"
     ]
   },
   {
@@ -3251,9 +2946,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0299",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS"
+      "MAP-0299"
     ]
   },
   {
@@ -3263,19 +2956,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0300",
-      "PROJ-OPERIT"
+      "MAP-0300"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息动作插件",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0301",
+    "canonicalCapabilityId": "builtin/tool/general_map_0301",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0301",
-      "PROJ-AMITIA"
+      "MAP-0301"
     ]
   },
   {
@@ -3285,8 +2976,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0302",
-      "PROJ-OPERIT"
+      "MAP-0302"
     ]
   },
   {
@@ -3296,19 +2986,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0303",
-      "PROJ-OPERIT"
+      "MAP-0303"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.消息后处理净化",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0304",
+    "canonicalCapabilityId": "builtin/tool/general_map_0304",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0304",
-      "PROJ-AMITIA"
+      "MAP-0304"
     ]
   },
   {
@@ -3318,41 +3006,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0305",
-      "PROJ-OPENMINIS"
+      "MAP-0305"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情景记忆模型",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0306",
+    "canonicalCapabilityId": "builtin/tool/general_map_0306",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0306",
-      "PROJ-AMITIA"
+      "MAP-0306"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情绪状态引擎",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0307",
+    "canonicalCapabilityId": "builtin/tool/general_map_0307",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0307",
-      "PROJ-AMITIA"
+      "MAP-0307"
     ]
   },
   {
     "aliasId": "CAP.FILE.DELETE.DELETE_FILE",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/file/delete_file",
+    "canonicalCapabilityId": "external/file/delete_delete_file",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0308",
-      "PROJ-OPERIT"
+      "MAP-0308"
     ]
   },
   {
@@ -3362,19 +3046,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0309",
-      "PROJ-OPERIT"
+      "MAP-0309"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.请求身份追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0310",
+    "canonicalCapabilityId": "builtin/tool/general_map_0310",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0310",
-      "PROJ-AMITIA"
+      "MAP-0310"
     ]
   },
   {
@@ -3384,8 +3066,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0311",
-      "PROJ-OPENMINIS"
+      "MAP-0311"
     ]
   },
   {
@@ -3395,8 +3076,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0312",
-      "PROJ-OPERIT"
+      "MAP-0312"
     ]
   },
   {
@@ -3406,54 +3086,47 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0313",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0313"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.硬性约束过滤器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0314",
+    "canonicalCapabilityId": "builtin/tool/general_map_0314",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0314",
-      "PROJ-AMITIA"
+      "MAP-0314"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.提示注入检测与防护",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0315",
+    "canonicalCapabilityId": "builtin/tool/general_map_0315",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0315",
-      "PROJ-AMITIA"
+      "MAP-0315"
     ]
   },
   {
     "aliasId": "CAP.FILE.READ.READ_FILE_PART",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/file/read_file_part",
+    "canonicalCapabilityId": "external/file/read_read_file_part",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0316",
-      "PROJ-OPERIT"
+      "MAP-0316"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情感仓库",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0317",
+    "canonicalCapabilityId": "builtin/tool/general_map_0317",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0317",
-      "PROJ-AMITIA"
+      "MAP-0317"
     ]
   },
   {
@@ -3463,20 +3136,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0318",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS"
+      "MAP-0318"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色数据模型",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0319",
+    "canonicalCapabilityId": "builtin/tool/general_map_0319",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0319",
-      "PROJ-AMITIA"
+      "MAP-0319"
     ]
   },
   {
@@ -3486,32 +3156,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0320",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0320"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.交互流水线",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0321",
+    "canonicalCapabilityId": "builtin/tool/general_map_0321",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0321",
-      "PROJ-AMITIA"
+      "MAP-0321"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端自动更新",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0322",
+    "canonicalCapabilityId": "builtin/tool/general_map_0322",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0322",
-      "PROJ-AMITIA"
+      "MAP-0322"
     ]
   },
   {
@@ -3521,19 +3186,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0323",
-      "PROJ-OPERIT"
+      "MAP-0323"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.人格特质仓库",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0324",
+    "canonicalCapabilityId": "builtin/tool/general_map_0324",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0324",
-      "PROJ-AMITIA"
+      "MAP-0324"
     ]
   },
   {
@@ -3543,30 +3206,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0325",
-      "PROJ-OPERIT"
+      "MAP-0325"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.任务行为成本评估",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0326",
+    "canonicalCapabilityId": "builtin/tool/general_map_0326",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0326",
-      "PROJ-AMITIA"
+      "MAP-0326"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.运行时语义解析",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0327",
+    "canonicalCapabilityId": "builtin/tool/general_map_0327",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0327",
-      "PROJ-AMITIA"
+      "MAP-0327"
     ]
   },
   {
@@ -3576,19 +3236,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0328",
-      "PROJ-OPERIT"
+      "MAP-0328"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.定时事件服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0329",
+    "canonicalCapabilityId": "builtin/tool/general_map_0329",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0329",
-      "PROJ-AMITIA"
+      "MAP-0329"
     ]
   },
   {
@@ -3598,74 +3256,67 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0330",
-      "PROJ-OPENMINIS"
+      "MAP-0330"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.调度背压控制",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0331",
+    "canonicalCapabilityId": "builtin/tool/general_map_0331",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0331",
-      "PROJ-AMITIA"
+      "MAP-0331"
     ]
   },
   {
     "aliasId": "CAP.SYSTEM.UPDATE.UPDATE_PATCH_INCREMENTAL",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/system/update_patch_incremental",
+    "canonicalCapabilityId": "external/system/update_update_patch_incremental",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0332",
-      "PROJ-OPERIT"
+      "MAP-0332"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展包管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0333",
+    "canonicalCapabilityId": "builtin/tool/general_map_0333",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0333",
-      "PROJ-AMITIA"
+      "MAP-0333"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息抑制机制",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0334",
+    "canonicalCapabilityId": "builtin/tool/general_map_0334",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0334",
-      "PROJ-AMITIA"
+      "MAP-0334"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.响应适配器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0335",
+    "canonicalCapabilityId": "builtin/tool/general_map_0335",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0335",
-      "PROJ-AMITIA"
+      "MAP-0335"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息管道",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0336",
+    "canonicalCapabilityId": "builtin/tool/general_map_0336",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0336",
-      "PROJ-AMITIA"
+      "MAP-0336"
     ]
   },
   {
@@ -3675,19 +3326,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0337",
-      "PROJ-OPERIT"
+      "MAP-0337"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆提示注入",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0338",
+    "canonicalCapabilityId": "builtin/tool/general_map_0338",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0338",
-      "PROJ-AMITIA"
+      "MAP-0338"
     ]
   },
   {
@@ -3697,8 +3346,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0339",
-      "PROJ-OPENMINIS"
+      "MAP-0339"
     ]
   },
   {
@@ -3708,8 +3356,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0340",
-      "PROJ-OPERIT"
+      "MAP-0340"
     ]
   },
   {
@@ -3719,19 +3366,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0341",
-      "PROJ-OPERIT"
+      "MAP-0341"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展中心前端",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0342",
+    "canonicalCapabilityId": "builtin/tool/general_map_0342",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0342",
-      "PROJ-AMITIA"
+      "MAP-0342"
     ]
   },
   {
@@ -3741,30 +3386,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0343",
-      "PROJ-OPERIT"
+      "MAP-0343"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息优先级",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0344",
+    "canonicalCapabilityId": "builtin/tool/general_map_0344",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0344",
-      "PROJ-AMITIA"
+      "MAP-0344"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展注册管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0345",
+    "canonicalCapabilityId": "builtin/tool/general_map_0345",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0345",
-      "PROJ-AMITIA"
+      "MAP-0345"
     ]
   },
   {
@@ -3774,8 +3416,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0346",
-      "PROJ-OPERIT"
+      "MAP-0346"
     ]
   },
   {
@@ -3785,19 +3426,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0347",
-      "PROJ-OPERIT"
+      "MAP-0347"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.聊天记录导出",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0348",
+    "canonicalCapabilityId": "builtin/tool/general_map_0348",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0348",
-      "PROJ-AMITIA"
+      "MAP-0348"
     ]
   },
   {
@@ -3807,63 +3446,57 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0349",
-      "PROJ-OPERIT"
+      "MAP-0349"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情绪状态持久化",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0350",
+    "canonicalCapabilityId": "builtin/tool/general_map_0350",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0350",
-      "PROJ-AMITIA"
+      "MAP-0350"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.安全GOVERNOR",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cngovernor",
+    "canonicalCapabilityId": "builtin/tool/governor",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0351",
-      "PROJ-AMITIA"
+      "MAP-0351"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.需求驱动行为",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0352",
+    "canonicalCapabilityId": "builtin/tool/general_map_0352",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0352",
-      "PROJ-AMITIA"
+      "MAP-0352"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息执行器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0353",
+    "canonicalCapabilityId": "builtin/tool/general_map_0353",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0353",
-      "PROJ-AMITIA"
+      "MAP-0353"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆交互集成",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0354",
+    "canonicalCapabilityId": "builtin/tool/general_map_0354",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0354",
-      "PROJ-AMITIA"
+      "MAP-0354"
     ]
   },
   {
@@ -3873,8 +3506,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0355",
-      "PROJ-OPENMINIS"
+      "MAP-0355"
     ]
   },
   {
@@ -3884,8 +3516,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0356",
-      "PROJ-OPENMINIS"
+      "MAP-0356"
     ]
   },
   {
@@ -3895,8 +3526,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0357",
-      "PROJ-OPENMINIS"
+      "MAP-0357"
     ]
   },
   {
@@ -3906,8 +3536,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0358",
-      "PROJ-OPENMINIS"
+      "MAP-0358"
     ]
   },
   {
@@ -3917,8 +3546,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0359",
-      "PROJ-OPENMINIS"
+      "MAP-0359"
     ]
   },
   {
@@ -3928,63 +3556,57 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0360",
-      "PROJ-OPERIT"
+      "MAP-0360"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.世界书知识管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0361",
+    "canonicalCapabilityId": "builtin/tool/general_map_0361",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0361",
-      "PROJ-AMITIA"
+      "MAP-0361"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆候选预览编辑",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0362",
+    "canonicalCapabilityId": "builtin/tool/general_map_0362",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0362",
-      "PROJ-AMITIA"
+      "MAP-0362"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.时间上下文加载",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0363",
+    "canonicalCapabilityId": "builtin/tool/general_map_0363",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0363",
-      "PROJ-AMITIA"
+      "MAP-0363"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.导入向导",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0364",
+    "canonicalCapabilityId": "builtin/tool/general_map_0364",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0364",
-      "PROJ-AMITIA"
+      "MAP-0364"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆冲突解决",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0365",
+    "canonicalCapabilityId": "builtin/tool/general_map_0365",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0365",
-      "PROJ-AMITIA"
+      "MAP-0365"
     ]
   },
   {
@@ -3994,52 +3616,47 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0366",
-      "PROJ-OPENMINIS"
+      "MAP-0366"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.需求等级系统",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0367",
+    "canonicalCapabilityId": "builtin/tool/general_map_0367",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0367",
-      "PROJ-AMITIA"
+      "MAP-0367"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色关系时间追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0368",
+    "canonicalCapabilityId": "builtin/tool/general_map_0368",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0368",
-      "PROJ-AMITIA"
+      "MAP-0368"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.需求状态持久化",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0369",
+    "canonicalCapabilityId": "builtin/tool/general_map_0369",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0369",
-      "PROJ-AMITIA"
+      "MAP-0369"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.世界书条目触发",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0370",
+    "canonicalCapabilityId": "builtin/tool/general_map_0370",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0370",
-      "PROJ-AMITIA"
+      "MAP-0370"
     ]
   },
   {
@@ -4049,63 +3666,57 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0371",
-      "PROJ-OPERIT"
+      "MAP-0371"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.数据库迁移",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0372",
+    "canonicalCapabilityId": "builtin/tool/general_map_0372",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0372",
-      "PROJ-AMITIA"
+      "MAP-0372"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展运行日志",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0373",
+    "canonicalCapabilityId": "builtin/tool/general_map_0373",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0373",
-      "PROJ-AMITIA"
+      "MAP-0373"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型服务封装",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0374",
+    "canonicalCapabilityId": "builtin/tool/general_map_0374",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0374",
-      "PROJ-AMITIA"
+      "MAP-0374"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆检索分析",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0375",
+    "canonicalCapabilityId": "builtin/tool/general_map_0375",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0375",
-      "PROJ-AMITIA"
+      "MAP-0375"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.通道工作者",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0376",
+    "canonicalCapabilityId": "builtin/tool/general_map_0376",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0376",
-      "PROJ-AMITIA"
+      "MAP-0376"
     ]
   },
   {
@@ -4115,8 +3726,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0377",
-      "PROJ-OPERIT"
+      "MAP-0377"
     ]
   },
   {
@@ -4126,30 +3736,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0378",
-      "PROJ-OPERIT"
+      "MAP-0378"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.世界书信息检索",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0379",
+    "canonicalCapabilityId": "builtin/tool/general_map_0379",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0379",
-      "PROJ-AMITIA"
+      "MAP-0379"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.消息回复生成",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0380",
+    "canonicalCapabilityId": "builtin/tool/general_map_0380",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0380",
-      "PROJ-AMITIA"
+      "MAP-0380"
     ]
   },
   {
@@ -4159,19 +3766,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0381",
-      "PROJ-OPERIT"
+      "MAP-0381"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情绪恢复机制",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0382",
+    "canonicalCapabilityId": "builtin/tool/general_map_0382",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0382",
-      "PROJ-AMITIA"
+      "MAP-0382"
     ]
   },
   {
@@ -4181,8 +3786,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0383",
-      "PROJ-OPERIT"
+      "MAP-0383"
     ]
   },
   {
@@ -4192,8 +3796,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0384",
-      "PROJ-OPERIT"
+      "MAP-0384"
     ]
   },
   {
@@ -4203,8 +3806,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0385",
-      "PROJ-OPENMINIS"
+      "MAP-0385"
     ]
   },
   {
@@ -4214,8 +3816,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0386",
-      "PROJ-OPENMINIS"
+      "MAP-0386"
     ]
   },
   {
@@ -4225,8 +3826,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0387",
-      "PROJ-OPERIT"
+      "MAP-0387"
     ]
   },
   {
@@ -4236,41 +3836,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0388",
-      "PROJ-OPENMINIS"
+      "MAP-0388"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息统一分发",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0389",
+    "canonicalCapabilityId": "builtin/tool/general_map_0389",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0389",
-      "PROJ-AMITIA"
+      "MAP-0389"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端会话客户端",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0390",
+    "canonicalCapabilityId": "builtin/tool/general_map_0390",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0390",
-      "PROJ-AMITIA"
+      "MAP-0390"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息串行写控制",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0391",
+    "canonicalCapabilityId": "builtin/tool/general_map_0391",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0391",
-      "PROJ-AMITIA"
+      "MAP-0391"
     ]
   },
   {
@@ -4280,19 +3876,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0392",
-      "PROJ-OPERIT"
+      "MAP-0392"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展协议定义",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0393",
+    "canonicalCapabilityId": "builtin/tool/general_map_0393",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0393",
-      "PROJ-AMITIA"
+      "MAP-0393"
     ]
   },
   {
@@ -4302,8 +3896,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0394",
-      "PROJ-OPERIT"
+      "MAP-0394"
     ]
   },
   {
@@ -4313,19 +3906,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0395",
-      "PROJ-OPERIT"
+      "MAP-0395"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.工作流值传递",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0396",
+    "canonicalCapabilityId": "builtin/tool/general_map_0396",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0396",
-      "PROJ-AMITIA"
+      "MAP-0396"
     ]
   },
   {
@@ -4335,19 +3926,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0397",
-      "PROJ-OPERIT"
+      "MAP-0397"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展安装器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0398",
+    "canonicalCapabilityId": "builtin/tool/general_map_0398",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0398",
-      "PROJ-AMITIA"
+      "MAP-0398"
     ]
   },
   {
@@ -4357,41 +3946,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0399",
-      "PROJ-OPERIT"
+      "MAP-0399"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.通道投放追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0400",
+    "canonicalCapabilityId": "builtin/tool/general_map_0400",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0400",
-      "PROJ-AMITIA"
+      "MAP-0400"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.通道提交处理器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0401",
+    "canonicalCapabilityId": "builtin/tool/general_map_0401",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0401",
-      "PROJ-AMITIA"
+      "MAP-0401"
     ]
   },
   {
     "aliasId": "CAP.AGENT.EXECUTE.PSYCHE状态追踪",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/agent/psychecn_map_0402",
+    "canonicalCapabilityId": "builtin/agent/psyche_map_0402",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0402",
-      "PROJ-AMITIA"
+      "MAP-0402"
     ]
   },
   {
@@ -4401,19 +3986,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0403",
-      "PROJ-OPERIT"
+      "MAP-0403"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.调度批处理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0404",
+    "canonicalCapabilityId": "builtin/tool/general_map_0404",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0404",
-      "PROJ-AMITIA"
+      "MAP-0404"
     ]
   },
   {
@@ -4423,30 +4006,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0405",
-      "PROJ-OPERIT"
+      "MAP-0405"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端主进程",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0406",
+    "canonicalCapabilityId": "builtin/tool/general_map_0406",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0406",
-      "PROJ-AMITIA"
+      "MAP-0406"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.技能前端列表",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0407",
+    "canonicalCapabilityId": "builtin/tool/general_map_0407",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0407",
-      "PROJ-AMITIA"
+      "MAP-0407"
     ]
   },
   {
@@ -4456,8 +4036,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0408",
-      "PROJ-OPERIT"
+      "MAP-0408"
     ]
   },
   {
@@ -4467,9 +4046,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0409",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS"
+      "MAP-0409"
     ]
   },
   {
@@ -4479,8 +4056,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0410",
-      "PROJ-OPERIT"
+      "MAP-0410"
     ]
   },
   {
@@ -4490,19 +4066,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0411",
-      "PROJ-OPENMINIS"
+      "MAP-0411"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.世界书分类标签",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0412",
+    "canonicalCapabilityId": "builtin/tool/general_map_0412",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0412",
-      "PROJ-AMITIA"
+      "MAP-0412"
     ]
   },
   {
@@ -4512,8 +4086,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0413",
-      "PROJ-OPERIT"
+      "MAP-0413"
     ]
   },
   {
@@ -4523,19 +4096,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0414",
-      "PROJ-OPENMINIS"
+      "MAP-0414"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.主动消息反馈收集",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0415",
+    "canonicalCapabilityId": "builtin/tool/general_map_0415",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0415",
-      "PROJ-AMITIA"
+      "MAP-0415"
     ]
   },
   {
@@ -4545,8 +4116,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0416",
-      "PROJ-OPERIT"
+      "MAP-0416"
     ]
   },
   {
@@ -4556,8 +4126,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0417",
-      "PROJ-OPERIT"
+      "MAP-0417"
     ]
   },
   {
@@ -4567,10 +4136,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0418",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0418"
     ]
   },
   {
@@ -4580,19 +4146,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0419",
-      "PROJ-OPENMINIS"
+      "MAP-0419"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.提示模板引擎",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0420",
+    "canonicalCapabilityId": "builtin/tool/general_map_0420",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0420",
-      "PROJ-AMITIA"
+      "MAP-0420"
     ]
   },
   {
@@ -4602,19 +4166,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0421",
-      "PROJ-OPENMINIS"
+      "MAP-0421"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.创意工坊前端",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0422",
+    "canonicalCapabilityId": "builtin/tool/general_map_0422",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0422",
-      "PROJ-AMITIA"
+      "MAP-0422"
     ]
   },
   {
@@ -4624,8 +4186,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0423",
-      "PROJ-OPERIT"
+      "MAP-0423"
     ]
   },
   {
@@ -4635,19 +4196,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0424",
-      "PROJ-OPENMINIS"
+      "MAP-0424"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.数据迁移面板",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0425",
+    "canonicalCapabilityId": "builtin/tool/general_map_0425",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0425",
-      "PROJ-AMITIA"
+      "MAP-0425"
     ]
   },
   {
@@ -4657,19 +4216,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0426",
-      "PROJ-OPENMINIS"
+      "MAP-0426"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情感衰减模型",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0427",
+    "canonicalCapabilityId": "builtin/tool/general_map_0427",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0427",
-      "PROJ-AMITIA"
+      "MAP-0427"
     ]
   },
   {
@@ -4679,41 +4236,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0428",
-      "PROJ-OPERIT"
+      "MAP-0428"
     ]
   },
   {
     "aliasId": "CAP.FILE.READ.READ_FILE",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/file/read_file",
+    "canonicalCapabilityId": "external/file/read_read_file",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0429",
-      "PROJ-OPERIT"
+      "MAP-0429"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.TOOL SCHEMA校验",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/tool_schemacn",
+    "canonicalCapabilityId": "builtin/tool/tool_schema",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0430",
-      "PROJ-AMITIA"
+      "MAP-0430"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.世界书导入导出",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0431",
+    "canonicalCapabilityId": "builtin/tool/general_map_0431",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0431",
-      "PROJ-AMITIA"
+      "MAP-0431"
     ]
   },
   {
@@ -4723,30 +4276,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0432",
-      "PROJ-OPERIT"
+      "MAP-0432"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.安全配置",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0433",
+    "canonicalCapabilityId": "builtin/tool/general_map_0433",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0433",
-      "PROJ-AMITIA"
+      "MAP-0433"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.TOKEN安全存储",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/tokencn_map_0434",
+    "canonicalCapabilityId": "builtin/tool/token_map_0434",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0434",
-      "PROJ-AMITIA"
+      "MAP-0434"
     ]
   },
   {
@@ -4756,8 +4306,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0435",
-      "PROJ-OPENMINIS"
+      "MAP-0435"
     ]
   },
   {
@@ -4767,41 +4316,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0436",
-      "PROJ-OPERIT"
+      "MAP-0436"
     ]
   },
   {
     "aliasId": "CAP.FILE.READ.READ_FILE_BINARY",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/file/read_file_binary",
+    "canonicalCapabilityId": "external/file/read_read_file_binary",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0437",
-      "PROJ-OPERIT"
+      "MAP-0437"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.向量配置文件",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0438",
+    "canonicalCapabilityId": "builtin/tool/general_map_0438",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0438",
-      "PROJ-AMITIA"
+      "MAP-0438"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.运行时调试",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0439",
+    "canonicalCapabilityId": "builtin/tool/general_map_0439",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0439",
-      "PROJ-AMITIA"
+      "MAP-0439"
     ]
   },
   {
@@ -4811,41 +4356,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0440",
-      "PROJ-OPENMINIS"
+      "MAP-0440"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.延迟回复服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0441",
+    "canonicalCapabilityId": "builtin/tool/general_map_0441",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0441",
-      "PROJ-AMITIA"
+      "MAP-0441"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.上下文加载器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0442",
+    "canonicalCapabilityId": "builtin/tool/general_map_0442",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0442",
-      "PROJ-AMITIA"
+      "MAP-0442"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆生成工作流",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0443",
+    "canonicalCapabilityId": "builtin/tool/general_map_0443",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0443",
-      "PROJ-AMITIA"
+      "MAP-0443"
     ]
   },
   {
@@ -4855,8 +4396,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0444",
-      "PROJ-OPERIT"
+      "MAP-0444"
     ]
   },
   {
@@ -4866,8 +4406,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0445",
-      "PROJ-OPENMINIS"
+      "MAP-0445"
     ]
   },
   {
@@ -4877,19 +4416,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0446",
-      "PROJ-OPENMINIS"
+      "MAP-0446"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.对话历史管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0447",
+    "canonicalCapabilityId": "builtin/tool/general_map_0447",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0447",
-      "PROJ-AMITIA"
+      "MAP-0447"
     ]
   },
   {
@@ -4899,8 +4436,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0448",
-      "PROJ-OPENMINIS"
+      "MAP-0448"
     ]
   },
   {
@@ -4910,52 +4446,47 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0449",
-      "PROJ-OPERIT"
+      "MAP-0449"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.多角色切换",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0450",
+    "canonicalCapabilityId": "builtin/tool/general_map_0450",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0450",
-      "PROJ-AMITIA"
+      "MAP-0450"
     ]
   },
   {
     "aliasId": "CAP.SYSTEM.START.START_APP",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/system/start_app",
+    "canonicalCapabilityId": "external/system/start_start_app",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0451",
-      "PROJ-OPERIT"
+      "MAP-0451"
     ]
   },
   {
     "aliasId": "CAP.MEMORY.READ.READ HEALTH DATA (HEALTHKIT)",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/memory/read_health_data",
+    "canonicalCapabilityId": "external/memory/read_read_health_data",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0452",
-      "PROJ-OPENMINIS"
+      "MAP-0452"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.任务行为规划构建",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0453",
+    "canonicalCapabilityId": "builtin/tool/general_map_0453",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0453",
-      "PROJ-AMITIA"
+      "MAP-0453"
     ]
   },
   {
@@ -4965,8 +4496,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0454",
-      "PROJ-OPERIT"
+      "MAP-0454"
     ]
   },
   {
@@ -4976,8 +4506,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0455",
-      "PROJ-OPERIT"
+      "MAP-0455"
     ]
   },
   {
@@ -4987,19 +4516,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0456",
-      "PROJ-OPENMINIS"
+      "MAP-0456"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆时间线视图",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0457",
+    "canonicalCapabilityId": "builtin/tool/general_map_0457",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0457",
-      "PROJ-AMITIA"
+      "MAP-0457"
     ]
   },
   {
@@ -5009,52 +4536,47 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0458",
-      "PROJ-OPENMINIS"
+      "MAP-0458"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.TOKEN预算管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/tokencn_map_0459",
+    "canonicalCapabilityId": "builtin/tool/token_map_0459",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0459",
-      "PROJ-AMITIA"
+      "MAP-0459"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.记忆生命周期管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0460",
+    "canonicalCapabilityId": "builtin/tool/general_map_0460",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0460",
-      "PROJ-AMITIA"
+      "MAP-0460"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.信念快照",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0461",
+    "canonicalCapabilityId": "builtin/tool/general_map_0461",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0461",
-      "PROJ-AMITIA"
+      "MAP-0461"
     ]
   },
   {
     "aliasId": "CAP.PROCESS.EXECUTE.EXECUTE_IN_TERMINAL_SESSION",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "external/process/in_terminal_session",
+    "canonicalCapabilityId": "external/process/execute_in_terminal_session",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0462",
-      "PROJ-OPERIT"
+      "MAP-0462"
     ]
   },
   {
@@ -5064,30 +4586,27 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0463",
-      "PROJ-OPENMINIS"
+      "MAP-0463"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.VISION视觉理解",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/visioncn",
+    "canonicalCapabilityId": "builtin/tool/vision",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0464",
-      "PROJ-AMITIA"
+      "MAP-0464"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.情感融合消息生成",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0465",
+    "canonicalCapabilityId": "builtin/tool/general_map_0465",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0465",
-      "PROJ-AMITIA"
+      "MAP-0465"
     ]
   },
   {
@@ -5097,8 +4616,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0466",
-      "PROJ-OPERIT"
+      "MAP-0466"
     ]
   },
   {
@@ -5108,8 +4626,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0467",
-      "PROJ-OPERIT"
+      "MAP-0467"
     ]
   },
   {
@@ -5119,19 +4636,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0468",
-      "PROJ-OPERIT"
+      "MAP-0468"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.技能列表管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0469",
+    "canonicalCapabilityId": "builtin/tool/general_map_0469",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0469",
-      "PROJ-AMITIA"
+      "MAP-0469"
     ]
   },
   {
@@ -5141,8 +4656,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0470",
-      "PROJ-OPENMINIS"
+      "MAP-0470"
     ]
   },
   {
@@ -5152,41 +4666,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0471",
-      "PROJ-OPERIT"
+      "MAP-0471"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.声纹入口",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0472",
+    "canonicalCapabilityId": "builtin/tool/general_map_0472",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0472",
-      "PROJ-AMITIA"
+      "MAP-0472"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.提示净化处理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0473",
+    "canonicalCapabilityId": "builtin/tool/general_map_0473",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0473",
-      "PROJ-AMITIA"
+      "MAP-0473"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型配置总览",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0474",
+    "canonicalCapabilityId": "builtin/tool/general_map_0474",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0474",
-      "PROJ-AMITIA"
+      "MAP-0474"
     ]
   },
   {
@@ -5196,52 +4706,47 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0475",
-      "PROJ-OPERIT"
+      "MAP-0475"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端配置存储",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0476",
+    "canonicalCapabilityId": "builtin/tool/general_map_0476",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0476",
-      "PROJ-AMITIA"
+      "MAP-0476"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.提示编译器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0477",
+    "canonicalCapabilityId": "builtin/tool/general_map_0477",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0477",
-      "PROJ-AMITIA"
+      "MAP-0477"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.活跃消息服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0478",
+    "canonicalCapabilityId": "builtin/tool/general_map_0478",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0478",
-      "PROJ-AMITIA"
+      "MAP-0478"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.备份服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0479",
+    "canonicalCapabilityId": "builtin/tool/general_map_0479",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0479",
-      "PROJ-AMITIA"
+      "MAP-0479"
     ]
   },
   {
@@ -5251,19 +4756,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0480",
-      "PROJ-OPERIT"
+      "MAP-0480"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.图片生成消息",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0481",
+    "canonicalCapabilityId": "builtin/tool/general_map_0481",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0481",
-      "PROJ-AMITIA"
+      "MAP-0481"
     ]
   },
   {
@@ -5273,8 +4776,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0482",
-      "PROJ-OPERIT"
+      "MAP-0482"
     ]
   },
   {
@@ -5284,21 +4786,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0483",
-      "PROJ-OPERIT",
-      "PROJ-OPENMINIS",
-      "PROJ-AMITIA"
+      "MAP-0483"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.技能仓库",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0484",
+    "canonicalCapabilityId": "builtin/tool/general_map_0484",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0484",
-      "PROJ-AMITIA"
+      "MAP-0484"
     ]
   },
   {
@@ -5308,96 +4806,87 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0485",
-      "PROJ-OPENMINIS"
+      "MAP-0485"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型场景分配",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0486",
+    "canonicalCapabilityId": "builtin/tool/general_map_0486",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0486",
-      "PROJ-AMITIA"
+      "MAP-0486"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.微信通道",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0487",
+    "canonicalCapabilityId": "builtin/tool/general_map_0487",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0487",
-      "PROJ-AMITIA"
+      "MAP-0487"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型健康检查",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0488",
+    "canonicalCapabilityId": "builtin/tool/general_map_0488",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0488",
-      "PROJ-AMITIA"
+      "MAP-0488"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.桌面端身份标识",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0489",
+    "canonicalCapabilityId": "builtin/tool/general_map_0489",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0489",
-      "PROJ-AMITIA"
+      "MAP-0489"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.随机消息爆发",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0490",
+    "canonicalCapabilityId": "builtin/tool/general_map_0490",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0490",
-      "PROJ-AMITIA"
+      "MAP-0490"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.日志上下文",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0491",
+    "canonicalCapabilityId": "builtin/tool/general_map_0491",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0491",
-      "PROJ-AMITIA"
+      "MAP-0491"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.技能运行时",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0492",
+    "canonicalCapabilityId": "builtin/tool/general_map_0492",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0492",
-      "PROJ-AMITIA"
+      "MAP-0492"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.扩展详情视图",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0493",
+    "canonicalCapabilityId": "builtin/tool/general_map_0493",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0493",
-      "PROJ-AMITIA"
+      "MAP-0493"
     ]
   },
   {
@@ -5407,19 +4896,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0494",
-      "PROJ-OPENMINIS"
+      "MAP-0494"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色导入导出",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0495",
+    "canonicalCapabilityId": "builtin/tool/general_map_0495",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0495",
-      "PROJ-AMITIA"
+      "MAP-0495"
     ]
   },
   {
@@ -5429,8 +4916,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0496",
-      "PROJ-OPERIT"
+      "MAP-0496"
     ]
   },
   {
@@ -5440,8 +4926,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0497",
-      "PROJ-OPERIT"
+      "MAP-0497"
     ]
   },
   {
@@ -5451,41 +4936,37 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0498",
-      "PROJ-OPERIT"
+      "MAP-0498"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.对话编排引擎",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0499",
+    "canonicalCapabilityId": "builtin/tool/general_map_0499",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0499",
-      "PROJ-AMITIA"
+      "MAP-0499"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.模型配置服务",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0500",
+    "canonicalCapabilityId": "builtin/tool/general_map_0500",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0500",
-      "PROJ-AMITIA"
+      "MAP-0500"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.创意工坊生成器",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0501",
+    "canonicalCapabilityId": "builtin/tool/general_map_0501",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0501",
-      "PROJ-AMITIA"
+      "MAP-0501"
     ]
   },
   {
@@ -5495,19 +4976,17 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0502",
-      "PROJ-OPERIT"
+      "MAP-0502"
     ]
   },
   {
     "aliasId": "CAP.TOOL.EXECUTE.角色配对关系管理",
     "aliasType": "HISTORICAL_B9_CAPABILITY",
-    "canonicalCapabilityId": "builtin/tool/cn_map_0503",
+    "canonicalCapabilityId": "builtin/tool/general_map_0503",
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0503",
-      "PROJ-AMITIA"
+      "MAP-0503"
     ]
   },
   {
@@ -5517,8 +4996,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0504",
-      "PROJ-OPERIT"
+      "MAP-0504"
     ]
   },
   {
@@ -5528,8 +5006,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0505",
-      "PROJ-OPERIT"
+      "MAP-0505"
     ]
   },
   {
@@ -5539,8 +5016,7 @@
     "runtimeResolvable": false,
     "deprecated": true,
     "sourceReferences": [
-      "MAP-0506",
-      "PROJ-OPERIT"
+      "MAP-0506"
     ]
   }
 ]
