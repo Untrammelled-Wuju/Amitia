@@ -429,7 +429,9 @@ func bindEnvironment(v *viper.Viper) error {
 			if !ok || val == "" {
 				continue
 			}
-			_ = v.BindEnv(entry.key, env)
+			if err := v.BindEnv(entry.key, env); err != nil {
+				return fmt.Errorf("bindEnv %s -> %s: %w", env, entry.key, err)
+			}
 		}
 	}
 

@@ -4,8 +4,6 @@ package processing
 
 import (
 	"archive/zip"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,12 +24,13 @@ import (
 
 type Handler struct {
 	service        Service
+	repo           Repository
 	safeResponder  *security.SafeArtifactResponder
 	ownershipGuard security.OwnershipGuard
 }
 
-func NewHandler(svc Service, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) *Handler {
-	return &Handler{service: svc, safeResponder: responder, ownershipGuard: guard}
+func NewHandler(svc Service, repo Repository, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) *Handler {
+	return &Handler{service: svc, repo: repo, safeResponder: responder, ownershipGuard: guard}
 }
 
 type createPackagePayload struct {
@@ -380,12 +379,18 @@ func (h *Handler) ProcessedFrameImage(c *gin.Context) {
 		return
 	}
 
-	fullPath, mimeType, err := h.service.GetProcessedFrameImage(processingTaskID, actionKey, frameIndex)
+	fullPath, _, err := h.service.GetProcessedFrameImage(processingTaskID, actionKey, frameIndex)
 	if err != nil {
 		writeProcessingError(c, err)
 		return
 	}
-	h.safeResponder.ServeArtifact(c, actor, buildProcessingFileRef(fullPath, mimeType, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), actor.UserID))
+	ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, frameIndex)
+	if err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+	ref.StorageKey = resolveStorageKey(fullPath)
+	h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
 func (h *Handler) SourceFrameImage(c *gin.Context) {
@@ -412,7 +417,14 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	h.safeResponder.ServeArtifact(c, actor, buildProcessingFileRef(fullPath, mimeType, processingTaskID+":"+actionKey, actionKey+":"+strconv.Itoa(frameIndex), actor.UserID))
+	ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, frameIndex)
+	if err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+	ref.StorageKey = resolveStorageKey(fullPath)
+	ref.MIME = mimeType
+	h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
 func (h *Handler) ActionPreview(c *gin.Context) {
@@ -434,7 +446,14 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	h.safeResponder.ServeArtifact(c, actor, buildProcessingFileRef(fullPath, mimeType, processingTaskID+":"+actionKey, "preview", actor.UserID))
+	ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, 0)
+	if err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+	ref.StorageKey = resolveStorageKey(fullPath)
+	ref.MIME = mimeType
+	h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
 func writeProcessingError(c *gin.Context, err error) {
@@ -598,31 +617,9 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 	}
 }
 
-func buildProcessingFileRef(fullPath, mimeType, artifactID, entityID, ownerUserID string) security.ArtifactReference {
-	storageKey := ""
+func resolveStorageKey(fullPath string) string {
 	if idx := strings.Index(fullPath, "desktop-pets/"); idx != -1 {
-		storageKey = fullPath[idx+len("desktop-pets/"):]
+		return fullPath[idx+len("desktop-pets/"):]
 	}
-	var hash string
-	var size int64
-	if f, err := os.Open(fullPath); err == nil {
-		info, _ := f.Stat()
-		if info != nil {
-			size = info.Size()
-		}
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err == nil {
-			hash = hex.EncodeToString(h.Sum(nil))
-		}
-		f.Close()
-	}
-	return security.ArtifactReference{
-		ArtifactID:  artifactID,
-		OwnerUserID: ownerUserID,
-		RootKind:    security.RootProcessingRevisions,
-		StorageKey:  storageKey,
-		ContentHash: hash,
-		ByteSize:    size,
-		MIME:        mimeType,
-	}
+	return fullPath
 }

@@ -125,8 +125,9 @@ type AppServices struct {
 	ReleaseRecoveryWorker *release.ReleaseRecoveryWorker
 	ReleaseBuildWorker    *releaseworker.ReleaseBuildWorker
 	ReleaseEventPublisher *release.ReleaseEventPublisher
-	DesktopPetRuntime     *runtime.Service
-	EditingService        editing.Service
+	DesktopPetRuntime          *runtime.Service
+	DesktopPetRuntimeV2        *runtimev2.RuntimeFacade
+	EditingService             editing.Service
 	RegenerationWorker    *editing.RegenerationWorker
 	BridgeRecoveryWorker  *revisioncommit.RecoveryWorker
 	BehaviorService       *behavior.BehaviorService
@@ -158,6 +159,7 @@ type AppServices struct {
 	DesktopInstanceStore  *security.DesktopInstanceStore
 	DeviceRepository      *device.Repository
 	RuntimeOrchestrator   RuntimeOrchestrator
+	RuntimeDomainEventConsumer *runtimev2.OutboxConsumer
 }
 
 type RuntimeOrchestrator interface {
@@ -589,13 +591,25 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	desktopPetRuntime := runtime.NewService(runtimeConfig, runtimeCmdStore, runtimeStateStore, runtimeSnapshotBuilder, runtimeSinkHolder)
 
-	runtimeStateService := runtimev2.NewActualStateService(ctx.DB)
+	runtimeV2Facade := runtimev2.NewRuntimeFacade(ctx.DB, &runtimev2.FacadeConfig{
+		Enabled:            runtimeConfig.Enabled,
+		Path:               runtimeConfig.Path,
+		LoopbackOnly:       runtimeConfig.LoopbackOnly,
+		HeartbeatInterval:  time.Duration(runtimeConfig.HeartbeatIntervalMs) * time.Millisecond,
+		HeartbeatTimeout:   time.Duration(runtimeConfig.HeartbeatTimeoutMs) * time.Millisecond,
+		MaxMessageBytes:    int64(runtimeConfig.MaxMessageBytes),
+		CommandTimeoutSec:  int64(runtimeConfig.CommandTimeoutSec),
+		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
+	})
+
 	runtimeOutboxSink := runtime.NewOutboxRuntimeEventSink(
-		runtime.NewV2ActualStateEventOutbox(runtimeStateService.AppendDomainEvent),
+		runtime.NewV2ActualStateEventOutbox(runtimeV2Facade.StateService().AppendDomainEvent),
 	)
 	runtimeSinkHolder.Set(runtimeOutboxSink)
 
-	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir, installation.WithRuntimeNotifier(desktopPetRuntime.Notifier()))
+	v2Notifier := runtimev2.NewV2RuntimeNotifier(runtimeV2Facade.StateService(), runtimeV2Facade.Events())
+
+	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir, installation.WithRuntimeNotifier(v2Notifier))
 
 	editingRepo := editing.NewRepository(ctx.DB)
 	editingAssetStore := editing.NewAssetStore(processingDataDir, editingRepo)
@@ -669,6 +683,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to assemble behavior engine: ", assembleErr)
 	} else {
 		behaviorSvc = behaviorAssembled.Service
+	}
+
+	var behaviorRuntimeSink *BehaviorRuntimeEventSink
+	var runtimeDomainEventConsumer *runtimev2.OutboxConsumer
+	if behaviorAssembled != nil && behaviorAssembled.Engine != nil {
+		behaviorRuntimeSink = NewBehaviorRuntimeEventSink(installationRepo, behaviorAssembled.Engine)
+		runtimeDomainEventConsumer = runtimev2.NewOutboxConsumer(ctx.DB, func(eventCtx context.Context, event runtimev2.DomainEventOutbox) error {
+			domainEvent, err := runtime.DecodeV2OutboxEvent(event)
+			if err != nil {
+				return err
+			}
+			return behaviorRuntimeSink.OnRuntimeEvent(eventCtx, domainEvent)
+		})
 	}
 
 	safeModeCtrl := readiness.NewSafeModeController()
@@ -796,6 +823,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		ReleaseRecoveryWorker: releaseRecoveryWorker,
 		ReleaseEventPublisher: releaseEventPublisher,
 		DesktopPetRuntime:     desktopPetRuntime,
+		DesktopPetRuntimeV2:   runtimeV2Facade,
 		EditingService:        editingSvc,
 		RegenerationWorker:    regenerationWorker,
 		BridgeRecoveryWorker:  bridgeRecoveryWorker,
@@ -827,6 +855,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		MCPDependencies:       dependencyService,
 		DesktopInstanceStore:  desktopInstanceStore,
 		DeviceRepository:      deviceRepo,
+		RuntimeDomainEventConsumer: runtimeDomainEventConsumer,
 	}, nil
 }
 

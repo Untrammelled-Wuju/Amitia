@@ -364,6 +364,14 @@ func (r *SQLiteRepository) GetImportSnapshot(stagingID string) (*release.ImportP
 	return &snapshot, nil
 }
 
+func (r *SQLiteRepository) GetImportSnapshotByReleaseID(releaseID string) (*release.ImportPackageSnapshot, error) {
+	var snapshot release.ImportPackageSnapshot
+	if err := r.db.First(&snapshot, "release_id = ?", releaseID).Error; err != nil {
+		return nil, err
+	}
+	return &snapshot, nil
+}
+
 func (r *SQLiteRepository) UpdateImportSnapshot(snapshot *release.ImportPackageSnapshot) error {
 	return r.db.Save(snapshot).Error
 }

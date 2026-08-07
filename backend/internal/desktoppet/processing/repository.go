@@ -4,9 +4,13 @@ package processing
 
 import (
 	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet"
+	desktoppet_security "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -81,6 +85,8 @@ type Repository interface {
 	GetRevision(revisionID string) (*ProcessingRevision, error)
 	ListRevisionsByAction(processingActionID string) ([]ProcessingRevision, error)
 	ListArtifactsByRevision(revisionID string) ([]ProcessingArtifactRecord, error)
+
+	GetActiveFrameArtifact(processingTaskID, actionKey string, frameIndex int) (*desktoppet_security.ArtifactReference, error)
 }
 
 type repository struct {
@@ -668,4 +674,46 @@ func (r *repository) ListArtifactsByRevision(revisionID string) ([]ProcessingArt
 		artifacts = []ProcessingArtifactRecord{}
 	}
 	return artifacts, err
+}
+
+func (r *repository) GetActiveFrameArtifact(processingTaskID, actionKey string, frameIndex int) (*desktoppet_security.ArtifactReference, error) {
+	var task ProcessingTask
+	if err := r.db.Where("id = ?", processingTaskID).First(&task).Error; err != nil {
+		return nil, fmt.Errorf("processing task not found: %w", err)
+	}
+	var action ProcessingAction
+	if err := r.db.Where("processing_task_id = ? AND action_key = ?", processingTaskID, actionKey).First(&action).Error; err != nil {
+		return nil, fmt.Errorf("action not found: %w", err)
+	}
+	if action.ActiveRevisionID == "" {
+		return nil, fmt.Errorf("no active revision for action %s", actionKey)
+	}
+	var frame ProcessedFrame
+	if err := r.db.Where("processing_action_id = ? AND frame_index = ?", action.ID, frameIndex).First(&frame).Error; err != nil {
+		return nil, fmt.Errorf("frame not found: %w", err)
+	}
+	if strings.TrimSpace(frame.ContentHash) == "" {
+		return nil, fmt.Errorf("frame content hash empty - fail closed")
+	}
+	mimeType := "image/png"
+	if ext := strings.ToLower(filepath.Ext(frame.ProcessedPath)); ext != "" {
+		switch ext {
+		case ".jpg", ".jpeg":
+			mimeType = "image/jpeg"
+		case ".webp":
+			mimeType = "image/webp"
+		case ".gif":
+			mimeType = "image/gif"
+		}
+	}
+	artifactID := processingTaskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex)
+	return &desktoppet_security.ArtifactReference{
+		ArtifactID:  artifactID,
+		OwnerUserID: task.UserID,
+		RootKind:    desktoppet_security.RootProcessingRevisions,
+		StorageKey:  frame.ProcessedPath,
+		ContentHash: frame.ContentHash,
+		ByteSize:    0,
+		MIME:        mimeType,
+	}, nil
 }

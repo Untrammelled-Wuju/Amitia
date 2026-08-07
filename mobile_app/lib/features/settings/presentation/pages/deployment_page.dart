@@ -7,7 +7,9 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/backend_uri_builder.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 
 class DeploymentPage extends ConsumerStatefulWidget {
   const DeploymentPage({super.key});
@@ -18,14 +20,13 @@ class DeploymentPage extends ConsumerStatefulWidget {
 
 class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   String _currentMode = '本地';
-  String _address = 'localhost:18899';
-  int _testState = 0;
   bool _loading = true;
+  bool _testState = false;
 
   static const _modes = <(String, IconData, String)>[
     ('本地', Icons.dns_outlined, '完整功能本地运行，数据不离开设备'),
-    ('远程', Icons.cloud_outlined, '连接远程服务器，适合低性能设备'),
-    ('混合', Icons.sync_alt, '核心本地运行，AI 推理使用远程服务'),
+    ('远程', Icons.cloud_outlined, '暂不可用'),
+    ('混合', Icons.sync_alt, '暂不可用'),
   ];
 
   @override
@@ -35,23 +36,15 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   }
 
   Future<void> _loadConfig() async {
-    final sys = ref.read(systemServiceProvider);
-    final health = await sys.health();
-    if (health != null && mounted) {
-      final mode = health['mode'] as String?;
-      final addr = health['address'] as String?;
-      setState(() {
-        _currentMode = mode ?? '本地';
-        _address = addr ?? 'localhost:18899';
-        _loading = false;
-      });
-    } else if (mounted) {
+    await Future.delayed(Duration.zero);
+    if (mounted) {
       setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final connectionAsync = ref.watch(backendConnectionProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '部署模式', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: _loading
@@ -68,34 +61,30 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                         icon: m.$2,
                         description: m.$3,
                         isSelected: m.$1 == _currentMode,
-                        onTap: () => _confirmSwitch(m.$1),
+                        onTap: m.$1 == '本地' ? () => _confirmSwitch(m.$1) : null,
                       ),
                     )),
                 const SizedBox(height: AppSpacing.sm),
                 _SectionLabel(text: '当前配置'),
                 const SizedBox(height: AppSpacing.sm),
-                _buildConfigCard(),
+                _buildConfigCard(connectionAsync),
                 const SizedBox(height: AppSpacing.sectionGap),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                   child: AmitiaButton(
-                    label: _testState == 1 ? '测试中...' : '测试连接',
+                    label: _testState ? '检查中...' : '检查运行时状态',
                     icon: Icons.wifi_protected_setup,
                     isFullWidth: true,
-                    onPressed: _testState == 1 ? null : _testConnection,
+                    onPressed: _testState ? null : _checkRuntimeStatus,
                   ),
                 ),
-                if (_testState == 2) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Center(child: _buildTestResult()),
-                ],
                 const SizedBox(height: AppSpacing.xl),
               ],
             ),
     );
   }
 
-  Widget _buildConfigCard() {
+  Widget _buildConfigCard(AsyncValue<BackendConnectionAvailability> connectionAsync) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -107,21 +96,27 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       child: Column(
         children: [
           _InfoRow(label: '当前模式', value: _currentMode),
-          _InfoRow(label: '服务地址', value: _address),
-          _InfoRow(label: '运行状态', value: '已连接'),
+          connectionAsync.when(
+            data: (avail) {
+              if (avail is BackendConnectionAvailable) {
+                final uri = BackendUriBuilder().httpBase(avail.config);
+                return _InfoRow(label: '后端地址', value: uri.toString());
+              }
+              return const _InfoRow(label: '后端地址', value: '运行环境未就绪');
+            },
+            loading: () => const _InfoRow(label: '后端地址', value: '检查中...'),
+            error: (_, __) => const _InfoRow(label: '后端地址', value: '运行环境未就绪'),
+          ),
+          connectionAsync.when(
+            data: (avail) {
+              final ready = avail is BackendConnectionAvailable;
+              return _InfoRow(label: '运行状态', value: ready ? '后端就绪' : '运行环境未就绪');
+            },
+            loading: () => const _InfoRow(label: '运行状态', value: '检查中...'),
+            error: (_, __) => const _InfoRow(label: '运行状态', value: '运行环境未就绪'),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildTestResult() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.check_circle, size: 16, color: context.success),
-        const SizedBox(width: 6),
-        Text('连接成功 · 延迟 12ms', style: AppTypography.caption(context).copyWith(color: context.success)),
-      ],
     );
   }
 
@@ -140,8 +135,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
               Navigator.pop(ctx);
               setState(() {
                 _currentMode = newMode;
-                _address = newMode == '本地' ? 'localhost:18899' : (newMode == '远程' ? 'remote.amitia.top:18899' : 'hybrid.amitia.top:18899');
-                _testState = 0;
+                _testState = false;
               });
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('已切换为${newMode}模式'), duration: const Duration(seconds: 1)),
@@ -154,11 +148,11 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     );
   }
 
-  Future<void> _testConnection() async {
-    setState(() => _testState = 1);
-    final sys = ref.read(systemServiceProvider);
-    await sys.health();
-    if (mounted) setState(() => _testState = 2);
+  Future<void> _checkRuntimeStatus() async {
+    setState(() => _testState = true);
+    await ref.read(backendConnectionProvider.future);
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (mounted) setState(() => _testState = false);
   }
 }
 
@@ -167,7 +161,7 @@ class _ModeCard extends StatelessWidget {
   final IconData icon;
   final String description;
   final bool isSelected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _ModeCard({
     required this.mode,

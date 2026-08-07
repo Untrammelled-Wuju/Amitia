@@ -93,11 +93,19 @@ const (
 	BuildOpStageDatabaseCommitted = "database_committed"
 )
 
+type PublishJournalOperationKind string
+
+const (
+	JournalOperationBuild  PublishJournalOperationKind = "build"
+	JournalOperationImport PublishJournalOperationKind = "import"
+)
+
 type ReleasePublishJournal struct {
 	ID              string `gorm:"column:id;primaryKey;type:text" json:"id"`
 	OperationID     string `gorm:"column:operation_id;type:text" json:"operationId"`
 	ReleaseID       string `gorm:"column:release_id;type:text" json:"releaseId"`
 	PetID           string `gorm:"column:pet_id;type:text" json:"petId"`
+	OperationKind   string `gorm:"column:operation_kind;type:text;default:'build'" json:"operationKind"`
 	Stage           string `gorm:"column:stage;type:text;default:'snapshot_created'" json:"stage"`
 	ContentRootHash string `gorm:"column:content_root_hash;type:text" json:"contentRootHash"`
 	StagingPath     string `gorm:"column:staging_path;type:text" json:"stagingPath"`
@@ -117,6 +125,19 @@ const (
 	JournalStageDatabaseCommitted = "database_committed"
 	JournalStageCompleted         = "completed"
 	JournalStageFailed            = "failed"
+)
+
+const (
+	ImportJournalStageCreated             = "import_created"
+	ImportJournalStageValidated           = "import_validated"
+	ImportJournalStageWorkspaceBuilt      = "import_workspace_built"
+	ImportJournalStageDatabasePrepared    = "import_database_prepared"
+	ImportJournalStageFilesPublished      = "import_files_published"
+	ImportJournalStageDatabaseFinalized   = "import_database_finalized"
+	ImportJournalStageSnapshotCommitted   = "import_snapshot_committed"
+	ImportJournalStageCompleted           = "import_completed"
+	ImportJournalStageFailed              = "import_failed"
+	ImportJournalStageManualReview        = "import_manual_review"
 )
 
 type LegacyPackageMapping struct {
@@ -262,7 +283,7 @@ func (ReleaseBuildRequestInbox) TableName() string { return "desktop_pet_release
 
 type ImportPackageSnapshot struct {
 	ID                    string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	ImportStagingID       string `gorm:"column:import_staging_id;type:text" json:"importStagingId"`
+	ImportStagingID       string `gorm:"column:import_staging_id;type:text;uniqueIndex" json:"importStagingId"`
 	SourcePackageHash     string `gorm:"column:source_package_hash;type:text" json:"sourcePackageHash"`
 	SourceManifestHash    string `gorm:"column:source_manifest_hash;type:text" json:"sourceManifestHash"`
 	SourceSchemaVersion   int    `gorm:"column:source_schema_version;type:integer;default:0" json:"sourceSchemaVersion"`
@@ -275,11 +296,22 @@ type ImportPackageSnapshot struct {
 	PetID                 string `gorm:"column:pet_id;type:text" json:"petId"`
 	ReleaseID             string `gorm:"column:release_id;type:text" json:"releaseId"`
 	OperationID           string `gorm:"column:operation_id;type:text" json:"operationId"`
+	Status                string `gorm:"column:status;type:text;default:'preparing'" json:"status"`
+	LastError             string `gorm:"column:last_error;type:text" json:"lastError"`
 	CreatedAt             string `gorm:"column:created_at;type:text" json:"createdAt"`
 	UpdatedAt             string `gorm:"column:updated_at;type:text" json:"updatedAt"`
 }
 
 func (ImportPackageSnapshot) TableName() string { return "desktop_pet_import_package_snapshots" }
+
+const (
+	ImportSnapshotPreparing         = "preparing"
+	ImportSnapshotPublished         = "published"
+	ImportSnapshotCompleted         = "completed"
+	ImportSnapshotFailedRetryable   = "failed_retryable"
+	ImportSnapshotFailedTerminal    = "failed_terminal"
+	ImportSnapshotManualReview      = "manual_review"
+)
 
 type ReleaseFrameSnapshot struct {
 	FrameID         string

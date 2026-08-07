@@ -1,0 +1,544 @@
+{
+  "schemaVersion": 1,
+  "componentId": "runtime.guest-layout",
+  "version": "1",
+  "distribution": "ubuntu",
+  "release": "24.04.4",
+  "codename": "noble",
+  "platform": "linux",
+  "architecture": "arm64",
+  "runtimeKind": "proot",
+  "user": {
+    "name": "amitia",
+    "uid": 1000,
+    "gid": 1000,
+    "home": "/home/amitia"
+  },
+  "paths": {
+    "runtimeRoot": "/opt/amitia",
+    "configRoot": "/etc/amitia",
+    "dataRoot": "/var/lib/amitia",
+    "cacheRoot": "/var/cache/amitia",
+    "logRoot": "/var/log/amitia",
+    "runRoot": "/run/amitia",
+    "tempRoot": "/run/amitia/tmp",
+    "workspaceRoot": "/var/lib/amitia/workspaces"
+  },
+  "components": {
+    "backend": {
+      "binary": "/opt/amitia/backend/amitia-server"
+    },
+    "node": {
+      "binary": "/opt/amitia/node/bin/node",
+      "npmCli": "/opt/amitia/node/lib/node_modules/npm/bin/npm-cli.js",
+      "npxCli": "/opt/amitia/node/lib/node_modules/npm/bin/npx-cli.js"
+    },
+    "qdrant": {
+      "binary": "/opt/amitia/qdrant/bin/qdrant",
+      "config": "/etc/amitia/providers/qdrant/config.yaml",
+      "storage": "/var/lib/amitia/providers/qdrant/storage",
+      "snapshots": "/var/lib/amitia/providers/qdrant/snapshots",
+      "migration": "/var/lib/amitia/providers/qdrant/migration"
+    },
+    "pluginHost": {
+      "entry": "/opt/amitia/plugin-host/dist/index.js"
+    },
+    "taskHost": {
+      "entry": "/opt/amitia/task-host/dist/index.js"
+    }
+  },
+  "environment": {
+    "AMITIA_RUNTIME_ROOT": "/opt/amitia",
+    "AMITIA_CONFIG_ROOT": "/etc/amitia",
+    "AMITIA_DATA_ROOT": "/var/lib/amitia",
+    "AMITIA_CACHE_ROOT": "/var/cache/amitia",
+    "AMITIA_LOG_ROOT": "/var/log/amitia",
+    "AMITIA_RUN_ROOT": "/run/amitia",
+    "AMITIA_TEMP_ROOT": "/run/amitia/tmp",
+    "AMITIA_WORKSPACE_ROOT": "/var/lib/amitia/workspaces",
+    "AMITIA_HOME": "/home/amitia",
+    "AMITIA_NODE_HOME": "/var/lib/amitia/node/home",
+    "AMITIA_NODE_PREFIX": "/var/lib/amitia/node/prefix",
+    "AMITIA_NPM_CACHE": "/var/cache/amitia/node/npm",
+    "AMITIA_NODE_TMP": "/run/amitia/tmp/node",
+    "HOME": "/home/amitia",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "TZ": "Etc/UTC"
+  },
+  "resourceUriMapping": {
+    "amitia://runtime/": "/opt/amitia/",
+    "amitia://config/": "/etc/amitia/",
+    "amitia://data/": "/var/lib/amitia/",
+    "amitia://workspace/": "/var/lib/amitia/workspaces/"
+  },
+  "runtimePathsMapping": {
+    "Root": "/opt/amitia",
+    "ConfigDir": "/etc/amitia",
+    "DataDir": "/var/lib/amitia",
+    "CacheDir": "/var/cache/amitia",
+    "LogDir": "/var/log/amitia",
+    "TempDir": "/run/amitia/tmp",
+    "WorkspaceDir": "/var/lib/amitia/workspaces"
+  },
+  "mountContract": [
+    {
+      "id": "runtime",
+      "guestTarget": "/opt/amitia",
+      "persistence": "immutable",
+      "required": true,
+      "sourceClass": "runtime-package"
+    },
+    {
+      "id": "config",
+      "guestTarget": "/etc/amitia",
+      "persistence": "persistent-critical",
+      "required": true,
+      "sourceClass": "config"
+    },
+    {
+      "id": "data",
+      "guestTarget": "/var/lib/amitia",
+      "persistence": "persistent-critical",
+      "required": true,
+      "sourceClass": "data"
+    },
+    {
+      "id": "cache",
+      "guestTarget": "/var/cache/amitia",
+      "persistence": "rebuildable",
+      "required": true,
+      "sourceClass": "cache"
+    },
+    {
+      "id": "logs",
+      "guestTarget": "/var/log/amitia",
+      "persistence": "persistent-diagnostic",
+      "required": true,
+      "sourceClass": "logs"
+    },
+    {
+      "id": "run",
+      "guestTarget": "/run/amitia",
+      "persistence": "ephemeral",
+      "required": true,
+      "sourceClass": "run"
+    }
+  ],
+  "directories": [
+    {
+      "path": "/opt/amitia",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "runtime-root"
+    },
+    {
+      "path": "/opt/amitia/backend",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "backend"
+    },
+    {
+      "path": "/opt/amitia/node",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "node-runtime"
+    },
+    {
+      "path": "/opt/amitia/qdrant",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "qdrant-runtime"
+    },
+    {
+      "path": "/opt/amitia/plugin-host",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "plugin-host"
+    },
+    {
+      "path": "/opt/amitia/task-host",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "task-host"
+    },
+    {
+      "path": "/opt/amitia/scripts",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "runtime-scripts"
+    },
+    {
+      "path": "/opt/amitia/scripts/node",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "runtime-scripts"
+    },
+    {
+      "path": "/opt/amitia/scripts/runtime",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "runtime-scripts"
+    },
+    {
+      "path": "/opt/amitia/manifest",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "runtime-manifest"
+    },
+    {
+      "path": "/opt/amitia/licenses",
+      "ownerUid": 0,
+      "ownerGid": 0,
+      "mode": "0755",
+      "persistence": "immutable",
+      "purpose": "licenses"
+    },
+    {
+      "path": "/etc/amitia",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "config-root"
+    },
+    {
+      "path": "/etc/amitia/app",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "app-config"
+    },
+    {
+      "path": "/etc/amitia/runtime",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "runtime-config"
+    },
+    {
+      "path": "/etc/amitia/providers",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "provider-config"
+    },
+    {
+      "path": "/etc/amitia/providers/qdrant",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "provider-config"
+    },
+    {
+      "path": "/var/lib/amitia",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "data-root"
+    },
+    {
+      "path": "/var/lib/amitia/app",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "app-data"
+    },
+    {
+      "path": "/var/lib/amitia/databases",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "databases"
+    },
+    {
+      "path": "/var/lib/amitia/providers",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "provider-data"
+    },
+    {
+      "path": "/var/lib/amitia/providers/qdrant",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "provider-data"
+    },
+    {
+      "path": "/var/lib/amitia/providers/qdrant/storage",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "qdrant-storage"
+    },
+    {
+      "path": "/var/lib/amitia/providers/qdrant/snapshots",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "qdrant-snapshots"
+    },
+    {
+      "path": "/var/lib/amitia/providers/qdrant/migration",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "qdrant-migration"
+    },
+    {
+      "path": "/var/lib/amitia/node",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "node-data"
+    },
+    {
+      "path": "/var/lib/amitia/extensions",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "extensions"
+    },
+    {
+      "path": "/var/lib/amitia/tasks",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "tasks"
+    },
+    {
+      "path": "/var/lib/amitia/workspaces",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "workspaces"
+    },
+    {
+      "path": "/var/lib/amitia/state",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-critical",
+      "purpose": "state"
+    },
+    {
+      "path": "/var/cache/amitia",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "rebuildable",
+      "purpose": "cache-root"
+    },
+    {
+      "path": "/var/cache/amitia/node",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "rebuildable",
+      "purpose": "cache-root"
+    },
+    {
+      "path": "/var/cache/amitia/node/npm",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "rebuildable",
+      "purpose": "npm-cache"
+    },
+    {
+      "path": "/var/cache/amitia/extensions",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "rebuildable",
+      "purpose": "extension-cache"
+    },
+    {
+      "path": "/var/cache/amitia/runtime",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "rebuildable",
+      "purpose": "runtime-cache"
+    },
+    {
+      "path": "/var/log/amitia",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-diagnostic",
+      "purpose": "log-root"
+    },
+    {
+      "path": "/var/log/amitia/backend",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-diagnostic",
+      "purpose": "backend-log"
+    },
+    {
+      "path": "/var/log/amitia/providers",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-diagnostic",
+      "purpose": "provider-log"
+    },
+    {
+      "path": "/var/log/amitia/extensions",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "persistent-diagnostic",
+      "purpose": "extension-log"
+    },
+    {
+      "path": "/run/amitia",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0750",
+      "persistence": "ephemeral",
+      "purpose": "run-root"
+    },
+    {
+      "path": "/run/amitia/tmp",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0700",
+      "persistence": "ephemeral",
+      "purpose": "temp"
+    },
+    {
+      "path": "/run/amitia/locks",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0700",
+      "persistence": "ephemeral",
+      "purpose": "locks"
+    },
+    {
+      "path": "/run/amitia/sockets",
+      "ownerUid": 1000,
+      "ownerGid": 1000,
+      "mode": "0700",
+      "persistence": "ephemeral",
+      "purpose": "sockets"
+    }
+  ],
+  "persistenceLevels": {
+    "immutable": "/opt/amitia",
+    "persistent-critical": [
+      "/etc/amitia",
+      "/var/lib/amitia"
+    ],
+    "persistent-diagnostic": "/var/log/amitia",
+    "rebuildable": "/var/cache/amitia",
+    "ephemeral": "/run/amitia"
+  },
+  "upgradeContract": {
+    "replaceable": "/opt/amitia",
+    "preserve": [
+      "/etc/amitia",
+      "/var/lib/amitia",
+      "/var/cache/amitia",
+      "/var/log/amitia"
+    ],
+    "recreate": "/run/amitia",
+    "repairSafe": "/etc/amitia/runtime",
+    "repairPreserve": [
+      "/etc/amitia/app",
+      "/etc/amitia/providers",
+      "/var/lib/amitia"
+    ]
+  },
+  "uninstallContract": {
+    "delete": [
+      "/opt/amitia",
+      "/run/amitia"
+    ],
+    "dataRetain": [
+      "/etc/amitia",
+      "/var/lib/amitia",
+      "/var/cache/amitia",
+      "/var/log/amitia"
+    ],
+    "fullClean": [
+      "/etc/amitia",
+      "/var/lib/amitia",
+      "/var/log/amitia"
+    ]
+  },
+  "cleanupContract": {
+    "runtimeStop": "/run/amitia/*",
+    "cacheCleanup": "/var/cache/amitia/*",
+    "protectAlways": [
+      "/etc/amitia",
+      "/var/lib/amitia",
+      "/var/log/amitia"
+    ]
+  },
+  "forbiddenRootAliases": [
+    "/runtime",
+    "/data",
+    "/workspace",
+    "/amitia"
+  ],
+  "forbiddenOptSubdirs": [
+    "/opt/amitia/data",
+    "/opt/amitia/config",
+    "/opt/amitia/cache",
+    "/opt/amitia/logs"
+  ],
+  "forbiddenPaths": [
+    "/",
+    "/proc",
+    "/dev",
+    "/sys",
+    "/system",
+    "/vendor",
+    "/data",
+    "/sdcard",
+    "/storage",
+    "/storage/emulated",
+    "/data/user",
+    "/data/data"
+  ]
+}

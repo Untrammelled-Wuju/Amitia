@@ -1,0 +1,20 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libc6 \
+    ldd \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /amitia
+
+COPY node /amitia/node
+COPY node-runtime.json /amitia/
+COPY file-manifest.json /amitia/
+COPY verify.py /amitia/
+COPY test-runtime.mjs /amitia/
+COPY test-local-package /amitia/test-local-package/
+
+ENV HOME=/tmp/test-home
+ENV npm_config_cache=/tmp/npm-cache
+ENV npm_config_prefix=/tmp/npm-prefix
+ENV TMPDIR=/tmp/test-tmp

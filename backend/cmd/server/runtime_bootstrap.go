@@ -10,7 +10,6 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
-	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
@@ -29,7 +28,6 @@ type runtimeBootstrap struct {
 	graphSvc          graph.Service
 	stopOnce          sync.Once
 	runError          error
-	processMgr        *process.DefaultProcessManager
 	nodeEnvironment   nodeenv.Resolver
 	artifactResolver sidecar.ArtifactResolver
 }
@@ -65,7 +63,6 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 		host:              host,
 		orchestrator:      orch,
 		resources:         paths,
-		processMgr:        process.NewDefaultProcessManager(),
 		nodeEnvironment:   nodeResolver,
 		artifactResolver: artifactResolver,
 	}, nil

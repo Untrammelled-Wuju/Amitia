@@ -1,0 +1,59 @@
+{
+  "format": "source/namespace/name",
+  "examples": [
+    {
+      "source": "builtin",
+      "namespace": "tool",
+      "name": "resolve_interaction_scope",
+      "full": "builtin/tool/resolve_interaction_scope"
+    },
+    {
+      "source": "builtin",
+      "namespace": "system",
+      "name": "update_full_apk",
+      "full": "builtin/system/update_full_apk"
+    },
+    {
+      "source": "builtin",
+      "namespace": "browser",
+      "name": "close_all_virtual_displays",
+      "full": "builtin/browser/close_all_virtual_displays"
+    },
+    {
+      "source": "builtin",
+      "namespace": "memory",
+      "name": "write_memory",
+      "full": "builtin/memory/write_memory"
+    },
+    {
+      "source": "builtin",
+      "namespace": "character",
+      "name": "execute",
+      "full": "builtin/character/execute"
+    }
+  ],
+  "invalidExamples": [
+    {
+      "id": "CAP.TOOL.EXECUTE.交互范围解析",
+      "reason": "Contains Chinese characters, uses dots, uppercase"
+    },
+    {
+      "id": "CAP.MEMORY.UPDATE.MEMORY WRITE",
+      "reason": "Contains space, uses dots, uppercase"
+    },
+    {
+      "id": "CAP.PROCESS.EXECUTE.EXECUTE_HIDDEN_TERMINAL_COMMAND",
+      "reason": "Uses dots, uppercase - but ASCII valid"
+    },
+    {
+      "id": "builtin/tool/READ",
+      "reason": "Uppercase name segment"
+    }
+  ],
+  "correctionMapping": {
+    "CAP.TOOL.EXECUTE.交互范围解析": "builtin/tool/resolve_interaction_scope",
+    "CAP.SYSTEM.UPDATE.UPDATE_FULL_APK": "external/system/update_full_apk",
+    "CAP.MEMORY.UPDATE.MEMORY WRITE": "internal/memory/write_memory",
+    "CAP.PROCESS.EXECUTE.EXECUTE_HIDDEN_TERMINAL_COMMAND": "external/process/execute_hidden_terminal_command"
+  }
+}

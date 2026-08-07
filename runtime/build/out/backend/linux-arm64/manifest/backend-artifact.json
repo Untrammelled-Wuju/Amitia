@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "componentId": "runtime.backend",
+  "name": "amitia-server",
+  "version": "dev",
+  "commit": "unknown",
+  "release": false,
+  "platform": "linux",
+  "architecture": "arm64",
+  "goarm64": "v8.0",
+  "cgoEnabled": false,
+  "fileName": "amitia-server",
+  "installPath": "/opt/amitia/backend/amitia-server",
+  "sha256": "d4b4c0c4ee14b2b30d935ff6e65922f16ede26e374768f02092cd8fbb0e74207",
+  "size": 56623230,
+  "elf": {
+    "class": 64,
+    "endianness": "little",
+    "machine": "aarch64",
+    "type": "executable",
+    "static": true,
+    "interpreter": null,
+    "neededLibraries": []
+  }
+}

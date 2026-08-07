@@ -1,0 +1,28 @@
+{
+  "architecture": "arm64",
+  "componentId": "runtime.node-scripts",
+  "entrypoints": {
+    "node": "scripts/node/amitia-node-exec.sh",
+    "npm": "scripts/node/amitia-npm-exec.sh",
+    "npx": "scripts/node/amitia-npx-exec.sh",
+    "pluginHost": "scripts/node/amitia-plugin-host.sh",
+    "prepare": "scripts/node/amitia-node-prepare.sh",
+    "probe": "scripts/node/amitia-node-probe.sh",
+    "taskHost": "scripts/node/amitia-task-host.sh"
+  },
+  "platform": "linux",
+  "requires": {
+    "nodeVersion": "24.19.0",
+    "npmVersion": "11.17.0"
+  },
+  "runtimeLayout": {
+    "nodeBinary": "node/bin/node",
+    "npmCli": "node/lib/node_modules/npm/bin/npm-cli.js",
+    "npxCli": "node/lib/node_modules/npm/bin/npx-cli.js",
+    "pluginHost": "plugin-host/dist/index.js",
+    "scriptsRoot": "scripts/node",
+    "taskHost": "task-host/dist/index.js"
+  },
+  "schemaVersion": 1,
+  "version": "1"
+}

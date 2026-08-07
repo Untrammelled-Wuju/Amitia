@@ -168,64 +168,7 @@ func RuntimeWorkspaceDir(runtimeRoot string) string {
 	if v := strings.TrimSpace(os.Getenv(WorkspaceDirEnv)); v != "" {
 		return resolveEnvDir(v, runtimeRoot)
 	}
-	if ws := findWorkspace(); ws != "" {
-		return ws
-	}
-	if runtimeRoot != "" {
-		return runtimeRoot
-	}
-	cwd, _ := os.Getwd()
-	if cwd != "" {
-		return cwd
-	}
 	return runtimeRoot
-}
-
-func findWorkspace() string {
-	cwd, _ := os.Getwd()
-	for i := 0; i < 4; i++ {
-		if info, err := os.Stat(filepath.Join(cwd, "backend")); err == nil && info.IsDir() {
-			return cwd
-		}
-		parent := filepath.Dir(cwd)
-		if parent == cwd {
-			break
-		}
-		cwd = parent
-	}
-
-	exe, _ := os.Executable()
-	dir := filepath.Dir(exe)
-	for i := 0; i < 6; i++ {
-		for _, check := range []string{"backend", "ai-companion/apps", "apps"} {
-			if info, err := os.Stat(filepath.Join(dir, check)); err == nil && info.IsDir() {
-				return dir
-			}
-		}
-		if info, err := os.Stat(filepath.Join(dir, "ai-companion")); err == nil && info.IsDir() {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-
-	cwd, _ = os.Getwd()
-	for i := 0; i < 3; i++ {
-		if info, err := os.Stat(filepath.Join(cwd, "backend")); err == nil && info.IsDir() {
-			return cwd
-		}
-		parent := filepath.Dir(cwd)
-		if parent == cwd {
-			break
-		}
-		cwd = parent
-	}
-
-	cwd, _ = os.Getwd()
-	return cwd
 }
 
 func RuntimeCacheDir(runtimeRoot, dataDir string) string {

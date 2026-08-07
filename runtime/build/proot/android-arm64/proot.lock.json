@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "componentId": "runtime.proot",
+  "version": "5.4.0-amitia.1",
+  "upstream": {
+    "repository": "proot-me/proot",
+    "tag": "v5.4.0",
+    "commit": "7aa1eac49b8298e2e0f3a2d29e2df7f4d8f6a4c9",
+    "archiveSha256": "placeholder-source-archive-sha256-replace-after-first-update-lock-run"
+  },
+  "androidCompatibility": {
+    "repository": "termux/proot",
+    "commit": "placeholder-termux-patch-commit-sha256-replace-after-first-update-lock-run",
+    "patchSeriesSha256": "placeholder-patch-series-sha256-replace-after-first-update-lock-run"
+  },
+  "target": {
+    "platform": "android",
+    "abi": "arm64-v8a",
+    "architecture": "aarch64",
+    "apiLevel": 21
+  },
+  "artifact": {
+    "name": "libamitia_proot.so",
+    "sha256": "placeholder-artifact-sha256-replace-after-build"
+  },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "file": "licenses/COPYING-PROOT",
+    "sha256": "placeholder-license-sha256-replace-after-build"
+  }
+}

@@ -85,6 +85,22 @@ func (r *RuntimeRegistry) GetByUser(userID string) *Connection {
 	return r.byRuntime[runtimeID]
 }
 
+func (r *RuntimeRegistry) GetForUser(userID, runtimeID string) *Connection {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	conn, ok := r.byRuntime[runtimeID]
+	if !ok {
+		return nil
+	}
+
+	if conn.UserID() != userID {
+		return nil
+	}
+
+	return conn
+}
+
 func (r *RuntimeRegistry) SelectRuntime(userID string) (*Connection, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

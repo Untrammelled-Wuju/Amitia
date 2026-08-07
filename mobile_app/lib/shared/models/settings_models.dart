@@ -124,12 +124,10 @@ class TimeAnchor {
 
 class DeploymentConfig {
   final String mode;
-  final String address;
   final String description;
 
   DeploymentConfig({
     this.mode = '本地',
-    this.address = 'localhost:18899',
     this.description = '完整功能本地运行',
   });
 }

@@ -25,6 +25,7 @@ type PendingResult struct {
 type waiter struct {
 	commandID string
 	sessionID string
+	runtimeID string
 	ch        chan *PendingResult
 	deadline  time.Time
 }
@@ -40,7 +41,7 @@ func NewPendingTracker() *PendingTracker {
 	}
 }
 
-func (t *PendingTracker) Register(commandID, sessionID string, timeout time.Duration) (<-chan *PendingResult, context.CancelFunc) {
+func (t *PendingTracker) Register(commandID, sessionID, runtimeID string, timeout time.Duration) (<-chan *PendingResult, context.CancelFunc) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -48,6 +49,7 @@ func (t *PendingTracker) Register(commandID, sessionID string, timeout time.Dura
 	w := &waiter{
 		commandID: commandID,
 		sessionID: sessionID,
+		runtimeID: runtimeID,
 		ch:        ch,
 		deadline:  time.Now().Add(timeout),
 	}
@@ -168,6 +170,19 @@ func (t *PendingTracker) Count() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return len(t.waiters)
+}
+
+func (t *PendingTracker) CountForRuntime(runtimeID string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	count := 0
+	for _, w := range t.waiters {
+		if w.runtimeID == runtimeID {
+			count++
+		}
+	}
+	return count
 }
 
 func (t *PendingTracker) CleanupExpired() int {

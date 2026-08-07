@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"gorm.io/gorm"
 )
@@ -73,6 +74,9 @@ func NewInstaller(repo Repository, packageRepo processing.Repository, charRepo c
 }
 
 func (s *installer) InstallPackage(packageId, userId, characterId string) (*Installation, error) {
+	if desktoppet.IsLegacyInstallationWriteDisabled() {
+		return nil, NewInstallationError(ErrCodeInstallationFailed, "旧版 Installation 写入已禁用，请使用 InstallationCoordinator", nil)
+	}
 	if packageId == "" || userId == "" || characterId == "" {
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "安装参数为空", nil)
 	}

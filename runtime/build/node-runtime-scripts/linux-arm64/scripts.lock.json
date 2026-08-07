@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "componentId": "runtime.node-scripts",
+  "version": "1",
+  "platform": "linux",
+  "architecture": "arm64",
+  "nodeVersion": "24.19.0",
+  "npmVersion": "11.17.0",
+  "layout": {
+    "scriptsRoot": "scripts/node",
+    "nodeBinary": "node/bin/node",
+    "npmCli": "node/lib/node_modules/npm/bin/npm-cli.js",
+    "npxCli": "node/lib/node_modules/npm/bin/npx-cli.js",
+    "pluginHost": "plugin-host/dist/index.js",
+    "taskHost": "task-host/dist/index.js"
+  }
+}

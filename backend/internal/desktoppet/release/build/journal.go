@@ -17,13 +17,31 @@ func NewPublishJournalManager(repo release.ReleaseRepository) *PublishJournalMan
 
 func (m *PublishJournalManager) CreateJournal(operationID, releaseID, petID string) (*release.ReleasePublishJournal, error) {
 	journal := &release.ReleasePublishJournal{
-		ID:          uuid.NewString(),
-		OperationID: operationID,
-		ReleaseID:   releaseID,
-		PetID:       petID,
-		Stage:       release.JournalStageSnapshotCreated,
-		CreatedAt:   formatTimestamp(time.Now()),
-		UpdatedAt:   formatTimestamp(time.Now()),
+		ID:            uuid.NewString(),
+		OperationID:   operationID,
+		ReleaseID:     releaseID,
+		PetID:         petID,
+		OperationKind: string(release.JournalOperationBuild),
+		Stage:         release.JournalStageSnapshotCreated,
+		CreatedAt:     formatTimestamp(time.Now()),
+		UpdatedAt:     formatTimestamp(time.Now()),
+	}
+	if err := m.repo.CreatePublishJournal(journal); err != nil {
+		return nil, err
+	}
+	return journal, nil
+}
+
+func (m *PublishJournalManager) CreateImportJournal(operationID, releaseID, petID string) (*release.ReleasePublishJournal, error) {
+	journal := &release.ReleasePublishJournal{
+		ID:            uuid.NewString(),
+		OperationID:   operationID,
+		ReleaseID:     releaseID,
+		PetID:         petID,
+		OperationKind: string(release.JournalOperationImport),
+		Stage:         release.ImportJournalStageCreated,
+		CreatedAt:     formatTimestamp(time.Now()),
+		UpdatedAt:     formatTimestamp(time.Now()),
 	}
 	if err := m.repo.CreatePublishJournal(journal); err != nil {
 		return nil, err

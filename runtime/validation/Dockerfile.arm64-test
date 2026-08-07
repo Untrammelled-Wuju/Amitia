@@ -1,0 +1,23 @@
+FROM ubuntu:24.04
+
+# 安装Python和基础工具
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    curl \
+    file \
+    ldd \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建验证目录
+WORKDIR /validation
+
+# 复制验证脚本
+COPY linux-arm64/ /validation/linux-arm64/
+COPY .validation/ /validation/.validation/
+
+# 设置环境变量
+ENV PYTHONPATH=/validation
+ENV PATH="/usr/bin:/bin"
+
+ENTRYPOINT ["python3", "/validation/linux-arm64/validate.py"]

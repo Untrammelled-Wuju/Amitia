@@ -78,7 +78,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, conn *Connection) error {
 	deadline := time.Now().Add(r.config.CommandTimeout())
 	msg.DeadlineAt = &deadline
 
-	waiterCh, cancel := r.pending.Register("sync_"+sessionID, sessionID, r.config.CommandTimeout())
+		waiterCh, cancel := r.pending.Register("sync_"+sessionID, sessionID, conn.RuntimeID(), r.config.CommandTimeout())
 	defer cancel()
 
 	if err := conn.SendBlocking(msg, r.config.CommandTimeout()); err != nil {

@@ -227,6 +227,7 @@ type ReleaseRepository interface {
 	CreateImportSnapshot(snapshot *ImportPackageSnapshot) error
 	CreateImportSnapshotTx(tx *gorm.DB, snapshot *ImportPackageSnapshot) error
 	GetImportSnapshot(stagingID string) (*ImportPackageSnapshot, error)
+	GetImportSnapshotByReleaseID(releaseID string) (*ImportPackageSnapshot, error)
 	UpdateImportSnapshot(snapshot *ImportPackageSnapshot) error
 
 	AcquireLeaseCAS(op *ReleaseBuildOperation, owner, executionID string) error
@@ -269,6 +270,8 @@ type ReleaseStoragePort interface {
 	MoveWorkspaceToStaging(operationID, releaseID string) error
 	RemovePublishedDir(petID, releaseID string) error
 	AtomicRenameStagingToPublished(petID, releaseID string) error
+
+	StoreVerifiedArchive(sourcePath, petID, releaseID, expectedHash string) (storageKey, archiveHash string, archiveBytes int64, err error)
 }
 
 type ArtifactResolver interface {

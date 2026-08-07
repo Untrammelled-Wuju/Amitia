@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "addendum_id": "ADDENDUM-2026-08-07-001",
+  "baseline_id": "PARITY-2026-08-07-V1",
+  "status": "APPLIED",
+  "generated_at": "2026-08-07T17:23:01.175696+08:00",
+  "summary": {
+    "original_total_capabilities": 506,
+    "corrected_total_capabilities": 502,
+    "total_removed": 4,
+    "original_required": 262,
+    "corrected_required": 258,
+    "original_preserve_amitia": 240,
+    "corrected_preserve_amitia": 240,
+    "original_required_platform_equivalent": 4,
+    "corrected_required_platform_equivalent": 4
+  },
+  "purification_rationale": "B7合并时部分OPERIT能力经行为签名归一化后被映射到相同behavior_key，导致分母膨胀。本次净化移除重复项，保留最低MAP-ID作为主记录。",
+  "removed_entries": [
+    {
+      "map_id": "MAP-0038",
+      "behavior_key": "DATA_PRESERVATION_BACKUP_BACKUP",
+      "scope_state": "REQUIRED",
+      "sources": [
+        "OPERIT"
+      ],
+      "merged_into": "MAP-0037",
+      "reason": "Duplicate behavior_key after B7 normalization"
+    },
+    {
+      "map_id": "MAP-0082",
+      "behavior_key": "CHARACTER_MANAGEMENT_EXECUTE_CHARACTER",
+      "scope_state": "REQUIRED",
+      "sources": [
+        "OPERIT"
+      ],
+      "merged_into": "MAP-0081",
+      "reason": "Duplicate behavior_key after B7 normalization"
+    },
+    {
+      "map_id": "MAP-0083",
+      "behavior_key": "CHARACTER_MANAGEMENT_EXECUTE_CHARACTER",
+      "scope_state": "REQUIRED",
+      "sources": [
+        "OPERIT"
+      ],
+      "merged_into": "MAP-0081",
+      "reason": "Duplicate behavior_key after B7 normalization"
+    },
+    {
+      "map_id": "MAP-0234",
+      "behavior_key": "GENERAL_CAPTURE_screen_capture_(screenshot)",
+      "scope_state": "REQUIRED",
+      "sources": [
+        "OPERIT"
+      ],
+      "merged_into": "MAP-0233",
+      "reason": "Duplicate behavior_key after B7 normalization"
+    }
+  ],
+  "remaining_profile_counts": {
+    "PROFILE_TOOL": 370,
+    "PROFILE_NATIVE": 35,
+    "PROFILE_DATA": 21,
+    "PROFILE_RUNTIME": 10,
+    "PROFILE_SECURITY": 12,
+    "PROFILE_UI": 9,
+    "PROFILE_EXTENSION": 19,
+    "PROFILE_CORE": 11,
+    "PROFILE_VOICE": 6,
+    "PROFILE_BACKGROUND": 5,
+    "PROFILE_MODEL": 4
+  },
+  "remaining_scope_state_counts": {
+    "PRESERVE_AMITIA": 240,
+    "REQUIRED": 258,
+    "REQUIRED_PLATFORM_EQUIVALENT": 4
+  }
+}

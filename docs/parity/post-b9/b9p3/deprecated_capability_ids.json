@@ -1,0 +1,34 @@
+[
+  {
+    "deprecatedId": "CAP.MEMORY.PRESERVATION.BACKUP_BACKUP_1",
+    "deprecatedNumericId": 6005,
+    "reason": "Removed by B9P2 purification - duplicate behavior_key",
+    "supersededBy": null,
+    "historicalOnly": true,
+    "migrationRequired": false
+  },
+  {
+    "deprecatedId": "CAP.CHARACTER.MANAGEMENT.EXECUTE_CHARACTER_1",
+    "deprecatedNumericId": 6202,
+    "reason": "Removed by B9P2 purification - duplicate behavior_key",
+    "supersededBy": null,
+    "historicalOnly": true,
+    "migrationRequired": false
+  },
+  {
+    "deprecatedId": "CAP.CHARACTER.MANAGEMENT.EXECUTE_CHARACTER_2",
+    "deprecatedNumericId": 6203,
+    "reason": "Removed by B9P2 purification - duplicate behavior_key",
+    "supersededBy": null,
+    "historicalOnly": true,
+    "migrationRequired": false
+  },
+  {
+    "deprecatedId": "CAP.BROWSER.CAPTURE.SCREEN_CAPTURE_(SCREENSHOT)_1",
+    "deprecatedNumericId": 4010,
+    "reason": "Removed by B9P2 purification - duplicate behavior_key",
+    "supersededBy": null,
+    "historicalOnly": true,
+    "migrationRequired": false
+  }
+]

@@ -228,7 +228,7 @@ func (s *Service) Reconcile(ctx context.Context, runtimeID string) error {
 }
 
 func (s *Service) GetRuntimeStatus(ctx context.Context, userID, runtimeID string) (*StatusView, error) {
-	conn := s.registry.GetByRuntime(runtimeID)
+	conn := s.registry.GetForUser(userID, runtimeID)
 	if conn == nil {
 		return &StatusView{
 			RuntimeID: runtimeID,
@@ -246,7 +246,7 @@ func (s *Service) GetRuntimeStatus(ctx context.Context, userID, runtimeID string
 		},
 	}
 
-	pendingCount := s.pending.Count()
+	pendingCount := s.pending.CountForRuntime(runtimeID)
 	view.Sync = &SyncView{
 		Status:          string(conn.State()),
 		PendingCommands: pendingCount,

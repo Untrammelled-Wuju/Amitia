@@ -10,6 +10,8 @@ import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../shared/models/models.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 
 final _runtimeHealthProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final svc = ref.read(systemServiceProvider);
@@ -79,7 +81,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
   void _start() {
     setState(() {
       _status = '运行中';
-      _backendStatus = '已连接';
+      _backendStatus = '后端就绪';
       _components = _components
           .map((c) => RuntimeComponent(name: c.name, status: '运行中'))
           .toList();
@@ -89,11 +91,12 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
   void _stop() {
     setState(() {
       _status = '已停止';
-      _backendStatus = '已断开';
+      _backendStatus = '后端未就绪';
       _components = _components
           .map((c) => RuntimeComponent(name: c.name, status: '已停止'))
           .toList();
     });
+    ref.read(backendConnectionRepositoryProvider).invalidate();
   }
 
   void _snack(String message) {
@@ -104,6 +107,14 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
 
   @override
   Widget build(BuildContext context) {
+    final connectionAsync = ref.watch(backendConnectionProvider);
+    final effectiveBackendStatus = connectionAsync.when(
+      data: (avail) => avail is BackendConnectionAvailable ? '后端就绪' : '后端未就绪',
+      loading: () => '检查中...',
+      error: (_, __) => '后端未就绪',
+    );
+    _backendStatus = effectiveBackendStatus;
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'Ubuntu Runtime', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
@@ -220,7 +231,7 @@ class _StatusCard extends StatelessWidget {
           _InfoLine(
             label: '后端状态',
             value: backendStatus,
-            type: backendStatus == '已连接'
+            type: backendStatus == '后端就绪' || backendStatus == '后端已就绪'
                 ? BadgeType.success
                 : BadgeType.neutral,
           ),

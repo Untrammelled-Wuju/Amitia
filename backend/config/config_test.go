@@ -585,6 +585,100 @@ func TestConfigDoesNotDependOnRuntimeDescriptor(t *testing.T) {
 	}
 }
 
+func TestServerEnvironmentBinding(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig failed: %v", err)
+	}
+
+	if cfg.Server.Host != "127.0.0.1" {
+		t.Errorf("default server.host = %q, want 127.0.0.1", cfg.Server.Host)
+	}
+	if cfg.Server.Port != 18899 {
+		t.Errorf("default server.port = %d, want 18899", cfg.Server.Port)
+	}
+}
+
+func TestServerHostEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("AMITIA_SERVER_HOST", "127.0.0.1")
+	defer os.Unsetenv("AMITIA_SERVER_HOST")
+
+	cfg, err := loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig failed: %v", err)
+	}
+
+	if cfg.Server.Host != "127.0.0.1" {
+		t.Errorf("server.host via env = %q, want 127.0.0.1", cfg.Server.Host)
+	}
+}
+
+func TestServerPortEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("AMITIA_SERVER_PORT", "18899")
+	defer os.Unsetenv("AMITIA_SERVER_PORT")
+
+	cfg, err := loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig failed: %v", err)
+	}
+
+	if cfg.Server.Port != 18899 {
+		t.Errorf("server.port via env = %d, want 18899", cfg.Server.Port)
+	}
+}
+
+func TestServerEnvDoesNotAffectProviderPorts(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("AMITIA_SERVER_PORT", "18899")
+	defer os.Unsetenv("AMITIA_SERVER_PORT")
+
+	cfg, err := loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig failed: %v", err)
+	}
+
+	if cfg.Providers.VectorStore.Qdrant.Port != 19178 {
+		t.Errorf("qdrant port should remain 19178, got %d", cfg.Providers.VectorStore.Qdrant.Port)
+	}
+	if cfg.Providers.GraphStore.SurrealDB.Port != 18000 {
+		t.Errorf("surrealdb port should remain 18000, got %d", cfg.Providers.GraphStore.SurrealDB.Port)
+	}
+}
+
+func TestNoAndroidSpecificServerEnv(t *testing.T) {
+	os.Unsetenv("ANDROID_SERVER_PORT")
+	if val, ok := os.LookupEnv("ANDROID_SERVER_PORT"); ok {
+		t.Errorf("ANDROID_SERVER_PORT should not be defined, got %q", val)
+	}
+}
+
 func TestAndroidStyleRequiredProviderOverrides(t *testing.T) {
 	dir := t.TempDir()
 	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\n"

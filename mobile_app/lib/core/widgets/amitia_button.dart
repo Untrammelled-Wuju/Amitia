@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
@@ -252,6 +253,92 @@ class AmitiaAvatar extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class ConduitStyleToolbarSurface extends StatelessWidget {
+  const ConduitStyleToolbarSurface({
+    super.key,
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDark
+              ? const Color(0xFF141414)
+              : const Color(0xFFF4F4F4),
+          border: Border.all(
+            width: 0.5,
+            color: isDark
+                ? const Color(0xFF1E1E1E)
+                : const Color(0xFFE5E5E5),
+          ),
+        ),
+        child: Center(
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class ConduitStyleToolbarButton extends StatelessWidget {
+  const ConduitStyleToolbarButton({
+    super.key,
+    required this.icon,
+    required this.onPressed,
+    this.iconSize = 22,
+    this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final double iconSize;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
+    final button = Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: ConduitStyleToolbarSurface(
+          child: Icon(
+            icon,
+            size: iconSize,
+            color: isDark
+                ? const Color(0xFFECECEC)
+                : const Color(0xFF000000),
+          ),
+        ),
+      ),
+    );
+
+    if (tooltip == null || tooltip!.isEmpty) {
+      return button;
+    }
+
+    return Tooltip(
+      message: tooltip!,
+      child: button,
     );
   }
 }

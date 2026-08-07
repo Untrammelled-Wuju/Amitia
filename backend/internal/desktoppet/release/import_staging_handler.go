@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -102,7 +102,7 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	sourceType := classifySourceType(contentType, safeFilename)
 
 	stagingID := uuid.New().String()
-	uploadDir := stagingID + "/" + path.Base(safeFilename) + ".bin"
+	uploadDir := stagingID + "/" + filepath.Base(safeFilename) + ".bin"
 	quarantinePath, err := h.registry.Resolve(security.RootImportQuarantine, uploadDir)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "暂存路径解析失败", gin.H{"errorCode": "INTERNAL_ERROR"})
@@ -129,7 +129,7 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	hashBuf := sha256.Sum256(data)
 	contentHash := hex.EncodeToString(hashBuf[:])
 
-	if err := os.MkdirAll(path.Dir(quarantinePath), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(quarantinePath), 0o700); err != nil {
 		util.ErrorResponse(c, response.InternalError, "写入暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
@@ -154,7 +154,7 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	}
 
 	if err := h.repo.Create(c.Request.Context(), staging); err != nil {
-		storageKey, cleanErr := h.registry.StorageKeyFromPath(security.RootImportQuarantine, path.Dir(quarantinePath))
+		storageKey, cleanErr := h.registry.StorageKeyFromPath(security.RootImportQuarantine, filepath.Dir(quarantinePath))
 		if cleanErr == nil {
 			_ = security.NewSafeArtifactResponder(h.registry).SafeDelete(
 				security.RootImportQuarantine,

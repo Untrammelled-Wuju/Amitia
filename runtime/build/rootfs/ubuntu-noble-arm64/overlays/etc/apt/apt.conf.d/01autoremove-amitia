@@ -1,0 +1,2 @@
+APT::AutoRemove::SuggestsImportant "false";
+APT::AutoRemove::RecommendsImportant "false";

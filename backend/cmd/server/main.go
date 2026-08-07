@@ -25,7 +25,6 @@ import (
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/database/mysql"
-	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
@@ -355,52 +354,6 @@ func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 		return fmt.Errorf("apply versioned migrations: %w", err)
 	}
 	return nil
-}
-
-func startQdrant() {
-	qcfg := config.AppCfg.Providers.VectorStore.Qdrant
-	log.Info("正在启动Qdrant...")
-	if err := qdrantDB.StartQdrant(); err != nil {
-		log.Error("Qdrant启动失败:", err)
-		log.Warn("向量检索功能不可用，将回退到关键词搜索")
-		return
-	}
-	if err := qdrantDB.WaitForQdrant(qcfg.Port); err != nil {
-		log.Error("等待Qdrant就绪超时:", err)
-		qdrantDB.StopQdrant()
-		log.Warn("向量检索功能不可用，将回退到关键词搜索")
-		return
-	}
-	if err := qdrantDB.InitClient(); err != nil {
-		log.Error("Qdrant客户端初始化失败:", err)
-		qdrantDB.StopQdrant()
-		log.Warn("向量检索功能不可用，将回退到关键词搜索")
-		return
-	}
-	if err := qdrantDB.EnsureCollections(); err != nil {
-		log.Error("Qdrant集合创建失败:", err)
-		qdrantDB.StopQdrant()
-		log.Warn("向量检索功能不可用，将回退到关键词搜索")
-		return
-	}
-	log.Info("Qdrant就绪，向量检索功能已启用")
-}
-
-func startSurreal() {
-	cfg := config.AppCfg.Providers.GraphStore.SurrealDB
-	log.Info("正在启动SurrealDB...")
-	if err := surrealdbDB.StartSurreal(); err != nil {
-		log.Error("SurrealDB启动失败:", err)
-		log.Warn("图谱功能不可用")
-		return
-	}
-	if err := surrealdbDB.WaitForSurreal(cfg.Port); err != nil {
-		log.Error("等待SurrealDB就绪超时:", err)
-		surrealdbDB.StopSurreal()
-		log.Warn("图谱功能不可用")
-		return
-	}
-	log.Info("SurrealDB就绪，图谱功能已启用")
 }
 
 func initGraph() graph.Service {

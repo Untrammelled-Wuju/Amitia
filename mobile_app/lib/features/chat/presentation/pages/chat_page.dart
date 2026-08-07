@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -536,31 +538,30 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surfaceColor = context.surfaceSecondary;
-    final borderColor = context.borderPrimary;
+    final platform = Theme.of(context).platform;
+    final isApplePlatform =
+        platform == TargetPlatform.iOS ||
+        platform == TargetPlatform.macOS;
+
     return SafeArea(
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           children: [
-            _ChatTopPillButton(
-              tooltip: '打开菜单',
-              onTap: onOpenDrawer,
-              isCircular: true,
-              surfaceColor: surfaceColor,
-              borderColor: borderColor,
-              child: Icon(
-                Icons.menu_rounded,
-                size: 20,
-                color: context.textPrimary,
-              ),
+            ConduitStyleToolbarButton(
+              icon: isApplePlatform
+                  ? CupertinoIcons.line_horizontal_3
+                  : Icons.menu,
+              iconSize: 20,
+              tooltip: '打开侧边栏',
+              onPressed: onOpenDrawer,
             ),
             const Spacer(),
             Material(
-              color: surfaceColor,
+              color: context.surfaceSecondary,
               shape: RoundedRectangleBorder(
-                side: BorderSide(color: borderColor),
+                side: BorderSide(color: context.borderPrimary),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: SizedBox(
@@ -584,73 +585,20 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                         ),
                       ),
                     ),
-                    Tooltip(
-                      message: '聊天操作',
-                      child: InkWell(
-                        borderRadius: const BorderRadius.horizontal(
-                          right: Radius.circular(20),
-                        ),
-                        onTap: onMore,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
-                          child: Icon(
-                            Icons.more_vert,
-                            size: 20,
-                            color: context.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ChatTopPillButton extends StatelessWidget {
-  final String tooltip;
-  final VoidCallback onTap;
-  final bool isCircular;
-  final Color surfaceColor;
-  final Color borderColor;
-  final Widget child;
-
-  const _ChatTopPillButton({
-    required this.tooltip,
-    required this.onTap,
-    required this.surfaceColor,
-    required this.borderColor,
-    required this.child,
-    this.isCircular = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(20);
-    return Material(
-      color: surfaceColor,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: borderColor),
-        borderRadius: radius,
-      ),
-      child: InkWell(
-        borderRadius: radius,
-        onTap: onTap,
-        child: Tooltip(
-          message: tooltip,
-          child: SizedBox(
-            width: isCircular ? 36 : null,
-            height: 36,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: isCircular ? 0 : 12),
-              child: Center(child: child),
+            const SizedBox(width: 8),
+            ConduitStyleToolbarButton(
+              icon: isApplePlatform
+                  ? CupertinoIcons.ellipsis
+                  : Icons.more_vert,
+              iconSize: 22,
+              tooltip: '更多',
+              onPressed: onMore,
             ),
-          ),
+          ],
         ),
       ),
     );

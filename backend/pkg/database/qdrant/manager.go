@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package qdrant
 
 import (
@@ -11,14 +13,6 @@ import (
 func SetQdrantShuttingDown() {}
 
 func IsQdrantShuttingDown() bool { return false }
-
-// StartQdrant is deprecated. Use BuildQdrantProcessSpec and the runtimehost.ProcessSupervisor.
-func StartQdrant() error {
-	return fmt.Errorf("qdrant: use BuildQdrantProcessSpec instead")
-}
-
-// StopQdrant is deprecated. Use runtimehost.ProcessSupervisor.Stop.
-func StopQdrant() {}
 
 func WaitForQdrant(port int) error {
 	url := fmt.Sprintf("http://127.0.0.1:%d/readyz", port)

@@ -386,6 +386,18 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		}
 		c.state.behaviorOk = true
 	}
+	if svc.RuntimeDomainEventConsumer != nil {
+		svc.RuntimeDomainEventConsumer.Start(ctx)
+	}
+	if svc.DesktopPetRuntimeV2 != nil {
+		if err := svc.DesktopPetRuntimeV2.Start(ctx); err != nil {
+			c.stopAllLocked(ctx, svc)
+			if svc.SafeMode != nil {
+				svc.SafeMode.Enter("pet runtime v2 start failed")
+			}
+			return fmt.Errorf("runtime v2 start: %w", err)
+		}
+	}
 	c.started = true
 	return nil
 }
@@ -435,6 +447,12 @@ func (c *desktopPetComponent) Stop(ctx context.Context) error {
 func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppServices) {
 	if c.state.behaviorOk && svc.BehaviorService != nil {
 		_ = svc.BehaviorService.Stop()
+	}
+	if svc.RuntimeDomainEventConsumer != nil {
+		svc.RuntimeDomainEventConsumer.Stop()
+	}
+	if svc.DesktopPetRuntimeV2 != nil {
+		_ = svc.DesktopPetRuntimeV2.Close(ctx)
 	}
 	if c.state.releaseRecoveryWorkerOk && svc.ReleaseRecoveryWorker != nil {
 		svc.ReleaseRecoveryWorker.Stop()

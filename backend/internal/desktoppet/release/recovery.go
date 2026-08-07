@@ -3,11 +3,13 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/log"
 )
 
@@ -360,10 +362,48 @@ func (w *ReleaseRecoveryWorker) isPublishedConsistent(op *ReleaseBuildOperation)
 	if err != nil || releaseRecord == nil {
 		return false
 	}
-	if releaseRecord.Lifecycle == string(ReleaseLifecycleReady) && releaseRecord.ContentRootHash != "" {
-		return true
+	if releaseRecord.Lifecycle != string(ReleaseLifecycleReady) {
+		return false
 	}
-	return false
+	if releaseRecord.ContentRootHash == "" {
+		return false
+	}
+	if err := w.verifyImportConsistency(op, releaseRecord, publishedDir); err != nil {
+		log.Logger.Warnf("import consistency check failed for operation %s: %v", op.ID, err)
+		return false
+	}
+	return true
+}
+
+func (w *ReleaseRecoveryWorker) verifyImportConsistency(op *ReleaseBuildOperation, releaseData *ReleaseData, publishedDir string) error {
+	files, err := w.repo.GetReleaseFiles(op.ReleaseID)
+	if err != nil {
+		return fmt.Errorf("get release files: %w", err)
+	}
+	if len(files) == 0 {
+		return errors.New("no release files found")
+	}
+	for _, item := range files {
+		fullPath, err := packageformat.SecureJoinUnderRoot(publishedDir, item.Path)
+		if err != nil {
+			return fmt.Errorf("secure join %s: %w", item.Path, err)
+		}
+		hash, size, err := HashFile(fullPath)
+		if err != nil {
+			return fmt.Errorf("hash file %s: %w", item.Path, err)
+		}
+		if hash != item.SHA256 || size != item.Bytes {
+			return fmt.Errorf("file mismatch: %s (expected %s/%d, got %s/%d)", item.Path, item.SHA256, item.Bytes, hash, size)
+		}
+	}
+	snapshot, err := w.repo.GetImportSnapshotByReleaseID(op.ReleaseID)
+	if err != nil {
+		return fmt.Errorf("get import snapshot: %w", err)
+	}
+	if snapshot == nil || snapshot.OperationID != op.ID || snapshot.ReleaseID != releaseData.ID {
+		return errors.New("import snapshot mismatch")
+	}
+	return nil
 }
 
 func (w *ReleaseRecoveryWorker) markImportOperationFailed(op *ReleaseBuildOperation, code string, msg string) {

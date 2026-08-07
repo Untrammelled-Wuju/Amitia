@@ -102,7 +102,7 @@ func (d *Dispatcher) dispatchEphemeral(ctx context.Context, req CommandRequest, 
 	msg.IdempotencyKey = idempotencyKey
 	applyMessageMetadata(&msg, req.UserID, req.InstallationID, req.PetInstanceID, deadline)
 
-	ch, cancel := d.pending.Register(commandID, conn.SessionID(), deadline)
+	ch, cancel := d.pending.Register(commandID, conn.SessionID(), conn.RuntimeID(), deadline)
 	defer cancel()
 
 	if err := conn.Send(msg); err != nil {
@@ -277,7 +277,7 @@ func (d *Dispatcher) dispatchOnline(ctx context.Context, conn *Connection, cmd *
 	cmd.AttemptCount++
 	cmd.LastSessionID = conn.SessionID()
 
-	ch, cancel := d.pending.Register(cmd.ID, conn.SessionID(), timeout)
+	ch, cancel := d.pending.Register(cmd.ID, conn.SessionID(), conn.RuntimeID(), timeout)
 	defer cancel()
 
 	var payloadArg interface{}
