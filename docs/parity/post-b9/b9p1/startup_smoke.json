@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P1",
+  "status": "NOT_TESTED",
+  "reason": "Binary build failed with compilation bugs; cannot execute --version or startup",
+  "versionCheck": {
+    "executed": false,
+    "binary": null,
+    "expectedName": "amitia-server",
+    "expectedGoos": "windows",
+    "expectedGoarch": "amd64"
+  },
+  "startupTest": {
+    "executed": false,
+    "binary": null,
+    "tempDir": null,
+    "livezResult": null,
+    "readyzResult": null,
+    "processLeakCheck": null
+  },
+  "blockingIssues": [
+    "Compilation error in internal/desktoppet/release/import_staging_handler.go: undefined: path (affects Linux ARM64)",
+    "Compilation error in internal/desktoppet/release/importer/package_importer.go: undefined: packageformat.VerdictInvalid (affects Linux AMD64, Windows AMD64)",
+    "Compilation error in internal/desktoppet/runtime/pending.go: w.runtimeID undefined (affects Linux AMD64)"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P1",
+  "inputVerification": {
+    "b9ProtocolVersion": "1.0.0-FROZEN",
+    "b9Frozen": true,
+    "b9BaselineId": "PARITY-2026-08-07-V1",
+    "b9Status": "COMPLETE",
+    "b9Unmapped": 0,
+    "b9DuplicateIds": 0,
+    "verificationPassed": true
+  },
+  "repositoryState": {
+    "root": "D:/桌面/跟进项目/U-Ai",
+    "branch": "develop",
+    "headCommit": "409f1737db0913afe30bbe3fe792a56e0db4632f",
+    "shortCommit": "409f173",
+    "workingTreeClean": false,
+    "trackedModified": [
+      "backend/config/config.go",
+      "backend/config/config_test.go",
+      "backend/internal/desktoppet/release/build/journal.go",
+      "backend/internal/desktoppet/release/importer/package_importer.go",
+      "backend/internal/desktoppet/release/model.go",
+      "mobile_app/lib/core/widgets/amitia_button.dart",
+      "mobile_app/lib/features/chat/presentation/pages/chat_page.dart",
+      "mobile_app/lib/features/runtime/presentation/pages/runtime_page.dart",
+      "mobile_app/lib/features/settings/presentation/pages/deployment_page.dart",
+      "mobile_app/lib/shared/models/settings_models.dart"
+    ],
+    "untracked": [
+      "backend/qdrantprocess.test",
+      "backend/qdrantprocess.test.exe",
+      "backend_source_20260806_222805.zip",
+      "runtime/build/...",
+      "runtime/validation/"
+    ]
+  },
+  "a14HistoricalGap": {
+    "originalStatus": "UNVERIFIED",
+    "linuxArm64": "UNVERIFIED -> FAIL (compilation bug)",
+    "linuxAmd64": "UNVERIFIED -> FAIL (compilation bug)",
+    "windowsAmd64": "UNVERIFIED -> FAIL (compilation bug)",
+    "cgoCheck": "UNVERIFIED -> PASS (no CGO detected)",
+    "basicStartup": "UNVERIFIED -> NOT_TESTED (binary not produced)"
+  }
+}

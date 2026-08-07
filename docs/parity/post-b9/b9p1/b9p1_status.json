@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P1",
+  "status": "FAIL_LINUX_ARM64_BUILD",
+  "a14": {
+    "linuxArm64": "FAIL",
+    "linuxAmd64": "FAIL",
+    "windowsAmd64": "FAIL",
+    "cgo": "PASS",
+    "basicStartup": "NOT_TESTED"
+  },
+  "source": {
+    "anchorCreated": true,
+    "anchorId": "AMT-POST-B9-a3a84ec86812",
+    "sourceMutated": false
+  },
+  "history": {
+    "b1ToB9Mutated": false
+  },
+  "modifications": {
+    "businessSourceFiles": 0,
+    "historicalParityFiles": 0,
+    "allowedOutputFiles": 0
+  },
+  "failureDetails": {
+    "allBuildsFailed": true,
+    "rootCause": "Pre-existing Go compilation bugs in internal/desktoppet/ package (undefined symbols: path, packageformat.VerdictInvalid, runtimeID field)",
+    "cgoNotInvolved": true,
+    "compilationBugs": [
+      {
+        "file": "internal/desktoppet/release/import_staging_handler.go",
+        "line": 157,
+        "error": "undefined: path"
+      },
+      {
+        "file": "internal/desktoppet/release/importer/package_importer.go",
+        "line": 455,
+        "error": "undefined: packageformat.VerdictInvalid"
+      },
+      {
+        "file": "internal/desktoppet/runtime/pending.go",
+        "line": 179,
+        "error": "w.runtimeID undefined (type *waiter has no field or method runtimeID)"
+      }
+    ]
+  },
+  "nextStep": "BLOCKED_PENDING_CODE_FIX"
+}

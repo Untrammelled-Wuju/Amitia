@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P1",
+  "goCheckCommand": "go version",
+  "buildCommands": [
+    "CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -mod=readonly -trimpath -buildvcs=false -o <B9P1_TEMP>/build/amitia-server-linux-arm64 ./cmd/server",
+    "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath -buildvcs=false -o <B9P1_TEMP>/build/amitia-server-linux-amd64 ./cmd/server",
+    "CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -mod=readonly -trimpath -buildvcs=false -o <B9P1_TEMP>/build/amitia-server-windows-amd64.exe ./cmd/server"
+  ],
+  "cgoAuditCommand": "go list -deps -f '{{if .CgoFiles}}{{.Standard}}|{{.ImportPath}}|{{join .CgoFiles \",\"}}{{end}}' ./cmd/server",
+  "smokeVersionCommand": "<B9P1_TEMP>/build/amitia-server-smoke --version",
+  "sourceAnchorCommand": "Get-ChildItem recursive + SHA-256 hashing",
+  "dependencyLockCommand": "Get-FileHash dependency lock files",
+  "startupHealthEndpoints": [
+    "GET http://127.0.0.1:<PORT>/livez",
+    "GET http://127.0.0.1:<PORT>/readyz"
+  ]
+}

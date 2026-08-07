@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P1",
+  "supersedesEvidenceOnly": "docs/parity/amitia/baseline/a14/a14_verification.json",
+  "doesNotRewriteHistoricalBaseline": true,
+  "status": "FAIL_LINUX_ARM64_BUILD",
+  "linuxArm64": {
+    "status": "FAIL",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": false,
+    "command": "CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -mod=readonly -trimpath -buildvcs=false -o <B9P1_TEMP>/build/amitia-server-linux-arm64 ./cmd/server",
+    "exitCode": 1,
+    "errorSummary": "internal/desktoppet/release/import_staging_handler.go:157:88: undefined: path",
+    "logFile": "logs/linux-arm64-build.log"
+  },
+  "linuxAmd64": {
+    "status": "FAIL",
+    "goos": "linux",
+    "goarch": "amd64",
+    "cgoEnabled": false,
+    "command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath -buildvcs=false -o <B9P1_TEMP>/build/amitia-server-linux-amd64 ./cmd/server",
+    "exitCode": 1,
+    "errorSummary": "internal/desktoppet/release/importer/package_importer.go:455:72: undefined: packageformat.VerdictInvalid; internal/desktoppet/runtime/pending.go:179:8: w.runtimeID undefined (type *waiter has no field or method runtimeID)",
+    "logFile": "logs/linux-amd64-build.log"
+  },
+  "windowsAmd64": {
+    "status": "FAIL",
+    "goos": "windows",
+    "goarch": "amd64",
+    "cgoEnabled": false,
+    "command": "CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -mod=readonly -trimpath -buildvcs=false -o <B9P1_TEMP>/build/amitia-server-windows-amd64.exe ./cmd/server",
+    "exitCode": 1,
+    "errorSummary": "internal/desktoppet/release/importer/package_importer.go:455:72: undefined: packageformat.VerdictInvalid",
+    "logFile": "logs/windows-amd64-build.log"
+  },
+  "cgoCheck": {
+    "status": "PASS",
+    "requiredCgo": false,
+    "note": "No CGO files detected in dependency tree. Build failures are due to compilation bugs, not CGO dependencies."
+  },
+  "basicStartup": {
+    "status": "NOT_TESTED",
+    "reason": "Binary build failed; cannot execute smoke test with broken compilation"
+  },
+  "verifiedAgainstAnchorId": "AMT-POST-B9-a3a84ec86812"
+}
