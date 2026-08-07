@@ -60,7 +60,7 @@ class DefaultRuntimeManifestVerifierFullTest {
 
     private fun manifestWithComponents(): RuntimeManifest {
         val backendFile = File(runtimeRoot, "backend/amitia-server").apply {
-            parentFile.mkdirs()
+            parentFile?.mkdirs()
             writeText("binary", Charsets.UTF_8)
         }
         val actualSha = InstalledFileHasher.sha256(backendFile)

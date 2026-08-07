@@ -162,7 +162,7 @@ class RuntimeManifestTest {
 
     @Test
     fun noTimestamp_fields() {
-        val javaFields = sampleManifest::class.java.declaredFields
+        val javaFields = RuntimeManifest::class.java.declaredFields
         for (f in javaFields) {
             val name = f.name.lowercase()
             assertTrue(
@@ -176,7 +176,7 @@ class RuntimeManifestTest {
 
     @Test
     fun noPid_fields() {
-        val javaFields = sampleManifest::class.java.declaredFields
+        val javaFields = RuntimeManifest::class.java.declaredFields
         for (f in javaFields) {
             val name = f.name.lowercase()
             assertTrue(
