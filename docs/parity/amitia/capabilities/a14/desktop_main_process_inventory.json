@@ -1,0 +1,416 @@
+{
+  "inventory_id": "INV-A14-DESKTOP-MAIN-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "desktop_main_process",
+  "platform": "desktop",
+  "items": [
+    {
+      "id": "DM-001",
+      "module": "main/index.ts",
+      "source": "desktop/src/main/index.ts",
+      "type": "entry",
+      "capabilities": ["应用启动入口", "单例锁定", "日志初始化", "配置加载", "IPC注册", "主窗口创建", "托盘创建", "核心进程管理", "运行时管理器初始化", "更新检查", "桌面宿主初始化", "桌面宠管理器初始化", "剪贴板桥接"],
+      "key_functions": ["app.whenReady()", "ensureAmitiaDataDir()", "ensureDesktopInstanceID()", "createMainWindow()", "createAppTray()", "startCore()", "createAppTray()", "DesktopPetManager", "DesktopHostManager"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-002",
+      "module": "window.ts",
+      "source": "desktop/src/main/window.ts",
+      "type": "window",
+      "capabilities": ["主窗口创建", "窗口尺寸配置", "窗口居中", "最小尺寸限制", "关闭事件拦截", "窗口焦点事件"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-003",
+      "module": "ipc-handlers.ts",
+      "source": "desktop/src/main/ipc-handlers.ts",
+      "type": "ipc",
+      "capabilities": ["环境信息获取", "部署配置读写", "运行时状态获取", "开机启动设置", "自动更新配置", "文件读写操作", "对话框操作", "Shell操作", "系统通知", "托盘刷新"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-004",
+      "module": "update-manager.ts",
+      "source": "desktop/src/main/update-manager.ts",
+      "type": "updater",
+      "capabilities": ["electron-updater集成", "自动更新检查", "更新下载", "更新安装", "更新进度回调", "更新错误处理", "手动检查更新"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-005",
+      "module": "tray.ts",
+      "source": "desktop/src/main/tray.ts",
+      "type": "tray",
+      "capabilities": ["系统托盘创建", "托盘菜单", "托盘图标切换(亮/暗)", "托盘点击事件", "托盘工具提示", "托盘上下文菜单"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-006",
+      "module": "config-store.ts",
+      "source": "desktop/src/main/config-store.ts",
+      "type": "config",
+      "capabilities": ["部署配置持久化", "开机启动配置", "应用配置读写", "配置文件路径管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-007",
+      "module": "core-manager.ts",
+      "source": "desktop/src/main/core-manager.ts",
+      "type": "core",
+      "capabilities": ["核心进程(AmitiaCore.exe)启动", "核心进程停止", "核心就绪等待", "核心状态检查", "数据目录和配置初始化"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-008",
+      "module": "core-prereq.ts",
+      "source": "desktop/src/main/core-prereq.ts",
+      "type": "core",
+      "capabilities": ["核心进程前置依赖检查", "二进制文件存在性验证", "依赖文件校验"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-009",
+      "module": "protocol.ts",
+      "source": "desktop/src/main/protocol.ts",
+      "type": "protocol",
+      "capabilities": ["扩展协议注册", "自定义协议处理", "URL协议拦截"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-010",
+      "module": "logger.ts",
+      "source": "desktop/src/main/logger.ts",
+      "type": "util",
+      "capabilities": ["日志初始化", "日志输出关闭", "日志级别控制"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-011",
+      "module": "auth-token-store.ts",
+      "source": "desktop/src/main/auth-token-store.ts",
+      "type": "auth",
+      "capabilities": ["认证Token存储", "Token获取/设置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-012",
+      "module": "backend-session-client.ts",
+      "source": "desktop/src/main/backend-session-client.ts",
+      "type": "api",
+      "capabilities": ["后端会话客户端", "请求头注入", "认证信息传递"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-013",
+      "module": "clipboard-bridge.ts",
+      "source": "desktop/src/main/clipboard-bridge.ts",
+      "type": "bridge",
+      "capabilities": ["剪贴板桥接", "图像粘贴", "文件复制到剪贴板"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-014",
+      "module": "path-manager.ts",
+      "source": "desktop/src/main/path-manager.ts",
+      "type": "util",
+      "capabilities": ["应用数据目录管理", "数据目录路径解析"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-015",
+      "module": "desktop-identity.ts",
+      "source": "desktop/src/main/desktop-identity.ts",
+      "type": "identity",
+      "capabilities": ["桌面实例ID生成/持久化", "设备唯一标识"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-016",
+      "module": "branding.ts",
+      "source": "desktop/src/main/branding.ts",
+      "type": "brand",
+      "capabilities": ["品牌主题应用", "主题切换通知", "托盘图标随主题切换"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-017",
+      "module": "pet-ipc.ts",
+      "source": "desktop/src/main/pet-ipc.ts",
+      "type": "ipc",
+      "capabilities": ["桌面宠IPC注册", "桌宠窗口通信", "桌宠动画控制IPC"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-018",
+      "module": "ui-host-sse.ts",
+      "source": "desktop/src/main/ui-host-sse.ts",
+      "type": "sse",
+      "capabilities": ["UI Host SSE服务", "前端状态推送", "实时事件分发"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-019",
+      "module": "protocol-types.ts",
+      "source": "desktop/src/main/protocol-types.ts",
+      "type": "types",
+      "capabilities": ["协议类型定义"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-020",
+      "module": "DesktopHostManager",
+      "source": "desktop/src/main/desktop-host/desktop-host.ts",
+      "type": "host",
+      "capabilities": ["桌面宿主管理", "桌面事件分发", "桌面状态管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-021",
+      "module": "action-bridge.ts",
+      "source": "desktop/src/main/desktop-host/action-bridge.ts",
+      "type": "bridge",
+      "capabilities": ["动作桥接", "原生动作调用", "动作路由"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-022",
+      "module": "global-shortcut-host.ts",
+      "source": "desktop/src/main/desktop-host/global-shortcut-host.ts",
+      "type": "host",
+      "capabilities": ["全局热键宿主", "热键绑定/解绑"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-023",
+      "module": "menu-host.ts",
+      "source": "desktop/src/main/desktop-host/menu-host.ts",
+      "type": "host",
+      "capabilities": ["应用菜单宿主", "菜单栏集成"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-024",
+      "module": "shortcut-host.ts",
+      "source": "desktop/src/main/desktop-host/shortcut-host.ts",
+      "type": "host",
+      "capabilities": ["快捷键宿主", "快捷键管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-025",
+      "module": "tray-host.ts",
+      "source": "desktop/src/main/desktop-host/tray-host.ts",
+      "type": "host",
+      "capabilities": "系统托盘宿主",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-026",
+      "module": "snapshot-applier.ts",
+      "source": "desktop/src/main/desktop-host/snapshot-applier.ts",
+      "type": "sync",
+      "capabilities": ["状态快照应用", "状态同步应用"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-027",
+      "module": "snapshot-sync.ts",
+      "source": "desktop/src/main/desktop-host/snapshot-sync.ts",
+      "type": "sync",
+      "capabilities": "状态快照同步", "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-028",
+      "module": "ipcp-channels.ts",
+      "source": "desktop/src/main/desktop-host/ipc-channels.ts",
+      "type": "ipc",
+      "capabilities": "IPC通道常量定义", "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-029",
+      "module": "PetManager",
+      "source": "desktop/src/main/pet/manager.ts",
+      "type": "pet",
+      "capabilities": ["桌面宠窗口管理", "桌面宠创建/销毁", "桌面宠配置", "桌面宠IPC通信"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-030",
+      "module": "character-watcher.ts",
+      "source": "desktop/src/main/pet/character-watcher.ts",
+      "type": "pet",
+      "capabilities": ["角色变更监听", "桌宠角色同步"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-031",
+      "module": "chat-state-subscriber.ts",
+      "source": "desktop/src/main/pet/chat-state-subscriber.ts",
+      "type": "pet",
+      "capabilities": ["聊天状态订阅", "聊天事件监听", "桌宠聊天联动"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-032",
+      "module": "pet/action-player.ts",
+      "source": "desktop/src/main/pet/action-player.ts",
+      "type": "pet",
+      "capabilities": ["桌面宠动作播放", "动作队列管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-033",
+      "module": "pet/action-scheduler.ts",
+      "source": "desktop/src/main/pet/action-scheduler.ts",
+      "type": "pet",
+      "capabilities": ["桌面宠动作调度", "定时动作触发"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-034",
+      "module": "pet/idle-controller.ts",
+      "source": "desktop/src/main/pet/idle-controller.ts",
+      "type": "pet",
+      "capabilities": ["闲置检测", "闲置状态切换", "桌宠休眠/唤醒"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-035",
+      "module": "pet/drag-controller.ts",
+      "source": "desktop/src/main/pet/drag-controller.ts",
+      "type": "pet",
+      "capabilities": ["桌面宠拖拽", "窗口拖动控制"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-036",
+      "module": "pet/click-hit-test.ts",
+      "source": "desktop/src/main/pet/click-hit-test.ts",
+      "type": "pet",
+      "capabilities": ["点击命中测试", "透明区域穿透"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-037",
+      "module": "pet/click-through-controller.ts",
+      "source": "desktop/src/main/pet/click-through-controller.ts",
+      "type": "pet",
+      "capabilities": ["点击穿透控制", "透明区域管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-038",
+      "module": "pet/resource-loader.ts",
+      "source": "desktop/src/main/pet/resource-loader.ts",
+      "type": "pet",
+      "capabilities": ["桌宠资源加载", "本地/远程资源"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-039",
+      "module": "pet/resource-resolver.ts",
+      "source": "desktop/src/main/pet/resource-resolver.ts",
+      "type": "pet",
+      "capabilities": ["资源路径解析", "资源定位"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-040",
+      "module": "pet/resource-protocol.ts",
+      "source": "desktop/src/main/pet/resource-protocol.ts",
+      "type": "pet",
+      "capabilities": ["资源协议处理", "file://协议"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-041",
+      "module": "pet/resource-cache.ts",
+      "source": "desktop/src/main/pet/resource-cache.ts",
+      "type": "pet",
+      "capabilities": ["资源缓存管理", "缓存清理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-042",
+      "module": "pet/package-integrity-verifier.ts",
+      "source": "desktop/src/main/pet/package-integrity-verifier.ts",
+      "type": "pet",
+      "capabilities": ["桌宠包完整性校验", "签名验证"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-043",
+      "module": "pet/window-adapter.ts",
+      "source": "desktop/src/main/pet/window-adapter.ts",
+      "type": "pet",
+      "capabilities": ["桌宠窗口适配器", "窗口API封装"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-044",
+      "module": "pet/event-bridge.ts",
+      "source": "desktop/src/main/pet/event-bridge.ts",
+      "type": "pet",
+      "capabilities": ["桌宠事件桥接", "事件转发"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-045",
+      "module": "pet/animation-player-bridge.ts",
+      "source": "desktop/src/main/pet/animation-player-bridge.ts",
+      "type": "pet",
+      "capabilities": ["动画播放器桥接", "动画控制"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-046",
+      "module": "pet/runtime-bridge-client.ts",
+      "source": "desktop/src/main/pet/runtime-bridge-client.ts",
+      "type": "pet",
+      "capabilities": ["运行时桥接客户端", "运行时通信"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-047",
+      "module": "pet/player-port.ts",
+      "source": "desktop/src/main/pet/player-port.ts",
+      "type": "pet",
+      "capabilities": ["播放器端口", "播放器状态管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-048",
+      "module": "pet/animation-ipc.ts",
+      "source": "desktop/src/main/pet/animation-ipc.ts",
+      "type": "pet",
+      "capabilities": ["动画IPC通道", "动画消息传递"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-049",
+      "module": "pet/chat-state-bridge.ts",
+      "source": "desktop/src/main/pet/chat-state-bridge.ts",
+      "type": "pet",
+      "capabilities": ["聊天状态桥接", "桌宠聊天联动"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "DM-050",
+      "module": "pet/runtime-resource-index.ts",
+      "source": "desktop/src/main/pet/runtime-resource-index.ts",
+      "type": "pet",
+      "capabilities": ["运行时资源索引", "运行时资源管理"],
+      "state": "IMPLEMENTED"
+    }
+  ],
+  "metadata": {
+    "total_modules": 50,
+    "source_root": "desktop/src/main",
+    "architecture": "Electron Main Process",
+    "framework": "Electron",
+    "key_classes": ["DesktopRuntimeManager", "DesktopPetManager", "DesktopHostManager"],
+    "key_imports": ["electron", "node:fs", "node:path", "node:crypto"]
+  }
+}

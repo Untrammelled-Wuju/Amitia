@@ -1,0 +1,71 @@
+{
+  "inventory_id": "INV-A14-ATTACHMENT-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "attachment_theory",
+  "items": [
+    {
+      "id": "ATTACH-001",
+      "name": "Attachment Model",
+      "name_en": "Attachment Style Model",
+      "description": "依恋类型模型，定义安全型、焦虑型、回避型、混乱型四种依恋风格",
+      "file": "backend/internal/relationship/model.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "ATTACH-002",
+      "name": "Secure Attachment",
+      "name_en": "Secure Attachment Style",
+      "description": "安全型依恋，表现为稳定信任、舒适亲密",
+      "file": "backend/internal/relationship/attachment.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "ATTACH-003",
+      "name": "Anxious Attachment",
+      "name_en": "Anxious Attachment Style",
+      "description": "焦虑型依恋，表现为过度寻求确认、害怕被抛弃",
+      "file": "backend/internal/relationship/attachment.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "ATTACH-004",
+      "name": "Avoidant Attachment",
+      "name_en": "Avoidant Attachment Style",
+      "description": "回避型依恋，表现为亲密回避、情感疏离",
+      "file": "backend/internal/relationship/attachment.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "ATTACH-005",
+      "name": "Disorganized Attachment",
+      "name_en": "Disorganized Attachment Style",
+      "description": "混乱型依恋，表现为矛盾行为、恐惧亲密",
+      "file": "backend/internal/relationship/attachment.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "ATTACH-006",
+      "name": "Attachment Behavioral Manifestation",
+      "name_en": "Behavioral Manifestations",
+      "description": "依恋行为表现映射，根据依恋类型生成不同的互动行为模式",
+      "file": "backend/internal/relationship/attachment.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "ATTACH-007",
+      "name": "Attachment Conflict Response",
+      "name_en": "Conflict Response Patterns",
+      "description": "依恋类型冲突反应模式，不同依恋类型在关系冲突中的典型反应",
+      "file": "backend/internal/relationship/conflict_repair.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

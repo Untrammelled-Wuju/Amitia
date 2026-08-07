@@ -1,0 +1,420 @@
+{
+  "scan_domain": "LINUX_FILE_NETWORK",
+  "scan_metadata": {
+    "repository": "Operit-v1.12.0",
+    "scan_date": "2025-08-07",
+    "source_root": "app/src/main/java/com/ai/assistance/operit/",
+    "terminal_submodule": "terminal/ (git submodule, separate repo: OperitTerminal)",
+    "platform": "Android (Kotlin/Java)"
+  },
+  "shell_runtime": {
+    "shell_classes": [
+      {
+        "name": "ShellExecutor",
+        "type": "interface",
+        "file": "core/tools/system/shell/ShellExecutor.kt",
+        "description": "统一Shell执行器接口,定义executeCommand/startProcess/hasPermission/isAvailable等核心方法"
+      },
+      {
+        "name": "StandardShellExecutor",
+        "type": "class",
+        "implements": "ShellExecutor",
+        "file": "core/tools/system/shell/StandardShellExecutor.kt",
+        "description": "标准Android权限Shell执行器,使用Runtime.getRuntime().exec()和sh -c执行命令,含管道/重定向/后台等shell操作符自动检测,30秒超时"
+      },
+      {
+        "name": "RootShellExecutor",
+        "type": "class",
+        "implements": "ShellExecutor",
+        "file": "core/tools/system/shell/RootShellExecutor.kt",
+        "description": "Root权限Shell执行器,使用libsu(Shell.cmd)或exec(su -c)模式,支持MOUNT_MASTER标志,支持ShellIdentity(SHELL/ROOT/APP/DEFAULT)分级执行,内嵌operit_shell_exec launcher二进制"
+      },
+      {
+        "name": "AdminShellExecutor",
+        "type": "class",
+        "implements": "ShellExecutor",
+        "file": "core/tools/system/shell/AdminShellExecutor.kt",
+        "description": "设备管理员权限执行器,通过DevicePolicyManager执行lockNow/wipe等系统操作,不直接执行shell命令"
+      },
+      {
+        "name": "DebuggerShellExecutor",
+        "type": "class",
+        "implements": "ShellExecutor",
+        "file": "core/tools/system/shell/DebuggerShellExecutor.kt",
+        "description": "Shizuku权限Shell执行器,使用IShizukuService.newProcess()创建进程,支持sh -c执行含操作符的命令,含重试机制和引号感知参数解析"
+      },
+      {
+        "name": "AccessibilityShellExecutor",
+        "type": "class",
+        "implements": "ShellExecutor",
+        "file": "core/tools/system/shell/AccessibilityShellExecutor.kt",
+        "description": "无障碍服务权限执行器"
+      },
+      {
+        "name": "ShellExecutorFactory",
+        "type": "class (factory)",
+        "file": "core/tools/system/shell/ShellExecutorFactory.kt",
+        "description": "Shell执行器工厂,按权限级别缓存执行器,提供getHighestAvailableExecutor/getUserPreferredExecutor/getAvailableExecutors等方法,权限级别从高到低:ROOT->ADMIN->DEBUGGER->ACCESSIBILITY->STANDARD"
+      },
+      {
+        "name": "AndroidShellExecutor",
+        "type": "class (facade)",
+        "file": "core/tools/system/AndroidShellExecutor.kt",
+        "description": "向后兼容的Shell命令执行工具类,通过权限级别委托到相应执行器,定义ShellIdentity枚举(DEFAULT/APP/ROOT/SHELL),严格权限模式"
+      },
+      {
+        "name": "OperitShowerShellRunner",
+        "type": "class",
+        "file": "core/tools/system/shower/OperitShowerShellRunner.kt",
+        "description": "Shower(投屏)Shell命令运行器"
+      }
+    ],
+    "execution_methods": [
+      "Runtime.getRuntime().exec(command) - 简单命令直接执行",
+      "Runtime.getRuntime().exec(arrayOf(\"sh\", \"-c\", command)) - 含管道/重定向等shell操作符",
+      "Runtime.getRuntime().exec(buildSuExecCommand(command)) - Root下su -c方式",
+      "Shell.cmd(command).exec() - libsu封装的Root执行(IShell.Result)",
+      "Shell.cmd(command).to(callbackList).enqueue() - libsu异步执行+回调",
+      "IShizukuService.newProcess(args, env, dir) - Shizuku进程创建",
+      "ProcessBuilder(*command) - 本地终端会话进程启动(在LocalTerminalProvider中)",
+      "DevicePolicyManager.lockNow()/wipeData() - 设备管理员系统操作"
+    ],
+    "permission_levels": [
+      "STANDARD - 标准Android权限,始终可用",
+      "ACCESSIBILITY - 无障碍服务权限",
+      "DEBUGGER - Shizuku服务权限",
+      "ADMIN - 设备管理员权限",
+      "ROOT - Root权限(libsu或exec su -c)"
+    ],
+    "linux_sandbox": {
+      "type": "PRoot + Ubuntu Noble (aarch64) chroot 沙盒",
+      "mechanism": "通过proot二进制启动Ubuntu rootfs,可选chroot模式(需root)",
+      "rootfs_asset": "terminal/src/main/assets/ubuntu-noble-aarch64-pd-v4.18.0.tar.xz",
+      "setup_script": "terminal/src/main/assets/setup_fake_sysdata.sh",
+      "native_binaries": [
+        "libbusybox.so - BusyBox工具集,提供awk/cp/chmod/cat/find/grep/gzip/tar等30+个Unix工具",
+        "liboperit_proot.so - PRoot用户空间chroot替代",
+        "liboperit_loader.so - PROOT_LOADER动态加载器",
+        "libbash.so - Bash shell",
+        "libsudo.so - sudo提权工具",
+        "liboperit.so / libpty.so - PTY伪终端支持"
+      ],
+      "busybox_symlinks": ["awk","ash","basename","bzip2","curl","cp","chmod","cut","cat","du","dd","find","grep","gzip","hexdump","head","id","lscpu","mkdir","realpath","rm","sed","stat","sh","tr","tar","uname","xargs","xz","xxd","file"],
+      "bind_mounts": [
+        "/dev -> /dev",
+        "/proc -> /proc",
+        "/sys -> /sys",
+        "/dev/pts -> /dev/pts",
+        "/proc/self/fd -> /dev/fd",
+        "/storage/emulated/{userId} -> /sdcard",
+        "/data/local/tmp -> /data/local/tmp",
+        "{homeDir} -> {homeDir}",
+        "{tmpDir} -> /dev/shm (可选shared_tmp)"
+      ],
+      "path_mapping": "PRootMountMapping提供Linux路径到Android实际路径的软映射,支持Ubuntu rootfs/bind mount/home directory映射",
+      "package_managers": {
+        "apt": "APT源(可配置镜像源)",
+        "pip/uv": "Python包管理(可配置镜像源)",
+        "npm": "Node包管理(可配置registry)",
+        "rust": "Rust镜像源"
+      },
+      "dns_config": "内置多个nameserver(8.8.8.8, 1.1.1.1, 223.5.5.5等)",
+      "chroot_support": "可选USE_CHROOT=1模式,使用busybox mount --bind挂载proc/sys/dev等后由chroot进入Ubuntu",
+      "terminal_manager": "TerminalManager(terminal submodule) - 核心终端会话管理器"
+    },
+    "terminal_implementations": [
+      {
+        "name": "Terminal (app侧门面)",
+        "file": "core/tools/system/Terminal.kt",
+        "description": "应用级别终端服务管理器门面,封装TerminalManager,提供createSession/executeCommand/executeHiddenCommand/executeCommandFlow/sendInput/sendInterruptSignal等API"
+      },
+      {
+        "name": "TerminalManager",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/TerminalManager.kt",
+        "description": "核心终端会话管理器单例,初始化环境(链接native库/提取assets/生成start脚本),管理TerminalProvider(本地/SSH),支持命令队列/Mutex/30秒session初始化超时/历史记录(500条MAX)/SharedFlow事件分发"
+      },
+      {
+        "name": "LocalTerminalProvider",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/type/LocalTerminalProvider.kt",
+        "description": "本地终端提供者,使用ProcessBuilder启动bash -c 'source common.sh && start_shell',PTY伪终端,支持visible session(前台交互)和hidden exec(后台复用shell),含__OPERIT_HIDDEN_BEGIN__/END/PID标记协议,30秒后台shell就绪超时"
+      },
+      {
+        "name": "SSHTerminalProvider",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/type/SSHTerminalProvider.kt",
+        "description": "SSH远程终端提供者,通过本地proot环境自动执行ssh命令连接远程服务器,支持密码/公钥认证/反向隧道/端口转发/Keep-Alive"
+      },
+      {
+        "name": "Pty",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/Pty.kt",
+        "description": "PTY伪终端封装,JNI native方法createSubprocess/waitFor/getTerminalFlags/getAvailableBytes/setPtyWindowSize,支持ICANON/ECHO/ISIG/IEXTEN标志检测和窗口大小调整"
+      },
+      {
+        "name": "TerminalSession",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/TerminalSession.kt",
+        "description": "终端会话数据类,封装process(stdout/stdin)"
+      },
+      {
+        "name": "CanvasTerminalView",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/view/canvas/CanvasTerminalView.kt",
+        "description": "Canvas自定义绘制终端视图"
+      },
+      {
+        "name": "CanvasTerminalCompose",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/view/canvas/CanvasTerminalCompose.kt",
+        "description": "Jetpack Compose终端UI组件"
+      },
+      {
+        "name": "AnsiTerminalEmulator",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/view/domain/ansi/AnsiTerminalEmulator.kt",
+        "description:": "ANSI终端模拟器,解析转义序列(颜色/光标等)"
+      },
+      {
+        "name": "TerminalService (AIDL)",
+        "file": "terminal/src/main/aidl/com/ai/assistance/operit/terminal/ITerminalService.aidl",
+        "description": "跨进程终端服务接口,AIDL定义"
+      }
+    ],
+    "session_command_queue": "命令队列(QueuedCommand)+Mutex锁确保同步执行,支持命令排队和初始化状态检测",
+    "command_history": "CommandHistoryItem,最大500条历史,每条最多1000行输出,mutableStateOf响应式输出更新"
+  },
+  "file_operations": {
+    "file_tools": [
+      {
+        "name": "StandardFileSystemTools",
+        "file": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+        "description": "标准文件系统工具,提供readFile/readFileFull/readFileBinary/readFilePart/writeFile/writeFileBinary/deleteFile/moveFile/copyFile/makeDirectory/listFiles/findFiles/fileInfo/grepCode/grepContext/openFile/shareFile/searchFiles等操作,支持本地和Linux环境切换,含文件apply编辑(compress/decompress/searchReplace/diffMatchPatch)"
+      },
+      {
+        "name": "LinuxFileSystemTools",
+        "file": "core/tools/defaultTool/standard/LinuxFileSystemTools.kt",
+        "description": "Linux文件系统工具,继承StandardFileSystemTools,通过动态获取文件系统(SSH/本地)操作Linux文件系统,所有操作标记env=linux"
+      },
+      {
+        "name": "SafFileSystemTools",
+        "file": "core/tools/defaultTool/standard/SafFileSystemTools.kt",
+        "description": "Storage Access Framework文件系统工具,通过content:// URI和DocumentsProvider操作"
+      },
+      {
+        "name": "DebuggerFileSystemTools",
+        "file": "core/tools/defaultTool/debugger/DebuggerFileSystemTools.kt",
+        "description": "调试器文件系统工具"
+      },
+      {
+        "name": "FileSystemProvider (interface)",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/filesystem/FileSystemProvider.kt",
+        "description": "终端文件系统操作抽象接口,定义readFile/writeFile/listDirectory/exists/isDirectory/isFile/getFileSize/getLineCount/createDirectory/delete/move/copy/findFiles/getFileInfo/getPermissions等完整方法,支持本地和SSH两种实现"
+      },
+      {
+        "name": "LocalFileSystemProvider",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/filesystem/LocalFileSystemProvider.kt",
+        "description": "本地文件系统提供者,通过proot内shell命令操作Ubuntu根文件系统,路径映射通过PRootMountMapping"
+      },
+      {
+        "name": "SSHFileSystemProvider",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/filesystem/SSHFileSystemProvider.kt",
+        "description": "SSH远程文件系统提供者,使用JSch SFTP协议操作远程文件系统,含32KB缓冲区和SFTP通道复用"
+      },
+      {
+        "name": "SSHFileConnectionManager",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/utils/SSHFileConnectionManager.kt",
+        "description": "SSH文件连接管理器单例,管理多个SSH SFTP连接"
+      },
+      {
+        "name": "FileManager (workspace侧)",
+        "file": "ui/features/chat/webview/workspace/FileManager.kt",
+        "description": "工作区文件管理器"
+      },
+      {
+        "name": "FileManagerViewModel/Screen",
+        "file": "ui/features/toolbox/screens/filemanager/",
+        "description": "工具箱文件管理器UI"
+      }
+    ],
+    "supported_operations": ["read", "write", "append", "delete", "copy", "move", "search", "compress", "decompress", "file_exists", "file_info", "list_directory", "make_directory", "grep_code", "grep_context", "read_binary", "write_binary", "read_part", "apply_edit", "open_file", "share_file"],
+    "saf_implementation": {
+      "documents_providers": [
+        {
+          "name": "UbuntuDocumentsProvider",
+          "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/UbuntuDocumentsProvider.kt",
+          "description": "通过SAF暴露Ubuntu文件系统给其他应用,root_id=ubuntu_root,基于LocalFileSystemProvider"
+        },
+        {
+          "name": "OperitDataDocumentsProvider",
+          "file": "provider/OperitDataDocumentsProvider.kt",
+          "description": "Operit数据DocumentsProvider"
+        },
+        {
+          "name": "WorkspaceDocumentsProvider",
+          "file": "provider/WorkspaceDocumentsProvider.kt",
+          "description": "工作区DocumentsProvider"
+        },
+        {
+          "name": "MemoryDocumentsProvider",
+          "file": "provider/MemoryDocumentsProvider.kt",
+          "description": "记忆DocumentsProvider"
+        }
+      ]
+    },
+    "file_types_supported": {
+      "text": "直接读取,按行分页",
+      "binary": "Base64编码读写",
+      "special_unsupported_in_linux": ["doc","docx","pdf","jpg","jpeg","png","gif","bmp"],
+      "archive_handling": ["zip","tar","gz/tar.gz","7z","rar"]
+    },
+    "path_validation": "PathValidator.validateLinuxPath/validateAndroidPath统一路径校验,防止越权访问",
+    "download_capabilities": [
+      {
+        "name": "HttpMultiPartDownloader",
+        "file": "util/HttpMultiPartDownloader.kt",
+        "description": "多线程分块HTTP下载器,支持断点续传"
+      },
+      {
+        "name": "MnnModelDownloadManager",
+        "file": "data/mnn/MnnModelDownloadManager.kt",
+        "description": "MNN AI模型下载管理器"
+      },
+      {
+        "name": "FullUpdateInstaller / PatchUpdateInstaller",
+        "file": "data/updates/",
+        "description": "应用完整更新和增量更新安装器"
+      },
+      {
+        "name": "BrowserDownloadSupport",
+        "file": "core/tools/defaultTool/websession/browser/BrowserDownloadSupport.kt",
+        "description": "WebView浏览器下载支持"
+      }
+    ]
+  },
+  "network_capabilities": {
+    "http_clients": [
+      {
+        "name": "OkHttpClient (StandardHttpTools)",
+        "file": "core/tools/defaultTool/standard/StandardHttpTools.kt",
+        "description": "OkHttp3封装,支持GET/POST/PUT/DELETE等,含CookieJar内存存储/SSL忽略/代理/超时配置/Multipart/form-data/Flow流式响应/HttpStreamEventData/Proxy支持"
+      },
+      {
+        "name": "OkHttpClient (OkHttp全局)",
+        "file": "build.gradle.kts (libs.versions.toml)",
+        "description": "OkHttp用于所有LLM API调用(OpenAI/Claude/Gemini/Deepseek/Ollama等)"
+      },
+      {
+        "name": "HttpURLConnection (GitHub API)",
+        "file": "data/api/GitHubApiService.kt",
+        "description": "java.net.GitHub API服务,原生HttpURLConnection"
+      },
+      {
+        "name": "GithubReleaseUtil",
+        "file": "util/GithubReleaseUtil.kt",
+        "description": "GitHub Release信息获取工具,检查更新用"
+      },
+      {
+        "name": "ExternalChatHttpServer",
+        "file": "integrations/http/ExternalChatHttpServer.kt",
+        "description": "外部聊天HTTP服务器,提供API端点"
+      },
+      {
+        "name": "WebChatHttpBridge",
+        "file": "integrations/http/WebChatHttpBridge.kt",
+        "description": "Web Chat HTTP桥梁,支持SSE/EventSource通信"
+      }
+    ],
+    "websocket_support": {
+      "implemented": true,
+      "locations": [
+        {
+          "file": "api/voice/OpenAIRealtimeVoiceProvider.kt",
+          "usage": "OpenAI实时语音WebSocket连接"
+        },
+        {
+          "file": "core/application/OperitApplication.kt",
+          "usage": "全局WebSocket配置"
+        },
+        {
+          "file": "api/voice/VoiceServiceFactory.kt",
+          "usage": "语音服务WebSocket工厂"
+        }
+      ],
+      "library": "OkWebSocket (OkHttp3内置)"
+    },
+    "sse_support": {
+      "implemented": true,
+      "description": "通过WebChatHttpBridge和LLM Provider的事件流",
+      "content_type": "text/event-stream",
+      "locations": [
+        "WebChatHttpBridge.kt - Web聊天SSE桥接",
+        "ClaudeProvider.kt / GeminiProvider.kt - LLM SSE响应处理",
+        "StandardSystemOperationTools.kt - SSE事件推送",
+        "ExternalChatHttpServer.kt - 外部聊天SSE"
+      ]
+    },
+    "download_support": {
+      "implemented": true,
+      "components": [
+        "HttpMultiPartDownloader - 多线程分块HTTP下载,支持断点续传",
+        "MnnModelDownloadManager - MNN模型文件下载",
+        "FullUpdateInstaller - 应用全量更新下载",
+        "PatchUpdateInstaller - 增量更新patch下载",
+        "BrowserDownloadSupport - WebView浏览器下载回调",
+        "FtpServerManager - 内置FTP服务器(Apache FTP Server,端口2127,用户ubuntu/ubuntu123)",
+        "SkillRepository - 技能包下载/更新"
+      ]
+    },
+    "server_capabilities": [
+      {
+        "name": "FtpServerManager",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/utils/FtpServerManager.kt",
+        "description": "内置Apache FtpServer,端口2127,暴露Ubuntu根文件系统,支持被动模式(2128-2136)"
+      },
+      {
+        "name": "SSHDServerManager",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/utils/SSHDServerManager.kt",
+        "description": "内置Apache MINA SSHD服务器,支持反向SSH隧道,BouncyCastle加密"
+      },
+      {
+        "name": "LocalWebServer",
+        "file": "ui/features/chat/webview/LocalWebServer.kt",
+        "description": "本地Web服务器,为WebView提供本地HTTP服务"
+      },
+      {
+        "name": "ExternalChatHttpServer",
+        "file": "integrations/http/ExternalChatHttpServer.kt",
+        "description": "外部聊天HTTP服务器端点"
+      }
+    ],
+    "ssh_capabilities": {
+      "client": {
+        "library": "JSch (com.jcraft.jsch)",
+        "features": ["密码认证","公钥认证(含passphrase)","SFTP文件操作","反向SSH隧道(remote->local)","端口转发(local->remote)","Keep-Alive心跳","多路复用"],
+        "connection_manager": "SSHFileConnectionManager - 单一连接ID管理,支持getOrCreateConnection/closeConnection"
+      },
+      "server": {
+        "library": "Apache MINA SSHD",
+        "features": ["内置SSHD服务","密码认证用户","BouncyCastle加密适配","SFTP子系统","反向隧道"]
+      }
+    },
+    "js_execution": {
+      "engine": "QuickJS (quickjs submodule)",
+      "bridge": "JsEngine/JsJavaBridge - Native<->JS双向调用",
+      "script_runner": "JsExecutionScriptBuilder构建JS运行时",
+      "tool_system": "ToolPackage/JS脚本作为AI工具执行",
+      "npm_support": "通过终端npm源安装JS包(NPM_SOURCE可配置镜像)"
+    }
+  },
+  "notes": [
+    "Shell执行体系为5级权限分层设计:STANDARD/ACCESSIBILITY/DEBUGGER/ADMIN/ROOT,通过ShellExecutorFactory自动选择可用执行器",
+    "STANDARD执行器通过Operation符自动检测决定是否走sh -c模式",
+    "ROOT执行器支持libsu v6.0+ (FLAG_MOUNT_MASTER + Shell.cmd)和exec(su -c)两种模式可切换",
+    "Linux沙盒基于PRoot + Ubuntu Noble rootfs,不依赖设备root(可选chroot模式需root)",
+    "BusyBox提供30+个Unix工具(含curl/tar/gzip等),所有工具通过符号链接指向busybox二进制",
+    "PRootMountMapping统一管理路径映射: Ubuntu rootfs / bind mounts / home directory",
+    "文件系统提供抽象接口FileSystemProvider,LocalFileSystemProvider通过proot+shell命令操作Ubuntu文件系统,SSHFileSystemProvider通过JSch SFTP操作远程文件系统",
+    "PTY伪终端通过JNI(libpty.so)实现,支持行列窗口大小调整/规范模式检测/echo控制",
+    "SSHTerminalProvider通过本地proot环境自动执行ssh,实现远程终端+SFTP文件一体化",
+    "OkHttp作为HTTP客户端核心,所有AI LLM调用和HTTP工具均基于OkHttp3",
+    "WebSocket用于OpenAI Realtime语音,通过OkWebSocket实现",
+    "SSE通过WebChatHttpBridge+LLM Provider实现事件流,ClaudeProvider和GeminiProvider中均有SSE处理逻辑",
+    "内置FTP(2127)和SSHD服务器,可暴露Ubuntu文件系统给外部访问",
+    "工具包系统(ToolPackage)支持JS脚本作为AI可调用工具,QuickJS引擎+JsJavaBridge实现Native<->JS互调",
+    "Terminal module为独立git submodule(OperitTerminal repo),通过settings.gradle.kts集成"
+  ]
+}

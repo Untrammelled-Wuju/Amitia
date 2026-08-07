@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-08-07T14:45:04+08:00",
+  "aliases": [
+    {
+      "Canonical": "CAP.TOOL.EXECUTE.GENERAL",
+      "Alias": "CAP.TOOL.Execute"
+    },
+    {
+      "Canonical": "CAP.TOOL.EXECUTE.GENERAL",
+      "Alias": "tool.execute.general"
+    }
+  ]
+}

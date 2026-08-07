@@ -1,0 +1,39 @@
+{
+  "id": "flutter_app_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "flutter_app",
+  "description": "Flutter移动端App结构清单",
+  "framework": "Flutter 3.x + go_router + Riverpod",
+  "app_structure": {
+    "core": {
+      "description": "核心模型与服务层",
+      "files": [
+        "mobile_app/lib/core/api/api_client.dart",
+        "mobile_app/lib/core/models/character.dart",
+        "mobile_app/lib/core/models/conversation.dart",
+        "mobile_app/lib/core/services/chat_service.dart",
+        "mobile_app/lib/core/services/memory_service.dart"
+      ]
+    },
+    "routing": {
+      "description": "路由配置(50+页面)",
+      "files": ["mobile_app/lib/app/app_routes.dart", "mobile_app/lib/app/router.dart"]
+    },
+    "features": {
+      "description": "业务功能模块",
+      "feature_pages": [
+        "auth/login", "chat/对话", "characters/角色管理(CRUD/详情/声音/记忆/时间线/主动/心理/调试)",
+        "agent/Agent任务", "channels/通道(微信/QQ/中心)", "conversations/会话列表",
+        "dashboard/仪表盘", "desktop_pet/桌面宠物", "developer/开发面板(kernel/tasks/schedules/events/hooks...)",
+        "emotes/表情管理", "chat_logs/聊天记录", "chat_import/聊天导入",
+        "extensions/扩展中心(插件/技能/MCP/Agent技能)", "extensions/packages/扩展包",
+        "extensions/execution_runs/执行历史", "game_center/游戏中心",
+        "memory/记忆(管理器/时间线/图谱/情景/世界书/用户画像)",
+        "permissions/权限设置", "privacy/隐私", "reminders/提醒",
+        "runtime/运行时管理", "settings/设置(20+子页面)", "toolbox/工具箱(9个诊断页面)",
+        "workshop(技能创作/宠物创作/动作编辑)"
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "registries": [
+    {
+      "Count": 506,
+      "File": "capability_registry.json"
+    },
+    {
+      "Count": 506,
+      "File": "tool_registry.json"
+    },
+    {
+      "Count": 506,
+      "File": "permission_registry.json"
+    }
+  ],
+  "generatedAt": "2026-08-07T14:45:04+08:00",
+  "manifestId": "PARITY-2026-08-07-V1-CONSTANTS-MANIFEST",
+  "totalCapabilities": 506
+}

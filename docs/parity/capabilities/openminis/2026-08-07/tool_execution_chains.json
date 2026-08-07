@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "chains": [
+    {
+      "tool_id": "shell_execute",
+      "flow": "Agent parses params → ToolPreflight checks permission → Sandbox route (iOS: iSH fakefs; Android: PRoot) → ISHExecutionCoordinator / ShellExecutor → PTY stdin/stdout/stderr → result returned"
+    },
+    {
+      "tool_id": "file_read",
+      "flow": "Agent → Workspace/Sandbox path resolver → FileManager read → contents → Agent context"
+    },
+    {
+      "tool_id": "file_write",
+      "flow": "Agent → Path validation → Workspace/Sandbox isolation → FileManager write → confirmation"
+    },
+    {
+      "tool_id": "file_edit",
+      "flow": "Agent → Read current → Apply diff/patch → Write result → Return diff"
+    },
+    {
+      "tool_id": "browser_use",
+      "flow": "Agent → BrowserTabPool (iOS: WKWebView; Android: WebView) → Execute action (navigate/click/input/screenshot) → Return result"
+    },
+    {
+      "tool_id": "browser_use",
+      "flow": "Agent → BrowserTabPool (iOS: WKWebView; Android: WebView) → Execute action (navigate/click/input/screenshot) → Return result"
+    }
+  ]
+}

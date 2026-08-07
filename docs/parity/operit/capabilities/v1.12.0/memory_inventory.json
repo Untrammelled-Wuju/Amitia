@@ -1,0 +1,125 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "source": "memory_scan.json"
+  },
+  "components": [
+    {
+      "name": "MemoryRepository",
+      "path": "app/src/main/java/com/ai/assistance/operit/data/repository/MemoryRepository.kt",
+      "description": "Core data access layer for memory CRUD operations using ObjectBox database. Supports per-profile isolation. Implements vector similarity search with RRF (Reciprocal Rank Fusion) combining semantic and keyword search. Includes link graph operations (strong/medium/weak relations), tag system, document chunk management, folder-based organization, and memory import/export.",
+      "key_features": [
+        "ObjectBox-based persistence per memory profile",
+        "HNSW vector index via VectorIndexManager (hnswlib)",
+        "Hybrid search: semantic embedding + keyword coverage bonus with RRF",
+        "Link/graph relationships with configurable weights (STRONG=1.0, MEDIUM=0.7, WEAK=0.3)",
+        "Document chunk storage and retrieval via DocumentChunk entities",
+        "Tag-based organization and filtering",
+        "FolderPath-based hierarchical organization",
+        "Dangling link cleanup",
+        "Memory score modes and debug info for search transparency",
+        "Full memory import/export (JSON serialization)"
+      ]
+    },
+    {
+      "name": "Memory Entity",
+      "path": "app/src/main/java/com/ai/assistance/operit/data/model/Memory.kt",
+      "description": "Core memory unit entity stored in ObjectBox. Represents a knowledge fragment/event/concept. Contains title, content, contentType, source, credibility, importance, documentPath, isDocumentNode, chunkIndexFilePath, folderPath, embedding (FloatArray), tags, links, backlinks, properties, documentChunks, and timestamps.",
+      "relations": [
+        "tags: ToMany<MemoryTag> - classification labels",
+        "properties: ToMany<MemoryProperty> - arbitrary key-value metadata",
+        "links: ToMany<MemoryLink> - outgoing graph edges",
+        "backlinks: ToMany<MemoryLink> - incoming graph edges (reverse)",
+        "documentChunks: ToMany<DocumentChunk> - full document content blocks"
+      ]
+    },
+    {
+      "name": "MemoryLink Entity",
+      "path": "data/model/MemoryLink (referenced in repository)",
+      "description": "Directed relationship between memories with weight (strong/medium/weak) and description. Forms a knowledge graph."
+    },
+    {
+      "name": "MemoryTag Entity",
+      "path": "app/src/main/java/com/ai/assistance/operit/data/model/Memory.kt",
+      "description": "Tag for memory classification with parent-child hierarchy support"
+    },
+    {
+      "name": "VectorIndexManager",
+      "path": "app/src/main/java/com/ai/assistance/operit/util/vector/VectorIndexManager.kt",
+      "description": "HNSWLib-based vector index. Uses cosine similarity distance. Supports dynamic resizing, item removal, k-nearest-neighbor query, persistence via Java serialization to disk.",
+      "library": "com.github.jelmerk:hnswlib-core"
+    },
+    {
+      "name": "IndexItem",
+      "path": "app/src/main/java/com/ai/assistance/operit/util/vector/IndexItem.kt",
+      "description": "Concrete Item implementation for HNSWLib storing id, vector (FloatArray), and associated data"
+    },
+    {
+      "name": "MemoryLibrary",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/chat/library/MemoryLibrary.kt",
+      "description": "High-level memory management API. Analyzes conversation content via AI to extract structured knowledge graph: entities (ParsedEntity), relationships (ParsedLink), updates (ParsedUpdate), merges (ParsedMerge), and user preferences. Persists extracted knowledge as memory nodes with links in ObjectBox.",
+      "analysis_output_structure": {
+        "mainEntity": "ParsedEntity - the main topic",
+        "extractedEntities": "List of knowledge items with title, content, tags, aliasFor, folderPath",
+        "links": "Relationships with type, description, weight",
+        "updates": "Content updates for existing entities with credibility/importance changes",
+        "merges": "Entity consolidation operations",
+        "userPreferences": "Extracted user preferences text"
+      }
+    },
+    {
+      "name": "MemoryAutoSaveScheduler",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/chat/library/MemoryAutoSaveScheduler.kt",
+      "description": "Periodic background service that scans chat histories for memory-worthy content. Polls every 60s, extracts candidates from conversations (reply finalization, user messages), batches them (max 48 messages/run), and processes via MemoryAutoSaveCandidateRepository.",
+      "key_constants": {
+        "LOOP_TICK_MS": "60000 (1 minute)",
+        "DEFAULT_POLL_INTERVAL": "from MemorySearchSettingsPreferences",
+        "MAX_MESSAGES_PER_BATCH": 48,
+        "MAX_CANDIDATES_PER_RUN_PER_CHAT": 20,
+        "MIN_TOTAL_CANDIDATES_TO_EXTRACT": 5
+      }
+    },
+    {
+      "name": "MemoryAutoSaveCandidateRepository",
+      "path": "app/src/main/java/com/ai/assistance/operit/data/repository/MemoryAutoSaveCandidateRepository.kt",
+      "description": "Manages queue of memory extraction candidates with status tracking: PENDING, PROCESSING, FAILED. Supports state_machine transitions for retry logic."
+    },
+    {
+      "name": "MemorySearchSettingsPreferences",
+      "path": "app/src/main/java/com/ai/assistance/operit/data/preferences/MemorySearchSettingsPreferences.kt",
+      "description": "Per-profile memory search settings: auto-save interval, next scheduled run timestamp, search configuration"
+    },
+    {
+      "name": "Embedding / EmbeddingConverter",
+      "path": "app/src/main/java/com/ai/assistance/operit/data/model/Embedding.kt",
+      "description": "FloatArray-based embedding vector stored in ObjectBox via converter (ByteArray storage)"
+    },
+    {
+      "name": "CloudEmbeddingService",
+      "path": "app/src/main/java/com/ai/assistance/operit/services/CloudEmbeddingService.kt",
+      "description": "Service for computing embeddings via cloud API providers (uses configured model endpoint)"
+    },
+    {
+      "name": "DocumentChunk Entity",
+      "path": "data/model/DocumentChunk",
+      "description": "Stores segmented document content for RAG (Retrieval-Augmented Generation) - full document text split into searchable chunks with embeddings"
+    },
+    {
+      "name": "MemoryDocumentsProvider",
+      "path": "app/src/main/java/com/ai/assistance/operit/provider/MemoryDocumentsProvider.kt",
+      "description": "Android DocumentsProvider exposing memory contents to the system file picker (SAF)"
+    },
+    {
+      "name": "MemorySearchConfig / MemorySearchDebugInfo",
+      "path": "app/src/main/java/com/ai/assistance/operit/data/model/",
+      "description": "Configuration and debug instrumentation for search relevance scoring"
+    }
+  ],
+  "storage": {
+    "primary": "ObjectBox (NoSQL embedded database) per memory profile",
+    "vector_index": "HNSWLib (hnswlib) Hierarchical Navigable Small World graph with cosine distance",
+    "vector_persistence": "Java Object serialization to disk file",
+    "supabase": "No evidence of Supabase pgvector found"
+  },
+  "details": "Operit v1.12.0 has a sophisticated memory system built on three pillars: (1) ObjectBox-based persistent knowledge graph with entities, directed weighted links, tags, folder hierarchy, and full document RAG chunk storage; (2) HNSWLib vector index enabling cosine-similarity semantic search fused with keyword coverage bonus via RRF; (3) AI-powered memory extraction pipeline that analyzes conversations to auto-extract entities, relationships, updates, and merges. The system supports per-profile isolation so different character cards can have separate memory stores. MemoryDocumentsProvider exposes stored memories to Android's Storage Access Framework."
+}

@@ -1,0 +1,123 @@
+{
+  "inventory_id": "INV-A14-MEMORY-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "memory_system",
+  "items": [
+    {
+      "id": "MEMORY-001",
+      "name": "Pipeline Layer 1 - Working Memory",
+      "name_en": "Working Memory Layer",
+      "description": "工作记忆层，管理当前对话会话的短期上下文和临时状态",
+      "file": "backend/internal/memory/working_memory.go",
+      "state": "IMPLEMENTED",
+      "layer": 1
+    },
+    {
+      "id": "MEMORY-002",
+      "name": "Pipeline Layer 2 - Profile",
+      "name_en": "User Profile Layer",
+      "description": "用户画像层，注入用户基础信息和偏好到记忆中",
+      "file": "backend/internal/memory/pipeline.go",
+      "state": "IMPLEMENTED",
+      "layer": 2
+    },
+    {
+      "id": "MEMORY-003",
+      "name": "Pipeline Layer 3 - Episodic",
+      "name_en": "Episodic Memory Layer",
+      "description": "情景记忆层，检索和注入相关的情景记忆片段",
+      "file": "backend/internal/memory/pipeline.go",
+      "state": "IMPLEMENTED",
+      "layer": 3
+    },
+    {
+      "id": "MEMORY-004",
+      "name": "Pipeline Layer 4 - Structured Fact",
+      "name_en": "Structured Fact Layer",
+      "description": "结构化事实层，注入从记忆库检索到的结构化事实",
+      "file": "backend/internal/memory/pipeline.go",
+      "state": "IMPLEMENTED",
+      "layer": 4
+    },
+    {
+      "id": "MEMORY-005",
+      "name": "Pipeline Layer 5 - Vector Sync",
+      "name_en": "Vector Search Layer",
+      "description": "向量搜索层，通过向量相似度检索相关记忆内容",
+      "file": "backend/internal/memory/search_service.go",
+      "state": "IMPLEMENTED",
+      "layer": 5
+    },
+    {
+      "id": "MEMORY-006",
+      "name": "Pipeline Layer 6 - Graph Relations",
+      "name_en": "Graph Knowledge Layer",
+      "description": "图谱知识层，通过图数据库检索关系型记忆",
+      "file": "backend/internal/memory/graph_service.go",
+      "state": "IMPLEMENTED",
+      "layer": 6
+    },
+    {
+      "id": "MEMORY-007",
+      "name": "Search Method - Keyword",
+      "name_en": "Keyword Search",
+      "description": "关键词搜索，基于文本匹配的记忆检索方法",
+      "file": "backend/internal/memory/search_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/memories/search"]
+    },
+    {
+      "id": "MEMORY-008",
+      "name": "Search Method - Vector",
+      "name_en": "Vector Similarity Search",
+      "description": "向量相似度搜索，基于嵌入向量的语义检索",
+      "file": "backend/internal/memory/search_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/memories/vector-search"]
+    },
+    {
+      "id": "MEMORY-009",
+      "name": "Search Method - Hybrid",
+      "name_en": "Hybrid Search",
+      "description": "混合搜索，结合关键词和向量搜索的综合检索方法",
+      "file": "backend/internal/memory/search_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/memories/hybrid-search"]
+    },
+    {
+      "id": "MEMORY-010",
+      "name": "Conflict Resolution",
+      "name_en": "Memory Conflict Resolver",
+      "description": "记忆冲突解决器，检测和处理相互矛盾的记忆条目",
+      "file": "backend/internal/memory/conflict_resolver.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/v1/memories/check-conflict",
+        "POST /api/v1/memories/resolve-conflict"
+      ]
+    },
+    {
+      "id": "MEMORY-011",
+      "name": "Candidate Management",
+      "name_en": "Memory Candidate System",
+      "description": "记忆候选系统，管理从对话中提取的潜在记忆候选",
+      "file": "backend/internal/memory/candidate_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/memory-candidates",
+        "POST /api/v1/memory-candidates/:id/accept",
+        "POST /api/v1/memory-candidates/:id/reject"
+      ]
+    },
+    {
+      "id": "MEMORY-012",
+      "name": "Retrieval Ranking",
+      "name_en": "Memory Ranking Service",
+      "description": "记忆排序服务，对检索结果按相关性和时间进行排序",
+      "file": "backend/internal/memory/ranking_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/memories/ranked"]
+    }
+  ]
+}

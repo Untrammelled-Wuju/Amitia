@@ -1,0 +1,75 @@
+{
+  "total_stubs": 10,
+  "stubs": [
+    {
+      "file": "backend/internal/character/handler.go",
+      "handler": "ExportPack",
+      "endpoint": "POST /characters/:id/export-pack",
+      "state": "STUB",
+      "note": "Returns empty object"
+    },
+    {
+      "file": "backend/internal/character/handler.go",
+      "handler": "ImportPackPreview",
+      "endpoint": "POST /characters/import-pack/preview",
+      "state": "STUB",
+      "note": "Returns empty object"
+    },
+    {
+      "file": "backend/internal/character/handler.go",
+      "handler": "ImportPackConfirm",
+      "endpoint": "POST /characters/import-pack/confirm",
+      "state": "STUB",
+      "note": "Returns empty object"
+    },
+    {
+      "file": "backend/internal/character/handler.go",
+      "handler": "PacksHistory",
+      "endpoint": "GET /characters/packs/history",
+      "state": "STUB",
+      "note": "Returns empty object"
+    },
+    {
+      "file": "backend/internal/character/handler.go",
+      "handler": "CreateFromTemplate",
+      "endpoint": "POST /character-templates/:id/create-character",
+      "state": "STUB",
+      "note": "Returns fake ID"
+    },
+    {
+      "file": "backend/internal/chat/handler.go",
+      "handler": "GetSummary",
+      "endpoint": "POST /chats/conversations/:id/summarize",
+      "state": "STUB",
+      "note": "Returns empty {summary:\"\"}"
+    },
+    {
+      "file": "backend/internal/chat/handler.go",
+      "handler": "CleanupPreview",
+      "endpoint": "POST /system/storage/cleanup/preview",
+      "state": "STUB",
+      "note": "Returns fixed {deletable:0}"
+    },
+    {
+      "file": "backend/internal/chat/handler.go",
+      "handler": "CleanupConfirm",
+      "endpoint": "POST /system/storage/cleanup/confirm",
+      "state": "STUB",
+      "note": "No-op confirmation"
+    },
+    {
+      "file": "backend/internal/chat/handler.go",
+      "handler": "CleanupVacuum",
+      "endpoint": "POST /system/storage/cleanup/vacuum",
+      "state": "STUB",
+      "note": "Returns empty result"
+    },
+    {
+      "file": "backend/internal/chat/handler.go",
+      "handler": "GetProviderSchema",
+      "endpoint": "GET /model/provider-schema",
+      "state": "STUB",
+      "note": "Returns fixed fields (baseUrl/apiKey/modelName)"
+    }
+  ]
+}

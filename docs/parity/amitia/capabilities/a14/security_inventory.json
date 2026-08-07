@@ -1,0 +1,152 @@
+{
+  "inventory_id": "INV-A14-SECURITY-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "security",
+  "items": [
+    {
+      "id": "SEC-001",
+      "name": "Security Mode",
+      "name_en": "Security Mode Configuration",
+      "description": "安全模式配置，支持network、local_single_user、maintenance三种模式",
+      "file": "backend/internal/security/mode.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-002",
+      "name": "JWT Authentication",
+      "name_en": "JWT Token Authentication",
+      "description": "JWT令牌认证，在network模式下使用JWT进行用户认证",
+      "file": "backend/internal/security/mode.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-003",
+      "name": "Local Token Auth",
+      "name_en": "Local Single-User Token",
+      "description": "本地单用户令牌认证，在local_single_user模式下使用本地令牌",
+      "file": "backend/internal/security/mode.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-004",
+      "name": "Auth Context",
+      "name_en": "Authentication Context",
+      "description": "认证上下文，传递和管理用户认证信息",
+      "file": "backend/internal/auth/context.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-005",
+      "name": "Permission System",
+      "name_en": "User Permission System",
+      "description": "用户权限系统，管理用户角色和权限级别",
+      "file": "backend/internal/auth/permissions.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-006",
+      "name": "Extension Auth",
+      "name_en": "Extension Authentication",
+      "description": "扩展认证中间件，验证扩展请求的身份和权限",
+      "file": "backend/internal/extension/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-007",
+      "name": "Permission Gate",
+      "name_en": "Execution Permission Gate",
+      "description": "执行权限门控，在工具/工作流执行前检查权限",
+      "file": "backend/internal/extension/kernel/execution/permission_gate.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-008",
+      "name": "OAuth (MCP)",
+      "name_en": "MCP OAuth Support",
+      "description": "MCP OAuth支持，管理MCP服务器的OAuth认证流程",
+      "file": "backend/internal/mcp/auth/oauth.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-009",
+      "name": "Secret Store",
+      "name_en": "MCP Secret Storage",
+      "description": "密钥存储，安全存储MCP服务器的认证凭证",
+      "file": "backend/internal/mcp/auth/oauth.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-010",
+      "name": "Token Store",
+      "name_en": "OAuth Token Storage",
+      "description": "OAuth令牌存储，安全持久化MCP OAuth令牌",
+      "file": "backend/internal/mcp/auth/token_store.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-011",
+      "name": "Transport Security",
+      "name_en": "MCP Transport Security",
+      "description": "MCP传输安全，控制stdio和HTTP传输的安全策略",
+      "file": "backend/internal/mcp/transport/security.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-012",
+      "name": "Sandbox Policy",
+      "name_en": "Endpoint Sandbox Policy",
+      "description": "端点沙箱策略，控制MCP连接的网络访问范围（公网/私网/回环）",
+      "file": "backend/internal/mcp/transport/transport.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-013",
+      "name": "Trusted Service Auth",
+      "name_en": "Trusted Service Authentication",
+      "description": "可信服务认证，控制扩展对受信任服务的访问授权",
+      "file": "backend/internal/extension/kernel/trusted_service/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-014",
+      "name": "Package Signing",
+      "name_en": "Extension Package Signing",
+      "description": "扩展包签名验证，确保扩展包的完整性和来源可信",
+      "file": "backend/internal/extension/kernel/amitiax/signing.go",
+      "state": "PARTIAL",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-015",
+      "name": "Scope Binding",
+      "name_en": "Scope-based Access Control",
+      "description": "基于作用域的访问控制，限制扩展的数据访问范围",
+      "file": "backend/internal/extension/kernel/scope_context.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "SEC-016",
+      "name": "User Management",
+      "name_en": "User CRUD",
+      "description": "用户管理，处理用户账号的创建、认证和管理",
+      "file": "backend/internal/user/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

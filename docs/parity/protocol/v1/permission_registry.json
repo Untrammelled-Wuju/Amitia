@@ -1,0 +1,3549 @@
+{
+  "registryId": "PARITY-2026-08-07-V1-PERMISSION-REGISTRY",
+  "totalPermissions": 1,
+  "generatedAt": "2026-08-07T14:45:04+08:00",
+  "permissions": [
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CN",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.UPDATE.UPDATE_FULL_APK",
+      "resource": "UPDATE_FULL_APK",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.CONTROL.CLOSE_ALL_VIRTUAL_DISPLAYS",
+      "resource": "CLOSE_ALL_VIRTUAL_DISPLAYS",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.UPDATE.UPDATE_USER_PREFERENCES",
+      "resource": "UPDATE_USER_PREFERENCES",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.1",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.2",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.3",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.4",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.ORMCN",
+      "resource": "ORMCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.INSTALL_APP",
+      "resource": "INSTALL_APP",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.5",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.6",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.UPDATE.MEMORY WRITE",
+      "resource": "MEMORY WRITE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL OWNED RESOURCECN",
+      "resource": "TOOL OWNED RESOURCECN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.UPDATE.MODIFY_SYSTEM_SETTING",
+      "resource": "MODIFY_SYSTEM_SETTING",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.UPDATE.FILE EDIT",
+      "resource": "FILE EDIT",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.JS PACKAGE TOOLS (DYNAMIC)",
+      "resource": "JS PACKAGE TOOLS (DYNAMIC)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.7",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.8",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_HIDDEN_TERMINAL_COMMAND",
+      "resource": "EXECUTE_HIDDEN_TERMINAL_COMMAND",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.CREATE.CREATE_TERMINAL_SESSION",
+      "resource": "CREATE_TERMINAL_SESSION",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.SEND.PERMISSION_POST_NOTIFICATIONS",
+      "resource": "PERMISSION_POST_NOTIFICATIONS",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.READ.MEMORY FUZZY SEARCH",
+      "resource": "MEMORY FUZZY SEARCH",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.EXECUTE.CROSS-SESSION PERSISTENCE",
+      "resource": "CROSS-SESSION PERSISTENCE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.WORKSPACE IMPORT/EXPORT",
+      "resource": "WORKSPACE IMPORT/EXPORT",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.APPLICATION_INSTALL_UNINSTALL",
+      "resource": "APPLICATION_INSTALL_UNINSTALL",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.EXECUTE.FLOATING_WINDOW_OVERLAY",
+      "resource": "FLOATING_WINDOW_OVERLAY",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.READ.PERMISSION_READ_PHONE_STATE",
+      "resource": "PERMISSION_READ_PHONE_STATE",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.9",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.10",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.STREAMING OUTPUT",
+      "resource": "STREAMING OUTPUT",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.DEVICE INFO",
+      "resource": "DEVICE INFO",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CORRUPTION RECOVERY",
+      "resource": "CORRUPTION RECOVERY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.VISION/OCR",
+      "resource": "VISION/OCR",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.READ.QUERY_MEMORY_LINKS",
+      "resource": "QUERY_MEMORY_LINKS",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CONCURRENT TOOL EXECUTION",
+      "resource": "CONCURRENT TOOL EXECUTION",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.PRESERVATION.BACKUP_BACKUP",
+      "resource": "BACKUP_BACKUP",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.PRESERVATION.1",
+      "resource": "BACKUP_BACKUP",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.TRANSFER.TRANSFER_DATA",
+      "resource": "TRANSFER_DATA",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.11",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.TOOLPKG_INSTALL_ZIP",
+      "resource": "TOOLPKG_INSTALL_ZIP",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.12",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.13",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.14",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.15",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.GREP_CODE",
+      "resource": "GREP_CODE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.BLUETOOTH_SEND_AND_READ",
+      "resource": "BLUETOOTH_SEND_AND_READ",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CONVERSATION.MANAGE.CONVERSATION",
+      "resource": "CONVERSATION",
+      "level": "EXECUTE",
+      "domain": "CONVERSATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CHANNEL",
+      "resource": "CHANNEL",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.16",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CAPTURE.CAPTURE_SCREENSHOT",
+      "resource": "CAPTURE_SCREENSHOT",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.17",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.18",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.INSTALL.MCP_PLUGIN_INSTALL_&_SERVER",
+      "resource": "MCP_PLUGIN_INSTALL_&_SERVER",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.CAMERA_CAPTURE_(IMAGEREADER)",
+      "resource": "CAMERA_CAPTURE_(IMAGEREADER)",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.UPDATE.UPDATE_MEMORY",
+      "resource": "UPDATE_MEMORY",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.19",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.20",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.21",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.22",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.UPDATE.UPDATE_MEMORY_LINK",
+      "resource": "UPDATE_MEMORY_LINK",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CALCULATOR",
+      "resource": "CALCULATOR",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.23",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MUSIC_STATUS",
+      "resource": "MUSIC_STATUS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.AUTOMATION.EXECUTE_BROWSER",
+      "resource": "EXECUTE_BROWSER",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.IRCN",
+      "resource": "IRCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.EXECUTE.VECTORINDEXMANAGER",
+      "resource": "VECTORINDEXMANAGER",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.EXECUTE.PERMISSION_CALL_PHONE",
+      "resource": "PERMISSION_CALL_PHONE",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.24",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.VIRTUALDISPLAYOVERLAY",
+      "resource": "VIRTUALDISPLAYOVERLAY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.25",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.26",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.27",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.28",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.29",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_IN_TERMINAL_SESSION_STREAMING",
+      "resource": "EXECUTE_IN_TERMINAL_SESSION_STREAMING",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.30",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.READ.BLUETOOTH_BLE_READ_CHARACTERISTIC",
+      "resource": "BLUETOOTH_BLE_READ_CHARACTERISTIC",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.REQUEST_ENABLE_BLUETOOTH",
+      "resource": "REQUEST_ENABLE_BLUETOOTH",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_ACCEPT",
+      "resource": "BLUETOOTH_ACCEPT",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.MANAGEMENT.EXECUTE_CHARACTER",
+      "resource": "EXECUTE_CHARACTER",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.MANAGEMENT.1",
+      "resource": "EXECUTE_CHARACTER",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.MANAGEMENT.2",
+      "resource": "EXECUTE_CHARACTER",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.31",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.32",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.GET_APP_USAGE_TIME",
+      "resource": "GET_APP_USAGE_TIME",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.33",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.SCHEMACN",
+      "resource": "SCHEMACN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.34",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.SET_INPUT_TEXT",
+      "resource": "SET_INPUT_TEXT",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.35",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.36",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.SCREEN_CAPTURE_(VIRTUALDISPLAY_MANAGER)",
+      "resource": "SCREEN_CAPTURE_(VIRTUALDISPLAY_MANAGER)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.37",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.AGENT.EXECUTE.PSYCHECN",
+      "resource": "PSYCHECN",
+      "level": "EXECUTE",
+      "domain": "AGENT"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.SEND.BLUETOOTH_SEND",
+      "resource": "BLUETOOTH_SEND",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.38",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.39",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.40",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.41",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MINIS://OFFLOADS/",
+      "resource": "MINIS://OFFLOADS/",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.42",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.43",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.44",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.READ.LIST_INSTALLED_APPS",
+      "resource": "LIST_INSTALLED_APPS",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_BLE_DISCOVER_SERVICES",
+      "resource": "BLUETOOTH_BLE_DISCOVER_SERVICES",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.45",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTE.OPERITSHOWERSHELLRUNNER",
+      "resource": "OPERITSHOWERSHELLRUNNER",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.46",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.47",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.MEDIA PLAYBACK CONTROL",
+      "resource": "MEDIA PLAYBACK CONTROL",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.48",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.49",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.LOG SANITIZATION",
+      "resource": "LOG SANITIZATION",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.50",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.51",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.UNINSTALL_APP",
+      "resource": "UNINSTALL_APP",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.UPDATE.BLUETOOTH_BLE_WRITE_AND_READ_CHARACTERISTIC",
+      "resource": "BLUETOOTH_BLE_WRITE_AND_READ_CHARACTERISTIC",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NOTIFICATION.READ.BLUETOOTH_BLE_READ_NOTIFICATIONS",
+      "resource": "BLUETOOTH_BLE_READ_NOTIFICATIONS",
+      "level": "EXECUTE",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.52",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.DATA IMPORT",
+      "resource": "DATA IMPORT",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.VOICE.READ.VOICELISTFETCHER",
+      "resource": "VOICELISTFETCHER",
+      "level": "EXECUTE",
+      "domain": "VOICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.53",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.54",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.DELETE.DELETE_MEMORY",
+      "resource": "DELETE_MEMORY",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL REGISTRY",
+      "resource": "TOOL REGISTRY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.INSTALL.SKILL INSTALLATION/IMPORT",
+      "resource": "SKILL INSTALLATION/IMPORT",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.55",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CNSCHEMA",
+      "resource": "CNSCHEMA",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.EXECUTE.HOOK_TOOL_LIFECYCLE_INTERCEPT",
+      "resource": "HOOK_TOOL_LIFECYCLE_INTERCEPT",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.GET_SYSTEM_SETTING",
+      "resource": "GET_SYSTEM_SETTING",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.56",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL CALL EXECUTION",
+      "resource": "TOOL CALL EXECUTION",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.57",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.58",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.59",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.EXECUTE.SESSION PERSISTENCE",
+      "resource": "SESSION PERSISTENCE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.60",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.61",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.DEBUGGERSYSTEMOPERATIONTOOLS",
+      "resource": "DEBUGGERSYSTEMOPERATIONTOOLS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.62",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.63",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.UPDATE.CLIPBOARD WRITE",
+      "resource": "CLIPBOARD WRITE",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.FALLBACK & RETRY",
+      "resource": "FALLBACK & RETRY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.64",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.65",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.66",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.READ.LIST_CHARACTER_CARDS",
+      "resource": "LIST_CHARACTER_CARDS",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.DELETE.DELETE_MEMORY_LINK",
+      "resource": "DELETE_MEMORY_LINK",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.67",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.68",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TASK.EXECUTE.TASK",
+      "resource": "TASK",
+      "level": "EXECUTE",
+      "domain": "TASK"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.EXECUTE.MAKE_DIRECTORY",
+      "resource": "MAKE_DIRECTORY",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.69",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.OPEN URL/APP",
+      "resource": "OPEN URL/APP",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.SSHD_SERVER_MANAGER",
+      "resource": "SSHD_SERVER_MANAGER",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.FFMPEG_CONVERT",
+      "resource": "FFMPEG_CONVERT",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.70",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.71",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.AGENT.EXECUTE.AGENT_STATUS",
+      "resource": "AGENT_STATUS",
+      "level": "EXECUTE",
+      "domain": "AGENT"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TASK.READ.PERSONALWAKELISTENER_(CUSTOM_WAKE_WORD)",
+      "resource": "PERSONALWAKELISTENER_(CUSTOM_WAKE_WORD)",
+      "level": "EXECUTE",
+      "domain": "TASK"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.72",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.CAPTURE.BROWSER SCREENSHOT",
+      "resource": "BROWSER SCREENSHOT",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.VOICE.EXECUTE.AUDIO",
+      "resource": "AUDIO",
+      "level": "EXECUTE",
+      "domain": "VOICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.73",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NOTIFICATION.EXECUTE.TOAST",
+      "resource": "TOAST",
+      "level": "EXECUTE",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.74",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.INSTALL.SKILL_IMPORT_FROM_ZIP",
+      "resource": "SKILL_IMPORT_FROM_ZIP",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.75",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.76",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.77",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_PLAY_QUEUE",
+      "resource": "MUSIC_PLAY_QUEUE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CNIPCCN",
+      "resource": "CNIPCCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CLIPBOARD_ACCESS",
+      "resource": "CLIPBOARD_ACCESS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.78",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.STOP_APP",
+      "resource": "STOP_APP",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.INTEGRATION.EXECUTE_MCP_SERVER",
+      "resource": "EXECUTE_MCP_SERVER",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.FTP_SERVER_MANAGER",
+      "resource": "FTP_SERVER_MANAGER",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.SWITCH.BROWSER_SELECT_OPTION",
+      "resource": "BROWSER_SELECT_OPTION",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.AGENT.EXECUTE.RUN_UI_SUBAGENT",
+      "resource": "RUN_UI_SUBAGENT",
+      "level": "EXECUTE",
+      "domain": "AGENT"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.CREATE.CREATE_MEMORY",
+      "resource": "CREATE_MEMORY",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.INDEXITEM",
+      "resource": "INDEXITEM",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.79",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.STOP.BROWSER_CLOSE",
+      "resource": "BROWSER_CLOSE",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_STOP",
+      "resource": "MUSIC_STOP",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NOTIFICATION.EXECUTE.NOTIFICATION_FGS_MANAGEMENT",
+      "resource": "NOTIFICATION_FGS_MANAGEMENT",
+      "level": "EXECUTE",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.EXECUTE.TOOLPKGHOOKBRIDGESUPPORT",
+      "resource": "TOOLPKGHOOKBRIDGESUPPORT",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.80",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.PACKAGE_PROXY",
+      "resource": "PACKAGE_PROXY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOLCN",
+      "resource": "TOOLCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.81",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.82",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTE.NLP PROCESSING",
+      "resource": "NLP PROCESSING",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NOTIFICATION.EXECUTE.NOTIFICATION_MANAGEMENT",
+      "resource": "NOTIFICATION_MANAGEMENT",
+      "level": "EXECUTE",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.FFMPEG_INFO",
+      "resource": "FFMPEG_INFO",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.83",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.EXECUTE.TOOLPKGSUMMARYHOOKBRIDGE",
+      "resource": "TOOLPKGSUMMARYHOOKBRIDGE",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.UPDATE.WRITE_FILE",
+      "resource": "WRITE_FILE",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.SEND.SHARE_INTENT_(ACTION_SEND)",
+      "resource": "SHARE_INTENT_(ACTION_SEND)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.EXECUTE.WORKFLOW_DAG_EXECUTE",
+      "resource": "WORKFLOW_DAG_EXECUTE",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.CLIPBOARD READ",
+      "resource": "CLIPBOARD READ",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.84",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.CAPTURE.CAMERA_IMAGE_CAPTURE",
+      "resource": "CAMERA_IMAGE_CAPTURE",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.85",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.86",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.87",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.88",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.89",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.PHOTO LIBRARY ACCESS",
+      "resource": "PHOTO LIBRARY ACCESS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.90",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.91",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.START.PERMISSION_BLUETOOTH_CONNECT",
+      "resource": "PERMISSION_BLUETOOTH_CONNECT",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.CREATE.WORKFLOW_CREATE",
+      "resource": "WORKFLOW_CREATE",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.FFMPEG_EXECUTE",
+      "resource": "FFMPEG_EXECUTE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TOKENCN",
+      "resource": "TOKENCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.UPDATE.WRITE_FILE_BINARY",
+      "resource": "WRITE_FILE_BINARY",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.CANCELLATION & STOP",
+      "resource": "CANCELLATION & STOP",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.92",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.GET_DEVICE_LOCATION",
+      "resource": "GET_DEVICE_LOCATION",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.PRESS_KEY",
+      "resource": "PRESS_KEY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.93",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.BLUETOOTH_LISTEN",
+      "resource": "BLUETOOTH_LISTEN",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.DOCUMENTCHUNK_ENTITY",
+      "resource": "DOCUMENTCHUNK_ENTITY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.START.SSHFILECONNECTIONMANAGER",
+      "resource": "SSHFILECONNECTIONMANAGER",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.94",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.EXECUTE.ROOTSYSTEMOPERATIONTOOLS",
+      "resource": "ROOTSYSTEMOPERATIONTOOLS",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.95",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.96",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.97",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.USE_PACKAGE",
+      "resource": "USE_PACKAGE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.98",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.LIST_BLUETOOTH_BONDED_DEVICES",
+      "resource": "LIST_BLUETOOTH_BONDED_DEVICES",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CAPTURE.SCREEN_CAPTURE_(SCREENSHOT)",
+      "resource": "SCREEN_CAPTURE_(SCREENSHOT)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CAPTURE.1",
+      "resource": "SCREEN_CAPTURE_(SCREENSHOT)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.CREATE.CREATE_FILE",
+      "resource": "CREATE_FILE",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.99",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_SHELL",
+      "resource": "EXECUTE_SHELL",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.FILESYSTEM LISTING",
+      "resource": "FILESYSTEM LISTING",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.VOICE.CAPTURE.PERMISSION_RECORD_AUDIO",
+      "resource": "PERMISSION_RECORD_AUDIO",
+      "level": "EXECUTE",
+      "domain": "VOICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.SYSTEM_SETTINGS_MANIPULATION",
+      "resource": "SYSTEM_SETTINGS_MANIPULATION",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MODEL.EXECUTE.EMBEDDING_/_EMBEDDINGCONVERTER",
+      "resource": "EMBEDDING_/_EMBEDDINGCONVERTER",
+      "level": "EXECUTE",
+      "domain": "MODEL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.INSTALL.SKILL_INSTALL_FROM_GITHUB",
+      "resource": "SKILL_INSTALL_FROM_GITHUB",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CNSCHEMACN",
+      "resource": "CNSCHEMACN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.INTEGRATION.EXECUTE_PLATFORM",
+      "resource": "EXECUTE_PLATFORM",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.READ.GET_MEMORY_BY_TITLE",
+      "resource": "GET_MEMORY_BY_TITLE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MUSIC_SET_VOLUME",
+      "resource": "MUSIC_SET_VOLUME",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.ASSISTANT_INTENT_ACTIVITY",
+      "resource": "ASSISTANT_INTENT_ACTIVITY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.100",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.101",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.STOP.BLUETOOTH_CLOSE",
+      "resource": "BLUETOOTH_CLOSE",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.102",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.READ.QUERY_MEMORY",
+      "resource": "QUERY_MEMORY",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.SLEEP_DELAY",
+      "resource": "SLEEP_DELAY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.EXECUTE.MCP_TOOL_INVOKE",
+      "resource": "MCP_TOOL_INVOKE",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MANAGE_COOKIES",
+      "resource": "MANAGE_COOKIES",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.READ.MEMORYSEARCHSETTINGSPREFERENCES",
+      "resource": "MEMORYSEARCHSETTINGSPREFERENCES",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.INTERFACE.EXECUTE_UI",
+      "resource": "EXECUTE_UI",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.LONG_PRESS",
+      "resource": "LONG_PRESS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.103",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.REASONING/THINKING DISPLAY",
+      "resource": "REASONING/THINKING DISPLAY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.READ_FILE_FULL",
+      "resource": "READ_FILE_FULL",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.SEND.PERMISSION_SEND_SMS",
+      "resource": "PERMISSION_SEND_SMS",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.104",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.ANDROID CONTACTS READ",
+      "resource": "ANDROID CONTACTS READ",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.EXECUTE.TOOLPKGTOOLLIFECYCLEBRIDGE",
+      "resource": "TOOLPKGTOOLLIFECYCLEBRIDGE",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.105",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.AGENT.EXECUTE.1",
+      "resource": "PSYCHECN",
+      "level": "EXECUTE",
+      "domain": "AGENT"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.106",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.107",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.108",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.EXECUTE_INTENT",
+      "resource": "EXECUTE_INTENT",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.109",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.110",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.111",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.112",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.SCREEN_CASTING_(VIRTUALDISPLAY_OVERLAY)",
+      "resource": "SCREEN_CASTING_(VIRTUALDISPLAY_OVERLAY)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TASK.EXECUTE.PERSONALWAKEFEATUREEXTRACTOR",
+      "resource": "PERSONALWAKEFEATUREEXTRACTOR",
+      "level": "EXECUTE",
+      "domain": "TASK"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.113",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.114",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.115",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.SEND.SEND_BROADCAST",
+      "resource": "SEND_BROADCAST",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CNDEV CONSOLE API",
+      "resource": "CNDEV CONSOLE API",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NOTIFICATION.SEND.SEND_NOTIFICATION",
+      "resource": "SEND_NOTIFICATION",
+      "level": "EXECUTE",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.DEVICE_INFO",
+      "resource": "DEVICE_INFO",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_RESUME",
+      "resource": "MUSIC_RESUME",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.FILE READ",
+      "resource": "FILE READ",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.MANAGEMENT.EXECUTE_SKILL",
+      "resource": "EXECUTE_SKILL",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.116",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.EXECUTE.BROWSER_RUN_CODE",
+      "resource": "BROWSER_RUN_CODE",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.INSTALL.CHARACTER_CARD_SILLYTAVERN_IMPORT",
+      "resource": "CHARACTER_CARD_SILLYTAVERN_IMPORT",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.117",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL RESULT OBSERVATION",
+      "resource": "TOOL RESULT OBSERVATION",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.118",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CAPTURE.SCREEN_RECORDING___CASTING_(SHOWER)",
+      "resource": "SCREEN_RECORDING___CASTING_(SHOWER)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MODEL.EXECUTE.CLOUDEMBEDDINGSERVICE",
+      "resource": "CLOUDEMBEDDINGSERVICE",
+      "level": "EXECUTE",
+      "domain": "MODEL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.119",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.GET_PAGE_INFO",
+      "resource": "GET_PAGE_INFO",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.120",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTION.EXECUTE_SHELL",
+      "resource": "EXECUTE_SHELL",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_PLAY",
+      "resource": "MUSIC_PLAY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.121",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.LOCATION_TRACKING_(CONTINUOUS)",
+      "resource": "LOCATION_TRACKING_(CONTINUOUS)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.SCREEN_CAPTURE_(IMAGEREADER)",
+      "resource": "SCREEN_CAPTURE_(IMAGEREADER)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.122",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.UPDATE.WRITE HEALTH DATA (HEALTHKIT)",
+      "resource": "WRITE HEALTH DATA (HEALTHKIT)",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.123",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.124",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.DELETE.DELETE_FILE",
+      "resource": "DELETE_FILE",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.APPLICATION_INSTALL_(APK)",
+      "resource": "APPLICATION_INSTALL_(APK)",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.125",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MINIS:// URI SCHEME",
+      "resource": "MINIS:// URI SCHEME",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.VOICE.CAPTURE.MICROPHONE_RECORDING",
+      "resource": "MICROPHONE_RECORDING",
+      "level": "EXECUTE",
+      "domain": "VOICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.PERSISTENCE.EXECUTE_DATABASE",
+      "resource": "EXECUTE_DATABASE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.126",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.127",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.READ_FILE_PART",
+      "resource": "READ_FILE_PART",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.128",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.EXECUTE.MEMORY",
+      "resource": "MEMORY",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.129",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.EXECUTE.PERMISSION",
+      "resource": "PERMISSION",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.130",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.131",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.READ.PERMISSION_READ_CONTACTS",
+      "resource": "PERMISSION_READ_CONTACTS",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.132",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.START.BLUETOOTH_CONNECT",
+      "resource": "BLUETOOTH_CONNECT",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.133",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.134",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TAP",
+      "resource": "TAP",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.135",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.ANDROID WEATHER QUERY",
+      "resource": "ANDROID WEATHER QUERY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.136",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.UPDATE.UPDATE_PATCH_INCREMENTAL",
+      "resource": "UPDATE_PATCH_INCREMENTAL",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.137",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.138",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.139",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.140",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.INSTALL.PERMISSION_REQUEST_INSTALL_PACKAGES",
+      "resource": "PERMISSION_REQUEST_INSTALL_PACKAGES",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.141",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH DEVICE DETECTION",
+      "resource": "BLUETOOTH DEVICE DETECTION",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NOTIFICATION.READ.GET_NOTIFICATIONS",
+      "resource": "GET_NOTIFICATIONS",
+      "level": "EXECUTE",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CAPTURE.SCREENSHOT_SHARE",
+      "resource": "SCREENSHOT_SHARE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.142",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.SWIPE",
+      "resource": "SWIPE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.143",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.144",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.EXECUTE.ACCESSIBILITYSYSTEMOPERATIONTOOLS",
+      "resource": "ACCESSIBILITYSYSTEMOPERATIONTOOLS",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_DEVICE_SCAN",
+      "resource": "BLUETOOTH_DEVICE_SCAN",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.145",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MULTIPART_REQUEST",
+      "resource": "MULTIPART_REQUEST",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.146",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CNGOVERNOR",
+      "resource": "CNGOVERNOR",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.147",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.148",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.149",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CREATE.WORKSPACE CREATE",
+      "resource": "WORKSPACE CREATE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NOTIFICATION.READ.ANDROID NOTIFICATION READ",
+      "resource": "ANDROID NOTIFICATION READ",
+      "level": "EXECUTE",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.API KEY ENCRYPTION",
+      "resource": "API KEY ENCRYPTION",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.LOCATION GET",
+      "resource": "LOCATION GET",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.VOICE.SWITCH.TTS VOICE SELECTION",
+      "resource": "TTS VOICE SELECTION",
+      "level": "EXECUTE",
+      "domain": "VOICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.FIND_FILES",
+      "resource": "FIND_FILES",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.150",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.151",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.152",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.153",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.154",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.STOP.ANDROID CALENDAR ACCESS",
+      "resource": "ANDROID CALENDAR ACCESS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.155",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.156",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.157",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.158",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.MANAGEMENT.EXECUTE_EXTENSION",
+      "resource": "EXECUTE_EXTENSION",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.159",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.160",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.161",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.162",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.163",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.DEVICE_ADMIN_PRIVILEGE",
+      "resource": "DEVICE_ADMIN_PRIVILEGE",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.LOCATION_TRACKING",
+      "resource": "LOCATION_TRACKING",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.164",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.165",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.VOICE.EXECUTE.MICROPHONE_(OBOE)",
+      "resource": "MICROPHONE_(OBOE)",
+      "level": "EXECUTE",
+      "domain": "VOICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.166",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_PAUSE",
+      "resource": "MUSIC_PAUSE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_DEVICE_MANAGEMENT",
+      "resource": "BLUETOOTH_DEVICE_MANAGEMENT",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.HOMEKIT DEVICE CONTROL",
+      "resource": "HOMEKIT DEVICE CONTROL",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.SHORTCUTS/APP INTENTS",
+      "resource": "SHORTCUTS/APP INTENTS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.UPDATE.PERMISSION_WRITE_CONTACTS",
+      "resource": "PERMISSION_WRITE_CONTACTS",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.SHARE SHEET",
+      "resource": "SHARE SHEET",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.167",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.168",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.169",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.ADMINSYSTEMOPERATIONTOOLS",
+      "resource": "ADMINSYSTEMOPERATIONTOOLS",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.170",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.READ.MEMORYSEARCHCONFIG_/_MEMORYSEARCHDEBUGINFO",
+      "resource": "MEMORYSEARCHCONFIG_/_MEMORYSEARCHDEBUGINFO",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MODEL.EXECUTE.ONNXSILEROVAD",
+      "resource": "ONNXSILEROVAD",
+      "level": "EXECUTE",
+      "domain": "MODEL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.171",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.START.BLUETOOTH_BLE_CONNECT",
+      "resource": "BLUETOOTH_BLE_CONNECT",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.172",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.GET_BLUETOOTH_STATE",
+      "resource": "GET_BLUETOOTH_STATE",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.173",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.174",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.AGENT.EXECUTE.2",
+      "resource": "PSYCHECN",
+      "level": "EXECUTE",
+      "domain": "AGENT"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MUSIC_SEEK",
+      "resource": "MUSIC_SEEK",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.175",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.UPDATE.PERMISSION_WRITE_SETTINGS",
+      "resource": "PERMISSION_WRITE_SETTINGS",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.176",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.177",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.EXECUTE.FLOATINGWINDOWMANAGER",
+      "resource": "FLOATINGWINDOWMANAGER",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.MANAGEMENT.EXECUTE_FILE",
+      "resource": "EXECUTE_FILE",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.EXECUTE.WORKFLOW",
+      "resource": "WORKFLOW",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.WEATHER QUERY",
+      "resource": "WEATHER QUERY",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.178",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.START.MCP_REMOTE_SERVER_CONNECT",
+      "resource": "MCP_REMOTE_SERVER_CONNECT",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.FILESYSTEM SEARCH",
+      "resource": "FILESYSTEM SEARCH",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.179",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.VOICE.CONTROL.QUEUEDTTSPLAYBACK",
+      "resource": "QUEUEDTTSPLAYBACK",
+      "level": "EXECUTE",
+      "domain": "VOICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.EXECUTE.SCAN_BLUETOOTH_DEVICES",
+      "resource": "SCAN_BLUETOOTH_DEVICES",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MODEL.MANAGEMENT.EXECUTE_MODEL",
+      "resource": "EXECUTE_MODEL",
+      "level": "EXECUTE",
+      "domain": "MODEL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.READ.MEMORY GET/RETRIEVE",
+      "resource": "MEMORY GET/RETRIEVE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.180",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.SWITCH.WORKSPACE SELECT/SWITCH",
+      "resource": "WORKSPACE SELECT/SWITCH",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.181",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.STOP.BROWSER_CLOSE_ALL",
+      "resource": "BROWSER_CLOSE_ALL",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.MINIS://ATTACHMENTS/",
+      "resource": "MINIS://ATTACHMENTS/",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.182",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.UPDATE.FILE WRITE",
+      "resource": "FILE WRITE",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.183",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.SHIZUKU_ACTION_LISTENER_(UI)",
+      "resource": "SHIZUKU_ACTION_LISTENER_(UI)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.READ_FILE",
+      "resource": "READ_FILE",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL SCHEMACN",
+      "resource": "TOOL SCHEMACN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.184",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTE.STANDARD_RUNTIME_SHELL_EXECUTION",
+      "resource": "STANDARD_RUNTIME_SHELL_EXECUTION",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.185",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.186",
+      "resource": "TOKENCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CREATE.CALENDAR EVENT CREATE",
+      "resource": "CALENDAR EVENT CREATE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.BROWSER.CAPTURE.BROWSER_TAKE_SCREENSHOT",
+      "resource": "BROWSER_TAKE_SCREENSHOT",
+      "level": "EXECUTE",
+      "domain": "BROWSER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.READ_FILE_BINARY",
+      "resource": "READ_FILE_BINARY",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.187",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.188",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.DELETE.MEMORY DELETE",
+      "resource": "MEMORY DELETE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.189",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.190",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.191",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SECURITY.READ.PERMISSION_READ_EXTERNAL_STORAGE",
+      "resource": "PERMISSION_READ_EXTERNAL_STORAGE",
+      "level": "EXECUTE",
+      "domain": "SECURITY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.ANDROID LOCATION GET",
+      "resource": "ANDROID LOCATION GET",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.READ.NFC TAG READ",
+      "resource": "NFC TAG READ",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.192",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.THINKING/REASONING MODE",
+      "resource": "THINKING/REASONING MODE",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.STOP.CLOSE_TERMINAL_SESSION",
+      "resource": "CLOSE_TERMINAL_SESSION",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.193",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.START.START_APP",
+      "resource": "START_APP",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.READ HEALTH DATA (HEALTHKIT)",
+      "resource": "READ HEALTH DATA (HEALTHKIT)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.194",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.DEVICE.READ.BLUETOOTH_READ",
+      "resource": "BLUETOOTH_READ",
+      "level": "EXECUTE",
+      "domain": "DEVICE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.INSTALL.PACKAGE_PLUGIN_INSTALL_RECEIVER",
+      "resource": "PACKAGE_PLUGIN_INSTALL_RECEIVER",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.IMAGE/MULTIMODAL INPUT",
+      "resource": "IMAGE/MULTIMODAL INPUT",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.195",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.UPDATE.ANDROID CLIPBOARD WRITE",
+      "resource": "ANDROID CLIPBOARD WRITE",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.196",
+      "resource": "TOKENCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.197",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.198",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_IN_TERMINAL_SESSION",
+      "resource": "EXECUTE_IN_TERMINAL_SESSION",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TASK.CREATE.REMINDER CREATE",
+      "resource": "REMINDER CREATE",
+      "level": "EXECUTE",
+      "domain": "TASK"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.VISIONCN",
+      "resource": "VISIONCN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.199",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.JAVASCRIPT_EXECUTION_(JS_BRIDGE)",
+      "resource": "JAVASCRIPT_EXECUTION_(JS_BRIDGE)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CRASH_GLOBAL_EXCEPTION_HANDLER",
+      "resource": "CRASH_GLOBAL_EXCEPTION_HANDLER",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.CHARACTER.UPDATE.BLUETOOTH_BLE_WRITE_CHARACTERISTIC",
+      "resource": "BLUETOOTH_BLE_WRITE_CHARACTERISTIC",
+      "level": "EXECUTE",
+      "domain": "CHARACTER"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.200",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.READ.ANDROID CLIPBOARD READ",
+      "resource": "ANDROID CLIPBOARD READ",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.READ.LIST_FILES",
+      "resource": "LIST_FILES",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.201",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.202",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.203",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.FILE.UPDATE.EDIT_FILE",
+      "resource": "EDIT_FILE",
+      "level": "EXECUTE",
+      "domain": "FILE"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.204",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.205",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.206",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.207",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.NETWORK.EXECUTE.HTTP_REQUEST",
+      "resource": "HTTP_REQUEST",
+      "level": "EXECUTE",
+      "domain": "NETWORK"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.208",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.EXECUTE.INPUT_EVENT_INJECTION_(SHIZUKU_ADB)",
+      "resource": "INPUT_EVENT_INJECTION_(SHIZUKU_ADB)",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.AGENT.ENGINEERING.EXECUTE_PROMPT",
+      "resource": "EXECUTE_PROMPT",
+      "level": "EXECUTE",
+      "domain": "AGENT"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.209",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.CREATE.ALARM CREATE (ALARMKIT)",
+      "resource": "ALARM CREATE (ALARMKIT)",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.210",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.211",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.212",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.213",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.214",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.215",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.216",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.217",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.MEMORY.UPDATE.MEMORY EDIT/UPDATE",
+      "resource": "MEMORY EDIT/UPDATE",
+      "level": "EXECUTE",
+      "domain": "MEMORY"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.218",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.CLIPBOARD_FALLBACK",
+      "resource": "CLIPBOARD_FALLBACK",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.LINK_MEMORIES",
+      "resource": "LINK_MEMORIES",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.EXTENSION.START.MCP_LOCAL_SERVER_LAUNCH",
+      "resource": "MCP_LOCAL_SERVER_LAUNCH",
+      "level": "EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.219",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.220",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.221",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.LOGCAT_VIEWER",
+      "resource": "LOGCAT_VIEWER",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.222",
+      "resource": "CN",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.PROCESS.READ.GET_TERMINAL_SESSION_SCREEN",
+      "resource": "GET_TERMINAL_SESSION_SCREEN",
+      "level": "EXECUTE",
+      "domain": "PROCESS"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.TOOL.EXECUTE.OPERITAPPLICATION",
+      "resource": "OPERITAPPLICATION",
+      "level": "EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "permissionId": 47328,
+      "capabilityId": "CAP.SYSTEM.INSTALL.SHIZUKU_BUNDLED_INSTALLER",
+      "resource": "SHIZUKU_BUNDLED_INSTALLER",
+      "level": "EXECUTE",
+      "domain": "SYSTEM"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "channel_message_chains",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "channel_message",
+  "description": "通道消息生命周期完整链路",
+  "chain": [
+    {
+      "stage": 1,
+      "name": "submit",
+      "description": "侧车/通道将消息提交到后端",
+      "files": ["backend/internal/delivery/submit_handler.go"],
+      "flow": "POST /api/delivery/submit → DeliveryIntent → SQLite队列表"
+    },
+    {
+      "stage": 2,
+      "name": "queue",
+      "description": "投递队列持久化与调度",
+      "files": ["backend/internal/delivery/store_sqlite.go"],
+      "flow": "SQLite delivery_intents 表 → Worker轮询(batch=10, interval=1s)"
+    },
+    {
+      "stage": 3,
+      "name": "worker",
+      "description": "后台Worker批量处理队列",
+      "files": ["backend/internal/delivery/worker.go"],
+      "flow": "Worker.processBatch → 按channel路由到对应Adapter → 删除已投递记录"
+    },
+    {
+      "stage": 4,
+      "name": "sidecar",
+      "description": "通道适配器调用侧车HTTP接口",
+      "files": ["backend/internal/delivery/channel_adapters.go"],
+      "flow": "QQChannelAdapter.Deliver → POST sidecar/api/send | WechatChannelAdapter.Deliver → POST sidecar/api/send"
+    },
+    {
+      "stage": 5,
+      "name": "deliver",
+      "description": "侧车将消息送达最终用户",
+      "files": ["sidecar/launcher.mjs", "qq-sidecar/launcher.mjs"],
+      "flow": "侧车HTTP服务接收 → 调用微信/QQ协议发送给用户"
+    }
+  ],
+  "channels_supported": ["wechat", "qq", "web", "flutter"]
+}

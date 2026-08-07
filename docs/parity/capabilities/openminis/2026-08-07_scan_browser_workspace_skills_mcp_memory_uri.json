@@ -1,0 +1,980 @@
+{
+  "scan_metadata": {
+    "project": "OpenMinis",
+    "source_path": "D:\\桌面\\跟进项目\\_parity_sources\\OpenMinis\\worktrees\\source-baseline",
+    "scan_date": "2026-08-07",
+    "scan_type": "B5_capability_audit",
+    "areas_scanned": [
+      "BROWSER",
+      "WORKSPACE",
+      "SKILL",
+      "MCP",
+      "MEMORY",
+      "URI"
+    ],
+    "total_source_files_analyzed": 52,
+    "auditor": "CatPaw B5 Scanner v1"
+  },
+  "findings": [
+    {
+      "category": "BROWSER",
+      "subcategory": "Action_Enumeration",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseActions.swift",
+      "line_numbers": [
+        5,
+        28
+      ],
+      "symbol_name": "BrowserAction",
+      "description": "26个浏览器操作枚举: navigate/screenshot/click/type/getText/scroll/getPageInfo/executeJS/findElements/hover/getReadable/setUserAgent/setViewport/getBackbone/fetch/newTab/closeTab/listTabs/getCookies/setCookies/scrollAndCollect/waitForDomStable",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_ACT_NAVIGATE",
+        "BROWSER_ACT_SCREENSHOT",
+        "BROWSER_ACT_CLICK",
+        "BROWSER_ACT_TYPE",
+        "BROWSER_ACT_GET_TEXT",
+        "BROWSER_ACT_SCROLL",
+        "BROWSER_ACT_EXECUTE_JS",
+        "BROWSER_ACT_FIND_ELEMENTS",
+        "BROWSER_ACT_HOVER",
+        "BROWSER_ACT_GET_READABLE",
+        "BROWSER_ACT_SET_USER_AGENT",
+        "BROWSER_ACT_SET_VIEWPORT",
+        "BROWSER_ACT_GET_BACKBONE",
+        "BROWSER_ACT_FETCH",
+        "BROWSER_ACT_TAB_MANAGE",
+        "BROWSER_ACT_COOKIE",
+        "BROWSER_ACT_SCROLL_COLLECT",
+        "BROWSER_ACT_WAIT_DOM"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Action_Input_Model",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseActions.swift",
+      "line_numbers": [
+        32,
+        129
+      ],
+      "symbol_name": "BrowserActionInput",
+      "description": "浏览器动作输入结构体。parse(from:)解析Agent JSON指令，supported fields: action/url/selector/text/coordinate_x/coordinate_y/direction/amount/script/user_agent/max_depth/tab_id/scroll_count/item_selector/keywords/fuzzy/timeout/viewport_width/viewport_height/viewport_reset/full_page/cookies。cookies字段同时接受[[String:Any]]和JSON字符串两种形态",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_INPUT_MODEL"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "UserAgent_Profiles",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseActions.swift",
+      "line_numbers": [
+        133,
+        176
+      ],
+      "symbol_name": "UserAgentProfile",
+      "description": "三种预置UA: mobile_safari(390x844 iOS 18 Safari)/desktop_safari(1280x800 macOS Safari)/custom(自定义UA字符串)。每种对应逻辑viewport大小和desktop/mobile contentMode。preferredContentMode影响移动端/桌面端layout协商",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_UA_PROFILES"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Result_Model",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseActions.swift",
+      "line_numbers": [
+        180,
+        218
+      ],
+      "symbol_name": "BrowserActionResult",
+      "description": "结果模型: text/success/base64Image(给LLM vision)/imageFilePath(本地磁盘)/fetchedFileData(下载Data)/fetchedFileName/pageURL/tabId(实际执行tab标识防fan-out分支误判tab)",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_RESULT_MODEL"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Core_Manager",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseManager.swift",
+      "line_numbers": [
+        9,
+        399
+      ],
+      "symbol_name": "BrowserUseManager",
+      "description": "核心浏览器管理器@MainActor。@property: currentURL/pageTitle/isLoading/loadError/canGoBack/canGoForward/lastScreenshot。execute(action:)分发26类操作；visualChangeAction后waitForDomSettleAndSnapshot注入DOM MutationObserver收集3秒summary并截图；evaluateJavaScriptBounded用GCD DispatchSourceTimer保障JS执行wall-clock超时(解决后台Task.sleep被CPU throttling拉长)。sharedProcessPool保证跨tab OAuth流程共享session。navigationTimeout=30秒",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_CORE_MANAGER",
+        "BROWSER_JS_TIMEOUT",
+        "BROWSER_ACTION_DISPATCH"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "WebView_Factory",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseManager.swift",
+      "line_numbers": [
+        117,
+        170
+      ],
+      "symbol_name": "BrowserUseManager.makeWebView",
+      "description": "WKWebView工厂: sharedProcessPool+websiteDataStore=.default()+allowsContentJavaScript+注册MinisURLSchemeHandler(处理minis://scheme)+注入printBridge(解决WKWebView忽略window.print)+desktop viewport meta override(替换meta[name=viewport]+preferredContentMode desktop/mobile",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_WKWEBVIEW_FACTORY",
+        "BROWSER_PRINT_BRIDGE",
+        "BROWSER_MINIS_SCHEME_HANDLER",
+        "BROWSER_VIEWPORT_OVERRIDE"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "SwiftUI_BrowserView",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserWebView.swift",
+      "line_numbers": [
+        5,
+        15
+      ],
+      "symbol_name": "BrowserWebView",
+      "description": "UIViewRepresentable包装BrowserUseManager.webView接入SwiftUI",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "minis-browser-use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_SWIFTUI_INTEGRATION"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "WebApp_WebView_Host",
+      "file_path": "src/ios/WebApp/WebAppWebViewController.swift",
+      "line_numbers": [
+        24,
+        100
+      ],
+      "symbol_name": "WebAppWebViewController",
+      "description": "全屏沉浸式WKWebView Host用于WebAppShortcut。安全策略: (1)仅loadFileURL(_:allowingReadAccessTo:)；(2)导航策略拒绝所有非file:/about:URL(http/https/data:/自定义scheme含minis://全blocked)；(3)iOS 17+ per-shortcut隔离WKWebsiteDataStore(forIdentifier:)；(4)无WKScriptMessageHandler+window.webkit未设置+无userContentController注入。左边缘swipe退出+右下角悬浮菜单",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "web_app"
+      ],
+      "related_capability_ids": [
+        "BROWSER_PWA_HOST",
+        "BROWSER_PWA_ISOLATED_DATASTORE",
+        "BROWSER_PWA_NO_JSBRIDGE"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "JS_Injection_Library",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseJavaScript.swift",
+      "line_numbers": [
+        5,
+        859
+      ],
+      "symbol_name": "BrowserUseJS",
+      "description": "全量浏览器操作JS库，每方法返回IIFE+JSON.stringify。实现: click(selector)全事件序列mouseover→mouseenter→mousemove→mousedown→mouseup→click→mouseleave→mouseout；clickCoordinate(x,y)通过document.elementFromPoint；type(selector,text)使用nativeSetter(=getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set)绕过React/Vue，逐字符触发keydown/keypress/input/keyup+Angular $forceUpdate+Vue $forceUpdate+blur/focusout；getText(selector?) body/selector两种模式+10k字符cap+debug对象(visible/hidden统计/readyState/scrollHeight)；getReadable候选选择器article/[role=main]/main/.post-content等15k trim文本+matchedSelector；scroll(direction,amount,selector?) 自动发现最大可滚动容器overflowY auto/scroll+walk 10 levels deep；scrollToElement用scrollIntoView({behavior:'smooth',block:'center'})；hover模拟mouseenter+mouseover；findElements(selector) querySelectorAll返回前20完整rect+visibility+text+href；getBackbone(maxDepth): 复杂DOM骨架化-visible leaf筛选→bubble-merge rectsClose注入分组节点→DOM containment建树→flatten空group→trimDepth→输出含selector/rect/pageXY/input；scrollAndCollect(direction,amount,scrollCount,selector,itemSelector): MutationObserver观测300ms settle+2s max wait+500 item/30k char cap+80字符去重key；getPageInfo返回url/title/scrollY/scrollHeight/viewport/readyState/forms/links/images",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_JS_CLICK_NATIVE",
+        "BROWSER_JS_TYPE_REACT_VUE",
+        "BROWSER_JS_GET_TEXT_DEBUG",
+        "BROWSER_JS_GET_READABLE",
+        "BROWSER_JS_SCROLL_DISCOVERY",
+        "BROWSER_JS_FIND_ELEMENTS_RECT",
+        "BROWSER_JS_BACKBONE_FULL",
+        "BROWSER_JS_SCROLL_COLLECT_MUTATION_OBSERVER"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "History_Store",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserHistory.swift",
+      "line_numbers": [
+        9,
+        114
+      ],
+      "symbol_name": "BrowserHistoryStore",
+      "description": "浏览器历史单例@MainActor。7天retentionDays+按日分组groupedByDay+连续同URL去重+about:blank忽略。持久化到Application Support/MinisChat/browser_history.json。clearAll全删；record(url:title)插入队首",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_history"
+      ],
+      "related_capability_ids": [
+        "BROWSER_HISTORY_STORE",
+        "BROWSER_HISTORY_7DAY_RETENTION"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "History_UI",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserHistory.swift",
+      "line_numbers": [
+        118,
+        235
+      ],
+      "symbol_name": "BrowserHistoryView",
+      "description": "SwiftUI历史视图:按日section分组+HH:mm时间戳+monospaced URL+Clear All确认弹窗+空状态icon。onSelect(String)回调",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_history"
+      ],
+      "related_capability_ids": [
+        "BROWSER_HISTORY_UI"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Cookie_Audit_Logger",
+      "file_path": "src/ios/Agent/BrowserUse/CookieAuditLogger.swift",
+      "line_numbers": [
+        20,
+        157
+      ],
+      "symbol_name": "CookieAuditLogger",
+      "description": "WKWebsiteDataStore.default().httpCookieStore的WKHTTPCookieStoreObserver实时审计。两层: (1)Live diff-cookiesDidChange触发400ms合并burst后diff vs上次快照，log added/removed/modified；(2)Offline diff-快照持久化到cookie_audit_snapshot.json，app launch时与上次diff检测ITP离线wipe。CookieMeta仅记录valueLength/expires/httpOnly，从不记录值",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "get_cookies",
+        "set_cookies"
+      ],
+      "related_capability_ids": [
+        "BROWSER_COOKIE_LIVE_AUDIT",
+        "BROWSER_COOKIE_OFFLINE_DIFF",
+        "BROWSER_COOKIE_ITP_DETECTION"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Cookie_Backup_Anti_ITP",
+      "file_path": "src/ios/Agent/BrowserUse/CookieBackupStore.swift",
+      "line_numbers": [
+        41,
+        461
+      ],
+      "symbol_name": "CookieBackupStore",
+      "description": "WebKit ITP反制系统。解决agent headless浏览(无user gesture)导致prevalent domain HttpOnly cookie被30天wipe。每次browser_use action前(60s节流)syncIfNeeded: (1)将所有cookie备份为Netscape cookies.txt格式到Application Support/BrowserCookieBackup/<registrable-domain>.txt(对HttpOnly domain用#HttpOnly_前缀)；(2)从备份恢复live store缺失的cookie(full metadata)。backup域使用registrable domain归并。文件completeUntilFirstUserAuthentication加密+isExcludedFromBackup+永不离开设备。域30天未访问drop backup+stop restore(visit clock由真实navigation重置)。maxDomains=1000硬cap。legacy JSON→txt migration",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "get_cookies",
+        "set_cookies"
+      ],
+      "related_capability_ids": [
+        "BROWSER_ANTI_ITP_BACKUP",
+        "BROWSER_NETSCAPE_COOKIES_TXT",
+        "BROWSER_COOKIE_FILE_PROTECTION",
+        "BROWSER_COOKIE_DOMAIN_RETENTION"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Browser_Settings_UI",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserManagementView.swift",
+      "line_numbers": [
+        4,
+        469
+      ],
+      "symbol_name": "BrowserManagementView",
+      "description": "设置管理SwiftUA: UserAgentSection(3选项+custom编辑+contextMenu复制)；ViewportSection(默认/Custom+width×height+6预设iPhone/iPhone Pro/iPad/Laptop/Desktop/Full HD+UA-viewport mismatch warning banner mobileUA width>=768或desktopUA width<768触发)；CookiesSection(cookieCount+Clear All→CookieBackupStore.forgetAll)；DomainListSection(按域分组+swipeActions删除+cookieStore.deleteCookie+reconcileDomainAfterUserEdit反写同步)。搜索栏filter by domain",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_settings"
+      ],
+      "related_capability_ids": [
+        "BROWSER_SETTINGS_UA",
+        "BROWSER_SETTINGS_VIEWPORT",
+        "BROWSER_SETTINGS_COOKIES"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Browser_Sheet_View",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserSheetView.swift",
+      "line_numbers": [
+        4,
+        150
+      ],
+      "symbol_name": "BrowserSheetView",
+      "description": "浏览器sheet SwiftUI容器: Tab bar+URL Address Bar(keyboardType=.URL+onSubmit→loadURL)+导航按钮(Back/Forward/Stop/Reload/Fullscreen)+WebLoadErrorOverlay(Safari-style)+AgentBrowsingOverlay(isAgentBusy锁定+onTakeover回调)+BrowserDownloadBanner+fullscreen退出按钮",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_sheet"
+      ],
+      "related_capability_ids": [
+        "BROWSER_SHEET_UI",
+        "BROWSER_AGENT_BUSY_TAKEOVER",
+        "BROWSER_ERROR_OVERLAY"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Browser_TabPool_Registry",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserTabPool.swift",
+      "line_numbers": [
+        20,
+        150
+      ],
+      "symbol_name": "BrowserTabPoolRegistry",
+      "description": "进程级tab配额注册表@MainActor。globalTabCap=8。requestSlot两阶段驱逐: pass1最旧idle non-inUse tab，pass2最旧busy inUse(tab reclaimed retry错误)。handleMemoryWarning驱逐所有non-inUse tab。allTabSnapshots返回sessionId/tabId/url/title/isLoading/inUse/lastActivityAgo。每pool默认maxTabs=3",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_GLOBAL_TAB_CAP",
+        "BROWSER_TAB_EVICTION",
+        "BROWSER_MEMORY_WATCHER"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Browser_Download",
+      "file_path": "src/ios/Agent/BrowserUse/BrowserUseManager.swift",
+      "line_numbers": [
+        42,
+        68
+      ],
+      "symbol_name": "BrowserUseManager.downloadSupport",
+      "description": "WKDownload支持。downloadCenterIds映射ObjectIdentifier→UUID+hasInflightDownloads+sessionIdProvider/tabIdProvider由pool绑定+inflightDownloads字典持有WKDownload生命周期(weak delegate)+downloadDestinations记录目标host",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_use"
+      ],
+      "related_capability_ids": [
+        "BROWSER_DOWNLOAD_SUPPORT"
+      ]
+    },
+    {
+      "category": "BROWSER",
+      "subcategory": "Browser_Resource_Monitor",
+      "file_path": "src/ios/Diagnostics/BrowserResourceMonitor.swift",
+      "line_numbers": [
+        1,
+        50
+      ],
+      "symbol_name": "BrowserResourceMonitor",
+      "description": "浏览器资源诊断监控(监测WKWebView内存/进程状态)",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_diagnostics"
+      ],
+      "related_capability_ids": [
+        "BROWSER_RESOURCE_MONITOR"
+      ]
+    },
+    {
+      "category": "WORKSPACE",
+      "subcategory": "Mounted_Folders_Manager",
+      "file_path": "src/ios/Views/Settings/MountedFoldersManager.swift",
+      "line_numbers": [
+        25,
+        120
+      ],
+      "symbol_name": "MountedFolderEntry",
+      "description": "用户挂载外部文件夹(如Obsidian vault)通过security-scoped bookmark。字段: id(UUID)/name(→/var/minis/mounts/<name>)/sourceDisplayName/bookmark/security-scoped数据/isWritable(OS级)/userAllowWrite(用户意图)/effectiveWritable(两者同时成立)。validMountName验证非空/非./不含/或\\0。MountActivationState: active/stale/permissionDenied/failed/contentsUnavailable(第三方FileProvider未materialize)",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mount_folder"
+      ],
+      "related_capability_ids": [
+        "WORKSPACE_MOUNT_FOLDER",
+        "WORKSPACE_SECURITY_BOOKMARK"
+      ]
+    },
+    {
+      "category": "WORKSPACE",
+      "subcategory": "WebApp_Path_Resolver",
+      "file_path": "src/ios/WebApp/WebAppPathResolver.swift",
+      "line_numbers": [
+        14,
+        100
+      ],
+      "symbol_name": "WebAppPathResolver",
+      "description": "将(scope,scopeContext,relativeHtmlPath)解析为(host htmlURL, readAccessRoot)对。scope: sessionAttachment(minisAttachmentsPersistentDir)/sessionWorkspace(minisWorkspacePersistentDir)/shared(minisSharedPersistentDir)/mount(MountedFoldersManager.shared.resolvedURL)。路径逃逸检测prefix拒绝../other-session。session readAccessRoot=session root，mount/shared=base本身",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "web_app"
+      ],
+      "related_capability_ids": [
+        "WORKSPACE_SESSION_ISOLATION",
+        "WORKSPACE_MOUNT_RESOLUTION",
+        "WORKSPACE_PATH_TRAVERSAL_GUARD"
+      ]
+    },
+    {
+      "category": "SKILL",
+      "subcategory": "Skill_Data_Model",
+      "file_path": "src/ios/Agent/Session/SkillStore.swift",
+      "line_numbers": [
+        45,
+        65
+      ],
+      "symbol_name": "Skill",
+      "description": "Skill数据模型符合Anthropic SKILL.md: id(String slugify)/name/description/version/importSource(URL/file/bundled/session)/isEnabled/installedAt/updatedAt/body(frontmatter后SKILL.md内容)/useCount(0-100标准化)/sourceURL(计算属性)",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "skill_import",
+        "skill_manage"
+      ],
+      "related_capability_ids": [
+        "SKILL_DATA_MODEL"
+      ]
+    },
+    {
+      "category": "SKILL",
+      "subcategory": "Skill_YAML_Frontmatter",
+      "file_path": "src/ios/Agent/Session/SkillStore.swift",
+      "line_numbers": [
+        421,
+        550
+      ],
+      "symbol_name": "SkillStore.parse(skillMD:)",
+      "description": "SKILL.md YAML解析器。标准--- opening/closing fence + headless frontmatter(无opening fence但含key:value+closing fence，需至少含name/description/version之一作recognized key门控)。支持YAML block scalars |-/>-/>+ (fold/newline保留)。字段: name/description/version(=default 1.0.0)/body",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "skill_import"
+      ],
+      "related_capability_ids": [
+        "SKILL_PARSE_FRONTMATTER",
+        "SKILL_PARSE_YAML_BLOCK_SCALAR"
+      ]
+    },
+    {
+      "category": "SKILL",
+      "subcategory": "SkillStore_Core",
+      "file_path": "src/ios/Agent/Session/SkillStore.swift",
+      "line_numbers": [
+        69,
+        106
+      ],
+      "symbol_name": "SkillStore",
+      "description": "技能商店@MainActor @Published skills。SQLite persistence Library/MinisChat/skills.db。表: skills(8字段)+session_skill_overrides(session_id/skill_id/is_enabled)。init依次openDatabase/loadSkills/installBundledSkills(内置2.1.0 skill-creator)/migrateMarkBundledSkillsDirty",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "skill_import",
+        "skill_enable_disable",
+        "skill_delete"
+      ],
+      "related_capability_ids": [
+        "SKILL_STORE_DB",
+        "SKILL_SESSION_OVERRIDE",
+        "SKILL_BUNDLED_SKILL_CREATOR"
+      ]
+    },
+    {
+      "category": "SKILL",
+      "subcategory": "SkillStore_System_Prompt",
+      "file_path": "src/ios/Agent/Session/SkillStore.swift",
+      "line_numbers": [
+        700,
+        800
+      ],
+      "symbol_name": "SkillStore.skillPromptFragment(for:)",
+      "description": "系统提示Top-20 Skill元数据注入。enabled→排序updatedAt desc+name asc tiebreak→prefix 20→每行- <id>: <note截断200字符>",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "system_prompt"
+      ],
+      "related_capability_ids": [
+        "SKILL_SYSTEM_PROMPT_INJECTION"
+      ]
+    },
+    {
+      "category": "SKILL",
+      "subcategory": "Skills_Management_UI",
+      "file_path": "src/ios/Views/Skills/SkillsManagementView.swift",
+      "line_numbers": [
+        28,
+        180
+      ],
+      "symbol_name": "SkillsManagementView",
+      "description": "设置级技能管理SwiftUI: search bar+sort menu(name/modified+ascending/descending)。每行: name+importSourceBadge+description+Toggle enabled+skill detail NavigationLink。Delete swipeActions。Top menu: Import Skill(sheet)+Minis Skills(globe全屏cover browser/市场)+Force iCloud Sync All(iCloudSyncEnabled)",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "skill_manage"
+      ],
+      "related_capability_ids": [
+        "SKILL_LIST_UI",
+        "SKILL_IMPORT_URL",
+        "SKILL_IMPORT_FILE",
+        "SKILL_BROWSER_MARKET",
+        "SKILL_ICLOUD_SYNC"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCP_Server_Config_Model",
+      "file_path": "src/ios/Agent/Session/MCPStore.swift",
+      "line_numbers": [
+        26,
+        73
+      ],
+      "symbol_name": "MCPServerConfig",
+      "description": "MCP服务器配置: id(servers.json key即server name)/note/enabled/createdAt/updatedAt/url+headers+oauth(非secret)/command+args+env+startupTimeoutSeconds(STDIO)。isHTTP=url非空，isSTDIO=command非空。transportSummary显示https://或npx ...",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mcp_config"
+      ],
+      "related_capability_ids": [
+        "MCP_CONFIG_MODEL"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCPStore_Core",
+      "file_path": "src/ios/Agent/Session/MCPStore.swift",
+      "line_numbers": [
+        77,
+        101
+      ],
+      "symbol_name": "MCPStore",
+      "description": "MCP管理@MainActor @Published servers。servers.json(in MinisConfig persistent dir非minisAppGroupRoot) co-read/write with in-guest minis-mcp-cli(/var/minis/mcp-servers/ bind mount)。表mcp_session_overrides复用skills.db。file shape {\"mcpServers\":{<name>:{...}}} per-entry decode tolerance。createTime stable-assigned Once。atomic write",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mcp_crud",
+        "mcp_session_override"
+      ],
+      "related_capability_ids": [
+        "MCP_STORE_CORE",
+        "MCP_CO_READ_WRITE_CLI",
+        "MCP_ATOMIC_SAVE"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCP_JSON_Import",
+      "file_path": "src/ios/Agent/Session/MCPStore.swift",
+      "line_numbers": [
+        444,
+        580
+      ],
+      "symbol_name": "MCPStore.parseImport",
+      "description": "Paste JSON导入格式兼容: (1){\"mcpServers\":{<name>:{…}}}标准Claude-Desktop (2){<name>:{\"command\"|\"url\":…}} top-level keys是name (3){\"command\":\"npx\",…}单entry(name 'new-server')。disabled:true→enabled:false。oauth 5字段(mode/clientId/authorizationEndpoint/tokenEndpoint/scopes/redirectURI)。支持5个startupTimeout字段alias",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mcp_import"
+      ],
+      "related_capability_ids": [
+        "MCP_IMPORT_FORMAT_COMPAT",
+        "MCP_IMPORT_OAUTH"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCP_System_Prompt_Injection",
+      "file_path": "src/ios/Agent/Session/MCPStore.swift",
+      "line_numbers": [
+        601,
+        640
+      ],
+      "symbol_name": "MCPStore.systemPromptSnippet(for:)",
+      "description": "Top-20 MCP server系统提示注入。enabled→filter isEnabledForSession→排序createdAt desc+name asc→prefix 20。每行- <id>: <note截断200字符>。追加minis-mcp-cli tools/call用法示例+$$VARNAME运行时环境变量占位符说明",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "system_prompt"
+      ],
+      "related_capability_ids": [
+        "MCP_SYSTEM_PROMPT_INJECTION",
+        "MCP_RUNTIME_VAR_PLACEHOLDER"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCP_Tools_Refresh",
+      "file_path": "src/ios/Agent/Session/MCPStore.swift",
+      "line_numbers": [
+        642,
+        699
+      ],
+      "symbol_name": "MCPStore.refreshTools(server:)",
+      "description": "server工具refresh通过in-guest minis-mcp-cli。前置条件ISHKernel.shared.isBooted。执行'minis-mcp-cli refresh <server>'(120s timeout sessionId mcp-settings含/var/minis/mcp-servers mount)。JSON envelope的tools[{name,description}]。ToolsRefreshError: kernelNotBooted/cliFailed",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mcp_tools_refresh"
+      ],
+      "related_capability_ids": [
+        "MCP_TOOLS_REFRESH",
+        "MCP_INTEGRATION_BRIDGE"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCP_iCloud_Per_Server_Sync",
+      "file_path": "src/ios/Agent/Session/MCPStore.swift",
+      "line_numbers": [
+        700,
+        925
+      ],
+      "symbol_name": "MCPStore.sync",
+      "description": "per-server MCPServerItem CK record同步。noteSyncedLocalChange/LocalDelete→markServerDirty。semanticFingerprint排除createdAt/updatedAt。applyRemoteServerItem LWW by updatedAt+2秒slop保留最早createdAt。scanExternalChanges检测CLI edits(fingerprint+updatedAt stamp)。applyRemoteServerDeletion hard-delete",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mcp_sync"
+      ],
+      "related_capability_ids": [
+        "MCP_ICLOUD_PER_SERVER_SYNC",
+        "MCP_LWW_CLOCK",
+        "MCP_EXTERNAL_EDIT_SCAN"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCP_OAuth_Controller",
+      "file_path": "src/ios/Agent/Session/MCPOAuthController.swift",
+      "line_numbers": [
+        52,
+        120
+      ],
+      "symbol_name": "MCPOAuthController",
+      "description": "Native OAuth for MCP servers(静态模式)。PKCE Authorization Code flow via ASWebAuthenticationSession。client_secret+tokens存储在LOCAL Keychain(kSecAttrSynchronizable=false永不iCloud)。Bridge file <MinisConfig>/mcp-servers/oauth/<name>.json(chmod 600)让guest daemon self-refresh。loopbackPort=54546。defaultRedirectURI=http://localhost:54546/callback。purge(server:)清理OAuth凭证",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mcp_oauth"
+      ],
+      "related_capability_ids": [
+        "MCP_OAUTH_STATIC",
+        "MCP_OAUTH_PKCE",
+        "MCP_OAUTH_KEYCHAIN_LOCAL",
+        "MCP_OAUTH_BRIDGE_FILE"
+      ]
+    },
+    {
+      "category": "MCP",
+      "subcategory": "MCP_OAuth_Config_Model",
+      "file_path": "src/ios/Agent/Session/MCPOAuthController.swift",
+      "line_numbers": [
+        38,
+        50
+      ],
+      "symbol_name": "MCPOAuthConfig",
+      "description": "非secret OAuth配置(syncs with server)。mode: 'static'=user-supplied creds/'dynamic'=reserved DCR。clientId/authorizationEndpoint/tokenEndpoint/scopes(space-separated)/redirectURI(默认http://localhost:54546/callback)",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "mcp_oauth"
+      ],
+      "related_capability_ids": [
+        "MCP_OAUTH_CONFIG_MODEL"
+      ]
+    },
+    {
+      "category": "MEMORY",
+      "subcategory": "iOS_Memory_System",
+      "file_path": "src/ios/Agent/Chat/AIChatViewModel+MemoryTools.swift",
+      "line_numbers": [
+        5,
+        100
+      ],
+      "symbol_name": "AIChatViewModel+MemoryTools",
+      "description": "iOS memory系统: GLOBAL.md(用户维护，agent只读)+YYYY-MM-DD.md(每日日志，timestamped via memory_write)。loadGlobalMemoryFragment全量注入system prompt。loadRecentDailyMemoryFragment近3天日志(200行cap)。executeMemoryWrite: prepend timestamped entry到当天md+ensureFakefsMetadata+iCloud v2 sync MemoryDailyV2 record+post memoryFilesDidChange notification。executeMemoryGet含confidence-based fuzzy scoring(entry命中keywords数+recency score)+500 dump/60 search entries cap",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "memory_write",
+        "memory_get"
+      ],
+      "related_capability_ids": [
+        "MEMORY_GLOBAL_MD",
+        "MEMORY_DAILY_LOG",
+        "MEMORY_FUZZY_SEARCH",
+        "MEMORY_SYSTEM_PROMPT_INJECT"
+      ]
+    },
+    {
+      "category": "MEMORY",
+      "subcategory": "Android_Memory_Repository",
+      "file_path": "src/android/app/src/main/java/com/openminis/app/data/repository/MemoryRepository.kt",
+      "line_numbers": [
+        18,
+        350
+      ],
+      "symbol_name": "MemoryRepository",
+      "description": "Android memory系统镜像iOS: GLOBAL.md(agent只读)+YYYY-MM-DD.md(timestamp via memory_write)+memory_get(模糊keywords跨文件±2 context window/500 dump lines/60 search lines/30KB byte cap/30天lookback cap)。MAX_INJECT_LINES=200/MAX_RECENT_FILES=3。loadGlobalMemoryFragment/loadRecentDailyMemoryFragment构建<memory> XML block",
+      "platform": "ANDROID",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "memory_write",
+        "memory_get"
+      ],
+      "related_capability_ids": [
+        "MEMORY_GLOBAL_MD",
+        "MEMORY_DAILY_LOG",
+        "MEMORY_KEYWORD_SEARCH",
+        "MEMORY_BYTE_CAP",
+        "MEMORY_SYSTEM_PROMPT_INJECT"
+      ]
+    },
+    {
+      "category": "MEMORY",
+      "subcategory": "SOUL_MD_Personality",
+      "file_path": "src/ios/Agent/Session/SoulStore.swift",
+      "line_numbers": [
+        4,
+        100
+      ],
+      "symbol_name": "SoulStore/SoulMDParser",
+      "description": "SOUL.md身份/人格文件。YAML frontmatter: name/emoji(保留但弃用UI固定sparkles)/style/lang(auto/zh/en/free-form)。body作为Layer 1 system prompt注入最顶层identity section。name影响chat bubble头部。serialize()仅写name/style/lang。parse lossless roundtrip。default name=Minis lang=auto",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "soul_file"
+      ],
+      "related_capability_ids": [
+        "MEMORY_SOUL_MD",
+        "MEMORY_PERSONALITY",
+        "MEMORY_IDENTITY_INJECT"
+      ]
+    },
+    {
+      "category": "MEMORY",
+      "subcategory": "Session_Memory_View",
+      "file_path": "src/ios/Views/Chat/SessionMemoryView.swift",
+      "line_numbers": [
+        10,
+        62
+      ],
+      "symbol_name": "SessionMemoryView",
+      "description": "memory展示视图。两级: (1)Auto-injected: SOUL.md(person身份icon)+GLOBAL.md(star)+近3天daily Logs(yesterday标签+200行cap)；(2)Tool Activity: memory_write(平方笔)+memoryGet(放大镜)。所有item点击进入MemoryContentView/MemoryWriteDetailView/MemoryGetDetailView",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "memory_write",
+        "memory_get"
+      ],
+      "related_capability_ids": [
+        "MEMORY_SESSION_VIEW",
+        "MEMORY_AUTO_INJECT",
+        "MEMORY_SOUL_MD"
+      ]
+    },
+    {
+      "category": "MEMORY",
+      "subcategory": "Memory_Management_UI",
+      "file_path": "src/ios/Views/Settings/MemoryManagementView.swift",
+      "line_numbers": [
+        1,
+        50
+      ],
+      "symbol_name": "MemoryManagementView",
+      "description": "Memory设置管理界面(Settings→Memory)，管理GLOBAL.md/SOUL.md/daily logs查看编辑",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "memory_manage"
+      ],
+      "related_capability_ids": [
+        "MEMORY_SETTINGS_UI"
+      ]
+    },
+    {
+      "category": "URI",
+      "subcategory": "DeepLink_Router",
+      "file_path": "src/ios/Shared/DeepLinkRouter.swift",
+      "line_numbers": [
+        4,
+        99
+      ],
+      "symbol_name": "DeepLinkRouter",
+      "description": "minis:// URL路由枚举。路由: share(shareCoordinator.raisePendingShare)/views/alarm/open_terminal(?init_command)/open(?session+path)WebApp launcher round-trip/session/<id>(legacy)/sessions/<id>(canonical matches minis-sessions-cli)/settings+handleSettings sub-router。sub-router handles: providers[/<instanceId>]/model-groups[/<groupId>]/usage(aliases usage-stats/usage_stats)/skills/memory/storage/mount-external(aliases mount_external/mounts/mounted-folders/mounted_folders)/shared-folders/logs/appearance/background/about/permissions/environments(?create_key/create_value/create_note)/rootfs(aliases mirrors/rootfs-management/rootfs_management)。unknown settings paths fall back to Settings home",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "deeplink_router"
+      ],
+      "related_capability_ids": [
+        "URI_OPEN_SHARE",
+        "URI_OPEN_TERMINAL",
+        "URI_OPEN_SESSION",
+        "URI_OPEN_SETTINGS",
+        "URI_OPEN_WEBAPP",
+        "URI_OPEN_ALARM"
+      ]
+    },
+    {
+      "category": "URI",
+      "subcategory": "DeepLink_Coordinator",
+      "file_path": "src/ios/Shared/DeepLinkCoordinator.swift",
+      "line_numbers": [
+        32,
+        100
+      ],
+      "symbol_name": "DeepLinkCoordinator",
+      "description": "@MainActor导航协调器。pendingSettingsTarget驱动SettingsSheet导航stack跳转；pendingEnvVarCreate带key/value/note prefill；pendingRootfsManagement跳Rootfs Management sheet；pendingSessionId跳session切换；pendingLogsTab在LogMgmtView land right tab；pendingFocus [String:Bool?]支持?focus=key:value,key高亮directives。setFocus解析token。SettingsDeepLinkTarget枚举: home/providers/providerDetail/modelGroups/modelGroupDetail/usage/skills/memory/storage/mountedFolders/sharedFolders/logs/appearance/background/about/permissions/environments/mcpIntegrations/mcpServerDetail",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "deeplink_navigate"
+      ],
+      "related_capability_ids": [
+        "URI_SETTINGS_NAV",
+        "URI_ENVVAR_PREFILL",
+        "URI_ROOTFS_MANAGEMENT",
+        "URI_LOGS_TAB",
+        "URI_FOCUS_HIGHLIGHT"
+      ]
+    },
+    {
+      "category": "URI",
+      "subcategory": "Minis_URL_Scheme_Spec",
+      "file_path": "docs/specs/minis-url-scheme.md",
+      "line_numbers": [
+        1,
+        342
+      ],
+      "symbol_name": "minis_url_scheme_spec",
+      "description": "minis:// session-scoped unified resource locator规范: namespaces=attachments(media images/.png/.jpg/.webp,audio/.mp3/.m4a,video/.mp4/.mov)+workspace(working scripts/data/config)+offloads(>20k char truncated outputs)+browser(screenshots)。Linux映射minis://<ns>/<path>→/var/minis/<ns>/<path>。session-isolated: Library/MinisChat/minis/<sessionId>/独立目录+harvest→clear→mount→register切换保证原子性。tool result contract: file_write/shell_execute/offload结果附minis_url让模型embed Markdown。security: namespace validation+path traversal rejection(.. rejection)+no session ID in URL",
+      "platform": "SHARED",
+      "evidence_type": "CONFIGURATION",
+      "related_tool_ids": [
+        "file_write",
+        "shell_execute",
+        "browser_use",
+        "offload"
+      ],
+      "related_capability_ids": [
+        "URI_NS_ATTACHMENTS",
+        "URI_NS_WORKSPACE",
+        "URI_NS_OFFLOADS",
+        "URI_NS_BROWSER",
+        "URI_SESSION_ISOLATED",
+        "URI_TOOL_RESULT_CONTRACT"
+      ]
+    },
+    {
+      "category": "EXTENSION",
+      "subcategory": "Share_Extension",
+      "file_path": "src/ios/ShareExtension/ShareViewController.swift",
+      "line_numbers": [
+        1,
+        50
+      ],
+      "symbol_name": "ShareViewController",
+      "description": "iOS Share Extension: 外部app通过iOS share sheet将文件/text/URL导入Minis会话。MainInterface.storyboard UI",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "share_extension"
+      ],
+      "related_capability_ids": [
+        "EXT_SHARE_EXTENSION"
+      ]
+    },
+    {
+      "category": "EXTENSION",
+      "subcategory": "FileProvider_Extension",
+      "file_path": "src/ios/FileProvider/FileProviderExtension.swift",
+      "line_numbers": [
+        1,
+        60
+      ],
+      "symbol_name": "FileProviderExtension",
+      "description": "iOS File Provider Extension: 使Minis持久化文件出现在iOS Files app。FileProviderItem/FileProviderEnumerator/FileProviderItem等。AppGroupChangeWatcher监听变化",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "file_provider"
+      ],
+      "related_capability_ids": [
+        "EXT_FILEPROVIDER"
+      ]
+    },
+    {
+      "category": "EXTENSION",
+      "subcategory": "Native_Offloads",
+      "file_path": "src/ios/NativeOffloads/BrowserUseOffload.h",
+      "line_numbers": [
+        1,
+        50
+      ],
+      "symbol_name": "BrowserUseOffload(h,m)",
+      "description": "WKWebView操作的native offload ObjC封装给Swift调用(减少JS bridge开销)。BrowserUseOffloadBridge.swift桥接。其他Offload: Alarm/Bluetooth/Calendar/Clipboard/Config/Debug/Device/FFmpeg/HealthKit/HomeKit/Location/Maps/Media/ModelUse/NFC/NLP/Notification/Open/Photos/Player/Reminders/Sessions/Speak/Speech/Vision/Weather",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "browser_offload",
+        "native_offload"
+      ],
+      "related_capability_ids": [
+        "EXT_NATIVE_OFFLOAD_BROWSER",
+        "EXT_NATIVE_OFFLOADS_ALL"
+      ]
+    },
+    {
+      "category": "EXTENSION",
+      "subcategory": "File_Tools_iSH",
+      "file_path": "src/ios/Agent/Chat/AIChatViewModel+FileTools.swift",
+      "line_numbers": [
+        9,
+        100
+      ],
+      "symbol_name": "AIChatViewModel+FileTools",
+      "description": "file_write/file_read直接在host data/读写+iSH fakefs meta.db注册(避免shell escaping+更快)。snapshotMinisFiles遍历/var/minis/。resolveMinisURL映射minis://到ns base(memory/skills/shared/mcp-servers)或session scoped dir。resolveHostPath linux path→host data/。linuxPathToMinisURL反向映射生成minis:// URL。ensureFakefsMetadata写入SQLite meta.db paths+stats表(inode+mode+uid+gid+rdev)",
+      "platform": "IOS",
+      "evidence_type": "IMPLEMENTATION",
+      "related_tool_ids": [
+        "file_write",
+        "file_read",
+        "file_snapshot"
+      ],
+      "related_capability_ids": [
+        "EXT_FILE_TOOLS_DIRECT_IO",
+        "EXT_FAKEFS_META_DB"
+      ]
+    }
+  ]
+}

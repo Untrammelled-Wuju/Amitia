@@ -1,0 +1,61 @@
+{
+  "inventory_id": "INV-A14-GRAPH-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "graph_database",
+  "items": [
+    {
+      "id": "GRAPH-001",
+      "name": "Graph Client",
+      "name_en": "SurrealDB Graph Client",
+      "description": "图数据库客户端，管理SurrealDB的WebSocket连接、认证和schema初始化",
+      "file": "backend/internal/graph/client.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "GRAPH-002",
+      "name": "Graph Service",
+      "name_en": "Graph Query Service",
+      "description": "图查询服务，提供节点查询、邻居搜索、路径查找等图操作",
+      "file": "backend/internal/graph/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/graph/node/:id/neighbors",
+        "GET /api/v1/graph/path",
+        "GET /api/v1/graph/stats"
+      ]
+    },
+    {
+      "id": "GRAPH-003",
+      "name": "Graph Handler",
+      "name_en": "Graph API Handler",
+      "description": "图数据库HTTP处理器，处理图查询请求和响应格式化",
+      "file": "backend/internal/graph/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/graph/nodes",
+        "GET /api/v1/graph/edges",
+        "DELETE /api/v1/graph/node/:id"
+      ]
+    },
+    {
+      "id": "GRAPH-004",
+      "name": "Graph Memory Integration",
+      "name_en": "Graph Memory Integration",
+      "description": "图谱记忆集成，将图数据库集成到记忆检索管道中作为第6层",
+      "file": "backend/internal/memory/graph_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "GRAPH-005",
+      "name": "Graph Stub Fallback",
+      "name_en": "Graph Service Stub",
+      "description": "图数据库不可用时的降级stub，提供空实现避免服务中断",
+      "file": "backend/internal/graph/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

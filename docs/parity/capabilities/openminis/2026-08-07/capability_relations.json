@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "relations": [
+    {
+      "parent": "OMN-0011 Tool Registry",
+      "children": [
+        "OMN-0012",
+        "OMN-0013",
+        "OMN-0014",
+        "OMN-0015",
+        "OMN-0026",
+        "OMN-0048",
+        "OMN-0049",
+        "OMN-0008"
+      ]
+    },
+    {
+      "parent": "OMN-0026 Browser",
+      "children": [
+        "OMN-0027",
+        "OMN-0028",
+        "OMN-0029",
+        "OMN-0030",
+        "OMN-0031",
+        "OMN-0032",
+        "OMN-0033",
+        "OMN-0034",
+        "OMN-0035",
+        "OMN-0036"
+      ]
+    },
+    {
+      "parent": "OMN-018/019 Sandbox",
+      "children": [
+        "OMN-0020",
+        "OMN-0021",
+        "OMN-0022",
+        "OMN-0023",
+        "OMN-0024",
+        "OMN-0025",
+        "OMN-0012"
+      ]
+    },
+    {
+      "parent": "OMN-016 HomeKit",
+      "related": [
+        "OMN-0073 Bluetooth",
+        "OMN-0075 NFC"
+      ]
+    }
+  ]
+}

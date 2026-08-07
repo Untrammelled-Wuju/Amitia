@@ -1,0 +1,98 @@
+{
+  "inventory_id": "INV-A14-TOOL-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "tool_registry",
+  "items": [
+    {
+      "id": "TOOL-001",
+      "name": "Tool Registry",
+      "name_en": "Tool Registry",
+      "description": "工具注册表，管理所有可用工具的定义、发现和动态调用分发",
+      "file": "backend/internal/agent/tool/registry.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-002",
+      "name": "Memory Tool",
+      "name_en": "Memory Read/Write Tool",
+      "description": "记忆读写工具，允许LLM读取和写入语义记忆条目",
+      "file": "backend/internal/agent/tool/memory.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-003",
+      "name": "Memory Summary Tool",
+      "name_en": "Memory Summary Tool",
+      "description": "记忆摘要工具，获取按时间或重要性排序的记忆摘要视图",
+      "file": "backend/internal/agent/tool/memory_summary.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-004",
+      "name": "Context Tool",
+      "name_en": "Context Query Tool",
+      "description": "上下文查询工具，检索当前对话相关的上下文信息（用户画像、关系、需求等）",
+      "file": "backend/internal/agent/tool/context_test.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-005",
+      "name": "Model Tool",
+      "name_en": "Model Selection Tool",
+      "description": "模型选择工具，动态切换当前对话使用的LLM模型",
+      "file": "backend/internal/agent/tool/model.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-006",
+      "name": "Schedule Tool",
+      "name_en": "Schedule Query Tool",
+      "description": "日程查询工具，获取伴侣的日程安排和时间线信息",
+      "file": "backend/internal/agent/tool/schedule.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-007",
+      "name": "System Time Tool",
+      "name_en": "System Time Tool",
+      "description": "系统时间工具，获取当前服务器时间和时区信息",
+      "file": "backend/internal/agent/tool/system_time.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-008",
+      "name": "Read Need State Tool",
+      "name_en": "Need State Reader Tool",
+      "description": "需求状态读取工具，获取当前用户的需求状态快照",
+      "file": "backend/internal/agent/tool/read_need_state.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-009",
+      "name": "Read Psyche State Tool",
+      "name_en": "Psyche State Reader Tool",
+      "description": "心理状态读取工具，获取当前情感、情绪、压力等心理状态",
+      "file": "backend/internal/agent/tool/read_psyche_state.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "TOOL-010",
+      "name": "Voice Reply Tool",
+      "name_en": "Voice Reply Tool",
+      "description": "语音回复工具，生成语音回复并返回音频数据",
+      "file": "backend/internal/agent/tool/voice_reply.go",
+      "state": "PARTIAL",
+      "endpoints": []
+    }
+  ]
+}

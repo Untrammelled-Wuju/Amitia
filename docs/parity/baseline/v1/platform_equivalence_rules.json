@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-08-07T14:00:00+08:00",
+  "baseline_id": "PARITY-2026-08-07-V1",
+  "total_platform_equivalent": 4,
+  "platform_equivalence_rules": [
+    {
+      "original_platform": "android",
+      "behavior_key": "GENERAL_EXECUTE_notification_fgs_management",
+      "map_id": "MAP-0186",
+      "verification_requirement": "跨平台一致性验证(Cross-platform Consistency)",
+      "equivalence_rule": {
+        "description": "Android专属能力(Amitia未覆盖)需在Amitia目标平台中等价实现或提供行为降级",
+        "fallback_strategy": "BEHAVIORAL_DEGRADATION",
+        "type": "PLATFORM_EQUIVALENT",
+        "target_platforms": [
+          "web",
+          "desktop",
+          "ios",
+          "cross-platform"
+        ]
+      },
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "profile": "PROFILE_BACKGROUND",
+      "original_source": "OPERIT"
+    },
+    {
+      "original_platform": "android",
+      "behavior_key": "GENERAL_EXECUTE_RootSystemOperationTools",
+      "map_id": "MAP-0226",
+      "verification_requirement": "跨平台一致性验证(Cross-platform Consistency)",
+      "equivalence_rule": {
+        "description": "Android专属能力(Amitia未覆盖)需在Amitia目标平台中等价实现或提供行为降级",
+        "fallback_strategy": "BEHAVIORAL_DEGRADATION",
+        "type": "PLATFORM_EQUIVALENT",
+        "target_platforms": [
+          "web",
+          "desktop",
+          "ios",
+          "cross-platform"
+        ]
+      },
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "profile": "PROFILE_NATIVE",
+      "original_source": "OPERIT"
+    },
+    {
+      "original_platform": "android",
+      "behavior_key": "GENERAL_EXECUTE_AccessibilitySystemOperationTools",
+      "map_id": "MAP-0346",
+      "verification_requirement": "跨平台一致性验证(Cross-platform Consistency)",
+      "equivalence_rule": {
+        "description": "Android专属能力(Amitia未覆盖)需在Amitia目标平台中等价实现或提供行为降级",
+        "fallback_strategy": "BEHAVIORAL_DEGRADATION",
+        "type": "PLATFORM_EQUIVALENT",
+        "target_platforms": [
+          "web",
+          "desktop",
+          "ios",
+          "cross-platform"
+        ]
+      },
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "profile": "PROFILE_NATIVE",
+      "original_source": "OPERIT"
+    },
+    {
+      "original_platform": "android",
+      "behavior_key": "GENERAL_EXECUTE_input_event_injection_(shizuku_adb)",
+      "map_id": "MAP-0482",
+      "verification_requirement": "跨平台一致性验证(Cross-platform Consistency)",
+      "equivalence_rule": {
+        "description": "Android专属能力(Amitia未覆盖)需在Amitia目标平台中等价实现或提供行为降级",
+        "fallback_strategy": "BEHAVIORAL_DEGRADATION",
+        "type": "PLATFORM_EQUIVALENT",
+        "target_platforms": [
+          "web",
+          "desktop",
+          "ios",
+          "cross-platform"
+        ]
+      },
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "profile": "PROFILE_NATIVE",
+      "original_source": "OPERIT"
+    }
+  ],
+  "general_policy": "所有标记为REQUIRED_PLATFORM_EQUIVALENT的能力必须在Amitia支持的至少一个平台上验证行为等价性。Android专属ADB/Root/Accessibility能力若Amitia无法直接实现，需提供功能降级路径和用户说明。"
+}

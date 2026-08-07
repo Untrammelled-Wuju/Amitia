@@ -1,0 +1,54 @@
+{
+  "id": "skill_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "skill",
+  "description": "技能系统清单(技能定义/注册/执行/Agent技能/兼容技能)",
+  "skill_types": [
+    {
+      "name": "builtin_skills",
+      "description": "内置技能(系统级工具技能)",
+      "tool_files": ["backend/internal/agent/tool/"],
+      "registered_tools": [
+        "memory_summary — 记忆摘要",
+        "memory — 直接操作记忆",
+        "read_need_state — 读取需求状态",
+        "read_psyche_state — 读取心理状态",
+        "schedule — 日程查询",
+        "system_time — 系统时间",
+        "voice_reply — 语音回复",
+        "model — 模型切换"
+      ]
+    },
+    {
+      "name": "agent_skills",
+      "description": "Agent技能(兼容技能/可导入导出)",
+      "files": [
+        "backend/internal/extension/agent_skill_definition.go",
+        "backend/internal/extension/agent_skill_parser.go",
+        "backend/internal/extension/agent_skill_runtime.go",
+        "backend/internal/extension/agent_skill_service.go",
+        "backend/internal/extension/agent_skill_catalog.go"
+      ]
+    },
+    {
+      "name": "mcp_skills",
+      "description": "MCP技能(MCP工具通过适配器暴露为技能)",
+      "file": "backend/internal/extension/capability/adapter_mcp_tool.go"
+    },
+    {
+      "name": "workflow_skills",
+      "description": "工作流技能(工作流封装为技能)",
+      "file": "backend/internal/extension/capability/adapter_workflow.go"
+    },
+    {
+      "name": "skill_migration",
+      "description": "技能迁移(从旧版技能/Agent技能/MCP/工作流统一迁移)",
+      "files": [
+        "backend/internal/extension/migration/skill_migration/",
+        "backend/internal/extension/migration/agent_skill_adapter.go",
+        "backend/internal/extension/migration/legacy_skill_adapter.go"
+      ]
+    }
+  ]
+}

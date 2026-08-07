@@ -1,0 +1,206 @@
+{
+  "inventory_id": "INV-A14-DESKTOP-RUNTIME-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "desktop_runtime_integration",
+  "platform": "desktop",
+  "items": [
+    {
+      "id": "RT-001",
+      "module": "DesktopRuntimeManager",
+      "source": "desktop/src/runtime/runtime-manager.ts",
+      "type": "runtime",
+      "capabilities": ["运行时状态管理", "部署配置管理", "运行时状态查询", "状态更新通知"],
+      "key_api": ["initialize()", "getStatus()", "setStatus()", "setDeploymentConfig()"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-002",
+      "module": "ProcessSupervisor",
+      "source": "desktop/src/runtime/process-supervisor.ts",
+      "type": "runtime",
+      "capabilities": ["进程生命周期管理", "进程启动/停止", "进程状态跟踪", "进程失败处理"],
+      "key_api": ["getStatus()", "start()", "stop()", "fail()"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-003",
+      "module": "PluginHost",
+      "source": "runtime/plugin-host/src/bootstrap.ts",
+      "type": "runtime_host",
+      "capabilities": ["插件宿主启动", "模块加载", "RPC通信", "处理器注册", "运行时上下文"],
+      "sub_modules": [
+        "bootstrap.ts - 启动引导",
+        "handler-registry.ts - 处理器注册表",
+        "module-loader.ts - 模块加载器",
+        "rpc.ts - RPC通信",
+        "runtime-context.ts - 运行时上下文",
+        "shutdown.ts - 关闭流程"
+      ],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-004",
+      "module": "TaskHost",
+      "source": "runtime/task-host/src/bootstrap.ts",
+      "type": "runtime_host",
+      "capabilities": ["任务宿主启动", "任务加载", "进度追踪", "检查点管理", "结果收集", "RPC通信"],
+      "sub_modules": [
+        "bootstrap.ts - 启动引导",
+        "task-loader.ts - 任务加载器",
+        "task-context.ts - 任务上下文",
+        "progress.ts - 进度追踪",
+        "checkpoint.ts - 检查点管理",
+        "result.ts - 结果收集",
+        "rpc.ts - RPC通信",
+        "shutdown.ts - 关闭流程"
+      ],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-005",
+      "module": "DesktopSnapshotSync",
+      "source": "desktop/src/main/desktop-host/snapshot-sync.ts",
+      "type": "sync",
+      "capabilities": ["状态快照同步", "主进程-渲染进程状态同步"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-006",
+      "module": "SnapshotApplier",
+      "source": "desktop/src/main/desktop-host/snapshot-applier.ts",
+      "type": "applier",
+      "capabilities": ["状态快照应用", "状态合并"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-007",
+      "module": "AnimationPlaybackEventBridge",
+      "source": "desktop/src/desktop-pet/runtime/playback-event-bridge.ts",
+      "type": "bridge",
+      "capabilities": ["播放事件桥接", "动画事件转发"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-008",
+      "module": "RuntimeHandlerV2",
+      "source": "desktop/src/desktop-pet/runtime/runtime-handler-v2.ts",
+      "type": "runtime_handler",
+      "capabilities": ["运行时处理V2", "协议处理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-009",
+      "module": "ProtocolV2",
+      "source": "desktop/src/desktop-pet/runtime/protocol-v2.ts",
+      "type": "protocol",
+      "capabilities": ["协议V2定义", "运行时协议"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-010",
+      "module": "UIRuntime",
+      "source": "front/src/runtime/runtime-adapter.ts",
+      "type": "runtime_adapter",
+      "capabilities": ["前端运行时适配", "桌面/浏览器运行时抽象"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-011",
+      "module": "RuntimeCapabilities",
+      "source": "front/src/runtime/runtime-capabilities.ts",
+      "type": "runtime_caps",
+      "capabilities": ["运行时能力检测", "路由模式检测", "平台能力查询", "hash/history路由判定"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-012",
+      "module": "RuntimeTypes",
+      "source": "front/src/runtime/runtime-types.ts",
+      "type": "runtime_types",
+      "capabilities": ["运行时类型定义", "平台类型"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-013",
+      "module": "ActionScheduler",
+      "source": "desktop/src/main/pet/action-scheduler.ts",
+      "type": "scheduler",
+      "capabilities": ["动作调度器", "定时动作", "触发器管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-014",
+      "module": "ActionPlayer",
+      "source": "desktop/src/main/pet/action-player.ts",
+      "type": "player",
+      "capabilities": ["动作播放器", "动作队列", "播放控制"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-015",
+      "module": "RuntimeBridgeClient",
+      "source": "desktop/src/main/pet/runtime-bridge-client.ts",
+      "type": "bridge",
+      "capabilities": ["运行时桥接客户端", "运行时通信", "远程控制"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-016",
+      "module": "DesktopDeployment",
+      "source": "desktop/src/shared/deployment.ts",
+      "type": "deployment",
+      "capabilities": ["部署配置工具", "部署模式检测", "本地/远程判定"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-017",
+      "module": "RuntimeProtocol",
+      "source": "desktop/src/shared/runtime-protocol.ts",
+      "type": "protocol",
+      "capabilities": ["运行时协议定义", "进程间通信协议"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-018",
+      "module": "PackageSchema",
+      "source": "desktop/src/shared/package-schema.ts",
+      "type": "schema",
+      "capabilities": ["包Schema定义", "桌宠包/技能包结构"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-019",
+      "module": "PackageErrors",
+      "source": "desktop/src/shared/package-errors.ts",
+      "type": "errors",
+      "capabilities": ["包错误类型", "包解析错误", "包加载错误"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-020",
+      "module": "AppNav",
+      "source": "front/src/navigation/app-nav.ts",
+      "type": "navigation",
+      "capabilities": ["应用导航", "导航辅助函数"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "RT-021",
+      "module": "NavWhitelist",
+      "source": "front/src/navigation/nav-whitelist.ts",
+      "type": "navigation",
+      "capabilities": ["导航白名单", "允许的路由列表"],
+      "state": "IMPLEMENTED"
+    }
+  ],
+  "metadata": {
+    "total_runtime_modules": 21,
+    "runtime_hosts": ["plugin-host", "task-host"],
+    "runtime_root": "desktop/src/runtime",
+    "app_runtime_root": "front/src/runtime",
+    "navigation_root": "front/src/navigation",
+    "shared_root": "desktop/src/shared",
+    "external_runtime_root": "runtime/"
+  }
+}

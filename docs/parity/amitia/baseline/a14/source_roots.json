@@ -1,0 +1,238 @@
+[
+  {
+    "manifest_files": [
+      "backend/go.mod",
+      "backend/go.sum"
+    ],
+    "included_in_baseline": true,
+    "type": "go-module",
+    "path": "backend",
+    "git_repository": "root",
+    "lock_files": [
+      "backend/go.sum"
+    ],
+    "language": [
+      "Go"
+    ],
+    "build_entrypoints": [
+      "backend/cmd/server/main.go",
+      "backend/cmd/qdrant/main.go",
+      "backend/cmd/amitia-ext/main.go"
+    ],
+    "id": "backend-go"
+  },
+  {
+    "manifest_files": [
+      "front/package.json",
+      "front/pnpm-workspace.yaml",
+      "front/tsconfig.json"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "front",
+    "git_repository": "root",
+    "lock_files": [
+      "front/pnpm-lock.yaml",
+      "front/package-lock.json"
+    ],
+    "language": [
+      "TypeScript",
+      "JavaScript",
+      "Vue"
+    ],
+    "build_entrypoints": [
+      "front/src/main.ts",
+      "front/index.html"
+    ],
+    "id": "frontend-vue"
+  },
+  {
+    "manifest_files": [
+      "desktop/package.json",
+      "desktop/electron-builder.yml"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "desktop",
+    "git_repository": "root",
+    "lock_files": [
+      "desktop/pnpm-lock.yaml",
+      "desktop/package-lock.json"
+    ],
+    "language": [
+      "TypeScript",
+      "JavaScript"
+    ],
+    "build_entrypoints": [
+      "desktop/src/main/main.ts"
+    ],
+    "id": "desktop-electron"
+  },
+  {
+    "manifest_files": [
+      "mobile_app/pubspec.yaml"
+    ],
+    "included_in_baseline": true,
+    "type": "flutter-project",
+    "path": "mobile_app",
+    "git_repository": "root",
+    "lock_files": [
+      "mobile_app/pubspec.lock"
+    ],
+    "language": [
+      "Dart"
+    ],
+    "build_entrypoints": [
+      "mobile_app/lib/main.dart"
+    ],
+    "id": "mobile-flutter"
+  },
+  {
+    "manifest_files": [
+      "mobile_app/android/settings.gradle.kts",
+      "mobile_app/android/build.gradle.kts",
+      "mobile_app/android/app/build.gradle.kts"
+    ],
+    "included_in_baseline": true,
+    "type": "android-gradle",
+    "path": "mobile_app/android",
+    "git_repository": "root",
+    "lock_files": [],
+    "language": [
+      "Kotlin",
+      "Java"
+    ],
+    "build_entrypoints": [
+      "mobile_app/android/gradlew"
+    ],
+    "id": "mobile-android"
+  },
+  {
+    "manifest_files": [],
+    "included_in_baseline": true,
+    "type": "ios-xcode",
+    "path": "mobile_app/ios",
+    "git_repository": "root",
+    "lock_files": [],
+    "language": [
+      "Swift"
+    ],
+    "build_entrypoints": [],
+    "id": "mobile-ios"
+  },
+  {
+    "manifest_files": [
+      "wechat-chat-extractor/requirements.txt"
+    ],
+    "included_in_baseline": true,
+    "type": "python-project",
+    "path": "wechat-chat-extractor",
+    "git_repository": "root",
+    "lock_files": [],
+    "language": [
+      "Python"
+    ],
+    "build_entrypoints": [
+      "wechat-chat-extractor/weflow_wrapper.py"
+    ],
+    "id": "wechat-extractor"
+  },
+  {
+    "manifest_files": [
+      "runtime/plugin-host/package.json"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "runtime/plugin-host",
+    "git_repository": "root",
+    "lock_files": [
+      "runtime/plugin-host/package-lock.json"
+    ],
+    "language": [
+      "TypeScript"
+    ],
+    "build_entrypoints": [],
+    "id": "runtime-plugin-host"
+  },
+  {
+    "manifest_files": [
+      "runtime/task-host/package.json"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "runtime/task-host",
+    "git_repository": "root",
+    "lock_files": [
+      "runtime/task-host/package-lock.json"
+    ],
+    "language": [
+      "TypeScript"
+    ],
+    "build_entrypoints": [],
+    "id": "runtime-task-host"
+  },
+  {
+    "manifest_files": [
+      "sdk/plugin-cli/package.json"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "sdk/plugin-cli",
+    "git_repository": "root",
+    "lock_files": [],
+    "language": [
+      "TypeScript"
+    ],
+    "build_entrypoints": [],
+    "id": "sdk-plugin-cli"
+  },
+  {
+    "manifest_files": [
+      "sdk/plugin-sdk/package.json"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "sdk/plugin-sdk",
+    "git_repository": "root",
+    "lock_files": [],
+    "language": [
+      "TypeScript"
+    ],
+    "build_entrypoints": [],
+    "id": "sdk-plugin-sdk"
+  },
+  {
+    "manifest_files": [
+      "backend/sidecar/package.json"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "backend/sidecar",
+    "git_repository": "root",
+    "lock_files": [
+      "backend/sidecar/pnpm-lock.yaml"
+    ],
+    "language": [
+      "TypeScript"
+    ],
+    "build_entrypoints": [],
+    "id": "wechat-sidecar"
+  },
+  {
+    "manifest_files": [
+      "backend/qq-sidecar/package.json"
+    ],
+    "included_in_baseline": true,
+    "type": "node-package",
+    "path": "backend/qq-sidecar",
+    "git_repository": "root",
+    "lock_files": [
+      "backend/qq-sidecar/pnpm-lock.yaml"
+    ],
+    "language": [
+      "TypeScript"
+    ],
+    "build_entrypoints": [],
+    "id": "qq-sidecar"
+  }
+]

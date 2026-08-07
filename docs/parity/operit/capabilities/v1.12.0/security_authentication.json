@@ -1,0 +1,427 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "source": "permission_scan.json + backup_update_scan.json + ui_scan.json"
+  },
+  "web_auth": [
+    {
+      "channel": "MCP WebVIEW-BASED WEBUI",
+      "auth_type": "Bearer Token (configurable, default auto-generated UUID)",
+      "location": "integrations/http/ExternalChatHttpServer.kt:374-391",
+      "token_source": "DataStore EXTERNAL_HTTP_API (preferences.getBearerToken(), UUID via ensureBearerToken)",
+      "header_name": "Authorization: Bearer <token>",
+      "port": 8094,
+      "protection": "All external HTTP chat endpoints gated by requireBearerToken()"
+    },
+    {
+      "channel": "WebChat HTTP Bridge",
+      "auth_type": "Bearer Token (same as above, shared EXTERNAL_HTTP_API datastore)",
+      "location": "integrations/http/WebChatHttpBridge.kt:2521-2536",
+      "token_source": "Preferences.getBearerToken() -> UUID ensureBearerToken",
+      "header_name": "Authorization: Bearer <token>",
+      "protection": "All web chat endpoints gated by requireBearerToken()"
+    },
+    {
+      "channel": "MCP Remote Server",
+      "auth_type": "Bearer Token (user-configured per remote server)",
+      "location": "data/mcp/MCPLocalServer.kt:171",
+      "token_source": "MCP config UI (MCPConfigScreen) -> local MCP server config",
+      "header_name": "Authorization: Bearer <token>",
+      "protection": "Per-serverBearerToken sent to MCP bridge client"
+    },
+    {
+      "channel": "GitHub OAuth Webview",
+      "auth_type": "OAuth 2.0 Authorization Code (WebView login)",
+      "location": "ui/features/github/GitHubLoginWebViewDialog.kt:271",
+      "flow": "System browser/WebView github.com/login/oauth/authorization -> callback operit://github-oauth-callback"
+    }
+  ],
+  "special_permissions": [
+    {
+      "permission": "SYSTEM_ALERT_WINDOW",
+      "provider": "Settings.canDrawOverlays()",
+      "usage": "Floating window overlay for floating chat ball, voice assistant ball, full-screen mode, UIDebugger overlay",
+      "files": [
+        "ui/features/demo/components/PermissionLevelCard.kt"
+      ]
+    },
+    {
+      "permission": "WRITE_SECURE_SETTINGS",
+      "provider": "Indirect via shell: settings put secure/global/system",
+      "usage": "System/Secure/Global settings manipulation via DebuggerSystemOperationTools",
+      "files": [
+        "core/tools/defaultTool/standard/StandardSystemOperationTools.kt"
+      ]
+    },
+    {
+      "permission": "MANAGE_EXTERNAL_STORAGE",
+      "provider": "Environment.isExternalStorageManager()",
+      "usage": "Full file system access for shell commands, model storage, MCP plugins, skill storage",
+      "files": [
+        "ui/features/demo/screens/ShizukuDemoScreen.kt"
+      ]
+    },
+    {
+      "permission": "PACKAGE_USAGE_STATS",
+      "provider": "AppOpsManager.unsafeCheckOpNoThrow()",
+      "usage": "App usage time statistics via UsageStatsManager",
+      "files": [
+        "core/tools/defaultTool/standard/StandardSystemOperationTools.kt"
+      ]
+    },
+    {
+      "permission": "BIND_ACCESSIBILITY_SERVICE",
+      "provider": "com.ai.assistance.operit/.../YourAccessibilityService",
+      "usage": "External accessibility provider service for ADB-level UI automation (separate package: com.ai.assistance.operit.provider)",
+      "files": [
+        "core/tools/system/shell/AccessibilityShellExecutor.kt"
+      ]
+    },
+    {
+      "permission": "BIND_NOTIFICATION_LISTENER_SERVICE",
+      "provider": "services.notification.OperitNotificationListenerService",
+      "usage": "Notification monitoring and posting",
+      "files": [
+        "AndroidManifest.xml:335-342"
+      ]
+    },
+    {
+      "permission": "BIND_VOICE_INTERACTION",
+      "provider": "services.assistant.OperitVoiceInteractionService",
+      "usage": "Default voice assistant replacement",
+      "files": [
+        "AndroidManifest.xml:484-496"
+      ]
+    },
+    {
+      "permission": "REQUEST_INSTALL_PACKAGES",
+      "provider": "PatchUpdateInstaller + shell pm install",
+      "usage": "Silent APK install via Shizuku/pm",
+      "files": [
+        "data/updates/PatchUpdateInstaller.kt",
+        "core/tools/defaultTool/debugger/DebuggerSystemOperationTools.kt"
+      ]
+    },
+    {
+      "permission": "SCHEDULE_EXACT_ALARM",
+      "provider": "AlarmManager.setExactAndAllowWhileIdle()",
+      "usage": "Exact workflow scheduling",
+      "files": [
+        "integrations/tasker/"
+      ]
+    },
+    {
+      "permission": "QUERY_ALL_PACKAGES",
+      "provider": "PackageManager queryIntentActivities",
+      "usage": "App inventory via tool_get_installed_apps, enhanced shell resolve-activity",
+      "files": [
+        "core/tools/javascript/JsBridge.kt"
+      ]
+    },
+    {
+      "permission": "SUSTAINED_PERFORMANCE_MODE",
+      "provider": "Window.setSustainedPerformanceMode()",
+      "usage": "Prevent thermal throttling during LLM inference",
+      "files": [
+        "MainActivity"
+      ]
+    },
+    {
+      "permission": "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "provider": "PowerManager.isIgnoringBatteryOptimizations()",
+      "usage": "Run LLM inference in background",
+      "files": [
+        "ui/features/demo/components/PermissionLevelCard.kt"
+      ]
+    },
+    {
+      "permission": "INTERACT_ACROSS_USERS_FULL",
+      "provider": "ShizukuProvider",
+      "usage": "Binder IPC for Shizuku ADB-level shell impersonation",
+      "files": [
+        "AndroidManifest.xml:153"
+      ]
+    }
+  ],
+  "manifest_permissions": [
+    {
+      "permission": "android.permission.INTERNET",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.ACCESS_NETWORK_STATE",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE_SHORT_SERVICE",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.KILL_BACKGROUND_PROCESSES",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.READ_EXTERNAL_STORAGE",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.READ_MEDIA_AUDIO",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.MANAGE_EXTERNAL_STORAGE",
+      "level": "special/appop",
+      "used": true
+    },
+    {
+      "permission": "moe.shizuku.manager.permission.API_V23",
+      "level": "signature",
+      "used": true
+    },
+    {
+      "permission": "android.permission.REQUEST_INSTALL_PACKAGES",
+      "level": "special",
+      "used": true
+    },
+    {
+      "permission": "android.permission.SYSTEM_ALERT_WINDOW",
+      "level": "special/appop",
+      "used": true
+    },
+    {
+      "permission": "android.permission.WRITE_SETTINGS",
+      "level": "special/appop",
+      "used": true
+    },
+    {
+      "permission": "android.permission.PACKAGE_USAGE_STATS",
+      "level": "special/appop",
+      "used": true
+    },
+    {
+      "permission": "android.permission.POST_NOTIFICATIONS",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.SUSTAINED_PERFORMANCE_MODE",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "com.android.alarm.permission.SET_ALARM",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.CALL_PHONE",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.SEND_SMS",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.READ_SMS",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.RECEIVE_SMS",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.ACCESS_FINE_LOCATION",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.ACCESS_COARSE_LOCATION",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.BLUETOOTH",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.BLUETOOTH_ADMIN",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.BLUETOOTH_CONNECT",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.BLUETOOTH_SCAN",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.WAKE_LOCK",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.QUERY_ALL_PACKAGES",
+      "level": "special",
+      "used": true
+    },
+    {
+      "permission": "android.permission.RECORD_AUDIO",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.CAMERA",
+      "level": "dangerous",
+      "used": true
+    },
+    {
+      "permission": "android.permission.BIND_VOICE_INTERACTION",
+      "level": "signature",
+      "used": true
+    },
+    {
+      "permission": "android.permission.RECEIVE_BOOT_COMPLETED",
+      "level": "normal",
+      "used": true
+    },
+    {
+      "permission": "android.permission.SCHEDULE_EXACT_ALARM",
+      "level": "special",
+      "used": true
+    },
+    {
+      "permission": "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE",
+      "level": "signature",
+      "used": true
+    },
+    {
+      "permission": "android.permission.INTERACT_ACROSS_USERS_FULL",
+      "level": "signature",
+      "used": true
+    },
+    {
+      "permission": "android.permission.MANAGE_DOCUMENTS",
+      "level": "signature",
+      "used": true
+    }
+  ],
+  "crash_recovery": {
+    "found": true,
+    "details": "全局异常捕获 + 独立崩溃报告 Activity + 数据救援模式",
+    "items": [
+      {
+        "name": "GlobalExceptionHandler",
+        "path": "util/GlobalExceptionHandler.kt",
+        "description": "Thread.UncaughtExceptionHandler 实现。捕获未处理异常后: 标记 CrashRecoveryState 保存日志 → 格式化堆栈 → 启动 CrashReportActivity → exitProcess(1) 终止进程"
+      },
+      {
+        "name": "CrashReportActivity",
+        "path": "ui/error/CrashReportActivity.kt",
+        "description": "崩溃报告展示页。功能: 重启应用 (通过 AlarmManager 200ms 后 PendingIntent 拉起 MainActivity)、复制堆栈到剪贴板、导出到 Downloads/Operit/error/error-report-*.log、导出 logcat 日志 (LogcatExportHelper)。堆栈截断上限 24000 字符"
+      },
+      {
+        "name": "CrashRecoveryState",
+        "path": "util/CrashRecoveryState.kt",
+        "description": "崩溃恢复状态标记: SharedPreferences 持久化 pending crash report launch 状态，确保崩溃后重启时保留日志"
+      },
+      {
+        "name": "DataRecoveryActivity + ViewModel",
+        "path": "ui/recovery/DataRecoveryActivity.kt / DataRecoveryViewModel.kt",
+        "description": "独立数据救援进程: 提供原始快照导入/导出 (调用 RawSnapshotBackupManager)、SQL 执行器 (直接 SQLite 操作)。从 launcher 独立启动，恢复后可重启主应用"
+      },
+      {
+        "name": "Registration in OperitApplication",
+        "path": "core/application/OperitApplication.kt",
+        "description": "在 Application.onCreate 中调用 Thread.setDefaultUncaughtExceptionHandler(GlobalExceptionHandler(this)) 注册全局异常处理器"
+      },
+      {
+        "name": "AnrMonitor",
+        "path": "util/AnrMonitor.kt",
+        "description": "ANR 监测工具，检测应用无响应情况"
+      }
+    ]
+  },
+  "external_integrations": [
+    {
+      "name": "ExternalChatHttpServer",
+      "auth": "Bearer Token (UUID)",
+      "channel": "http",
+      "port": 8094
+    },
+    {
+      "name": "WebChatHttpBridge",
+      "auth": "Bearer Token (UUID)",
+      "channel": "http+sse"
+    },
+    {
+      "name": "MCP Remote Server",
+      "auth": "Bearer Token",
+      "channel": "tcp+bridge"
+    },
+    {
+      "name": "MCP Local Server",
+      "auth": "local",
+      "channel": "tcp"
+    },
+    {
+      "name": "GitHub OAuth",
+      "auth": "OAuth 2.0",
+      "channel": "webview"
+    },
+    {
+      "name": "ExternalChatReceiver",
+      "auth": "none",
+      "channel": "broadcast"
+    }
+  ]
+}

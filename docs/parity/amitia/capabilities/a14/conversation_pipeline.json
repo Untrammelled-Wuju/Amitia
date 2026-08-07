@@ -1,0 +1,18 @@
+{
+  "id": "conversation_pipeline",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "conversation_pipeline",
+  "description": "对话消息流管线(从用户输入到AI回复的完整Pipeline)",
+  "stages": [
+    { "order": 1, "name": "input_preprocess", "description": "用户输入预处理(去敏/安全检查/多模态附件)", "file": "backend/internal/prompt/sanitize.go" },
+    { "order": 2, "name": "conversation_state_resolve", "description": "会话状态解析(会话是否存在/角色切换/会话摘要加载)", "file": "backend/internal/chat/conversation_state.go" },
+    { "order": 3, "name": "prompt_assemble", "description": "提示词组装(system + context + history + user input)", "file": "backend/internal/prompt/builder.go" },
+    { "order": 4, "name": "llm_stream", "description": "LLM流式生成(通过chat/llm_client.go调用模型Provider)", "file": "backend/internal/chat/llm_client.go" },
+    { "order": 5, "name": "tool_detect", "description": "检测LLM输出中的tool_call，分发执行", "file": "backend/internal/chat/tool_runtime.go" },
+    { "order": 6, "name": "tool_result_inject", "description": "工具结果回填到对话历史，触发二次生成", "file": "backend/internal/agent/tool/" },
+    { "order": 7, "name": "reply_sanitize", "description": "回复后处理(去重复/去标记化/句式断句)", "files": ["backend/internal/chat/reply_sanitizer.go", "backend/internal/chat/reply_sanitizer_dedup.go", "backend/internal/chat/reply_sanitizer_markup.go", "backend/internal/chat/reply_sanitizer_sentence.go"] },
+    { "order": 8, "name": "commit", "description": "提交状态变更(need/psyche/relationship/memory outbox)", "files": ["backend/internal/chat/commit_coordinator.go", "backend/internal/chat/commit_need.go", "backend/internal/chat/commit_psyche.go", "backend/internal/chat/commit_relationship.go"] },
+    { "order": 9, "name": "deliver", "description": "输出投递(SSE推前端/侧车投递通道)", "files": ["backend/internal/delivery/worker.go", "internal/companion/channel_delivery.go"] }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "id": "runtime_infrastructure",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "runtime_infrastructure",
+  "description": "运行时基础设施清单(服务编排/进程管理/健康检查/断路器)",
+  "components": [
+    {
+      "name": "service_orchestrator",
+      "description": "服务启动编排(数据库初始化/迁移/侧车/队列)",
+      "files": ["backend/cmd/", "backend/internal/runtimeorchestrator/"]
+    },
+    {
+      "name": "desktop_runtime",
+      "description": "桌面端运行时(进程管理/生命周期)",
+      "files": ["desktop/src/runtime/runtime-manager.ts", "desktop/src/runtime/process-supervisor.ts"]
+    },
+    {
+      "name": "core_manager",
+      "description": "核心进程管理(AmitiaCore.exe启动/重启/健康检查)",
+      "files": ["desktop/src/main/core-manager.ts", "desktop/src/main/core-prereq.ts"]
+    },
+    {
+      "name": "health_checker",
+      "description": "健康检查(各组件存活探测)",
+      "file": "backend/internal/health/checker.go"
+    },
+    {
+      "name": "circuit_breaker",
+      "description": "断路器(故障隔离)",
+      "files": ["backend/internal/circuitbreaker/", "backend/internal/extension/plugin_circuit.go"]
+    },
+    {
+      "name": "request_identity",
+      "description": "请求ID追踪",
+      "file": "backend/internal/requestidentity/"
+    },
+    {
+      "name": "hot_reload",
+      "description": "开发模式热重载",
+      "files": ["backend/internal/extension/dev_mode/reloader.go"]
+    },
+    {
+      "name": "migration_system",
+      "description": "数据库迁移系统(baseline.sql + 版本化迁移 + checksum校验)",
+      "files": ["backend/internal/migration/migrations.go", "backend/internal/migration/baseline.sql"]
+    },
+    {
+      "name": "scheduler",
+      "description": "调度器(批处理/背压/幂等提交/优先级)",
+      "files": ["backend/internal/scheduler/"]
+    }
+  ]
+}

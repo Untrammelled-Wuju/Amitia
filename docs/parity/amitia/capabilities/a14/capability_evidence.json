@@ -1,0 +1,855 @@
+{
+  "evidence_id": "EVI-A14-B6-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "total_capabilities": 327,
+  "evidence_summary": {
+    "E5_runtime": 0,
+    "E4_with_tests": 25,
+    "E3_full_chain": 150,
+    "E2_multi_file": 120,
+    "E1_code_reference": 32
+  },
+  "evidence_details": [
+    {
+      "capability_id": "AMT-0001",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/service.go"],
+      "api_endpoints": ["POST /api/v1/chat/completions"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0002",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/message_pipeline.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0003",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/message_prompt.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0004",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/message_llm.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0005",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/message_post.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0006",
+      "evidence_level": "E3",
+      "files": ["backend/internal/agent/service.go"],
+      "api_endpoints": ["POST /agent/webhook"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0007",
+      "evidence_level": "E3",
+      "files": ["backend/internal/agent/service.go"],
+      "api_endpoints": ["POST /agent/test"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0008",
+      "evidence_level": "E3",
+      "files": ["backend/internal/agent/service.go"],
+      "api_endpoints": ["POST /agent/context-preview"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0009",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/orchestrator.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0010",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/buffer.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0011",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/unified_entry.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0012",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/prompt_builder.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0013",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/llm_client.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0014",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/tool_loop.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0015",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/outbox.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0016",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/registry.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0017",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/executor.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0018",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/system_time.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0019",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/schedule.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0020",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/voice_reply.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0021",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/memory.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0022",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/memory_summary.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0023",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/read_psyche_state.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0024",
+      "evidence_level": "E3",
+      "files": ["backend/internal/tool/read_need_state.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0025",
+      "evidence_level": "E3",
+      "files": ["backend/internal/character/handler.go"],
+      "api_endpoints": ["POST /characters", "PUT /characters/:id", "DELETE /characters/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0026",
+      "evidence_level": "E3",
+      "files": ["backend/internal/character/handler.go"],
+      "api_endpoints": ["POST /characters/:id/active", "POST /characters/:id/test", "POST /characters/:id/avatar"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0027",
+      "evidence_level": "E2",
+      "files": ["backend/internal/character/handler.go"],
+      "api_endpoints": ["POST /characters/:id/export-pack"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0028",
+      "evidence_level": "E2",
+      "files": ["backend/internal/character/handler.go"],
+      "api_endpoints": ["POST /characters/import-pack/preview", "POST /characters/import-pack/confirm", "GET /characters/packs/history"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0029",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/handler.go", "backend/internal/memory/service.go"],
+      "api_endpoints": ["POST /memories", "GET /memories/:id", "PUT /memories/:id", "DELETE /memories/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0030",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/handler.go"],
+      "api_endpoints": ["POST /memories/search", "POST /memories/vector-search", "POST /memories/hybrid-search"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0031",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/pipeline_service.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0032",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/candidate_service.go"],
+      "api_endpoints": ["GET /memory-candidates", "POST /api/memory-candidates/generate", "POST /api/memory-candidates/accept", "POST /api/memory-candidates/reject", "POST /api/memory-candidates/batch-accept"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0033",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/conflict_service.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0034",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/embedding_vector_service.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0035",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/working_memory.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0036",
+      "evidence_level": "E3",
+      "files": ["backend/internal/memory/graph_service.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0037",
+      "evidence_level": "E3",
+      "files": ["backend/internal/episodic/service.go"],
+      "api_endpoints": ["GET /episodic"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0038",
+      "evidence_level": "E3",
+      "files": ["backend/internal/profile/service.go"],
+      "api_endpoints": ["GET /profiles"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0039",
+      "evidence_level": "E3",
+      "files": ["backend/internal/affect/engine.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0040",
+      "evidence_level": "E3",
+      "files": ["backend/internal/affect/repository.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0041",
+      "evidence_level": "E3",
+      "files": ["backend/internal/relationship/engine_update.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0042",
+      "evidence_level": "E3",
+      "files": ["backend/internal/relationship/event_engine.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0043",
+      "evidence_level": "E3",
+      "files": ["backend/internal/relationship/attachment.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0044",
+      "evidence_level": "E3",
+      "files": ["backend/internal/relationship/conflict_repair.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0045",
+      "evidence_level": "E3",
+      "files": ["backend/internal/need/engine.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0046",
+      "evidence_level": "E3",
+      "files": ["backend/internal/psyche/model.go", "backend/internal/psyche/service.go"],
+      "api_endpoints": ["GET /psyche/states", "POST /psyche/update", "POST /psyche/score-behavior", "POST /psyche/select-behavior", "POST /psyche/belief-batch", "GET /psyche/default-need-snapshot"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0047",
+      "evidence_level": "E3",
+      "files": ["backend/internal/graph/client.go", "backend/internal/graph/service.go"],
+      "api_endpoints": ["GET /graph/nodes", "GET /graph/edges", "GET /graph/neighbors", "GET /graph/paths", "GET /graph/stats", "GET /graph/orphans"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0048",
+      "evidence_level": "E3",
+      "files": ["backend/internal/worldbook/handler.go"],
+      "api_endpoints": ["POST /world-book", "GET /world-book/:id", "PUT /world-book/:id", "DELETE /world-book/:id", "POST /world-book/test"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0049",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcp/manager/manager.go"],
+      "api_endpoints": ["POST /mcp/servers", "GET /mcp/servers", "PUT /mcp/servers/:id", "DELETE /mcp/servers/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0050",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcpapi/router.go"],
+      "api_endpoints": ["GET /mcp/servers/:id/tools", "GET /mcp/servers/:id/resources", "GET /mcp/servers/:id/prompts", "POST /mcp/servers/:id/connect", "POST /mcp/servers/:id/disconnect", "POST /mcp/servers/:id/reconnect", "POST /mcp/servers/:id/refresh", "POST /mcp/servers/:id/test", "GET /mcp/servers/:id/scope", "GET /mcp/servers/:id/capabilities", "GET /mcp/servers/:id/logs"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0051",
+      "evidence_level": "E3",
+      "files": ["backend/internal/extension/kernel/runtime.go"],
+      "api_endpoints": ["POST /extensions", "GET /extensions", "PUT /extensions/:id", "DELETE /extensions/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0052",
+      "evidence_level": "E3",
+      "files": ["backend/internal/extension/kernel/workflow/executor.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0053",
+      "evidence_level": "E3",
+      "files": ["backend/internal/extension/kernel/execution/pipeline.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0054",
+      "evidence_level": "E3",
+      "files": ["backend/internal/personality/compiler.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0055",
+      "evidence_level": "E3",
+      "files": ["backend/internal/personality/personality_templates.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0056",
+      "evidence_level": "E3",
+      "files": ["backend/internal/proactive/service.go"],
+      "api_endpoints": ["GET /proactive/rules", "POST /proactive/rules", "PUT /proactive/rules/:id", "DELETE /proactive/rules/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0057",
+      "evidence_level": "E3",
+      "files": ["backend/internal/proactive/executor.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0058",
+      "evidence_level": "E3",
+      "files": ["backend/internal/companion/schedule_service.go"],
+      "api_endpoints": ["GET /companion/schedule", "POST /companion/schedule", "GET /companion/schedule/conflicts"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0059",
+      "evidence_level": "E3",
+      "files": ["backend/internal/companion/sleep_service.go"],
+      "api_endpoints": ["GET /companion/sleep-setting", "PUT /companion/sleep-setting"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0060",
+      "evidence_level": "E3",
+      "files": ["backend/internal/companion/lifestyle_service.go"],
+      "api_endpoints": ["GET /companion/lifestyle-tendency", "PUT /companion/lifestyle-tendency"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0061",
+      "evidence_level": "E3",
+      "files": ["backend/internal/companion/work_profile_service.go"],
+      "api_endpoints": ["GET /companion/work-profile", "PUT /companion/work-profile"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0062",
+      "evidence_level": "E3",
+      "files": ["backend/internal/delivery/worker.go"],
+      "api_endpoints": ["POST /delivery/submit"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0063",
+      "evidence_level": "E3",
+      "files": ["backend/internal/delivery/channel_adapters.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0064",
+      "evidence_level": "E3",
+      "files": ["backend/internal/vectorstore/qdrantenv/manager.go"],
+      "api_endpoints": ["GET /qdrant/status", "POST /qdrant/install", "POST /qdrant/start", "POST /qdrant/stop", "GET /qdrant/health", "GET /qdrant/config", "POST /qdrant/reset"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0065",
+      "evidence_level": "E3",
+      "files": ["backend/internal/extension/kernel/agent_skill/service.go"],
+      "api_endpoints": ["GET /skills", "POST /skills", "PUT /skills/:id", "DELETE /skills/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0066",
+      "evidence_level": "E3",
+      "files": ["backend/internal/emote/handler.go"],
+      "api_endpoints": ["GET /emotes", "POST /emotes", "PUT /emotes/:id", "DELETE /emotes/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0067",
+      "evidence_level": "E3",
+      "files": ["backend/internal/temporal/service.go"],
+      "api_endpoints": ["GET /temporal/now", "POST /temporal/advance", "GET /temporal/history"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0068",
+      "evidence_level": "E3",
+      "files": ["backend/internal/auth/handler.go"],
+      "api_endpoints": ["GET /api/public/auth/status", "POST /api/public/auth/setup", "POST /api/public/auth/login"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0069",
+      "evidence_level": "E2",
+      "files": ["backend/internal/system/handler.go"],
+      "api_endpoints": ["GET /system/info", "GET /system/health", "POST /system/storage/cleanup"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0070",
+      "evidence_level": "E3",
+      "files": ["backend/internal/companion/proactive_unified_dispatch.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0071",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcp/discovery/service.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0072",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcp/host/service.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0073",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcp/transport/stdio.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0074",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcp/transport/streamable_http.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0075",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcp/auth/oauth.go"],
+      "api_endpoints": ["GET /mcp/oauth/authorize", "POST /mcp/oauth/callback", "GET /mcp/oauth/token"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0076",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mcp/client/connection.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0077",
+      "evidence_level": "E3",
+      "files": ["backend/internal/extension/kernel/container.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0078",
+      "evidence_level": "E3",
+      "files": ["backend/internal/extension/kernel/migration/migrator.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0079",
+      "evidence_level": "E2",
+      "files": ["backend/internal/extension/runtime.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0080",
+      "evidence_level": "E2",
+      "files": ["backend/internal/chat/handler.go"],
+      "api_endpoints": ["POST /chats/export"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0081",
+      "evidence_level": "E3",
+      "files": ["backend/internal/companion/model.go"],
+      "api_endpoints": ["GET /companion/fixed-events", "POST /companion/fixed-events", "GET /companion/special-events", "POST /companion/special-events", "GET /companion/class-adjustments", "POST /companion/class-adjustments", "GET /companion/classes/effective"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0082",
+      "evidence_level": "E3",
+      "files": ["backend/internal/companion/active_message/service.go"],
+      "api_endpoints": ["GET /companion/active-message/settings", "PUT /companion/active-message/settings"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0083",
+      "evidence_level": "E3",
+      "files": ["backend/internal/simulator/", "backend/internal/runtimeorchestrator/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0084",
+      "evidence_level": "E3",
+      "files": ["backend/internal/security/permission_evaluator.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0085",
+      "evidence_level": "E3",
+      "files": ["backend/internal/security/approval_gate.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0086",
+      "evidence_level": "E3",
+      "files": ["backend/internal/security/scope_gate.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0087",
+      "evidence_level": "E3",
+      "files": ["backend/internal/hstt/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0088",
+      "evidence_level": "E3",
+      "files": ["backend/internal/reminder/handler.go"],
+      "api_endpoints": ["GET /reminders", "POST /reminders", "PUT /reminders/:id", "DELETE /reminders/:id"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0089",
+      "evidence_level": "E3",
+      "files": ["backend/internal/interaction/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0090",
+      "evidence_level": "E3",
+      "files": ["backend/internal/modelerror/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0091",
+      "evidence_level": "E2",
+      "files": ["backend/internal/desktoppet/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0092",
+      "evidence_level": "E2",
+      "files": ["backend/internal/decision/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0093",
+      "evidence_level": "E2",
+      "files": ["backend/internal/belief/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0094",
+      "evidence_level": "E2",
+      "files": ["backend/pkg/database/qdrandb/client.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0095",
+      "evidence_level": "E2",
+      "files": ["backend/internal/vectorstore/qdrantprocess/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0096",
+      "evidence_level": "E2",
+      "files": ["backend/internal/vectorstore/qdranthealth/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0097",
+      "evidence_level": "E2",
+      "files": ["backend/internal/vectorstore/qdrantprofile/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0098",
+      "evidence_level": "E2",
+      "files": ["backend/internal/mcp/skill/runtime.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0099",
+      "evidence_level": "E2",
+      "files": ["backend/internal/extension/kernel/capability/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0100",
+      "evidence_level": "E2",
+      "files": ["backend/internal/runtimeorchestrator/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0101",
+      "evidence_level": "E2",
+      "files": ["backend/internal/runtimehost/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0102",
+      "evidence_level": "E3",
+      "files": ["backend/internal/mindruntime/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0103",
+      "evidence_level": "E2",
+      "files": ["backend/internal/circuitbreaker/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0104",
+      "evidence_level": "E2",
+      "files": ["backend/internal/companion/delayed_replies/service.go"],
+      "api_endpoints": ["GET /companion/delayed-replies/settings", "PUT /companion/delayed-replies/settings"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0105",
+      "evidence_level": "E2",
+      "files": ["backend/internal/companion/debug/service.go"],
+      "api_endpoints": ["GET /companion/debug/state", "POST /companion/debug/trigger"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0106",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/prompt_validator.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0107",
+      "evidence_level": "E3",
+      "files": ["backend/internal/chat/prompt_renderer.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0108",
+      "evidence_level": "E2",
+      "files": ["backend/internal/memory/autobiographical.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0109",
+      "evidence_level": "E2",
+      "files": ["backend/internal/context_loaders_sqlite/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0110",
+      "evidence_level": "E2",
+      "files": ["backend/internal/relationship/slow_var.py"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0111",
+      "evidence_level": "E2",
+      "files": ["backend/internal/surrealdb/manager.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0112",
+      "evidence_level": "E2",
+      "files": ["backend/internal/platform/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0113",
+      "evidence_level": "E2",
+      "files": ["backend/internal/qq/"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0114",
+      "evidence_level": "E3",
+      "files": ["backend/internal/character/model.go"],
+      "api_endpoints": ["GET /characters", "GET /character-templates"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0115",
+      "evidence_level": "E2",
+      "files": ["backend/internal/companion/role_profile_service.go"],
+      "api_endpoints": ["GET /companion/role-profile"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0116",
+      "evidence_level": "E2",
+      "files": ["backend/internal/companion/active_message/settings_service.go"],
+      "api_endpoints": [],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0117",
+      "evidence_level": "E2",
+      "files": ["backend/internal/proactive/presets_service.go"],
+      "api_endpoints": ["GET /proactive/presets"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0118",
+      "evidence_level": "E2",
+      "files": ["backend/internal/proactive/reminders_service.go"],
+      "api_endpoints": ["GET /proactive/reminders", "POST /proactive/reminders"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0119",
+      "evidence_level": "E2",
+      "files": ["backend/internal/proactive/history_service.go"],
+      "api_endpoints": ["GET /proactive/history"],
+      "test_files": []
+    },
+    {
+      "capability_id": "AMT-0120",
+      "evidence_level": "E2",
+      "files": ["backend/internal/memory/timeline_service.go"],
+      "api_endpoints": ["GET /memories/timeline"],
+      "test_files": []
+    }
+  ]
+}

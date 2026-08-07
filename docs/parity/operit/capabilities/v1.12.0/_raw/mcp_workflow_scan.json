@@ -1,0 +1,364 @@
+{
+  "scan_domain": "MCP_WORKFLOW_SKILL",
+  "scan_timestamp": "2026-08-07",
+  "repository": "Operit-v1.12.0",
+  "source_root": "app/src/main/java/com/ai/assistance/operit/",
+  "mcp": {
+    "found": true,
+    "files": [
+      "core/tools/mcp/MCPTool.kt",
+      "core/tools/mcp/MCPToolExecutor.kt",
+      "core/tools/mcp/MCPToolParameter.kt",
+      "core/tools/mcp/MCPServerConfig.kt",
+      "core/tools/mcp/MCPJson.kt",
+      "core/tools/mcp/MCPPackage.kt",
+      "data/mcp/MCPRepository.kt",
+      "data/mcp/MCPLocalServer.kt",
+      "data/mcp/plugins/MCPBridge.kt",
+      "data/mcp/plugins/MCPBridgeClient.kt",
+      "data/mcp/plugins/MCPStarter.kt",
+      "data/mcp/plugins/MCPSharedSession.kt",
+      "data/mcp/plugins/MCPProjectAnalyzer.kt",
+      "data/mcp/plugins/MCPDeployer.kt",
+      "data/mcp/plugins/MCPConfigGenerator.kt",
+      "data/mcp/plugins/MCPCommandGenerator.kt",
+      "ui/features/packages/viewmodel/MCPViewModel.kt",
+      "ui/features/packages/screens/MCPConfigScreen.kt",
+      "ui/features/packages/screens/mcp/viewmodel/MCPDeployViewModel.kt",
+      "ui/features/packages/screens/mcp/components/MCPEnvironmentVariablesDialog.kt",
+      "ui/features/packages/screens/mcp/components/MCPDeployProgressDialog.kt",
+      "ui/features/packages/screens/mcp/components/MCPDeployConfirmDialog.kt",
+      "ui/features/packages/screens/mcp/components/MCPCommandsEditDialog.kt",
+      "ui/features/packages/model/MCPCategories.kt",
+      "ui/features/packages/dialogs/MCPPackageDetailsDialog.kt",
+      "ui/features/packages/components/dialogs/MCPServerDetailsDialog.kt",
+      "ui/features/packages/components/dialogs/tabs/MCPServerDetailsTabs.kt",
+      "ui/features/packages/components/dialogs/header/MCPServerDetailsHeader.kt",
+      "ui/features/packages/components/dialogs/content/MCPServerDetailsContent.kt",
+      "ui/features/packages/components/dialogs/content/MCPServerConfigContent.kt",
+      "ui/features/packages/components/dialogs/actions/MCPServerDetailsActions.kt",
+      "ui/features/packages/components/MCPInstallProgressDialog.kt",
+      "app/src/main/assets/bridge/index.js",
+      "app/src/main/assets/bridge/spawn-helper.js"
+    ],
+    "protocols": [
+      "TCP Socket (自定义桥接协议)",
+      "本地 stdio (通过 Terminal/Node.js 桥接)",
+      "远程 HTTP/SSE (通过桥接器注册远程服务)"
+    ],
+    "architecture": {
+      "pattern": "Bridge-Client 代理模式",
+      "description": "Operit 不直接实现 MCP 协议，而是通过一个 Node.js 桥接器（bridge）代理所有 MCP 通信。Android 端通过 TCP Socket 与桥接器通信，桥接器负责实际的 MCP 协议交互。",
+      "components": {
+        "MCPBridge": "核心桥接管理器，单例。通过 TCP Socket (端口 8752/8751) 与 Node.js 桥接器进程通信。支持命令: spawn, shutdown, listtools, toolcall, list, register, unregister, reset。",
+        "MCPBridgeClient": "桥接客户端，负责构建 JSON 命令报文。支持注册本地服务 (register: type=local + command + args + env) 和远程服务 (register: type=remote + endpoint + connectionType + bearerToken + headers)。",
+        "MCPToolExecutor": "MCP 工具执行器，实现 ToolExecutor 接口。解析 serverName:toolName 格式，通过 MCPManager 获取 MCPBridgeClient 并调用 callToolSync。支持自动参数类型转换 (MCPToolParameter.smartConvert)。",
+        "MCPManager": "MCP 管理器，单例。管理 MCPBridgeClient 缓存和 MCPServerConfig 注册。提供 getOrCreateClient/server 连接复用。",
+        "MCPRepository": "MCP 仓库，管理插件安装/卸载、UI 状态 (StateFlow)、已安装插件 ID 跟踪。插件存储在 /Download/Operit/mcp_plugins/ 目录。",
+        "MCPLocalServer": "MCP 配置管理中心。管理 mcp_config.json 和 server_status.json，使用 SharedPreferences + 文件持久化。",
+        "MCPStarter": "MCP 插件启动器。依赖 Terminal (Node.js 终端环境) 和 pnpm。负责初始化桥接器、启动已部署插件、健康检查。",
+        "MCPDeployer": "MCP 部署器。协调项目分析、命令生成和配置生成完成插件部署到终端环境。",
+        "MCPConfigGenerator": "MCP 配置生成器。",
+        "MCPCommandGenerator": "MCP 命令生成器。",
+        "MCPProjectAnalyzer": "MCP 项目分析器。",
+        "MCPSharedSession": "共享终端会话管理。"
+      }
+    },
+    "transport_details": {
+      "local": {
+        "type": "TCP Socket -> Node.js Bridge -> stdio/SSE",
+        "port": "8752 (主) / 8751 (SSH 转发备)",
+        "format": "JSON 命令 (command + id + params)",
+        "commands": ["spawn", "shutdown", "listtools", "toolcall", "list", "register", "unregister", "reset", "cache_tools", "logs"]
+      },
+      "bridge_deployment": {
+        "source": "app/src/main/assets/bridge/index.js + spawn-helper.js",
+        "deploy_path": "~/bridge (终端环境)",
+        "runtime": "Node.js (终端内)",
+        "dependencies": "打包在 bridge/index.js 中 (自包含)"
+      }
+    },
+    "supports": {
+      "install_uninstall": "通过 MCPRepository + MCPLocalServer 实现插件安装/卸载和配置管理",
+      "config_management": "mcp_config.json + server_status.json + SharedPreferences",
+      "env_variables": "支持环境变量配置 (MCPEnvironmentVariablesDialog)",
+      "remote_endpoint": "支持 bearerToken + headers 的远程 HTTP/SSE 端点注册"
+    },
+    "notes": [
+      "MCP 实现采用 Bridge 代理模式而非原生实现：Android 端 -> TCP Socket -> Node.js Bridge -> MCP Server (stdio/SSE/HTTP)",
+      "桥接器文件位于 app/src/main/assets/bridge/ 部署到终端 ~/bridge/ 目录",
+      "MCPManager 在 MCPToolExecutor 内部静态定义（同一文件）",
+      "工具调用格式: serverName:toolName — 通过 AIToolHandler.executeTool() 分发",
+      "MCPStarter 检查 Node.js/pnpm 可用性作为前置条件",
+      "MCPBridgeClient 构建两种注册命令：local (command+args+env) 和 remote (endpoint+connectionType+bearerToken+headers)"
+    ]
+  },
+  "workflow": {
+    "found": true,
+    "files": [
+      "data/model/Workflow.kt",
+      "data/model/WorkflowExecutionLog.kt",
+      "data/repository/WorkflowRepository.kt",
+      "core/workflow/WorkflowExecutor.kt",
+      "core/workflow/WorkflowScheduler.kt",
+      "core/workflow/WorkflowSchedulerInitializer.kt",
+      "core/workflow/WorkflowWorker.kt",
+      "plugins/workflow/WorkflowLifecyclePlugin.kt",
+      "integrations/tasker/WorkflowTaskerActivity.kt",
+      "integrations/tasker/WorkflowTaskerReceiver.kt",
+      "ui/features/workflow/viewmodel/WorkflowViewModel.kt",
+      "ui/features/workflow/screens/WorkflowListScreen.kt",
+      "ui/features/workflow/screens/WorkflowDetailScreen.kt",
+      "ui/features/workflow/components/GridWorkflowCanvas.kt",
+      "ui/features/workflow/components/DraggableNodeCard.kt",
+      "ui/features/workflow/components/ConnectionMenu.kt",
+      "core/tools/defaultTool/standard/StandardWorkflowTools.kt",
+      "app/src/main/assets/packages/workflow.js",
+      "androidTest/java/com/ai/assistance/operit/core/workflow/WorkflowExecutorAndroidTest.kt"
+    ],
+    "architecture": {
+      "pattern": "DAG 有向无环图 + 拓扑排序",
+      "description": "完整的工作流自动化系统。基于节点连接构建邻接表和入度表，通过拓扑排序确保依赖顺序执行。支持条件分支、数据提取、逻辑运算等多种节点类型。"
+    },
+    "node_types": {
+      "TriggerNode": {
+        "description": "触发节点，工作流入口",
+        "trigger_types": ["manual", "schedule", "tasker", "intent", "speech", "app_open (cold start)"],
+        "config": "triggerConfig: Map<String, String>"
+      },
+      "ExecuteNode": {
+        "description": "执行节点，调用工具",
+        "fields": "actionType (工具名), actionConfig (Map<String, ParameterValue>), jsCode (可选内联JS)",
+        "tool_format": "packageName:toolName 或标准工具名"
+      },
+      "ConditionNode": {
+        "description": "条件分支节点",
+        "operators": ["EQ", "NE", "GT", "GTE", "LT", "LTE", "CONTAINS", "NOT_CONTAINS", "IN", "NOT_IN"],
+        "supports": "数值/字符串比较 (自动类型感知)"
+      },
+      "LogicNode": {
+        "description": "逻辑运算节点",
+        "operators": ["AND", "OR"],
+        "inputs": "所有入边连接"
+      },
+      "ExtractNode": {
+        "description": "数据提取/变换节点",
+        "modes": ["REGEX (正则提取)", "JSON (JSONPath 提取)", "SUB (子字符串)", "CONCAT (字符串拼接)", "RANDOM_INT", "RANDOM_STRING"],
+        "features": "支持 JSONPath 数组索引、正则分组、固定值/随机值"
+      }
+    },
+    "dag_implementation": {
+      "graph_construction": "buildDependencyGraph(): 构建邻接表 + 入度表，包含显式连接和参数引用依赖",
+      "cycle_detection": "detectCycle(): DFS 三色标记法检测有向环",
+      "execution_order": "executeTopologicalOrder(): Kahn 算法拓扑排序，入度为0的节点加入队列",
+      "connection_conditions": "支持条件边 (success/failed/on_error/正则/布尔表达式) 控制流转",
+      "reference_dependencies": "自动分析 ParameterValue.NodeReference 构建隐式依赖边"
+    },
+    "scheduling": {
+      "implementation": "WorkflowScheduler (WorkManager 驱动)",
+      "types": {
+        "interval": "PeriodicWorkRequest - 固定间隔执行 (最低15分钟)",
+        "specific_time": "OneTimeWorkRequest - 指定时间执行",
+        "cron": "Cron 表达式 (简化实现，支持 分 时 日 月 周 格式)"
+      },
+      "initializer": "WorkflowSchedulerInitializer - 应用启动时恢复所有调度",
+      "worker": "WorkflowWorker - 实际执行工作流的 WorkManager Worker"
+    },
+    "triggers": {
+      "manual": "手动触发 (默认)",
+      "schedule": "定时触发 (WorkflowScheduler + WorkManager)",
+      "tasker": "Tasker 集成 (WorkflowTaskerActivity + WorkflowTaskerReceiver)",
+      "intent": "Intent 触发",
+      "speech": "语音触发",
+      "app_open": "应用冷启动触发 (WorkflowLifecyclePlugin)"
+    },
+    "parameter_flow": {
+      "model": "sealed class ParameterValue { StaticValue | NodeReference }",
+      "resolution": "resolveParameterValue() 将 NodeReference 解析为上游节点执行结果",
+      "supports": "ExecuteNode、ConditionNode、ExtractNode 的参数均支持引用其他节点输出"
+    },
+    "data_model": {
+      "serialization": "Kotlinx Serialization (@Serializable)",
+      "workflow": "Workflow(id, name, description, nodes, connections, enabled, statistics)",
+      "execution_log": "WorkflowExecutionRecord(runId, workflowId, startedAt, finishedAt, success, logs)",
+      "persistence": "WorkflowRepository (数据存储层)"
+    },
+    "import_export": {
+      "ui": "WorkflowDetailScreen 支持图形化编辑",
+      "serialization": "使用 kotlinx.serialization.json.Json 进行 JSON 序列化/反序列化",
+      "programmatic_api": "StandardWorkflowTools 提供 CRUD API (getAllWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow, triggerWorkflow)"
+    },
+    "notes": [
+      "Workflow 系统是一个完整的 DAG 执行引擎，支持 6 种节点类型",
+      "DAG 构建同时考虑显式连接 (connections) 和隐式参数引用依赖 (NodeReference)",
+      "使用 Kahn 算法拓扑排序 + 入度管理确保正确执行顺序",
+      "条件边支持多种匹配模式: success/failed/正则/布尔值",
+      "定时调度基于 Android WorkManager (PeriodicWorkRequest/OneTimeWorkRequest)",
+      "支持 Tasker 应用集成触发 Workflow",
+      "应用冷启动触发通过 WorkflowLifecyclePlugin + AppLifecycleHook 实现",
+      "ExtractNode 支持丰富的数据提取模式: 正则/JSONPath/子串/拼接/随机值"
+    ]
+  },
+  "skill": {
+    "found": true,
+    "files": [
+      "core/tools/skill/SkillManager.kt",
+      "core/tools/skill/SkillPackage.kt",
+      "data/skill/SkillRepository.kt",
+      "data/preferences/SkillVisibilityPreferences.kt",
+      "util/SkillRepoZipPoolManager.kt",
+      "ui/features/packages/screens/SkillConfigScreen.kt"
+    ],
+    "architecture": {
+      "description": "基于文件系统的轻量级技能系统。技能以目录形式存储，每个技能目录包含一个 SKILL.md 文件 (YAML frontmatter + Markdown 内容)。通过 SkillManager 扫描文件系统发现和管理技能。"
+    },
+    "definition_format": {
+      "format": "Markdown (SKILL.md) + YAML Frontmatter",
+      "frontmatter_fields": ["name", "description"],
+      "example": "---\nname: \"skill-name\"\ndescription: \"skill description\"\n---\n\n(instructions content)",
+      "discovery": "扫描 /Download/Operit/skills/ 下所有包含 SKILL.md 或 skill.md 的子目录"
+    },
+    "install_uninstall": {
+      "zip_import": "SkillManager.importSkillFromZip() / SkillRepository.importSkillFromZip() - 从 zip 文件导入技能",
+      "github_import": "SkillRepository.importSkillFromGitHubRepo() - 从 GitHub 仓库导入 (支持 tree/blob 路径、subDir 提取)",
+      "direct_input": "SkillRepository.importSkillFromDirectInput() - 直接输入技能 ID/描述/内容创建",
+      "delete": "SkillManager.deleteSkill() - 删除技能目录"
+    },
+    "enable_disable": {
+      "mechanism": "SkillVisibilityPreferences - AI 可见性控制",
+      "description": "技能没有显式的 enable/disable 开关，而是通过 isSkillVisibleToAi() 控制 AI 是否能看到该技能"
+    },
+    "prompt_injection": {
+      "location": "SkillManager.getSkillSystemPrompt() -> SystemPromptConfig",
+      "template": "注入格式包含: 技能名称、使用时间、执行策略、描述、路径信息、目录结构树、完整 SKILL.md 内容",
+      "injection_point": "技能内容直接拼接到系统提示中，以 'Using package (Skill):' 开头"
+    },
+    "zip_handling": {
+      "path_traversal_protection": "Zip Slip 攻击防护 (检查 canonical 路径)",
+      "duplication_check": "同名技能检测",
+      "temporary_extraction": "先解压到临时目录检测到目标技能目录后再复制到最终位置"
+    },
+    "notes": [
+      "技能定义格式为 SKILL.md (Markdown + YAML frontmatter)，简单轻量",
+      "安装支持三种方式: zip 包 / GitHub 仓库 / 直接输入",
+      "没有传统意义上的 enable/disable，通过 SkillVisibilityPreferences 控制 AI 可见性",
+      "SkillRepository 支持从 GitHub 任意子目录提取 skill (解析 tree/blob URL)",
+      "导入含 Zip Slip 防护和路径合法性校验",
+      "技能内容注入到系统 prompt 时包含完整目录结构树，便于 AI 理解技能资源布局"
+    ]
+  },
+  "toolpkg": {
+    "found": true,
+    "files": [
+      "core/tools/ToolPackage.kt",
+      "core/tools/packTool/PackageManager.kt",
+      "core/tools/packTool/ToolPkgManager.kt",
+      "core/tools/packTool/ToolPkgParser.kt",
+      "core/tools/packTool/ToolPkgLoader.kt",
+      "core/tools/packTool/ToolPkgMainRegistrationScriptParser.kt",
+      "core/tools/packTool/ToolPkgTemplateModels.kt",
+      "plugins/toolpkg/ToolPkgChatInputHookBridge.kt",
+      "plugins/toolpkg/ToolPkgAiProviderRegistry.kt",
+      "plugins/toolpkg/ToolPkgCommonBridgePlugin.kt",
+      "plugins/toolpkg/ToolPkgChatViewHookBridge.kt",
+      "plugins/toolpkg/ToolPkgMessageProcessingCancellationRegistry.kt",
+      "plugins/toolpkg/ToolPkgHookBridgeSupport.kt",
+      "plugins/toolpkg/ToolPkgToolLifecycleBridge.kt",
+      "plugins/toolpkg/ToolPkgSummaryHookBridge.kt",
+      "plugins/toolpkg/ToolPkgPromptHookBridge.kt",
+      "widget/ToolPkgDesktopWidgetReceiver.kt",
+      "widget/ToolPkgDesktopWidgetHost.kt",
+      "widget/ToolPkgDesktopWidgetDslRenderer.kt",
+      "widget/ToolPkgDesktopWidgetConfigActivity.kt",
+      "widget/ToolPkgDesktopGlanceWidget.kt"
+    ],
+    "architecture": {
+      "description": "完整的 JavaScript/TypeScript 工具包系统。工具包以 ZIP 格式分发，包含 manifest (HJSON/JSON)、JS 脚本、资源文件。通过 QuickJS 引擎在终端环境中执行。PackageManager 负责全生命周期管理 (加载/安装/启用/禁用/卸载)。"
+    },
+    "manifest_format": {
+      "format": "HJSON (首选) 或 JSON",
+      "filename": "manifest.hjson / manifest.json",
+      "fields": {
+        "name": "包名称",
+        "description": "本地化描述 (支持多语言 Map)",
+        "tools": "工具列表 (name, description, parameters, script)",
+        "states": "可选状态列表",
+        "env": "环境变量声明列表",
+        "isBuiltIn": "是否内建包",
+        "enabledByDefault": "默认启用",
+        "displayName": "本地化显示名",
+        "category": "分类",
+        "author": "作者列表"
+      }
+    },
+    "loading_execution": {
+      "parser": "ToolPkgParser - 解析 manifest 和工具定义",
+      "loader": "ToolPkgLoader - 从 ZIP/Asset 加载工具包",
+      "manager": "ToolPkgManager - 管理容器运行时 (ToolPkgContainerRuntime) 和子包 (ToolPkgSubpackageRuntime)",
+      "executor": "PackageToolExecutor - 执行 JS 脚本 (通过 JsToolManager)",
+      "js_engine": "QuickJS (JsEngine) - 在终端内执行 JavaScript/TypeScript",
+      "artifacts_source": "app/src/main/assets/packages/ (内建) + /Download/Operit/packages/ (外部安装)"
+    },
+    "hook_system": {
+      "description": "工具包可以通过 HookBridge 注入到不同处理阶段",
+      "hooks": [
+        "ToolPkgChatInputHookBridge - 聊天输入处理",
+        "ToolPkgChatViewHookBridge - 聊天视图渲染",
+        "ToolPkgToolLifecycleBridge - 工具生命周期",
+        "ToolPkgSummaryHookBridge - 摘要生成",
+        "ToolPkgPromptHookBridge - 系统提示注入",
+        "ToolPkgMessageProcessingCancellationRegistry - 消息处理取消",
+        "ToolPkgAiProviderRegistry - AI 提供商注册",
+        "ToolPkgCommonBridgePlugin - 通用桥接插件",
+        "ToolPkgHookBridgeSupport - Hook 桥接支持"
+      ]
+    },
+    "install_uninstall": {
+      "mechanism": "PackageManager.installPackage() / uninstallPackage()",
+      "storage": "/Download/Operit/packages/",
+      "built_in": "app/src/main/assets/packages/ (随应用分发)"
+    },
+    "ui_capabilities": {
+      "compose_dsl": "工具包声明式 UI (Compose DSL) 支持",
+      "desktop_widget": "桌面小组件 (ToolPkgDesktopWidget* 系列)",
+      "navigation": "导航入口 (ToolPkgNavigationEntryRuntime)",
+      "ui_route": "UI 路由 (ToolPkgUiRouteRuntime)",
+      "ui_module": "UI 模块 (ToolPkgUiModuleRuntime)"
+    },
+    "enable_disable": {
+      "mechanism": "PackageManager.isPackageEnabled() / enablePackage() / disablePackage()",
+      "description": "包级别启用/禁用控制"
+    },
+    "notes": [
+      "工具包使用 HJSON (人类友好 JSON) 或标准 JSON 作为 manifest 格式",
+      "JS 脚本通过 QuickJs 引擎执行，支持流式输出 (Flow<ToolResult>)",
+      "PackageManager 超过 142KB，是核心管理类，支持容器包 (container) 和子包 (subpackage) 两级结构",
+      "ToolPkg 提供丰富的 Hook 桥接机制注入到聊天输入/视图/工具生命周期/摘要/提示等阶段",
+      "支持声明式 Compose DSL UI 和桌面小组件扩展",
+      "工具参数支持 LocalizedText 多语言、EnvVar 环境变量声明、默认值等高级特性"
+    ]
+  },
+  "notes": [
+    "=== 整体架构总结 ===",
+    "Operit v1.112.0 包含四个独立但互联的子系统：MCP (桥接代理模式)、Workflow (DAG 引擎)、Skill (文件系统驱动)、ToolPkg (JS 包运行时)。",
+    "",
+    "=== MCP 特点 ===",
+    "MCP 通过 Node.js Bridge 代理实现：Android -> TCP Socket -> Bridge -> MCP Server。支持 local (stdio) 和 remote (SSE/HTTP) 两种连接方式。桥接器使用 pnpm 管理依赖。",
+    "",
+    "=== Workflow 特点 ===",
+    "完整的 DAG 工作流引擎：构建邻接表->环检测->拓扑排序执行。6种节点类型：Trigger/Execute/Condition/Logic/Extract。触发方式多样：手动/定时/Tasker/Intent/语音/冷启动。使用 WorkManager 做定时调度。",
+    "",
+    "=== Skill 特点 ===",
+    "轻量文件系统技能系统：SKILL.md + YAML frontmatter。支持 zip/GitHub/直接输入三种安装方式。SkillManager 生成包含目录树的系统提示注入到 AI 对话中。",
+    "",
+    "=== ToolPkg 特点 ===",
+    "全功能 JS 工具包生态：HJSON manifest + QuickJS 执行 + Hook 桥接注入。支持包启用/禁用、Compose DSL UI、桌面小组件等高级扩展。PackageManager 是最大最复杂的核心类。",
+    "",
+    "=== 系统间关联 ===",
+    "1. ToolPkg 工具可以被 Workflow ExecuteNode 调用 (通过 packageName:toolName 格式)",
+    "2. Skill 内容注入到 SystemPromptConfig 系统提示中指导 AI 行为",
+    "3. MCP 工具也通过 AIToolHandler 统一调度 (serverName:toolName)",
+    "4. ToolPkgPromptHookBridge 允许工具包自定义系统提示注入",
+    "5. WorkflowLifecyclePlugin 通过 AppLifecycle 事件触发工作流"
+  ]
+}

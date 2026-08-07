@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "used_frameworks": [
+    "AlarmKit",
+    "AVFoundation",
+    "CoreBluetooth",
+    "CoreLocation",
+    "EventKit",
+    "HomeKit",
+    "Speech",
+    "UIKit",
+    "Vision",
+    "WeatherKit",
+    "WebKit",
+    "UserNotifications",
+    "BGTaskKit/BackgroundTasks",
+    "IntentsUI/Foundation",
+    "CryptoKit (or equivalent)"
+  ],
+  "unused_frameworks": [
+    "CallKit",
+    "ARKit",
+    "SceneKit",
+    "CoreML",
+    "StoreKit",
+    "WatchKit",
+    "PDFKit",
+    "PencilKit",
+    "MessageKit"
+  ]
+}

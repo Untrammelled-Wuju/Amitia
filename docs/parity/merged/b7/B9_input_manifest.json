@@ -1,0 +1,18 @@
+{
+  "task": "B9_Implementation_Gap_Analysis",
+  "inputs_from_b7": [
+    "capability_mapping_matrix.json",
+    "preliminary_amitia_mapping_summary.json",
+    "target_candidate_inventory.json",
+    "behavior_conflicts.json"
+  ],
+  "analysis_scope": "All three sources with Amitia as baseline",
+  "required_outputs": [
+    "implementation_gap_analysis.json",
+    "priority_matrix.json",
+    "resource_estimation.json",
+    "roadmap_draft.json"
+  ],
+  "schema_version": 1,
+  "generated_at": "2026-08-07T13:53:10+08:00"
+}

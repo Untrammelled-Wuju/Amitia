@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "ios": [
+    "UNUserNotificationCenter",
+    "Live Activities via ActivityKit"
+  ],
+  "android": [
+    "NotificationListenerService",
+    "NotificationManager",
+    "Overlay window permission"
+  ]
+}

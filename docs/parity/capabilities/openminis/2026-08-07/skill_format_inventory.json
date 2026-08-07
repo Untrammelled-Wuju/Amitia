@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "format": "SKILL.md with YAML frontmatter + markdown body",
+  "frontmatter_fields": [
+    "name",
+    "description",
+    "version",
+    "triggers"
+  ],
+  "body_sections": [
+    "instruction",
+    "scripts",
+    "references"
+  ]
+}

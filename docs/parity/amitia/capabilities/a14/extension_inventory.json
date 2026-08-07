@@ -1,0 +1,77 @@
+{
+  "id": "extension_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "extension",
+  "description": "扩展系统能力清单(插件/技能/工作流/MCP/Agent技能)",
+  "subsystems": [
+    {
+      "name": "plugin-host",
+      "description": "插件宿主机(生命周期/权限/事件/调度)",
+      "files": [
+        "backend/internal/extension/plugin_host.go",
+        "backend/internal/extension/plugin_manager.go",
+        "backend/internal/extension/plugin_registry.go",
+        "backend/internal/extension/plugin_service.go",
+        "backend/internal/extension/plugin_circuit.go",
+        "backend/internal/extension/plugin_surface.go"
+      ]
+    },
+    {
+      "name": "skill-runtime",
+      "description": "技能运行时(技能定义/编译/注册/执行)",
+      "files": [
+        "backend/internal/extension/capability/",
+        "backend/internal/extension/execution/"
+      ]
+    },
+    {
+      "name": "workflow-engine",
+      "description": "工作流引擎(编译/执行/步骤定义)",
+      "files": [
+        "backend/internal/extension/workflow_compiler.go",
+        "backend/internal/extension/workflow_executor.go",
+        "backend/internal/extension/workflow_values.go"
+      ]
+    },
+    {
+      "name": "mcp-host",
+      "description": "MCP协议宿主(工具/资源/提示词发现与调用)",
+      "files": [
+        "backend/internal/mcp/manager/",
+        "backend/internal/mcp/host/",
+        "backend/internal/mcp/client/",
+        "backend/internal/mcp/transport/"
+      ]
+    },
+    {
+      "name": "agent-skill",
+      "description": "Agent技能(兼容技能/贡献/上下文注入)",
+      "files": [
+        "backend/internal/extension/agent_skill_runtime.go",
+        "backend/internal/extension/agent_skill_service.go",
+        "backend/internal/extension/agent_skill_parser.go"
+      ]
+    },
+    {
+      "name": "kernel-runtime",
+      "description": "WASM内核运行时(沙箱/容器/能力暴露)",
+      "files": ["backend/internal/extension/kernel/"]
+    },
+    {
+      "name": "workshop",
+      "description": "工作坊(技能创作/编辑/测试/发布)",
+      "files": [
+        "backend/internal/extension/workshop_service.go",
+        "backend/internal/extension/workshop_generator.go",
+        "backend/internal/extension/workshop_handler.go",
+        "backend/internal/extension/workshop_installer.go"
+      ]
+    },
+    {
+      "name": "update-system",
+      "description": "扩展更新(包管理/版本/差分更新/回滚)",
+      "files": ["backend/internal/extension/desktop_update/", "backend/internal/extension/update/"]
+    }
+  ]
+}

@@ -1,0 +1,431 @@
+{
+  "inventory_id": "INV-A14-WEB-VIEWS-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "web_views",
+  "platform": "web",
+  "items": [
+    {
+      "id": "WV-001",
+      "view": "ChatView",
+      "path": "front/src/views/web-chat/WebChatView.vue",
+      "components": ["MemoryInjectPanel.vue", "ProfileSummaryPanel.vue"],
+      "features": ["实时对话", "流式响应", "Markdown渲染", "角色切换", "记忆注入面板", "用户画像摘要"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-002",
+      "view": "CharacterView",
+      "path": "front/src/views/character/CharacterView.vue",
+      "components": [],
+      "features": ["角色管理入口", "多Tab模式"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-003",
+      "view": "CharacterConfigView",
+      "path": "front/src/views/character-config/CharacterConfigView.vue",
+      "components": ["CharacterEditForm.vue", "CharacterSidebar.vue", "CharacterTestChat.vue", "ImportPackDialog.vue", "TemplatePickerDialog.vue"],
+      "features": ["角色编辑表单", "角色导入导出", "模板选择", "角色测试对话", "角色侧边栏"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-004",
+      "view": "CharacterPsycheView",
+      "path": "front/src/views/character/CharacterPsycheView.vue",
+      "components": [],
+      "features": ["角色心智", "情绪调节", "性格参数"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-005",
+      "view": "CharacterVoiceView",
+      "path": "front/src/views/character-voice/CharacterVoiceView.vue",
+      "components": ["CloneVoiceSection.vue", "PresetVoiceSection.vue", "VoicePreviewBar.vue", "VoiceSettingsPanel.vue"],
+      "features": ["语音克隆", "预设语音", "语音预览", "语音设置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-006",
+      "view": "EpisodicView",
+      "path": "front/src/views/episodic/EpisodicView.vue",
+      "components": [],
+      "features": ["情景记忆", "事件列表", "记忆搜索"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-007",
+      "view": "MemoryManagerView",
+      "path": "front/src/views/memory-manager/MemoryManagerView.vue",
+      "components": ["CandidateEditorDialog.vue", "CandidateGenerateDialog.vue", "CandidateMemoryPanel.vue", "ConflictResolverDialog.vue", "MemoryEditorDialog.vue", "MemorySearchDialog.vue", "MemoryStatusPanel.vue", "MemoryTable.vue", "RetrievalAnalysisPanel.vue"],
+      "features": ["记忆管理", "候选记忆编辑/生成", "记忆搜索", "冲突解决", "记忆状态面板", "记忆表格", "检索分析"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-008",
+      "view": "MemoryTimeline",
+      "path": "front/src/views/memory-timeline/MemoryTimeline.vue",
+      "components": [],
+      "features": ["记忆时间线", "事件回顾"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-009",
+      "view": "WorldBookView",
+      "path": "front/src/views/world-book/WorldBookView.vue",
+      "components": [],
+      "features": ["世界书管理", "词条编辑", "触发规则"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-010",
+      "view": "ExtensionCenterView",
+      "path": "front/src/views/extensions/ExtensionCenterView.vue",
+      "components": ["ExtensionPageHeader.vue", "PermissionDialog.vue", "SchemaSurfaceRenderer.vue", "SurfaceAction.vue", "SurfaceForm.vue", "SurfaceStatus.vue", "SurfaceTable.vue"],
+      "features": ["扩展中心(遗留)", "权限管理", "Schema UI渲染", "Action/Form/Status/Table组件"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-011",
+      "view": "PluginDetailView",
+      "path": "front/src/views/extensions/PluginDetailView.vue",
+      "components": [],
+      "features": ["插件详情", "插件配置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-012",
+      "view": "SkillDetailView",
+      "path": "front/src/views/extensions/SkillDetailView.vue",
+      "components": [],
+      "features": ["技能详情", "技能配置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-013",
+      "view": "AgentSkillListView",
+      "path": "front/src/views/extensions/agent-skills/AgentSkillListView.vue",
+      "components": [],
+      "features": ["代理技能列表"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-014",
+      "view": "MCPServerView",
+      "path": "front/src/views/mcp/MCPServerView.vue",
+      "components": [],
+      "features": ["MCP服务器管理", "MCP配置", "连接测试"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-015",
+      "view": "PackageManagerView",
+      "path": "front/src/views/extensions/packages/PackageManagerView.vue",
+      "components": [],
+      "features": ["扩展包管理", "安装/卸载"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-016",
+      "view": "SettingsView",
+      "path": "front/src/views/settings/SettingsView.vue",
+      "components": ["AboutPanel.vue", "AiConfigPanel.vue", "DeploymentPanel.vue", "RuntimePanel.vue", "SystemSettingsPanel.vue", "TemporalSettingsView.vue", "ThemeSettingsView.vue"],
+      "features": ["通用设置", "AI配置", "部署配置", "运行时设置", "系统设置", "时间感知设置", "主题设置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-017",
+      "view": "ModelConfigView",
+      "path": "front/src/views/model-config/ModelConfigView.vue",
+      "components": ["ConfigCardList.vue", "ConfigEditDialog.vue", "ScenarioAssignment.vue", "TestResultDialog.vue"],
+      "features": ["模型配置总览", "模型编辑对话框", "场景分配", "测试结果"],
+      "sub_views": ["ModelConfigLlmView.vue", "VoiceModelConfigView.vue", "VectorModelConfigView.vue", "VisionModelConfigView.vue", "ImageGenModelConfigView.vue"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-018",
+      "view": "CreativeWorkshopView",
+      "path": "front/src/views/creative-workshop/CreativeWorkshopView.vue",
+      "components": [],
+      "features": ["创作工坊入口"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-019",
+      "view": "PetHubView",
+      "path": "front/src/views/creative-workshop/PetHubView.vue",
+      "components": [],
+      "features": ["桌宠工作台", "宠物列表"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-020",
+      "view": "PetCreationView",
+      "path": "front/src/views/creative-workshop/PetCreationView.vue",
+      "components": [],
+      "features": ["宠物创建", "帧上传", "动作配置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-021",
+      "view": "MenuHost",
+      "path": "desktop/src/main/desktop-host/menu-host.ts",
+      "components": [],
+      "features": ["应用菜单栏", "原生菜单集成", "快捷键绑定"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-022",
+      "view": "TrayHost",
+      "path": "desktop/src/main/desktop-host/tray-host.ts",
+      "components": [],
+      "features": ["系统托盘", "托盘菜单", "托盘图标切换"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-023",
+      "view": "ShortcutHost",
+      "path": "desktop/src/main/desktop-host/shortcut-host.ts",
+      "components": [],
+      "features": ["全局热键", "快捷键注册/注销"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-024",
+      "view": "PetInstallationsView",
+      "path": "front/src/views/creative-workshop/PetInstallationsView.vue",
+      "components": [],
+      "features": ["宠物安装管理", "安装列表"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-025",
+      "view": "PetTaskListView",
+      "path": "front/src/views/creative-workshop/PetTaskListView.vue",
+      "components": [],
+      "features": ["宠物任务列表"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-026",
+      "view": "PetProcessingReviewView",
+      "path": "front/src/views/creative-workshop/PetProcessingReviewView.vue",
+      "components": [],
+      "features": ["宠物处理审查", "帧审核"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-027",
+      "view": "ActionEditorView",
+      "path": "front/src/views/creative-workshop/ActionEditorView.vue",
+      "components": [],
+      "features": ["动作编辑器", "帧编辑"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-028",
+      "view": "WorkshopListView",
+      "path": "front/src/views/extensions/workshop/WorkshopListView.vue",
+      "components": ["CapabilityRiskList.vue", "StructuredDraftEditor.vue", "TestResultViewer.vue"],
+      "features": ["技能工作坊列表", "能力风险清单", "结构化草稿编辑", "测试结果查看"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-029",
+      "view": "QqConnectView",
+      "path": "front/src/views/qq-connect/QqConnectView.vue",
+      "components": [],
+      "features": ["QQ连接", "扫码登录"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-030",
+      "view": "WechatConnectView",
+      "path": "front/src/views/wechat-connect/WechatConnectView.vue",
+      "components": [],
+      "features": ["微信连接", "扫码登录"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-031",
+      "view": "EmoteManagerView",
+      "path": "front/src/views/emotes/EmoteManagerView.vue",
+      "components": [],
+      "features": ["表情包管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-032",
+      "view": "GraphView",
+      "path": "front/src/views/graph/GraphView.vue",
+      "components": [],
+      "features": ["记忆图谱可视化"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-033",
+      "view": "KernelCenterView",
+      "path": "front/src/views/kernel/KernelCenterView.vue",
+      "components": [],
+      "features": ["内核管理", "内核模块"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-034",
+      "view": "DeveloperConsoleView",
+      "path": "front/src/views/kernel/DeveloperConsoleView.vue",
+      "components": [],
+      "features": ["开发者控制台"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-035",
+      "view": "HookCenterView",
+      "path": "front/src/views/kernel/HookCenterView.vue",
+      "components": [],
+      "features": ["钩子管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-036",
+      "view": "EventCenterView",
+      "path": "front/src/views/kernel/EventCenterView.vue",
+      "components": [],
+      "features": ["事件中心", "事件日志"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-037",
+      "view": "ScheduleCenterView",
+      "path": "front/src/views/kernel/ScheduleCenterView.vue",
+      "components": [],
+      "features": ["调度管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-038",
+      "view": "UpdateCenterView",
+      "path": "front/src/views/kernel/UpdateCenterView.vue",
+      "components": [],
+      "features": ["更新管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-039",
+      "view": "MigrationCenterView",
+      "path": "front/src/views/kernel/MigrationCenterView.vue",
+      "components": [],
+      "features": ["迁移管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-040",
+      "view": "ProactiveRules",
+      "path": "front/src/views/proactive-rules/ProactiveRules.vue",
+      "components": ["ActiveMessageSettings.vue", "RuleEditDialog.vue", "RuleListTable.vue", "TestResultDialog.vue"],
+      "features": ["主动消息规则", "规则编辑", "规则列表", "测试规则"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-041",
+      "view": "SafetySettingsView",
+      "path": "front/src/views/safety-settings/SafetySettingsView.vue",
+      "components": [],
+      "features": ["安全设置", "内容过滤"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-042",
+      "view": "ChatCleanupView",
+      "path": "front/src/views/chat-cleanup/ChatCleanupView.vue",
+      "components": ["CleanupWorkflow.vue", "DatabaseHealthCard.vue", "DataMigrationPanel.vue", "EncryptedBackupPanel.vue", "RestoreBackupDialog.vue"],
+      "features": ["聊天清理", "数据库健康", "数据迁移", "加密备份", "备份恢复"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-043",
+      "view": "PrivacyScanView",
+      "path": "front/src/views/privacy-scan/PrivacyScanView.vue",
+      "components": ["ScanHistoryPanel.vue", "ScanResultsPanel.vue", "ScanScopePanel.vue"],
+      "features": ["隐私扫描", "扫描历史", "扫描结果", "扫描范围"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-044",
+      "view": "Reminders",
+      "path": "front/src/views/reminders/Reminders.vue",
+      "components": ["ProspectivePanel.vue", "TriggerHistoryPanel.vue"],
+      "features": ["提醒管理", "触发历史"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-045",
+      "view": "ProfileView",
+      "path": "front/src/views/profile/ProfileView.vue",
+      "components": [],
+      "features": ["用户画像"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-046",
+      "view": "LogsView",
+      "path": "front/src/views/chat-logs/ChatLogsView.vue",
+      "components": ["ContextPreviewDialog.vue", "ConversationListPanel.vue"],
+      "features": ["聊天日志", "会话列表", "上下文预览"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-047",
+      "view": "MaintenanceDiagnosticsView",
+      "path": "front/src/views/maintenance-diagnostics/MaintenanceDiagnosticsView.vue",
+      "components": ["DiagnosticsPanel.vue", "ExportHistoryPanel.vue", "OperationsPanel.vue", "ServiceStatusPanel.vue"],
+      "features": ["维护诊断", "导出历史", "运维操作", "服务状态"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-048",
+      "view": "LongRunningView",
+      "path": "front/src/views/long-running/LongRunningView.vue",
+      "components": ["ConfigPanel.vue", "ManualActionsPanel.vue", "StatusPanel.vue"],
+      "features": ["长时间运行任务", "手动操作", "状态监控"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-049",
+      "view": "RuntimeModeView",
+      "path": "front/src/views/runtime-mode/RuntimeModeView.vue",
+      "components": ["ModeConfigPanel.vue", "ModeSwitchPanel.vue"],
+      "features": ["运行模式切换", "模式配置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-050",
+      "view": "DecisionVizView",
+      "path": "front/src/views/decision-viz/DecisionVizView.vue",
+      "components": [],
+      "features": ["决策可视化", "决策流程展示"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-051",
+      "view": "RealtimeVoiceView",
+      "path": "front/src/views/realtime/RealtimeVoiceView.vue",
+      "components": [],
+      "features": ["实时语音", "语音通话"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WV-052",
+      "view": "DataView",
+      "path": "front/src/views/dashboard/DataView.vue",
+      "components": ["AccessRiskAlert.vue", "DiagnosticsPanel.vue", "PsycheStateCard.vue", "RecentErrorsPanel.vue", "RecentImportsPanel.vue", "RuntimeHealthPanel.vue", "StatusOverviewCards.vue", "UsageStatsPanel.vue"],
+      "features": ["数据统计", "访问风险", "诊断面板", "心智状态", "错误日志", "导入统计", "运行时健康", "用量统计"],
+      "state": "IMPLEMENTED"
+    }
+  ],
+  "metadata": {
+    "total_views": 52,
+    "views_root": "front/src/views",
+    "components_root": "front/src/components"
+  }
+}

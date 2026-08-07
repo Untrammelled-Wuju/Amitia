@@ -1,0 +1,26 @@
+{
+  "baseline_id": "PARITY-2026-08-07-V1",
+  "status": "FROZEN",
+  "next_version_plan": {
+    "trigger": "B9测试验证完成后可能更新",
+    "expected_changes": "基于实际验收结果调整evidence_level分配"
+  },
+  "version_history": [
+    {
+      "baseline_id": "PARITY-2026-08-07-V1",
+      "date": "2026-08-07",
+      "status": "FROZEN",
+      "description": "初始冻结版本：基于B7三方能力映射结果",
+      "source": "B7_PARITY_MAPPING",
+      "categories": {
+        "total_groups": 506,
+        "platform_equivalent": 4,
+        "preserve_amitia": 240,
+        "required": 262
+      },
+      "version": "1.0.0"
+    }
+  ],
+  "frozen_at": "2026-08-07T14:00:00+08:00",
+  "version": "1.0.0"
+}

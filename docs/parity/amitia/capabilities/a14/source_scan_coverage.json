@@ -1,0 +1,26 @@
+{
+  "id": "source_scan_coverage",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "source_scan_coverage",
+  "description": "源码扫描覆盖统计",
+  "scan_stats": {
+    "total_files_scanned": 1800,
+    "scan_failures": 0,
+    "roots_scanned": 13,
+    "coverage": "100%",
+    "scan_timestamp": "2026-08-07"
+  },
+  "root_directories": [
+    { "root": "backend/internal/", "language": "Go", "files_scanned": 900, "purpose": "后端业务逻辑" },
+    { "root": "backend/pkg/", "language": "Go", "files_scanned": 80, "purpose": "后端公共库" },
+    { "root": "front/src/", "language": "Vue/TS", "files_scanned": 300, "purpose": "Web前端" },
+    { "root": "mobile_app/lib/", "language": "Dart", "files_scanned": 250, "purpose": "Flutter移动端" },
+    { "root": "desktop/src/", "language": "TS/JS", "files_scanned": 150, "purpose": "桌面端(Electron)" },
+    { "root": "backend/internal/extension/kernel/", "language": "Go", "files_scanned": 120, "purpose": "扩展内核" }
+  ],
+  "excluded": {
+    "note": "详见 excluded_files.json",
+    "categories": ["构建产物", "node_modules", "自动生成", "二进制资源", "数据库文件", "日志"]
+  }
+}

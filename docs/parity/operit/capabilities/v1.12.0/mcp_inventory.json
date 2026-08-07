@@ -1,0 +1,107 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "source": "mcp_workflow_scan.json"
+  },
+  "mcp": {
+    "found": true,
+    "files": [
+      "core/tools/mcp/MCPTool.kt",
+      "core/tools/mcp/MCPToolExecutor.kt",
+      "core/tools/mcp/MCPToolParameter.kt",
+      "core/tools/mcp/MCPServerConfig.kt",
+      "core/tools/mcp/MCPJson.kt",
+      "core/tools/mcp/MCPPackage.kt",
+      "data/mcp/MCPRepository.kt",
+      "data/mcp/MCPLocalServer.kt",
+      "data/mcp/plugins/MCPBridge.kt",
+      "data/mcp/plugins/MCPBridgeClient.kt",
+      "data/mcp/plugins/MCPStarter.kt",
+      "data/mcp/plugins/MCPSharedSession.kt",
+      "data/mcp/plugins/MCPProjectAnalyzer.kt",
+      "data/mcp/plugins/MCPDeployer.kt",
+      "data/mcp/plugins/MCPConfigGenerator.kt",
+      "data/mcp/plugins/MCPCommandGenerator.kt",
+      "ui/features/packages/viewmodel/MCPViewModel.kt",
+      "ui/features/packages/screens/MCPConfigScreen.kt",
+      "ui/features/packages/screens/mcp/viewmodel/MCPDeployViewModel.kt",
+      "ui/features/packages/screens/mcp/components/MCPEnvironmentVariablesDialog.kt",
+      "ui/features/packages/screens/mcp/components/MCPDeployProgressDialog.kt",
+      "ui/features/packages/screens/mcp/components/MCPDeployConfirmDialog.kt",
+      "ui/features/packages/screens/mcp/components/MCPCommandsEditDialog.kt",
+      "ui/features/packages/model/MCPCategories.kt",
+      "ui/features/packages/dialogs/MCPPackageDetailsDialog.kt",
+      "ui/features/packages/components/dialogs/MCPServerDetailsDialog.kt",
+      "ui/features/packages/components/dialogs/tabs/MCPServerDetailsTabs.kt",
+      "ui/features/packages/components/dialogs/header/MCPServerDetailsHeader.kt",
+      "ui/features/packages/components/dialogs/content/MCPServerDetailsContent.kt",
+      "ui/features/packages/components/dialogs/content/MCPServerConfigContent.kt",
+      "ui/features/packages/components/dialogs/actions/MCPServerDetailsActions.kt",
+      "ui/features/packages/components/MCPInstallProgressDialog.kt",
+      "app/src/main/assets/bridge/index.js",
+      "app/src/main/assets/bridge/spawn-helper.js"
+    ],
+    "protocols": [
+      "TCP Socket (自定义桥接协议)",
+      "本地 stdio (通过 Terminal/Node.js 桥接)",
+      "远程 HTTP/SSE (通过桥接器注册远程服务)"
+    ],
+    "architecture": {
+      "pattern": "Bridge-Client 代理模式",
+      "description": "Operit 不直接实现 MCP 协议，而是通过一个 Node.js 桥接器（bridge）代理所有 MCP 通信。Android 端通过 TCP Socket 与桥接器通信，桥接器负责实际的 MCP 协议交互。",
+      "components": {
+        "MCPBridge": "核心桥接管理器，单例。通过 TCP Socket (端口 8752/8751) 与 Node.js 桥接器进程通信。支持命令: spawn, shutdown, listtools, toolcall, list, register, unregister, reset。",
+        "MCPBridgeClient": "桥接客户端，负责构建 JSON 命令报文。支持注册本地服务 (register: type=local + command + args + env) 和远程服务 (register: type=remote + endpoint + connectionType + bearerToken + headers)。",
+        "MCPToolExecutor": "MCP 工具执行器，实现 ToolExecutor 接口。解析 serverName:toolName 格式，通过 MCPManager 获取 MCPBridgeClient 并调用 callToolSync。支持自动参数类型转换 (MCPToolParameter.smartConvert)。",
+        "MCPManager": "MCP 管理器，单例。管理 MCPBridgeClient 缓存和 MCPServerConfig 注册。提供 getOrCreateClient/server 连接复用。",
+        "MCPRepository": "MCP 仓库，管理插件安装/卸载、UI 状态 (StateFlow)、已安装插件 ID 跟踪。插件存储在 /Download/Operit/mcp_plugins/ 目录。",
+        "MCPLocalServer": "MCP 配置管理中心。管理 mcp_config.json 和 server_status.json，使用 SharedPreferences + 文件持久化。",
+        "MCPStarter": "MCP 插件启动器。依赖 Terminal (Node.js 终端环境) 和 pnpm。负责初始化桥接器、启动已部署插件、健康检查。",
+        "MCPDeployer": "MCP 部署器。协调项目分析、命令生成和配置生成完成插件部署到终端环境。",
+        "MCPConfigGenerator": "MCP 配置生成器。",
+        "MCPCommandGenerator": "MCP 命令生成器。",
+        "MCPProjectAnalyzer": "MCP 项目分析器。",
+        "MCPSharedSession": "共享终端会话管理。"
+      }
+    },
+    "transport_details": {
+      "local": {
+        "type": "TCP Socket -> Node.js Bridge -> stdio/SSE",
+        "port": "8752 (主) / 8751 (SSH 转发备)",
+        "format": "JSON 命令 (command + id + params)",
+        "commands": [
+          "spawn",
+          "shutdown",
+          "listtools",
+          "toolcall",
+          "list",
+          "register",
+          "unregister",
+          "reset",
+          "cache_tools",
+          "logs"
+        ]
+      },
+      "bridge_deployment": {
+        "source": "app/src/main/assets/bridge/index.js + spawn-helper.js",
+        "deploy_path": "~/bridge (终端环境)",
+        "runtime": "Node.js (终端内)",
+        "dependencies": "打包在 bridge/index.js 中 (自包含)"
+      }
+    },
+    "supports": {
+      "install_uninstall": "通过 MCPRepository + MCPLocalServer 实现插件安装/卸载和配置管理",
+      "config_management": "mcp_config.json + server_status.json + SharedPreferences",
+      "env_variables": "支持环境变量配置 (MCPEnvironmentVariablesDialog)",
+      "remote_endpoint": "支持 bearerToken + headers 的远程 HTTP/SSE 端点注册"
+    },
+    "notes": [
+      "MCP 实现采用 Bridge 代理模式而非原生实现：Android 端 -> TCP Socket -> Node.js Bridge -> MCP Server (stdio/SSE/HTTP)",
+      "桥接器文件位于 app/src/main/assets/bridge/ 部署到终端 ~/bridge/ 目录",
+      "MCPManager 在 MCPToolExecutor 内部静态定义（同一文件）",
+      "工具调用格式: serverName:toolName — 通过 AIToolHandler.executeTool() 分发",
+      "MCPStarter 检查 Node.js/pnpm 可用性作为前置条件",
+      "MCPBridgeClient 构建两种注册命令：local (command+args+env) 和 remote (endpoint+connectionType+bearerToken+headers)"
+    ]
+  }
+}

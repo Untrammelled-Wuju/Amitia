@@ -1,0 +1,634 @@
+{
+  "scan_domain": "ANDROID_CONTROL",
+  "scan_metadata": {
+    "app_version": "1.12.0",
+    "package_name": "com.ai.assistance.operit",
+    "scan_timestamp": "2025-06-26",
+    "total_implementation_files_scanned": 1080
+  },
+  "channels": [
+    {
+      "channel_type": "ADB/Shizuku Shell Command Execution",
+      "implementation_class": "DebuggerShellExecutor",
+      "file_path": "core/tools/system/shell/DebuggerShellExecutor.kt",
+      "line_start": 81,
+      "actions": [
+        "Execute shell commands via Shizuku ADB binder (IShizukuService)",
+        "Direct command execution via IShizukuService.executeCommand",
+        "Shell operator detection (containsShellOperators) for complex command handling",
+        "Background process spawning via Shizuku.Service()"
+      ],
+      "permissions_required": ["moe.shizuku.manager.permission.API_V23"],
+      "initialization": "ShizukuAuthorizer.initialize() -> Binder death recipient registration -> requestPermission()"
+    },
+    {
+      "channel_type": "ADB/Shizuku Shell Command Execution",
+      "implementation_class": "AdminShellExecutor",
+      "file_path": "core/tools/system/shell/AdminShellExecutor.kt",
+      "line_start": 97,
+      "actions": [
+        "Execute device-admin protected shell commands via DevicePolicyManager",
+        "Wraps shell executor after admin+ shell activation"
+      ],
+      "permissions_required": ["android.permission.DEVICE_ADMIN"],
+      "initialization": "DevicePolicyManager + isDeviceOwnerApp/profileOwner check"
+    },
+    {
+      "channel_type": "Root Shell Command Execution",
+      "implementation_class": "RootShellExecutor",
+      "file_path": "core/tools/system/shell/RootShellExecutor.kt",
+      "line_start": 356,
+      "actions": [
+        "Execute shell commands as root (su)",
+        "Runtime.exec('su') with stdin/stdout piping",
+        "Two execution modes: exec-based and libsu-style",
+        "Root permission check via RootAuthorizer"
+      ],
+      "permissions_required": ["Root access (su binary)"],
+      "initialization": "RootAuthorizer.requestRoot() -> Runtime.exec('su -c id')"
+    },
+    {
+      "channel_type": "Standard Runtime Shell Execution",
+      "implementation_class": "StandardShellExecutor",
+      "file_path": "core/tools/system/shell/StandardShellExecutor.kt",
+      "line_start": 40,
+      "actions": [
+        "Standard Runtime.exec() shell execution for standard permission level",
+        "Shell operator passthrough via /system/bin/sh -c"
+      ],
+      "permissions_required": [],
+      "initialization": "None required"
+    },
+    {
+      "channel_type": "Accessibility Service Shell Wrapper",
+      "implementation_class": "AccessibilityShellExecutor",
+      "file_path": "core/tools/system/shell/AccessibilityShellExecutor.kt",
+      "line_start": 98,
+      "actions": [
+        "Framework bridge for AccessibilityService-based commands",
+        "Cannot directly execute shell - converts to UI automation",
+        "Global AccessibilityService reference management (setAccessibilityService)",
+        "Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES check"
+      ],
+      "permissions_required": ["BIND_ACCESSIBILITY_SERVICE"],
+      "initialization": "setAccessibilityService(service) static injection from provider app"
+    },
+    {
+      "channel_type": "Shizuku Permission Management",
+      "implementation_class": "ShizukuAuthorizer",
+      "file_path": "core/tools/system/ShizukuAuthorizer.kt",
+      "line_start": 316,
+      "actions": [
+        "Shizuku.requestPermission(requestCode) - ADB-level permission prompt",
+        "Shizuku service lifecycle monitoring (binder death recipient)",
+        "Wireless debugging start flow (adb shell sh start.sh)",
+        "Service running check: Shizuku.pingBinder()"
+      ],
+      "permissions_required": ["moe.shizuku.manager.permission.API_V23"],
+      "initialization": "Shizuku.bindService() -> BinderRecipient"
+    },
+    {
+      "channel_type": "Shizuku Bundled Installer",
+      "implementation_class": "ShizukuInstaller",
+      "file_path": "core/tools/system/ShizukuInstaller.kt",
+      "line_start": 73,
+      "actions": [
+        "Extract Shizuku APK from assets",
+        "Install bundled Shizuku via FileProvider + system package installer",
+        "Version checking (bundled vs installed)"
+      ],
+      "permissions_required": ["REQUEST_INSTALL_PACKAGES"],
+      "initialization": "APK extraction from assets/shizuku.apk"
+    },
+    {
+      "channel_type": "Shizuku Action Listener (UI)",
+      "implementation_class": "DebuggerActionListener",
+      "file_path": "core/tools/system/action/DebuggerActionListener.kt",
+      "line_start": 69,
+      "actions": [
+        "UI automation via Shizuku binder (performAction delegation)"
+      ],
+      "permissions_required": ["Shizuku ADB binder"],
+      "initialization": "ShizukuAuthorizer.requestShizukuPermission"
+    },
+    {
+      "channel_type": "Screen Capture (Screenshot)",
+      "implementation_class": "ScreenCaptureActivity",
+      "file_path": "core/tools/system/ScreenCaptureActivity.kt",
+      "line_start": 30,
+      "actions": [
+        "MediaProjection permission acquisition (createScreenCaptureIntent)",
+        "Transparent activity requesting user consent for screen capture"
+      ],
+      "permissions_required": ["FOREGROUND_SERVICE_MEDIA_PROJECTION"],
+      "initialization": "startActivityForResult(mediaProjectionManager.createScreenCaptureIntent())"
+    },
+    {
+      "channel_type": "Screen Capture (Screenshot)",
+      "implementation_class": "ScreenCaptureService",
+      "file_path": "core/tools/system/ScreenCaptureService.kt",
+      "line_start": 63,
+      "actions": [
+        "Dedicated foreground service for Android 14 MediaProjection compliance",
+        "Must remain active while MediaProjection is in use",
+        "Channel: ScreenCaptureChannel, Notification ID: 2001"
+      ],
+      "permissions_required": ["FOREGROUND_SERVICE_MEDIA_PROJECTION", "POST_NOTIFICATIONS"],
+      "initialization": "startForeground() with mediaProjection type"
+    },
+    {
+      "channel_type": "Screen Capture (ImageReader)",
+      "implementation_class": "MediaProjectionCaptureManager",
+      "file_path": "core/tools/system/MediaProjectionCaptureManager.kt",
+      "line_start": 52,
+      "actions": [
+        "ImageReader.newInstance for pixel-level screen frame capture",
+        "VirtualDisplay creation on MediaProjection surface",
+        "RGBA_8888 format frame acquisition"
+      ],
+      "permissions_required": ["FOREGROUND_SERVICE_MEDIA_PROJECTION"],
+      "initialization": "MediaProjection -> VirtualDisplay -> ImageReader"
+    },
+    {
+      "channel_type": "Screen Capture (VirtualDisplay Manager)",
+      "implementation_class": "VirtualDisplayManager",
+      "file_path": "core/tools/agent/VirtualDisplayManager.kt",
+      "line_start": 123,
+      "actions": [
+        "VIRTUAL_DISPLAY_FLAG_PRESENTATION display creation",
+        "ImageReader surface from VirtualDisplay",
+        "Singleton per context"
+      ],
+      "permissions_required": ["FOREGROUND_SERVICE_MEDIA_PROJECTION", "SYSTEM_ALERT_WINDOW"],
+      "initialization": "DisplayManager.createVirtualDisplay with VIRTUAL_DISPLAY_FLAG_PRESENTATION"
+    },
+    {
+      "channel_type": "Screen Recording / Casting (Shower)",
+      "implementation_class": "ShowerController",
+      "file_path": "core/tools/agent/ShowerController.kt",
+      "line_start": 126,
+      "actions": [
+        "VirtualDisplay-based remote screen mirroring",
+        "Remote touch injection (injectTouchEvent with x,y,action,edgeFlags)",
+        "Key injection via Shizuku-level input",
+        "Screenshot triggering from remote",
+        "Per-agent display instance management"
+      ],
+      "permissions_required": ["FOREGROUND_SERVICE_MEDIA_PROJECTION", "SYSTEM_ALERT_WINDOW"],
+      "initialization": "ShowerController.getInstance(agentId) -> binder handoff from Shower server"
+    },
+    {
+      "channel_type": "Screen Casting (VirtualDisplay Overlay)",
+      "implementation_class": "VirtualDisplayOverlay",
+      "file_path": "ui/common/displays/VirtualDisplayOverlay.kt",
+      "line_start": 30,
+      "actions": [
+        "Overlay display of remote Shower stream within app window",
+        "ShowerSurfaceView composable binding",
+        "Touch coordinate mapping (local->remote offset)",
+        "ShowerController.injectTouchEvent for remote device control"
+      ],
+      "permissions_required": ["SYSTEM_ALERT_WINDOW"],
+      "initialization": "VirtualDisplayOverlay.getInstance(context, agentId)"
+    },
+    {
+      "channel_type": "Application Install/Uninstall",
+      "implementation_class": "DebuggerSystemOperationTools",
+      "file_path": "core/tools/defaultTool/debugger/DebuggerSystemOperationTools.kt",
+      "line_start": 171,
+      "actions": [
+        "pm install -r (APK install via shell)",
+        "pm uninstall / pm uninstall -k (package removal)",
+        "am force-stop (force kill app)",
+        "cmd package resolve-activity --brief (activity resolution)"
+      ],
+      "permissions_required": ["Shizuku ADB or Root", "REQUEST_INSTALL_PACKAGES"],
+      "initialization": "AndroidShellExecutor.executeShellCommand() via Shizuku/Root"
+    },
+    {
+      "channel_type": "Application Install (APK)",
+      "implementation_class": "PatchUpdateInstaller",
+      "file_path": "data/updates/PatchUpdateInstaller.kt",
+      "line_start": 103,
+      "actions": [
+        "FileProvider.getUriForFile APK URI generation",
+        "System package installer intent dispatch",
+        "Version-targeted install (API N+ FileProvider)"
+      ],
+      "permissions_required": ["REQUEST_INSTALL_PACKAGES", "FileProvider URI grant"],
+      "initialization": "Context.startActivity(install intent)"
+    },
+    {
+      "channel_type": "Input Event Injection (Shizuku/ADB)",
+      "implementation_class": "DebuggerActionListener -> RootActionListener",
+      "file_path": "core/tools/system/action/RootActionListener.kt",
+      "line_start": 211,
+      "actions": [
+        "Low-level input device enumeration (cat /proc/bus/input/devices)",
+        "Touch event parsing via getevent (timeout 0.1 getevent)",
+        "Input event injection via /dev/uinput (echo/write)"
+      ],
+      "permissions_required": ["Shizuku ADB or Root"],
+      "initialization": "getevent/lsinput shell-level acquisition"
+    },
+    {
+      "channel_type": "System Settings Manipulation",
+      "implementation_class": "StandardSystemOperationTools",
+      "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt",
+      "line_start": 267,
+      "actions": [
+        "Settings.System.putString/getString (system namespace)",
+        "Settings.Secure.putString/getString (secure namespace)",
+        "Settings.Global.putString/getString (global namespace)",
+        "Write access gated by Settings.System.canWrite"
+      ],
+      "permissions_required": ["WRITE_SETTINGS"],
+      "initialization": "ContentResolver.putString/getString via standard tool handlers"
+    },
+    {
+      "channel_type": "System Settings via Shell",
+      "implementation_class": "DebuggerSystemOperationTools",
+      "file_path": "core/tools/defaultTool/debugger/DebuggerSystemOperationTools.kt",
+      "line_start": 44,
+      "actions": [
+        "settings put system/secure/global (write via shell)",
+        "settings get system/secure/global (read via shell)",
+        "Enabled notification listener query: Settings.Secure.getString('enabled_notification_listeners')"
+      ],
+      "permissions_required": ["Shizuku ADB or Root"],
+      "initialization": "AndroidShellExecutor.executeShellCommand()"
+    },
+    {
+      "channel_type": "Notification Management",
+      "implementation_class": "OperitNotificationListenerService",
+      "file_path": "services/notification/OperitNotificationListenerService.kt",
+      "line_start": 108,
+      "actions": [
+        "NotificationListenerService.onListenerConnected callback",
+        "StatusBarNotification enumeration and monitoring",
+        "Notification reply action support",
+        "Active notification channel inspection"
+      ],
+      "permissions_required": ["BIND_NOTIFICATION_LISTENER_SERVICE"],
+      "initialization": "System binds via ACTION_NOTIFICATION_LISTENER_SERVICE intent-filter"
+    },
+    {
+      "channel_type": "Notification FGS Management",
+      "implementation_class": "AIForegroundService",
+      "file_path": "api/chat/AIForegroundService.kt",
+      "line_start": 564,
+      "actions": [
+        "HD notification posting for LLM response alerts",
+        "Reply action with PendingIntent (direct reply from notification)",
+        "Categorized foreground service notifications"
+      ],
+      "permissions_required": ["POST_NOTIFICATIONS", "FOREGROUND_SERVICE_DATA_SYNC/MICROPHONE/SPECIAL_USE"],
+      "initialization": "NotificationChannel + NotificationCompat.Builder"
+    },
+    {
+      "channel_type": "Clipboard Access",
+      "implementation_class": "PhoneAgent",
+      "file_path": "core/tools/agent/PhoneAgent.kt",
+      "line_start": 1067,
+      "actions": [
+        "setClipboardData via ClipboardManager.setPrimaryClip(ClipData.newPlainText('operit_input', text))",
+        "PASTE key injection after clipboard set for programmatic paste"
+      ],
+      "permissions_required": [],
+      "initialization": "getSystemService(Context.CLIPBOARD_SERVICE)"
+    },
+    {
+      "channel_type": "Clipboard Fallback",
+      "implementation_class": "CrashReportActivity",
+      "file_path": "ui/error/CrashReportActivity.kt",
+      "line_start": 252,
+      "actions": [
+        "Copy text to clipboard: ClipboardManager.setPrimaryClip"
+      ],
+      "permissions_required": [],
+      "initialization": "Standard Android clipboard API"
+    },
+    {
+      "channel_type": "Share Intent (ACTION_SEND)",
+      "implementation_class": "StandardFileSystemTools",
+      "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+      "line_start": 5271,
+      "actions": [
+        "ACTION_SEND with EXTRA_STREAM for sharing files",
+        "Intent.createChooser for file share selection"
+      ],
+      "permissions_required": [],
+      "initialization": "Standard share intent via FileProvider URI"
+    },
+    {
+      "channel_type": "Screenshot Share",
+      "implementation_class": "ChatScreenContent",
+      "file_path": "ui/features/chat/components/ChatScreenContent.kt",
+      "line_start": 813,
+      "actions": [
+        "ACTION_SEND PNG via chooser for generated images"
+      ],
+      "permissions_required": [],
+      "initialization": "Intent.createChooser -> Image export from AI response"
+    },
+    {
+      "channel_type": "Bluetooth Device Scan",
+      "implementation_class": "BluetoothSessionManager",
+      "file_path": "core/tools/defaultTool/standard/BluetoothSessionManager.kt",
+      "line_start": 143,
+      "actions": [
+        "Classic Bluetooth scan via BroadcastReceiver + BluetoothDevice.ACTION_FOUND",
+        "BLE scan via BluetoothLeScanner with ScanCallback",
+        "BluetoothGatt device connection",
+        "BLE characteristic discovery and read"
+      ],
+      "permissions_required": ["BLUETOOTH", "BLUETOOTH_ADMIN", "BLUETOOTH_CONNECT", "BLUETOOTH_SCAN", "ACCESS_FINE_LOCATION"],
+      "initialization": "BluetoothAdapter.getBluetoothLeScanner / registerReceiver(ACTION_FOUND)"
+    },
+    {
+      "channel_type": "Bluetooth Device Management",
+      "implementation_class": "StandardSystemOperationTools",
+      "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt",
+      "line_start": 920,
+      "actions": [
+        "Bluetooth state read (STATE_OFF/ON/TURNING_ON/TURNING_OFF)",
+        "Bluetooth enable request via ACTION_REQUEST_ENABLE intent",
+        "Bonded device enumeration with device metadata"
+      ],
+      "permissions_required": ["BLUETOOTH", "BLUETOOTH_ADMIN"],
+      "initialization": "BluetoothSessionManager.adapter(context)"
+    },
+    {
+      "channel_type": "Location Tracking",
+      "implementation_class": "LocationUtils",
+      "file_path": "util/LocationUtils.kt",
+      "line_start": 67,
+      "actions": [
+        "getCurrentLocation via LocationManager.getCurrentLocation (API R+)",
+        "requestSingleUpdate via LocationManager.NETWORK_PROVIDER",
+        "GPS vs Network provider fallback",
+        "CancellationSignal support for API R+"
+      ],
+      "permissions_required": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      "initialization": "getSystemService(Context.LOCATION_SERVICE)"
+    },
+    {
+      "channel_type": "Location Tracking (Continuous)",
+      "implementation_class": "StandardSystemOperationTools",
+      "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt",
+      "line_start": 1547,
+      "actions": [
+        "Continuous location updates via requestLocationUpdates(provider, 0, 0.0f, listener)",
+        "GPS/Network/Passive provider priority selection"
+      ],
+      "permissions_required": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      "initialization": "getSystemService(Context.LOCATION_SERVICE) -> requestLocationUpdates"
+    },
+    {
+      "channel_type": "Microphone Recording",
+      "implementation_class": "SherpaSpeechProvider",
+      "file_path": "api/speech/SherpaSpeechProvider.kt",
+      "line_start": 47,
+      "actions": [
+        "AudioRecord (MediaRecorder.AudioSource.MIC) for speech recognition",
+        "16kHz PCM_16BIT mono recording",
+        "VAD-based speech segmentation with OnnxSileroVad",
+        "Continuous audio recording loop"
+      ],
+      "permissions_required": ["RECORD_AUDIO", "FOREGROUND_SERVICE_MICROPHONE"],
+      "initialization": "AudioRecord.startRecording() -> coroutine-based audio stream"
+    },
+    {
+      "channel_type": "Microphone (Oboe)",
+      "implementation_class": "SpeechService",
+      "file_path": "api/speech/SpeechService.kt",
+      "line_start": 81,
+      "actions": [
+        "VOICE_COMMUNICATION audio source configuration",
+        "Continuous and single-shot recording modes",
+        "Partial results streaming"
+      ],
+      "permissions_required": ["RECORD_AUDIO"],
+      "initialization": "Speech service initialization with AudioRecord/Oboe engine"
+    },
+    {
+      "channel_type": "Camera Capture (ImageReader)",
+      "implementation_class": "MediaProjectionCaptureManager",
+      "file_path": "core/tools/system/MediaProjectionCaptureManager.kt",
+      "line_start": 54,
+      "actions": [
+        "ImageReader.newInstance for pixel-level screen frame capture",
+        "RGBA_8888 format with maxImages=2"
+      ],
+      "permissions_required": ["FOREGROUND_SERVICE_MEDIA_PROJECTION"],
+      "initialization": "ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)"
+    },
+    {
+      "channel_type": "Floating Window Overlay",
+      "implementation_class": "FloatingChatService",
+      "file_path": "services/FloatingChatService.kt",
+      "line_start": 335,
+      "actions": [
+        "Floating chat ball overlay via WindowManager.addView",
+        "Voice assistant SiriBall floating mode",
+        "Full-screen floating chat mode",
+        "DataSync foreground service Type"
+      ],
+      "permissions_required": ["SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE_DATA_SYNC"],
+      "initialization": "WindowManager.addView with TYPE_APPLICATION_OVERLAY"
+    },
+    {
+      "channel_type": "Phone Agent UI Automation",
+      "implementation_class": "PhoneAgent",
+      "file_path": "core/tools/agent/PhoneAgent.kt",
+      "line_start": 979,
+      "actions": [
+        "UI automation with coordinated Shizuku + MediaProjection",
+        "ADB-level tap via UIHierarchyManager.adbTap(x, y)",
+        "Remote screen mirroring via ShowerController",
+        "App navigation via shell am start + deep link",
+        "VIRTUAL_DISPLAY_FLAG_PRESENTATION for agent display"
+      ],
+      "permissions_required": ["Shizuku ADB", "FOREGROUND_SERVICE_MEDIA_PROJECTION", "SYSTEM_ALERT_WINDOW"],
+      "initialization": "PermissionLevel hierarchy: ROOT > DEBUGGER(Shizuku) > ADMIN > STANDARD"
+    },
+    {
+      "channel_type": "MCP Plugin Install & Server",
+      "implementation_class": "MCPSt/MCPStarter",
+      "file_path": "data/mcp/plugins/MCPStarter.kt",
+      "line_start": 276,
+      "actions": [
+        "MCP plugin npm/pnpm install (MCPCommandGenerator)",
+        "MCP server local process spawn via terminal",
+        "MCP remote server connection with bearer token auth",
+        "MCP bridge client launch (MCPBridgeClient)"
+      ],
+      "permissions_required": ["Terminal execution (any permission level)", "INTERNET"],
+      "initialization": "MCPStarter.createLocalStartCommand -> terminal session -> IPC bind"
+    },
+    {
+      "channel_type": "External HTTP Chat Server",
+      "implementation_class": "ExternalChatHttpServer",
+      "file_path": "integrations/http/ExternalChatHttpServer.kt",
+      "line_start": 60,
+      "actions": [
+        "NanoHTTPD-based chat server on configurable port (default 8094)",
+        "Full chat API exposed via HTTP POST",
+        "Bearer token gating on all endpoints (requireBearerToken)"
+      ],
+      "permissions_required": ["INTERNET"],
+      "initialization": "NanoHTTPD.start() -> listing Port (8094)"
+    },
+    {
+      "channel_type": "External HTTP Web Chat Bridge",
+      "implementation_class": "WebChatHttpBridge",
+      "file_path": "integrations/http/WebChatHttpBridge.kt",
+      "line_start": 112,
+      "actions": [
+        "WebView-integrated HTTP chat bridge",
+        "Bearer token authentication (requireBearerToken from ExternalHttpApiPreferences)",
+        "All API endpoints protected"
+      ],
+      "permissions_required": ["INTERNET"],
+      "initialization": "NanoHTTPD IHTTPSession handler with token validation"
+    },
+    {
+      "channel_type": "External Intent Chat Receiver",
+      "implementation_class": "ExternalChatReceiver",
+      "file_path": "integrations/intent/ExternalChatReceiver.kt",
+      "line_start": 14,
+      "actions": [
+        "BroadcastReceiver for com.ai.assistance.operit.EXTERNAL_CHAT action",
+        "Accepts chat prompts via broadcast intents"
+      ],
+      "permissions_required": [],
+      "initialization": "BroadcastReceiver registration via manifest intent-filter"
+    },
+    {
+      "channel_type": "JavaScript Execution (JS Bridge)",
+      "implementation_class": "ScriptExecutionReceiver",
+      "file_path": "core/tools/javascript/ScriptExecutionReceiver.kt",
+      "line_start": 1,
+      "actions": [
+        "JS script execution via broadcast (com.ai.assistance.operit.EXECUTE_JS)",
+        "QuickJS/MiniEs4 engine for script execution",
+        "Script result return via callback"
+      ],
+      "permissions_required": [],
+      "initialization": "BroadcastReceiver + JS engine init (QuickJS or Rhino)"
+    },
+    {
+      "channel_type": "Package/Plugin Install Receiver",
+      "implementation_class": "ToolPkgDebugInstallReceiver",
+      "file_path": "core/tools/packTool/ToolPkgDebugInstallReceiver.kt",
+      "line_start": 1,
+      "actions": [
+        "Debug-only toolpkg install via broadcast (com.ai.assistance.operit.DEBUG_INSTALL_TOOLPKG)"
+      ],
+      "permissions_required": ["REQUEST_INSTALL_PACKAGES"],
+      "initialization": "BroadcastReceiver manifest registration"
+    },
+    {
+      "channel_type": "Voice Interaction Service",
+      "implementation_class": "OperitVoiceInteractionService",
+      "file_path": "services/assistant/OperitVoiceInteractionService.kt",
+      "line_start": 1,
+      "actions": [
+        "System default voice assistant service (VoiceInteractionService)",
+        "Assistant session creation via OperitVoiceInteractionSessionService",
+        "Voice session management"
+      ],
+      "permissions_required": ["BIND_VOICE_INTERACTION"],
+      "initialization": "System binds via AndroidManifest.service + intent-filter"
+    },
+    {
+      "channel_type": "Assistant Intent Activity",
+      "implementation_class": "OperitAssistActivity",
+      "file_path": "services/assistant/OperitAssistActivity.kt",
+      "line_start": 1,
+      "actions": [
+        "android.intent.action.ASSIST entry for system assistant pickup",
+        "android.intent.action.VOICE_ASSIST for voice-trigger pickup"
+      ],
+      "permissions_required": [],
+      "initialization": "Intent-filter in AndroidManifest: ASSIST + VOICE_ASSIST actions"
+    },
+    {
+      "channel_type": "UI Debugger Overlay Service",
+      "implementation_class": "UIDebuggerService",
+      "file_path": "services/UIDebuggerService.kt",
+      "line_start": 115,
+      "actions": [
+        "Global floating UI element tree overlay",
+        "View hierarchy inspection",
+        "Element highlight, tap and inspect actions"
+      ],
+      "permissions_required": ["SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE_SPECIAL_USE"],
+      "initialization": "UIDebuggerService(startForeground) -> WindowManager overlay"
+    },
+    {
+      "channel_type": "Work Scheduler (Alarm)",
+      "implementation_class": "WorkflowTaskerReceiver",
+      "file_path": "integrations/tasker/WorkflowTaskerReceiver.kt",
+      "line_start": 1,
+      "actions": [
+        "Trigger workflow via locale/Tasker com.twofortyfouram.locale.intent.action.FIRE_SETTING",
+        "Workflow scheduled via AlarmManager",
+        "Boot reschedule via WorkflowBootReceiver (BOOT_COMPLETED)"
+      ],
+      "permissions_required": ["RECEIVE_BOOT_COMPLETED", "SCHEDULE_EXACT_ALARM"],
+      "initialization": "TaskerPlugin + AlarmManager scheduling"
+    },
+    {
+      "channel_type": "Device Admin Privilege",
+      "implementation_class": "AdminShellExecutor + AdminActionListener",
+      "file_path": "core/tools/system/shell/AdminShellExecutor.kt",
+      "line_start": 59,
+      "actions": [
+        "DevicePolicyManager.isDeviceOwnerApp check",
+        "Silent package install set via admin",
+        "Admin-privileged shell commands (wipe data, set password, etc.)",
+        "Admin-level UI interaction delegation"
+      ],
+      "permissions_required": ["android.permission.DEVICE_ADMIN"],
+      "initialization": "DevicePolicyManager profile/owner verification"
+    },
+    {
+      "channel_type": "Tasker Integration",
+      "implementation_class": "ActivityConfigAIAgentAction + WorkflowTaskerActivityConfig",
+      "file_path": "integrations/tasker/ActivityConfigAIAgentAction.kt",
+      "line_start": 1,
+      "actions": [
+        "AI Agent action as Tasker plugin",
+        "Workflow trigger via Tasker variable passing",
+        "Locale/Tasker protocol (com.twofortyfouram.locale.intent.action)"
+      ],
+      "permissions_required": [],
+      "initialization": "TaskerPluginActivity + intent-filter EDIT_EVENT/EDIT_SETTING"
+    }
+  ],
+  "permission_level_hierarchy": {
+    "description": "Shell/UI execution modes ranked from highest to lowest privilege",
+    "levels": [
+      {"level": "ROOT", "executor": "RootShellExecutor", "listener": "RootActionListener"},
+      {"level": "DEBUGGER (Shizuku/ADB)", "executor": "DebuggerShellExecutor", "listener": "DebuggerActionListener"},
+      {"level": "ADMIN (Device Owner)", "executor": "AdminShellExecutor", "listener": "AdminActionListener"},
+      {"level": "ACCESSIBILITY", "executor": "AccessibilityShellExecutor", "listener": "AccessibilityActionListener"},
+      {"level": "STANDARD", "executor": "StandardShellExecutor", "listener": "StandardActionListener"}
+    ]
+  },
+  "footer": {
+    "note": "This scan covers Operit v1.12.0 Operit-v1.12.0/app/src/main/. All channels identified via static grep analysis of .kt/.java source files with manifest cross-referencing.",
+    "key_findings": [
+      "6 permission-level shell executors (ROOT -> ADMIN -> DEBUGGER/Shizuku -> ACCESSIBILITY -> STANDARD)",
+      "Dual-path UI control: Shizuku ADB binder (adb input tap / MediaProjection), Accessibility service node tree",
+      "Shower remote display/touch channel: binder handoff from external Shower server process",
+      "Dual-token web auth: auto-generated UUID bearer token for HTTP chat + per-server bearer for MCP remotes",
+      "No AccessibilityService implementation in main app — delegated to com.ai.assistance.operit.provider package",
+      "1 MCP plugin install via npm/pnpm in sandboxed terminal",
+      "1 External HTTP server (NanoHTTPD, port 8094) with token-gated chat endpoints",
+      "1 BroadcastReceiver-based external intent chat channel (no token)",
+      "Package debug refresh + Compose DSL debug dump via broadcast receivers"
+    ]
+  }
+}

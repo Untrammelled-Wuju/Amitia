@@ -1,0 +1,25 @@
+{
+  "operit_scale": {
+    "E3": "测试/运行时证据",
+    "E2": "静态代码证据",
+    "E0": "无证据",
+    "E1": "文档或入口证据"
+  },
+  "unified_level": {
+    "level_3": "RUNTIME_VERIFIED",
+    "level_1": "DOCUMENTATION",
+    "level_0": "NO_EVIDENCE",
+    "level_2": "STATIC_CODE"
+  },
+  "amitia_scale": {
+    "E3": "运行时验证证据",
+    "E2": "静态代码证据",
+    "E0": "无证据",
+    "E1": "文档/结构证据"
+  },
+  "openminis_scale": {
+    "adapter_only": "仅适配器",
+    "source_verified": "源码已验证",
+    "source_not_released": "源码未公开"
+  }
+}

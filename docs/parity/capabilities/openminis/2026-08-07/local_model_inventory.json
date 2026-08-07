@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "native_integration": "None found - no on-device LLM execution",
+  "apple_intelligence": "Not directly integrated",
+  "note": "All model inference via cloud APIs"
+}

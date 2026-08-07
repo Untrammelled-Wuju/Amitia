@@ -1,0 +1,136 @@
+{
+  "inventory_id": "INV-A14-MODEL-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "model_provider",
+  "items": [
+    {
+      "id": "MODEL-001",
+      "name": "OpenAI API Provider",
+      "name_en": "OpenAI Compatible API",
+      "description": "OpenAI兼容API提供商，支持ChatGPT等OpenAI系列模型",
+      "file": "backend/internal/chat/llm_client.go",
+      "state": "IMPLEMENTED",
+      "api_type": "openai"
+    },
+    {
+      "id": "MODEL-002",
+      "name": "Anthropic API Provider",
+      "name_en": "Anthropic Claude API",
+      "description": "Anthropic Claude API提供商，支持Claude系列模型",
+      "file": "backend/internal/chat/llm_client.go",
+      "state": "IMPLEMENTED",
+      "api_type": "anthropic"
+    },
+    {
+      "id": "MODEL-003",
+      "name": "Google Gemini Provider",
+      "name_en": "Google Gemini API",
+      "description": "Google Gemini API提供商，支持Gemini系列模型",
+      "file": "backend/internal/chat/llm_client.go",
+      "state": "IMPLEMENTED",
+      "api_type": "google"
+    },
+    {
+      "id": "MODEL-004",
+      "name": "Ollama Local Provider",
+      "name_en": "Ollama Local LLM",
+      "description": "Ollama本地模型提供商，支持在本地运行开源模型",
+      "file": "backend/internal/chat/llm_client.go",
+      "state": "IMPLEMENTED",
+      "api_type": "ollama"
+    },
+    {
+      "id": "MODEL-005",
+      "name": "Model Config Service",
+      "name_en": "Model Configuration Service",
+      "description": "模型配置服务，管理多个模型配置的CRUD操作",
+      "file": "backend/internal/chat/model_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/model/configs",
+        "POST /api/v1/model/configs",
+        "PUT /api/v1/model/configs/:id",
+        "DELETE /api/v1/model/configs/:id"
+      ]
+    },
+    {
+      "id": "MODEL-006",
+      "name": "Model Route",
+      "name_en": "Model Routing",
+      "description": "模型路由系统，根据请求上下文选择合适的模型",
+      "file": "backend/internal/chat/model.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/model/routes",
+        "PUT /api/v1/model/routes"
+      ]
+    },
+    {
+      "id": "MODEL-007",
+      "name": "Provider Detection",
+      "name_en": "Auto Provider Detection",
+      "description": "自动提供商检测，自动发现和配置可用的模型提供商",
+      "file": "backend/internal/chat/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/model/detect-models"]
+    },
+    {
+      "id": "MODEL-008",
+      "name": "Provider List",
+      "name_en": "Supported Providers",
+      "description": "支持的提供商列表，枚举所有可用的模型提供商",
+      "file": "backend/internal/chat/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/model/providers"]
+    },
+    {
+      "id": "MODEL-009",
+      "name": "Model Test",
+      "name_en": "Model Connection Test",
+      "description": "模型连接测试，验证模型配置是否可用",
+      "file": "backend/internal/chat/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/v1/model/configs/:id/test",
+        "POST /api/v1/model/test"
+      ]
+    },
+    {
+      "id": "MODEL-010",
+      "name": "Token Budget Config",
+      "name_en": "Token Budget Configuration",
+      "description": "token预算配置，控制模型请求的最大token数",
+      "file": "backend/internal/chat/model_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MODEL-011",
+      "name": "Model Error Handling",
+      "name_en": "Model Error Recovery",
+      "description": "模型错误处理，处理模型请求失败和自动重试",
+      "file": "backend/internal/chat/model_error.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MODEL-012",
+      "name": "Vision Service",
+      "name_en": "Vision/Image Input Support",
+      "description": "视觉/图片输入服务，支持多模态模型的图片处理",
+      "file": "backend/internal/chat/vision_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MODEL-013",
+      "name": "Embedding Config",
+      "name_en": "Embedding Model Configuration",
+      "description": "嵌入模型配置，管理向量嵌入模型的设置",
+      "file": "backend/internal/embedding_config/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

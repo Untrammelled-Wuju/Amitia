@@ -1,0 +1,20 @@
+{
+  "mappings": [
+    {
+      "iosEquivalent": "N/A",
+      "androidPermission": "android.permission.READ_PHONE_STATE",
+      "capabilityId": "CAP.SECURITY.PERMISSION.READ_PHONE_STATE",
+      "platform": "android",
+      "desktopEquivalent": "N/A"
+    },
+    {
+      "iosEquivalent": "NSCameraUsageDescription",
+      "androidPermission": "android.permission.CAMERA",
+      "capabilityId": "CAP.DEVICE.CAMERA.CAPTURE",
+      "platform": "android",
+      "desktopEquivalent": "camera"
+    }
+  ],
+  "description": "Platform-specific permission mappings",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

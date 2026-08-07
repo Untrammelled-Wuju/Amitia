@@ -1,0 +1,76 @@
+{
+  "inventory_id": "INV-A14-PROFILE-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "user_profile",
+  "items": [
+    {
+      "id": "PROFILE-001",
+      "name": "Profile Service",
+      "name_en": "Profile Service",
+      "description": "用户画像服务，管理用户基础属性和偏好配置",
+      "file": "backend/internal/profile/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/profiles",
+        "POST /api/v1/profiles",
+        "PUT /api/v1/profiles/:id",
+        "DELETE /api/v1/profiles/:id"
+      ]
+    },
+    {
+      "id": "PROFILE-002",
+      "name": "Profile Model",
+      "name_en": "Profile Data Model",
+      "description": "画像数据模型，定义用户画像的结构和字段",
+      "file": "backend/internal/profile/model.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROFILE-003",
+      "name": "Profile Repository",
+      "name_en": "Profile Repository",
+      "description": "画像数据仓库，处理用户画像的持久化和查询",
+      "file": "backend/internal/profile/repository.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROFILE-004",
+      "name": "Profile by User",
+      "name_en": "Get Profile by User ID",
+      "description": "通过用户ID获取画像接口，支持按用户维度查询画像",
+      "file": "backend/internal/profile/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/profiles/by-user"]
+    },
+    {
+      "id": "PROFILE-005",
+      "name": "Profile Extract",
+      "name_en": "Profile Extraction",
+      "description": "画像提取服务，从对话中自动提取和更新用户偏好信息",
+      "file": "backend/internal/profile/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/profiles/extract"]
+    },
+    {
+      "id": "PROFILE-006",
+      "name": "Profile System Prompt",
+      "name_en": "Profile System Prompt Generator",
+      "description": "生成用户画像的系统提示注入，将画像信息格式化后注入LLM上下文",
+      "file": "backend/internal/profile/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/profiles/system-prompt"]
+    },
+    {
+      "id": "PROFILE-007",
+      "name": "Autobiographical Memory",
+      "name_en": "Autobiographical Integration",
+      "description": "自传式记忆集成，将用户画像与自传式记忆关联",
+      "file": "backend/internal/memory/autobiographical.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

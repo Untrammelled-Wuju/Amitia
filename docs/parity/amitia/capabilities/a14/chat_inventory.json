@@ -1,0 +1,108 @@
+{
+  "inventory_id": "INV-A14-CHAT-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "chat_conversation",
+  "items": [
+    {
+      "id": "CHAT-001",
+      "name": "Chat Service",
+      "name_en": "Chat Service",
+      "description": "核心聊天服务，管理会话创建、消息历史、模型配置和对话编排",
+      "file": "backend/internal/chat/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/v1/chat",
+        "GET /api/v1/chats/conversations",
+        "POST /api/v1/chats/conversations",
+        "GET /api/v1/chats/conversations/:id/messages",
+        "DELETE /api/v1/chats/conversations/:id"
+      ]
+    },
+    {
+      "id": "CHAT-002",
+      "name": "Message LLM",
+      "name_en": "Message LLM Generation",
+      "description": "LLM消息回复生成，支持流式输出和多模型路由",
+      "file": "backend/internal/chat/message_llm.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHAT-003",
+      "name": "Tool Loop",
+      "name_en": "Tool Execution Loop",
+      "description": "工具调用循环，解析LLM返回的工具调用请求并执行，支持多轮工具循环",
+      "file": "backend/internal/chat/tool_runtime.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHAT-004",
+      "name": "Message Buffer",
+      "name_en": "Message Buffer",
+      "description": "消息缓冲区，用于累积流式输出的token并在完成后批量提交",
+      "file": "backend/internal/chat/buffer.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHAT-005",
+      "name": "Conversation Summaries",
+      "name_en": "Conversation Summaries",
+      "description": "对话摘要系统，自动生成、存储和更新对话摘要用于上下文压缩",
+      "file": "backend/internal/chat/compressor.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/chats/conversations/:id/summary",
+        "PUT /api/v1/chats/conversations/:id/summary",
+        "POST /api/v1/chats/conversations/:id/summary/generate"
+      ]
+    },
+    {
+      "id": "CHAT-006",
+      "name": "Conversation Export",
+      "name_en": "Conversation Export",
+      "description": "对话导出功能，支持将完整对话导出为结构化格式",
+      "file": "backend/internal/chat/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/chats/export"]
+    },
+    {
+      "id": "CHAT-007",
+      "name": "Message Pipeline",
+      "name_en": "Message Pipeline",
+      "description": "消息多阶段处理管道，包括分词、过滤、格式化、路由等阶段",
+      "file": "backend/internal/chat/message_pipeline.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHAT-008",
+      "name": "Message PostProcess Sanitizer",
+      "name_en": "Reply Sanitizer Pipeline",
+      "description": "回复后处理净化管道，包括句子去重、标记清理、敏感内容过滤",
+      "file": "backend/internal/chat/reply_sanitizer.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHAT-009",
+      "name": "Working Memory",
+      "name_en": "Chat Working Memory",
+      "description": "聊天工作内存，管理当前对话会话的临时状态和上下文",
+      "file": "backend/internal/chat/working_memory.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHAT-010",
+      "name": "Generation Queue",
+      "name_en": "Generation Queue",
+      "description": "生成队列，管理并发生成请求的调度和流量控制",
+      "file": "backend/internal/chat/generation_queue.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

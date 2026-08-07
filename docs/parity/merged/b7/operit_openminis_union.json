@@ -1,0 +1,3288 @@
+{
+  "total_opr_omn_union_groups": 266,
+  "groups_with_amitia_match": 10,
+  "groups_without_amitia_match": 256,
+  "schema_version": 1,
+  "generated_at": "2026-08-07T13:52:20+08:00",
+  "groups": [
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0297-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0002",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0354-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0003",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0236-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0004",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0338-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0010",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0013",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0048-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0336-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0015",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0016",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0015-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0027-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0017",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0020-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0020",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0017-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0021",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0263-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0022",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0023",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0050-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0024",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0052-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0025",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0114-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0042-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0026",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0060-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0027",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0278-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0028",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0031",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0063-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0032",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0091-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0033",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0130-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0034",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0082-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0242-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0035",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0036",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0010-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0293-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0037",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0294-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0038",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0039",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0127-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0164-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0041",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0097-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0046",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0325-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0047",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0001-01",
+        "PROJ-OPR-0002-01",
+        "PROJ-OPR-0003-01",
+        "PROJ-OPR-0004-01",
+        "PROJ-OPR-0005-01",
+        "PROJ-OPR-0007-01",
+        "PROJ-OPR-0008-01",
+        "PROJ-OPR-0009-01",
+        "PROJ-OPR-0010-01",
+        "PROJ-OPR-0011-01",
+        "PROJ-OPR-0013-01",
+        "PROJ-OPR-0014-01",
+        "PROJ-OPR-0063-01",
+        "PROJ-OPR-0064-01",
+        "PROJ-OPR-0065-01",
+        "PROJ-OPR-0126-01",
+        "PROJ-OPR-0131-01",
+        "PROJ-OPR-0165-01",
+        "PROJ-OPR-0282-01",
+        "PROJ-OPR-0290-01",
+        "PROJ-OPR-0291-01",
+        "PROJ-OPR-0292-01",
+        "PROJ-OPR-0302-01",
+        "PROJ-OPR-0358-01",
+        "PROJ-OPR-0359-01",
+        "PROJ-OPR-0365-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "NO_AMITIA_EQUIVALENT",
+      "union_id": "MAP-0048",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0001-01",
+        "PROJ-OMN-0006-01",
+        "PROJ-OMN-0067-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0352-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0051",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0062-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0054",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0059-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0055",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0238-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0056",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0243-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0061",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0313-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0062",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0152-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0064",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0122-01",
+        "PROJ-OPR-0123-01",
+        "PROJ-OPR-0127-01",
+        "PROJ-OPR-0128-01",
+        "PROJ-OPR-0130-01",
+        "PROJ-OPR-0132-01",
+        "PROJ-OPR-0133-01",
+        "PROJ-OPR-0134-01",
+        "PROJ-OPR-0135-01",
+        "PROJ-OPR-0136-01",
+        "PROJ-OPR-0137-01",
+        "PROJ-OPR-0140-01",
+        "PROJ-OPR-0142-01",
+        "PROJ-OPR-0143-01",
+        "PROJ-OPR-0144-01",
+        "PROJ-OPR-0346-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUBSET",
+      "union_id": "MAP-0065",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0145-01",
+        "PROJ-AMT-0229-01",
+        "PROJ-AMT-0230-01",
+        "PROJ-AMT-0231-01",
+        "PROJ-AMT-0232-01",
+        "PROJ-AMT-0233-01",
+        "PROJ-AMT-0234-01",
+        "PROJ-AMT-0235-01",
+        "PROJ-AMT-0236-01",
+        "PROJ-AMT-0237-01",
+        "PROJ-AMT-0238-01",
+        "PROJ-AMT-0239-01",
+        "PROJ-AMT-0240-01",
+        "PROJ-AMT-0241-01",
+        "PROJ-AMT-0242-01",
+        "PROJ-AMT-0243-01",
+        "PROJ-AMT-0303-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0026-01",
+        "PROJ-OMN-0027-01",
+        "PROJ-OMN-0029-01",
+        "PROJ-OMN-0030-01",
+        "PROJ-OMN-0031-01",
+        "PROJ-OMN-0032-01",
+        "PROJ-OMN-0033-01",
+        "PROJ-OMN-0034-01",
+        "PROJ-OMN-0036-01",
+        "PROJ-OMN-0134-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0249-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0067",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0274-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0068",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0286-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0070",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0019-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0076",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0329-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0078",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0317-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0079",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0322-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0080",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0260-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0081",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0262-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0082",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0332-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0083",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0344-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0086",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0349-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0090",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0039-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0093",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0323-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0096",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0101",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0135-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0340-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0105",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0328-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0106",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0082-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0108",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0111",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0080-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0114",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0121-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0339-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0117",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0331-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0118",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0333-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0119",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0121",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0128-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0217-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0122",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0239-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0125",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0126",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0011-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0127",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0038-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0171-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0130",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0337-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0131",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0133",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0002-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0137",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0005-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0232-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0140",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0143",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0077-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0144",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0009-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0012-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0148",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0244-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0149",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0071-01",
+        "PROJ-OPR-0073-01",
+        "PROJ-OPR-0168-01",
+        "PROJ-OPR-0169-01",
+        "PROJ-OPR-0221-01",
+        "PROJ-OPR-0361-01",
+        "PROJ-OPR-0363-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "NO_AMITIA_EQUIVALENT",
+      "union_id": "MAP-0152",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0003-01",
+        "PROJ-OMN-0103-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0095-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0153",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0155",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0092-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0304-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0156",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0155-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0157",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0006-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0160",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0201-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0161",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0163",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0028-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0068-01",
+        "PROJ-OPR-0194-01",
+        "PROJ-OPR-0195-01",
+        "PROJ-OPR-0196-01",
+        "PROJ-OPR-0197-01",
+        "PROJ-OPR-0198-01",
+        "PROJ-OPR-0199-01",
+        "PROJ-OPR-0204-01",
+        "PROJ-OPR-0205-01",
+        "PROJ-OPR-0206-01",
+        "PROJ-OPR-0207-01",
+        "PROJ-OPR-0208-01",
+        "PROJ-OPR-0209-01",
+        "PROJ-OPR-0210-01",
+        "PROJ-OPR-0211-01",
+        "PROJ-OPR-0212-01",
+        "PROJ-OPR-0213-01",
+        "PROJ-OPR-0214-01",
+        "PROJ-OPR-0215-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUBSET",
+      "union_id": "MAP-0164",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0133-01",
+        "PROJ-AMT-0134-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0065-01",
+        "PROJ-OMN-0066-01",
+        "PROJ-OMN-0083-01",
+        "PROJ-OMN-0084-01",
+        "PROJ-OMN-0101-01",
+        "PROJ-OMN-0102-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0334-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0166",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0161-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0168",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0146-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0172",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0049-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0174",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0342-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0176",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0026-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUPERSET",
+      "union_id": "MAP-0177",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0163-01",
+        "PROJ-AMT-0164-01",
+        "PROJ-AMT-0165-01",
+        "PROJ-AMT-0166-01",
+        "PROJ-AMT-0167-01",
+        "PROJ-AMT-0168-01",
+        "PROJ-AMT-0169-01",
+        "PROJ-AMT-0170-01",
+        "PROJ-AMT-0171-01",
+        "PROJ-AMT-0172-01",
+        "PROJ-AMT-0173-01",
+        "PROJ-AMT-0174-01",
+        "PROJ-AMT-0175-01",
+        "PROJ-AMT-0176-01",
+        "PROJ-AMT-0177-01",
+        "PROJ-AMT-0178-01",
+        "PROJ-AMT-0179-01",
+        "PROJ-AMT-0180-01",
+        "PROJ-AMT-0181-01",
+        "PROJ-AMT-0182-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0042-01",
+        "PROJ-OMN-0043-01",
+        "PROJ-OMN-0044-01",
+        "PROJ-OMN-0045-01",
+        "PROJ-OMN-0046-01",
+        "PROJ-OMN-0047-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0303-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0178",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0139-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0179",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0015-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0180",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0237-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0181",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0250-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0182",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0124-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0184",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0149-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0185",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0048-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0186",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0360-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0187",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0025-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0189",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0193",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0090-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0047-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0194",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0154-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0195",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0357-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0197",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0089-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0198",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0051-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0199",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0170-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0200",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0201",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0076-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0156-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0203",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0209",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0081-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0272-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0212",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0167-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0213",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0153-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0214",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0090-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0216",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0217",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0007-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0345-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0219",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0350-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0220",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0321-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0222",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0257-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0223",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0118-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0224",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0230-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0226",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0024-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0230",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0318-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0232",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0036-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0233",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0037-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0234",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0092-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0235",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0016-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0237",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0238",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0016-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0268-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0239",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0045-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0240",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0255-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0241",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0162-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0242",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUBSET",
+      "union_id": "MAP-0244",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0300-01",
+        "PROJ-AMT-0301-01",
+        "PROJ-AMT-0302-01",
+        "PROJ-AMT-0304-01",
+        "PROJ-AMT-0305-01",
+        "PROJ-AMT-0306-01",
+        "PROJ-AMT-0307-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0089-01",
+        "PROJ-OMN-0096-01",
+        "PROJ-OMN-0104-01",
+        "PROJ-OMN-0105-01",
+        "PROJ-OMN-0106-01",
+        "PROJ-OMN-0107-01",
+        "PROJ-OMN-0108-01",
+        "PROJ-OMN-0109-01",
+        "PROJ-OMN-0110-01",
+        "PROJ-OMN-0115-01",
+        "PROJ-OMN-0119-01",
+        "PROJ-OMN-0122-01",
+        "PROJ-OMN-0123-01",
+        "PROJ-OMN-0124-01",
+        "PROJ-OMN-0125-01",
+        "PROJ-OMN-0126-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0235-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0245",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0151-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0246",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0069-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0247",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0326-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0250",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0234-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0252",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0314-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0253",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0160-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0254",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0110-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0255",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0254-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0256",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0061-01",
+        "PROJ-OPR-0070-01",
+        "PROJ-OPR-0226-01",
+        "PROJ-OPR-0227-01",
+        "PROJ-OPR-0228-01",
+        "PROJ-OPR-0229-01",
+        "PROJ-OPR-0283-01",
+        "PROJ-OPR-0284-01",
+        "PROJ-OPR-0287-01",
+        "PROJ-OPR-0305-01",
+        "PROJ-OPR-0312-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUPERSET",
+      "union_id": "MAP-0257",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0042-01",
+        "PROJ-AMT-0068-01",
+        "PROJ-AMT-0115-01",
+        "PROJ-AMT-0123-01",
+        "PROJ-AMT-0131-01",
+        "PROJ-AMT-0158-01",
+        "PROJ-AMT-0159-01",
+        "PROJ-AMT-0201-01",
+        "PROJ-AMT-0202-01",
+        "PROJ-AMT-0203-01",
+        "PROJ-AMT-0204-01",
+        "PROJ-AMT-0205-01",
+        "PROJ-AMT-0206-01",
+        "PROJ-AMT-0207-01",
+        "PROJ-AMT-0208-01",
+        "PROJ-AMT-0209-01",
+        "PROJ-AMT-0210-01",
+        "PROJ-AMT-0211-01",
+        "PROJ-AMT-0212-01",
+        "PROJ-AMT-0213-01",
+        "PROJ-AMT-0214-01",
+        "PROJ-AMT-0215-01",
+        "PROJ-AMT-0216-01",
+        "PROJ-AMT-0217-01",
+        "PROJ-AMT-0218-01",
+        "PROJ-AMT-0219-01",
+        "PROJ-AMT-0220-01",
+        "PROJ-AMT-0272-01",
+        "PROJ-AMT-0281-01"
+      ],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0348-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0258",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0260",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0143-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0087-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0261",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0275-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0262",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0264",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0099-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0355-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0265",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0219-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0271",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0041-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0276",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0202-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0277",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0220-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0281",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0335-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0283",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0218-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0284",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0148-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0285",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0286",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0013-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUBSET",
+      "union_id": "MAP-0287",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0192-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0037-01",
+        "PROJ-OMN-0039-01",
+        "PROJ-OMN-0041-01",
+        "PROJ-OMN-0140-01",
+        "PROJ-OMN-0141-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0138-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0289",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0261-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0290",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0292",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0145-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0040-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0294",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0256-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0295",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0353-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0297",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0022-01",
+        "PROJ-OPR-0028-01",
+        "PROJ-OPR-0029-01",
+        "PROJ-OPR-0030-01",
+        "PROJ-OPR-0032-01",
+        "PROJ-OPR-0046-01",
+        "PROJ-OPR-0074-01",
+        "PROJ-OPR-0075-01",
+        "PROJ-OPR-0076-01",
+        "PROJ-OPR-0077-01",
+        "PROJ-OPR-0078-01",
+        "PROJ-OPR-0079-01",
+        "PROJ-OPR-0080-01",
+        "PROJ-OPR-0081-01",
+        "PROJ-OPR-0083-01",
+        "PROJ-OPR-0299-01",
+        "PROJ-OPR-0300-01",
+        "PROJ-OPR-0301-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "NO_AMITIA_EQUIVALENT",
+      "union_id": "MAP-0299",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0012-01",
+        "PROJ-OMN-0018-01",
+        "PROJ-OMN-0019-01",
+        "PROJ-OMN-0020-01",
+        "PROJ-OMN-0021-01",
+        "PROJ-OMN-0022-01",
+        "PROJ-OMN-0023-01",
+        "PROJ-OMN-0025-01",
+        "PROJ-OMN-0142-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0145-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0300",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0056-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0302",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0038-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0303",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0305",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0070-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0091-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0308",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0043-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0309",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0311",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0131-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0057-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0312",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0311-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUPERSET",
+      "union_id": "MAP-0313",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0254-01",
+        "PROJ-AMT-0257-01",
+        "PROJ-AMT-0258-01",
+        "PROJ-AMT-0259-01",
+        "PROJ-AMT-0312-01",
+        "PROJ-AMT-0325-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0118-01",
+        "PROJ-OMN-0129-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0086-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0316",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0240-01",
+        "PROJ-OPR-0245-01",
+        "PROJ-OPR-0246-01",
+        "PROJ-OPR-0247-01",
+        "PROJ-OPR-0248-01",
+        "PROJ-OPR-0251-01",
+        "PROJ-OPR-0252-01",
+        "PROJ-OPR-0253-01",
+        "PROJ-OPR-0258-01",
+        "PROJ-OPR-0309-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "NO_AMITIA_EQUIVALENT",
+      "union_id": "MAP-0318",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0051-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0033-01",
+        "PROJ-OPR-0264-01",
+        "PROJ-OPR-0265-01",
+        "PROJ-OPR-0266-01",
+        "PROJ-OPR-0269-01",
+        "PROJ-OPR-0270-01",
+        "PROJ-OPR-0271-01",
+        "PROJ-OPR-0273-01",
+        "PROJ-OPR-0280-01",
+        "PROJ-OPR-0288-01",
+        "PROJ-OPR-0315-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUBSET",
+      "union_id": "MAP-0320",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0247-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0116-01",
+        "PROJ-OMN-0117-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0276-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0323",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0320-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0325",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0347-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0328",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0330",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0100-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0296-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0332",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0281-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0337",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0339",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0073-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0343-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0340",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0052-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0341",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0351-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0343",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0233-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0346",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0053-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0347",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0109-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0349",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0355",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0111-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0356",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0095-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0357",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0120-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0358",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0078-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0359",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0068-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0096-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0360",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0366",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0098-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0289-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0371",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0072-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0377",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0055-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0378",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0058-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0381",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0147-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0383",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0054-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0384",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0385",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0074-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0386",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0086-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0277-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0387",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0388",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0087-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0231-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0392",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0259-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0394",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0200-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0395",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0327-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0397",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0316-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0399",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0150-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0403",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0267-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0405",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0285-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0408",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0094-01",
+        "PROJ-OPR-0099-01",
+        "PROJ-OPR-0100-01",
+        "PROJ-OPR-0101-01",
+        "PROJ-OPR-0102-01",
+        "PROJ-OPR-0103-01",
+        "PROJ-OPR-0104-01",
+        "PROJ-OPR-0105-01",
+        "PROJ-OPR-0106-01",
+        "PROJ-OPR-0107-01",
+        "PROJ-OPR-0111-01",
+        "PROJ-OPR-0112-01",
+        "PROJ-OPR-0113-01",
+        "PROJ-OPR-0114-01",
+        "PROJ-OPR-0115-01",
+        "PROJ-OPR-0116-01",
+        "PROJ-OPR-0117-01",
+        "PROJ-OPR-0119-01",
+        "PROJ-OPR-0120-01",
+        "PROJ-OPR-0121-01",
+        "PROJ-OPR-0129-01",
+        "PROJ-OPR-0157-01",
+        "PROJ-OPR-0222-01",
+        "PROJ-OPR-0223-01",
+        "PROJ-OPR-0224-01",
+        "PROJ-OPR-0225-01",
+        "PROJ-OPR-0295-01",
+        "PROJ-OPR-0308-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "NO_AMITIA_EQUIVALENT",
+      "union_id": "MAP-0409",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0024-01",
+        "PROJ-OMN-0035-01",
+        "PROJ-OMN-0088-01",
+        "PROJ-OMN-0113-01",
+        "PROJ-OMN-0132-01",
+        "PROJ-OMN-0136-01",
+        "PROJ-OMN-0137-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0362-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0410",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0411",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0079-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0159-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0413",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0414",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0017-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0216-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0416",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0319-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0417",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0173-01",
+        "PROJ-OPR-0174-01",
+        "PROJ-OPR-0175-01",
+        "PROJ-OPR-0176-01",
+        "PROJ-OPR-0177-01",
+        "PROJ-OPR-0178-01",
+        "PROJ-OPR-0179-01",
+        "PROJ-OPR-0180-01",
+        "PROJ-OPR-0181-01",
+        "PROJ-OPR-0182-01",
+        "PROJ-OPR-0183-01",
+        "PROJ-OPR-0184-01",
+        "PROJ-OPR-0185-01",
+        "PROJ-OPR-0186-01",
+        "PROJ-OPR-0187-01",
+        "PROJ-OPR-0188-01",
+        "PROJ-OPR-0189-01",
+        "PROJ-OPR-0190-01",
+        "PROJ-OPR-0191-01",
+        "PROJ-OPR-0192-01",
+        "PROJ-OPR-0193-01",
+        "PROJ-OPR-0203-01",
+        "PROJ-OPR-0306-01",
+        "PROJ-OPR-0307-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUBSET",
+      "union_id": "MAP-0418",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0009-01",
+        "PROJ-AMT-0013-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0053-01",
+        "PROJ-OMN-0054-01",
+        "PROJ-OMN-0055-01",
+        "PROJ-OMN-0056-01",
+        "PROJ-OMN-0057-01",
+        "PROJ-OMN-0058-01",
+        "PROJ-OMN-0059-01",
+        "PROJ-OMN-0060-01",
+        "PROJ-OMN-0061-01",
+        "PROJ-OMN-0062-01",
+        "PROJ-OMN-0144-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0419",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0049-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0421",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0112-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0125-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0423",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0424",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0133-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0426",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0014-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0035-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0428",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0085-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0429",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0031-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0432",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0435",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0071-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0141-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0436",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0088-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0437",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0440",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0138-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0279-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0444",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0445",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0097-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0446",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0075-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0448",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0064-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0021-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0449",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0341-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0451",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0452",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0069-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0324-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0454",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0067-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0455",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0456",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0008-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0458",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0094-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0018-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0462",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0463",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0072-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0066-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0466",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0298-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0467",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0330-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0468",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0470",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0093-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0084-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0471",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0093-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0475",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0108-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0480",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0044-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0482",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0098-01",
+        "PROJ-OPR-0163-01",
+        "PROJ-OPR-0166-01",
+        "PROJ-OPR-0172-01",
+        "PROJ-OPR-0356-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "AMITIA_SUBSET",
+      "union_id": "MAP-0483",
+      "has_amitia_match": true,
+      "amitia_projection_ids": [
+        "PROJ-AMT-0022-01",
+        "PROJ-AMT-0025-01"
+      ],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0004-01",
+        "PROJ-OMN-0040-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0485",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0085-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPENMINIS_ONLY",
+      "union_id": "MAP-0494",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": [
+        "PROJ-OMN-0139-01"
+      ]
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0050-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0496",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0241-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0497",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0158-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0498",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0310-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0502",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0023-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0504",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0364-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0505",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    },
+    {
+      "operit_projection_ids": [
+        "PROJ-OPR-0034-01"
+      ],
+      "unified_category": "26_OTHER",
+      "relationship_type": "OPERIT_ONLY",
+      "union_id": "MAP-0506",
+      "has_amitia_match": false,
+      "amitia_projection_ids": [],
+      "openminis_projection_ids": []
+    }
+  ]
+}

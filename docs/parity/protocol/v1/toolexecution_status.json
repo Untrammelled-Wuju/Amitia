@@ -1,0 +1,50 @@
+{
+  "statuses": [
+    {
+      "value": "WAITING_PERMISSION",
+      "description": "Waiting for permission"
+    },
+    {
+      "value": "PAUSED",
+      "description": "Execution paused"
+    },
+    {
+      "value": "CANCELLED",
+      "description": "Execution cancelled"
+    },
+    {
+      "value": "SUCCEEDED",
+      "description": "Execution succeeded"
+    },
+    {
+      "value": "READY",
+      "description": "Ready to execute"
+    },
+    {
+      "value": "PENDING",
+      "description": "Waiting to execute"
+    },
+    {
+      "value": "CANCELLING",
+      "description": "Cancellation in progress"
+    },
+    {
+      "value": "FAILED",
+      "description": "Execution failed"
+    },
+    {
+      "value": "VALIDATING",
+      "description": "Validating parameters"
+    },
+    {
+      "value": "RUNNING",
+      "description": "Currently executing"
+    },
+    {
+      "value": "TIMED_OUT",
+      "description": "Execution timed out"
+    }
+  ],
+  "statusType": "toolExecution",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

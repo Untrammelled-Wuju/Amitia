@@ -1,0 +1,40 @@
+{
+  "total_legacy": 5,
+  "legacy_systems": [
+    {
+      "name": "Extension Runtime (Legacy)",
+      "file": "backend/internal/extension/runtime.go",
+      "state": "LEGACY",
+      "replacement": "Extension Kernel (extension/kernel/runtime.go)",
+      "note": "旧版扩展运行时，已被新版Extension Kernel替代"
+    },
+    {
+      "name": "Plugin Manager (Legacy)",
+      "file": "backend/internal/extension/plugin_manager.go",
+      "state": "LEGACY+DEPRECATED",
+      "replacement": "Extension Kernel (extension/kernel/)",
+      "note": "旧版插件管理器，功能已合并到Kernel"
+    },
+    {
+      "name": "Plugin Registry (Legacy)",
+      "file": "backend/internal/extension/plugin_registry.go",
+      "state": "LEGACY",
+      "replacement": "Extension Kernel",
+      "note": "旧版插件注册表"
+    },
+    {
+      "name": "SurrealDB Manager (Old API)",
+      "file": "backend/internal/surrealdb/manager.go",
+      "state": "DEPRECATED",
+      "replacement": "graph/client.go + graph/service.go",
+      "note": "Start/Stop/Monitor API已废弃"
+    },
+    {
+      "name": "Chat Legacy Path",
+      "file": "backend/internal/chat/handler.go",
+      "state": "FALLBACK",
+      "replacement": "unifiedEntry.Handle",
+      "note": "旧版Chat路由路径，作为fallback保留"
+    }
+  ]
+}

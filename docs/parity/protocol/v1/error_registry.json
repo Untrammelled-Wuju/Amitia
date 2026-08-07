@@ -1,0 +1,160 @@
+{
+  "errors": [
+    {
+      "Number": 1001,
+      "Domain": "AGENT",
+      "Category": "INITIALIZATION",
+      "Description": "Agent failed to initialize",
+      "ErrorCode": "ERR_AGENT_INITIALIZATION_FAILED_1001"
+    },
+    {
+      "Number": 1002,
+      "Domain": "AGENT",
+      "Category": "CAPABILITY",
+      "Description": "Capability not found",
+      "ErrorCode": "ERR_AGENT_CAPABILITY_NOT_FOUND_1002"
+    },
+    {
+      "Number": 2001,
+      "Domain": "MODEL",
+      "Category": "CONNECTION",
+      "Description": "Model connection failed",
+      "ErrorCode": "ERR_MODEL_CONNECTION_FAILED_2001"
+    },
+    {
+      "Number": 2002,
+      "Domain": "MODEL",
+      "Category": "TIMEOUT",
+      "Description": "Model request timed out",
+      "ErrorCode": "ERR_MODEL_TIMEOUT_2002"
+    },
+    {
+      "Number": 3001,
+      "Domain": "TOOL",
+      "Category": "INVALID_ARGUMENT",
+      "Description": "Invalid tool argument",
+      "ErrorCode": "ERR_TOOL_INVALID_ARGUMENT_3001"
+    },
+    {
+      "Number": 3002,
+      "Domain": "TOOL",
+      "Category": "EXECUTION",
+      "Description": "Tool execution failed",
+      "ErrorCode": "ERR_TOOL_EXECUTION_FAILED_3002"
+    },
+    {
+      "Number": 4001,
+      "Domain": "TASK",
+      "Category": "PLANNING",
+      "Description": "Task planning failed",
+      "ErrorCode": "ERR_TASK_PLANNING_FAILED_4001"
+    },
+    {
+      "Number": 4002,
+      "Domain": "TASK",
+      "Category": "EXECUTION",
+      "Description": "Task execution failed",
+      "ErrorCode": "ERR_TASK_EXECUTION_FAILED_4002"
+    },
+    {
+      "Number": 5001,
+      "Domain": "RUNTIME",
+      "Category": "NOT_READY",
+      "Description": "Runtime not ready",
+      "ErrorCode": "ERR_RUNTIME_NOT_READY_5001"
+    },
+    {
+      "Number": 6001,
+      "Domain": "PERMISSION",
+      "Category": "DENIED",
+      "Description": "Permission denied",
+      "ErrorCode": "ERR_PERMISSION_DENIED_6001"
+    },
+    {
+      "Number": 7001,
+      "Domain": "FILE",
+      "Category": "NOT_FOUND",
+      "Description": "File not found",
+      "ErrorCode": "ERR_FILE_NOT_FOUND_7001"
+    },
+    {
+      "Number": 8001,
+      "Domain": "NETWORK",
+      "Category": "CONNECTION",
+      "Description": "Network connection error",
+      "ErrorCode": "ERR_NETWORK_CONNECTION_8001"
+    },
+    {
+      "Number": 9001,
+      "Domain": "BROWSER",
+      "Category": "AUTOMATION",
+      "Description": "Browser automation error",
+      "ErrorCode": "ERR_BROWSER_AUTOMATION_9001"
+    },
+    {
+      "Number": 10001,
+      "Domain": "MCP",
+      "Category": "SERVER",
+      "Description": "MCP server error",
+      "ErrorCode": "ERR_MCP_SERVER_ERROR_10001"
+    },
+    {
+      "Number": 11001,
+      "Domain": "SKILL",
+      "Category": "LOAD",
+      "Description": "Skill load failed",
+      "ErrorCode": "ERR_SKILL_LOAD_FAILED_11001"
+    },
+    {
+      "Number": 12001,
+      "Domain": "EXTENSION",
+      "Category": "INSTALL",
+      "Description": "Extension install failed",
+      "ErrorCode": "ERR_EXTENSION_INSTALL_12001"
+    },
+    {
+      "Number": 13001,
+      "Domain": "VOICE",
+      "Category": "SYNTHESIS",
+      "Description": "Voice synthesis error",
+      "ErrorCode": "ERR_VOICE_SYNTHESIS_13001"
+    },
+    {
+      "Number": 14001,
+      "Domain": "MEMORY",
+      "Category": "STORAGE",
+      "Description": "Memory storage error",
+      "ErrorCode": "ERR_MEMORY_STORAGE_14001"
+    },
+    {
+      "Number": 15001,
+      "Domain": "CHANNEL",
+      "Category": "CONNECTION",
+      "Description": "Channel connection error",
+      "ErrorCode": "ERR_CHANNEL_CONNECTION_15001"
+    },
+    {
+      "Number": 16001,
+      "Domain": "DATABASE",
+      "Category": "QUERY",
+      "Description": "Database query error",
+      "ErrorCode": "ERR_DATABASE_QUERY_16001"
+    },
+    {
+      "Number": 17001,
+      "Domain": "SECURITY",
+      "Category": "AUTH",
+      "Description": "Security authentication error",
+      "ErrorCode": "ERR_SECURITY_AUTH_17001"
+    },
+    {
+      "Number": 99001,
+      "Domain": "INTERNAL",
+      "Category": "UNKNOWN",
+      "Description": "Internal unknown error",
+      "ErrorCode": "ERR_INTERNAL_UNKNOWN_99001"
+    }
+  ],
+  "registryId": "PARITY-2026-08-07-V1-ERROR-REGISTRY",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

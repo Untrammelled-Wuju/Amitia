@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "id": "OMN-UNRESOLVED-001",
+      "subject": "Apple Intelligence local model",
+      "reason": "No source code evidence of direct Apple Intelligence integration",
+      "blocking": false
+    },
+    {
+      "id": "OMN-UNRESOLVED-002",
+      "subject": "iSH vs actual Linux sandbox performance",
+      "reason": "Requires runtime testing",
+      "blocking": false
+    },
+    {
+      "id": "OMN-UNRESOLVED-003",
+      "subject": "Reminder write support (apple-reminders header only)",
+      "reason": "Only declaration, implementation may be partial",
+      "blocking": false
+    },
+    {
+      "id": "OMN-UNRESOLVED-004",
+      "subject": "On-device LLM inference",
+      "reason": "All model calls go through cloud APIs; no CoreML/NNAPI evidence",
+      "blocking": false
+    }
+  ]
+}

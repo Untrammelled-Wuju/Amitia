@@ -1,0 +1,134 @@
+{
+  "inventory_id": "INV-A14-KERNEL-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "extension_kernel",
+  "items": [
+    {
+      "id": "KERNEL-001",
+      "name": "Kernel Container",
+      "name_en": "Extension Kernel Container",
+      "description": "内核容器，管理扩展包的隔离运行环境和生命周期",
+      "file": "backend/internal/extension/kernel/container.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-002",
+      "name": "Capability Registry",
+      "name_en": "Capability Registry",
+      "description": "能力注册表，管理扩展内定义的能力（工具、工作流等）",
+      "file": "backend/internal/extension/kernel/capability/registry.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-003",
+      "name": "Workflow Executor",
+      "name_en": "Workflow Executor",
+      "description": "工作流执行器，编译和执行扩展定义的自动化工作流",
+      "file": "backend/internal/extension/workflow_executor.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-004",
+      "name": "Execution Pipeline",
+      "name_en": "Execution Pipeline",
+      "description": "执行管道，管理扩展调用的完整执行流程（审批、权限、执行、结果验证）",
+      "file": "backend/internal/extension/kernel/execution/pipeline.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-005",
+      "name": "Package Lifecycle",
+      "name_en": "Package Lifecycle Management",
+      "description": "包生命周期管理，处理扩展包的安装、更新、启用、禁用、卸载",
+      "file": "backend/internal/extension/kernel/lifecycle_ops.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-006",
+      "name": "Kernel Migration",
+      "name_en": "Migration System",
+      "description": "迁移系统，管理从旧版扩展系统到内核的迁移",
+      "file": "backend/internal/extension/kernel/migration/runtime.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-007",
+      "name": "Candidate Management",
+      "name_en": "Candidate Store",
+      "description": "候选包管理，处理扩展包的安装预览和延迟确认安装",
+      "file": "backend/internal/extension/kernel/candidate_store.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-008",
+      "name": "Event System",
+      "name_en": "Kernel Event System",
+      "description": "内核事件系统，管理扩展事件的发布、订阅和分发",
+      "file": "backend/internal/extension/kernel/event/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-009",
+      "name": "Hook System",
+      "name_en": "Extension Hook System",
+      "description": "钩子系统，提供扩展插件在关键流程节点注入自定义逻辑的能力",
+      "file": "backend/internal/extension/kernel/hook/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-010",
+      "name": "Permission Gate",
+      "name_en": "Permission Gate",
+      "description": "权限门控，控制扩展对用户数据的访问权限",
+      "file": "backend/internal/extension/kernel/execution/permission_gate.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-011",
+      "name": "Saga Orchestration",
+      "name_en": "Saga Orchestration",
+      "description": "Saga编排，管理复杂多步骤操作的事务性（包安装、卸载、更新）",
+      "file": "backend/internal/extension/kernel/package_install_saga.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-012",
+      "name": "Trusted Services",
+      "name_en": "Trusted Service API",
+      "description": "可信服务API，提供扩展与后端安全通信的受控接口",
+      "file": "backend/internal/extension/kernel/trusted_service/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-013",
+      "name": "Desktop API Bridge",
+      "name_en": "Desktop Action Bridge",
+      "description": "桌面API桥接，连接内核能力与桌面端原生操作",
+      "file": "backend/internal/extension/kernel/desktop_action_bridge.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "KERNEL-014",
+      "name": "Schedule Integration",
+      "name_en": "Schedule Workflow Integration",
+      "description": "日程工作流集成，连接扩展与主动消息调度系统",
+      "file": "backend/internal/extension/kernel/schedule_workflow_integration_test.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

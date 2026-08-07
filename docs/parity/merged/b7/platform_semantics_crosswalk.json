@@ -1,0 +1,33 @@
+{
+  "note": "B7不冻结平台语义，桌面端指代Amitia核心发布形态",
+  "operit": {
+    "primary": "Android",
+    "secondary": [
+      "Linux_Shell",
+      "Termux"
+    ]
+  },
+  "amitia": {
+    "primary": "Desktop",
+    "secondary": [
+      "Web_Flutter",
+      "Android",
+      "iOS",
+      "WeChat_QQ_Sidecar"
+    ]
+  },
+  "unified_platform": {
+    "CROSS_PLATFORM": "跨平台",
+    "SERVER": "服务端",
+    "MOBILE": "移动端",
+    "WEB": "Web前端",
+    "DESKTOP": "桌面端"
+  },
+  "openminis": {
+    "primary": "iOS",
+    "secondary": [
+      "Android",
+      "Shared_Core"
+    ]
+  }
+}

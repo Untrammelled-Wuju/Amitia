@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "loop_type": "Tool-calling agentic loop",
+  "max_turns": 200,
+  "provider_factory": "ProviderFactory (iOS) / ProviderFactory (Android)",
+  "stream_handler": "streamAgentMessageClamped (SSE)",
+  "tool_loop_detector": "ToolLoopDetector (4 strategies, max 3 repeats)",
+  "context_management": "Sliding window with compaction",
+  "fallback": "AIChatViewModel+Fallback.swift",
+  "offloading": "AIChatViewModel+Offloading.swift",
+  "persistence": "AIChatViewModel+Persistence.swift",
+  "concurrent_tools": "AIChatViewModel+ConcurrentTools.swift",
+  "preflight": "AIChatViewModel+ToolPreflight.swift",
+  "budget": "AIChatViewModel+RequestBudget.swift",
+  "background_task": "AIChatViewModel+BackgroundTask.swift",
+  "attachments": "Image/file attachment handling",
+  "streaming": "SSE via URLSession / OkHttp",
+  "cancellation": "Task cancellation via Swift structured concurrency / Kotlin coroutines"
+}

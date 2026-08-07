@@ -1,0 +1,550 @@
+{
+  "version": "1.0.0",
+  "framework": "Custom route-based navigation (AppRouterState + ScreenRouteRegistry, NOT Jetpack Navigation Component)",
+  "route_registry_class": "ScreenRouteRegistry",
+  "routes": [
+    {
+      "id": "native.ai_chat",
+      "type": "native"
+    },
+    {
+      "id": "native.assistant_config",
+      "type": "native"
+    },
+    {
+      "id": "native.memory_base",
+      "type": "native"
+    },
+    {
+      "id": "native.packages",
+      "type": "native"
+    },
+    {
+      "id": "native.market",
+      "type": "native"
+    },
+    {
+      "id": "native.market_category",
+      "type": "native"
+    },
+    {
+      "id": "native.market_notifications",
+      "type": "native"
+    },
+    {
+      "id": "native.market_entry_detail",
+      "type": "native"
+    },
+    {
+      "id": "native.market_author",
+      "type": "native"
+    },
+    {
+      "id": "native.market_manage",
+      "type": "native"
+    },
+    {
+      "id": "native.artifact_publish",
+      "type": "native"
+    },
+    {
+      "id": "native.artifact_continue_publish",
+      "type": "native"
+    },
+    {
+      "id": "native.artifact_edit",
+      "type": "native"
+    },
+    {
+      "id": "native.repo_publish",
+      "type": "native"
+    },
+    {
+      "id": "native.repo_edit",
+      "type": "native"
+    },
+    {
+      "id": "native.repo_publish_version",
+      "type": "native"
+    },
+    {
+      "id": "native.toolbox",
+      "type": "native"
+    },
+    {
+      "id": "native.shizuku_commands",
+      "type": "native"
+    },
+    {
+      "id": "native.settings",
+      "type": "native"
+    },
+    {
+      "id": "native.git_hub_account",
+      "type": "native"
+    },
+    {
+      "id": "native.help",
+      "type": "native"
+    },
+    {
+      "id": "native.about",
+      "type": "native"
+    },
+    {
+      "id": "native.agreement",
+      "type": "native"
+    },
+    {
+      "id": "native.update_history",
+      "type": "native"
+    },
+    {
+      "id": "native.workflow",
+      "type": "native"
+    },
+    {
+      "id": "native.workflow_detail",
+      "type": "native"
+    },
+    {
+      "id": "native.token_config",
+      "type": "native"
+    },
+    {
+      "id": "native.tool_permission",
+      "type": "native"
+    },
+    {
+      "id": "native.user_preferences_guide",
+      "type": "native"
+    },
+    {
+      "id": "native.user_preferences_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.model_config",
+      "type": "native"
+    },
+    {
+      "id": "native.speech_services_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.external_http_chat_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.mnn_model_download",
+      "type": "native"
+    },
+    {
+      "id": "native.persona_card_generation",
+      "type": "native"
+    },
+    {
+      "id": "native.waifu_mode_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.custom_emoji_management",
+      "type": "native"
+    },
+    {
+      "id": "native.tag_market",
+      "type": "native"
+    },
+    {
+      "id": "native.model_prompts_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.functional_config",
+      "type": "native"
+    },
+    {
+      "id": "native.theme_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.global_display_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.layout_adjustment_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.chat_history_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.chat_backup_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.language_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.token_usage_statistics",
+      "type": "native"
+    },
+    {
+      "id": "native.context_summary_settings",
+      "type": "native"
+    },
+    {
+      "id": "native.tool_pkg_compose_dsl",
+      "type": "native"
+    },
+    {
+      "id": "native.tool_pkg_plugin_config",
+      "type": "native"
+    },
+    {
+      "id": "native.file_manager",
+      "type": "native"
+    },
+    {
+      "id": "native.terminal",
+      "type": "native"
+    },
+    {
+      "id": "native.terminal_setup",
+      "type": "native"
+    },
+    {
+      "id": "native.terminal_auto_config",
+      "type": "native"
+    },
+    {
+      "id": "native.app_permissions",
+      "type": "native"
+    },
+    {
+      "id": "native.ui_debugger",
+      "type": "native"
+    },
+    {
+      "id": "native.shell_executor",
+      "type": "native"
+    },
+    {
+      "id": "native.logcat",
+      "type": "native"
+    },
+    {
+      "id": "native.sql_viewer",
+      "type": "native"
+    },
+    {
+      "id": "native.ffmpeg_toolbox",
+      "type": "native"
+    },
+    {
+      "id": "native.markdown_demo",
+      "type": "native"
+    },
+    {
+      "id": "native.tool_tester",
+      "type": "native"
+    },
+    {
+      "id": "native.text_to_speech",
+      "type": "native"
+    },
+    {
+      "id": "native.speech_to_text",
+      "type": "native"
+    },
+    {
+      "id": "native.default_assistant_guide",
+      "type": "native"
+    },
+    {
+      "id": "native.process_limit_remover",
+      "type": "native"
+    },
+    {
+      "id": "native.html_packager",
+      "type": "native"
+    },
+    {
+      "id": "native.auto_glm_one_click",
+      "type": "native"
+    },
+    {
+      "id": "native.auto_glm_tool",
+      "type": "native"
+    }
+  ],
+  "main_screens": [
+    {
+      "name": "AiChat",
+      "route_id": "native.ai_chat",
+      "source": "AIChatScreen",
+      "file": "ui/features/chat/screens/AIChatScreen.kt"
+    },
+    {
+      "name": "AssistantConfig",
+      "route_id": "native.assistant_config",
+      "source": "AssistantConfigScreen",
+      "file": "ui/features/assistant/screens/AssistantConfigScreen.kt"
+    },
+    {
+      "name": "MemoryBase",
+      "route_id": "native.memory_base",
+      "source": "MemoryScreen",
+      "file": "ui/features/memory/screens/MemoryScreen.kt"
+    },
+    {
+      "name": "Packages",
+      "route_id": "native.packages",
+      "source": "PackageManagerScreen",
+      "file": "ui/features/packages/screens/PackageManagerScreen.kt"
+    },
+    {
+      "name": "Market",
+      "route_id": "native.market",
+      "source": "UnifiedMarketScreen",
+      "file": "ui/features/packages/screens/UnifiedMarketScreen.kt"
+    },
+    {
+      "name": "Toolbox",
+      "route_id": "native.toolbox",
+      "source": "ToolboxScreen",
+      "file": "ui/features/toolbox/screens/ToolboxScreen.kt"
+    },
+    {
+      "name": "ShizukuCommands",
+      "route_id": "native.shizuku_commands",
+      "source": "ShizukuDemoScreen",
+      "file": "ui/features/demo/screens/ShizukuDemoScreen.kt"
+    },
+    {
+      "name": "Settings",
+      "route_id": "native.settings",
+      "source": "SettingsScreen",
+      "file": "ui/features/settings/screens/SettingsScreen.kt"
+    },
+    {
+      "name": "Workflow",
+      "route_id": "native.workflow",
+      "source": "WorkflowListScreen",
+      "file": "ui/features/workflow/screens/WorkflowListScreen.kt"
+    },
+    {
+      "name": "Help",
+      "route_id": "native.help",
+      "source": "HelpScreen",
+      "file": "ui/features/help/screens/HelpScreen.kt"
+    },
+    {
+      "name": "About",
+      "route_id": "native.about",
+      "source": "AboutScreen",
+      "file": "ui/features/about/screens/AboutScreen.kt"
+    }
+  ],
+  "settings_screens": [
+    {
+      "name": "SettingsScreen",
+      "route_id": "native.settings",
+      "file": "ui/features/settings/screens/SettingsScreen.kt"
+    },
+    {
+      "name": "GitHubAccountScreen",
+      "route_id": "native.git_hub_account",
+      "file": "ui/features/settings/screens/GitHubAccountScreen.kt"
+    },
+    {
+      "name": "ToolPermissionSettingsScreen",
+      "route_id": "native.tool_permission",
+      "file": "ui/features/settings/screens/ToolPermissionSettingsScreen.kt"
+    },
+    {
+      "name": "UserPreferencesGuideScreen",
+      "route_id": "native.user_preferences_guide",
+      "file": "ui/features/settings/screens/UserPreferencesGuideScreen.kt"
+    },
+    {
+      "name": "UserPreferencesSettingsScreen",
+      "route_id": "native.user_preferences_settings",
+      "file": "ui/features/settings/screens/UserPreferencesSettingsScreen.kt"
+    },
+    {
+      "name": "ModelConfigScreen",
+      "route_id": "native.model_config",
+      "file": "ui/features/settings/screens/ModelConfigScreen.kt"
+    },
+    {
+      "name": "SpeechServicesSettingsScreen",
+      "route_id": "native.speech_services_settings",
+      "file": "ui/features/settings/screens/SpeechServicesSettingsScreen.kt"
+    },
+    {
+      "name": "ExternalHttpChatSettingsScreen",
+      "route_id": "native.external_http_chat_settings",
+      "file": "ui/features/settings/screens/ExternalHttpChatSettingsScreen.kt"
+    },
+    {
+      "name": "MnnModelDownloadScreen",
+      "route_id": "native.mnn_model_download",
+      "file": "ui/features/settings/screens/MnnModelDownloadScreen.kt"
+    },
+    {
+      "name": "PersonaCardGenerationScreen",
+      "route_id": "native.persona_card_generation",
+      "file": "ui/features/settings/screens/PersonaCardGenerationScreen.kt"
+    },
+    {
+      "name": "WaifuModeSettingsScreen",
+      "route_id": "native.waifu_mode_settings",
+      "file": "ui/features/settings/screens/WaifuModeSettingsScreen.kt"
+    },
+    {
+      "name": "CustomEmojiManagementScreen",
+      "route_id": "native.custom_emoji_management",
+      "file": "ui/features/settings/screens/CustomEmojiManagementScreen.kt"
+    },
+    {
+      "name": "TagMarketScreen",
+      "route_id": "native.tag_market",
+      "file": "ui/features/settings/screens/TagMarketScreen.kt"
+    },
+    {
+      "name": "ModelPromptsSettingsScreen",
+      "route_id": "native.model_prompts_settings",
+      "file": "ui/features/settings/screens/ModelPromptsSettingsScreen.kt"
+    },
+    {
+      "name": "FunctionalConfigScreen",
+      "route_id": "native.functional_config",
+      "file": "ui/features/settings/screens/FunctionalConfigScreen.kt"
+    },
+    {
+      "name": "ThemeSettingsScreen",
+      "route_id": "native.theme_settings",
+      "file": "ui/features/settings/screens/ThemeSettingsScreen.kt"
+    },
+    {
+      "name": "GlobalDisplaySettingsScreen",
+      "route_id": "native.global_display_settings",
+      "file": "ui/features/settings/screens/GlobalDisplaySettingsScreen.kt"
+    },
+    {
+      "name": "LayoutAdjustmentSettingsScreen",
+      "route_id": "native.layout_adjustment_settings",
+      "file": "ui/features/settings/screens/LayoutAdjustmentSettingsScreen.kt"
+    },
+    {
+      "name": "ChatHistorySettingsScreen",
+      "route_id": "native.chat_history_settings",
+      "file": "ui/features/settings/screens/ChatHistorySettingsScreen.kt"
+    },
+    {
+      "name": "ChatBackupSettingsScreen",
+      "route_id": "native.chat_backup_settings",
+      "file": "ui/features/settings/screens/ChatBackupSettingsScreen.kt"
+    },
+    {
+      "name": "LanguageSettingsScreen",
+      "route_id": "native.language_settings",
+      "file": "ui/features/settings/screens/LanguageSettingsScreen.kt"
+    },
+    {
+      "name": "TokenUsageStatisticsScreen",
+      "route_id": "native.token_usage_statistics",
+      "file": "ui/features/settings/screens/TokenUsageStatisticsScreen.kt"
+    },
+    {
+      "name": "ContextSummarySettingsScreen",
+      "route_id": "native.context_summary_settings",
+      "file": "ui/features/settings/screens/ContextSummarySettingsScreen.kt"
+    }
+  ],
+  "total_native_routes": 69,
+  "deep_links": [
+    {
+      "scheme": "operit",
+      "host": "github-oauth-callback",
+      "path_prefix": null,
+      "target": "MainActivity -> GitHubOAuthCoordinator",
+      "description": "GitHub OAuth callback deep link"
+    },
+    {
+      "scheme": "http",
+      "host": null,
+      "path_prefix": null,
+      "target": "MainActivity -> AIChatScreen (as shared text)",
+      "description": "View web links"
+    },
+    {
+      "scheme": "https",
+      "host": null,
+      "path_prefix": null,
+      "target": "MainActivity -> AIChatScreen (as shared text)",
+      "description": "View web links"
+    }
+  ],
+  "static_shortcuts": [
+    {
+      "shortcut_id": "voice_floating_window",
+      "label": "@string/service_voice_floating_window",
+      "target": "OperitAssistActivity",
+      "action": "com.ai.assistance.operit.action.OPEN_VOICE_FLOATING_WINDOW"
+    },
+    {
+      "shortcut_id": "open_settings",
+      "label": "@string/nav_settings",
+      "target": "MainActivity",
+      "action": "com.ai.assistance.operit.action.OPEN_SETTINGS_SHORTCUT"
+    },
+    {
+      "shortcut_id": "data_recovery",
+      "label": "@string/shortcut_data_recovery",
+      "target": "DataRecoveryActivity",
+      "action": "com.ai.assistance.operit.action.OPEN_DATA_RECOVERY"
+    }
+  ],
+  "navigation_surfaces": {
+    "MAIN_SIDEBAR_AI": [
+      "AiChat",
+      "AssistantConfig",
+      "MemoryBase"
+    ],
+    "MAIN_SIDEBAR_TOOLS": [
+      "Packages",
+      "ShizukuCommands",
+      "Workflow"
+    ],
+    "MAIN_SIDEBAR_SYSTEM": [
+      "Settings",
+      "Help",
+      "About"
+    ],
+    "MAIN_SIDEBAR_PLUGINS": "Dynamic (ToolPkg plugins with surface=main_sidebar_plugins)",
+    "TOOLBOX": [
+      "ToolTester",
+      "FileManager",
+      "TextToSpeech",
+      "SpeechToText",
+      "AppPermissions",
+      "Agreement",
+      "DefaultAssistantGuide",
+      "Terminal",
+      "UIDebugger",
+      "FFmpegToolbox",
+      "ShellExecutor",
+      "Logcat",
+      "SqlViewer",
+      "TokenConfig",
+      "ProcessLimitRemover",
+      "HtmlPackager",
+      "AutoGlmOneClick",
+      "AutoGlmTool"
+    ]
+  }
+}

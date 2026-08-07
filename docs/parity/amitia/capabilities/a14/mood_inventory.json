@@ -1,0 +1,58 @@
+{
+  "inventory_id": "INV-A14-MOOD-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "mood_tags",
+  "items": [
+    {
+      "id": "MOOD-001",
+      "name": "Mood Service",
+      "name_en": "Mood Service",
+      "description": "心情标签服务，管理对话级别的心情状态记录",
+      "file": "backend/internal/mood/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/moods",
+        "GET /api/v1/moods/conversations/:id",
+        "DELETE /api/v1/moods/:id",
+        "DELETE /api/v1/moods/conversations/:id"
+      ]
+    },
+    {
+      "id": "MOOD-002",
+      "name": "Mood Handler",
+      "name_en": "Mood HTTP Handler",
+      "description": "心情标签HTTP处理器，处理心情记录的CRUD请求",
+      "file": "backend/internal/mood/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MOOD-003",
+      "name": "Mood by Conversation",
+      "name_en": "Mood by Conversation",
+      "description": "按对话获取心情标签，追踪单次对话的心情变化",
+      "file": "backend/internal/mood/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/moods/conversations/:id"]
+    },
+    {
+      "id": "MOOD-004",
+      "name": "Mood Recovery",
+      "name_en": "Mood Recovery Mechanism",
+      "description": "心情恢复机制，在长时间无交互后自动恢复心情基线",
+      "file": "backend/internal/chat/mood_recovery.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MOOD-005",
+      "name": "Mood Label Integration",
+      "name_en": "Mood Label to Tag Mapping",
+      "description": "心情标签映射，将连续情感状态映射为离散的心情标签",
+      "file": "backend/internal/affect/label.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

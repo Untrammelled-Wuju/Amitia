@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    "Execute arbitrary Linux commands",
+    "Run scripts (bash/sh/python/node)",
+    "Install packages (apk/apt)",
+    "Process stdin/stdout/stderr piping",
+    "Process groups with kill support",
+    "Concurrent command execution",
+    "Per-session filesystem isolation via fakefs",
+    "Bind mount from host",
+    "TIM-based process control (PTY)",
+    "Crash detection and recovery",
+    "Bashism detection and injection prevention",
+    "Timeout enforcement",
+    "CPU throttling (configurable)",
+    "DNS configuration refresh",
+    "Environment variable management",
+    "Working directory context"
+  ]
+}

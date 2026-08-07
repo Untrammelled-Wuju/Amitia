@@ -1,0 +1,394 @@
+{
+  "inventory_id": "INV-A14-CROSS-PLATFORM-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "cross_platform_comparison",
+  "platform": "flutter",
+  "capability_matrix": [
+    {
+      "capability": "实时聊天",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台支持，通过共享后端API"
+    },
+    {
+      "capability": "角色管理",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台完整CRUD"
+    },
+    {
+      "capability": "记忆系统",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "包含情景记忆、世界书、用户画像"
+    },
+    {
+      "capability": "扩展/MCP",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台通过API操作"
+    },
+    {
+      "capability": "桌面宠物",
+      "flutter": "IMPLEMENTED",
+      "web": "PARTIAL",
+      "desktop": "IMPLEMENTED",
+      "android": "PARTIAL",
+      "ios": "PARTIAL",
+      "notes": "桌面端原生支持，移动端/桌面端显示页，无原生动画引擎"
+    },
+    {
+      "capability": "多渠道(微信/QQ)",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "通过后端侧车实现，前端展示配置"
+    },
+    {
+      "capability": "系统通知",
+      "flutter": "IMPLEMENTED",
+      "web": "PARTIAL",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "桌面端原生通知，浏览器Web通知"
+    },
+    {
+      "capability": "自动更新",
+      "flutter": "PARTIAL",
+      "web": "PARTIAL",
+      "desktop": "IMPLEMENTED",
+      "android": "PARTIAL",
+      "ios": "PARTIAL",
+      "notes": "桌面端electron-updater"
+    },
+    {
+      "capability": "全局热键",
+      "flutter": "NOT_IMPLEMENTED",
+      "web": "NOT_IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "NOT_IMPLEMENTED",
+      "ios": "NOT_IMPLEMENTED",
+      "notes": "仅桌面端通过Electron globalShortcut"
+    },
+    {
+      "capability": "系统托盘",
+      "flutter": "NOT_IMPLEMENTED",
+      "web": "NOT_IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "NOT_IMPLEMENTED",
+      "ios": "NOT_IMPLEMENTED",
+      "notes": "仅桌面端通过Electron Tray"
+    },
+    {
+      "capability": "本地文件访问",
+      "flutter": "PARTIAL",
+      "web": "PARTIAL",
+      "desktop": "IMPLEMENTED",
+      "android": "PARTIAL",
+      "ios": "PARTIAL",
+      "notes": "桌面端完整文件系统访问"
+    },
+    {
+      "capability": "语音输入(ASR)",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "通过API调用后端ASR服务"
+    },
+    {
+      "capability": "语音合成(TTS)",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "通过API调用后端TTS服务"
+    },
+    {
+      "capability": "开发者工具",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "事件、钩子、内核、迁移管理"
+    },
+    {
+      "capability": "创作工坊",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "技能创作、桌宠创作"
+    },
+    {
+      "capability": "工具箱",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "日志、数据库状态、运行时状态"
+    },
+    {
+      "capability": "主题切换",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "暗色/亮色/跟随系统"
+    },
+    {
+      "capability": "引导流程",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "首次使用引导"
+    },
+    {
+      "capability": "隐私扫描",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "PARTIAL",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "数据暴露检测"
+    },
+    {
+      "capability": "安全设置",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "内容过滤、安全策略"
+    },
+    {
+      "capability": "数据库管理",
+      "flutter": "PARTIAL",
+      "web": "IMPLEMENTED",
+      "desktop": "PARTIAL",
+      "android": "PARTIAL",
+      "ios": "PARTIAL",
+      "notes": "Web端完整，移动端/桌面端功能受限"
+    },
+    {
+      "capability": "SSE实时通信",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台通过标准SSE"
+    },
+    {
+      "capability": "部署模式切换",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "本地/远程部署模式"
+    },
+    {
+      "capability": "沙盒WebUI扩展",
+      "flutter": "PARTIAL",
+      "web": "IMPLEMENTED",
+      "desktop": "PARTIAL",
+      "android": "PARTIAL",
+      "ios": "PARTIAL",
+      "notes": "通过iframe沙盒"
+    },
+    {
+      "capability": "主动消息",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台规则配置"
+    },
+    {
+      "capability": "提醒管理",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台提醒CRUD"
+    },
+    {
+      "capability": "心智/灵魂状态",
+      "flutter": "IMPLEMENTED",
+      "web": "PARTIAL",
+      "desktop": "PARTIAL",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "Flutter移动端最完整"
+    },
+    {
+      "capability": "用户体验边界",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "NOT_IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "移动端/Web端展示"
+    },
+    {
+      "capability": "隐私政策",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "NOT_IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "移动端/Web端展示"
+    },
+    {
+      "capability": "引导员注册",
+      "flutter": "NOT_IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "NOT_IMPLEMENTED",
+      "android": "NOT_IMPLEMENTED",
+      "ios": "NOT_IMPLEMENTED",
+      "notes": "仅Web端"
+    },
+    {
+      "capability": "频道消息链",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "微信/QQ渠道"
+    },
+    {
+      "capability": "决策可视化",
+      "flutter": "NOT_IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "PARTIAL",
+      "android": "NOT_IMPLEMENTED",
+      "ios": "NOT_IMPLEMENTED",
+      "notes": "仅Web端，桌面端通过Web视图"
+    },
+    {
+      "capability": "角色扮演人格病理化",
+      "flutter": "PARTIAL",
+      "web": "IMPLEMENTED",
+      "desktop": "PARTIAL",
+      "android": "PARTIAL",
+      "ios": "PARTIAL",
+      "notes": "Web端最完整"
+    },
+    {
+      "capability": "图像生成",
+      "flutter": "PARTIAL",
+      "web": "IMPLEMENTED",
+      "desktop": "PARTIAL",
+      "android": "PARTIAL",
+      "ios": "PARTIAL",
+      "notes": "配置页完整，功能通过API"
+    },
+    {
+      "capability": "向量模型配置",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台配置"
+    },
+    {
+      "capability": "视觉模型配置",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台配置"
+    },
+    {
+      "capability": "声音模型配置",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台配置"
+    },
+    {
+      "capability": "LLM模型配置",
+      "flutter": "IMPLEMENTED",
+      "web": "IMPLEMENTED",
+      "desktop": "IMPLEMENTED",
+      "android": "IMPLEMENTED",
+      "ios": "IMPLEMENTED",
+      "notes": "全平台配置"
+    }
+  ],
+  "platform_parity_summary": {
+    "flutter_web": {
+      "total_capabilities": 37,
+      "fully_supported": 32,
+      "partially_supported": 5,
+      "not_supported": 0
+    },
+    "web": {
+      "total_capabilities": 37,
+      "fully_supported": 33,
+      "partially_supported": 2,
+      "not_supported": 2
+    },
+    "desktop": {
+      "total_capabilities": 37,
+      "fully_supported": 28,
+      "partially_supported": 5,
+      "not_supported": 4
+    },
+    "android": {
+      "total_capabilities": 37,
+      "fully_supported": 32,
+      "partially_supported": 5,
+      "not_supported": 0
+    },
+    "ios": {
+      "total_capabilities": 37,
+      "fully_supported": 32,
+      "partially_supported": 5,
+      "not_supported": 0
+    }
+  },
+  "metadata": {
+    "total_capabilities_tracked": 37,
+    "state_values": ["IMPLEMENTED", "PARTIAL", "NOT_IMPLEMENTED"],
+    "source_files": {
+      "flutter": "mobile_app/lib/features",
+      "web": "front/src/views",
+      "desktop": "desktop/src",
+      "android": "mobile_app/android",
+      "ios": "mobile_app/ios"
+    }
+  }
+}

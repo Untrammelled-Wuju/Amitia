@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "storage": "SQLite / file-based",
+  "capabilities": [
+    "Write memory",
+    "Get/search memories",
+    "Fuzzy text search",
+    "Auto-summarize conversation",
+    "Cross-session persistence",
+    "Edit memory",
+    "Delete memory",
+    "System prompt injection"
+  ]
+}

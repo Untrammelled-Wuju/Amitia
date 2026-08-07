@@ -1,0 +1,50 @@
+{
+  "statuses": [
+    {
+      "value": "UNINSTALLING",
+      "description": "Extension uninstalling"
+    },
+    {
+      "value": "DISABLED",
+      "description": "Extension disabled"
+    },
+    {
+      "value": "DISCOVERED",
+      "description": "Extension discovered"
+    },
+    {
+      "value": "ENABLED",
+      "description": "Extension enabled"
+    },
+    {
+      "value": "FAILED",
+      "description": "Extension operation failed"
+    },
+    {
+      "value": "UPDATING",
+      "description": "Extension updating"
+    },
+    {
+      "value": "ENABLING",
+      "description": "Extension enabling"
+    },
+    {
+      "value": "INSTALLING",
+      "description": "Extension installing"
+    },
+    {
+      "value": "INSTALLED",
+      "description": "Extension installed"
+    },
+    {
+      "value": "DISABLING",
+      "description": "Extension disabling"
+    },
+    {
+      "value": "INCOMPATIBLE",
+      "description": "Extension incompatible"
+    }
+  ],
+  "statusType": "extension",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

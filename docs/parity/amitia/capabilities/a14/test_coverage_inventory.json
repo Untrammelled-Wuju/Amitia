@@ -1,0 +1,160 @@
+{
+  "go_tests": 30,
+  "flutter_tests": 0,
+  "web_tests": 0,
+  "scripts_tests": 0,
+  "coverage_estimate": "10-15%",
+  "test_files": [
+    {
+      "file": "backend/internal/agent/service_test.go",
+      "type": "unit",
+      "target": "Agent服务"
+    },
+    {
+      "file": "backend/internal/chat/prompt_builder_test.go",
+      "type": "unit",
+      "target": "Prompt构建器"
+    },
+    {
+      "file": "backend/internal/chat/orchestrator_test.go",
+      "type": "unit",
+      "target": "编排器"
+    },
+    {
+      "file": "backend/internal/affect/engine_test.go",
+      "type": "unit",
+      "target": "Affect情绪引擎"
+    },
+    {
+      "file": "backend/internal/affect/repository_test.go",
+      "type": "unit",
+      "target": "Affect持久化"
+    },
+    {
+      "file": "backend/internal/need/engine_test.go",
+      "type": "unit",
+      "target": "需求引擎"
+    },
+    {
+      "file": "backend/internal/relationship/engine_update_test.go",
+      "type": "unit",
+      "target": "关系更新引擎"
+    },
+    {
+      "file": "backend/internal/relationship/attachment_test.go",
+      "type": "unit",
+      "target": "依恋类型"
+    },
+    {
+      "file": "backend/internal/memory/search_test.go",
+      "type": "unit",
+      "target": "记忆搜索"
+    },
+    {
+      "file": "backend/internal/memory/pipeline_service_test.go",
+      "type": "unit",
+      "target": "记忆Pipeline"
+    },
+    {
+      "file": "backend/internal/memory/conflict_service_test.go",
+      "type": "unit",
+      "target": "记忆矛盾检测"
+    },
+    {
+      "file": "backend/internal/memory/candidate_service_test.go",
+      "type": "unit",
+      "target": "记忆候选"
+    },
+    {
+      "file": "backend/internal/memory/working_memory_test.go",
+      "type": "unit",
+      "target": "工作记忆"
+    },
+    {
+      "file": "backend/internal/personality/compiler_test.go",
+      "type": "unit",
+      "target": "性格编译器"
+    },
+    {
+      "file": "backend/internal/tool/registry_test.go",
+      "type": "unit",
+      "target": "Tool注册表"
+    },
+    {
+      "file": "backend/internal/tool/executor_test.go",
+      "type": "unit",
+      "target": "Tool执行器"
+    },
+    {
+      "file": "backend/internal/psyche/service_test.go",
+      "type": "unit",
+      "target": "心理服务"
+    },
+    {
+      "file": "backend/internal/embedding/service_test.go",
+      "type": "unit",
+      "target": "向量Embedding服务"
+    },
+    {
+      "file": "backend/internal/worldbook/service_test.go",
+      "type": "unit",
+      "target": "世界书服务"
+    },
+    {
+      "file": "backend/internal/character/service_test.go",
+      "type": "unit",
+      "target": "角色服务"
+    },
+    {
+      "file": "backend/internal/episodic/service_test.go",
+      "type": "unit",
+      "target": "情景记忆服务"
+    },
+    {
+      "file": "backend/internal/delivery/worker_test.go",
+      "type": "unit",
+      "target": "投递Worker"
+    },
+    {
+      "file": "backend/internal/proactive/executor_test.go",
+      "type": "unit",
+      "target": "主动消息执行器"
+    },
+    {
+      "file": "backend/internal/companion/schedule_service_test.go",
+      "type": "unit",
+      "target": "日程服务"
+    },
+    {
+      "file": "backend/internal/security/permission_evaluator_test.go",
+      "type": "unit",
+      "target": "权限评估器"
+    },
+    {
+      "file": "backend/internal/mcp/client/connection_test.go",
+      "type": "unit",
+      "target": "MCP连接"
+    },
+    {
+      "file": "backend/internal/extension/kernel/runtime_test.go",
+      "type": "unit",
+      "target": "Kernel运行时"
+    },
+    {
+      "file": "backend/pkg/database/qdrandb/client_test.go",
+      "type": "integration",
+      "target": "Qdrant客户端"
+    },
+    {
+      "file": "backend/internal/chat/llm_client_test.go",
+      "type": "unit",
+      "target": "LLM客户端"
+    },
+    {
+      "file": "backend/internal/graph/client_test.go",
+      "type": "integration",
+      "target": "图谱客户端"
+    }
+  ],
+  "notes": "测试覆盖集中在核心引擎和服务层，前端(Flutter/Web)无自动化测试文件，scripts/有测试目录但未统计具体数量"
+}

@@ -1,0 +1,150 @@
+{
+  "inventory_id": "INV-A14-CHARACTER-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "character_system",
+  "items": [
+    {
+      "id": "CHAR-001",
+      "name": "Character CRUD",
+      "name_en": "Character CRUD Operations",
+      "description": "角色核心CRUD操作，创建、读取、更新、删除角色实体",
+      "file": "backend/internal/character/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/characters",
+        "GET /api/v1/characters/:id",
+        "POST /api/v1/characters",
+        "PUT /api/v1/characters/:id",
+        "DELETE /api/v1/characters/:id"
+      ]
+    },
+    {
+      "id": "CHAR-002",
+      "name": "Character Active Switch",
+      "name_en": "Active Character Switch",
+      "description": "激活角色切换，设置当前对话使用的活跃角色",
+      "file": "backend/internal/character/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/characters/:id/active"]
+    },
+    {
+      "id": "CHAR-003",
+      "name": "Character Test",
+      "name_en": "Character Test Chat",
+      "description": "角色测试聊天接口，在不保存会话的情况下测试角色响应",
+      "file": "backend/internal/character/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/characters/:id/test"]
+    },
+    {
+      "id": "CHAR-004",
+      "name": "Character Export Pack",
+      "name_en": "Character Export Package",
+      "description": "角色导出功能，将角色配置打包为可分享的数据包",
+      "file": "backend/internal/character/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/characters/:id/export-pack"]
+    },
+    {
+      "id": "CHAR-005",
+      "name": "Character Import Pack",
+      "name_en": "Character Import Package",
+      "description": "角色导入功能，预览和确认导入角色数据包",
+      "file": "backend/internal/character/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/v1/characters/import-pack/preview",
+        "POST /api/v1/characters/import-pack/confirm"
+      ]
+    },
+    {
+      "id": "CHAR-006",
+      "name": "Character Templates",
+      "name_en": "Character Templates",
+      "description": "角色模板系统，提供预定义的角色模板供快速创建",
+      "file": "backend/internal/character/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/character-templates",
+        "GET /api/v1/character-templates/:id",
+        "POST /api/v1/character-templates/:id/create-character"
+      ]
+    },
+    {
+      "id": "CHAR-007",
+      "name": "Role Profile",
+      "name_en": "Companion Role Profile",
+      "description": "伴侣角色档案，管理角色的详细背景信息和属性",
+      "file": "backend/internal/character/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/companion/role-profile",
+        "PUT /api/v1/companion/role-profile"
+      ]
+    },
+    {
+      "id": "CHAR-008",
+      "name": "Character Repository",
+      "name_en": "Character Repository",
+      "description": "角色数据仓库，处理角色实体的持久化和复杂查询",
+      "file": "backend/internal/character/repository.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHAR-009",
+      "name": "Character Avatar",
+      "name_en": "Character Avatar Upload",
+      "description": "角色头像上传接口，支持图片上传和头像管理",
+      "file": "backend/internal/character/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/characters/:id/avatar"]
+    },
+    {
+      "id": "CHAR-010",
+      "name": "Character Life Scores Stub",
+      "name_en": "Character Life Score Stubs",
+      "description": "角色生命评分系统stub，提供健康、金钱、娱乐等维度的占位接口",
+      "file": "backend/internal/character/model.go",
+      "state": "STUB",
+      "endpoints": []
+    },
+    {
+      "id": "CHAR-011",
+      "name": "Character Appraisal Stub",
+      "name_en": "Character Appraisal Stub",
+      "description": "角色评价系统stub，用于未来实现角色对事件的自动评价",
+      "file": "backend/internal/character/model.go",
+      "state": "STUB",
+      "endpoints": []
+    },
+    {
+      "id": "CHAR-012",
+      "name": "Character Interaction Stub",
+      "name_en": "Character Interaction Stub",
+      "description": "角色间交互stub，用于未来实现多角色间互动",
+      "file": "backend/internal/character/model.go",
+      "state": "STUB",
+      "endpoints": []
+    },
+    {
+      "id": "CHAR-013",
+      "name": "Character Inventory Stub",
+      "name_en": "Character Inventory Stub",
+      "description": "角色物品系统stub，用于未来实现角色物品管理",
+      "file": "backend/internal/character/model.go",
+      "state": "STUB",
+      "endpoints": []
+    },
+    {
+      "id": "CHAR-014",
+      "name": "Character Social Stub",
+      "name_en": "Character Social Stub",
+      "description": "角色社交系统stub，用于未来实现角色社交网络",
+      "file": "backend/internal/character/model.go",
+      "state": "STUB",
+      "endpoints": []
+    }
+  ]
+}

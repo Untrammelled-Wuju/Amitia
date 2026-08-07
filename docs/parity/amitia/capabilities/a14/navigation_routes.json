@@ -1,0 +1,39 @@
+{
+  "id": "navigation_routes",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "navigation_routes",
+  "description": "前端导航路由统一清单(Web端 + Flutter端)",
+  "web_routes": {
+    "router": "front/src/router/index.ts",
+    "total_routes": 50,
+    "key_routes": [
+      "/login", "/onboarding",
+      "/chat", "/chat/:conversationId",
+      "/character", "/character/:id",
+      "/character-voice", "/character-config",
+      "/asr", "/realtime",
+      "/memory-manager", "/memory-timeline", "/memory-graph",
+      "/graph", "/world-book", "/episodic",
+      "/reminders", "/proactive-rules",
+      "/extensions", "/plugins", "/skills", "/mcp",
+      "/long-running", "/runtime-mode",
+      "/dashboard", "/settings",
+      "/chat-cleanup", "/chat-import", "/chat-logs",
+      "/import", "/privacy", "/privacy-scan",
+      "/decision-viz", "/companion-debug",
+      "/creative-workshop",
+      "/kernel", "/kernel/dev-console", "/kernel/migration", "/kernel/schedule", "/kernel/task"
+    ]
+  },
+  "flutter_routes": {
+    "router": "mobile_app/lib/app/router.dart + app_routes.dart",
+    "total_routes": 80,
+    "note": "flutter_routes_inventory.json与web_routes_inventory.json分别记录"
+  },
+  "side_nav": {
+    "file": "front/src/components/SideNav.vue",
+    "whitelist": "front/src/navigation/nav-whitelist.ts",
+    "app_nav": "front/src/navigation/app-nav.ts"
+  }
+}

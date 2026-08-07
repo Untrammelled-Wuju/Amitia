@@ -1,0 +1,150 @@
+{
+  "inventory_id": "INV-A14-FLUTTER-FEATURES-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "flutter_features",
+  "platform": "flutter",
+  "items": [
+    {
+      "id": "FL-F-001",
+      "feature": "chat",
+      "path": "lib/features/chat",
+      "pages": ["chat_page.dart"],
+      "services": ["chat_service.dart"],
+      "capabilities": ["实时对话", "消息发送", "流式接收", "消息复制", "消息删除", "角色切换", "Markdown渲染"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-002",
+      "feature": "characters",
+      "path": "lib/features/characters",
+      "pages": ["character_list_page.dart", "character_create_page.dart", "character_detail_page.dart", "character_debug_page.dart", "character_life_rules_page.dart", "character_voice_page.dart", "character_memory_page.dart", "character_timeline_page.dart", "character_proactive_page.dart", "character_psyche_page.dart"],
+      "services": ["character_service.dart", "character_detail_service.dart"],
+      "capabilities": ["角色CRUD", "角色人设配置", "角色生活规则", "角色记忆关联", "角色语音配置", "角色主动消息", "角色心智状态"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-003",
+      "feature": "memory",
+      "path": "lib/features/memory",
+      "pages": ["memory_page.dart", "memory_timeline_page.dart", "memory_graph_page.dart", "world_book_page.dart", "episodic_memory_page.dart", "user_profiles_page.dart", "memory_manager_page.dart"],
+      "services": ["memory_service.dart"],
+      "capabilities": ["记忆管理", "记忆时间线", "记忆图谱可视化", "世界书管理", "情景记忆", "用户画像", "记忆候选项管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-004",
+      "feature": "extensions",
+      "path": "lib/features/extensions",
+      "pages": ["extension_center_page.dart", "extension_packages_page.dart", "mcp_list_page.dart", "mcp_detail_page.dart", "mcp_edit_page.dart", "agent_skills_page.dart", "execution_runs_page.dart", "extension_page_host_page.dart", "skill_detail_page.dart", "plugin_detail_page.dart", "system_plugins_page.dart"],
+      "services": ["extension_service.dart"],
+      "capabilities": ["扩展中心", "MCP服务器管理", "MCP服务器详情/编辑", "插件详情", "技能详情", "代理技能", "执行记录", "扩展页面托管", "系统插件"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-005",
+      "feature": "channels",
+      "path": "lib/features/channels",
+      "pages": ["channel_center_page.dart", "wechat_page.dart", "qq_page.dart"],
+      "services": ["channel_service.dart"],
+      "capabilities": ["渠道管理", "微信登录/消息", "QQ登录/消息", "渠道状态监控"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-006",
+      "feature": "workshop",
+      "path": "lib/features/workshop",
+      "pages": ["workshop_home_page.dart", "skill_workshop_page.dart", "skill_draft_editor_page.dart", "pet_center_page.dart", "pet_create_page.dart", "pet_tasks_page.dart", "pet_installations_page.dart", "pet_processing_page.dart", "pet_action_editor_page.dart"],
+      "services": [],
+      "capabilities": ["创作工坊入口", "技能创作/草稿/编辑", "桌宠创建/任务/安装/处理", "帧序列审查", "动作编辑器", "宠物安装管理"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-007",
+      "feature": "settings",
+      "path": "lib/features/settings",
+      "pages": ["settings_page.dart", "model_config_page.dart", "model_settings_page.dart", "appearance_settings_page.dart", "backup_page.dart", "ai_config_page.dart", "system_settings_page.dart", "temporal_settings_page.dart", "safety_page.dart", "maintenance_page.dart", "storage_page.dart", "theme_settings_page.dart", "user_settings_page.dart", "devices_page.dart", "privacy_scan_page.dart", "deployment_page.dart", "about_page_new.dart"],
+      "services": [],
+      "capabilities": ["系统设置", "模型配置(LLM/语音/视觉/嵌入/图像生成)", "外观配置", "数据备份恢复", "AI功能配置", "时间感知配置", "安全策略", "存储管理", "主题切换", "设备管理", "隐私扫描", "部署模式切换", "关于页面"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-008",
+      "feature": "toolbox",
+      "path": "lib/features/toolbox",
+      "pages": ["toolbox_page.dart", "toolbox_file_browser_page.dart", "toolbox_workspace_page.dart", "toolbox_task_log_page.dart", "toolbox_log_page.dart", "toolbox_prompt_trace_page.dart", "toolbox_runtime_status_page.dart", "toolbox_database_status_page.dart", "toolbox_device_status_page.dart"],
+      "services": [],
+      "capabilities": ["系统工具箱", "文件浏览器", "工作区管理", "任务日志", "日志查看", "Prompt调用链追踪", "运行时状态监控", "数据库健康检测", "设备连通性检测"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-009",
+      "feature": "developer",
+      "path": "lib/features/developer",
+      "pages": ["developer_home_page.dart", "dev_console_page.dart", "dev_mode_page.dart", "desktop_contributions_page.dart", "events_page.dart", "hooks_page.dart", "kernel_home_page.dart", "kernel_tasks_page.dart", "migrations_page.dart", "schedules_page.dart", "trusted_services_page.dart", "updates_page.dart", "wasm_page.dart"],
+      "services": [],
+      "capabilities": ["开发者控制台", "开发者模式", "桌面贡献面板", "事件中心", "钩子管理", "内核管理", "内核任务", "数据迁移", "定时任务", "信任服务", "更新管理", "WASM运行时"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-010",
+      "feature": "game_center",
+      "path": "lib/features/game_center",
+      "pages": ["game_center_page.dart"],
+      "services": [],
+      "capabilities": ["游戏中心入口", "游戏列表", "游戏卡片展示"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-011",
+      "feature": "desktop_pet",
+      "path": "lib/features/desktop_pet",
+      "pages": ["desktop_pet_page.dart"],
+      "services": [],
+      "capabilities": ["桌面宠物展示页", "宠物角色绑定", "宠物交互入口", "宠物状态显示"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-012",
+      "feature": "dashboard",
+      "path": "lib/features/dashboard",
+      "pages": ["dashboard_page.dart"],
+      "services": [],
+      "capabilities": ["运行状态面板", "日志汇总", "导入统计", "资源监控"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-013",
+      "feature": "auth",
+      "path": "lib/features/auth",
+      "pages": ["login_page.dart"],
+      "services": ["auth_service.dart"],
+      "capabilities": ["用户登录", "Token认证", "登录态校验"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-014",
+      "feature": "agent",
+      "path": "lib/features/agent",
+      "pages": ["agent_page.dart", "agent_task_detail_page.dart"],
+      "services": [],
+      "capabilities": ["代理列表", "代理任务列表", "任务详情查看", "任务进度跟踪"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "FL-F-015",
+      "feature": "reminders",
+      "path": "lib/features/reminders",
+      "pages": ["reminders_page.dart"],
+      "services": ["reminder_service.dart"],
+      "capabilities": ["提醒CRUD", "定时触发", "提醒列表"],
+      "state": "IMPLEMENTED"
+    }
+  ],
+  "metadata": {
+    "total_features": 15,
+    "root_path": "lib/features",
+    "total_page_files": 106,
+    "total_service_files": 18
+  }
+}

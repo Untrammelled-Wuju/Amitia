@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "services": [
+    "4 foreground services found"
+  ],
+  "receivers": [
+    "3 broadcast receivers found"
+  ],
+  "content_providers": [
+    "Calendar/Contacts/MediaStore via android.content"
+  ],
+  "permission_uses": "31 uses-permission in manifest"
+}

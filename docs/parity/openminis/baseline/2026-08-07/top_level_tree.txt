@@ -1,0 +1,14 @@
+.git
+.gitignore
+.gitmodules
+BUILDING.md
+CONTRIBUTING.md
+LICENSE
+README.md
+THIRD_PARTY_LICENSES.md
+.github/
+assets/
+deps/
+docs/
+scripts/
+src/

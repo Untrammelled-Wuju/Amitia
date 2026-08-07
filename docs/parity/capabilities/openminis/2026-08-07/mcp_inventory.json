@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "transports": [
+    "STDIO",
+    "SSE",
+    "HTTP"
+  ],
+  "oauth": true,
+  "claude_desktop_import": true,
+  "env_var_injection": true,
+  "tool_discovery": "Automatic from MCP server capabilities",
+  "health_check": "Periodic connection health check",
+  "session_level_enable": true,
+  "timeout_cancel": true,
+  "multi_server": true
+}

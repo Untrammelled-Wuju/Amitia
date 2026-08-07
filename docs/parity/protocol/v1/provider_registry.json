@@ -1,0 +1,64 @@
+{
+  "providers": [
+    {
+      "Name": "OpenAI",
+      "Capabilities": [
+        "CAP.MODEL.INFERENCE.CHAT",
+        "CAP.MODEL.INFERENCE.COMPLETION"
+      ],
+      "Type": "cloud",
+      "ProviderId": "provider.model.openai"
+    },
+    {
+      "Name": "Anthropic",
+      "Capabilities": [
+        "CAP.MODEL.INFERENCE.CHAT"
+      ],
+      "Type": "cloud",
+      "ProviderId": "provider.model.anthropic"
+    },
+    {
+      "Name": "Local Model",
+      "Capabilities": [
+        "CAP.MODEL.INFERENCE.LOCAL"
+      ],
+      "Type": "local",
+      "ProviderId": "provider.model.local"
+    },
+    {
+      "Name": "Azure Speech",
+      "Capabilities": [
+        "CAP.VOICE.RECOGNIZE.SPEECH",
+        "CAP.VOICE.SYNTHESIZE.SPEECH"
+      ],
+      "Type": "cloud",
+      "ProviderId": "provider.voice.azure"
+    },
+    {
+      "Name": "ElevenLabs",
+      "Capabilities": [
+        "CAP.VOICE.SYNTHESIZE.SPEECH"
+      ],
+      "Type": "cloud",
+      "ProviderId": "provider.voice.elevenlabs"
+    },
+    {
+      "Name": "Serper",
+      "Capabilities": [
+        "CAP.SEARCH.WEB.QUERY"
+      ],
+      "Type": "cloud",
+      "ProviderId": "provider.search.serper"
+    },
+    {
+      "Name": "OpenAI Vision",
+      "Capabilities": [
+        "CAP.VISION.ANALYZE.IMAGE"
+      ],
+      "Type": "cloud",
+      "ProviderId": "provider.vision.openai"
+    }
+  ],
+  "registryId": "PARITY-2026-08-07-V1-PROVIDER-REGISTRY",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

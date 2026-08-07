@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-08-07T14:00:00+08:00",
+  "baseline_id": "PARITY-2026-08-07-V1",
+  "profile_requirements_by_platform": {
+    "PROFILE_UI": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 9,
+      "total": 9,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_VOICE": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 6,
+      "total": 6,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_NATIVE": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 3,
+      "REQUIRED": 32,
+      "total": 35,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_MODEL": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 4,
+      "total": 4,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_TOOL": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 134,
+      "total": 371,
+      "PRESERVE_AMITIA": 237
+    },
+    "PROFILE_BACKGROUND": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 1,
+      "REQUIRED": 4,
+      "total": 5,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_RUNTIME": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 10,
+      "total": 10,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_SECURITY": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 12,
+      "total": 12,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_EXTENSION": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 19,
+      "total": 19,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_DATA": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 22,
+      "total": 22,
+      "PRESERVE_AMITIA": 0
+    },
+    "PROFILE_CORE": {
+      "REQUIRED_PLATFORM_EQUIVALENT": 0,
+      "REQUIRED": 10,
+      "total": 13,
+      "PRESERVE_AMITIA": 3
+    }
+  },
+  "platforms": [
+    {
+      "id": "android",
+      "origin_source": "OPERIT",
+      "name": "Android"
+    },
+    {
+      "id": "ios",
+      "origin_source": "OPENMINIS",
+      "name": "iOS"
+    },
+    {
+      "id": "web",
+      "origin_source": "AMITIA",
+      "name": "Web Browser"
+    },
+    {
+      "id": "desktop",
+      "origin_source": "AMITIA",
+      "name": "Desktop (Win/Mac/Linux)"
+    },
+    {
+      "id": "flutter",
+      "origin_source": "AMITIA",
+      "name": "Flutter (Mobile)"
+    },
+    {
+      "id": "backend",
+      "origin_source": "AMITIA",
+      "name": "Backend Server"
+    }
+  ],
+  "platform_requirements": {
+    "android": {
+      "required_capabilities": 201,
+      "preserve_amitia_on_android": 240,
+      "source": "OPERIT",
+      "platform_equivalent_capabilities": 4
+    },
+    "desktop": {
+      "amitia_native_capabilities": 250,
+      "parity_required_from_sources": 266,
+      "source": "AMITIA"
+    },
+    "web": {
+      "amitia_native_capabilities": 250,
+      "parity_required_from_sources": 266,
+      "source": "AMITIA"
+    },
+    "ios": {
+      "preserve_amitia_on_ios": 240,
+      "required_capabilities": 77,
+      "source": "OPENMINIS",
+      "platform_equivalent_capabilities": 0
+    }
+  }
+}

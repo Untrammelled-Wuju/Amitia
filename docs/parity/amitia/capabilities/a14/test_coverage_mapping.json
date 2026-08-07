@@ -1,0 +1,30 @@
+{
+  "id": "test_coverage_mapping",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "test_coverage",
+  "description": "测试→源码覆盖映射",
+  "test_files_summary": {
+    "total_test_files": 200,
+    "go_test_files": 150,
+    "vue_test_files": 10,
+    "ts_test_files": 20,
+    "flutter_test_files": 20
+  },
+  "key_test_mappings": [
+    { "test_file": "backend/internal/affect/engine_test.go", "covers": "backend/internal/affect/engine.go" },
+    { "test_file": "backend/internal/affect/decay_test.go", "covers": "backend/internal/affect/engine.go (decay logic)" },
+    { "test_file": "backend/internal/affect/label_test.go", "covers": "backend/internal/affect/label.go" },
+    { "test_file": "backend/internal/chat/message_pipeline_test.go", "covers": "backend/internal/chat/message_pipeline.go" },
+    { "test_file": "backend/internal/chat/emotion_fusion_test.go", "covers": "backend/internal/chat/emotion_fusion.go" },
+    { "test_file": "backend/internal/chat/tool_runtime_test", "covers": "backend/internal/chat/tool_runtime.go (via integration)" },
+    { "test_file": "backend/internal/prompt/compiler_test.go", "covers": "backend/internal/prompt/compiler.go" },
+    { "test_file": "backend/internal/mcp/mcp_baseline_test.go", "covers": "backend/internal/mcp/ (全模块基线)" },
+    { "test_file": "backend/internal/extension/plugin_baseline_test.go", "covers": "backend/internal/extension/ (插件基线)" },
+    { "test_file": "backend/internal/extension/workflow_baseline_test.go", "covers": "workflow编译/执行" },
+    { "test_file": "backend/internal/extension/agent_skill_baseline_test.go", "covers": "Agent技能全链路" },
+    { "test_file": "desktop/src/runtime/process-supervisor.test.ts", "covers": "process-supervisor.ts" },
+    { "test_file": "desktop/src/main/core-manager.test.ts", "covers": "core-manager.ts" }
+  ],
+  "note": "项目以Go测试为主，覆盖率较高的模块：affect/prompt/extension/chat/mcp/memory"
+}

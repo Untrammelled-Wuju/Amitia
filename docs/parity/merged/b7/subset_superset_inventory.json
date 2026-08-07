@@ -1,0 +1,68 @@
+{
+  "generated_at": "2026-08-07T13:52:31+08:00",
+  "amitia_superset_count": 3,
+  "schema_version": 1,
+  "details": [
+    {
+      "amitia_proj_count": 17,
+      "map_id": "MAP-0065",
+      "external_proj_count": 26,
+      "relationship": "AMITIA_SUBSET"
+    },
+    {
+      "amitia_proj_count": 2,
+      "map_id": "MAP-0164",
+      "external_proj_count": 25,
+      "relationship": "AMITIA_SUBSET"
+    },
+    {
+      "amitia_proj_count": 20,
+      "map_id": "MAP-0177",
+      "external_proj_count": 7,
+      "relationship": "AMITIA_SUPERSET"
+    },
+    {
+      "amitia_proj_count": 7,
+      "map_id": "MAP-0244",
+      "external_proj_count": 16,
+      "relationship": "AMITIA_SUBSET"
+    },
+    {
+      "amitia_proj_count": 29,
+      "map_id": "MAP-0257",
+      "external_proj_count": 11,
+      "relationship": "AMITIA_SUPERSET"
+    },
+    {
+      "amitia_proj_count": 1,
+      "map_id": "MAP-0287",
+      "external_proj_count": 5,
+      "relationship": "AMITIA_SUBSET"
+    },
+    {
+      "amitia_proj_count": 6,
+      "map_id": "MAP-0313",
+      "external_proj_count": 3,
+      "relationship": "AMITIA_SUPERSET"
+    },
+    {
+      "amitia_proj_count": 1,
+      "map_id": "MAP-0320",
+      "external_proj_count": 13,
+      "relationship": "AMITIA_SUBSET"
+    },
+    {
+      "amitia_proj_count": 2,
+      "map_id": "MAP-0418",
+      "external_proj_count": 35,
+      "relationship": "AMITIA_SUBSET"
+    },
+    {
+      "amitia_proj_count": 2,
+      "map_id": "MAP-0483",
+      "external_proj_count": 7,
+      "relationship": "AMITIA_SUBSET"
+    }
+  ],
+  "amitia_subset_count": 7
+}

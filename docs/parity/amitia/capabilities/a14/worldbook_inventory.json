@@ -1,0 +1,67 @@
+{
+  "inventory_id": "INV-A14-WORLD-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "worldbook_knowledge",
+  "items": [
+    {
+      "id": "WORLD-001",
+      "name": "Worldbook Service",
+      "name_en": "Worldbook Service",
+      "description": "世界书服务，管理知识条目的创建、更新和匹配",
+      "file": "backend/internal/worldbook/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/world-book",
+        "POST /api/v1/world-book",
+        "PUT /api/v1/world-book/:id",
+        "DELETE /api/v1/world-book/:id"
+      ]
+    },
+    {
+      "id": "WORLD-002",
+      "name": "Worldbook Model",
+      "name_en": "Worldbook Data Model",
+      "description": "世界书数据模型，定义知识条目的结构（关键词、内容、激活条件等）",
+      "file": "backend/internal/worldbook/model.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "WORLD-003",
+      "name": "Worldbook Repository",
+      "name_en": "Worldbook Repository",
+      "description": "世界书数据仓库，处理知识条目的持久化存储和查询",
+      "file": "backend/internal/worldbook/repository.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "WORLD-004",
+      "name": "Worldbook Keyword Match",
+      "name_en": "Worldbook Keyword Matching",
+      "description": "世界书关键词匹配引擎，根据对话内容触发相关知识条目",
+      "file": "backend/internal/worldbook/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/world-book/match"]
+    },
+    {
+      "id": "WORLD-005",
+      "name": "Worldbook System Prompt",
+      "name_en": "Worldbook System Prompt Generator",
+      "description": "世界书系统提示生成，将匹配的知识条目注入LLM上下文",
+      "file": "backend/internal/worldbook/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/world-book/system-prompt"]
+    },
+    {
+      "id": "WORLD-006",
+      "name": "Worldbook Bulk Operations",
+      "name_en": "Worldbook Bulk Delete",
+      "description": "世界书批量删除和全量管理操作",
+      "file": "backend/internal/worldbook/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["DELETE /api/v1/world-book"]
+    }
+  ]
+}

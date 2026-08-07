@@ -1,0 +1,42 @@
+{
+  "statuses": [
+    {
+      "value": "UNSUPPORTED",
+      "description": "Permission unsupported on this platform"
+    },
+    {
+      "value": "NOT_REQUIRED",
+      "description": "Permission not required"
+    },
+    {
+      "value": "UNKNOWN",
+      "description": "Permission state unknown"
+    },
+    {
+      "value": "DENIED_PERMANENTLY",
+      "description": "Permission permanently denied"
+    },
+    {
+      "value": "RESTRICTED",
+      "description": "Permission restricted"
+    },
+    {
+      "value": "DENIED",
+      "description": "Permission denied"
+    },
+    {
+      "value": "GRANTED",
+      "description": "Permission granted"
+    },
+    {
+      "value": "REQUESTING",
+      "description": "Permission request in progress"
+    },
+    {
+      "value": "NOT_REQUESTED",
+      "description": "Permission not requested yet"
+    }
+  ],
+  "statusType": "permission",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

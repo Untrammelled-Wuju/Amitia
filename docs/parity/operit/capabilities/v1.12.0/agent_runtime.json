@@ -1,0 +1,284 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "source": "agent_tool_scan.json"
+  },
+  "framework": {
+    "entrypoint_files": [
+      {
+        "file": "api/chat/EnhancedAIService.kt",
+        "class": "EnhancedAIService",
+        "description": "Core chat orchestration service - singleton per chat instance. Manages full conversation lifecycle including tool execution loop, streaming, and token counting.",
+        "line_declaration": 97,
+        "key_methods": [
+          {
+            "name": "getInstance",
+            "line": 118,
+            "description": "Returns singleton EnhancedAIService instance"
+          },
+          {
+            "name": "getChatInstance",
+            "line": 128,
+            "description": "Returns per-chatId EnhancedAIService instance"
+          },
+          {
+            "name": "sendMessage",
+            "line": 463,
+            "description": "Main entry: sends user message, processes stream, handles tool invocations"
+          },
+          {
+            "name": "processStreamCompletion",
+            "line": 1678,
+            "description": "Post-stream processing: extracts tool calls, dispatches execution"
+          },
+          {
+            "name": "handleToolInvocations",
+            "line": 1941,
+            "description": "Handles multiple tool invocations from a single AI response"
+          },
+          {
+            "name": "processToolResults",
+            "line": 2156,
+            "description": "Feeds tool results back to AI for next turn (agentic loop)"
+          }
+        ]
+      }
+    ],
+    "agent_loop_classes": [
+      {
+        "file": "api/chat/EnhancedAIService.kt",
+        "class": "EnhancedAIService",
+        "loop_mechanism": "Implicit agentic loop via processToolResults() -> AIService.sendMessage() recursion",
+        "line_loop_logic": "1678-2410",
+        "description": "After AI responds with tool calls, results are collected and fed back into the conversation. There is no explicit max_iterations in the chat loop; it continues until the AI responds without tool calls."
+      },
+      {
+        "file": "core/tools/agent/PhoneAgent.kt",
+        "class": "PhoneAgent",
+        "loop_mechanism": "Explicit max-steps UI automation loop",
+        "line_loop_logic": "355-593",
+        "description": "Vision-language agent for Android UI automation. Uses screenshot + action loop up to maxSteps (default 20).",
+        "key_config": {
+          "class": "AgentConfig",
+          "field": "maxSteps",
+          "default_value": 20,
+          "line": 44
+        },
+        "key_methods": [
+          {
+            "name": "run",
+            "line": 355,
+            "description": "Main agent loop entry - sends task+systemPrompt, iterates _executeStep until finished or maxSteps"
+          },
+          {
+            "name": "_executeStep",
+            "line": 602,
+            "description": "Single agent step: screenshot -> AI -> parse action -> execute via ActionHandler"
+          },
+          {
+            "name": "parseAgentAction",
+            "line": 691,
+            "description": "Parses do(action=...) and finish(message=...) from AI response"
+          },
+          {
+            "name": "reset",
+            "line": 596,
+            "description": "Clears agent context history and step counter"
+          }
+        ]
+      },
+      {
+        "file": "core/tools/agent/PhoneAgent.kt",
+        "class": "ActionHandler",
+        "line_declaration": 762,
+        "description": "Executes parsed PhoneAgent actions. Contains executeAgentAction() with Launch/Tap/Type/Swipe/Back/Home/Wait/Take_over handlers.",
+        "key_methods": [
+          {
+            "name": "executeAgentAction",
+            "line": 960,
+            "description": "Dispatches parsed action to implementation (uses Shower virtual display or tool layer)"
+          },
+          {
+            "name": "captureScreenshotForAgent",
+            "line": 826,
+            "description": "Captures screenshot via Shower WS or bitmap fallback"
+          }
+        ]
+      },
+      {
+        "file": "core/tools/agent/PhoneAgent.kt",
+        "class": "ToolImplementations",
+        "line_declaration": 1280,
+        "description": "Interface providing tap/longPress/setInputText/swipe/pressKey/captureScreenshot for PhoneAgent"
+      }
+    ],
+    "system_prompt_builders": [
+      {
+        "file": "core/config/SystemPromptConfig.kt",
+        "class": "SystemPromptConfig",
+        "line_declaration": 15,
+        "key_methods": [
+          {
+            "name": "getSystemPrompt",
+            "line": 245,
+            "description": "Generates complete system prompt with tool descriptions, workspace guidelines, package system info"
+          },
+          {
+            "name": "getSystemPromptWithCustomPrompts",
+            "line": 557,
+            "description": "Extended version with hook dispatch for custom prompt composition"
+          },
+          {
+            "name": "applyCustomPrompts",
+            "line": 209,
+            "description": "Applies user-defined intro prompt customization"
+          }
+        ],
+        "templates": [
+          {
+            "name": "SYSTEM_PROMPT_TEMPLATE",
+            "line": 149,
+            "description": "English template with section placeholders"
+          },
+          {
+            "name": "SYSTEM_PROMPT_TEMPLATE_CN",
+            "line": 166,
+            "description": "Chinese template with section placeholders"
+          },
+          {
+            "name": "SUBTASK_AGENT_PROMPT_TEMPLATE",
+            "line": 184,
+            "description": "Template for subtask agents (no memory, no emotion)"
+          }
+        ],
+        "section_placeholders": [
+          "BEGIN_SELF_INTRODUCTION_SECTION",
+          "WORKSPACE_GUIDELINES_SECTION",
+          "TOOL_USAGE_GUIDELINES_SECTION",
+          "PACKAGE_SYSTEM_GUIDELINES_SECTION",
+          "ACTIVE_PACKAGES_SECTION",
+          "AVAILABLE_TOOLS_SECTION"
+        ]
+      },
+      {
+        "file": "core/config/SystemToolPrompts.kt",
+        "class": "SystemToolPrompts",
+        "line_declaration": 13,
+        "description": "Defines structured tool descriptions (ToolPrompt with ToolParameterSchema) organized by category for system prompt inclusion",
+        "key_categories": [
+          {
+            "name": "basicTools",
+            "line": 42,
+            "tools": [
+              "sleep",
+              "use_package"
+            ]
+          },
+          {
+            "name": "fileSystemTools",
+            "line": 88,
+            "tools": [
+              "list_files",
+              "read_file",
+              "read_file_part",
+              "create_file",
+              "edit_file",
+              "delete_file",
+              "make_directory",
+              "find_files",
+              "grep_code",
+              "grep_context",
+              "download_file"
+            ]
+          }
+        ]
+      },
+      {
+        "file": "core/config/SystemToolPromptsInternal.kt",
+        "description": "Internal tool prompt generation for dynamic tool visibility and capability-based tool inclusion"
+      }
+    ],
+    "context_managers": [
+      {
+        "file": "api/chat/EnhancedAIService.kt",
+        "class": "EnhancedAIService.MessageExecutionContext",
+        "description": "Per-conversation execution context holding conversationHistory, streamBuffer, roundManager, eventChannel, isConversationActive flag"
+      },
+      {
+        "file": "api/chat/enhance/ToolExecutionManager.kt",
+        "class": "ToolExecutionManager.ToolRuntimeContext",
+        "line_declaration": 47,
+        "description": "Thread-local runtime context for tool execution (callerCardId, toolExposureMode)"
+      }
+    ],
+    "tool_selection_logic": [
+      {
+        "file": "api/chat/enhance/ToolExecutionManager.kt",
+        "description": "Tool selection based on role card access control, CLI mode exposure, and character card permissions"
+      },
+      {
+        "file": "core/tools/AIToolHandler.kt",
+        "method": "getToolExecutorOrActivate",
+        "line": 304,
+        "description": "Auto-activates package when tool name looks like 'package:toolName', supporting dynamic tool resolution"
+      }
+    ],
+    "max_iterations": {
+      "chat_loop": "No explicit limit - continues until AI responds without tool calls",
+      "phone_agent": 20,
+      "phone_agent_configurable": "AgentConfig.maxSteps, default 20"
+    },
+    "streaming_support": {
+      "enabled": true,
+      "mechanism": "AIService.sendMessage returns Stream<String>; EnhancedAIService processes chunks via TextStreamEventCarrier with savepoint/rollback revision tracking",
+      "stream_class": "com.ai.assistance.operit.util.stream.Stream"
+    },
+    "cancellation_support": {
+      "enabled": true,
+      "mechanism": "coroutine Job tracking via PhoneAgentJobRegistry; cancelConversation() in EnhancedAIService; CancellationException handling throughout"
+    }
+  },
+  "data_models": {
+    "AITool": {
+      "file": "data/model/AITool.kt",
+      "fields": [
+        "name: String",
+        "parameters: List<ToolParameter>",
+        "description: String"
+      ]
+    },
+    "ToolParameter": {
+      "fields": [
+        "name: String",
+        "value: String"
+      ]
+    },
+    "ToolResult": {
+      "fields": [
+        "toolName: String",
+        "success: Boolean",
+        "result: ToolResultData",
+        "error: String?"
+      ]
+    },
+    "ToolResultData": {
+      "file": "core/tools/ToolResultDataClasses.kt",
+      "description": "Sealed class with variants: BooleanResultData, StringResultData, SleepResultData, ADBResultData, DirectoryListingData, FileContentData, FileApplyResultData, BinaryFileContentData, FileExistsData, FileInfoData, FileOperationData, FilePartContentData, FindFilesResultData, GrepResultData, AppListData, etc.",
+      "serialization": "Polymorphic JSON with __type discriminator"
+    }
+  },
+  "streaming_support": {
+    "enabled": true,
+    "mechanism": "AIService.sendMessage returns Stream<String>; EnhancedAIService processes chunks via TextStreamEventCarrier with savepoint/rollback revision tracking",
+    "stream_class": "com.ai.assistance.operit.util.stream.Stream"
+  },
+  "cancellation_support": {
+    "enabled": true,
+    "mechanism": "coroutine Job tracking via PhoneAgentJobRegistry; cancelConversation() in EnhancedAIService; CancellationException handling throughout"
+  },
+  "max_iterations": {
+    "chat_loop": "No explicit limit - continues until AI responds without tool calls",
+    "phone_agent": 20,
+    "phone_agent_configurable": "AgentConfig.maxSteps, default 20"
+  }
+}

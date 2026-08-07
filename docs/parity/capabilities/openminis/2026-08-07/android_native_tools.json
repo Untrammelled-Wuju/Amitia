@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "count": 23,
+  "tools": [
+    {
+      "id": "OMN-0019",
+      "name": "Linux Sandbox (Android PRoot)",
+      "tool_id": "shell_execute",
+      "category": "04_SANDBOX_RUNTIME",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0093",
+      "name": "Android Clipboard Read",
+      "tool_id": "android-clipboard",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0094",
+      "name": "Android Clipboard Write",
+      "tool_id": "android-clipboard",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0095",
+      "name": "Android Notification Read",
+      "tool_id": "android-notification",
+      "category": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0096",
+      "name": "Android Notification Action",
+      "tool_id": "android-notification",
+      "category": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0097",
+      "name": "Android Location Get",
+      "tool_id": "android-location",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0098",
+      "name": "Android Calendar Access",
+      "tool_id": "android-calendar",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0099",
+      "name": "Android Contacts Read",
+      "tool_id": "android-contacts",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0100",
+      "name": "Android Weather Query",
+      "tool_id": "android-weather",
+      "category": "29_OTHER",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0101",
+      "name": "Android Speech-to-Text",
+      "tool_id": "android-speech",
+      "category": "14_VOICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0102",
+      "name": "Android Text-to-Speech",
+      "tool_id": "android-speak",
+      "category": "14_VOICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0103",
+      "name": "Android Scheduled Task",
+      "tool_id": "android-alarm",
+      "category": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0104",
+      "name": "Android Shizuku Execution",
+      "tool_id": "android-shizuku",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0105",
+      "name": "Android A11y CLI",
+      "tool_id": "android-a11y-cli",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0106",
+      "name": "Android Media Control",
+      "tool_id": "android-player",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0107",
+      "name": "Android Photos Access",
+      "tool_id": "android-photos",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0108",
+      "name": "Android Open URL/App",
+      "tool_id": "android-open",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0109",
+      "name": "Android Device Info",
+      "tool_id": "android-device",
+      "category": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0110",
+      "name": "Android Sessions CLI",
+      "tool_id": "android-sessions-cli",
+      "category": "27_DEVELOPER_DIAGNOSTICS",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0117",
+      "name": "Android Permission Flow",
+      "tool_id": "",
+      "category": "23_PERMISSION_SECURITY_PRIVACY",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0119",
+      "name": "Android Keystore",
+      "tool_id": "",
+      "category": "23_PERMISSION_SECURITY_PRIVACY",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0123",
+      "name": "Background Execution (Android)",
+      "tool_id": "",
+      "category": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0124",
+      "name": "Foreground Service (Android)",
+      "tool_id": "",
+      "category": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    }
+  ]
+}

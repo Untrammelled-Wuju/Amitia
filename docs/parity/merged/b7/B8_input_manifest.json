@@ -1,0 +1,18 @@
+{
+  "task": "B8_Target_Capability_Validation",
+  "inputs_from_b7": [
+    "capability_mapping_matrix.json",
+    "target_candidate_inventory.json",
+    "capability_union_catalog.json",
+    "source_projection_coverage.json"
+  ],
+  "estimated_targets": 506,
+  "required_outputs": [
+    "validated_target_capability_list.json",
+    "target_capability_requirements.json",
+    "target_validation_report.json",
+    "C1_input_manifest.json"
+  ],
+  "schema_version": 1,
+  "generated_at": "2026-08-07T13:53:10+08:00"
+}

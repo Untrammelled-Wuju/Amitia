@@ -1,0 +1,84 @@
+{
+  "inventory_id": "INV-A14-EPISODIC-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "episodic_memory",
+  "items": [
+    {
+      "id": "EPISODIC-001",
+      "name": "Episodic Service",
+      "name_en": "Episodic Memory Service",
+      "description": "情景记忆服务，管理情景记忆的创建、检索和生命周期",
+      "file": "backend/internal/episodic/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/episodic",
+        "POST /api/v1/episodic",
+        "DELETE /api/v1/episodic/:id"
+      ]
+    },
+    {
+      "id": "EPISODIC-002",
+      "name": "Episodic Model",
+      "name_en": "Episodic Memory Model",
+      "description": "情景记忆数据模型，定义情景记忆的结构（角色、事件、时间、地点等）",
+      "file": "backend/internal/episodic/model.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "EPISODIC-003",
+      "name": "Episodic Repository",
+      "name_en": "Episodic Repository",
+      "description": "情景记忆数据仓库，处理记忆事件的持久化存储",
+      "file": "backend/internal/episodic/repository.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "EPISODIC-004",
+      "name": "Episodic Extract",
+      "name_en": "Episodic Memory Extraction",
+      "description": "情景记忆提取，从对话中自动提取重要事件作为情景记忆",
+      "file": "backend/internal/episodic/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/episodic/extract"]
+    },
+    {
+      "id": "EPISODIC-005",
+      "name": "Episodic Detail",
+      "name_en": "Episodic Detail View",
+      "description": "情景记忆详情视图，获取单条情景记忆的完整上下文信息",
+      "file": "backend/internal/episodic/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/episodic/:id/detail"]
+    },
+    {
+      "id": "EPISODIC-006",
+      "name": "Episodic by User",
+      "name_en": "Episodic by User",
+      "description": "按用户获取情景记忆列表，支持时间范围过滤",
+      "file": "backend/internal/episodic/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/episodic/by-user"]
+    },
+    {
+      "id": "EPISODIC-007",
+      "name": "Episodic System Prompt",
+      "name_en": "Episodic System Prompt",
+      "description": "情景记忆系统提示生成，将相关情景记忆格式化为LLM上下文",
+      "file": "backend/internal/episodic/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/episodic/system-prompt"]
+    },
+    {
+      "id": "EPISODIC-008",
+      "name": "Timeline Service",
+      "name_en": "Timeline Service",
+      "description": "时间线服务，管理情景记忆的时间排序和聚合展示",
+      "file": "backend/internal/memory/timeline_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/memories/timeline"]
+    }
+  ]
+}

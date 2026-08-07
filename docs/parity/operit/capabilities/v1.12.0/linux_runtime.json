@@ -1,0 +1,209 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "repository": "Operit-v1.12.0",
+    "scan_date": "2025-08-07",
+    "source_root": "app/src/main/java/com/ai/assistance/operit/",
+    "terminal_submodule": "terminal/ (git submodule, separate repo: OperitTerminal)",
+    "platform": "Android (Kotlin/Java)"
+  },
+  "shell_runtime": [
+    {
+      "name": "ShellExecutor",
+      "type": "interface",
+      "file": "core/tools/system/shell/ShellExecutor.kt",
+      "description": "统一Shell执行器接口,定义executeCommand/startProcess/hasPermission/isAvailable等核心方法"
+    },
+    {
+      "name": "StandardShellExecutor",
+      "type": "class",
+      "implements": "ShellExecutor",
+      "file": "core/tools/system/shell/StandardShellExecutor.kt",
+      "description": "标准Android权限Shell执行器,使用Runtime.getRuntime().exec()和sh -c执行命令,含管道/重定向/后台等shell操作符自动检测,30秒超时"
+    },
+    {
+      "name": "RootShellExecutor",
+      "type": "class",
+      "implements": "ShellExecutor",
+      "file": "core/tools/system/shell/RootShellExecutor.kt",
+      "description": "Root权限Shell执行器,使用libsu(Shell.cmd)或exec(su -c)模式,支持MOUNT_MASTER标志,支持ShellIdentity(SHELL/ROOT/APP/DEFAULT)分级执行,内嵌operit_shell_exec launcher二进制"
+    },
+    {
+      "name": "AdminShellExecutor",
+      "type": "class",
+      "implements": "ShellExecutor",
+      "file": "core/tools/system/shell/AdminShellExecutor.kt",
+      "description": "设备管理员权限执行器,通过DevicePolicyManager执行lockNow/wipe等系统操作,不直接执行shell命令"
+    },
+    {
+      "name": "DebuggerShellExecutor",
+      "type": "class",
+      "implements": "ShellExecutor",
+      "file": "core/tools/system/shell/DebuggerShellExecutor.kt",
+      "description": "Shizuku权限Shell执行器,使用IShizukuService.newProcess()创建进程,支持sh -c执行含操作符的命令,含重试机制和引号感知参数解析"
+    },
+    {
+      "name": "AccessibilityShellExecutor",
+      "type": "class",
+      "implements": "ShellExecutor",
+      "file": "core/tools/system/shell/AccessibilityShellExecutor.kt",
+      "description": "无障碍服务权限执行器"
+    },
+    {
+      "name": "ShellExecutorFactory",
+      "type": "class (factory)",
+      "file": "core/tools/system/shell/ShellExecutorFactory.kt",
+      "description": "Shell执行器工厂,按权限级别缓存执行器,提供getHighestAvailableExecutor/getUserPreferredExecutor/getAvailableExecutors等方法,权限级别从高到低:ROOT->ADMIN->DEBUGGER->ACCESSIBILITY->STANDARD"
+    },
+    {
+      "name": "AndroidShellExecutor",
+      "type": "class (facade)",
+      "file": "core/tools/system/AndroidShellExecutor.kt",
+      "description": "向后兼容的Shell命令执行工具类,通过权限级别委托到相应执行器,定义ShellIdentity枚举(DEFAULT/APP/ROOT/SHELL),严格权限模式"
+    },
+    {
+      "name": "OperitShowerShellRunner",
+      "type": "class",
+      "file": "core/tools/system/shower/OperitShowerShellRunner.kt",
+      "description": "Shower(投屏)Shell命令运行器"
+    }
+  ],
+  "execution_methods": [
+    "Runtime.getRuntime().exec(command) - 简单命令直接执行",
+    "Runtime.getRuntime().exec(arrayOf(\"sh\", \"-c\", command)) - 含管道/重定向等shell操作符",
+    "Runtime.getRuntime().exec(buildSuExecCommand(command)) - Root下su -c方式",
+    "Shell.cmd(command).exec() - libsu封装的Root执行(IShell.Result)",
+    "Shell.cmd(command).to(callbackList).enqueue() - libsu异步执行+回调",
+    "IShizukuService.newProcess(args, env, dir) - Shizuku进程创建",
+    "ProcessBuilder(*command) - 本地终端会话进程启动(在LocalTerminalProvider中)",
+    "DevicePolicyManager.lockNow()/wipeData() - 设备管理员系统操作"
+  ],
+  "permission_levels": [
+    "STANDARD - 标准Android权限,始终可用",
+    "ACCESSIBILITY - 无障碍服务权限",
+    "DEBUGGER - Shizuku服务权限",
+    "ADMIN - 设备管理员权限",
+    "ROOT - Root权限(libsu或exec su -c)"
+  ],
+  "linux_sandbox": {
+    "type": "PRoot + Ubuntu Noble (aarch64) chroot 沙盒",
+    "mechanism": "通过proot二进制启动Ubuntu rootfs,可选chroot模式(需root)",
+    "rootfs_asset": "terminal/src/main/assets/ubuntu-noble-aarch64-pd-v4.18.0.tar.xz",
+    "setup_script": "terminal/src/main/assets/setup_fake_sysdata.sh",
+    "native_binaries": [
+      "libbusybox.so - BusyBox工具集,提供awk/cp/chmod/cat/find/grep/gzip/tar等30+个Unix工具",
+      "liboperit_proot.so - PRoot用户空间chroot替代",
+      "liboperit_loader.so - PROOT_LOADER动态加载器",
+      "libbash.so - Bash shell",
+      "libsudo.so - sudo提权工具",
+      "liboperit.so / libpty.so - PTY伪终端支持"
+    ],
+    "busybox_symlinks": [
+      "awk",
+      "ash",
+      "basename",
+      "bzip2",
+      "curl",
+      "cp",
+      "chmod",
+      "cut",
+      "cat",
+      "du",
+      "dd",
+      "find",
+      "grep",
+      "gzip",
+      "hexdump",
+      "head",
+      "id",
+      "lscpu",
+      "mkdir",
+      "realpath",
+      "rm",
+      "sed",
+      "stat",
+      "sh",
+      "tr",
+      "tar",
+      "uname",
+      "xargs",
+      "xz",
+      "xxd",
+      "file"
+    ],
+    "bind_mounts": [
+      "/dev -> /dev",
+      "/proc -> /proc",
+      "/sys -> /sys",
+      "/dev/pts -> /dev/pts",
+      "/proc/self/fd -> /dev/fd",
+      "/storage/emulated/{userId} -> /sdcard",
+      "/data/local/tmp -> /data/local/tmp",
+      "{homeDir} -> {homeDir}",
+      "{tmpDir} -> /dev/shm (可选shared_tmp)"
+    ],
+    "path_mapping": "PRootMountMapping提供Linux路径到Android实际路径的软映射,支持Ubuntu rootfs/bind mount/home directory映射",
+    "package_managers": {
+      "apt": "APT源(可配置镜像源)",
+      "pip/uv": "Python包管理(可配置镜像源)",
+      "npm": "Node包管理(可配置registry)",
+      "rust": "Rust镜像源"
+    },
+    "dns_config": "内置多个nameserver(8.8.8.8, 1.1.1.1, 223.5.5.5等)",
+    "chroot_support": "可选USE_CHROOT=1模式,使用busybox mount --bind挂载proc/sys/dev等后由chroot进入Ubuntu",
+    "terminal_manager": "TerminalManager(terminal submodule) - 核心终端会话管理器"
+  },
+  "terminal_implementations": [
+    {
+      "name": "Terminal (app侧门面)",
+      "file": "core/tools/system/Terminal.kt",
+      "description": "应用级别终端服务管理器门面,封装TerminalManager,提供createSession/executeCommand/executeHiddenCommand/executeCommandFlow/sendInput/sendInterruptSignal等API"
+    },
+    {
+      "name": "TerminalManager",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/TerminalManager.kt",
+      "description": "核心终端会话管理器单例,初始化环境(链接native库/提取assets/生成start脚本),管理TerminalProvider(本地/SSH),支持命令队列/Mutex/30秒session初始化超时/历史记录(500条MAX)/SharedFlow事件分发"
+    },
+    {
+      "name": "LocalTerminalProvider",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/type/LocalTerminalProvider.kt",
+      "description": "本地终端提供者,使用ProcessBuilder启动bash -c 'source common.sh && start_shell',PTY伪终端,支持visible session(前台交互)和hidden exec(后台复用shell),含__OPERIT_HIDDEN_BEGIN__/END/PID标记协议,30秒后台shell就绪超时"
+    },
+    {
+      "name": "SSHTerminalProvider",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/type/SSHTerminalProvider.kt",
+      "description": "SSH远程终端提供者,通过本地proot环境自动执行ssh命令连接远程服务器,支持密码/公钥认证/反向隧道/端口转发/Keep-Alive"
+    },
+    {
+      "name": "Pty",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/Pty.kt",
+      "description": "PTY伪终端封装,JNI native方法createSubprocess/waitFor/getTerminalFlags/getAvailableBytes/setPtyWindowSize,支持ICANON/ECHO/ISIG/IEXTEN标志检测和窗口大小调整"
+    },
+    {
+      "name": "TerminalSession",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/TerminalSession.kt",
+      "description": "终端会话数据类,封装process(stdout/stdin)"
+    },
+    {
+      "name": "CanvasTerminalView",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/view/canvas/CanvasTerminalView.kt",
+      "description": "Canvas自定义绘制终端视图"
+    },
+    {
+      "name": "CanvasTerminalCompose",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/view/canvas/CanvasTerminalCompose.kt",
+      "description": "Jetpack Compose终端UI组件"
+    },
+    {
+      "name": "AnsiTerminalEmulator",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/view/domain/ansi/AnsiTerminalEmulator.kt",
+      "description:": "ANSI终端模拟器,解析转义序列(颜色/光标等)"
+    },
+    {
+      "name": "TerminalService (AIDL)",
+      "file": "terminal/src/main/aidl/com/ai/assistance/operit/terminal/ITerminalService.aidl",
+      "description": "跨进程终端服务接口,AIDL定义"
+    }
+  ],
+  "session_command_queue": "命令队列(QueuedCommand)+Mutex锁确保同步执行,支持命令排队和初始化状态检测"
+}

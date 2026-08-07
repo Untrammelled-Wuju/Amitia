@@ -1,0 +1,53 @@
+{
+  "id": "permission_security_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "permission_security",
+  "description": "权限/安全能力清单",
+  "modules": [
+    {
+      "name": "auth",
+      "description": "认证模块(JWT Token/Bearer <REDACTED>)",
+      "files": ["backend/internal/auth/context.go", "backend/internal/middleware/auth.go"]
+    },
+    {
+      "name": "extension_permission",
+      "description": "扩展权限系统(插件/技能权限定义/审批)",
+      "files": [
+        "backend/internal/extension/permission.go",
+        "backend/internal/extension/permission/ (kernel层)",
+        "backend/internal/extension/execution/permission_gate.go"
+      ]
+    },
+    {
+      "name": "extension_scope",
+      "description": "作用域绑定(扩展可访问的数据范围)",
+      "files": ["backend/internal/extension/scope/", "backend/internal/extension/execution/scope_gate.go"]
+    },
+    {
+      "name": "safety_governor",
+      "description": "安全治理(LLM输出审核/内容安全)",
+      "files": ["backend/internal/safety/", "front/src/views/model-config/SafetyGovernorView.vue"]
+    },
+    {
+      "name": "prompt_injection_detector",
+      "description": "提示词注入检测",
+      "file": "backend/internal/prompt/injection_detector.go"
+    },
+    {
+      "name": "circuit_breaker",
+      "description": "熔断器(插件/API故障隔离)",
+      "files": ["backend/internal/circuitbreaker/", "backend/internal/extension/plugin_circuit.go"]
+    },
+    {
+      "name": "desktop_identity",
+      "description": "桌面端身份验证/会话管理",
+      "files": ["desktop/src/main/desktop-identity.ts", "desktop/src/main/auth-token-store.ts"]
+    },
+    {
+      "name": "privacy_scan",
+      "description": "隐私扫描(检测敏感数据泄露)",
+      "view": "front/src/views/privacy-scan/"
+    }
+  ]
+}

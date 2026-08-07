@@ -1,0 +1,64 @@
+{
+  "id": "voice_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "voice",
+  "description": "语音系统清单(TTS/ASR/实时语音对话)",
+  "subsystems": [
+    {
+      "name": "tts",
+      "description": "文本转语音(情感语音合成)",
+      "files": [
+        "backend/internal/tts/",
+        "backend/internal/expression/voice_emotion.go",
+        "backend/internal/expression/channel_voice_acceptance_test.go"
+      ],
+      "features": ["情感语音", "音色选择", "语速调节"]
+    },
+    {
+      "name": "asr",
+      "description": "语音转文本",
+      "files": [
+        "backend/internal/asr/asr.go",
+        "backend/internal/asr/service.go",
+        "backend/internal/asr/handler.go"
+      ]
+    },
+    {
+      "name": "realtime_voice",
+      "description": "实时语音对话(二进制帧协议)",
+      "files": [
+        "backend/internal/realtime/voice_session.go",
+        "backend/internal/realtime/protocol.go",
+        "backend/internal/realtime/proxy.go",
+        "backend/internal/realtime/channel_switch.go"
+      ],
+      "protocol": "二进制帧协议(消息类型0x01-0x0B，事件码1/2/100/200)"
+    },
+    {
+      "name": "voice_model_config",
+      "description": "语音模型配置(音色/提供商)",
+      "view": "front/src/views/model-config/VoiceModelConfigView.vue",
+      "flutter": "mobile_app/lib/features/characters/presentation/pages/character_voice_page.dart"
+    },
+    {
+      "name": "character_voice",
+      "description": "角色语音配置(每个角色独立音色设置)",
+      "view": "front/src/views/character-voice/",
+      "files": [
+        "backend/internal/character/",
+        "mobile_app/lib/features/characters/presentation/pages/character_voice_page.dart"
+      ]
+    },
+    {
+      "name": "voice_reply_tool",
+      "description": "agent语音回复工具(LLM触发voice_reply调用TTS)",
+      "file": "backend/internal/agent/tool/voice_reply.go"
+    }
+  ],
+  "protocol_details": {
+    "websocket": "/api/realtime (FullDuplex)",
+    "frame_structure": "4-byte header + 4-byte event_code + session_id + payload",
+    "event_codes": ["StartConnection=1", "FinishConnection=2", "StartSession=100", "TaskRequest=200", "UpdateConfig=201"]
+  }
+}

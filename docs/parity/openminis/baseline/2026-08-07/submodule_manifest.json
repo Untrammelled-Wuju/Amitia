@@ -1,0 +1,63 @@
+{
+  "skipped_count": 1,
+  "schema_version": 1,
+  "submodules": [
+    {
+      "working_tree_clean": true,
+      "path": "deps/ish",
+      "android_tag_commit": "de124dd66124a15239cea1465164f74980ada245",
+      "android_initialized": true,
+      "commit_match_between_baselines": true,
+      "url": "https://github.com/OpenMinis/ish-arm64.git",
+      "source_initialized": true,
+      "has_nested_submodules": true,
+      "source_baseline_commit": "de124dd66124a15239cea1465164f74980ada245"
+    },
+    {
+      "url": "https://github.com/ish-app/libapps",
+      "source_baseline_commit": "b8cacae35e5b11d64bb736a053921c16ca7faf9e",
+      "commit_match_between_baselines": true,
+      "working_tree_clean": true,
+      "source_initialized": true,
+      "android_initialized": true,
+      "path": "deps/ish/deps/libapps",
+      "android_tag_commit": "b8cacae35e5b11d64bb736a053921c16ca7faf9e"
+    },
+    {
+      "url": "https://github.com/libarchive/libarchive",
+      "source_baseline_commit": "fc6563f5130d8a7ee1fc27c0e55baef35119f26c",
+      "commit_match_between_baselines": true,
+      "working_tree_clean": true,
+      "source_initialized": true,
+      "android_initialized": true,
+      "path": "deps/ish/deps/libarchive",
+      "android_tag_commit": "fc6563f5130d8a7ee1fc27c0e55baef35119f26c"
+    },
+    {
+      "working_tree_clean": true,
+      "path": "deps/ish/deps/linux",
+      "intentionally_skipped": true,
+      "android_tag_commit": "8ec9bf17f89c6dba818f3ed2427de4223e78644a",
+      "android_initialized": false,
+      "commit_match_between_baselines": true,
+      "url": "https://github.com/ish-app/linux",
+      "source_initialized": false,
+      "note": "Disabled submodule (matchPath skip)",
+      "source_baseline_commit": "8ec9bf17f89c6dba818f3ed2427de4223e78644a"
+    },
+    {
+      "url": "https://github.com/OpenMinis/proot.git",
+      "source_baseline_commit": "8cf13e997cdc9472997aae19df8050c073c9a86c",
+      "commit_match_between_baselines": true,
+      "working_tree_clean": true,
+      "source_initialized": true,
+      "android_initialized": true,
+      "path": "deps/proot",
+      "android_tag_commit": "8cf13e997cdc9472997aae19df8050c073c9a86c"
+    }
+  ],
+  "source_baseline_commit": "9cf3a855fecd27bb5735b84cacbd56852a3ab8dd",
+  "initialized_count": 4,
+  "total_count": 5,
+  "android_tag": "0.22-preview"
+}

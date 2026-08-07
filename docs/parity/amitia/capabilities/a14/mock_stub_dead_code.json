@@ -1,0 +1,29 @@
+{
+  "id": "mock_stub_dead_code",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "mock_stub_dead_code",
+  "description": "Mock/Stub/死代码清单",
+  "summary": {
+    "mock_count": 0,
+    "stub_count": 0,
+    "dead_code_count": 0
+  },
+  "mocks": [],
+  "stubs": [],
+  "dead_code_candidates": [
+    {
+      "name": "legacy_routes",
+      "description": "已退役的旧版路由(保留但不再使用)",
+      "files": ["backend/internal/extension/retired_legacy_routes.go"],
+      "note": "标记为retired，保留作历史兼容"
+    },
+    {
+      "name": "legacy_tool_adapter",
+      "description": "旧版工具适配器(兼容旧插件)",
+      "file": "backend/internal/extension/legacy_tool_adapter.go",
+      "note": "过渡期保留"
+    }
+  ],
+  "note": "未发现显式mock(测试数据文件名包含fake/stub。fake_clock.go为测试工具。dead_code待运行时调用图分析确认"
+}

@@ -1,0 +1,196 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "source": "backup_update_scan.json"
+  },
+  "export": {
+    "found": true,
+    "formats": [
+      "HTML",
+      "Markdown",
+      "TXT",
+      "JSON",
+      "CSV"
+    ],
+    "items": [
+      {
+        "name": "ChatHistoryExporter (HTML)",
+        "path": "data/exporter/HtmlExporter.kt",
+        "description": "将单条或多条聊天记录导出为带 CSS 样式的 HTML 文件，含消息元信息、代码块格式化"
+      },
+      {
+        "name": "ChatHistoryExporter (Markdown)",
+        "path": "data/exporter/MarkdownExporter.kt",
+        "description": "导出为 Markdown 格式，含 YAML Front Matter 元数据、msg 注释标记、角色标题"
+      },
+      {
+        "name": "ChatHistoryExporter (TXT)",
+        "path": "data/exporter/TextExporter.kt",
+        "description": "导出为纯文本格式，含分隔线、角色图标、模型信息"
+      },
+      {
+        "name": "Chat History JSON Export",
+        "path": "ui/features/settings/screens/ChatBackupSettingsScreen.kt",
+        "description": "chat_export_*.json 格式导出，保存在 backup/chat 目录"
+      },
+      {
+        "name": "Memory Export (JSON)",
+        "path": "data/repository/MemoryRepository.kt",
+        "description": "通过 memoryRepository.exportMemoriesToJson() 导出记忆数据到 backup/memory 目录，支持按 PreferenceProfile 选择性导出"
+      },
+      {
+        "name": "Character Card Export (SillyTavern/Tavern)",
+        "path": "data/preferences/CharacterCardManager.kt",
+        "description": "exportCharacterCardToTavernJson() 将角色卡导出为 SillyTavern chara_card_v2 格式 (TavernCharacterCard)，支持 spec_version 2.0"
+      },
+      {
+        "name": "Character Cards Bulk Export",
+        "path": "data/preferences/CharacterCardManager.kt",
+        "description": "exportAllCharacterCardsToBackupFile() 将所有角色卡批量导出到 backup/character_cards 目录"
+      },
+      {
+        "name": "Model Config Export",
+        "path": "data/preferences/ModelConfigManager.kt",
+        "description": "exportAllConfigs() 将模型配置导出为 JSON，保存到 backup/model_config 目录"
+      }
+    ]
+  },
+  "import": {
+    "found": true,
+    "formats": [
+      "JSON",
+      "Markdown",
+      "CSV",
+      "TXT",
+      "HTML(仅检测)",
+      "ChatGPT",
+      "ChatBox",
+      "Claude",
+      "GenericJSON",
+      "Operit原生"
+    ],
+    "items": [
+      {
+        "name": "ChatFormatDetector",
+        "path": "data/converter/ChatFormatDetector.kt",
+        "description": "自动检测导入文件格式 (OPERIT/CHATGPT/CHATBOX/CLAUDE/MARKDOWN/GENERIC_JSON/CSV/PLAIN_TEXT)，通过扩展名+内容分析"
+      },
+      {
+        "name": "ChatGPT Conversation Import",
+        "path": "data/converter/ChatGPTConverter.kt",
+        "description": "支持 OpenAI 官方 conversations.json 格式，从 mapping 树提取消息，保留 create_time"
+      },
+      {
+        "name": "ChatBox Import",
+        "path": "data/converter/ChatBoxConverter.kt",
+        "description": "支持 ChatBox 导出的聊天记录格式"
+      },
+      {
+        "name": "Claude Import",
+        "path": "data/converter/ChatFormatDetector.kt (CLAUDE detection)",
+        "description": "通过 uuid/chat_messages 字段识别 Claude 导出格式"
+      },
+      {
+        "name": "Markdown Chat Import",
+        "path": "data/converter/MarkdownConverter.kt",
+        "description": "支持从 Markdown 注释标记 <!-- chat-info --> 和 <!-- msg --> 还原聊天记录"
+      },
+      {
+        "name": "Generic JSON Import",
+        "path": "data/converter/GenericJsonConverter.kt",
+        "description": "支持 role/content 结构或 messages 数组的通用 JSON 格式"
+      },
+      {
+        "name": "SillyTavern Character Card Import",
+        "path": "data/preferences/CharacterCardManager.kt",
+        "description": "createCharacterCardFromTavernJson() 解析 TavernCharacterCard JSON，将 SillyTavern chara_card_v2 格式转换为本地角色卡，支持 OperitTavernExtension 扩展字段"
+      },
+      {
+        "name": "Character Cards Bulk Import",
+        "path": "data/preferences/CharacterCardManager.kt",
+        "description": "importAllCharacterCardsFromBackupContent() 从备份文件批量导入角色卡"
+      },
+      {
+        "name": "Model Config Import",
+        "path": "data/preferences/ModelConfigManager.kt",
+        "description": "模型配置 JSON 导入"
+      },
+      {
+        "name": "Preference Profile Import",
+        "path": "data/model/PreferenceProfile.kt",
+        "description": "通过 UserPreferencesManager 的 profileListFlow 管理多组配置档案，支持选择性导入"
+      }
+    ]
+  },
+  "backup": {
+    "found": true,
+    "types": [
+      "完整数据库备份(Room DB ZIP)",
+      "原始文件系统快照(Raw Snapshot)",
+      "工作区版本备份(Workspace)",
+      "每日定时备份(WorkManager)"
+    ],
+    "items": [
+      {
+        "name": "RoomDatabaseBackupManager",
+        "path": "data/backup/RoomDatabaseBackupManager.kt",
+        "description": "Room SQLite 数据库完整备份，将 app_database + -wal + -shm 打包为 ZIP。支持自动每日备份 (room_db_backup_YYYY-MM-DD.zip) 和手动备份 (room_db_manual_backup_*.zip)。通过 WAL checkpoint 确保一致性，保留最近 N 份备份 (默认10，范围1-100)"
+      },
+      {
+        "name": "RoomDatabaseBackupScheduler",
+        "path": "data/backup/RoomDatabaseBackupScheduler.kt",
+        "description": "通过 WorkManager 实现每日凌晨3点定时备份，支持手动立即触发 (enqueueManualBackup)。约束条件: 存储空间不低"
+      },
+      {
+        "name": "RoomDatabaseBackupWorker",
+        "path": "data/backup/RoomDatabaseBackupWorker.kt",
+        "description": "CoroutineWorker 实现备份后台执行，支持 force 参数强制执行"
+      },
+      {
+        "name": "RoomDatabaseBackupPreferences",
+        "path": "data/backup/RoomDatabaseBackupPreferences.kt",
+        "description": "DataStore 存储备份配置：开关、上次备份日期、成功时间、错误信息、最大备份数"
+      },
+      {
+        "name": "RoomDatabaseRestoreManager",
+        "path": "data/backup/RoomDatabaseRestoreManager.kt",
+        "description": "从 ZIP 恢复 Room 数据库，支持 URI 和 File 两种输入，先关闭数据库再替换文件，含 -wal/-shm"
+      },
+      {
+        "name": "RoomDatabaseBackupRestoreLock",
+        "path": "data/backup/RoomDatabaseBackupRestoreLock.kt",
+        "description": "Kotlin Mutex 用于备份和恢复操作的互斥锁，防止并发冲突"
+      },
+      {
+        "name": "RawSnapshotBackupManager",
+        "path": "data/backup/RawSnapshotBackupManager.kt",
+        "description": "完整应用数据快照: 将 files、external_files、shared_prefs、datastore、databases 打包为 operit_raw_snapshot_*.zip，包含 manifest.json 元信息（formatVersion=1, packageName, createdAt, includes, includeTerminalData）。恢复时关闭 Room+ObjectBox，替换全部数据目录。支持 includeTerminalData 选项排除/包含 Ubuntu terminal 数据。排除大文件（ubuntu-*.tar.xz, memory_hnsw_*.idx, doc_index_*.hnsw）。进度回调含多阶段"
+      },
+      {
+        "name": "DataRecoveryActivity",
+        "path": "ui/recovery/DataRecoveryActivity.kt",
+        "description": "数据救援独立 Activity: 原始快照导出/导入、SQL 执行器（直接操作 SQLite）、文件管理。导入后重启主应用"
+      },
+      {
+        "name": "DataRecoveryViewModel",
+        "path": "ui/recovery/DataRecoveryViewModel.kt",
+        "description": "data recovery 状态管理: 快照导出恢复执行、SQL 查询执行、进度和结果展示"
+      },
+      {
+        "name": "WorkspaceBackupManager",
+        "path": "ui/features/chat/webview/workspace/WorkspaceBackupManager.kt",
+        "description": "工作区级版本控制: 通过 AIToolHook 监听文件操作工具(apply_file/create_file/edit_file等)，以 SHA-256 hash + content-addressable objects 存储文件快照。支持按时间戳 (messageTimestamp) 同步状态、回溯 (rewind)、变更预览 (previewChanges)。.gitignore 支持。每个 chat 独立备份目录。通过 WorkspaceToolHookSession 实现 per-session 文件状态追踪"
+      },
+      {
+        "name": "OperitBackupDirs",
+        "path": "data/backup/OperitBackupDirs.kt",
+        "description": "备份目录结构: backup/raw_snapshot, backup/room_db, backup/chat, backup/memory, backup/model_config, backup/character_cards"
+      },
+      {
+        "name": "Chat Backup Settings Screen",
+        "path": "ui/features/settings/screens/ChatBackupSettingsScreen.kt",
+        "description": "统一备份管理 UI: 角色卡导入导出、模型配置导入导出、Room DB 每日备份管理、原始快照导出/导入/恢复、记忆导入导出、聊天记录格式转换导入"
+      }
+    ]
+  }
+}

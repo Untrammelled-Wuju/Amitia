@@ -1,0 +1,4 @@
+{
+  "schema_version": 1,
+  "note": "Since source commit = Android Tag, all source capabilities are also in Android Release except the 12 iOS-only SOURCE_NOT_VERIFIED_IOS items which lack iOS product confirmation"
+}

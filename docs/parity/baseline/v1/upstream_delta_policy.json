@@ -1,0 +1,32 @@
+{
+  "baseline_id": "PARITY-2026-08-07-V1",
+  "amitia_internal": {
+    "description": "Amitia自身新增能力自动纳入PRESERVE_AMITIA",
+    "tracking_method": "B6能力审计更新",
+    "delta_handling": "新增能力自动归类为PRESERVE_AMITIA"
+  },
+  "generated_at": "2026-08-07T14:00:00+08:00",
+  "upstream_sources": {
+    "operit": {
+      "source_id": "OPERIT",
+      "current_version": "v1.12.0",
+      "update_frequency": "monthly",
+      "tracking_method": "定期扫描release notes和capability catalog变化",
+      "delta_handling": "新增能力纳入REVIEW_REQUIRED流程；删除的能力标记ARCHIVED"
+    },
+    "openminis": {
+      "source_id": "OPENMINIS",
+      "current_version": "2026-08-07",
+      "update_frequency": "monthly",
+      "tracking_method": "定期扫描iOS AppStore和Android release变化",
+      "delta_handling": "新增能力纳入REVIEW_REQUIRED流程；删除的能力评估是否影响parity"
+    }
+  },
+  "policy": "上游变更跟踪与Baseline更新策略",
+  "baseline_update_triggers": [
+    "上游源发布重大更新(major version)",
+    "发现遗漏能力(源自新扫描)",
+    "平台等价性规则变更",
+    "Amitia架构重大调整"
+  ]
+}

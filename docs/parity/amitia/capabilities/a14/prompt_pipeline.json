@@ -1,0 +1,62 @@
+{
+  "id": "prompt_pipeline",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "prompt_pipeline",
+  "description": "提示词构建管线详情(从请求到最终system prompt的完整链路)",
+  "build_request_fields": {
+    "file": "backend/internal/prompt/builder.go",
+    "core_fields": [
+      "CharacterBase(角色基础配置)",
+      "CharacterName/CharacterConfig",
+      "CompiledPersonality(编译后人格配置)",
+      "RuntimePlan(运行时计划)",
+      "ExpressionPlan(表达计划)",
+      "BaseIdentity(身份定义)",
+      "PersonalityRaw(原始人格)",
+      "EmotionFusionRaw(情绪融合)",
+      "AdultIntimacyRaw(亲密模式)",
+      "MemoryInjectRaw(记忆注入)",
+      "MemoryExtractRaw(记忆提取)",
+      "OutputShapeRaw(输出形状)",
+      "AntiRepeatRaw(反重复)",
+      "ChannelShortRaw(通道短文)",
+      "ProactiveRaw(主动模式全套)",
+      "ProfileContext(用户画像上下文)",
+      "TemporalContext(时间上下文)",
+      "RelationshipTimeContext(关系时间)",
+      "MemoryContext(记忆上下文)",
+      "Worldbook(世界书)",
+      "PluginContext(插件上下文)",
+      "AgentSkillContext(Agent技能上下文)",
+      "History(对话历史)",
+      "ToolResults(工具结果)",
+      "MultimodalText(多模态文本)",
+      "CurrentUserInput(当前用户输入)"
+    ]
+  },
+  "build_steps": [
+    "1. BuildRequest 字段收集(从character/companion/memory/worldbook等模块)",
+    "2. TextLib渲染(templates.txt中模板 + 文本库替换)",
+    "3. IR编译(中间表示)",
+    "4. Sanitize(安全检查/注入检测)",
+    "5. Compiler编译为最终字符串",
+    "6. Budget裁剪(Token限制内按优先级裁剪历史)",
+    "7. Renderer输出最终system prompt"
+  ],
+  "key_files": [
+    "backend/internal/prompt/builder.go",
+    "backend/internal/prompt/builder_character.go",
+    "backend/internal/prompt/builder_context.go",
+    "backend/internal/prompt/builder_output.go",
+    "backend/internal/prompt/builder_policy.go",
+    "backend/internal/prompt/builder_proactive.go",
+    "backend/internal/prompt/compiler.go",
+    "backend/internal/prompt/renderer.go",
+    "backend/internal/prompt/budget.go",
+    "backend/internal/prompt/sanitize.go",
+    "backend/internal/prompt/templates.go",
+    "backend/internal/prompt/ir.go",
+    "backend/internal/prompt/textlib/"
+  ]
+}

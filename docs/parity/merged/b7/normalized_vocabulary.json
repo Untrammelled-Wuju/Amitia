@@ -1,0 +1,53 @@
+{
+  "source_prefixes": {
+    "openminis": "OMN-",
+    "amitia": "AMT-",
+    "operit": "OPR-"
+  },
+  "behavior_match_types": [
+    "EXACT_BEHAVIOR_EQUIVALENT",
+    "OUTCOME_EQUIVALENT",
+    "PLATFORM_EQUIVALENT",
+    "AMITIA_SUPERSET",
+    "AMITIA_SUBSET",
+    "PARTIAL_OVERLAP",
+    "NO_AMITIA_EQUIVALENT",
+    "AMITIA_ONLY"
+  ],
+  "mapping_prefix": "MAP-",
+  "version": "B7-alpha",
+  "projection_prefixes": {
+    "openminis": "PROJ-OMN-",
+    "amitia": "PROJ-AMT-",
+    "operit": "PROJ-OPR-"
+  },
+  "description": "三方能力映射统一命名空间",
+  "unified_categories": [
+    "01_AGENT_AND_CONVERSATION",
+    "02_PROMPT_CONTEXT_AND_PLANNING",
+    "03_TASK_AND_AUTOMATION",
+    "04_TOOL_RUNTIME",
+    "05_SANDBOX_RUNTIME",
+    "06_FILE_PROCESS_AND_NETWORK",
+    "07_BROWSER_SEARCH_AND_COMPUTER_USE",
+    "08_WORKSPACE_AND_RESOURCE",
+    "09_MCP_SKILL_PLUGIN_EXTENSION",
+    "10_WORKFLOW_HOOK_EVENT_SCHEDULE",
+    "11_MODEL_AND_LOCAL_INFERENCE",
+    "12_VOICE_AND_AUDIO",
+    "13_MEMORY",
+    "14_CHARACTER_PERSONALITY_EMOTION_LIFE",
+    "15_CHANNEL_AND_MESSAGING",
+    "16_ANDROID_NATIVE",
+    "17_IOS_NATIVE",
+    "18_DESKTOP_NATIVE",
+    "19_MEDIA_VISION_AND_DEVICE",
+    "20_PERMISSION_SECURITY_AND_PRIVACY",
+    "21_IMPORT_EXPORT_BACKUP_UPDATE",
+    "22_RUNTIME_INFRASTRUCTURE",
+    "23_DATABASE_AND_STORAGE",
+    "24_UI_PRODUCT_AND_DIAGNOSTICS",
+    "25_PET_GAME_AND_SPECIALIZED",
+    "26_OTHER"
+  ]
+}

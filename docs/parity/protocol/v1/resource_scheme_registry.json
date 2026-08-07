@@ -1,0 +1,30 @@
+{
+  "primaryScheme": "amitia",
+  "schemes": [
+    {
+      "Scheme": "amitia",
+      "Description": "Primary Amitia URI scheme",
+      "Paths": [
+        "workspace",
+        "attachment",
+        "browser",
+        "offload",
+        "memory",
+        "runtime",
+        "extension",
+        "temp"
+      ]
+    },
+    {
+      "Scheme": " amitia-workspace",
+      "Description": "Workspace-specific URI",
+      "Paths": [
+        "projects",
+        "files",
+        "settings"
+      ]
+    }
+  ],
+  "registryId": "PARITY-2026-08-07-V1-SCHEME-REGISTRY",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

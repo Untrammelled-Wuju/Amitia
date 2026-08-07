@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "export": [
+    "Sessions",
+    "Settings",
+    "Provider config",
+    "MCP config",
+    "Workspace"
+  ],
+  "import": [
+    "From exported backup",
+    "MCP Claude Desktop JSON"
+  ],
+  "migration": [
+    "Database schema migration on version upgrade",
+    "Corruption recovery"
+  ]
+}

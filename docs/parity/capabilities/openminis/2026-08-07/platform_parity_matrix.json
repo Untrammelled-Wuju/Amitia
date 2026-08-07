@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "summary": {
+    "shared_capabilities": 89,
+    "ios_only": 31,
+    "android_only": 23,
+    "behavior_equivalent": 89,
+    "behavior_different": [
+      "shell execution (iSH vs PRoot)",
+      "TTS engine",
+      "sandbox architecture"
+    ]
+  }
+}

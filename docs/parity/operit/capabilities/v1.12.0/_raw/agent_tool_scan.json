@@ -1,0 +1,1184 @@
+{
+  "scan_domain": "AGENT_AND_TOOL",
+  "scan_timestamp": "2026-08-07",
+  "repository": "Operit-v1.12.0",
+  "source_root": "app/src/main/java/com/ai/assistance/operit",
+  "agent_framework": {
+    "entrypoint_files": [
+      {
+        "file": "api/chat/EnhancedAIService.kt",
+        "class": "EnhancedAIService",
+        "description": "Core chat orchestration service - singleton per chat instance. Manages full conversation lifecycle including tool execution loop, streaming, and token counting.",
+        "line_declaration": 97,
+        "key_methods": [
+          {"name": "getInstance", "line": 118, "description": "Returns singleton EnhancedAIService instance"},
+          {"name": "getChatInstance", "line": 128, "description": "Returns per-chatId EnhancedAIService instance"},
+          {"name": "sendMessage", "line": 463, "description": "Main entry: sends user message, processes stream, handles tool invocations"},
+          {"name": "processStreamCompletion", "line": 1678, "description": "Post-stream processing: extracts tool calls, dispatches execution"},
+          {"name": "handleToolInvocations", "line": 1941, "description": "Handles multiple tool invocations from a single AI response"},
+          {"name": "processToolResults", "line": 2156, "description": "Feeds tool results back to AI for next turn (agentic loop)"}
+        ]
+      }
+    ],
+    "agent_loop_classes": [
+      {
+        "file": "api/chat/EnhancedAIService.kt",
+        "class": "EnhancedAIService",
+        "loop_mechanism": "Implicit agentic loop via processToolResults() -> AIService.sendMessage() recursion",
+        "line_loop_logic": "1678-2410",
+        "description": "After AI responds with tool calls, results are collected and fed back into the conversation. There is no explicit max_iterations in the chat loop; it continues until the AI responds without tool calls."
+      },
+      {
+        "file": "core/tools/agent/PhoneAgent.kt",
+        "class": "PhoneAgent",
+        "loop_mechanism": "Explicit max-steps UI automation loop",
+        "line_loop_logic": "355-593",
+        "description": "Vision-language agent for Android UI automation. Uses screenshot + action loop up to maxSteps (default 20).",
+        "key_config": {
+          "class": "AgentConfig",
+          "field": "maxSteps",
+          "default_value": 20,
+          "line": 44
+        },
+        "key_methods": [
+          {"name": "run", "line": 355, "description": "Main agent loop entry - sends task+systemPrompt, iterates _executeStep until finished or maxSteps"},
+          {"name": "_executeStep", "line": 602, "description": "Single agent step: screenshot -> AI -> parse action -> execute via ActionHandler"},
+          {"name": "parseAgentAction", "line": 691, "description": "Parses do(action=...) and finish(message=...) from AI response"},
+          {"name": "reset", "line": 596, "description": "Clears agent context history and step counter"}
+        ]
+      },
+      {
+        "file": "core/tools/agent/PhoneAgent.kt",
+        "class": "ActionHandler",
+        "line_declaration": 762,
+        "description": "Executes parsed PhoneAgent actions. Contains executeAgentAction() with Launch/Tap/Type/Swipe/Back/Home/Wait/Take_over handlers.",
+        "key_methods": [
+          {"name": "executeAgentAction", "line": 960, "description": "Dispatches parsed action to implementation (uses Shower virtual display or tool layer)"},
+          {"name": "captureScreenshotForAgent", "line": 826, "description": "Captures screenshot via Shower WS or bitmap fallback"}
+        ]
+      },
+      {
+        "file": "core/tools/agent/PhoneAgent.kt",
+        "class": "ToolImplementations",
+        "line_declaration": 1280,
+        "description": "Interface providing tap/longPress/setInputText/swipe/pressKey/captureScreenshot for PhoneAgent"
+      }
+    ],
+    "system_prompt_builders": [
+      {
+        "file": "core/config/SystemPromptConfig.kt",
+        "class": "SystemPromptConfig",
+        "line_declaration": 15,
+        "key_methods": [
+          {"name": "getSystemPrompt", "line": 245, "description": "Generates complete system prompt with tool descriptions, workspace guidelines, package system info"},
+          {"name": "getSystemPromptWithCustomPrompts", "line": 557, "description": "Extended version with hook dispatch for custom prompt composition"},
+          {"name": "applyCustomPrompts", "line": 209, "description": "Applies user-defined intro prompt customization"}
+        ],
+        "templates": [
+          {"name": "SYSTEM_PROMPT_TEMPLATE", "line": 149, "description": "English template with section placeholders"},
+          {"name": "SYSTEM_PROMPT_TEMPLATE_CN", "line": 166, "description": "Chinese template with section placeholders"},
+          {"name": "SUBTASK_AGENT_PROMPT_TEMPLATE", "line": 184, "description": "Template for subtask agents (no memory, no emotion)"}
+        ],
+        "section_placeholders": [
+          "BEGIN_SELF_INTRODUCTION_SECTION",
+          "WORKSPACE_GUIDELINES_SECTION",
+          "TOOL_USAGE_GUIDELINES_SECTION",
+          "PACKAGE_SYSTEM_GUIDELINES_SECTION",
+          "ACTIVE_PACKAGES_SECTION",
+          "AVAILABLE_TOOLS_SECTION"
+        ]
+      },
+      {
+        "file": "core/config/SystemToolPrompts.kt",
+        "class": "SystemToolPrompts",
+        "line_declaration": 13,
+        "description": "Defines structured tool descriptions (ToolPrompt with ToolParameterSchema) organized by category for system prompt inclusion",
+        "key_categories": [
+          {"name": "basicTools", "line": 42, "tools": ["sleep", "use_package"]},
+          {"name": "fileSystemTools", "line": 88, "tools": ["list_files", "read_file", "read_file_part", "create_file", "edit_file", "delete_file", "make_directory", "find_files", "grep_code", "grep_context", "download_file"]}
+        ]
+      },
+      {
+        "file": "core/config/SystemToolPromptsInternal.kt",
+        "description": "Internal tool prompt generation for dynamic tool visibility and capability-based tool inclusion"
+      }
+    ],
+    "context_managers": [
+      {
+        "file": "api/chat/EnhancedAIService.kt",
+        "class": "EnhancedAIService.MessageExecutionContext",
+        "description": "Per-conversation execution context holding conversationHistory, streamBuffer, roundManager, eventChannel, isConversationActive flag"
+      },
+      {
+        "file": "api/chat/enhance/ToolExecutionManager.kt",
+        "class": "ToolExecutionManager.ToolRuntimeContext",
+        "line_declaration": 47,
+        "description": "Thread-local runtime context for tool execution (callerCardId, toolExposureMode)"
+      }
+    ],
+    "tool_selection_logic": [
+      {
+        "file": "api/chat/enhance/ToolExecutionManager.kt",
+        "description": "Tool selection based on role card access control, CLI mode exposure, and character card permissions"
+      },
+      {
+        "file": "core/tools/AIToolHandler.kt",
+        "method": "getToolExecutorOrActivate",
+        "line": 304,
+        "description": "Auto-activates package when tool name looks like 'package:toolName', supporting dynamic tool resolution"
+      }
+    ],
+    "max_iterations": {
+      "chat_loop": "No explicit limit - continues until AI responds without tool calls",
+      "phone_agent": 20,
+      "phone_agent_configurable": "AgentConfig.maxSteps, default 20"
+    },
+    "streaming_support": {
+      "enabled": true,
+      "mechanism": "AIService.sendMessage returns Stream<String>; EnhancedAIService processes chunks via TextStreamEventCarrier with savepoint/rollback revision tracking",
+      "stream_class": "com.ai.assistance.operit.util.stream.Stream"
+    },
+    "cancellation_support": {
+      "enabled": true,
+      "mechanism": "coroutine Job tracking via PhoneAgentJobRegistry; cancelConversation() in EnhancedAIService; CancellationException handling throughout"
+    }
+  },
+  "tool_registry": {
+    "registry_classes": [
+      {
+        "file": "core/tools/AIToolHandler.kt",
+        "class": "AIToolHandler",
+        "line_declaration": 29,
+        "description": "Singleton tool handler - central registry for all available tools via ConcurrentHashMap<String, ToolExecutor>",
+        "registry_storage": "ConcurrentHashMap<String, ToolExecutor> availableTools (line 45)",
+        "key_methods": [
+          {"name": "registerTool", "line": 179, "description": "Register tool with name, description generator, and executor"},
+          {"name": "executeTool", "line": 364, "description": "Execute tool with hook interception and permission checks"},
+          {"name": "executeToolAndStream", "line": 420, "description": "Execute tool with streaming result support"},
+          {"name": "getToolExecutorOrActivate", "line": 304, "description": "Get executor with lazy default registration and auto-package-activation"},
+          {"name": "registerDefaultTools", "line": 211, "description": "Idempotent registration of all default tools via registerAllTools()"}
+        ]
+      },
+      {
+        "file": "core/tools/ToolRegistration.kt",
+        "function": "registerAllTools",
+        "line_declaration": 36,
+        "description": "Centralized registration function - all ~100+ built-in tools registered here. Called by AIToolHandler.registerDefaultTools()"
+      },
+      {
+        "file": "core/tools/defaultTool/ToolGetter.kt",
+        "class": "ToolGetter",
+        "line_declaration": 13,
+        "description": "Factory that returns permission-level-appropriate tool implementations (STANDARD/ROOT/ADMIN/DEBUGGER/ACCESSIBILITY)"
+      },
+      {
+        "file": "core/tools/ToolPackage.kt",
+        "class": "PackageToolExecutor",
+        "line_declaration": 373,
+        "description": "Executor for JS package tools - parses 'packageName:toolName' format and delegates to JsToolManager"
+      },
+      {
+        "file": "core/tools/mcp/MCPToolExecutor.kt",
+        "class": "MCPToolExecutor",
+        "line_declaration": 24,
+        "description": "Executor for MCP (Model Context Protocol) tools - connects to MCP servers via MCPBridgeClient",
+        "key_methods": [
+          {"name": "invoke", "line": 238, "description": "Calls MCP tool via bridge client with auto type conversion"}
+        ]
+      },
+      {
+        "file": "core/tools/mcp/MCPToolExecutor.kt",
+        "class": "MCPManager",
+        "line_declaration": 431,
+        "description": "Singleton MCP server manager - handles MCP client creation, caching, and server registration"
+      }
+    ],
+    "builtin_tool_count": 108,
+    "categories": [
+      "shell/terminal",
+      "file_system",
+      "ui_automation",
+      "browser_session",
+      "system_operation",
+      "device_info",
+      "music",
+      "http_web",
+      "memory",
+      "chat_management",
+      "package_mcp",
+      "workflow",
+      "bluetooth",
+      "ffmpeg",
+      "calculator",
+      "intent_broadcast",
+      "settings_config",
+      "phone_agent"
+    ],
+    "core_interfaces": [
+      {
+        "file": "core/tools/AIToolHandler.kt",
+        "interface": "ToolExecutor",
+        "line_declaration": 480,
+        "methods": [
+          {"name": "invoke", "signature": "fun invoke(tool: AITool): ToolResult"},
+          {"name": "invokeAndStream", "signature": "fun invokeAndStream(tool: AITool): Flow<ToolResult>"},
+          {"name": "validateParameters", "signature": "fun validateParameters(tool: AITool): ToolValidationResult"}
+        ]
+      },
+      {
+        "file": "core/tools/AIToolHook.kt",
+        "interface": "AIToolHook",
+        "line_declaration": 16,
+        "description": "Lifecycle hooks for tool call interception: onToolCallRequested, onToolCallIntercept, onToolPermissionChecked, onToolExecutionStarted, onToolExecutionResult, onToolExecutionError, onToolExecutionFinished"
+      }
+    ],
+    "permission_system": {
+      "file": "ui/permissions/ToolPermissionSystem.kt",
+      "description": "Manages tool permission dialogs and user approval for tool executions"
+    }
+  },
+  "tool_categories": [
+    {
+      "category_name": "Shell & Terminal",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {
+          "tool_id": "execute_shell",
+          "display_name": "Execute Shell",
+          "class_name": "StandardShellToolExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardShellToolExecutor.kt",
+          "line_start": 18,
+          "line_end": 102,
+          "description": "Execute ADB shell commands via AndroidShellExecutor",
+          "parameters": [
+            {"name": "command", "type": "string", "required": true, "description": "Shell command to execute"}
+          ],
+          "return_type": "ToolResult via ADBResultData"
+        },
+        {
+          "tool_id": "create_terminal_session",
+          "display_name": "Create Terminal Session",
+          "class_name": "StandardTerminalCommandExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardTerminalCommandExecutor.kt",
+          "line_start": 31,
+          "line_method": 31,
+          "description": "Create a persistent terminal session",
+          "parameters": [{"name": "session_name", "type": "string", "required": false}],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "execute_in_terminal_session",
+          "display_name": "Execute In Terminal Session",
+          "class_name": "StandardTerminalCommandExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardTerminalCommandExecutor.kt",
+          "line_method": 88,
+          "description": "Execute a command in an existing terminal session",
+          "parameters": [
+            {"name": "session_id", "type": "string", "required": true},
+            {"name": "command", "type": "string", "required": true}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "execute_in_terminal_session_streaming",
+          "display_name": "Execute In Terminal Session (Streaming)",
+          "class_name": "StandardTerminalCommandExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardTerminalCommandExecutor.kt",
+          "line_method": 197,
+          "description": "Execute command with streaming output",
+          "parameters": [
+            {"name": "session_id", "type": "string", "required": true},
+            {"name": "command", "type": "string", "required": true}
+          ],
+          "return_type": "Flow<ToolResult>"
+        },
+        {
+          "tool_id": "execute_hidden_terminal_command",
+          "display_name": "Execute Hidden Terminal Command",
+          "class_name": "StandardTerminalCommandExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardTerminalCommandExecutor.kt",
+          "line_method": 342,
+          "description": "Execute hidden/privileged terminal command",
+          "parameters": [
+            {"name": "command", "type": "string", "required": true},
+            {"name": "executor_key", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "close_terminal_session",
+          "display_name": "Close Terminal Session",
+          "class_name": "StandardTerminalCommandExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardTerminalCommandExecutor.kt",
+          "line_method": 498,
+          "description": "Close a terminal session",
+          "parameters": [{"name": "session_id", "type": "string", "required": true}],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "input_in_terminal_session",
+          "display_name": "Input In Terminal Session",
+          "class_name": "StandardTerminalCommandExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardTerminalCommandExecutor.kt",
+          "line_method": 419,
+          "description": "Send input to terminal session (e.g., control characters)",
+          "parameters": [
+            {"name": "session_id", "type": "string", "required": true},
+            {"name": "control", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "get_terminal_session_screen",
+          "display_name": "Get Terminal Session Screen",
+          "class_name": "StandardTerminalCommandExecutor",
+          "file_path": "core/tools/defaultTool/standard/StandardTerminalCommandExecutor.kt",
+          "line_method": 539,
+          "description": "Get the current terminal screen content",
+          "parameters": [{"name": "session_id", "type": "string", "required": true}],
+          "return_type": "ToolResult"
+        }
+      ]
+    },
+    {
+      "category_name": "File System",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {
+          "tool_id": "list_files",
+          "display_name": "List Files",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "line_start": 90,
+          "description": "List files in a directory",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult via DirectoryListingData"
+        },
+        {
+          "tool_id": "read_file",
+          "display_name": "Read File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Read file content with OCR/image/audio/video support",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "intent", "type": "string", "required": false},
+            {"name": "direct_image", "type": "boolean", "required": false},
+            {"name": "direct_audio", "type": "boolean", "required": false},
+            {"name": "direct_video", "type": "boolean", "required": false}
+          ],
+          "return_type": "ToolResult via FileContentData"
+        },
+        {
+          "tool_id": "read_file_part",
+          "display_name": "Read File Part",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Read file by line range",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "start_line", "type": "integer", "required": false},
+            {"name": "end_line", "type": "integer", "required": false}
+          ],
+          "return_type": "ToolResult via FilePartContentData"
+        },
+        {
+          "tool_id": "read_file_full",
+          "display_name": "Read File Full",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Read complete file content",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "read_file_binary",
+          "display_name": "Read File Binary",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Read binary file (Base64 encoded)",
+          "parameters": [{"name": "path", "type": "string", "required": true}],
+          "return_type": "ToolResult via BinaryFileContentData"
+        },
+        {
+          "tool_id": "write_file",
+          "display_name": "Write File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Write content to file",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "content", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "append", "type": "boolean", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "write_file_binary",
+          "display_name": "Write File Binary",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Write binary content to file",
+          "parameters": [{"name": "path", "type": "string", "required": true}],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "delete_file",
+          "display_name": "Delete File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Delete file or directory",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "recursive", "type": "boolean", "required": false}
+          ],
+          "return_type": "ToolResult via FileOperationData"
+        },
+        {
+          "tool_id": "create_file",
+          "display_name": "Create File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Create new file",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "new", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "edit_file",
+          "display_name": "Edit File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Edit existing file (old->new replacement)",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "old", "type": "string", "required": true},
+            {"name": "new", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "apply_file",
+          "display_name": "Apply File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Smart file binding with create/replace/patch operations (streaming supported)",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "type", "type": "string", "required": false},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult via FileApplyResultData"
+        },
+        {
+          "tool_id": "make_directory",
+          "display_name": "Make Directory",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Create directory",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "create_parents", "type": "boolean", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "find_files",
+          "display_name": "Find Files",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Search files matching pattern with ripgrep support",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "pattern", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "max_depth", "type": "integer", "required": false},
+            {"name": "use_path_pattern", "type": "boolean", "required": false},
+            {"name": "case_insensitive", "type": "boolean", "required": false}
+          ],
+          "return_type": "ToolResult via FindFilesResultData"
+        },
+        {
+          "tool_id": "grep_code",
+          "display_name": "Grep Code",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Regex search code content",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "pattern", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "file_pattern", "type": "string", "required": false},
+            {"name": "case_insensitive", "type": "boolean", "required": false},
+            {"name": "context_lines", "type": "integer", "required": false},
+            {"name": "max_results", "type": "integer", "required": false}
+          ],
+          "return_type": "ToolResult via GrepResultData"
+        },
+        {
+          "tool_id": "grep_context",
+          "display_name": "Grep Context",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Intent-based semantic code search",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "intent", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "file_pattern", "type": "string", "required": false},
+            {"name": "max_results", "type": "integer", "required": false}
+          ],
+          "return_type": "ToolResult via GrepResultData"
+        },
+        {
+          "tool_id": "download_file",
+          "display_name": "Download File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Download file from URL or visit_web result",
+          "parameters": [
+            {"name": "url", "type": "string", "required": false},
+            {"name": "visit_key", "type": "string", "required": false},
+            {"name": "link_number", "type": "integer", "required": false},
+            {"name": "image_number", "type": "integer", "required": false},
+            {"name": "destination", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false},
+            {"name": "headers", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "file_exists",
+          "display_name": "File Exists",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Check if file/directory exists",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult via FileExistsData"
+        },
+        {
+          "tool_id": "file_info",
+          "display_name": "File Info",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Get file/directory metadata",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult via FileInfoData"
+        },
+        {
+          "tool_id": "move_file",
+          "display_name": "Move File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Move or rename file/directory",
+          "parameters": [
+            {"name": "source", "type": "string", "required": true},
+            {"name": "destination", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult via FileOperationData"
+        },
+        {
+          "tool_id": "copy_file",
+          "display_name": "Copy File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Copy file/directory with cross-environment support",
+          "parameters": [
+            {"name": "source", "type": "string", "required": true},
+            {"name": "destination", "type": "string", "required": true},
+            {"name": "source_environment", "type": "string", "required": false},
+            {"name": "dest_environment", "type": "string", "required": false},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "zip_files",
+          "display_name": "Zip Files",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Compress files/directories",
+          "parameters": [
+            {"name": "source", "type": "string", "required": true},
+            {"name": "destination", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "unzip_files",
+          "display_name": "Unzip Files",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Extract compressed archive",
+          "parameters": [
+            {"name": "source", "type": "string", "required": true},
+            {"name": "destination", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "open_file",
+          "display_name": "Open File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Open file with system default app",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "share_file",
+          "display_name": "Share File",
+          "class_name": "StandardFileSystemTools",
+          "file_path": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+          "description": "Share file via Android share intent",
+          "parameters": [
+            {"name": "path", "type": "string", "required": true},
+            {"name": "environment", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        }
+      ]
+    },
+    {
+      "category_name": "UI Automation",
+      "path": "core/tools/defaultTool/standard/ & core/tools/defaultTool/{root,admin,debugger,accessibility}/",
+      "tools": [
+        {
+          "tool_id": "click_element",
+          "display_name": "Click Element",
+          "class_name": "StandardUITools (and permission-specific variants)",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Click UI element by resourceId/className/bounds with floating window visibility management",
+          "parameters": [
+            {"name": "resourceId", "type": "string", "required": false},
+            {"name": "className", "type": "string", "required": false},
+            {"name": "bounds", "type": "string", "required": false},
+            {"name": "index", "type": "integer", "required": false, "default": "0"}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "tap",
+          "display_name": "Tap",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Tap at screen coordinates",
+          "parameters": [
+            {"name": "x", "type": "integer", "required": true},
+            {"name": "y", "type": "integer", "required": true}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "long_press",
+          "display_name": "Long Press",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Long press at screen coordinates",
+          "parameters": [
+            {"name": "x", "type": "integer", "required": true},
+            {"name": "y", "type": "integer", "required": true}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "set_input_text",
+          "display_name": "Set Input Text",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Set text in focused input field",
+          "parameters": [{"name": "text", "type": "string", "required": true}],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "press_key",
+          "display_name": "Press Key",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Press hardware/meta key by key code",
+          "parameters": [{"name": "key_code", "type": "string", "required": true}],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "swipe",
+          "display_name": "Swipe",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Perform swipe gesture",
+          "parameters": [
+            {"name": "start_x", "type": "integer", "required": true},
+            {"name": "start_y", "type": "integer", "required": true},
+            {"name": "end_x", "type": "integer", "required": true},
+            {"name": "end_y", "type": "integer", "required": true}
+          ],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "capture_screenshot",
+          "display_name": "Capture Screenshot",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Capture screen and return image path (hides status indicator during capture)",
+          "parameters": [],
+          "return_type": "ToolResult via StringResultData (image path)"
+        },
+        {
+          "tool_id": "get_page_info",
+          "display_name": "Get Page Info",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Get current window/activity info",
+          "parameters": [],
+          "return_type": "ToolResult"
+        },
+        {
+          "tool_id": "run_ui_subagent",
+          "display_name": "Run UI SubAgent",
+          "class_name": "StandardUITools",
+          "file_path": "core/tools/defaultTool/standard/StandardUITools.kt",
+          "description": "Launch PhoneAgent as a sub-agent for UI automation tasks",
+          "parameters": [
+            {"name": "intent", "type": "string", "required": true},
+            {"name": "max_steps", "type": "integer", "required": false, "default": "20"},
+            {"name": "agent_id", "type": "string", "required": false}
+          ],
+          "return_type": "ToolResult"
+        }
+      ]
+    },
+    {
+      "category_name": "Browser Session",
+      "path": "core/tools/defaultTool/standard/ & core/tools/defaultTool/websession/",
+      "tools": [
+        {
+          "tool_id": "visit_web",
+          "display_name": "Visit Web",
+          "class_name": "StandardWebVisitTool",
+          "file_path": "core/tools/defaultTool/standard/StandardWebVisitTool.kt",
+          "description": "Navigate to URL or search, supports SERP extraction",
+          "parameters": [
+            {"name": "url", "type": "string", "required": false},
+            {"name": "visit_key", "type": "string", "required": false},
+            {"name": "link_number", "type": "integer", "required": false}
+          ],
+          "return_type": "ToolResult via StringResultData"
+        },
+        {
+          "tool_id": "browser_click", "display_name": "Browser Click", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "ref", "type": "string", "required": false}, {"name": "selector", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "browser_close", "display_name": "Browser Close", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "browser_close_all", "display_name": "Browser Close All", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "browser_console_messages", "display_name": "Browser Console Messages", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "browser_drag", "display_name": "Browser Drag", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "from_ref", "type": "string", "required": true}, {"name": "to_ref", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_evaluate", "display_name": "Browser Evaluate", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "expression", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_file_upload", "display_name": "Browser File Upload", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "ref", "type": "string", "required": true}, {"name": "file_path", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_fill_form", "display_name": "Browser Fill Form", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "ref", "type": "string", "required": true}, {"name": "values", "type": "object", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_handle_dialog", "display_name": "Browser Handle Dialog", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "action", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_hover", "display_name": "Browser Hover", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "ref", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_navigate", "display_name": "Browser Navigate", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "url", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_navigate_back", "display_name": "Browser Navigate Back", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "browser_network_requests", "display_name": "Browser Network Requests", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "browser_press_key", "display_name": "Browser Press Key", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "key", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_resize", "display_name": "Browser Resize", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "width", "type": "integer", "required": true}, {"name": "height", "type": "integer", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_run_code", "display_name": "Browser Run Code", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "code", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_select_option", "display_name": "Browser Select Option", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "ref", "type": "string", "required": true}, {"name": "values", "type": "array", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_snapshot", "display_name": "Browser Snapshot", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "browser_take_screenshot", "display_name": "Browser Take Screenshot", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "browser_tabs", "display_name": "Browser Tabs", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "action", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_type", "display_name": "Browser Type", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "ref", "type": "string", "required": true}, {"name": "text", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "browser_wait_for", "display_name": "Browser Wait For", "class_name": "StandardBrowserSessionTools", "file_path": "core/tools/defaultTool/standard/StandardBrowserSessionTools.kt", "parameters": [{"name": "text", "type": "string", "required": false}, {"name": "time", "type": "number", "required": false}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "System Operation",
+      "path": "core/tools/defaultTool/standard/ & core/tools/defaultTool/{root,admin,debugger,accessibility}/",
+      "tools": [
+        {"tool_id": "toast", "display_name": "Toast", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "message", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "send_notification", "display_name": "Send Notification", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "title", "type": "string", "required": true}, {"name": "content", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "modify_system_setting", "display_name": "Modify System Setting", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "key", "type": "string", "required": true}, {"name": "value", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "get_system_setting", "display_name": "Get System Setting", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "key", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "install_app", "display_name": "Install App", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "path", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "uninstall_app", "display_name": "Uninstall App", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "package_name", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "list_installed_apps", "display_name": "List Installed Apps", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [], "return_type": "ToolResult via AppListData"},
+        {"tool_id": "start_app", "display_name": "Start App", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "package_name", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "stop_app", "display_name": "Stop App", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "package_name", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "get_notifications", "display_name": "Get Notifications", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "limit", "type": "integer", "required": false}, {"name": "include_ongoing", "type": "boolean", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "get_app_usage_time", "display_name": "Get App Usage Time", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "package_name", "type": "string", "required": false}, {"name": "since_hours", "type": "integer", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "get_device_location", "display_name": "Get Device Location", "class_name": "StandardSystemOperationTools", "file_path": "core/tools/defaultTool/standard/StandardSystemOperationTools.kt", "parameters": [{"name": "high_accuracy", "type": "boolean", "required": false}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Bluetooth",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "request_bluetooth_permission", "display_name": "Request Bluetooth Permission", "class_name": "StandardSystemOperationTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "get_bluetooth_state", "display_name": "Get Bluetooth State", "class_name": "StandardSystemOperationTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "request_enable_bluetooth", "display_name": "Request Enable Bluetooth", "class_name": "StandardSystemOperationTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "list_bluetooth_bonded_devices", "display_name": "List Bluetooth Bonded Devices", "class_name": "StandardSystemOperationTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "scan_bluetooth_devices", "display_name": "Scan Bluetooth Devices", "class_name": "StandardSystemOperationTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_connect", "display_name": "Bluetooth Connect", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "address", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_listen", "display_name": "Bluetooth Listen", "class_name": "StandardSystemOperationTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_accept", "display_name": "Bluetooth Accept", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "listener_session_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_send", "display_name": "Bluetooth Send", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}, {"name": "data", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_read", "display_name": "Bluetooth Read", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_send_and_read", "display_name": "Bluetooth Send And Read", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}, {"name": "data", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_close", "display_name": "Bluetooth Close", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_ble_connect", "display_name": "Bluetooth BLE Connect", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "address", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_ble_discover_services", "display_name": "Bluetooth BLE Discover Services", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_ble_read_characteristic", "display_name": "Bluetooth BLE Read Characteristic", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}, {"name": "characteristic_uuid", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_ble_write_characteristic", "display_name": "Bluetooth BLE Write Characteristic", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}, {"name": "characteristic_uuid", "type": "string", "required": true}, {"name": "data", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_ble_write_and_read_characteristic", "display_name": "BLE Write And Read Characteristic", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}, {"name": "write_characteristic_uuid", "type": "string", "required": true}, {"name": "read_characteristic_uuid", "type": "string", "required": true}, {"name": "data", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_ble_subscribe_characteristic", "display_name": "BLE Subscribe Characteristic", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}, {"name": "characteristic_uuid", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "bluetooth_ble_read_notifications", "display_name": "BLE Read Notifications", "class_name": "StandardSystemOperationTools", "parameters": [{"name": "session_id", "type": "string", "required": true}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "HTTP & Web",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "http_request", "display_name": "HTTP Request", "class_name": "StandardHttpTools", "file_path": "core/tools/defaultTool/standard/StandardHttpTools.kt", "parameters": [{"name": "url", "type": "string", "required": true}, {"name": "method", "type": "string", "required": false}, {"name": "headers", "type": "object", "required": false}, {"name": "body", "type": "string", "required": false}], "return_type": "ToolResult (streaming supported)"},
+        {"tool_id": "multipart_request", "display_name": "Multipart Request", "class_name": "StandardHttpTools", "file_path": "core/tools/defaultTool/standard/StandardHttpTools.kt", "parameters": [{"name": "url", "type": "string", "required": true}, {"name": "data", "type": "object", "required": false}, {"name": "files", "type": "array", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "manage_cookies", "display_name": "Manage Cookies", "class_name": "StandardHttpTools", "file_path": "core/tools/defaultTool/standard/StandardHttpTools.kt", "parameters": [{"name": "action", "type": "string", "required": true}, {"name": "domain", "type": "string", "required": false}, {"name": "name", "type": "string", "required": false}, {"name": "value", "type": "string", "required": false}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Device Info",
+      "path": "core/tools/defaultTool/standard/ & permission-specific variants/",
+      "tools": [
+        {"tool_id": "device_info", "display_name": "Device Info", "class_name": "StandardDeviceInfoToolExecutor", "file_path": "core/tools/defaultTool/standard/StandardDeviceInfoToolExecutor.kt", "description": "[Permission-level variant STANDARD/ROOT/ADMIN/DEBUGGER/ACCESSIBILITY] Get device information", "parameters": [], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Music Playback",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "music_play", "display_name": "Music Play", "class_name": "StandardMusicPlaybackTools", "file_path": "core/tools/defaultTool/standard/StandardMusicPlaybackTools.kt", "parameters": [{"name": "source", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "music_play_queue", "display_name": "Music Play Queue", "class_name": "StandardMusicPlaybackTools", "parameters": [{"name": "items", "type": "array", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "music_pause", "display_name": "Music Pause", "class_name": "StandardMusicPlaybackTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "music_resume", "display_name": "Music Resume", "class_name": "StandardMusicPlaybackTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "music_stop", "display_name": "Music Stop", "class_name": "StandardMusicPlaybackTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "music_seek", "display_name": "Music Seek", "class_name": "StandardMusicPlaybackTools", "parameters": [{"name": "position_ms", "type": "integer", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "music_set_volume", "display_name": "Music Set Volume", "class_name": "StandardMusicPlaybackTools", "parameters": [{"name": "volume", "type": "number", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "music_status", "display_name": "Music Status", "class_name": "StandardMusicPlaybackTools", "parameters": [], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Memory & Preferences",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "query_memory", "display_name": "Query Memory", "class_name": "MemoryQueryToolExecutor", "file_path": "core/tools/defaultTool/standard/MemoryQueryToolExecutor.kt", "parameters": [{"name": "query", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "get_memory_by_title", "display_name": "Get Memory By Title", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "title", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "update_user_preferences", "display_name": "Update User Preferences", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "birth_date", "type": "string", "required": false}, {"name": "gender", "type": "string", "required": false}, {"name": "personality", "type": "string", "required": false}, {"name": "identity", "type": "string", "required": false}, {"name": "occupation", "type": "string", "required": false}, {"name": "ai_style", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "create_memory", "display_name": "Create Memory", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "title", "type": "string", "required": true}, {"name": "content", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "update_memory", "display_name": "Update Memory", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "old_title", "type": "string", "required": true}, {"name": "new_title", "type": "string", "required": false}, {"name": "content", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "delete_memory", "display_name": "Delete Memory", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "title", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "move_memory", "display_name": "Move Memory", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "titles", "type": "array", "required": false}, {"name": "source_folder_path", "type": "string", "required": false}, {"name": "target_folder_path", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "link_memories", "display_name": "Link Memories", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "source_title", "type": "string", "required": true}, {"name": "target_title", "type": "string", "required": true}, {"name": "link_type", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "query_memory_links", "display_name": "Query Memory Links", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "link_id", "type": "string", "required": false}, {"name": "source_title", "type": "string", "required": false}, {"name": "target_title", "type": "string", "required": false}, {"name": "link_type", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "update_memory_link", "display_name": "Update Memory Link", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "link_id", "type": "string", "required": false}, {"name": "source_title", "type": "string", "required": false}, {"name": "target_title", "type": "string", "required": false}, {"name": "link_type", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "delete_memory_link", "display_name": "Delete Memory Link", "class_name": "MemoryQueryToolExecutor", "parameters": [{"name": "link_id", "type": "string", "required": false}, {"name": "source_title", "type": "string", "required": false}, {"name": "target_title", "type": "string", "required": false}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Chat Management",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "start_chat_service", "display_name": "Start Chat Service", "class_name": "StandardChatManagerTool", "file_path": "core/tools/defaultTool/standard/StandardChatManagerTool.kt", "parameters": [], "return_type": "ToolResult via ChatServiceStartResultData"},
+        {"tool_id": "stop_chat_service", "display_name": "Stop Chat Service", "class_name": "StandardChatManagerTool", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "create_new_chat", "display_name": "Create New Chat", "class_name": "StandardChatManagerTool", "parameters": [{"name": "title", "type": "string", "required": false}, {"name": "group", "type": "string", "required": false}], "return_type": "ToolResult via ChatCreationResultData"},
+        {"tool_id": "list_chats", "display_name": "List Chats", "class_name": "StandardChatManagerTool", "parameters": [], "return_type": "ToolResult via ChatListResultData"},
+        {"tool_id": "find_chat", "display_name": "Find Chat", "class_name": "StandardChatManagerTool", "parameters": [{"name": "query", "type": "string", "required": true}], "return_type": "ToolResult via ChatFindResultData"},
+        {"tool_id": "agent_status", "display_name": "Agent Status", "class_name": "StandardChatManagerTool", "parameters": [{"name": "chat_id", "type": "string", "required": true}], "return_type": "ToolResult via AgentStatusResultData"},
+        {"tool_id": "switch_chat", "display_name": "Switch Chat", "class_name": "StandardChatManagerTool", "parameters": [{"name": "chat_id", "type": "string", "required": true}], "return_type": "ToolResult via ChatSwitchResultData"},
+        {"tool_id": "update_chat_title", "display_name": "Update Chat Title", "class_name": "StandardChatManagerTool", "parameters": [{"name": "chat_id", "type": "string", "required": true}, {"name": "title", "type": "string", "required": true}], "return_type": "ToolResult via ChatTitleUpdateResultData"},
+        {"tool_id": "delete_chat", "display_name": "Delete Chat", "class_name": "StandardChatManagerTool", "parameters": [{"name": "chat_id", "type": "string", "required": true}], "return_type": "ToolResult via ChatDeleteResultData"},
+        {"tool_id": "send_message_to_ai", "display_name": "Send Message To AI", "class_name": "StandardChatManagerTool", "parameters": [{"name": "chat_id", "type": "string", "required": true}, {"name": "message", "type": "string", "required": true}, {"name": "character_card_id", "type": "string", "required": false}], "return_type": "ToolResult via MessageSendResultData"},
+        {"tool_id": "send_message_to_ai_streaming", "display_name": "Send Message To AI (Streaming)", "class_name": "StandardChatManagerTool", "parameters": [{"name": "chat_id", "type": "string", "required": true}, {"name": "message", "type": "string", "required": true}], "return_type": "Flow<ToolResult> via MessageSendStreamEventData"},
+        {"tool_id": "list_character_cards", "display_name": "List Character Cards", "class_name": "StandardChatManagerTool", "parameters": [], "return_type": "ToolResult via CharacterCardListResultData"},
+        {"tool_id": "get_chat_messages", "display_name": "Get Chat Messages", "class_name": "StandardChatManagerTool", "parameters": [{"name": "chat_id", "type": "string", "required": true}, {"name": "order", "type": "string", "required": false}, {"name": "limit", "type": "integer", "required": false}], "return_type": "ToolResult via ChatMessagesResultData"}
+      ]
+    },
+    {
+      "category_name": "Package & MCP",
+      "path": "core/tools/packTool/ & core/tools/mcp/ & core/tools/javascript/",
+      "tools": [
+        {"tool_id": "use_package", "display_name": "Use Package", "class_name": "PackageManager (via handler.getOrCreatePackageManager().executeUsePackageTool)", "file_path": "core/tools/packTool/PackageManager.kt", "parameters": [{"name": "package_name", "type": "string", "required": true}], "return_type": "ToolResult via StringResultData"},
+        {"tool_id": "package_proxy", "display_name": "Package Proxy", "class_name": "inline executor in ToolRegistration.kt", "file_path": "core/tools/ToolRegistration.kt", "line": 1038, "parameters": [{"name": "tool_name", "type": "string", "required": true}, {"name": "params", "type": "object", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "MCP tools (dynamic)", "display_name": "MCP Server Tools", "class_name": "MCPToolExecutor", "file_path": "core/tools/mcp/MCPToolExecutor.kt", "line": 24, "parameters": [{"name": "server_name:tool_name", "type": "string", "required": true}], "return_type": "ToolResult via StringResultData"},
+        {"tool_id": "JS Package tools (dynamic)", "display_name": "JavaScript Package Tools", "class_name": "PackageToolExecutor", "file_path": "core/tools/ToolPackage.kt", "line": 373, "parameters": [{"name": "packageName:toolName", "type": "string", "required": true}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Workflow",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "get_all_workflows", "display_name": "Get All Workflows", "class_name": "StandardWorkflowTools", "file_path": "core/tools/defaultTool/standard/StandardWorkflowTools.kt", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "create_workflow", "display_name": "Create Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "name", "type": "string", "required": true}, {"name": "description", "type": "string", "required": false}, {"name": "trigger_type", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "get_workflow", "display_name": "Get Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "workflow_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "update_workflow", "display_name": "Update Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "workflow_id", "type": "string", "required": true}, {"name": "name", "type": "string", "required": false}, {"name": "description", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "patch_workflow", "display_name": "Patch Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "workflow_id", "type": "string", "required": true}, {"name": "patches", "type": "array", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "enable_workflow", "display_name": "Enable Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "workflow_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "disable_workflow", "display_name": "Disable Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "workflow_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "delete_workflow", "display_name": "Delete Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "workflow_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "trigger_workflow", "display_name": "Trigger Workflow", "class_name": "StandardWorkflowTools", "parameters": [{"name": "workflow_id", "type": "string", "required": true}, {"name": "input_data", "type": "object", "required": false}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Intent & Broadcast",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "execute_intent", "display_name": "Execute Intent", "class_name": "StandardIntentToolExecutor", "file_path": "core/tools/defaultTool/standard/StandardIntentToolExecutor.kt", "parameters": [{"name": "action", "type": "string", "required": false}, {"name": "package", "type": "string", "required": false}, {"name": "component", "type": "string", "required": false}, {"name": "type", "type": "string", "required": false}, {"name": "extras", "type": "object", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "send_broadcast", "display_name": "Send Broadcast", "class_name": "StandardSendBroadcastToolExecutor", "file_path": "core/tools/defaultTool/standard/StandardSendBroadcastToolExecutor.kt", "parameters": [{"name": "action", "type": "string", "required": true}, {"name": "extras", "type": "object", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "trigger_tasker_event", "display_name": "Trigger Tasker Event", "class_name": "inline executor in ToolRegistration.kt", "file_path": "core/tools/ToolRegistration.kt", "parameters": [{"name": "task_type", "type": "string", "required": true}, {"name": "arg1..argN", "type": "string", "required": false}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Utility",
+      "path": "core/tools/defaultTool/standard/ & core/tools/calculator/",
+      "tools": [
+        {"tool_id": "calculate", "display_name": "Calculate", "class_name": "Calculator / JsCalculator", "file_path": "core/tools/calculator/Calculator.kt", "parameters": [{"name": "expression", "type": "string", "required": true}], "return_type": "ToolResult via StringResultData"},
+        {"tool_id": "sleep", "display_name": "Sleep", "class_name": "inline executor in ToolRegistration.kt", "file_path": "core/tools/ToolRegistration.kt", "parameters": [{"name": "duration_ms", "type": "integer", "required": false, "default": "1000"}], "return_type": "ToolResult via SleepResultData"},
+        {"tool_id": "close_all_virtual_displays", "display_name": "Close All Virtual Displays", "class_name": "inline executor", "file_path": "core/tools/ToolRegistration.kt", "parameters": [], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "FFmpeg",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "ffmpeg_execute", "display_name": "FFmpeg Execute", "class_name": "StandardFFmpegTool", "file_path": "core/tools/defaultTool/standard/StandardFFmpegTool.kt", "parameters": [{"name": "command", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "ffmpeg_info", "display_name": "FFmpeg Info", "class_name": "StandardFFmpegTool", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "ffmpeg_convert", "display_name": "FFmpeg Convert", "class_name": "StandardFFmpegTool", "parameters": [{"name": "input_path", "type": "string", "required": true}, {"name": "output_path", "type": "string", "required": true}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Device & Environment Settings",
+      "path": "core/tools/defaultTool/standard/",
+      "tools": [
+        {"tool_id": "read_environment_variable", "display_name": "Read Environment Variable", "class_name": "StandardSoftwareSettingsModifyTools", "file_path": "core/tools/defaultTool/standard/StandardSoftwareSettingsModifyTools.kt", "parameters": [{"name": "key", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "write_environment_variable", "display_name": "Write Environment Variable", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "key", "type": "string", "required": true}, {"name": "value", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "list_sandbox_packages", "display_name": "List Sandbox Packages", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "set_sandbox_package_enabled", "display_name": "Set Sandbox Package Enabled", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "package_name", "type": "string", "required": true}, {"name": "enabled", "type": "boolean", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "execute_sandbox_script_direct", "display_name": "Execute Sandbox Script Direct", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "source_path", "type": "string", "required": false}, {"name": "source_code", "type": "string", "required": false}, {"name": "script_label", "type": "string", "required": false}, {"name": "env", "type": "object", "required": false}, {"name": "args", "type": "array", "required": false}, {"name": "wait_ms", "type": "integer", "required": false}], "return_type": "ToolResult via SandboxScriptExecutionResultData"},
+        {"tool_id": "restart_mcp_with_logs", "display_name": "Restart MCP With Logs", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "timeout_ms", "type": "integer", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "get_speech_services_config", "display_name": "Get Speech Services Config", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "set_speech_services_config", "display_name": "Set Speech Services Config", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "tts_service", "type": "string", "required": false}, {"name": "stt_service", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "test_tts_playback", "display_name": "Test TTS Playback", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "text", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "list_model_configs", "display_name": "List Model Configs", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "create_model_config", "display_name": "Create Model Config", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "name", "type": "string", "required": true}, {"name": "api_url", "type": "string", "required": true}, {"name": "api_key", "type": "string", "required": true}, {"name": "model_name", "type": "string", "required": true}, {"name": "provider", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "update_model_config", "display_name": "Update Model Config", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "config_id", "type": "string", "required": true}, {"name": "name", "type": "string", "required": false}, {"name": "api_url", "type": "string", "required": false}, {"name": "api_key", "type": "string", "required": false}, {"name": "model_name", "type": "string", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "delete_model_config", "display_name": "Delete Model Config", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "config_id", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "list_function_model_configs", "display_name": "List Function Model Configs", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [], "return_type": "ToolResult"},
+        {"tool_id": "get_function_model_config", "display_name": "Get Function Model Config", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "function_type", "type": "string", "required": true}], "return_type": "ToolResult"},
+        {"tool_id": "set_function_model_config", "display_name": "Set Function Model Config", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "function_type", "type": "string", "required": true}, {"name": "config_id", "type": "string", "required": true}, {"name": "model_index", "type": "integer", "required": false}], "return_type": "ToolResult"},
+        {"tool_id": "test_model_config_connection", "display_name": "Test Model Config Connection", "class_name": "StandardSoftwareSettingsModifyTools", "parameters": [{"name": "config_id", "type": "string", "required": true}, {"name": "model_index", "type": "integer", "required": false}], "return_type": "ToolResult"}
+      ]
+    },
+    {
+      "category_name": "Permission-Level File System Variants",
+      "path": "core/tools/defaultTool/{root,admin,debugger,accessibility}/",
+      "tools": [
+        {"tool_id": "RootFileSystemTools", "display_name": "Root File System Tools", "class_name": "RootFileSystemTools", "file_path": "core/tools/defaultTool/root/RootFileSystemTools.kt", "description": "extends StandardFileSystemTools with root-privileged file operations"},
+        {"tool_id": "AdminFileSystemTools", "display_name": "Admin File System Tools", "class_name": "AdminFileSystemTools", "file_path": "core/tools/defaultTool/admin/AdminFileSystemTools.kt", "description": "extends StandardFileSystemTools with device admin privileged file operations"},
+        {"tool_id": "DebuggerFileSystemTools", "display_name": "Debugger File System Tools", "class_name": "DebuggerFileSystemTools", "file_path": "core/tools/defaultTool/debugger/DebuggerFileSystemTools.kt", "description": "extends StandardFileSystemTools with ADB/debugger privileged file operations"},
+        {"tool_id": "AccessibilityFileSystemTools", "display_name": "Accessibility File System Tools", "class_name": "AccessibilityFileSystemTools", "file_path": "core/tools/defaultTool/accessbility/AccessibilityFileSystemTools.kt", "description": "extends StandardFileSystemTools with accessibility service file operations"},
+        {"tool_id": "RootUITools", "display_name": "Root UI Tools", "class_name": "RootUITools", "file_path": "core/tools/defaultTool/root/RootUITools.kt"},
+        {"tool_id": "AdminUITools", "display_name": "Admin UI Tools", "class_name": "AdminUITools", "file_path": "core/tools/defaultTool/admin/AdminUITools.kt"},
+        {"tool_id": "DebuggerUITools", "display_name": "Debugger UI Tools", "class_name": "DebuggerUITools", "file_path": "core/tools/defaultTool/debugger/DebuggerUITools.kt"},
+        {"tool_id": "AccessibilityUITools", "display_name": "Accessibility UI Tools", "class_name": "AccessibilityUITools", "file_path": "core/tools/defaultTool/accessbility/AccessibilityUITools.kt"},
+        {"tool_id": "RootSystemOperationTools", "display_name": "Root System Operation Tools", "class_name": "RootSystemOperationTools", "file_path": "core/tools/defaultTool/root/RootSystemOperationTools.kt"},
+        {"tool_id": "AdminSystemOperationTools", "display_name": "Admin System Operation Tools", "class_name": "AdminSystemOperationTools", "file_path": "core/tools/defaultTool/admin/AdminSystemOperationTools.kt"},
+        {"tool_id": "DebuggerSystemOperationTools", "display_name": "Debugger System Operation Tools", "class_name": "DebuggerSystemOperationTools", "file_path": "core/tools/defaultTool/debugger/DebuggerSystemOperationTools.kt"},
+        {"tool_id": "AccessibilitySystemOperationTools", "display_name": "Accessibility System Operation Tools", "class_name": "AccessibilitySystemOperationTools", "file_path": "core/tools/defaultTool/accessbility/AccessibilitySystemOperationTools.kt"}
+      ]
+    },
+    {
+      "category_name": "Shizuku Shell Executors",
+      "path": "core/tools/system/shell/",
+      "tools": [
+        {"tool_id": "StandardShellExecutor", "display_name": "Standard Shell Executor", "class_name": "StandardShellExecutor", "file_path": "core/tools/system/shell/StandardShellExecutor.kt"},
+        {"tool_id": "RootShellExecutor", "display_name": "Root Shell Executor", "class_name": "RootShellExecutor", "file_path": "core/tools/system/shell/RootShellExecutor.kt"},
+        {"tool_id": "AdminShellExecutor", "display_name": "Admin Shell Executor", "class_name": "AdminShellExecutor", "file_path": "core/tools/system/shell/AdminShellExecutor.kt"},
+        {"tool_id": "DebuggerShellExecutor", "display_name": "Debugger Shell Executor", "class_name": "DebuggerShellExecutor", "file_path": "core/tools/system/shell/DebuggerShellExecutor.kt"},
+        {"tool_id": "AccessibilityShellExecutor", "display_name": "Accessibility Shell Executor", "class_name": "AccessibilityShellExecutor", "file_path": "core/tools/system/shell/AccessibilityShellExecutor.kt"}
+      ]
+    },
+    {
+      "category_name": "Agent Infrastructure",
+      "path": "core/tools/agent/",
+      "tools": [
+        {"tool_id": "PhoneAgent", "display_name": "Phone Agent", "class_name": "PhoneAgent", "file_path": "core/tools/agent/PhoneAgent.kt", "description": "AI-powered UI automation agent using vision-language model with screenshot-action loop"},
+        {"tool_id": "ActionHandler", "display_name": "Action Handler", "class_name": "ActionHandler", "file_path": "core/tools/agent/PhoneAgent.kt", "description": "Executes PhoneAgent actions: Launch, Tap, Type, Swipe, Back, Home, Wait, Take_over"},
+        {"tool_id": "ShowerController", "display_name": "Shower Controller", "class_name": "ShowerController", "file_path": "core/tools/agent/ShowerController.kt", "description": "Virtual display controller for non-main-screen agents using Shizuku/ADB"},
+        {"tool_id": "ShowerServerManager", "display_name": "Shower Server Manager", "class_name": "ShowerServerManager", "file_path": "core/tools/agent/ShowerServerManager.kt"},
+        {"tool_id": "ShowerVideoRenderer", "display_name": "Shower Video Renderer", "class_name": "ShowerVideoRenderer", "file_path": "core/tools/agent/ShowerVideoRenderer.kt"},
+        {"tool_id": "ShowerBinderRegistry", "display_name": "Shower Binder Registry", "class_name": "ShowerBinderRegistry", "file_path": "core/tools/agent/ShowerBinderRegistry.kt"},
+        {"tool_id": "VirtualDisplayManager", "display_name": "Virtual Display Manager", "class_name": "VirtualDisplayManager", "file_path": "core/tools/agent/VirtualDisplayManager.kt"},
+        {"tool_id": "PhoneAgentJobRegistry", "display_name": "Phone Agent Job Registry", "class_name": "PhoneAgentJobRegistry", "file_path": "core/tools/agent/PhoneAgentJobRegistry.kt"}
+      ]
+    },
+    {
+      "category_name": "Skills System",
+      "path": "core/tools/skill/ & data/skill/",
+      "tools": [
+        {"tool_id": "SkillManager", "display_name": "Skill Manager", "class_name": "SkillManager", "file_path": "core/tools/skill/SkillManager.kt", "description": "Manages skill packages stored in Downloads/Operit/skills directory"},
+        {"tool_id": "SkillPackage", "display_name": "Skill Package", "class_name": "SkillPackage", "file_path": "core/tools/skill/SkillPackage.kt", "description": "Data model for skill packages with tools/states/env configuration"}
+      ]
+    }
+  ],
+  "total_tools_found": 108,
+  "call_chain_confirmed": [
+    {
+      "chain": "XML-format tool call",
+      "steps": [
+        "1. AI generates: <tool name=\"tool_name\"><param name=\"param1\">value1</param></tool>",
+        "2. EnhancedAIService.sendMessage() collects stream response",
+        "3. MessageContentParser / StreamXmlPlugin extracts ToolInvocation objects from response text",
+        "4. EnhancedAIService.handleToolInvocations() processes each ToolInvocation",
+        "5. ToolExecutionManager handles permission checks, role card access, proxy resolution",
+        "6. AIToolHandler.executeTool() dispatches via hook interception -> executor invocation",
+        "7. ToolExecutor.invoke() executes specific tool implementation",
+        "8. ToolResult returned and formatted into conversation history via ConversationMarkupManager",
+        "9. EnhancedAIService.processToolResults() feeds result back to AI (loop continues)"
+      ]
+    },
+    {
+      "chain": "Tool Call API (native function calling)",
+      "steps": [
+        "1. AIService.sendMessage() sends availableTools: List<ToolPrompt> to API (bypasses system prompt tool descriptions)",
+        "2. AI returns structured tool_call in response",
+        "3. ToolExecutionManager parses tool_call into ToolInvocation",
+        "4. Same as steps 6-9 from XML-format chain"
+      ]
+    },
+    {
+      "chain": "Package tool (use_package + packageName:toolName)",
+      "steps": [
+        "1. AI calls use_package to activate a package (JS/MCP/Skill)",
+        "2. handler.getOrCreatePackageManager().executeUsePackageTool() loads and activates package",
+        "3. Package tools registered/resolved dynamically",
+        "4. AI calls packageName:toolName format",
+        "5. AIToolHandler.getToolExecutorOrActivate() auto-activates package if needed",
+        "6. PackageToolExecutor parses 'packageName:toolName' and delegates to JsToolManager.executeScript()",
+        "7. JsToolManager runs tool script (JavaScript via GraalJS or similar)"
+      ]
+    },
+    {
+      "chain": "MCP tool execution",
+      "steps": [
+        "1. AI calls 'serverName:mcpToolName'",
+        "2. AIToolHandler.getToolExecutorOrActivate() finds MCPToolExecutor",
+        "3. MCPToolExecutor splits name into serverName:mcpToolName",
+        "4. MCPManager.getOrCreateClient() creates/gets cached MCPBridgeClient",
+        "5. MCPBridgeClient.callToolSync() sends JSON-RPC to MCP server",
+        "6. MCPToolExecutor.extractContentFromResult() parses response content array"
+      ]
+    },
+    {
+      "chain": "PhoneAgent execution",
+      "steps": [
+        "1. AI calls run_ui_subagent with intent and max_steps",
+        "2. PhoneAgent.run() starts with AgentConfig(maxSteps=20)",
+        "3. ActionHandler.captureScreenshotForAgent() gets screen image",
+        "4. AIService.sendMessage() with vision model sends screenshot + user task",
+        "5. AI returns thinking + do(action=...) or finish(message=...)",
+        "6. ActionHandler.executeAgentAction() dispatches to Shower tool layer or StandardUITools/AIToolHandler",
+        "7. Loops until finish or maxSteps reached"
+      ]
+    }
+  ],
+  "tool_execution_hook_points": {
+    "description": "AIToolHandler implements a hook system (AIToolHook) that allows intercepting tool calls at multiple lifecycle stages",
+    "stages": [
+      {"stage": "onToolCallRequested", "description": "Called when tool call is received"},
+      {"stage": "onToolCallIntercept", "description": "Can block tool execution by returning Block(reason)"},
+      {"stage": "onToolPermissionChecked", "description": "Called after permission check completes"},
+      {"stage": "onToolExecutionStarted", "description": "Called before actual execution begins"},
+      {"stage": "onToolExecutionResult", "description": "Called after result is produced"},
+      {"stage": "onToolExecutionError", "description": "Called on execution exception"},
+      {"stage": "onToolExecutionFinished", "description": "Always called at end of lifecycle"}
+    ],
+    "hook_class": "AIToolHook",
+    "file": "core/tools/AIToolHook.kt"
+  },
+  "token_handling": {
+    "token_counting": {
+      "class": "AIService",
+      "fields": ["inputTokenCount", "cachedInputTokenCount", "outputTokenCount"],
+      "method": "calculateInputTokens(chatHistory, availableTools)"
+    },
+    "context_management": {
+      "conversation_history": "List<PromptTurn> in MessageExecutionContext.conversationHistory",
+      "normalization": "ConversationService.normalizeConversationHistoryForModel()",
+      "max_text_result": "ToolExecutionLimits.MAX_TEXT_RESULT_LENGTH = 5000",
+      "max_file_read": "ToolExecutionLimits.MAX_FILE_READ_BYTES = 32000",
+      "max_final_tool_result": "ToolExecutionLimits.MAX_FINAL_TOOL_RESULT_MESSAGE_CHARS = 64000"
+    }
+  },
+  "data_models": {
+    "AITool": {
+      "file": "data/model/AITool.kt",
+      "fields": ["name: String", "parameters: List<ToolParameter>", "description: String"]
+    },
+    "ToolParameter": {
+      "fields": ["name: String", "value: String"]
+    },
+    "ToolResult": {
+      "fields": ["toolName: String", "success: Boolean", "result: ToolResultData", "error: String?"]
+    },
+    "ToolResultData": {
+      "file": "core/tools/ToolResultDataClasses.kt",
+      "description": "Sealed class with variants: BooleanResultData, StringResultData, SleepResultData, ADBResultData, DirectoryListingData, FileContentData, FileApplyResultData, BinaryFileContentData, FileExistsData, FileInfoData, FileOperationData, FilePartContentData, FindFilesResultData, GrepResultData, AppListData, etc.",
+      "serialization": "Polymorphic JSON with __type discriminator"
+    }
+  },
+  "tool_processing_pipeline": {
+    "xml_parsing": "MessageContentParser uses ChatMarkupRegex to extract <tool> tags from AI response text",
+    "stream_parsing": "StreamXmlPlugin processes streaming chunks to detect tool calls in real-time",
+    "proxy_handling": "ToolExecutionManager handles package_proxy and CLI-mode search_tool routing",
+    "permission_validation": "ToolPermissionSystem checks user approval for tool execution",
+    "role_card_filtering": "CharacterCardToolAccessResolver restricts tools based on role card configuration",
+    "cli_mode_routing": "CliToolModeSupport handles search_tool and proxy_tool for reduced tool exposure"
+  },
+  "notes": [
+    "Operit v1.12.0 使用 XML 格式或 Native Tool Call API 进行工具调用。AI 在响应中嵌入 <tool name=...><param name=...</tool> 标签字符串，由 MessageContentParser 解析。",
+    "Agent 循环不是传统的 while(maxIterations) 模式，而是由 EnhancedAIService 在 AI 响应包含工具调用时自动将结果反馈给 AI，直到 AI 不再调用工具。PhoneAgent (UI 自动化) 使用显式的 AgentConfig.maxSteps=20 循环限制。",
+    "工具注册集中在 ToolRegistration.kt 的 registerAllTools() 函数中。AIToolHandler 是单例，通过 ConcurrentHashMap 维护所有工具。ToolGetter 根据权限级别 (STANDARD/ROOT/ADMIN/DEBUGGER/ACCESSIBILITY) 返回不同的工具实现。",
+    "total_tools_found=108 包含所有 handler.registerTool() 调用及权限级别变体。MCP 工具和 JS 包工具是动态注册的，数量取决于已安装的包。",
+    "Shizuku/Root shell 执行器分离在 core/tools/system/shell/ 目录下，通过 ShellExecutorFactory 创建。",
+    "core/tools/skill/ 目录下仅有 SkillManager 和 SkillPackage，Skills 作为工具注册的扩展机制。",
+    "core/tools/packTool/ 是 JS 包管理工具系统，支持动态加载和注册用户编写的 JS 工具包。",
+    "core/tools/javascript/ 是 JavaScript (GraalJS) 执行引擎，支持通过 JS 脚本定义工具行为。",
+    "ToolResultData 使用 kotlinx.serialization 的多态序列化，__type 字段作为类型鉴别器。",
+    "核心工具执行限制: MAX_TEXT_RESULT_LENGTH=5000, MAX_FILE_READ_BYTES=32000, MAX_FINAL_TOOL_RESULT_MESSAGE_CHARS=64000。",
+    "PromptHookRegistry 提供 before_compose_system_prompt / compose_system_prompt_sections / after_compose_system_prompt 三个 hook 阶段。",
+    "SystemPromptConfig 通过 getSystemPrompt() 动态生成完整提示词，根据 useToolCallApi 是否为 true 决定是否在系统提示词中包含工具描述。",
+    "不要混淆的是：system/ 目录下的 shell/action/ 类是底层基础设施执行器；defaultTool/ 目录下的类是 AI 可调用的具体工具实现。",
+    "backend/AIServiceFactory.kt 创建不同类型的 AI 服务实例，支持 OpenAI/Anthropic/DeepSeek/Gemini 等提供商的 Tool Call API。"
+  ]
+}

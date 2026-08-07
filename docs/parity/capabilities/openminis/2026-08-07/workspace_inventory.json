@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    "Create workspace with isolated directory",
+    "Switch between workspaces",
+    "Delete workspace",
+    "List workspace contents",
+    "Import files into workspace",
+    "Export workspace contents",
+    "Mount external folders (iOS)",
+    "WebApp/PWA isolation",
+    "Git integration (read)",
+    "File operations (read/write/delete/move/copy)",
+    "Directory listing",
+    "File search"
+  ]
+}

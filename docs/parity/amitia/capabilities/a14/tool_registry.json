@@ -1,0 +1,52 @@
+{
+  "id": "tool_registry",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "tool_registry",
+  "description": "工具注册中心(内置工具/扩展工具/MCP工具 统一注册)",
+  "tool_sources": [
+    {
+      "source": "builtin_agent_tools",
+      "description": "Agent内置工具(注册到agent/tool/funcMap)",
+      "file": "backend/internal/agent/tool/registry.go",
+      "register_fn": "Register(t Tool, fn ToolCallFunc)"
+    },
+    {
+      "source": "memory_tools",
+      "description": "记忆专用工具(单独注册到memFuncMap)",
+      "file": "backend/internal/agent/tool/memory.go",
+      "register_fn": "RegisterMemory(t Tool, fn ToolCallFunc)"
+    },
+    {
+      "source": "extension_tools",
+      "description": "扩展暴露的工具(插件/技能/MCP adapter)",
+      "files": [
+        "backend/internal/extension/capability/tool.go",
+        "backend/internal/extension/capability/adapter_mcp_tool.go",
+        "backend/internal/extension/capability/adapter_plugin.go"
+      ]
+    },
+    {
+      "source": "mcp_tools",
+      "description": "MCP工具(通过MCP Host暴露)",
+      "files": [
+        "backend/internal/mcp/host/",
+        "backend/internal/mcp/manager/"
+      ]
+    },
+    {
+      "source": "kernel_tools",
+      "description": "WASM内核工具",
+      "file": "backend/internal/extension/capability/adapter_wasmrt.go"
+    },
+    {
+      "source": "workflow_tools",
+      "description": "工作流工具",
+      "file": "backend/internal/extension/capability/adapter_workflow.go"
+    }
+  ],
+  "tool_interface": {
+    "definition": "Tool struct(Function jsonschema, Description)",
+    "execution": "ToolCallFunc(ctx, argsJSON) -> ToolCallResult"
+  }
+}

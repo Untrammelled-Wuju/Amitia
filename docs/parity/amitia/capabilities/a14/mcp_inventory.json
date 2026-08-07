@@ -1,0 +1,134 @@
+{
+  "inventory_id": "INV-A14-MCP-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "mcp_system",
+  "items": [
+    {
+      "id": "MCP-001",
+      "name": "MCP Manager",
+      "name_en": "MCP Server Manager",
+      "description": "MCP服务管理器，管理MCP服务器的注册、配置和生命周期",
+      "file": "backend/internal/mcp/manager/manager.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-002",
+      "name": "MCP Connection",
+      "name_en": "MCP Connection Client",
+      "description": "MCP连接客户端，管理与MCP服务器的连接和请求管理",
+      "file": "backend/internal/mcp/client/connection.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-003",
+      "name": "MCP Transport",
+      "name_en": "Transport Layer",
+      "description": "MCP传输层，支持stdio和streamable_http两种传输方式",
+      "file": "backend/internal/mcp/transport/transport.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-004",
+      "name": "MCP Discovery",
+      "name_en": "Service Discovery",
+      "description": "MCP服务发现，自动发现和注册可用的MCP服务器",
+      "file": "backend/internal/mcp/discovery/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-005",
+      "name": "MCP Host",
+      "name_en": "MCP Host Interface",
+      "description": "MCP宿主接口，提供文件系统访问和操作交互能力",
+      "file": "backend/internal/mcp/host/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-006",
+      "name": "MCP Auth (OAuth)",
+      "name_en": "OAuth Authentication",
+      "description": "MCP OAuth认证，管理MCP服务器的OAuth令牌流程",
+      "file": "backend/internal/mcp/auth/oauth.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-007",
+      "name": "MCP Protocol",
+      "name_en": "Protocol Messages",
+      "description": "MCP协议消息定义，实现JSON-RPC协议的消息结构和版本管理",
+      "file": "backend/internal/mcp/protocol/message.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-008",
+      "name": "MCP Skill Runtime",
+      "name_en": "MCP Skill Runtime",
+      "description": "MCP技能运行时，支持将MCP工具作为Agent技能使用",
+      "file": "backend/internal/mcp/skill/runtime.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-009",
+      "name": "MCP Features",
+      "name_en": "Server Feature Detection",
+      "description": "MCP服务特性检测，识别服务器支持的工具、资源和提示能力",
+      "file": "backend/internal/mcp/features/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-010",
+      "name": "MCP Repository",
+      "name_en": "Server Configuration Repository",
+      "description": "MCP服务器配置仓库，持久化MCP服务器配置和元数据",
+      "file": "backend/internal/mcp/repository.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-011",
+      "name": "MCP Duplicate Store",
+      "name_en": "Duplicate Server Detection",
+      "description": "重复服务器检测，防止同一MCP服务器被重复注册",
+      "file": "backend/internal/mcp/duplicate_store.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-012",
+      "name": "MCP Dependency Service",
+      "name_en": "Dependency Resolution",
+      "description": "MCP依赖解析，管理MCP服务器间的依赖关系",
+      "file": "backend/internal/mcp/dependency/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-013",
+      "name": "MCP Kernel Bridge",
+      "name_en": "Kernel Host Bridge",
+      "description": "MCP内核桥接，将MCP服务器接入Extension Kernel体系",
+      "file": "backend/cmd/server/mcp_kernel_bridge.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "MCP-014",
+      "name": "MCP Token Store",
+      "name_en": "Token Storage",
+      "description": "令牌存储，安全存储和管理MCP OAuth令牌",
+      "file": "backend/internal/mcp/auth/token_store.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "capability_relations",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "capability_relations",
+  "description": "能力间依赖关系有向图",
+  "dependencies": [
+    { "from": "amt-0001-agent-runtime", "to": "amt-0002-prompt-pipeline", "type": "uses" },
+    { "from": "amt-0001-agent-runtime", "to": "amt-0003-tool-execution", "type": "uses" },
+    { "from": "amt-0001-agent-runtime", "to": "amt-0005-character-life", "type": "reads" },
+    { "from": "amt-0002-prompt-pipeline", "to": "amt-0004-context-token", "type": "consumes" },
+    { "from": "amt-0003-tool-execution", "to": "amt-0006-extension-system", "type": "invokes" },
+    { "from": "amt-0006-extension-system", "to": "amt-0007-plugin-host", "type": "manages" },
+    { "from": "amt-0006-extension-system", "to": "amt-0008-workflow", "type": "orchestrates" },
+    { "from": "amt-0005-character-life", "to": "amt-0009-memory-system", "type": "writes" },
+    { "from": "amt-0005-character-life", "to": "amt-0010-emotion-model", "type": "drives" },
+    { "from": "amt-0011-proactive", "to": "amt-0001-agent-runtime", "type": "triggers" },
+    { "from": "amt-0011-proactive", "to": "amt-0012-schedule-reminder", "type": "schedules" },
+    { "from": "amt-0013-channel-delivery", "to": "amt-0001-agent-runtime", "type": "receives" },
+    { "from": "amt-0013-channel-delivery", "to": "amt-0014-sidecar", "type": "delivers_via" },
+    { "from": "amt-0015-desktop-pet", "to": "amt-0005-character-life", "type": "reads" },
+    { "from": "amt-0016-update-migration", "to": "amt-0006-extension-system", "type": "updates" }
+  ]
+}

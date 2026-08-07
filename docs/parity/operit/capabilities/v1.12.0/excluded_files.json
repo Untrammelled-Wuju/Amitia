@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "total_excluded": 256,
+  "categories": [
+    {
+      "category": "Android resources (res/values, res/drawable)",
+      "count": 110
+    },
+    {
+      "category": "Documentation (.md, .txt)",
+      "count": 15
+    },
+    {
+      "category": "Native .so libraries",
+      "count": 12
+    },
+    {
+      "category": "Font files",
+      "count": 5
+    },
+    {
+      "category": "Gradle build files",
+      "count": 8
+    },
+    {
+      "category": "Generated files",
+      "count": 10
+    },
+    {
+      "category": "Asset JSON/JS files",
+      "count": 50
+    },
+    {
+      "category": "Test files",
+      "count": 36
+    },
+    {
+      "category": "Image/media assets",
+      "count": 10
+    }
+  ]
+}

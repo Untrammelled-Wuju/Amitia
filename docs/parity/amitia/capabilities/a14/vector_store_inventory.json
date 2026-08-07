@@ -1,0 +1,92 @@
+{
+  "inventory_id": "INV-A14-VECTOR-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "vector_store",
+  "items": [
+    {
+      "id": "VECTOR-001",
+      "name": "Qdrant Client",
+      "name_en": "Qdrant Vector Client",
+      "description": "Qdrant向量数据库客户端，管理连接、集合创建和向量操作",
+      "file": "backend/internal/vectorstore/qdrantconfig/writer.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "VECTOR-002",
+      "name": "Qdrant Config Renderer",
+      "name_en": "Qdrant Configuration Renderer",
+      "description": "Qdrant配置渲染器，生成Qdrant服务的配置文件（desktop/mobile不同profile）",
+      "file": "backend/internal/vectorstore/qdrantconfig/renderer.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "VECTOR-003",
+      "name": "Qdrant Environment",
+      "name_en": "Qdrant Environment Manager",
+      "description": "Qdrant环境管理器，处理安装检测、路径解析和环境配置",
+      "file": "backend/internal/vectorstore/qdrantenv/environment.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "VECTOR-004",
+      "name": "Qdrant Process Manager",
+      "name_en": "Qdrant Process Manager",
+      "description": "Qdrant进程管理器，负责Qdrant服务的启动、停止、健康检查和自动重启",
+      "file": "backend/internal/vectorstore/qdrantprocess/reconciler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "VECTOR-005",
+      "name": "Qdrant Health Monitor",
+      "name_en": "Qdrant Health Monitor",
+      "description": "Qdrant健康监控器，持续检测Qdrant服务状态和可用性",
+      "file": "backend/internal/vectorstore/qdranthealth/health.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "VECTOR-006",
+      "name": "Qdrant Profile Classifier",
+      "name_en": "Runtime Profile Classifier",
+      "description": "运行时profile分类器，根据硬件配置选择最优的向量搜索profile",
+      "file": "backend/internal/vectorstore/qdrantprofile/runtime_classifier.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "VECTOR-007",
+      "name": "Qdrant Layout Manager",
+      "name_en": "Qdrant Layout Manager",
+      "description": "Qdrant布局管理器，管理数据目录结构和迁移",
+      "file": "backend/internal/vectorstore/qdrantlayout/layout.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "VECTOR-008",
+      "name": "Embedding Vector Service",
+      "name_en": "Embedding Vector Service",
+      "description": "嵌入向量服务，将文本转换为向量并进行相似度检索",
+      "file": "backend/internal/memory/embedding_vector_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/v1/memories/vector-search",
+        "POST /api/v1/memories/rebuild-embeddings"
+      ]
+    },
+    {
+      "id": "VECTOR-009",
+      "name": "Vector Index Rebuild",
+      "name_en": "Vector Index Rebuild",
+      "description": "向量索引重建服务，支持全量重建和增量更新向量索引",
+      "file": "backend/internal/memory/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/memories/rebuild-index"]
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "inventory_id": "INV-A14-PLUGIN-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "plugin_host",
+  "items": [
+    {
+      "id": "PLUGIN-001",
+      "name": "Plugin Host Runtime",
+      "name_en": "Plugin Host Node.js Runtime",
+      "description": "插件宿主Node.js运行时，在独立子进程中隔离执行插件代码",
+      "file": "runtime/plugin-host/src/index.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-002",
+      "name": "Module Loader",
+      "name_en": "Plugin Module Loader",
+      "description": "插件模块加载器，在隔离环境中加载和初始化插件模块",
+      "file": "runtime/plugin-host/src/module-loader.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-003",
+      "name": "RPC Communication",
+      "name_en": "Plugin RPC Channel",
+      "description": "插件RPC通信通道，通过JSON-RPC与后端进行消息交互",
+      "file": "runtime/plugin-host/src/rpc.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-004",
+      "name": "Handler Registry",
+      "name_en": "Handler Action Registry",
+      "description": "处理器动作注册表，管理插件注册的事件处理和动作",
+      "file": "runtime/plugin-host/src/handler-registry.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-005",
+      "name": "Runtime Context",
+      "name_en": "Plugin Runtime Context",
+      "description": "插件运行时上下文，提供API访问和状态管理环境",
+      "file": "runtime/plugin-host/src/runtime-context.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-006",
+      "name": "Bootstrap",
+      "name_en": "Plugin Bootstrap",
+      "description": "插件启动器，初始化运行时环境和加载插件模块",
+      "file": "runtime/plugin-host/src/bootstrap.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-007",
+      "name": "Shutdown Handler",
+      "name_en": "Graceful Shutdown",
+      "description": "优雅关闭处理器，确保插件在退出前完成清理工作",
+      "file": "runtime/plugin-host/src/shutdown.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-008",
+      "name": "Permission System",
+      "name_en": "Plugin Permission System",
+      "description": "插件权限系统，控制插件对系统资源的访问权限",
+      "file": "backend/internal/extension/permission.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-009",
+      "name": "Plugin Registry",
+      "name_en": "Plugin Registry Backend",
+      "description": "插件注册表后端，管理插件的注册、发现和存储",
+      "file": "backend/internal/extension/plugin_registry.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-010",
+      "name": "Plugin Service",
+      "name_en": "Plugin Service Layer",
+      "description": "插件服务层，封装插件CRUD操作和生命周期管理",
+      "file": "backend/internal/extension/plugin_service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-011",
+      "name": "Security Sandbox",
+      "name_en": "JavaScript Sandbox",
+      "description": "JavaScript沙箱环境，限制插件代码的访问范围和操作",
+      "file": "runtime/plugin-host/src/runtime-context.ts",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-012",
+      "name": "Plugin API Surface",
+      "name_en": "Stable Plugin API",
+      "description": "稳定的插件API表面，提供向后兼容的插件开发接口",
+      "file": "backend/internal/extension/plugin_surface.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PLUGIN-013",
+      "name": "Trusted Service Bridge",
+      "name_en": "Trusted Service Communication",
+      "description": "可信服务通信桥，控制插件与受信服务的交互",
+      "file": "backend/internal/extension/trusted_service/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

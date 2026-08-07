@@ -1,0 +1,256 @@
+{
+  "generated_at": "2026-08-07T14:00:00+08:00",
+  "total_profiles": 11,
+  "baseline_id": "PARITY-2026-08-07-V1",
+  "profiles": [
+    {
+      "profile_name": "Agent Core",
+      "description": "Agent中枢能力：Character、Prompt、Task、Personality、Belief、Emotion、Psyche、Need、Companion",
+      "min_evidence_level": "L4_AUTOMATED_TEST",
+      "applicable_categories": [
+        "agent_runtime",
+        "character",
+        "personality",
+        "emotion",
+        "belief",
+        "need",
+        "companion",
+        "planning"
+      ],
+      "count": 13,
+      "cross_platform_required": false,
+      "device_verification": false,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "T"
+      ],
+      "profile_id": "PROFILE_CORE"
+    },
+    {
+      "profile_name": "Tool Runtime",
+      "description": "工具运行时能力：Tool Execution、File、Command、Update、Install、Execute",
+      "min_evidence_level": "L4_AUTOMATED_TEST",
+      "applicable_categories": [
+        "tool_runtime",
+        "tool_execution",
+        "shell_file_network"
+      ],
+      "count": 371,
+      "cross_platform_required": false,
+      "device_verification": false,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "T"
+      ],
+      "profile_id": "PROFILE_TOOL"
+    },
+    {
+      "profile_name": "Native Platform",
+      "description": "原生平台能力：ADB、Root、Hardware、Camera、Sensor、System Setting、Accessibility、Virtual Display",
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "applicable_categories": [
+        "android_native",
+        "ios_native",
+        "permission_matrix"
+      ],
+      "count": 35,
+      "cross_platform_required": true,
+      "device_verification": true,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "P",
+        "E",
+        "D",
+        "X"
+      ],
+      "profile_id": "PROFILE_NATIVE"
+    },
+    {
+      "profile_name": "Sandbox Runtime",
+      "description": "沙箱运行时能力：Shell、Sandbox、NPM、Docker、Process Management",
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "applicable_categories": [
+        "sandbox_architecture",
+        "linux_runtime",
+        "developer_diagnostics"
+      ],
+      "count": 10,
+      "cross_platform_required": true,
+      "device_verification": true,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "D",
+        "X"
+      ],
+      "profile_id": "PROFILE_RUNTIME"
+    },
+    {
+      "profile_name": "User Interface",
+      "description": "用户界面能力：Flutter、Web、Theme、Display、Route、Browser、Animation",
+      "min_evidence_level": "L4_AUTOMATED_TEST",
+      "applicable_categories": [
+        "ui_entrypoints",
+        "web_frontend",
+        "flutter"
+      ],
+      "count": 9,
+      "cross_platform_required": false,
+      "device_verification": false,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "T",
+        "D"
+      ],
+      "profile_id": "PROFILE_UI"
+    },
+    {
+      "profile_name": "Data and Storage",
+      "description": "数据存储能力：Memory、Database、Backup、Persistence、Vector、Graph、Cache",
+      "min_evidence_level": "L4_AUTOMATED_TEST",
+      "applicable_categories": [
+        "memory",
+        "database_storage",
+        "vector_store",
+        "backup_import_export"
+      ],
+      "count": 22,
+      "cross_platform_required": false,
+      "device_verification": false,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "R",
+        "T"
+      ],
+      "profile_id": "PROFILE_DATA"
+    },
+    {
+      "profile_name": "Extension and Skill",
+      "description": "扩展能力：MCP、Skill、Plugin、Workflow、Hook、URI Scheme",
+      "min_evidence_level": "L4_AUTOMATED_TEST",
+      "applicable_categories": [
+        "mcp",
+        "skill",
+        "plugin",
+        "extension",
+        "workflow_hook"
+      ],
+      "count": 19,
+      "cross_platform_required": false,
+      "device_verification": false,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "T"
+      ],
+      "profile_id": "PROFILE_EXTENSION"
+    },
+    {
+      "profile_name": "Model Provider",
+      "description": "模型能力：Model、Provider、Inference、Embedding、ONNX",
+      "note": "关键Provider需L5_RUNTIME_VERIFIED",
+      "min_evidence_level": "L4_AUTOMATED_TEST",
+      "applicable_categories": [
+        "model_provider",
+        "local_model"
+      ],
+      "count": 4,
+      "cross_platform_required": false,
+      "device_verification": false,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "T"
+      ],
+      "profile_id": "PROFILE_MODEL"
+    },
+    {
+      "profile_name": "Voice and Audio",
+      "description": "语音能力：TTS、STT、Audio、Speaker、Microphone、Speech",
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "applicable_categories": [
+        "voice",
+        "tts_voice"
+      ],
+      "count": 6,
+      "cross_platform_required": false,
+      "device_verification": true,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "D"
+      ],
+      "profile_id": "PROFILE_VOICE"
+    },
+    {
+      "profile_name": "Background Task",
+      "description": "后台能力：Schedule、Background、FGS、Proactive、Reminder、Notification Overlay",
+      "min_evidence_level": "L5_RUNTIME_VERIFIED",
+      "applicable_categories": [
+        "schedule_background",
+        "proactive",
+        "reminder",
+        "hook_event_schedule"
+      ],
+      "count": 5,
+      "cross_platform_required": true,
+      "device_verification": true,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "E",
+        "D",
+        "X"
+      ],
+      "profile_id": "PROFILE_BACKGROUND"
+    },
+    {
+      "profile_name": "Security and Permission",
+      "description": "安全能力：Permission、Security、Privacy、Auth、Consent",
+      "note": "系统权限操作(REQUIRED_PLATFORM_EQUIVALENT)需L5_RUNTIME_VERIFIED",
+      "min_evidence_level": "L4_AUTOMATED_TEST",
+      "applicable_categories": [
+        "permission",
+        "security",
+        "privacy",
+        "authentication"
+      ],
+      "count": 12,
+      "cross_platform_required": false,
+      "device_verification": false,
+      "required_dimensions": [
+        "F",
+        "C",
+        "I",
+        "P",
+        "E",
+        "S",
+        "T"
+      ],
+      "profile_id": "PROFILE_SECURITY"
+    }
+  ]
+}

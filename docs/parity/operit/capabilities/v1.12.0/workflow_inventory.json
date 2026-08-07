@@ -1,0 +1,140 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "source": "mcp_workflow_scan.json"
+  },
+  "workflow": {
+    "found": true,
+    "files": [
+      "data/model/Workflow.kt",
+      "data/model/WorkflowExecutionLog.kt",
+      "data/repository/WorkflowRepository.kt",
+      "core/workflow/WorkflowExecutor.kt",
+      "core/workflow/WorkflowScheduler.kt",
+      "core/workflow/WorkflowSchedulerInitializer.kt",
+      "core/workflow/WorkflowWorker.kt",
+      "plugins/workflow/WorkflowLifecyclePlugin.kt",
+      "integrations/tasker/WorkflowTaskerActivity.kt",
+      "integrations/tasker/WorkflowTaskerReceiver.kt",
+      "ui/features/workflow/viewmodel/WorkflowViewModel.kt",
+      "ui/features/workflow/screens/WorkflowListScreen.kt",
+      "ui/features/workflow/screens/WorkflowDetailScreen.kt",
+      "ui/features/workflow/components/GridWorkflowCanvas.kt",
+      "ui/features/workflow/components/DraggableNodeCard.kt",
+      "ui/features/workflow/components/ConnectionMenu.kt",
+      "core/tools/defaultTool/standard/StandardWorkflowTools.kt",
+      "app/src/main/assets/packages/workflow.js",
+      "androidTest/java/com/ai/assistance/operit/core/workflow/WorkflowExecutorAndroidTest.kt"
+    ],
+    "architecture": {
+      "pattern": "DAG 有向无环图 + 拓扑排序",
+      "description": "完整的工作流自动化系统。基于节点连接构建邻接表和入度表，通过拓扑排序确保依赖顺序执行。支持条件分支、数据提取、逻辑运算等多种节点类型。"
+    },
+    "node_types": {
+      "TriggerNode": {
+        "description": "触发节点，工作流入口",
+        "trigger_types": [
+          "manual",
+          "schedule",
+          "tasker",
+          "intent",
+          "speech",
+          "app_open (cold start)"
+        ],
+        "config": "triggerConfig: Map<String, String>"
+      },
+      "ExecuteNode": {
+        "description": "执行节点，调用工具",
+        "fields": "actionType (工具名), actionConfig (Map<String, ParameterValue>), jsCode (可选内联JS)",
+        "tool_format": "packageName:toolName 或标准工具名"
+      },
+      "ConditionNode": {
+        "description": "条件分支节点",
+        "operators": [
+          "EQ",
+          "NE",
+          "GT",
+          "GTE",
+          "LT",
+          "LTE",
+          "CONTAINS",
+          "NOT_CONTAINS",
+          "IN",
+          "NOT_IN"
+        ],
+        "supports": "数值/字符串比较 (自动类型感知)"
+      },
+      "LogicNode": {
+        "description": "逻辑运算节点",
+        "operators": [
+          "AND",
+          "OR"
+        ],
+        "inputs": "所有入边连接"
+      },
+      "ExtractNode": {
+        "description": "数据提取/变换节点",
+        "modes": [
+          "REGEX (正则提取)",
+          "JSON (JSONPath 提取)",
+          "SUB (子字符串)",
+          "CONCAT (字符串拼接)",
+          "RANDOM_INT",
+          "RANDOM_STRING"
+        ],
+        "features": "支持 JSONPath 数组索引、正则分组、固定值/随机值"
+      }
+    },
+    "dag_implementation": {
+      "graph_construction": "buildDependencyGraph(): 构建邻接表 + 入度表，包含显式连接和参数引用依赖",
+      "cycle_detection": "detectCycle(): DFS 三色标记法检测有向环",
+      "execution_order": "executeTopologicalOrder(): Kahn 算法拓扑排序，入度为0的节点加入队列",
+      "connection_conditions": "支持条件边 (success/failed/on_error/正则/布尔表达式) 控制流转",
+      "reference_dependencies": "自动分析 ParameterValue.NodeReference 构建隐式依赖边"
+    },
+    "scheduling": {
+      "implementation": "WorkflowScheduler (WorkManager 驱动)",
+      "types": {
+        "interval": "PeriodicWorkRequest - 固定间隔执行 (最低15分钟)",
+        "specific_time": "OneTimeWorkRequest - 指定时间执行",
+        "cron": "Cron 表达式 (简化实现，支持 分 时 日 月 周 格式)"
+      },
+      "initializer": "WorkflowSchedulerInitializer - 应用启动时恢复所有调度",
+      "worker": "WorkflowWorker - 实际执行工作流的 WorkManager Worker"
+    },
+    "triggers": {
+      "manual": "手动触发 (默认)",
+      "schedule": "定时触发 (WorkflowScheduler + WorkManager)",
+      "tasker": "Tasker 集成 (WorkflowTaskerActivity + WorkflowTaskerReceiver)",
+      "intent": "Intent 触发",
+      "speech": "语音触发",
+      "app_open": "应用冷启动触发 (WorkflowLifecyclePlugin)"
+    },
+    "parameter_flow": {
+      "model": "sealed class ParameterValue { StaticValue | NodeReference }",
+      "resolution": "resolveParameterValue() 将 NodeReference 解析为上游节点执行结果",
+      "supports": "ExecuteNode、ConditionNode、ExtractNode 的参数均支持引用其他节点输出"
+    },
+    "data_model": {
+      "serialization": "Kotlinx Serialization (@Serializable)",
+      "workflow": "Workflow(id, name, description, nodes, connections, enabled, statistics)",
+      "execution_log": "WorkflowExecutionRecord(runId, workflowId, startedAt, finishedAt, success, logs)",
+      "persistence": "WorkflowRepository (数据存储层)"
+    },
+    "import_export": {
+      "ui": "WorkflowDetailScreen 支持图形化编辑",
+      "serialization": "使用 kotlinx.serialization.json.Json 进行 JSON 序列化/反序列化",
+      "programmatic_api": "StandardWorkflowTools 提供 CRUD API (getAllWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow, triggerWorkflow)"
+    },
+    "notes": [
+      "Workflow 系统是一个完整的 DAG 执行引擎，支持 6 种节点类型",
+      "DAG 构建同时考虑显式连接 (connections) 和隐式参数引用依赖 (NodeReference)",
+      "使用 Kahn 算法拓扑排序 + 入度管理确保正确执行顺序",
+      "条件边支持多种匹配模式: success/failed/正则/布尔值",
+      "定时调度基于 Android WorkManager (PeriodicWorkRequest/OneTimeWorkRequest)",
+      "支持 Tasker 应用集成触发 Workflow",
+      "应用冷启动触发通过 WorkflowLifecyclePlugin + AppLifecycleHook 实现",
+      "ExtractNode 支持丰富的数据提取模式: 正则/JSONPath/子串/拼接/随机值"
+    ]
+  }
+}

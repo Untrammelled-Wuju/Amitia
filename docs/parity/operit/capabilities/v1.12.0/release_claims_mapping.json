@@ -1,0 +1,125 @@
+{
+  "version": "1.0.0",
+  "release_version": "1.12.0",
+  "release_tag": "v1.12.0",
+  "mapping_method": "static_analysis",
+  "claims": [
+    {
+      "category": "增加",
+      "claim": "统一市场浏览/详情/作者/管理/发布流程",
+      "status": "PARTIALLY_VERIFIED",
+      "evidence_files": [
+        "ui/features/packages/screens/"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "音乐播放工具和播放队列工具",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "core/tools/defaultTool/standard/StandardMusicPlaybackTools.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "蓝牙设备工具和更多系统操作工具",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "core/tools/defaultTool/standard/StandardSystemOperationTools.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "Mimo语音/Doubao TTS/TTS排队播放",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "api/voice/VoiceServiceFactory.kt",
+        "api/voice/QueuedTtsPlayback.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "工具Hook拦截能力",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "core/tools/AIToolHook.kt",
+        "plugins/toolpkg/ToolPkgToolLifecycleBridge.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "长MCP结果保存为文件",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "core/tools/mcp/MCPToolExecutor.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "崩溃数据恢复流程和启动隔离",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "util/GlobalExceptionHandler.kt",
+        "ui/recovery/DataRecoveryActivity.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "HTTP/WebUI自定义bearer token",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "integrations/http/ExternalChatHttpServer.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "Claude prompt cache/群组编排/时间戳历史加载",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "api/chat/llmprovider/ClaudeProvider.kt",
+        "data/model/CharacterGroupCard.kt"
+      ]
+    },
+    {
+      "category": "增加",
+      "claim": "韩语本地化",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "ui/features/settings/screens/LanguageSettingsScreen.kt"
+      ]
+    },
+    {
+      "category": "修复",
+      "claim": "grep_code ripgrep过度处理",
+      "status": "CODE_CONFIRMED",
+      "evidence_files": [
+        "core/tools/defaultTool/standard/StandardFileSystemTools.kt"
+      ]
+    },
+    {
+      "category": "修复",
+      "claim": "Claude thinking参数不兼容",
+      "status": "CODE_CONFIRMED",
+      "evidence_files": [
+        "api/chat/llmprovider/ClaudeProvider.kt"
+      ]
+    },
+    {
+      "category": "修复",
+      "claim": "DeepSeek硬编码API Key安全",
+      "status": "VERIFIED",
+      "evidence_files": [
+        "data/preferences/ModelConfigManager.kt"
+      ]
+    },
+    {
+      "category": "优化",
+      "claim": "工具包运行时拆分加载器和管理器",
+      "status": "CODE_CONFIRMED",
+      "evidence_files": [
+        "core/tools/packTool/ToolPkgLoader.kt",
+        "core/tools/packTool/ToolPkgManager.kt"
+      ]
+    }
+  ]
+}

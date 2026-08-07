@@ -1,0 +1,224 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "repository": "Operit-v1.12.0",
+    "scan_date": "2025-08-07",
+    "source_root": "app/src/main/java/com/ai/assistance/operit/",
+    "terminal_submodule": "terminal/ (git submodule, separate repo: OperitTerminal)",
+    "platform": "Android (Kotlin/Java)"
+  },
+  "file_tools": [
+    {
+      "name": "StandardFileSystemTools",
+      "file": "core/tools/defaultTool/standard/StandardFileSystemTools.kt",
+      "description": "标准文件系统工具,提供readFile/readFileFull/readFileBinary/readFilePart/writeFile/writeFileBinary/deleteFile/moveFile/copyFile/makeDirectory/listFiles/findFiles/fileInfo/grepCode/grepContext/openFile/shareFile/searchFiles等操作,支持本地和Linux环境切换,含文件apply编辑(compress/decompress/searchReplace/diffMatchPatch)"
+    },
+    {
+      "name": "LinuxFileSystemTools",
+      "file": "core/tools/defaultTool/standard/LinuxFileSystemTools.kt",
+      "description": "Linux文件系统工具,继承StandardFileSystemTools,通过动态获取文件系统(SSH/本地)操作Linux文件系统,所有操作标记env=linux"
+    },
+    {
+      "name": "SafFileSystemTools",
+      "file": "core/tools/defaultTool/standard/SafFileSystemTools.kt",
+      "description": "Storage Access Framework文件系统工具,通过content:// URI和DocumentsProvider操作"
+    },
+    {
+      "name": "DebuggerFileSystemTools",
+      "file": "core/tools/defaultTool/debugger/DebuggerFileSystemTools.kt",
+      "description": "调试器文件系统工具"
+    },
+    {
+      "name": "FileSystemProvider (interface)",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/filesystem/FileSystemProvider.kt",
+      "description": "终端文件系统操作抽象接口,定义readFile/writeFile/listDirectory/exists/isDirectory/isFile/getFileSize/getLineCount/createDirectory/delete/move/copy/findFiles/getFileInfo/getPermissions等完整方法,支持本地和SSH两种实现"
+    },
+    {
+      "name": "LocalFileSystemProvider",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/filesystem/LocalFileSystemProvider.kt",
+      "description": "本地文件系统提供者,通过proot内shell命令操作Ubuntu根文件系统,路径映射通过PRootMountMapping"
+    },
+    {
+      "name": "SSHFileSystemProvider",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/filesystem/SSHFileSystemProvider.kt",
+      "description": "SSH远程文件系统提供者,使用JSch SFTP协议操作远程文件系统,含32KB缓冲区和SFTP通道复用"
+    },
+    {
+      "name": "SSHFileConnectionManager",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/utils/SSHFileConnectionManager.kt",
+      "description": "SSH文件连接管理器单例,管理多个SSH SFTP连接"
+    },
+    {
+      "name": "FileManager (workspace侧)",
+      "file": "ui/features/chat/webview/workspace/FileManager.kt",
+      "description": "工作区文件管理器"
+    },
+    {
+      "name": "FileManagerViewModel/Screen",
+      "file": "ui/features/toolbox/screens/filemanager/",
+      "description": "工具箱文件管理器UI"
+    }
+  ],
+  "supported_operations": [
+    "read",
+    "write",
+    "append",
+    "delete",
+    "copy",
+    "move",
+    "search",
+    "compress",
+    "decompress",
+    "file_exists",
+    "file_info",
+    "list_directory",
+    "make_directory",
+    "grep_code",
+    "grep_context",
+    "read_binary",
+    "write_binary",
+    "read_part",
+    "apply_edit",
+    "open_file",
+    "share_file"
+  ],
+  "saf_implementation": {
+    "documents_providers": [
+      {
+        "name": "UbuntuDocumentsProvider",
+        "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/provider/UbuntuDocumentsProvider.kt",
+        "description": "通过SAF暴露Ubuntu文件系统给其他应用,root_id=ubuntu_root,基于LocalFileSystemProvider"
+      },
+      {
+        "name": "OperitDataDocumentsProvider",
+        "file": "provider/OperitDataDocumentsProvider.kt",
+        "description": "Operit数据DocumentsProvider"
+      },
+      {
+        "name": "WorkspaceDocumentsProvider",
+        "file": "provider/WorkspaceDocumentsProvider.kt",
+        "description": "工作区DocumentsProvider"
+      },
+      {
+        "name": "MemoryDocumentsProvider",
+        "file": "provider/MemoryDocumentsProvider.kt",
+        "description": "记忆DocumentsProvider"
+      }
+    ]
+  },
+  "http_clients": [
+    {
+      "name": "OkHttpClient (StandardHttpTools)",
+      "file": "core/tools/defaultTool/standard/StandardHttpTools.kt",
+      "description": "OkHttp3封装,支持GET/POST/PUT/DELETE等,含CookieJar内存存储/SSL忽略/代理/超时配置/Multipart/form-data/Flow流式响应/HttpStreamEventData/Proxy支持"
+    },
+    {
+      "name": "OkHttpClient (OkHttp全局)",
+      "file": "build.gradle.kts (libs.versions.toml)",
+      "description": "OkHttp用于所有LLM API调用(OpenAI/Claude/Gemini/Deepseek/Ollama等)"
+    },
+    {
+      "name": "HttpURLConnection (GitHub API)",
+      "file": "data/api/GitHubApiService.kt",
+      "description": "java.net.GitHub API服务,原生HttpURLConnection"
+    },
+    {
+      "name": "GithubReleaseUtil",
+      "file": "util/GithubReleaseUtil.kt",
+      "description": "GitHub Release信息获取工具,检查更新用"
+    },
+    {
+      "name": "ExternalChatHttpServer",
+      "file": "integrations/http/ExternalChatHttpServer.kt",
+      "description": "外部聊天HTTP服务器,提供API端点"
+    },
+    {
+      "name": "WebChatHttpBridge",
+      "file": "integrations/http/WebChatHttpBridge.kt",
+      "description": "Web Chat HTTP桥梁,支持SSE/EventSource通信"
+    }
+  ],
+  "websocket_support": {
+    "implemented": true,
+    "locations": [
+      {
+        "file": "api/voice/OpenAIRealtimeVoiceProvider.kt",
+        "usage": "OpenAI实时语音WebSocket连接"
+      },
+      {
+        "file": "core/application/OperitApplication.kt",
+        "usage": "全局WebSocket配置"
+      },
+      {
+        "file": "api/voice/VoiceServiceFactory.kt",
+        "usage": "语音服务WebSocket工厂"
+      }
+    ],
+    "library": "OkWebSocket (OkHttp3内置)"
+  },
+  "sse_support": {
+    "implemented": true,
+    "description": "通过WebChatHttpBridge和LLM Provider的事件流",
+    "content_type": "text/event-stream",
+    "locations": [
+      "WebChatHttpBridge.kt - Web聊天SSE桥接",
+      "ClaudeProvider.kt / GeminiProvider.kt - LLM SSE响应处理",
+      "StandardSystemOperationTools.kt - SSE事件推送",
+      "ExternalChatHttpServer.kt - 外部聊天SSE"
+    ]
+  },
+  "server_capabilities": [
+    {
+      "name": "FtpServerManager",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/utils/FtpServerManager.kt",
+      "description": "内置Apache FtpServer,端口2127,暴露Ubuntu根文件系统,支持被动模式(2128-2136)"
+    },
+    {
+      "name": "SSHDServerManager",
+      "file": "terminal/src/main/java/com/ai/assistance/operit/terminal/utils/SSHDServerManager.kt",
+      "description": "内置Apache MINA SSHD服务器,支持反向SSH隧道,BouncyCastle加密"
+    },
+    {
+      "name": "LocalWebServer",
+      "file": "ui/features/chat/webview/LocalWebServer.kt",
+      "description": "本地Web服务器,为WebView提供本地HTTP服务"
+    },
+    {
+      "name": "ExternalChatHttpServer",
+      "file": "integrations/http/ExternalChatHttpServer.kt",
+      "description": "外部聊天HTTP服务器端点"
+    }
+  ],
+  "ssh_capabilities": {
+    "client": {
+      "library": "JSch (com.jcraft.jsch)",
+      "features": [
+        "密码认证",
+        "公钥认证(含passphrase)",
+        "SFTP文件操作",
+        "反向SSH隧道(remote->local)",
+        "端口转发(local->remote)",
+        "Keep-Alive心跳",
+        "多路复用"
+      ],
+      "connection_manager": "SSHFileConnectionManager - 单一连接ID管理,支持getOrCreateConnection/closeConnection"
+    },
+    "server": {
+      "library": "Apache MINA SSHD",
+      "features": [
+        "内置SSHD服务",
+        "密码认证用户",
+        "BouncyCastle加密适配",
+        "SFTP子系统",
+        "反向隧道"
+      ]
+    }
+  },
+  "js_execution": {
+    "engine": "QuickJS (quickjs submodule)",
+    "bridge": "JsEngine/JsJavaBridge - Native<->JS双向调用",
+    "script_runner": "JsExecutionScriptBuilder构建JS运行时",
+    "tool_system": "ToolPackage/JS脚本作为AI工具执行",
+    "npm_support": "通过终端npm源安装JS包(NPM_SOURCE可配置镜像)"
+  }
+}

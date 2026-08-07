@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "registration_function": "makeAgentTools() in AIChatViewModel+ToolDefinitions.swift / AgentTools.kt",
+  "platform_alignment": "iOS and Android have identical 8-tool contract",
+  "tools": [
+    {
+      "id": "shell_execute",
+      "desc": "Execute shell commands in Linux sandbox",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    },
+    {
+      "id": "file_read",
+      "desc": "Read file contents",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    },
+    {
+      "id": "file_write",
+      "desc": "Write/create files",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    },
+    {
+      "id": "file_edit",
+      "desc": "Edit existing files with patch",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    },
+    {
+      "id": "browser_use",
+      "desc": "Web browser automation",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    },
+    {
+      "id": "memory_write",
+      "desc": "Write memory entry (cond. available)",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    },
+    {
+      "id": "memory_get",
+      "desc": "Retrieve memories (cond. available)",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    },
+    {
+      "id": "read_image",
+      "desc": "Process image input",
+      "platform": "SHARED",
+      "imp": "IMPLEMENTED"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "amitia_mapped_to_sources": 10,
+  "amitia_superset_extensions": 3,
+  "mapping_status_breakdown": {
+    "SUBSET": 0,
+    "ABSENT": 256,
+    "FULL_EQUIVALENT": 0,
+    "AMITIA_ONLY": 0,
+    "OUTCOME_EQUIVALENT": 250,
+    "SUPERSET": 0,
+    "PARTIAL": 0
+  },
+  "amitia_total_capabilities": 327,
+  "amitia_absent_from_sources": 5,
+  "amitia_only_preservation": 240,
+  "generated_at": "2026-08-07T13:53:10+08:00",
+  "amitia_subset_gaps": 7
+}

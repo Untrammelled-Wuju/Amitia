@@ -1,0 +1,104 @@
+{
+  "inventory_id": "INV-A14-CHANNEL-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "channel_system",
+  "items": [
+    {
+      "id": "CHANNEL-001",
+      "name": "QQ Sidecar",
+      "name_en": "QQ Sidecar Service",
+      "description": "QQ侧车服务，通过Node.js子进程桥接ICQQ实现QQ消息收发",
+      "file": "backend/qq-sidecar/bundle.mjs",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/send",
+        "POST /api/send-image"
+      ]
+    },
+    {
+      "id": "CHANNEL-002",
+      "name": "QQ Sidecar Launcher",
+      "name_en": "QQ Sidecar Launcher",
+      "description": "QQ侧车启动器，管理QQ侧车子进程的生命周期",
+      "file": "backend/qq-sidecar/launcher.mjs",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHANNEL-003",
+      "name": "QQ Sidecar Source",
+      "name_en": "QQ Sidecar Source Code",
+      "description": "QQ侧车TypeScript源码，编译后生成bundle.mjs",
+      "file": "backend/qq-sidecar/src/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHANNEL-004",
+      "name": "WeChat Sidecar",
+      "name_en": "WeChat Sidecar Service",
+      "description": "微信侧车服务，通过Node.js子进程桥接微信实现消息收发",
+      "file": "backend/sidecar/bundle.mjs",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/send",
+        "POST /api/send-image"
+      ]
+    },
+    {
+      "id": "CHANNEL-005",
+      "name": "WeChat Sidecar Launcher",
+      "name_en": "WeChat Sidecar Launcher",
+      "description": "微信侧车启动器，管理微信侧车子进程的生命周期",
+      "file": "backend/sidecar/launcher.mjs",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHANNEL-006",
+      "name": "WeChat Sidecar Source",
+      "name_en": "WeChat Sidecar Source Code",
+      "description": "微信侧车TypeScript源码，编译后生成bundle.mjs",
+      "file": "backend/sidecar/src/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHANNEL-007",
+      "name": "QQ Channel Handler",
+      "name_en": "QQ Channel Backend Handler",
+      "description": "QQ渠道后端处理器，处理QQ消息的接收和路由",
+      "file": "backend/internal/qq/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHANNEL-008",
+      "name": "Webhook Channel Adapter",
+      "name_en": "Webhook Channel Bridge",
+      "description": "Webhook渠道适配器，将外部平台webhook消息桥接到统一处理管道",
+      "file": "backend/internal/agent/handler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["POST /api/v1/agent/webhook"]
+    },
+    {
+      "id": "CHANNEL-009",
+      "name": "Web SSE Channel",
+      "name_en": "Web SSE Channel Adapter",
+      "description": "Web SSE渠道适配器，管理浏览器客户端的Server-Sent Events连接",
+      "file": "backend/pkg/sse/",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "CHANNEL-010",
+      "name": "Memory Card Config",
+      "name_en": "AI Companion Memory Card",
+      "description": "AI伴侣记忆卡配置，定义侧车的消息格式和路由配置",
+      "file": "backend/sidecar/AI-Companion.memory-card.json",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    }
+  ]
+}

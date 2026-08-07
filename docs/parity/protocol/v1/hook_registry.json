@@ -1,0 +1,60 @@
+{
+  "hooks": [
+    {
+      "Phase": "pre_process",
+      "HookId": "hook.agent.pre_process",
+      "Domain": "agent",
+      "Description": "Before agent processing"
+    },
+    {
+      "Phase": "post_process",
+      "HookId": "hook.agent.post_process",
+      "Domain": "agent",
+      "Description": "After agent processing"
+    },
+    {
+      "Phase": "pre_execute",
+      "HookId": "hook.tool.pre_execute",
+      "Domain": "tool",
+      "Description": "Before tool execution"
+    },
+    {
+      "Phase": "post_execute",
+      "HookId": "hook.tool.post_execute",
+      "Domain": "tool",
+      "Description": "After tool execution"
+    },
+    {
+      "Phase": "on_error",
+      "HookId": "hook.tool.on_error",
+      "Domain": "tool",
+      "Description": "On tool execution error"
+    },
+    {
+      "Phase": "on_create",
+      "HookId": "hook.task.on_create",
+      "Domain": "task",
+      "Description": "When task is created"
+    },
+    {
+      "Phase": "on_complete",
+      "HookId": "hook.task.on_complete",
+      "Domain": "task",
+      "Description": "When task is completed"
+    },
+    {
+      "Phase": "on_install",
+      "HookId": "hook.extension.on_install",
+      "Domain": "extension",
+      "Description": "When extension is installed"
+    },
+    {
+      "Phase": "on_enable",
+      "HookId": "hook.extension.on_enable",
+      "Domain": "extension",
+      "Description": "When extension is enabled"
+    }
+  ],
+  "registryId": "PARITY-2026-08-07-V1-HOOK-REGISTRY",
+  "generatedAt": "2026-08-07T14:40:30+08:00"
+}

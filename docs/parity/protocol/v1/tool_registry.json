@@ -1,0 +1,3549 @@
+{
+  "registryId": "PARITY-2026-08-07-V1-TOOL-REGISTRY",
+  "tools": [
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CN",
+      "behaviorKey": "GENERAL_EXECUTE_交互范围解析",
+      "mapId": "MAP-0001",
+      "toolId": "tool.tool.execute_CN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.UPDATE.UPDATE_FULL_APK",
+      "behaviorKey": "GENERAL_UPDATE_update_full_apk",
+      "mapId": "MAP-0002",
+      "toolId": "tool.system.update_UPDATE_FULL_APK",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.CONTROL.CLOSE_ALL_VIRTUAL_DISPLAYS",
+      "behaviorKey": "GENERAL_CONTROL_close_all_virtual_displays",
+      "mapId": "MAP-0003",
+      "toolId": "tool.system.control_CLOSE_ALL_VIRTUAL_DISPLAYS",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.UPDATE.UPDATE_USER_PREFERENCES",
+      "behaviorKey": "GENERAL_UPDATE_update_user_preferences",
+      "mapId": "MAP-0004",
+      "toolId": "tool.system.update_UPDATE_USER_PREFERENCES",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.1",
+      "behaviorKey": "GENERAL_EXECUTE_任务目标注册",
+      "mapId": "MAP-0005",
+      "toolId": "tool.tool.execute_1",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.2",
+      "behaviorKey": "GENERAL_EXECUTE_角色模板管理",
+      "mapId": "MAP-0006",
+      "toolId": "tool.tool.execute_2",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.3",
+      "behaviorKey": "GENERAL_EXECUTE_角色配置管理",
+      "mapId": "MAP-0007",
+      "toolId": "tool.tool.execute_3",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.4",
+      "behaviorKey": "GENERAL_EXECUTE_工作记忆管理",
+      "mapId": "MAP-0008",
+      "toolId": "tool.tool.execute_4",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.ORMCN",
+      "behaviorKey": "GENERAL_EXECUTE_ORM封装",
+      "mapId": "MAP-0009",
+      "toolId": "tool.tool.execute_ORMCN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.INSTALL_APP",
+      "behaviorKey": "GENERAL_INSTALL_install_app",
+      "mapId": "MAP-0010",
+      "toolId": "tool.system.install_INSTALL_APP",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.5",
+      "behaviorKey": "GENERAL_EXECUTE_信念批处理",
+      "mapId": "MAP-0011",
+      "toolId": "tool.tool.execute_5",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.6",
+      "behaviorKey": "GENERAL_EXECUTE_链路追踪",
+      "mapId": "MAP-0012",
+      "toolId": "tool.tool.execute_6",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.UPDATE.MEMORY WRITE",
+      "behaviorKey": "GENERAL_UPDATE_Memory Write",
+      "mapId": "MAP-0013",
+      "toolId": "tool.memory.update_MEMORY WRITE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL OWNED RESOURCECN",
+      "behaviorKey": "GENERAL_EXECUTE_Tool Owned Resource管理",
+      "mapId": "MAP-0014",
+      "toolId": "tool.tool.execute_TOOL OWNED RESOURCECN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.UPDATE.MODIFY_SYSTEM_SETTING",
+      "behaviorKey": "GENERAL_UPDATE_modify_system_setting",
+      "mapId": "MAP-0015",
+      "toolId": "tool.device.update_MODIFY_SYSTEM_SETTING",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.FILE.UPDATE.FILE EDIT",
+      "behaviorKey": "GENERAL_UPDATE_File Edit",
+      "mapId": "MAP-0016",
+      "toolId": "tool.file.update_FILE EDIT",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.JS PACKAGE TOOLS (DYNAMIC)",
+      "behaviorKey": "GENERAL_EXECUTE_JS Package tools (dynamic)",
+      "mapId": "MAP-0017",
+      "toolId": "tool.tool.execute_JS PACKAGE TOOLS (DYNAMIC)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.7",
+      "behaviorKey": "GENERAL_EXECUTE_聊天导入",
+      "mapId": "MAP-0018",
+      "toolId": "tool.tool.execute_7",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.8",
+      "behaviorKey": "GENERAL_EXECUTE_工作流执行器",
+      "mapId": "MAP-0019",
+      "toolId": "tool.tool.execute_8",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_HIDDEN_TERMINAL_COMMAND",
+      "behaviorKey": "GENERAL_EXECUTE_execute_hidden_terminal_command",
+      "mapId": "MAP-0020",
+      "toolId": "tool.process.execute_EXECUTE_HIDDEN_TERMINAL_COMMAND",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.CREATE.CREATE_TERMINAL_SESSION",
+      "behaviorKey": "GENERAL_CREATE_create_terminal_session",
+      "mapId": "MAP-0021",
+      "toolId": "tool.process.create_CREATE_TERMINAL_SESSION",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.SEND.PERMISSION_POST_NOTIFICATIONS",
+      "behaviorKey": "GENERAL_SEND_permission_post_notifications",
+      "mapId": "MAP-0022",
+      "toolId": "tool.security.send_PERMISSION_POST_NOTIFICATIONS",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.READ.MEMORY FUZZY SEARCH",
+      "behaviorKey": "GENERAL_READ_Memory Fuzzy Search",
+      "mapId": "MAP-0023",
+      "toolId": "tool.memory.read_MEMORY FUZZY SEARCH",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.EXECUTE.CROSS-SESSION PERSISTENCE",
+      "behaviorKey": "GENERAL_EXECUTE_Cross-session Persistence",
+      "mapId": "MAP-0024",
+      "toolId": "tool.memory.execute_CROSS-SESSION PERSISTENCE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.WORKSPACE IMPORT/EXPORT",
+      "behaviorKey": "GENERAL_INSTALL_Workspace Import/Export",
+      "mapId": "MAP-0025",
+      "toolId": "tool.system.install_WORKSPACE IMPORT/EXPORT",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.APPLICATION_INSTALL_UNINSTALL",
+      "behaviorKey": "GENERAL_INSTALL_application_install_uninstall",
+      "mapId": "MAP-0026",
+      "toolId": "tool.system.install_APPLICATION_INSTALL_UNINSTALL",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.EXECUTE.FLOATING_WINDOW_OVERLAY",
+      "behaviorKey": "GENERAL_EXECUTE_floating_window_overlay",
+      "mapId": "MAP-0027",
+      "toolId": "tool.browser.execute_FLOATING_WINDOW_OVERLAY",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.READ.PERMISSION_READ_PHONE_STATE",
+      "behaviorKey": "GENERAL_READ_permission_read_phone_state",
+      "mapId": "MAP-0028",
+      "toolId": "tool.security.read_PERMISSION_READ_PHONE_STATE",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.9",
+      "behaviorKey": "GENERAL_EXECUTE_信念系统引擎",
+      "mapId": "MAP-0029",
+      "toolId": "tool.tool.execute_9",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.10",
+      "behaviorKey": "GENERAL_EXECUTE_任务计划执行",
+      "mapId": "MAP-0030",
+      "toolId": "tool.tool.execute_10",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.STREAMING OUTPUT",
+      "behaviorKey": "GENERAL_EXECUTE_Streaming Output",
+      "mapId": "MAP-0031",
+      "toolId": "tool.tool.execute_STREAMING OUTPUT",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.DEVICE INFO",
+      "behaviorKey": "GENERAL_EXECUTE_Device Info",
+      "mapId": "MAP-0032",
+      "toolId": "tool.device.execute_DEVICE INFO",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CORRUPTION RECOVERY",
+      "behaviorKey": "GENERAL_EXECUTE_Corruption Recovery",
+      "mapId": "MAP-0033",
+      "toolId": "tool.tool.execute_CORRUPTION RECOVERY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.VISION/OCR",
+      "behaviorKey": "GENERAL_EXECUTE_Vision/OCR",
+      "mapId": "MAP-0034",
+      "toolId": "tool.tool.execute_VISION/OCR",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.READ.QUERY_MEMORY_LINKS",
+      "behaviorKey": "GENERAL_READ_query_memory_links",
+      "mapId": "MAP-0035",
+      "toolId": "tool.memory.read_QUERY_MEMORY_LINKS",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CONCURRENT TOOL EXECUTION",
+      "behaviorKey": "GENERAL_EXECUTE_Concurrent Tool Execution",
+      "mapId": "MAP-0036",
+      "toolId": "tool.tool.execute_CONCURRENT TOOL EXECUTION",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.PRESERVATION.BACKUP_BACKUP",
+      "behaviorKey": "DATA_PRESERVATION_BACKUP_BACKUP",
+      "mapId": "MAP-0037",
+      "toolId": "tool.memory.preservation_BACKUP_BACKUP",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.PRESERVATION.1",
+      "behaviorKey": "DATA_PRESERVATION_BACKUP_BACKUP",
+      "mapId": "MAP-0038",
+      "toolId": "tool.memory.preservation_1",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.TRANSFER.TRANSFER_DATA",
+      "behaviorKey": "DATA_TRANSFER_TRANSFER_DATA",
+      "mapId": "MAP-0039",
+      "toolId": "tool.tool.transfer_TRANSFER_DATA",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.11",
+      "behaviorKey": "GENERAL_EXECUTE_技能解析器",
+      "mapId": "MAP-0040",
+      "toolId": "tool.tool.execute_11",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.TOOLPKG_INSTALL_ZIP",
+      "behaviorKey": "GENERAL_INSTALL_toolpkg_install_zip",
+      "mapId": "MAP-0041",
+      "toolId": "tool.system.install_TOOLPKG_INSTALL_ZIP",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.12",
+      "behaviorKey": "GENERAL_EXECUTE_创意工坊服务",
+      "mapId": "MAP-0042",
+      "toolId": "tool.tool.execute_12",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.13",
+      "behaviorKey": "GENERAL_EXECUTE_嵌入配置管理",
+      "mapId": "MAP-0043",
+      "toolId": "tool.tool.execute_13",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.14",
+      "behaviorKey": "GENERAL_EXECUTE_分享图生成",
+      "mapId": "MAP-0044",
+      "toolId": "tool.tool.execute_14",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.15",
+      "behaviorKey": "GENERAL_EXECUTE_结构化日志",
+      "mapId": "MAP-0045",
+      "toolId": "tool.tool.execute_15",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.GREP_CODE",
+      "behaviorKey": "GENERAL_EXECUTE_grep_code",
+      "mapId": "MAP-0046",
+      "toolId": "tool.tool.execute_GREP_CODE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.BLUETOOTH_SEND_AND_READ",
+      "behaviorKey": "GENERAL_READ_bluetooth_send_and_read",
+      "mapId": "MAP-0047",
+      "toolId": "tool.device.read_BLUETOOTH_SEND_AND_READ",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.CONVERSATION.MANAGE.CONVERSATION",
+      "behaviorKey": "CHAT_MANAGE_CONVERSATION",
+      "mapId": "MAP-0048",
+      "toolId": "tool.conversation.manage_CONVERSATION",
+      "domain": "CONVERSATION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CHANNEL",
+      "behaviorKey": "COMMUNICATION_EXECUTE_CHANNEL",
+      "mapId": "MAP-0049",
+      "toolId": "tool.tool.execute_CHANNEL",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.16",
+      "behaviorKey": "GENERAL_EXECUTE_工坊会话视图",
+      "mapId": "MAP-0050",
+      "toolId": "tool.tool.execute_16",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CAPTURE.CAPTURE_SCREENSHOT",
+      "behaviorKey": "GENERAL_CAPTURE_capture_screenshot",
+      "mapId": "MAP-0051",
+      "toolId": "tool.tool.capture_CAPTURE_SCREENSHOT",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.17",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息速率限制",
+      "mapId": "MAP-0052",
+      "toolId": "tool.tool.execute_17",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.18",
+      "behaviorKey": "GENERAL_EXECUTE_技能协议处理",
+      "mapId": "MAP-0053",
+      "toolId": "tool.tool.execute_18",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.INSTALL.MCP_PLUGIN_INSTALL_&_SERVER",
+      "behaviorKey": "GENERAL_INSTALL_mcp_plugin_install_&_server",
+      "mapId": "MAP-0054",
+      "toolId": "tool.extension.install_MCP_PLUGIN_INSTALL_&_SERVER",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.CAMERA_CAPTURE_(IMAGEREADER)",
+      "behaviorKey": "GENERAL_READ_camera_capture_(imagereader)",
+      "mapId": "MAP-0055",
+      "toolId": "tool.device.read_CAMERA_CAPTURE_(IMAGEREADER)",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.UPDATE.UPDATE_MEMORY",
+      "behaviorKey": "GENERAL_UPDATE_update_memory",
+      "mapId": "MAP-0056",
+      "toolId": "tool.memory.update_UPDATE_MEMORY",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.19",
+      "behaviorKey": "GENERAL_EXECUTE_配置加密",
+      "mapId": "MAP-0057",
+      "toolId": "tool.tool.execute_19",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.20",
+      "behaviorKey": "GENERAL_EXECUTE_导入历史",
+      "mapId": "MAP-0058",
+      "toolId": "tool.tool.execute_20",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.21",
+      "behaviorKey": "GENERAL_EXECUTE_人格特质模型",
+      "mapId": "MAP-0059",
+      "toolId": "tool.tool.execute_21",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.22",
+      "behaviorKey": "GENERAL_EXECUTE_数据源路由",
+      "mapId": "MAP-0060",
+      "toolId": "tool.tool.execute_22",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.UPDATE.UPDATE_MEMORY_LINK",
+      "behaviorKey": "GENERAL_UPDATE_update_memory_link",
+      "mapId": "MAP-0061",
+      "toolId": "tool.memory.update_UPDATE_MEMORY_LINK",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CALCULATOR",
+      "behaviorKey": "GENERAL_EXECUTE_calculator",
+      "mapId": "MAP-0062",
+      "toolId": "tool.tool.execute_CALCULATOR",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.23",
+      "behaviorKey": "GENERAL_EXECUTE_人格特质提示编译",
+      "mapId": "MAP-0063",
+      "toolId": "tool.tool.execute_23",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MUSIC_STATUS",
+      "behaviorKey": "GENERAL_EXECUTE_music_status",
+      "mapId": "MAP-0064",
+      "toolId": "tool.tool.execute_MUSIC_STATUS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.AUTOMATION.EXECUTE_BROWSER",
+      "behaviorKey": "WEB_AUTOMATION_EXECUTE_BROWSER",
+      "mapId": "MAP-0065",
+      "toolId": "tool.browser.automation_EXECUTE_BROWSER",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.IRCN",
+      "behaviorKey": "GENERAL_EXECUTE_IR中间表示",
+      "mapId": "MAP-0066",
+      "toolId": "tool.tool.execute_IRCN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.EXECUTE.VECTORINDEXMANAGER",
+      "behaviorKey": "GENERAL_EXECUTE_vectorindexmanager",
+      "mapId": "MAP-0067",
+      "toolId": "tool.memory.execute_VECTORINDEXMANAGER",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.EXECUTE.PERMISSION_CALL_PHONE",
+      "behaviorKey": "GENERAL_EXECUTE_permission_call_phone",
+      "mapId": "MAP-0068",
+      "toolId": "tool.security.execute_PERMISSION_CALL_PHONE",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.24",
+      "behaviorKey": "GENERAL_EXECUTE_日志查看面板",
+      "mapId": "MAP-0069",
+      "toolId": "tool.tool.execute_24",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.VIRTUALDISPLAYOVERLAY",
+      "behaviorKey": "GENERAL_CONTROL_virtualdisplayoverlay",
+      "mapId": "MAP-0070",
+      "toolId": "tool.tool.control_VIRTUALDISPLAYOVERLAY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.25",
+      "behaviorKey": "GENERAL_EXECUTE_日志工具面板",
+      "mapId": "MAP-0071",
+      "toolId": "tool.tool.execute_25",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.26",
+      "behaviorKey": "GENERAL_EXECUTE_世界书检索注入",
+      "mapId": "MAP-0072",
+      "toolId": "tool.tool.execute_26",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.27",
+      "behaviorKey": "GENERAL_EXECUTE_平台安全策略",
+      "mapId": "MAP-0073",
+      "toolId": "tool.tool.execute_27",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.28",
+      "behaviorKey": "GENERAL_EXECUTE_情绪视觉表情映射",
+      "mapId": "MAP-0074",
+      "toolId": "tool.tool.execute_28",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.29",
+      "behaviorKey": "GENERAL_EXECUTE_通道连接器管理",
+      "mapId": "MAP-0075",
+      "toolId": "tool.tool.execute_29",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_IN_TERMINAL_SESSION_STREAMING",
+      "behaviorKey": "GENERAL_EXECUTE_execute_in_terminal_session_streaming",
+      "mapId": "MAP-0076",
+      "toolId": "tool.process.execute_EXECUTE_IN_TERMINAL_SESSION_STREAMING",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.30",
+      "behaviorKey": "GENERAL_EXECUTE_认证上下文",
+      "mapId": "MAP-0077",
+      "toolId": "tool.tool.execute_30",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.READ.BLUETOOTH_BLE_READ_CHARACTERISTIC",
+      "behaviorKey": "GENERAL_READ_bluetooth_ble_read_characteristic",
+      "mapId": "MAP-0078",
+      "toolId": "tool.character.read_BLUETOOTH_BLE_READ_CHARACTERISTIC",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.REQUEST_ENABLE_BLUETOOTH",
+      "behaviorKey": "GENERAL_EXECUTE_request_enable_bluetooth",
+      "mapId": "MAP-0079",
+      "toolId": "tool.device.execute_REQUEST_ENABLE_BLUETOOTH",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_ACCEPT",
+      "behaviorKey": "GENERAL_EXECUTE_bluetooth_accept",
+      "mapId": "MAP-0080",
+      "toolId": "tool.device.execute_BLUETOOTH_ACCEPT",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.MANAGEMENT.EXECUTE_CHARACTER",
+      "behaviorKey": "CHARACTER_MANAGEMENT_EXECUTE_CHARACTER",
+      "mapId": "MAP-0081",
+      "toolId": "tool.character.management_EXECUTE_CHARACTER",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.MANAGEMENT.1",
+      "behaviorKey": "CHARACTER_MANAGEMENT_EXECUTE_CHARACTER",
+      "mapId": "MAP-0082",
+      "toolId": "tool.character.management_1",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.MANAGEMENT.2",
+      "behaviorKey": "CHARACTER_MANAGEMENT_EXECUTE_CHARACTER",
+      "mapId": "MAP-0083",
+      "toolId": "tool.character.management_2",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.31",
+      "behaviorKey": "GENERAL_EXECUTE_角色处理器",
+      "mapId": "MAP-0084",
+      "toolId": "tool.tool.execute_31",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.32",
+      "behaviorKey": "GENERAL_EXECUTE_决策一致性检查",
+      "mapId": "MAP-0085",
+      "toolId": "tool.tool.execute_32",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.GET_APP_USAGE_TIME",
+      "behaviorKey": "GENERAL_READ_get_app_usage_time",
+      "mapId": "MAP-0086",
+      "toolId": "tool.tool.read_GET_APP_USAGE_TIME",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.33",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息恢复机制",
+      "mapId": "MAP-0087",
+      "toolId": "tool.tool.execute_33",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.SCHEMACN",
+      "behaviorKey": "GENERAL_EXECUTE_Schema版本追踪",
+      "mapId": "MAP-0088",
+      "toolId": "tool.tool.execute_SCHEMACN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.34",
+      "behaviorKey": "GENERAL_EXECUTE_通道消息存储",
+      "mapId": "MAP-0089",
+      "toolId": "tool.tool.execute_34",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.SET_INPUT_TEXT",
+      "behaviorKey": "GENERAL_EXECUTE_set_input_text",
+      "mapId": "MAP-0090",
+      "toolId": "tool.tool.execute_SET_INPUT_TEXT",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.35",
+      "behaviorKey": "GENERAL_EXECUTE_消息对话缓冲管理",
+      "mapId": "MAP-0091",
+      "toolId": "tool.tool.execute_35",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.36",
+      "behaviorKey": "GENERAL_EXECUTE_人格特质服务",
+      "mapId": "MAP-0092",
+      "toolId": "tool.tool.execute_36",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.SCREEN_CAPTURE_(VIRTUALDISPLAY_MANAGER)",
+      "behaviorKey": "GENERAL_CONTROL_screen_capture_(virtualdisplay_manager)",
+      "mapId": "MAP-0093",
+      "toolId": "tool.tool.control_SCREEN_CAPTURE_(VIRTUALDISPLAY_MANAGER)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.37",
+      "behaviorKey": "GENERAL_EXECUTE_时间线构建",
+      "mapId": "MAP-0094",
+      "toolId": "tool.tool.execute_37",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.AGENT.EXECUTE.PSYCHECN",
+      "behaviorKey": "GENERAL_EXECUTE_Psyche状态更新管道",
+      "mapId": "MAP-0095",
+      "toolId": "tool.agent.execute_PSYCHECN",
+      "domain": "AGENT"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.SEND.BLUETOOTH_SEND",
+      "behaviorKey": "GENERAL_SEND_bluetooth_send",
+      "mapId": "MAP-0096",
+      "toolId": "tool.device.send_BLUETOOTH_SEND",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.38",
+      "behaviorKey": "GENERAL_EXECUTE_交互取消注册",
+      "mapId": "MAP-0097",
+      "toolId": "tool.tool.execute_38",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.39",
+      "behaviorKey": "GENERAL_EXECUTE_记忆系统服务",
+      "mapId": "MAP-0098",
+      "toolId": "tool.tool.execute_39",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.40",
+      "behaviorKey": "GENERAL_EXECUTE_语音预设管理",
+      "mapId": "MAP-0099",
+      "toolId": "tool.tool.execute_40",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.41",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端剪贴板桥接",
+      "mapId": "MAP-0100",
+      "toolId": "tool.tool.execute_41",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MINIS://OFFLOADS/",
+      "behaviorKey": "GENERAL_EXECUTE_minis://offloads/",
+      "mapId": "MAP-0101",
+      "toolId": "tool.tool.execute_MINIS://OFFLOADS/",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.42",
+      "behaviorKey": "GENERAL_EXECUTE_技能详情页面",
+      "mapId": "MAP-0102",
+      "toolId": "tool.tool.execute_42",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.43",
+      "behaviorKey": "GENERAL_EXECUTE_记忆压缩摘要",
+      "mapId": "MAP-0103",
+      "toolId": "tool.tool.execute_43",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.44",
+      "behaviorKey": "GENERAL_EXECUTE_中间件追踪",
+      "mapId": "MAP-0104",
+      "toolId": "tool.tool.execute_44",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.READ.LIST_INSTALLED_APPS",
+      "behaviorKey": "GENERAL_READ_list_installed_apps",
+      "mapId": "MAP-0105",
+      "toolId": "tool.system.read_LIST_INSTALLED_APPS",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_BLE_DISCOVER_SERVICES",
+      "behaviorKey": "GENERAL_EXECUTE_bluetooth_ble_discover_services",
+      "mapId": "MAP-0106",
+      "toolId": "tool.device.execute_BLUETOOTH_BLE_DISCOVER_SERVICES",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.45",
+      "behaviorKey": "GENERAL_EXECUTE_向量存储接口",
+      "mapId": "MAP-0107",
+      "toolId": "tool.tool.execute_45",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTE.OPERITSHOWERSHELLRUNNER",
+      "behaviorKey": "GENERAL_EXECUTE_operitshowershellrunner",
+      "mapId": "MAP-0108",
+      "toolId": "tool.process.execute_OPERITSHOWERSHELLRUNNER",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.46",
+      "behaviorKey": "GENERAL_EXECUTE_调度优先队列",
+      "mapId": "MAP-0109",
+      "toolId": "tool.tool.execute_46",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.47",
+      "behaviorKey": "GENERAL_EXECUTE_中间件日志",
+      "mapId": "MAP-0110",
+      "toolId": "tool.tool.execute_47",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.MEDIA PLAYBACK CONTROL",
+      "behaviorKey": "GENERAL_CONTROL_Media Playback Control",
+      "mapId": "MAP-0111",
+      "toolId": "tool.tool.control_MEDIA PLAYBACK CONTROL",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.48",
+      "behaviorKey": "GENERAL_EXECUTE_世界书编辑器",
+      "mapId": "MAP-0112",
+      "toolId": "tool.tool.execute_48",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.49",
+      "behaviorKey": "GENERAL_EXECUTE_工具权限控制",
+      "mapId": "MAP-0113",
+      "toolId": "tool.tool.execute_49",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.LOG SANITIZATION",
+      "behaviorKey": "GENERAL_EXECUTE_Log Sanitization",
+      "mapId": "MAP-0114",
+      "toolId": "tool.tool.execute_LOG SANITIZATION",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.50",
+      "behaviorKey": "GENERAL_EXECUTE_记忆仓库持久化",
+      "mapId": "MAP-0115",
+      "toolId": "tool.tool.execute_50",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.51",
+      "behaviorKey": "GENERAL_EXECUTE_任务规划调度",
+      "mapId": "MAP-0116",
+      "toolId": "tool.tool.execute_51",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.UNINSTALL_APP",
+      "behaviorKey": "GENERAL_INSTALL_uninstall_app",
+      "mapId": "MAP-0117",
+      "toolId": "tool.system.install_UNINSTALL_APP",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.UPDATE.BLUETOOTH_BLE_WRITE_AND_READ_CHARACTERISTIC",
+      "behaviorKey": "GENERAL_UPDATE_bluetooth_ble_write_and_read_characteristic",
+      "mapId": "MAP-0118",
+      "toolId": "tool.character.update_BLUETOOTH_BLE_WRITE_AND_READ_CHARACTERISTIC",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.NOTIFICATION.READ.BLUETOOTH_BLE_READ_NOTIFICATIONS",
+      "behaviorKey": "GENERAL_READ_bluetooth_ble_read_notifications",
+      "mapId": "MAP-0119",
+      "toolId": "tool.notification.read_BLUETOOTH_BLE_READ_NOTIFICATIONS",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.52",
+      "behaviorKey": "GENERAL_EXECUTE_幂等调度提交",
+      "mapId": "MAP-0120",
+      "toolId": "tool.tool.execute_52",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.DATA IMPORT",
+      "behaviorKey": "GENERAL_INSTALL_Data Import",
+      "mapId": "MAP-0121",
+      "toolId": "tool.system.install_DATA IMPORT",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.VOICE.READ.VOICELISTFETCHER",
+      "behaviorKey": "GENERAL_READ_voicelistfetcher",
+      "mapId": "MAP-0122",
+      "toolId": "tool.voice.read_VOICELISTFETCHER",
+      "domain": "VOICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.53",
+      "behaviorKey": "GENERAL_EXECUTE_模型自动故障转移",
+      "mapId": "MAP-0123",
+      "toolId": "tool.tool.execute_53",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.54",
+      "behaviorKey": "GENERAL_EXECUTE_通道模型层",
+      "mapId": "MAP-0124",
+      "toolId": "tool.tool.execute_54",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.DELETE.DELETE_MEMORY",
+      "behaviorKey": "GENERAL_DELETE_delete_memory",
+      "mapId": "MAP-0125",
+      "toolId": "tool.memory.delete_DELETE_MEMORY",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL REGISTRY",
+      "behaviorKey": "GENERAL_EXECUTE_Tool Registry",
+      "mapId": "MAP-0126",
+      "toolId": "tool.tool.execute_TOOL REGISTRY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.INSTALL.SKILL INSTALLATION/IMPORT",
+      "behaviorKey": "GENERAL_INSTALL_Skill Installation/Import",
+      "mapId": "MAP-0127",
+      "toolId": "tool.extension.install_SKILL INSTALLATION/IMPORT",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.55",
+      "behaviorKey": "GENERAL_EXECUTE_模型使用统计",
+      "mapId": "MAP-0128",
+      "toolId": "tool.tool.execute_55",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CNSCHEMA",
+      "behaviorKey": "GENERAL_EXECUTE_基线Schema",
+      "mapId": "MAP-0129",
+      "toolId": "tool.tool.execute_CNSCHEMA",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.EXECUTE.HOOK_TOOL_LIFECYCLE_INTERCEPT",
+      "behaviorKey": "GENERAL_EXECUTE_hook_tool_lifecycle_intercept",
+      "mapId": "MAP-0130",
+      "toolId": "tool.extension.execute_HOOK_TOOL_LIFECYCLE_INTERCEPT",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.GET_SYSTEM_SETTING",
+      "behaviorKey": "GENERAL_READ_get_system_setting",
+      "mapId": "MAP-0131",
+      "toolId": "tool.device.read_GET_SYSTEM_SETTING",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.56",
+      "behaviorKey": "GENERAL_EXECUTE_对话会话状态机",
+      "mapId": "MAP-0132",
+      "toolId": "tool.tool.execute_56",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL CALL EXECUTION",
+      "behaviorKey": "GENERAL_EXECUTE_Tool Call Execution",
+      "mapId": "MAP-0133",
+      "toolId": "tool.tool.execute_TOOL CALL EXECUTION",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.57",
+      "behaviorKey": "GENERAL_EXECUTE_工具执行引擎",
+      "mapId": "MAP-0134",
+      "toolId": "tool.tool.execute_57",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.58",
+      "behaviorKey": "GENERAL_EXECUTE_语音克隆",
+      "mapId": "MAP-0135",
+      "toolId": "tool.tool.execute_58",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.59",
+      "behaviorKey": "GENERAL_EXECUTE_隐私扫描",
+      "mapId": "MAP-0136",
+      "toolId": "tool.tool.execute_59",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.EXECUTE.SESSION PERSISTENCE",
+      "behaviorKey": "GENERAL_EXECUTE_Session Persistence",
+      "mapId": "MAP-0137",
+      "toolId": "tool.memory.execute_SESSION PERSISTENCE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.60",
+      "behaviorKey": "GENERAL_EXECUTE_记忆向量检索",
+      "mapId": "MAP-0138",
+      "toolId": "tool.tool.execute_60",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.61",
+      "behaviorKey": "GENERAL_EXECUTE_记忆图数据库",
+      "mapId": "MAP-0139",
+      "toolId": "tool.tool.execute_61",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.DEBUGGERSYSTEMOPERATIONTOOLS",
+      "behaviorKey": "GENERAL_EXECUTE_DebuggerSystemOperationTools",
+      "mapId": "MAP-0140",
+      "toolId": "tool.tool.execute_DEBUGGERSYSTEMOPERATIONTOOLS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.62",
+      "behaviorKey": "GENERAL_EXECUTE_实时语音对话",
+      "mapId": "MAP-0141",
+      "toolId": "tool.tool.execute_62",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.63",
+      "behaviorKey": "GENERAL_EXECUTE_情感影响引擎",
+      "mapId": "MAP-0142",
+      "toolId": "tool.tool.execute_63",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.UPDATE.CLIPBOARD WRITE",
+      "behaviorKey": "GENERAL_UPDATE_Clipboard Write",
+      "mapId": "MAP-0143",
+      "toolId": "tool.system.update_CLIPBOARD WRITE",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.FALLBACK & RETRY",
+      "behaviorKey": "GENERAL_EXECUTE_Fallback & Retry",
+      "mapId": "MAP-0144",
+      "toolId": "tool.tool.execute_FALLBACK & RETRY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.64",
+      "behaviorKey": "GENERAL_EXECUTE_工具生命周期管理",
+      "mapId": "MAP-0145",
+      "toolId": "tool.tool.execute_64",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.65",
+      "behaviorKey": "GENERAL_EXECUTE_技能处理器",
+      "mapId": "MAP-0146",
+      "toolId": "tool.tool.execute_65",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.66",
+      "behaviorKey": "GENERAL_EXECUTE_模型错误恢复",
+      "mapId": "MAP-0147",
+      "toolId": "tool.tool.execute_66",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.READ.LIST_CHARACTER_CARDS",
+      "behaviorKey": "GENERAL_READ_list_character_cards",
+      "mapId": "MAP-0148",
+      "toolId": "tool.character.read_LIST_CHARACTER_CARDS",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.DELETE.DELETE_MEMORY_LINK",
+      "behaviorKey": "GENERAL_DELETE_delete_memory_link",
+      "mapId": "MAP-0149",
+      "toolId": "tool.memory.delete_DELETE_MEMORY_LINK",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.67",
+      "behaviorKey": "GENERAL_EXECUTE_导入预览",
+      "mapId": "MAP-0150",
+      "toolId": "tool.tool.execute_67",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.68",
+      "behaviorKey": "GENERAL_EXECUTE_加密备份",
+      "mapId": "MAP-0151",
+      "toolId": "tool.tool.execute_68",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TASK.EXECUTE.TASK",
+      "behaviorKey": "PLANNING_EXECUTE_TASK",
+      "mapId": "MAP-0152",
+      "toolId": "tool.task.execute_TASK",
+      "domain": "TASK"
+    },
+    {
+      "capabilityId": "CAP.FILE.EXECUTE.MAKE_DIRECTORY",
+      "behaviorKey": "GENERAL_EXECUTE_make_directory",
+      "mapId": "MAP-0153",
+      "toolId": "tool.file.execute_MAKE_DIRECTORY",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.69",
+      "behaviorKey": "GENERAL_EXECUTE_任务路径分类器",
+      "mapId": "MAP-0154",
+      "toolId": "tool.tool.execute_69",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.OPEN URL/APP",
+      "behaviorKey": "GENERAL_EXECUTE_Open URL/App",
+      "mapId": "MAP-0155",
+      "toolId": "tool.tool.execute_OPEN URL/APP",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.SSHD_SERVER_MANAGER",
+      "behaviorKey": "GENERAL_EXECUTE_sshd_server_manager",
+      "mapId": "MAP-0156",
+      "toolId": "tool.tool.execute_SSHD_SERVER_MANAGER",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.FFMPEG_CONVERT",
+      "behaviorKey": "GENERAL_EXECUTE_ffmpeg_convert",
+      "mapId": "MAP-0157",
+      "toolId": "tool.tool.execute_FFMPEG_CONVERT",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.70",
+      "behaviorKey": "GENERAL_EXECUTE_扩展服务层",
+      "mapId": "MAP-0158",
+      "toolId": "tool.tool.execute_70",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.71",
+      "behaviorKey": "GENERAL_EXECUTE_工作流基线测试",
+      "mapId": "MAP-0159",
+      "toolId": "tool.tool.execute_71",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.AGENT.EXECUTE.AGENT_STATUS",
+      "behaviorKey": "GENERAL_EXECUTE_agent_status",
+      "mapId": "MAP-0160",
+      "toolId": "tool.agent.execute_AGENT_STATUS",
+      "domain": "AGENT"
+    },
+    {
+      "capabilityId": "CAP.TASK.READ.PERSONALWAKELISTENER_(CUSTOM_WAKE_WORD)",
+      "behaviorKey": "GENERAL_READ_personalwakelistener_(custom_wake_word)",
+      "mapId": "MAP-0161",
+      "toolId": "tool.task.read_PERSONALWAKELISTENER_(CUSTOM_WAKE_WORD)",
+      "domain": "TASK"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.72",
+      "behaviorKey": "GENERAL_EXECUTE_交互最终化",
+      "mapId": "MAP-0162",
+      "toolId": "tool.tool.execute_72",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.CAPTURE.BROWSER SCREENSHOT",
+      "behaviorKey": "GENERAL_CAPTURE_Browser Screenshot",
+      "mapId": "MAP-0163",
+      "toolId": "tool.browser.capture_BROWSER SCREENSHOT",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.VOICE.EXECUTE.AUDIO",
+      "behaviorKey": "VOICE_EXECUTE_AUDIO",
+      "mapId": "MAP-0164",
+      "toolId": "tool.voice.execute_AUDIO",
+      "domain": "VOICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.73",
+      "behaviorKey": "GENERAL_EXECUTE_情景记忆服务",
+      "mapId": "MAP-0165",
+      "toolId": "tool.tool.execute_73",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.NOTIFICATION.EXECUTE.TOAST",
+      "behaviorKey": "GENERAL_EXECUTE_toast",
+      "mapId": "MAP-0166",
+      "toolId": "tool.notification.execute_TOAST",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.74",
+      "behaviorKey": "GENERAL_EXECUTE_任务候选生成器",
+      "mapId": "MAP-0167",
+      "toolId": "tool.tool.execute_74",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.INSTALL.SKILL_IMPORT_FROM_ZIP",
+      "behaviorKey": "GENERAL_INSTALL_skill_import_from_zip",
+      "mapId": "MAP-0168",
+      "toolId": "tool.extension.install_SKILL_IMPORT_FROM_ZIP",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.75",
+      "behaviorKey": "GENERAL_EXECUTE_提示验证器",
+      "mapId": "MAP-0169",
+      "toolId": "tool.tool.execute_75",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.76",
+      "behaviorKey": "GENERAL_EXECUTE_决策可视化",
+      "mapId": "MAP-0170",
+      "toolId": "tool.tool.execute_76",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.77",
+      "behaviorKey": "GENERAL_EXECUTE_工具注册与发现",
+      "mapId": "MAP-0171",
+      "toolId": "tool.tool.execute_77",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_PLAY_QUEUE",
+      "behaviorKey": "GENERAL_CONTROL_music_play_queue",
+      "mapId": "MAP-0172",
+      "toolId": "tool.tool.control_MUSIC_PLAY_QUEUE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CNIPCCN",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端IPC通信",
+      "mapId": "MAP-0173",
+      "toolId": "tool.tool.execute_CNIPCCN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CLIPBOARD_ACCESS",
+      "behaviorKey": "GENERAL_EXECUTE_clipboard_access",
+      "mapId": "MAP-0174",
+      "toolId": "tool.tool.execute_CLIPBOARD_ACCESS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.78",
+      "behaviorKey": "GENERAL_EXECUTE_扩展管理器",
+      "mapId": "MAP-0175",
+      "toolId": "tool.tool.execute_78",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.STOP_APP",
+      "behaviorKey": "GENERAL_CONTROL_stop_app",
+      "mapId": "MAP-0176",
+      "toolId": "tool.tool.control_STOP_APP",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.INTEGRATION.EXECUTE_MCP_SERVER",
+      "behaviorKey": "TOOL_INTEGRATION_EXECUTE_MCP_SERVER",
+      "mapId": "MAP-0177",
+      "toolId": "tool.extension.integration_EXECUTE_MCP_SERVER",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.FTP_SERVER_MANAGER",
+      "behaviorKey": "GENERAL_EXECUTE_ftp_server_manager",
+      "mapId": "MAP-0178",
+      "toolId": "tool.tool.execute_FTP_SERVER_MANAGER",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.SWITCH.BROWSER_SELECT_OPTION",
+      "behaviorKey": "GENERAL_SWITCH_browser_select_option",
+      "mapId": "MAP-0179",
+      "toolId": "tool.browser.switch_BROWSER_SELECT_OPTION",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.AGENT.EXECUTE.RUN_UI_SUBAGENT",
+      "behaviorKey": "GENERAL_EXECUTE_run_ui_subagent",
+      "mapId": "MAP-0180",
+      "toolId": "tool.agent.execute_RUN_UI_SUBAGENT",
+      "domain": "AGENT"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.CREATE.CREATE_MEMORY",
+      "behaviorKey": "GENERAL_CREATE_create_memory",
+      "mapId": "MAP-0181",
+      "toolId": "tool.memory.create_CREATE_MEMORY",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.INDEXITEM",
+      "behaviorKey": "GENERAL_EXECUTE_indexitem",
+      "mapId": "MAP-0182",
+      "toolId": "tool.tool.execute_INDEXITEM",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.79",
+      "behaviorKey": "GENERAL_EXECUTE_模型提供商管理",
+      "mapId": "MAP-0183",
+      "toolId": "tool.tool.execute_79",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.STOP.BROWSER_CLOSE",
+      "behaviorKey": "GENERAL_STOP_browser_close",
+      "mapId": "MAP-0184",
+      "toolId": "tool.browser.stop_BROWSER_CLOSE",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_STOP",
+      "behaviorKey": "GENERAL_CONTROL_music_stop",
+      "mapId": "MAP-0185",
+      "toolId": "tool.tool.control_MUSIC_STOP",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.NOTIFICATION.EXECUTE.NOTIFICATION_FGS_MANAGEMENT",
+      "behaviorKey": "GENERAL_EXECUTE_notification_fgs_management",
+      "mapId": "MAP-0186",
+      "toolId": "tool.notification.execute_NOTIFICATION_FGS_MANAGEMENT",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.EXECUTE.TOOLPKGHOOKBRIDGESUPPORT",
+      "behaviorKey": "GENERAL_EXECUTE_toolpkghookbridgesupport",
+      "mapId": "MAP-0187",
+      "toolId": "tool.extension.execute_TOOLPKGHOOKBRIDGESUPPORT",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.80",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端核心管理",
+      "mapId": "MAP-0188",
+      "toolId": "tool.tool.execute_80",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.PACKAGE_PROXY",
+      "behaviorKey": "GENERAL_EXECUTE_package_proxy",
+      "mapId": "MAP-0189",
+      "toolId": "tool.tool.execute_PACKAGE_PROXY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOLCN",
+      "behaviorKey": "GENERAL_EXECUTE_Tool能力模型",
+      "mapId": "MAP-0190",
+      "toolId": "tool.tool.execute_TOOLCN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.81",
+      "behaviorKey": "GENERAL_EXECUTE_工作流编译器",
+      "mapId": "MAP-0191",
+      "toolId": "tool.tool.execute_81",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.82",
+      "behaviorKey": "GENERAL_EXECUTE_错误面板",
+      "mapId": "MAP-0192",
+      "toolId": "tool.tool.execute_82",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTE.NLP PROCESSING",
+      "behaviorKey": "GENERAL_EXECUTE_NLP Processing",
+      "mapId": "MAP-0193",
+      "toolId": "tool.process.execute_NLP PROCESSING",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.NOTIFICATION.EXECUTE.NOTIFICATION_MANAGEMENT",
+      "behaviorKey": "GENERAL_EXECUTE_notification_management",
+      "mapId": "MAP-0194",
+      "toolId": "tool.notification.execute_NOTIFICATION_MANAGEMENT",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.FFMPEG_INFO",
+      "behaviorKey": "GENERAL_EXECUTE_ffmpeg_info",
+      "mapId": "MAP-0195",
+      "toolId": "tool.tool.execute_FFMPEG_INFO",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.83",
+      "behaviorKey": "GENERAL_EXECUTE_工具协议定义",
+      "mapId": "MAP-0196",
+      "toolId": "tool.tool.execute_83",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.EXECUTE.TOOLPKGSUMMARYHOOKBRIDGE",
+      "behaviorKey": "GENERAL_EXECUTE_toolpkgsummaryhookbridge",
+      "mapId": "MAP-0197",
+      "toolId": "tool.extension.execute_TOOLPKGSUMMARYHOOKBRIDGE",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.FILE.UPDATE.WRITE_FILE",
+      "behaviorKey": "GENERAL_UPDATE_write_file",
+      "mapId": "MAP-0198",
+      "toolId": "tool.file.update_WRITE_FILE",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.SEND.SHARE_INTENT_(ACTION_SEND)",
+      "behaviorKey": "GENERAL_SEND_share_intent_(action_send)",
+      "mapId": "MAP-0199",
+      "toolId": "tool.tool.send_SHARE_INTENT_(ACTION_SEND)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.EXECUTE.WORKFLOW_DAG_EXECUTE",
+      "behaviorKey": "GENERAL_EXECUTE_workflow_dag_execute",
+      "mapId": "MAP-0200",
+      "toolId": "tool.extension.execute_WORKFLOW_DAG_EXECUTE",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.CLIPBOARD READ",
+      "behaviorKey": "GENERAL_READ_Clipboard Read",
+      "mapId": "MAP-0201",
+      "toolId": "tool.tool.read_CLIPBOARD READ",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.84",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端托盘集成",
+      "mapId": "MAP-0202",
+      "toolId": "tool.tool.execute_84",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.CAPTURE.CAMERA_IMAGE_CAPTURE",
+      "behaviorKey": "GENERAL_CAPTURE_camera_image_capture",
+      "mapId": "MAP-0203",
+      "toolId": "tool.device.capture_CAMERA_IMAGE_CAPTURE",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.85",
+      "behaviorKey": "GENERAL_EXECUTE_记忆管理器面板",
+      "mapId": "MAP-0204",
+      "toolId": "tool.tool.execute_85",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.86",
+      "behaviorKey": "GENERAL_EXECUTE_交互编排器",
+      "mapId": "MAP-0205",
+      "toolId": "tool.tool.execute_86",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.87",
+      "behaviorKey": "GENERAL_EXECUTE_角色仓库持久化",
+      "mapId": "MAP-0206",
+      "toolId": "tool.tool.execute_87",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.88",
+      "behaviorKey": "GENERAL_EXECUTE_消息管道处理",
+      "mapId": "MAP-0207",
+      "toolId": "tool.tool.execute_88",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.89",
+      "behaviorKey": "GENERAL_EXECUTE_信念清理维护",
+      "mapId": "MAP-0208",
+      "toolId": "tool.tool.execute_89",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.PHOTO LIBRARY ACCESS",
+      "behaviorKey": "GENERAL_EXECUTE_Photo Library Access",
+      "mapId": "MAP-0209",
+      "toolId": "tool.tool.execute_PHOTO LIBRARY ACCESS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.90",
+      "behaviorKey": "GENERAL_EXECUTE_任务候选注册管理",
+      "mapId": "MAP-0210",
+      "toolId": "tool.tool.execute_90",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.91",
+      "behaviorKey": "GENERAL_EXECUTE_工具运行时适配器",
+      "mapId": "MAP-0211",
+      "toolId": "tool.tool.execute_91",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.START.PERMISSION_BLUETOOTH_CONNECT",
+      "behaviorKey": "GENERAL_START_permission_bluetooth_connect",
+      "mapId": "MAP-0212",
+      "toolId": "tool.security.start_PERMISSION_BLUETOOTH_CONNECT",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.CREATE.WORKFLOW_CREATE",
+      "behaviorKey": "GENERAL_CREATE_workflow_create",
+      "mapId": "MAP-0213",
+      "toolId": "tool.extension.create_WORKFLOW_CREATE",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.FFMPEG_EXECUTE",
+      "behaviorKey": "GENERAL_EXECUTE_ffmpeg_execute",
+      "mapId": "MAP-0214",
+      "toolId": "tool.tool.execute_FFMPEG_EXECUTE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TOKENCN",
+      "behaviorKey": "GENERAL_EXECUTE_Token预算计算器",
+      "mapId": "MAP-0215",
+      "toolId": "tool.tool.execute_TOKENCN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.UPDATE.WRITE_FILE_BINARY",
+      "behaviorKey": "GENERAL_UPDATE_write_file_binary",
+      "mapId": "MAP-0216",
+      "toolId": "tool.file.update_WRITE_FILE_BINARY",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.CANCELLATION & STOP",
+      "behaviorKey": "GENERAL_CONTROL_Cancellation & Stop",
+      "mapId": "MAP-0217",
+      "toolId": "tool.tool.control_CANCELLATION & STOP",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.92",
+      "behaviorKey": "GENERAL_EXECUTE_中间件认证",
+      "mapId": "MAP-0218",
+      "toolId": "tool.tool.execute_92",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.GET_DEVICE_LOCATION",
+      "behaviorKey": "GENERAL_READ_get_device_location",
+      "mapId": "MAP-0219",
+      "toolId": "tool.device.read_GET_DEVICE_LOCATION",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.PRESS_KEY",
+      "behaviorKey": "GENERAL_EXECUTE_press_key",
+      "mapId": "MAP-0220",
+      "toolId": "tool.tool.execute_PRESS_KEY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.93",
+      "behaviorKey": "GENERAL_EXECUTE_情景记忆仓库",
+      "mapId": "MAP-0221",
+      "toolId": "tool.tool.execute_93",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.BLUETOOTH_LISTEN",
+      "behaviorKey": "GENERAL_READ_bluetooth_listen",
+      "mapId": "MAP-0222",
+      "toolId": "tool.device.read_BLUETOOTH_LISTEN",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.DOCUMENTCHUNK_ENTITY",
+      "behaviorKey": "GENERAL_EXECUTE_documentchunk_entity",
+      "mapId": "MAP-0223",
+      "toolId": "tool.tool.execute_DOCUMENTCHUNK_ENTITY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.START.SSHFILECONNECTIONMANAGER",
+      "behaviorKey": "GENERAL_START_sshfileconnectionmanager",
+      "mapId": "MAP-0224",
+      "toolId": "tool.file.start_SSHFILECONNECTIONMANAGER",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.94",
+      "behaviorKey": "GENERAL_EXECUTE_权限管理",
+      "mapId": "MAP-0225",
+      "toolId": "tool.tool.execute_94",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.EXECUTE.ROOTSYSTEMOPERATIONTOOLS",
+      "behaviorKey": "GENERAL_EXECUTE_RootSystemOperationTools",
+      "mapId": "MAP-0226",
+      "toolId": "tool.system.execute_ROOTSYSTEMOPERATIONTOOLS",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.95",
+      "behaviorKey": "GENERAL_EXECUTE_向量索引管理",
+      "mapId": "MAP-0227",
+      "toolId": "tool.tool.execute_95",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.96",
+      "behaviorKey": "GENERAL_EXECUTE_角色测试对话",
+      "mapId": "MAP-0228",
+      "toolId": "tool.tool.execute_96",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.97",
+      "behaviorKey": "GENERAL_EXECUTE_数据库健康检查",
+      "mapId": "MAP-0229",
+      "toolId": "tool.tool.execute_97",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.USE_PACKAGE",
+      "behaviorKey": "GENERAL_EXECUTE_use_package",
+      "mapId": "MAP-0230",
+      "toolId": "tool.tool.execute_USE_PACKAGE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.98",
+      "behaviorKey": "GENERAL_EXECUTE_通道消息计划",
+      "mapId": "MAP-0231",
+      "toolId": "tool.tool.execute_98",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.LIST_BLUETOOTH_BONDED_DEVICES",
+      "behaviorKey": "GENERAL_READ_list_bluetooth_bonded_devices",
+      "mapId": "MAP-0232",
+      "toolId": "tool.device.read_LIST_BLUETOOTH_BONDED_DEVICES",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CAPTURE.SCREEN_CAPTURE_(SCREENSHOT)",
+      "behaviorKey": "GENERAL_CAPTURE_screen_capture_(screenshot)",
+      "mapId": "MAP-0233",
+      "toolId": "tool.tool.capture_SCREEN_CAPTURE_(SCREENSHOT)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CAPTURE.1",
+      "behaviorKey": "GENERAL_CAPTURE_screen_capture_(screenshot)",
+      "mapId": "MAP-0234",
+      "toolId": "tool.tool.capture_1",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.CREATE.CREATE_FILE",
+      "behaviorKey": "GENERAL_CREATE_create_file",
+      "mapId": "MAP-0235",
+      "toolId": "tool.file.create_CREATE_FILE",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.99",
+      "behaviorKey": "GENERAL_EXECUTE_情绪语音合成",
+      "mapId": "MAP-0236",
+      "toolId": "tool.tool.execute_99",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_SHELL",
+      "behaviorKey": "GENERAL_EXECUTE_execute_shell",
+      "mapId": "MAP-0237",
+      "toolId": "tool.process.execute_EXECUTE_SHELL",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.FILESYSTEM LISTING",
+      "behaviorKey": "GENERAL_READ_Filesystem Listing",
+      "mapId": "MAP-0238",
+      "toolId": "tool.file.read_FILESYSTEM LISTING",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.VOICE.CAPTURE.PERMISSION_RECORD_AUDIO",
+      "behaviorKey": "GENERAL_CAPTURE_permission_record_audio",
+      "mapId": "MAP-0239",
+      "toolId": "tool.voice.capture_PERMISSION_RECORD_AUDIO",
+      "domain": "VOICE"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.SYSTEM_SETTINGS_MANIPULATION",
+      "behaviorKey": "GENERAL_EXECUTE_system_settings_manipulation",
+      "mapId": "MAP-0240",
+      "toolId": "tool.device.execute_SYSTEM_SETTINGS_MANIPULATION",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.MODEL.EXECUTE.EMBEDDING_/_EMBEDDINGCONVERTER",
+      "behaviorKey": "GENERAL_EXECUTE_embedding_/_embeddingconverter",
+      "mapId": "MAP-0241",
+      "toolId": "tool.model.execute_EMBEDDING_/_EMBEDDINGCONVERTER",
+      "domain": "MODEL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.INSTALL.SKILL_INSTALL_FROM_GITHUB",
+      "behaviorKey": "GENERAL_INSTALL_skill_install_from_github",
+      "mapId": "MAP-0242",
+      "toolId": "tool.extension.install_SKILL_INSTALL_FROM_GITHUB",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CNSCHEMACN",
+      "behaviorKey": "GENERAL_EXECUTE_扩展Schema校验",
+      "mapId": "MAP-0243",
+      "toolId": "tool.tool.execute_CNSCHEMACN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.INTEGRATION.EXECUTE_PLATFORM",
+      "behaviorKey": "PLATFORM_INTEGRATION_EXECUTE_PLATFORM",
+      "mapId": "MAP-0244",
+      "toolId": "tool.tool.integration_EXECUTE_PLATFORM",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.READ.GET_MEMORY_BY_TITLE",
+      "behaviorKey": "GENERAL_READ_get_memory_by_title",
+      "mapId": "MAP-0245",
+      "toolId": "tool.memory.read_GET_MEMORY_BY_TITLE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MUSIC_SET_VOLUME",
+      "behaviorKey": "GENERAL_EXECUTE_music_set_volume",
+      "mapId": "MAP-0246",
+      "toolId": "tool.tool.execute_MUSIC_SET_VOLUME",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.ASSISTANT_INTENT_ACTIVITY",
+      "behaviorKey": "GENERAL_EXECUTE_assistant_intent_activity",
+      "mapId": "MAP-0247",
+      "toolId": "tool.tool.execute_ASSISTANT_INTENT_ACTIVITY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.100",
+      "behaviorKey": "GENERAL_EXECUTE_扩展宿主机",
+      "mapId": "MAP-0248",
+      "toolId": "tool.tool.execute_100",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.101",
+      "behaviorKey": "GENERAL_EXECUTE_扩展更新检查",
+      "mapId": "MAP-0249",
+      "toolId": "tool.tool.execute_101",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.STOP.BLUETOOTH_CLOSE",
+      "behaviorKey": "GENERAL_STOP_bluetooth_close",
+      "mapId": "MAP-0250",
+      "toolId": "tool.device.stop_BLUETOOTH_CLOSE",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.102",
+      "behaviorKey": "GENERAL_EXECUTE_事件代理发布",
+      "mapId": "MAP-0251",
+      "toolId": "tool.tool.execute_102",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.READ.QUERY_MEMORY",
+      "behaviorKey": "GENERAL_READ_query_memory",
+      "mapId": "MAP-0252",
+      "toolId": "tool.memory.read_QUERY_MEMORY",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.SLEEP_DELAY",
+      "behaviorKey": "GENERAL_EXECUTE_sleep_delay",
+      "mapId": "MAP-0253",
+      "toolId": "tool.tool.execute_SLEEP_DELAY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.EXECUTE.MCP_TOOL_INVOKE",
+      "behaviorKey": "GENERAL_EXECUTE_mcp_tool_invoke",
+      "mapId": "MAP-0254",
+      "toolId": "tool.extension.execute_MCP_TOOL_INVOKE",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MANAGE_COOKIES",
+      "behaviorKey": "GENERAL_EXECUTE_manage_cookies",
+      "mapId": "MAP-0255",
+      "toolId": "tool.tool.execute_MANAGE_COOKIES",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.READ.MEMORYSEARCHSETTINGSPREFERENCES",
+      "behaviorKey": "GENERAL_READ_memorysearchsettingspreferences",
+      "mapId": "MAP-0256",
+      "toolId": "tool.memory.read_MEMORYSEARCHSETTINGSPREFERENCES",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.INTERFACE.EXECUTE_UI",
+      "behaviorKey": "USER_INTERFACE_EXECUTE_UI",
+      "mapId": "MAP-0257",
+      "toolId": "tool.tool.interface_EXECUTE_UI",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.LONG_PRESS",
+      "behaviorKey": "GENERAL_EXECUTE_long_press",
+      "mapId": "MAP-0258",
+      "toolId": "tool.tool.execute_LONG_PRESS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.103",
+      "behaviorKey": "GENERAL_EXECUTE_嵌入服务",
+      "mapId": "MAP-0259",
+      "toolId": "tool.tool.execute_103",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.REASONING/THINKING DISPLAY",
+      "behaviorKey": "GENERAL_CONTROL_Reasoning/Thinking Display",
+      "mapId": "MAP-0260",
+      "toolId": "tool.tool.control_REASONING/THINKING DISPLAY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.READ_FILE_FULL",
+      "behaviorKey": "GENERAL_READ_read_file_full",
+      "mapId": "MAP-0261",
+      "toolId": "tool.file.read_READ_FILE_FULL",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.SEND.PERMISSION_SEND_SMS",
+      "behaviorKey": "GENERAL_SEND_permission_send_sms",
+      "mapId": "MAP-0262",
+      "toolId": "tool.security.send_PERMISSION_SEND_SMS",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.104",
+      "behaviorKey": "GENERAL_EXECUTE_交互取消处理",
+      "mapId": "MAP-0263",
+      "toolId": "tool.tool.execute_104",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.ANDROID CONTACTS READ",
+      "behaviorKey": "GENERAL_READ_Android Contacts Read",
+      "mapId": "MAP-0264",
+      "toolId": "tool.tool.read_ANDROID CONTACTS READ",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.EXECUTE.TOOLPKGTOOLLIFECYCLEBRIDGE",
+      "behaviorKey": "GENERAL_EXECUTE_toolpkgtoollifecyclebridge",
+      "mapId": "MAP-0265",
+      "toolId": "tool.extension.execute_TOOLPKGTOOLLIFECYCLEBRIDGE",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.105",
+      "behaviorKey": "GENERAL_EXECUTE_连接池管理",
+      "mapId": "MAP-0266",
+      "toolId": "tool.tool.execute_105",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.AGENT.EXECUTE.1",
+      "behaviorKey": "GENERAL_EXECUTE_Psyche心理状态系统",
+      "mapId": "MAP-0267",
+      "toolId": "tool.agent.execute_1",
+      "domain": "AGENT"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.106",
+      "behaviorKey": "GENERAL_EXECUTE_隐私日志过滤",
+      "mapId": "MAP-0268",
+      "toolId": "tool.tool.execute_106",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.107",
+      "behaviorKey": "GENERAL_EXECUTE_记忆候选管理",
+      "mapId": "MAP-0269",
+      "toolId": "tool.tool.execute_107",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.108",
+      "behaviorKey": "GENERAL_EXECUTE_交互协调引擎",
+      "mapId": "MAP-0270",
+      "toolId": "tool.tool.execute_108",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.EXECUTE_INTENT",
+      "behaviorKey": "GENERAL_EXECUTE_execute_intent",
+      "mapId": "MAP-0271",
+      "toolId": "tool.tool.execute_EXECUTE_INTENT",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.109",
+      "behaviorKey": "GENERAL_EXECUTE_提示渲染器",
+      "mapId": "MAP-0272",
+      "toolId": "tool.tool.execute_109",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.110",
+      "behaviorKey": "GENERAL_EXECUTE_运行时决策",
+      "mapId": "MAP-0273",
+      "toolId": "tool.tool.execute_110",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.111",
+      "behaviorKey": "GENERAL_EXECUTE_需求更新管道",
+      "mapId": "MAP-0274",
+      "toolId": "tool.tool.execute_111",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.112",
+      "behaviorKey": "GENERAL_EXECUTE_情感标签系统",
+      "mapId": "MAP-0275",
+      "toolId": "tool.tool.execute_112",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.SCREEN_CASTING_(VIRTUALDISPLAY_OVERLAY)",
+      "behaviorKey": "GENERAL_CONTROL_screen_casting_(virtualdisplay_overlay)",
+      "mapId": "MAP-0276",
+      "toolId": "tool.tool.control_SCREEN_CASTING_(VIRTUALDISPLAY_OVERLAY)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TASK.EXECUTE.PERSONALWAKEFEATUREEXTRACTOR",
+      "behaviorKey": "GENERAL_EXECUTE_personalwakefeatureextractor",
+      "mapId": "MAP-0277",
+      "toolId": "tool.task.execute_PERSONALWAKEFEATUREEXTRACTOR",
+      "domain": "TASK"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.113",
+      "behaviorKey": "GENERAL_EXECUTE_记忆去重合并",
+      "mapId": "MAP-0278",
+      "toolId": "tool.tool.execute_113",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.114",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息生命周期追踪",
+      "mapId": "MAP-0279",
+      "toolId": "tool.tool.execute_114",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.115",
+      "behaviorKey": "GENERAL_EXECUTE_恢复服务",
+      "mapId": "MAP-0280",
+      "toolId": "tool.tool.execute_115",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.SEND.SEND_BROADCAST",
+      "behaviorKey": "GENERAL_SEND_send_broadcast",
+      "mapId": "MAP-0281",
+      "toolId": "tool.tool.send_SEND_BROADCAST",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CNDEV CONSOLE API",
+      "behaviorKey": "GENERAL_EXECUTE_扩展Dev Console API",
+      "mapId": "MAP-0282",
+      "toolId": "tool.tool.execute_CNDEV CONSOLE API",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.NOTIFICATION.SEND.SEND_NOTIFICATION",
+      "behaviorKey": "GENERAL_SEND_send_notification",
+      "mapId": "MAP-0283",
+      "toolId": "tool.notification.send_SEND_NOTIFICATION",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.DEVICE_INFO",
+      "behaviorKey": "GENERAL_EXECUTE_device_info",
+      "mapId": "MAP-0284",
+      "toolId": "tool.device.execute_DEVICE_INFO",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_RESUME",
+      "behaviorKey": "GENERAL_CONTROL_music_resume",
+      "mapId": "MAP-0285",
+      "toolId": "tool.tool.control_MUSIC_RESUME",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.FILE READ",
+      "behaviorKey": "GENERAL_READ_File Read",
+      "mapId": "MAP-0286",
+      "toolId": "tool.file.read_FILE READ",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.MANAGEMENT.EXECUTE_SKILL",
+      "behaviorKey": "SKILL_MANAGEMENT_EXECUTE_SKILL",
+      "mapId": "MAP-0287",
+      "toolId": "tool.extension.management_EXECUTE_SKILL",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.116",
+      "behaviorKey": "GENERAL_EXECUTE_角色路由注册",
+      "mapId": "MAP-0288",
+      "toolId": "tool.tool.execute_116",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.EXECUTE.BROWSER_RUN_CODE",
+      "behaviorKey": "GENERAL_EXECUTE_browser_run_code",
+      "mapId": "MAP-0289",
+      "toolId": "tool.browser.execute_BROWSER_RUN_CODE",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.INSTALL.CHARACTER_CARD_SILLYTAVERN_IMPORT",
+      "behaviorKey": "GENERAL_INSTALL_character_card_sillytavern_import",
+      "mapId": "MAP-0290",
+      "toolId": "tool.character.install_CHARACTER_CARD_SILLYTAVERN_IMPORT",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.117",
+      "behaviorKey": "GENERAL_EXECUTE_特殊事件服务",
+      "mapId": "MAP-0291",
+      "toolId": "tool.tool.execute_117",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL RESULT OBSERVATION",
+      "behaviorKey": "GENERAL_EXECUTE_Tool Result Observation",
+      "mapId": "MAP-0292",
+      "toolId": "tool.tool.execute_TOOL RESULT OBSERVATION",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.118",
+      "behaviorKey": "GENERAL_EXECUTE_消息提示构建",
+      "mapId": "MAP-0293",
+      "toolId": "tool.tool.execute_118",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CAPTURE.SCREEN_RECORDING___CASTING_(SHOWER)",
+      "behaviorKey": "GENERAL_CAPTURE_screen_recording___casting_(shower)",
+      "mapId": "MAP-0294",
+      "toolId": "tool.tool.capture_SCREEN_RECORDING___CASTING_(SHOWER)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MODEL.EXECUTE.CLOUDEMBEDDINGSERVICE",
+      "behaviorKey": "GENERAL_EXECUTE_cloudembeddingservice",
+      "mapId": "MAP-0295",
+      "toolId": "tool.model.execute_CLOUDEMBEDDINGSERVICE",
+      "domain": "MODEL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.119",
+      "behaviorKey": "GENERAL_EXECUTE_技能指标监控",
+      "mapId": "MAP-0296",
+      "toolId": "tool.tool.execute_119",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.GET_PAGE_INFO",
+      "behaviorKey": "GENERAL_READ_get_page_info",
+      "mapId": "MAP-0297",
+      "toolId": "tool.tool.read_GET_PAGE_INFO",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.120",
+      "behaviorKey": "GENERAL_EXECUTE_内容安全过滤",
+      "mapId": "MAP-0298",
+      "toolId": "tool.tool.execute_120",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTION.EXECUTE_SHELL",
+      "behaviorKey": "COMMAND_EXECUTION_EXECUTE_SHELL",
+      "mapId": "MAP-0299",
+      "toolId": "tool.process.execution_EXECUTE_SHELL",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_PLAY",
+      "behaviorKey": "GENERAL_CONTROL_music_play",
+      "mapId": "MAP-0300",
+      "toolId": "tool.tool.control_MUSIC_PLAY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.121",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息动作插件",
+      "mapId": "MAP-0301",
+      "toolId": "tool.tool.execute_121",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.LOCATION_TRACKING_(CONTINUOUS)",
+      "behaviorKey": "GENERAL_EXECUTE_location_tracking_(continuous)",
+      "mapId": "MAP-0302",
+      "toolId": "tool.tool.execute_LOCATION_TRACKING_(CONTINUOUS)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.SCREEN_CAPTURE_(IMAGEREADER)",
+      "behaviorKey": "GENERAL_READ_screen_capture_(imagereader)",
+      "mapId": "MAP-0303",
+      "toolId": "tool.tool.read_SCREEN_CAPTURE_(IMAGEREADER)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.122",
+      "behaviorKey": "GENERAL_EXECUTE_消息后处理净化",
+      "mapId": "MAP-0304",
+      "toolId": "tool.tool.execute_122",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.UPDATE.WRITE HEALTH DATA (HEALTHKIT)",
+      "behaviorKey": "GENERAL_UPDATE_Write Health Data (HealthKit)",
+      "mapId": "MAP-0305",
+      "toolId": "tool.system.update_WRITE HEALTH DATA (HEALTHKIT)",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.123",
+      "behaviorKey": "GENERAL_EXECUTE_情景记忆模型",
+      "mapId": "MAP-0306",
+      "toolId": "tool.tool.execute_123",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.124",
+      "behaviorKey": "GENERAL_EXECUTE_情绪状态引擎",
+      "mapId": "MAP-0307",
+      "toolId": "tool.tool.execute_124",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.DELETE.DELETE_FILE",
+      "behaviorKey": "GENERAL_DELETE_delete_file",
+      "mapId": "MAP-0308",
+      "toolId": "tool.file.delete_DELETE_FILE",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.APPLICATION_INSTALL_(APK)",
+      "behaviorKey": "GENERAL_INSTALL_application_install_(apk)",
+      "mapId": "MAP-0309",
+      "toolId": "tool.system.install_APPLICATION_INSTALL_(APK)",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.125",
+      "behaviorKey": "GENERAL_EXECUTE_请求身份追踪",
+      "mapId": "MAP-0310",
+      "toolId": "tool.tool.execute_125",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MINIS:// URI SCHEME",
+      "behaviorKey": "GENERAL_EXECUTE_minis:// URI Scheme",
+      "mapId": "MAP-0311",
+      "toolId": "tool.tool.execute_MINIS:// URI SCHEME",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.VOICE.CAPTURE.MICROPHONE_RECORDING",
+      "behaviorKey": "GENERAL_CAPTURE_microphone_recording",
+      "mapId": "MAP-0312",
+      "toolId": "tool.voice.capture_MICROPHONE_RECORDING",
+      "domain": "VOICE"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.PERSISTENCE.EXECUTE_DATABASE",
+      "behaviorKey": "DATA_PERSISTENCE_EXECUTE_DATABASE",
+      "mapId": "MAP-0313",
+      "toolId": "tool.memory.persistence_EXECUTE_DATABASE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.126",
+      "behaviorKey": "GENERAL_EXECUTE_硬性约束过滤器",
+      "mapId": "MAP-0314",
+      "toolId": "tool.tool.execute_126",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.127",
+      "behaviorKey": "GENERAL_EXECUTE_提示注入检测与防护",
+      "mapId": "MAP-0315",
+      "toolId": "tool.tool.execute_127",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.READ_FILE_PART",
+      "behaviorKey": "GENERAL_READ_read_file_part",
+      "mapId": "MAP-0316",
+      "toolId": "tool.file.read_READ_FILE_PART",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.128",
+      "behaviorKey": "GENERAL_EXECUTE_情感仓库",
+      "mapId": "MAP-0317",
+      "toolId": "tool.tool.execute_128",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.EXECUTE.MEMORY",
+      "behaviorKey": "MEMORY_EXECUTE_MEMORY",
+      "mapId": "MAP-0318",
+      "toolId": "tool.memory.execute_MEMORY",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.129",
+      "behaviorKey": "GENERAL_EXECUTE_角色数据模型",
+      "mapId": "MAP-0319",
+      "toolId": "tool.tool.execute_129",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.EXECUTE.PERMISSION",
+      "behaviorKey": "SECURITY_EXECUTE_PERMISSION",
+      "mapId": "MAP-0320",
+      "toolId": "tool.security.execute_PERMISSION",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.130",
+      "behaviorKey": "GENERAL_EXECUTE_交互流水线",
+      "mapId": "MAP-0321",
+      "toolId": "tool.tool.execute_130",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.131",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端自动更新",
+      "mapId": "MAP-0322",
+      "toolId": "tool.tool.execute_131",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.READ.PERMISSION_READ_CONTACTS",
+      "behaviorKey": "GENERAL_READ_permission_read_contacts",
+      "mapId": "MAP-0323",
+      "toolId": "tool.security.read_PERMISSION_READ_CONTACTS",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.132",
+      "behaviorKey": "GENERAL_EXECUTE_人格特质仓库",
+      "mapId": "MAP-0324",
+      "toolId": "tool.tool.execute_132",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.START.BLUETOOTH_CONNECT",
+      "behaviorKey": "GENERAL_START_bluetooth_connect",
+      "mapId": "MAP-0325",
+      "toolId": "tool.device.start_BLUETOOTH_CONNECT",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.133",
+      "behaviorKey": "GENERAL_EXECUTE_任务行为成本评估",
+      "mapId": "MAP-0326",
+      "toolId": "tool.tool.execute_133",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.134",
+      "behaviorKey": "GENERAL_EXECUTE_运行时语义解析",
+      "mapId": "MAP-0327",
+      "toolId": "tool.tool.execute_134",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TAP",
+      "behaviorKey": "GENERAL_EXECUTE_tap",
+      "mapId": "MAP-0328",
+      "toolId": "tool.tool.execute_TAP",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.135",
+      "behaviorKey": "GENERAL_EXECUTE_定时事件服务",
+      "mapId": "MAP-0329",
+      "toolId": "tool.tool.execute_135",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.ANDROID WEATHER QUERY",
+      "behaviorKey": "GENERAL_READ_Android Weather Query",
+      "mapId": "MAP-0330",
+      "toolId": "tool.tool.read_ANDROID WEATHER QUERY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.136",
+      "behaviorKey": "GENERAL_EXECUTE_调度背压控制",
+      "mapId": "MAP-0331",
+      "toolId": "tool.tool.execute_136",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.UPDATE.UPDATE_PATCH_INCREMENTAL",
+      "behaviorKey": "GENERAL_UPDATE_update_patch_incremental",
+      "mapId": "MAP-0332",
+      "toolId": "tool.system.update_UPDATE_PATCH_INCREMENTAL",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.137",
+      "behaviorKey": "GENERAL_EXECUTE_扩展包管理",
+      "mapId": "MAP-0333",
+      "toolId": "tool.tool.execute_137",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.138",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息抑制机制",
+      "mapId": "MAP-0334",
+      "toolId": "tool.tool.execute_138",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.139",
+      "behaviorKey": "GENERAL_EXECUTE_响应适配器",
+      "mapId": "MAP-0335",
+      "toolId": "tool.tool.execute_139",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.140",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息管道",
+      "mapId": "MAP-0336",
+      "toolId": "tool.tool.execute_140",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.INSTALL.PERMISSION_REQUEST_INSTALL_PACKAGES",
+      "behaviorKey": "GENERAL_INSTALL_permission_request_install_packages",
+      "mapId": "MAP-0337",
+      "toolId": "tool.security.install_PERMISSION_REQUEST_INSTALL_PACKAGES",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.141",
+      "behaviorKey": "GENERAL_EXECUTE_记忆提示注入",
+      "mapId": "MAP-0338",
+      "toolId": "tool.tool.execute_141",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH DEVICE DETECTION",
+      "behaviorKey": "GENERAL_EXECUTE_Bluetooth Device Detection",
+      "mapId": "MAP-0339",
+      "toolId": "tool.device.execute_BLUETOOTH DEVICE DETECTION",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.NOTIFICATION.READ.GET_NOTIFICATIONS",
+      "behaviorKey": "GENERAL_READ_get_notifications",
+      "mapId": "MAP-0340",
+      "toolId": "tool.notification.read_GET_NOTIFICATIONS",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CAPTURE.SCREENSHOT_SHARE",
+      "behaviorKey": "GENERAL_CAPTURE_screenshot_share",
+      "mapId": "MAP-0341",
+      "toolId": "tool.tool.capture_SCREENSHOT_SHARE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.142",
+      "behaviorKey": "GENERAL_EXECUTE_扩展中心前端",
+      "mapId": "MAP-0342",
+      "toolId": "tool.tool.execute_142",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.SWIPE",
+      "behaviorKey": "GENERAL_EXECUTE_swipe",
+      "mapId": "MAP-0343",
+      "toolId": "tool.tool.execute_SWIPE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.143",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息优先级",
+      "mapId": "MAP-0344",
+      "toolId": "tool.tool.execute_143",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.144",
+      "behaviorKey": "GENERAL_EXECUTE_扩展注册管理",
+      "mapId": "MAP-0345",
+      "toolId": "tool.tool.execute_144",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.EXECUTE.ACCESSIBILITYSYSTEMOPERATIONTOOLS",
+      "behaviorKey": "GENERAL_EXECUTE_AccessibilitySystemOperationTools",
+      "mapId": "MAP-0346",
+      "toolId": "tool.system.execute_ACCESSIBILITYSYSTEMOPERATIONTOOLS",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_DEVICE_SCAN",
+      "behaviorKey": "GENERAL_EXECUTE_bluetooth_device_scan",
+      "mapId": "MAP-0347",
+      "toolId": "tool.device.execute_BLUETOOTH_DEVICE_SCAN",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.145",
+      "behaviorKey": "GENERAL_EXECUTE_聊天记录导出",
+      "mapId": "MAP-0348",
+      "toolId": "tool.tool.execute_145",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MULTIPART_REQUEST",
+      "behaviorKey": "GENERAL_EXECUTE_multipart_request",
+      "mapId": "MAP-0349",
+      "toolId": "tool.tool.execute_MULTIPART_REQUEST",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.146",
+      "behaviorKey": "GENERAL_EXECUTE_情绪状态持久化",
+      "mapId": "MAP-0350",
+      "toolId": "tool.tool.execute_146",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CNGOVERNOR",
+      "behaviorKey": "GENERAL_EXECUTE_安全Governor",
+      "mapId": "MAP-0351",
+      "toolId": "tool.tool.execute_CNGOVERNOR",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.147",
+      "behaviorKey": "GENERAL_EXECUTE_需求驱动行为",
+      "mapId": "MAP-0352",
+      "toolId": "tool.tool.execute_147",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.148",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息执行器",
+      "mapId": "MAP-0353",
+      "toolId": "tool.tool.execute_148",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.149",
+      "behaviorKey": "GENERAL_EXECUTE_记忆交互集成",
+      "mapId": "MAP-0354",
+      "toolId": "tool.tool.execute_149",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CREATE.WORKSPACE CREATE",
+      "behaviorKey": "GENERAL_CREATE_Workspace Create",
+      "mapId": "MAP-0355",
+      "toolId": "tool.tool.create_WORKSPACE CREATE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.NOTIFICATION.READ.ANDROID NOTIFICATION READ",
+      "behaviorKey": "GENERAL_READ_Android Notification Read",
+      "mapId": "MAP-0356",
+      "toolId": "tool.notification.read_ANDROID NOTIFICATION READ",
+      "domain": "NOTIFICATION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.API KEY ENCRYPTION",
+      "behaviorKey": "GENERAL_EXECUTE_API Key Encryption",
+      "mapId": "MAP-0357",
+      "toolId": "tool.tool.execute_API KEY ENCRYPTION",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.LOCATION GET",
+      "behaviorKey": "GENERAL_READ_Location Get",
+      "mapId": "MAP-0358",
+      "toolId": "tool.tool.read_LOCATION GET",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.VOICE.SWITCH.TTS VOICE SELECTION",
+      "behaviorKey": "GENERAL_SWITCH_TTS Voice Selection",
+      "mapId": "MAP-0359",
+      "toolId": "tool.voice.switch_TTS VOICE SELECTION",
+      "domain": "VOICE"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.FIND_FILES",
+      "behaviorKey": "GENERAL_READ_find_files",
+      "mapId": "MAP-0360",
+      "toolId": "tool.file.read_FIND_FILES",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.150",
+      "behaviorKey": "GENERAL_EXECUTE_世界书知识管理",
+      "mapId": "MAP-0361",
+      "toolId": "tool.tool.execute_150",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.151",
+      "behaviorKey": "GENERAL_EXECUTE_记忆候选预览编辑",
+      "mapId": "MAP-0362",
+      "toolId": "tool.tool.execute_151",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.152",
+      "behaviorKey": "GENERAL_EXECUTE_时间上下文加载",
+      "mapId": "MAP-0363",
+      "toolId": "tool.tool.execute_152",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.153",
+      "behaviorKey": "GENERAL_EXECUTE_导入向导",
+      "mapId": "MAP-0364",
+      "toolId": "tool.tool.execute_153",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.154",
+      "behaviorKey": "GENERAL_EXECUTE_记忆冲突解决",
+      "mapId": "MAP-0365",
+      "toolId": "tool.tool.execute_154",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.STOP.ANDROID CALENDAR ACCESS",
+      "behaviorKey": "GENERAL_STOP_Android Calendar Access",
+      "mapId": "MAP-0366",
+      "toolId": "tool.tool.stop_ANDROID CALENDAR ACCESS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.155",
+      "behaviorKey": "GENERAL_EXECUTE_需求等级系统",
+      "mapId": "MAP-0367",
+      "toolId": "tool.tool.execute_155",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.156",
+      "behaviorKey": "GENERAL_EXECUTE_角色关系时间追踪",
+      "mapId": "MAP-0368",
+      "toolId": "tool.tool.execute_156",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.157",
+      "behaviorKey": "GENERAL_EXECUTE_需求状态持久化",
+      "mapId": "MAP-0369",
+      "toolId": "tool.tool.execute_157",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.158",
+      "behaviorKey": "GENERAL_EXECUTE_世界书条目触发",
+      "mapId": "MAP-0370",
+      "toolId": "tool.tool.execute_158",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.MANAGEMENT.EXECUTE_EXTENSION",
+      "behaviorKey": "EXTENSION_MANAGEMENT_EXECUTE_EXTENSION",
+      "mapId": "MAP-0371",
+      "toolId": "tool.extension.management_EXECUTE_EXTENSION",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.159",
+      "behaviorKey": "GENERAL_EXECUTE_数据库迁移",
+      "mapId": "MAP-0372",
+      "toolId": "tool.tool.execute_159",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.160",
+      "behaviorKey": "GENERAL_EXECUTE_扩展运行日志",
+      "mapId": "MAP-0373",
+      "toolId": "tool.tool.execute_160",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.161",
+      "behaviorKey": "GENERAL_EXECUTE_模型服务封装",
+      "mapId": "MAP-0374",
+      "toolId": "tool.tool.execute_161",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.162",
+      "behaviorKey": "GENERAL_EXECUTE_记忆检索分析",
+      "mapId": "MAP-0375",
+      "toolId": "tool.tool.execute_162",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.163",
+      "behaviorKey": "GENERAL_EXECUTE_通道工作者",
+      "mapId": "MAP-0376",
+      "toolId": "tool.tool.execute_163",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.DEVICE_ADMIN_PRIVILEGE",
+      "behaviorKey": "GENERAL_EXECUTE_device_admin_privilege",
+      "mapId": "MAP-0377",
+      "toolId": "tool.device.execute_DEVICE_ADMIN_PRIVILEGE",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.LOCATION_TRACKING",
+      "behaviorKey": "GENERAL_EXECUTE_location_tracking",
+      "mapId": "MAP-0378",
+      "toolId": "tool.tool.execute_LOCATION_TRACKING",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.164",
+      "behaviorKey": "GENERAL_EXECUTE_世界书信息检索",
+      "mapId": "MAP-0379",
+      "toolId": "tool.tool.execute_164",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.165",
+      "behaviorKey": "GENERAL_EXECUTE_消息回复生成",
+      "mapId": "MAP-0380",
+      "toolId": "tool.tool.execute_165",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.VOICE.EXECUTE.MICROPHONE_(OBOE)",
+      "behaviorKey": "GENERAL_EXECUTE_microphone_(oboe)",
+      "mapId": "MAP-0381",
+      "toolId": "tool.voice.execute_MICROPHONE_(OBOE)",
+      "domain": "VOICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.166",
+      "behaviorKey": "GENERAL_EXECUTE_情绪恢复机制",
+      "mapId": "MAP-0382",
+      "toolId": "tool.tool.execute_166",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CONTROL.MUSIC_PAUSE",
+      "behaviorKey": "GENERAL_CONTROL_music_pause",
+      "mapId": "MAP-0383",
+      "toolId": "tool.tool.control_MUSIC_PAUSE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.BLUETOOTH_DEVICE_MANAGEMENT",
+      "behaviorKey": "GENERAL_EXECUTE_bluetooth_device_management",
+      "mapId": "MAP-0384",
+      "toolId": "tool.device.execute_BLUETOOTH_DEVICE_MANAGEMENT",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.HOMEKIT DEVICE CONTROL",
+      "behaviorKey": "GENERAL_EXECUTE_HomeKit Device Control",
+      "mapId": "MAP-0385",
+      "toolId": "tool.device.execute_HOMEKIT DEVICE CONTROL",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.SHORTCUTS/APP INTENTS",
+      "behaviorKey": "GENERAL_EXECUTE_Shortcuts/App Intents",
+      "mapId": "MAP-0386",
+      "toolId": "tool.tool.execute_SHORTCUTS/APP INTENTS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.UPDATE.PERMISSION_WRITE_CONTACTS",
+      "behaviorKey": "GENERAL_UPDATE_permission_write_contacts",
+      "mapId": "MAP-0387",
+      "toolId": "tool.security.update_PERMISSION_WRITE_CONTACTS",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.SHARE SHEET",
+      "behaviorKey": "GENERAL_EXECUTE_Share Sheet",
+      "mapId": "MAP-0388",
+      "toolId": "tool.tool.execute_SHARE SHEET",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.167",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息统一分发",
+      "mapId": "MAP-0389",
+      "toolId": "tool.tool.execute_167",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.168",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端会话客户端",
+      "mapId": "MAP-0390",
+      "toolId": "tool.tool.execute_168",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.169",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息串行写控制",
+      "mapId": "MAP-0391",
+      "toolId": "tool.tool.execute_169",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.ADMINSYSTEMOPERATIONTOOLS",
+      "behaviorKey": "GENERAL_EXECUTE_AdminSystemOperationTools",
+      "mapId": "MAP-0392",
+      "toolId": "tool.tool.execute_ADMINSYSTEMOPERATIONTOOLS",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.170",
+      "behaviorKey": "GENERAL_EXECUTE_扩展协议定义",
+      "mapId": "MAP-0393",
+      "toolId": "tool.tool.execute_170",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.READ.MEMORYSEARCHCONFIG_/_MEMORYSEARCHDEBUGINFO",
+      "behaviorKey": "GENERAL_READ_memorysearchconfig_/_memorysearchdebuginfo",
+      "mapId": "MAP-0394",
+      "toolId": "tool.memory.read_MEMORYSEARCHCONFIG_/_MEMORYSEARCHDEBUGINFO",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.MODEL.EXECUTE.ONNXSILEROVAD",
+      "behaviorKey": "GENERAL_EXECUTE_onnxsilerovad",
+      "mapId": "MAP-0395",
+      "toolId": "tool.model.execute_ONNXSILEROVAD",
+      "domain": "MODEL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.171",
+      "behaviorKey": "GENERAL_EXECUTE_工作流值传递",
+      "mapId": "MAP-0396",
+      "toolId": "tool.tool.execute_171",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.START.BLUETOOTH_BLE_CONNECT",
+      "behaviorKey": "GENERAL_START_bluetooth_ble_connect",
+      "mapId": "MAP-0397",
+      "toolId": "tool.device.start_BLUETOOTH_BLE_CONNECT",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.172",
+      "behaviorKey": "GENERAL_EXECUTE_扩展安装器",
+      "mapId": "MAP-0398",
+      "toolId": "tool.tool.execute_172",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.GET_BLUETOOTH_STATE",
+      "behaviorKey": "GENERAL_READ_get_bluetooth_state",
+      "mapId": "MAP-0399",
+      "toolId": "tool.device.read_GET_BLUETOOTH_STATE",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.173",
+      "behaviorKey": "GENERAL_EXECUTE_通道投放追踪",
+      "mapId": "MAP-0400",
+      "toolId": "tool.tool.execute_173",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.174",
+      "behaviorKey": "GENERAL_EXECUTE_通道提交处理器",
+      "mapId": "MAP-0401",
+      "toolId": "tool.tool.execute_174",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.AGENT.EXECUTE.2",
+      "behaviorKey": "GENERAL_EXECUTE_Psyche状态追踪",
+      "mapId": "MAP-0402",
+      "toolId": "tool.agent.execute_2",
+      "domain": "AGENT"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MUSIC_SEEK",
+      "behaviorKey": "GENERAL_EXECUTE_music_seek",
+      "mapId": "MAP-0403",
+      "toolId": "tool.tool.execute_MUSIC_SEEK",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.175",
+      "behaviorKey": "GENERAL_EXECUTE_调度批处理",
+      "mapId": "MAP-0404",
+      "toolId": "tool.tool.execute_175",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.UPDATE.PERMISSION_WRITE_SETTINGS",
+      "behaviorKey": "GENERAL_UPDATE_permission_write_settings",
+      "mapId": "MAP-0405",
+      "toolId": "tool.security.update_PERMISSION_WRITE_SETTINGS",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.176",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端主进程",
+      "mapId": "MAP-0406",
+      "toolId": "tool.tool.execute_176",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.177",
+      "behaviorKey": "GENERAL_EXECUTE_技能前端列表",
+      "mapId": "MAP-0407",
+      "toolId": "tool.tool.execute_177",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.EXECUTE.FLOATINGWINDOWMANAGER",
+      "behaviorKey": "GENERAL_EXECUTE_floatingwindowmanager",
+      "mapId": "MAP-0408",
+      "toolId": "tool.browser.execute_FLOATINGWINDOWMANAGER",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.FILE.MANAGEMENT.EXECUTE_FILE",
+      "behaviorKey": "FILE_MANAGEMENT_EXECUTE_FILE",
+      "mapId": "MAP-0409",
+      "toolId": "tool.file.management_EXECUTE_FILE",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.EXECUTE.WORKFLOW",
+      "behaviorKey": "AUTOMATION_EXECUTE_WORKFLOW",
+      "mapId": "MAP-0410",
+      "toolId": "tool.extension.execute_WORKFLOW",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.WEATHER QUERY",
+      "behaviorKey": "GENERAL_READ_Weather Query",
+      "mapId": "MAP-0411",
+      "toolId": "tool.tool.read_WEATHER QUERY",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.178",
+      "behaviorKey": "GENERAL_EXECUTE_世界书分类标签",
+      "mapId": "MAP-0412",
+      "toolId": "tool.tool.execute_178",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.START.MCP_REMOTE_SERVER_CONNECT",
+      "behaviorKey": "GENERAL_START_mcp_remote_server_connect",
+      "mapId": "MAP-0413",
+      "toolId": "tool.extension.start_MCP_REMOTE_SERVER_CONNECT",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.FILESYSTEM SEARCH",
+      "behaviorKey": "GENERAL_READ_Filesystem Search",
+      "mapId": "MAP-0414",
+      "toolId": "tool.file.read_FILESYSTEM SEARCH",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.179",
+      "behaviorKey": "GENERAL_EXECUTE_主动消息反馈收集",
+      "mapId": "MAP-0415",
+      "toolId": "tool.tool.execute_179",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.VOICE.CONTROL.QUEUEDTTSPLAYBACK",
+      "behaviorKey": "GENERAL_CONTROL_queuedttsplayback",
+      "mapId": "MAP-0416",
+      "toolId": "tool.voice.control_QUEUEDTTSPLAYBACK",
+      "domain": "VOICE"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.EXECUTE.SCAN_BLUETOOTH_DEVICES",
+      "behaviorKey": "GENERAL_EXECUTE_scan_bluetooth_devices",
+      "mapId": "MAP-0417",
+      "toolId": "tool.device.execute_SCAN_BLUETOOTH_DEVICES",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.MODEL.MANAGEMENT.EXECUTE_MODEL",
+      "behaviorKey": "MODEL_MANAGEMENT_EXECUTE_MODEL",
+      "mapId": "MAP-0418",
+      "toolId": "tool.model.management_EXECUTE_MODEL",
+      "domain": "MODEL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.READ.MEMORY GET/RETRIEVE",
+      "behaviorKey": "GENERAL_READ_Memory Get/Retrieve",
+      "mapId": "MAP-0419",
+      "toolId": "tool.memory.read_MEMORY GET/RETRIEVE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.180",
+      "behaviorKey": "GENERAL_EXECUTE_提示模板引擎",
+      "mapId": "MAP-0420",
+      "toolId": "tool.tool.execute_180",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.SWITCH.WORKSPACE SELECT/SWITCH",
+      "behaviorKey": "GENERAL_SWITCH_Workspace Select/Switch",
+      "mapId": "MAP-0421",
+      "toolId": "tool.tool.switch_WORKSPACE SELECT/SWITCH",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.181",
+      "behaviorKey": "GENERAL_EXECUTE_创意工坊前端",
+      "mapId": "MAP-0422",
+      "toolId": "tool.tool.execute_181",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.STOP.BROWSER_CLOSE_ALL",
+      "behaviorKey": "GENERAL_STOP_browser_close_all",
+      "mapId": "MAP-0423",
+      "toolId": "tool.browser.stop_BROWSER_CLOSE_ALL",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.MINIS://ATTACHMENTS/",
+      "behaviorKey": "GENERAL_EXECUTE_minis://attachments/",
+      "mapId": "MAP-0424",
+      "toolId": "tool.tool.execute_MINIS://ATTACHMENTS/",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.182",
+      "behaviorKey": "GENERAL_EXECUTE_数据迁移面板",
+      "mapId": "MAP-0425",
+      "toolId": "tool.tool.execute_182",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.UPDATE.FILE WRITE",
+      "behaviorKey": "GENERAL_UPDATE_File Write",
+      "mapId": "MAP-0426",
+      "toolId": "tool.file.update_FILE WRITE",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.183",
+      "behaviorKey": "GENERAL_EXECUTE_情感衰减模型",
+      "mapId": "MAP-0427",
+      "toolId": "tool.tool.execute_183",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.SHIZUKU_ACTION_LISTENER_(UI)",
+      "behaviorKey": "GENERAL_READ_shizuku_action_listener_(ui)",
+      "mapId": "MAP-0428",
+      "toolId": "tool.tool.read_SHIZUKU_ACTION_LISTENER_(UI)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.READ_FILE",
+      "behaviorKey": "GENERAL_READ_read_file",
+      "mapId": "MAP-0429",
+      "toolId": "tool.file.read_READ_FILE",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.TOOL SCHEMACN",
+      "behaviorKey": "GENERAL_EXECUTE_Tool Schema校验",
+      "mapId": "MAP-0430",
+      "toolId": "tool.tool.execute_TOOL SCHEMACN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.184",
+      "behaviorKey": "GENERAL_EXECUTE_世界书导入导出",
+      "mapId": "MAP-0431",
+      "toolId": "tool.tool.execute_184",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTE.STANDARD_RUNTIME_SHELL_EXECUTION",
+      "behaviorKey": "GENERAL_EXECUTE_standard_runtime_shell_execution",
+      "mapId": "MAP-0432",
+      "toolId": "tool.process.execute_STANDARD_RUNTIME_SHELL_EXECUTION",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.185",
+      "behaviorKey": "GENERAL_EXECUTE_安全配置",
+      "mapId": "MAP-0433",
+      "toolId": "tool.tool.execute_185",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.186",
+      "behaviorKey": "GENERAL_EXECUTE_Token安全存储",
+      "mapId": "MAP-0434",
+      "toolId": "tool.tool.execute_186",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CREATE.CALENDAR EVENT CREATE",
+      "behaviorKey": "GENERAL_CREATE_Calendar Event Create",
+      "mapId": "MAP-0435",
+      "toolId": "tool.tool.create_CALENDAR EVENT CREATE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.BROWSER.CAPTURE.BROWSER_TAKE_SCREENSHOT",
+      "behaviorKey": "GENERAL_CAPTURE_browser_take_screenshot",
+      "mapId": "MAP-0436",
+      "toolId": "tool.browser.capture_BROWSER_TAKE_SCREENSHOT",
+      "domain": "BROWSER"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.READ_FILE_BINARY",
+      "behaviorKey": "GENERAL_READ_read_file_binary",
+      "mapId": "MAP-0437",
+      "toolId": "tool.file.read_READ_FILE_BINARY",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.187",
+      "behaviorKey": "GENERAL_EXECUTE_向量配置文件",
+      "mapId": "MAP-0438",
+      "toolId": "tool.tool.execute_187",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.188",
+      "behaviorKey": "GENERAL_EXECUTE_运行时调试",
+      "mapId": "MAP-0439",
+      "toolId": "tool.tool.execute_188",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.DELETE.MEMORY DELETE",
+      "behaviorKey": "GENERAL_DELETE_Memory Delete",
+      "mapId": "MAP-0440",
+      "toolId": "tool.memory.delete_MEMORY DELETE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.189",
+      "behaviorKey": "GENERAL_EXECUTE_延迟回复服务",
+      "mapId": "MAP-0441",
+      "toolId": "tool.tool.execute_189",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.190",
+      "behaviorKey": "GENERAL_EXECUTE_上下文加载器",
+      "mapId": "MAP-0442",
+      "toolId": "tool.tool.execute_190",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.191",
+      "behaviorKey": "GENERAL_EXECUTE_记忆生成工作流",
+      "mapId": "MAP-0443",
+      "toolId": "tool.tool.execute_191",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SECURITY.READ.PERMISSION_READ_EXTERNAL_STORAGE",
+      "behaviorKey": "GENERAL_READ_permission_read_external_storage",
+      "mapId": "MAP-0444",
+      "toolId": "tool.security.read_PERMISSION_READ_EXTERNAL_STORAGE",
+      "domain": "SECURITY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.ANDROID LOCATION GET",
+      "behaviorKey": "GENERAL_READ_Android Location Get",
+      "mapId": "MAP-0445",
+      "toolId": "tool.tool.read_ANDROID LOCATION GET",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.READ.NFC TAG READ",
+      "behaviorKey": "GENERAL_READ_NFC Tag Read",
+      "mapId": "MAP-0446",
+      "toolId": "tool.system.read_NFC TAG READ",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.192",
+      "behaviorKey": "GENERAL_EXECUTE_对话历史管理",
+      "mapId": "MAP-0447",
+      "toolId": "tool.tool.execute_192",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.THINKING/REASONING MODE",
+      "behaviorKey": "GENERAL_EXECUTE_Thinking/Reasoning Mode",
+      "mapId": "MAP-0448",
+      "toolId": "tool.tool.execute_THINKING/REASONING MODE",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.STOP.CLOSE_TERMINAL_SESSION",
+      "behaviorKey": "GENERAL_STOP_close_terminal_session",
+      "mapId": "MAP-0449",
+      "toolId": "tool.process.stop_CLOSE_TERMINAL_SESSION",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.193",
+      "behaviorKey": "GENERAL_EXECUTE_多角色切换",
+      "mapId": "MAP-0450",
+      "toolId": "tool.tool.execute_193",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.START.START_APP",
+      "behaviorKey": "GENERAL_START_start_app",
+      "mapId": "MAP-0451",
+      "toolId": "tool.tool.start_START_APP",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.READ HEALTH DATA (HEALTHKIT)",
+      "behaviorKey": "GENERAL_READ_Read Health Data (HealthKit)",
+      "mapId": "MAP-0452",
+      "toolId": "tool.tool.read_READ HEALTH DATA (HEALTHKIT)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.194",
+      "behaviorKey": "GENERAL_EXECUTE_任务行为规划构建",
+      "mapId": "MAP-0453",
+      "toolId": "tool.tool.execute_194",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.DEVICE.READ.BLUETOOTH_READ",
+      "behaviorKey": "GENERAL_READ_bluetooth_read",
+      "mapId": "MAP-0454",
+      "toolId": "tool.device.read_BLUETOOTH_READ",
+      "domain": "DEVICE"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.INSTALL.PACKAGE_PLUGIN_INSTALL_RECEIVER",
+      "behaviorKey": "GENERAL_INSTALL_package_plugin_install_receiver",
+      "mapId": "MAP-0455",
+      "toolId": "tool.extension.install_PACKAGE_PLUGIN_INSTALL_RECEIVER",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.IMAGE/MULTIMODAL INPUT",
+      "behaviorKey": "GENERAL_EXECUTE_Image/Multimodal Input",
+      "mapId": "MAP-0456",
+      "toolId": "tool.tool.execute_IMAGE/MULTIMODAL INPUT",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.195",
+      "behaviorKey": "GENERAL_EXECUTE_记忆时间线视图",
+      "mapId": "MAP-0457",
+      "toolId": "tool.tool.execute_195",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.UPDATE.ANDROID CLIPBOARD WRITE",
+      "behaviorKey": "GENERAL_UPDATE_Android Clipboard Write",
+      "mapId": "MAP-0458",
+      "toolId": "tool.system.update_ANDROID CLIPBOARD WRITE",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.196",
+      "behaviorKey": "GENERAL_EXECUTE_Token预算管理",
+      "mapId": "MAP-0459",
+      "toolId": "tool.tool.execute_196",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.197",
+      "behaviorKey": "GENERAL_EXECUTE_记忆生命周期管理",
+      "mapId": "MAP-0460",
+      "toolId": "tool.tool.execute_197",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.198",
+      "behaviorKey": "GENERAL_EXECUTE_信念快照",
+      "mapId": "MAP-0461",
+      "toolId": "tool.tool.execute_198",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.EXECUTE.EXECUTE_IN_TERMINAL_SESSION",
+      "behaviorKey": "GENERAL_EXECUTE_execute_in_terminal_session",
+      "mapId": "MAP-0462",
+      "toolId": "tool.process.execute_EXECUTE_IN_TERMINAL_SESSION",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.TASK.CREATE.REMINDER CREATE",
+      "behaviorKey": "GENERAL_CREATE_Reminder Create",
+      "mapId": "MAP-0463",
+      "toolId": "tool.task.create_REMINDER CREATE",
+      "domain": "TASK"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.VISIONCN",
+      "behaviorKey": "GENERAL_EXECUTE_Vision视觉理解",
+      "mapId": "MAP-0464",
+      "toolId": "tool.tool.execute_VISIONCN",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.199",
+      "behaviorKey": "GENERAL_EXECUTE_情感融合消息生成",
+      "mapId": "MAP-0465",
+      "toolId": "tool.tool.execute_199",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.JAVASCRIPT_EXECUTION_(JS_BRIDGE)",
+      "behaviorKey": "GENERAL_EXECUTE_javascript_execution_(js_bridge)",
+      "mapId": "MAP-0466",
+      "toolId": "tool.tool.execute_JAVASCRIPT_EXECUTION_(JS_BRIDGE)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CRASH_GLOBAL_EXCEPTION_HANDLER",
+      "behaviorKey": "GENERAL_EXECUTE_crash_global_exception_handler",
+      "mapId": "MAP-0467",
+      "toolId": "tool.tool.execute_CRASH_GLOBAL_EXCEPTION_HANDLER",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.CHARACTER.UPDATE.BLUETOOTH_BLE_WRITE_CHARACTERISTIC",
+      "behaviorKey": "GENERAL_UPDATE_bluetooth_ble_write_characteristic",
+      "mapId": "MAP-0468",
+      "toolId": "tool.character.update_BLUETOOTH_BLE_WRITE_CHARACTERISTIC",
+      "domain": "CHARACTER"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.200",
+      "behaviorKey": "GENERAL_EXECUTE_技能列表管理",
+      "mapId": "MAP-0469",
+      "toolId": "tool.tool.execute_200",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.READ.ANDROID CLIPBOARD READ",
+      "behaviorKey": "GENERAL_READ_Android Clipboard Read",
+      "mapId": "MAP-0470",
+      "toolId": "tool.tool.read_ANDROID CLIPBOARD READ",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.READ.LIST_FILES",
+      "behaviorKey": "GENERAL_READ_list_files",
+      "mapId": "MAP-0471",
+      "toolId": "tool.file.read_LIST_FILES",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.201",
+      "behaviorKey": "GENERAL_EXECUTE_声纹入口",
+      "mapId": "MAP-0472",
+      "toolId": "tool.tool.execute_201",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.202",
+      "behaviorKey": "GENERAL_EXECUTE_提示净化处理",
+      "mapId": "MAP-0473",
+      "toolId": "tool.tool.execute_202",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.203",
+      "behaviorKey": "GENERAL_EXECUTE_模型配置总览",
+      "mapId": "MAP-0474",
+      "toolId": "tool.tool.execute_203",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.FILE.UPDATE.EDIT_FILE",
+      "behaviorKey": "GENERAL_UPDATE_edit_file",
+      "mapId": "MAP-0475",
+      "toolId": "tool.file.update_EDIT_FILE",
+      "domain": "FILE"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.204",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端配置存储",
+      "mapId": "MAP-0476",
+      "toolId": "tool.tool.execute_204",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.205",
+      "behaviorKey": "GENERAL_EXECUTE_提示编译器",
+      "mapId": "MAP-0477",
+      "toolId": "tool.tool.execute_205",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.206",
+      "behaviorKey": "GENERAL_EXECUTE_活跃消息服务",
+      "mapId": "MAP-0478",
+      "toolId": "tool.tool.execute_206",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.207",
+      "behaviorKey": "GENERAL_EXECUTE_备份服务",
+      "mapId": "MAP-0479",
+      "toolId": "tool.tool.execute_207",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.NETWORK.EXECUTE.HTTP_REQUEST",
+      "behaviorKey": "GENERAL_EXECUTE_http_request",
+      "mapId": "MAP-0480",
+      "toolId": "tool.network.execute_HTTP_REQUEST",
+      "domain": "NETWORK"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.208",
+      "behaviorKey": "GENERAL_EXECUTE_图片生成消息",
+      "mapId": "MAP-0481",
+      "toolId": "tool.tool.execute_208",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.EXECUTE.INPUT_EVENT_INJECTION_(SHIZUKU_ADB)",
+      "behaviorKey": "GENERAL_EXECUTE_input_event_injection_(shizuku_adb)",
+      "mapId": "MAP-0482",
+      "toolId": "tool.system.execute_INPUT_EVENT_INJECTION_(SHIZUKU_ADB)",
+      "domain": "SYSTEM"
+    },
+    {
+      "capabilityId": "CAP.AGENT.ENGINEERING.EXECUTE_PROMPT",
+      "behaviorKey": "PROMPT_ENGINEERING_EXECUTE_PROMPT",
+      "mapId": "MAP-0483",
+      "toolId": "tool.agent.engineering_EXECUTE_PROMPT",
+      "domain": "AGENT"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.209",
+      "behaviorKey": "GENERAL_EXECUTE_技能仓库",
+      "mapId": "MAP-0484",
+      "toolId": "tool.tool.execute_209",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.CREATE.ALARM CREATE (ALARMKIT)",
+      "behaviorKey": "GENERAL_CREATE_Alarm Create (AlarmKit)",
+      "mapId": "MAP-0485",
+      "toolId": "tool.tool.create_ALARM CREATE (ALARMKIT)",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.210",
+      "behaviorKey": "GENERAL_EXECUTE_模型场景分配",
+      "mapId": "MAP-0486",
+      "toolId": "tool.tool.execute_210",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.211",
+      "behaviorKey": "GENERAL_EXECUTE_微信通道",
+      "mapId": "MAP-0487",
+      "toolId": "tool.tool.execute_211",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.212",
+      "behaviorKey": "GENERAL_EXECUTE_模型健康检查",
+      "mapId": "MAP-0488",
+      "toolId": "tool.tool.execute_212",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.213",
+      "behaviorKey": "GENERAL_EXECUTE_桌面端身份标识",
+      "mapId": "MAP-0489",
+      "toolId": "tool.tool.execute_213",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.214",
+      "behaviorKey": "GENERAL_EXECUTE_随机消息爆发",
+      "mapId": "MAP-0490",
+      "toolId": "tool.tool.execute_214",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.215",
+      "behaviorKey": "GENERAL_EXECUTE_日志上下文",
+      "mapId": "MAP-0491",
+      "toolId": "tool.tool.execute_215",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.216",
+      "behaviorKey": "GENERAL_EXECUTE_技能运行时",
+      "mapId": "MAP-0492",
+      "toolId": "tool.tool.execute_216",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.217",
+      "behaviorKey": "GENERAL_EXECUTE_扩展详情视图",
+      "mapId": "MAP-0493",
+      "toolId": "tool.tool.execute_217",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.MEMORY.UPDATE.MEMORY EDIT/UPDATE",
+      "behaviorKey": "GENERAL_UPDATE_Memory Edit/Update",
+      "mapId": "MAP-0494",
+      "toolId": "tool.memory.update_MEMORY EDIT/UPDATE",
+      "domain": "MEMORY"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.218",
+      "behaviorKey": "GENERAL_EXECUTE_角色导入导出",
+      "mapId": "MAP-0495",
+      "toolId": "tool.tool.execute_218",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.CLIPBOARD_FALLBACK",
+      "behaviorKey": "GENERAL_EXECUTE_clipboard_fallback",
+      "mapId": "MAP-0496",
+      "toolId": "tool.tool.execute_CLIPBOARD_FALLBACK",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.LINK_MEMORIES",
+      "behaviorKey": "GENERAL_EXECUTE_link_memories",
+      "mapId": "MAP-0497",
+      "toolId": "tool.tool.execute_LINK_MEMORIES",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.EXTENSION.START.MCP_LOCAL_SERVER_LAUNCH",
+      "behaviorKey": "GENERAL_START_mcp_local_server_launch",
+      "mapId": "MAP-0498",
+      "toolId": "tool.extension.start_MCP_LOCAL_SERVER_LAUNCH",
+      "domain": "EXTENSION"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.219",
+      "behaviorKey": "GENERAL_EXECUTE_对话编排引擎",
+      "mapId": "MAP-0499",
+      "toolId": "tool.tool.execute_219",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.220",
+      "behaviorKey": "GENERAL_EXECUTE_模型配置服务",
+      "mapId": "MAP-0500",
+      "toolId": "tool.tool.execute_220",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.221",
+      "behaviorKey": "GENERAL_EXECUTE_创意工坊生成器",
+      "mapId": "MAP-0501",
+      "toolId": "tool.tool.execute_221",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.LOGCAT_VIEWER",
+      "behaviorKey": "GENERAL_EXECUTE_logcat_viewer",
+      "mapId": "MAP-0502",
+      "toolId": "tool.tool.execute_LOGCAT_VIEWER",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.222",
+      "behaviorKey": "GENERAL_EXECUTE_角色配对关系管理",
+      "mapId": "MAP-0503",
+      "toolId": "tool.tool.execute_222",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.PROCESS.READ.GET_TERMINAL_SESSION_SCREEN",
+      "behaviorKey": "GENERAL_READ_get_terminal_session_screen",
+      "mapId": "MAP-0504",
+      "toolId": "tool.process.read_GET_TERMINAL_SESSION_SCREEN",
+      "domain": "PROCESS"
+    },
+    {
+      "capabilityId": "CAP.TOOL.EXECUTE.OPERITAPPLICATION",
+      "behaviorKey": "GENERAL_EXECUTE_operitapplication",
+      "mapId": "MAP-0505",
+      "toolId": "tool.tool.execute_OPERITAPPLICATION",
+      "domain": "TOOL"
+    },
+    {
+      "capabilityId": "CAP.SYSTEM.INSTALL.SHIZUKU_BUNDLED_INSTALLER",
+      "behaviorKey": "GENERAL_INSTALL_shizuku_bundled_installer",
+      "mapId": "MAP-0506",
+      "toolId": "tool.system.install_SHIZUKU_BUNDLED_INSTALLER",
+      "domain": "SYSTEM"
+    }
+  ],
+  "generatedAt": "2026-08-07T14:45:04+08:00",
+  "totalTools": 506
+}

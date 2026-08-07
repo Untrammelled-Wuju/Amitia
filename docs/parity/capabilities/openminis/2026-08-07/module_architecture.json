@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "modules": [
+    {
+      "id": "MOD_SHARED_AGENT",
+      "path": "src/shared",
+      "platform": "SHARED",
+      "languages": [
+        "Swift"
+      ],
+      "entrypoints": [
+        "bashism_rules.json",
+        "validate_detector.swift"
+      ]
+    },
+    {
+      "id": "MOD_IOS_CORE",
+      "path": "src/ios",
+      "platform": "IOS",
+      "languages": [
+        "Swift",
+        "ObjC",
+        "C++"
+      ],
+      "entrypoints": [
+        "App.swift",
+        "AIChatViewModel.swift",
+        "RootfsManager"
+      ]
+    },
+    {
+      "id": "MOD_ANDROID_CORE",
+      "path": "src/android",
+      "platform": "ANDROID",
+      "languages": [
+        "Kotlin"
+      ],
+      "entrypoints": [
+        "MainActivity.kt",
+        "ChatViewModel.kt",
+        "AgentTools.kt"
+      ]
+    },
+    {
+      "id": "MOD_IOS_SANDBOX",
+      "path": "src/ios/iSH",
+      "platform": "IOS",
+      "languages": [
+        "C",
+        "ObjC",
+        "Swift"
+      ],
+      "entrypoints": [
+        "ISHExecutionCoordinator",
+        "RootfsManager"
+      ]
+    },
+    {
+      "id": "MOD_ANDROID_SANDBOX",
+      "path": "src/android",
+      "platform": "ANDROID",
+      "languages": [
+        "Kotlin"
+      ],
+      "entrypoints": [
+        "TerminalCanvasView",
+        "ShellExecutor"
+      ]
+    },
+    {
+      "id": "MOD_IOS_OFFLOAD",
+      "path": "src/ios/NativeOffloads",
+      "platform": "IOS",
+      "languages": [
+        "ObjC",
+        "ObjC++"
+      ],
+      "entrypoints": [
+        "26 .m files"
+      ]
+    },
+    {
+      "id": "MOD_ANDROID_OFFLOAD",
+      "path": "src/android",
+      "platform": "ANDROID",
+      "languages": [
+        "Kotlin"
+      ],
+      "entrypoints": [
+        "AgentTools.kt"
+      ]
+    },
+    {
+      "id": "MOD_BROWSER_IOS",
+      "path": "src/ios/Browser",
+      "platform": "IOS",
+      "languages": [
+        "Swift"
+      ],
+      "entrypoints": [
+        "WKWebView wrapper",
+        "BrowserTabPool"
+      ]
+    },
+    {
+      "id": "MOD_BROWSER_ANDROID",
+      "path": "src/android/browser",
+      "platform": "ANDROID",
+      "languages": [
+        "Kotlin"
+      ],
+      "entrypoints": [
+        "WebView wrapper"
+      ]
+    },
+    {
+      "id": "MOD_WORKSPACE",
+      "path": "src/ios/Workspace",
+      "platform": "IOS",
+      "languages": [
+        "Swift"
+      ],
+      "entrypoints": [
+        "WorkspaceManager"
+      ]
+    },
+    {
+      "id": "MOD_SKILLS",
+      "path": "src/ios/Skills",
+      "platform": "SHARED",
+      "languages": [
+        "Swift"
+      ],
+      "entrypoints": [
+        "SkillLoader",
+        "SKILL.md parser"
+      ]
+    },
+    {
+      "id": "MOD_MEMORY",
+      "path": "src/ios/Memory",
+      "platform": "SHARED",
+      "languages": [
+        "Swift"
+      ],
+      "entrypoints": [
+        "MemoryStore"
+      ]
+    },
+    {
+      "id": "MOD_MCP",
+      "path": "src/ios/MCP",
+      "platform": "SHARED",
+      "languages": [
+        "Swift"
+      ],
+      "entrypoints": [
+        "MCPClient"
+      ]
+    },
+    {
+      "id": "MOD_PROVIDERS",
+      "path": "src/ios/Providers",
+      "platform": "SHARED",
+      "languages": [
+        "Swift"
+      ],
+      "entrypoints": [
+        "ProviderFactory",
+        "Anthropic/Gemini/OpenAI/Antigravity/Kimi/xAI"
+      ]
+    },
+    {
+      "id": "MOD_DEPS_ISH",
+      "path": "deps/ish",
+      "platform": "IOS",
+      "languages": [
+        "C"
+      ],
+      "entrypoints": [
+        "iSH kernel emulation"
+      ]
+    },
+    {
+      "id": "MOD_DEPS_PROOT",
+      "path": "deps/proot",
+      "platform": "ANDROID",
+      "languages": [
+        "C"
+      ],
+      "entrypoints": [
+        "PRoot user-space chroot"
+      ]
+    }
+  ]
+}

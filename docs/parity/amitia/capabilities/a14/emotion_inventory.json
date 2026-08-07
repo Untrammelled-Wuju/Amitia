@@ -1,0 +1,39 @@
+{
+  "id": "emotion_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "emotion",
+  "description": "情绪模型详情：PAD维度/衰减/标签体系",
+  "model": "PAD三维情感模型 + 离散情绪标签融合",
+  "pad_dimensions": [
+    { "dimension": "Pleasure(愉悦度)", "range": [-1.0, 1.0], "description": "正面/负面情感极性" },
+    { "dimension": "Arousal(激活度)", "range": [-1.0, 1.0], "description": "兴奋/平静激活水平" },
+    { "dimension": "Dominance(支配度)", "range": [-1.0, 1.0], "description": "控制/服从倾向" }
+  ],
+  "decay": {
+    "description": "情绪随时间自然衰减回基线",
+    "engine": "backend/internal/affect/engine.go + decay_test.go",
+    "mechanism": "指数衰减，每tick按decay_rate向基线回归"
+  },
+  "labels": {
+    "description": "离散情绪标签(快乐/悲伤/愤怒/惊讶/恐惧/厌恶等)",
+    "engine": "backend/internal/affect/label.go + label_test.go"
+  },
+  "emotion_fusion": {
+    "description": "角色设定情绪 + 对话实时情绪 + 人格特质融合计算",
+    "engine": "backend/internal/chat/emotion_fusion.go + emotion_fusion_test.go"
+  },
+  "mood": {
+    "description": "心情系统(独立于PAD，简单数值模型)",
+    "files": ["backend/internal/mood/service.go", "backend/internal/mood/router.go"],
+    "status": "affect为主，mood为辅助"
+  },
+  "related_files": [
+    "backend/internal/affect/engine.go",
+    "backend/internal/affect/label.go",
+    "backend/internal/affect/model.go",
+    "backend/internal/affect/service.go",
+    "backend/internal/affect/decay_test.go",
+    "backend/internal/chat/emotion_fusion.go"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "ios": [
+    "BGTaskScheduler",
+    "NSUserNotification",
+    "LiveActivity",
+    "BackgroundKeepAliveManager",
+    "Background fetch"
+  ],
+  "android": [
+    "WorkManager",
+    "AlarmManager",
+    "4 ForegroundServices",
+    "LiveStatusNotification",
+    "BroadcastReceiver",
+    "BootReceiver"
+  ]
+}

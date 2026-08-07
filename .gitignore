@@ -177,6 +177,11 @@ runtime/build/**/test-local-package/
 test_output.txt
 test_nodeenv_race.txt
 
+# Large source archives (exceed GitHub 100MB limit)
+docs/parity/**/amitia-a14-source.tar
+docs/parity/**/source_archive.*
+docs/**/*.tar
+
 # AI tooling workspace config
 .reasonix/
 reasonix.toml

@@ -1,0 +1,55 @@
+{
+  "id": "workflow_hook_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "workflow_hook",
+  "description": "工作流/Hook系统清单(事件钩子/工作流引擎/钩子贡献管理)",
+  "hook_system": {
+    "description": "事件钩子系统(监听系统事件并触发扩展逻辑)",
+    "files": [
+      "backend/internal/extension/hook_handler.go",
+      "backend/internal/extension/hook/",
+      "backend/internal/extension/kernel/hook/"
+    ],
+    "apis": [
+      "GET /api/extensions/hooks/points — 列出所有钩子挂载点",
+      "GET /api/extensions/hooks/contributions — 列出所有钩子贡献",
+      "POST /api/extensions/hooks/contributions/:id/enable|disable — 启用/禁用钩子",
+      "GET /api/extensions/hooks/points/:pointId/contributions — 按挂载点查看贡献",
+      "POST /api/extensions/hooks/contributions/:id/circuit/reset — 重置熔断"
+    ],
+    "circuit_breaker": "支持钩子级熔断(fail-fast)"
+  },
+  "workflow_engine": {
+    "description": "工作流引擎(编译/执行/调度/值传递)",
+    "files": [
+      "backend/internal/extension/workflow_compiler.go",
+      "backend/internal/extension/workflow_executor.go",
+      "backend/internal/extension/workflow_values.go"
+    ],
+    "features": ["多步骤编排", "条件分支", "并行执行", "值传递", "超时控制", "错误重试"]
+  },
+  "workflow_migration": {
+    "description": "工作流技能迁移(旧工作流→统一技能体系)",
+    "files": [
+      "backend/internal/extension/migration/workflow_migration/",
+      "backend/internal/extension/migration/workflow_skill_adapter.go"
+    ]
+  },
+  "event_system": {
+    "description": "事件系统(发布/订阅/持久化/重试/死信)",
+    "files": [
+      "backend/internal/extension/event/event_dispatcher.go",
+      "backend/internal/extension/event/event_store.go",
+      "backend/internal/extension/event/event_retry.go",
+      "backend/internal/extension/event/event_dead_letter.go",
+      "backend/internal/extension/event/event_subscription.go",
+      "backend/internal/extension/event_bus/bus.go"
+    ]
+  },
+  "user_views": [
+    { "name": "hook_center", "view": "front/src/views/kernel/HookCenterView.vue" },
+    { "name": "workshop_sessions", "view": "front/src/views/extensions/workshop/WorkshopSessionView.vue" },
+    { "name": "workflow_runs", "view": "front/src/views/extensions/RunHistoryView.vue" }
+  ]
+}

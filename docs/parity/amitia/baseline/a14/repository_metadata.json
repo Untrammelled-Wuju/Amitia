@@ -1,0 +1,35 @@
+{
+  "ignored_file_count": 0,
+  "schema_version": 1,
+  "tracked_file_count": 3495,
+  "modified_file_count": 1,
+  "nested_repository_count": 0,
+  "working_tree_clean": false,
+  "dirty_files": [
+    "backend/cmd/server/main.go"
+  ],
+  "commit": "3daeaf3c0a82e33213e0a52d84cfaf8f68f78eab",
+  "source_mode": "GIT_COMMIT_WITH_DIRTY_WORKTREE",
+  "tree_hash": "1f49ab81759aa83ac53a2deffe2e471dafe2",
+  "short_commit": "3daeaf3",
+  "repository_root": "D:/桌面/跟进项目/U-Ai",
+  "untracked_files": [
+    "backend/cmd/server/version.go",
+    "backend/cmd/server/version_test.go",
+    "backend/internal/buildinfo/info.go",
+    "backend/internal/buildinfo/info_test.go",
+    "backend/qdrantprocess.test",
+    "backend/qdrantprocess.test.exe",
+    "backend_source_20260806_222805.zip"
+  ],
+  "untracked_file_count": 7,
+  "branch": "develop",
+  "remote_origin": [
+    "git@gitee.com:Untrammelled/Amitia",
+    "git@github.com:Untrammelled-Wuju/Amitia"
+  ],
+  "commit_author_date": "2026-08-07 00:36:37 +0800",
+  "commit_subject": "fix: P0精准修复-统一Manifest、Import原子发布与恢复机制",
+  "submodule_count": 0,
+  "commit_committer_date": "2026-08-07 00:36:37 +0800"
+}

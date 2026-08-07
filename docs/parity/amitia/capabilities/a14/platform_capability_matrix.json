@@ -1,0 +1,22 @@
+{
+  "id": "platform_capability_matrix",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "platform_capability",
+  "description": "平台×能力矩阵(各平台支持的能力对比)",
+  "matrix": [
+    { "capability": "chat_conversation", "web": "FULL", "flutter": "FULL", "desktop": "FULL" },
+    { "capability": "character_management", "web": "FULL", "flutter": "FULL", "desktop": "WEBRTC" },
+    { "capability": "memory_system", "web": "FULL", "flutter": "FULL", "desktop": "WEBRTC" },
+    { "capability": "extension_ecosystem", "web": "FULL", "flutter": "FULL", "desktop": "WEBRTC" },
+    { "capability": "realtime_voice", "web": "FULL", "flutter": "PARTIAL", "desktop": "WEBRTC" },
+    { "capability": "channel_wechat_qq", "web": "WEBRTC", "flutter": "WEBRTC", "desktop": "WEBRTC" },
+    { "capability": "desktop_pet", "web": "NONE", "flutter": "VIEW_ONLY", "desktop": "FULL" },
+    { "capability": "auto_updater", "web": "NONE", "flutter": "NONE", "desktop": "FULL" },
+    { "capability": "tray_system", "web": "NONE", "flutter": "NONE", "desktop": "FULL" },
+    { "capability": "window_management", "web": "NONE", "flutter": "NONE", "desktop": "FULL" },
+    { "capability": "push_notification", "web": "PWA", "flutter": "FULL", "desktop": "FULL" },
+    { "capability": "pwa_install", "web": "FULL", "flutter": "NONE", "desktop": "NONE" }
+  ],
+  "legend": { "FULL": "完全支持", "PARTIAL": "部分支持", "VIEW_ONLY": "仅查看", "WEBRTC": "依赖后端", "NONE": "不支持" }
+}

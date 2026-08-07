@@ -1,0 +1,129 @@
+{
+  "inventory_id": "INV-A14-PROACTIVE-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "proactive_messaging",
+  "items": [
+    {
+      "id": "PROACTIVE-001",
+      "name": "Proactive Service",
+      "name_en": "Proactive Service",
+      "description": "主动消息服务，管理规则、提醒和历史记录的CRUD操作",
+      "file": "backend/internal/proactive/service.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/proactive/rules",
+        "POST /api/v1/proactive/rules",
+        "PUT /api/v1/proactive/rules/:id",
+        "DELETE /api/v1/proactive/rules/:id"
+      ]
+    },
+    {
+      "id": "PROACTIVE-002",
+      "name": "Rule Engine",
+      "name_en": "Proactive Rule Engine",
+      "description": "主动消息规则引擎，定义基于时间、条件触发的消息规则",
+      "file": "backend/internal/proactive/rules.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "POST /api/v1/proactive/rules/:id/toggle",
+        "POST /api/v1/proactive/rules/test/:id",
+        "POST /api/v1/proactive/rules/:id/trigger"
+      ]
+    },
+    {
+      "id": "PROACTIVE-003",
+      "name": "Proactive Executor",
+      "name_en": "Proactive Message Executor",
+      "description": "主动消息执行器，实际生成和发送主动消息的核心组件",
+      "file": "backend/internal/proactive/executor.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROACTIVE-004",
+      "name": "proactive Pipeline",
+      "name_en": "Proactive Processing Pipeline",
+      "description": "主动消息处理管道，管理从触发到投递的完整流程",
+      "file": "backend/internal/proactive/pipeline.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROACTIVE-004",
+      "name": "Dispatch System",
+      "name_en": "Proactive Dispatch",
+      "description": "分发调度系统，管理消息的分发时机和目标选择",
+      "file": "backend/internal/proactive/dispatch.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/proactive/queue-summary"
+      ]
+    },
+    {
+      "id": "PROACTIVE-006",
+      "name": "Deduplication",
+      "name_en": "Delivery Deduplication",
+      "description": "投递去重系统，防止相同或相似消息重复发送",
+      "file": "backend/internal/proactive/dedup_delivery.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROACTIVE-007",
+      "name": "Interruption Risk",
+      "name_en": "Interruption Risk Assessment",
+      "description": "打断风险评估，评估发送消息对用户当前活动的打断风险",
+      "file": "backend/internal/proactive/interruption_risk.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROACTIVE-008",
+      "name": "Suppression Logic",
+      "name_en": "Message Suppression",
+      "description": "消息抑制逻辑，在特定条件下抑制主动消息的发送",
+      "file": "backend/internal/proactive/suppression.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROACTIVE-009",
+      "name": "Budget Cooldown",
+      "name_en": "Rate Limit Cooldown",
+      "description": "频率限制冷却，控制主动消息的发送频率和间隔",
+      "file": "backend/internal/proactive/budget_cooldown.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROACTIVE-010",
+      "name": "State Management",
+      "name_en": "Unified State Management",
+      "description": "统一状态管理，管理主动消息系统的全局状态和配置",
+      "file": "backend/internal/proactive/state_unified.go",
+      "state": "IMPLEMENTED",
+      "endpoints": [
+        "GET /api/v1/proactive/status"
+      ]
+    },
+    {
+      "id": "PROACTIVE-011",
+      "name": "Safe Scheduler",
+      "name_en": "Safe Scheduler",
+      "description": "安全调度器，确保主动消息在合适的时机发送",
+      "file": "backend/internal/proactive/safe_scheduler.go",
+      "state": "IMPLEMENTED",
+      "endpoints": []
+    },
+    {
+      "id": "PROACTIVE-012",
+      "name": "Prospective Integration",
+      "name_en": "Prospective Memory Integration",
+      "description": "前瞻记忆集成，将前瞻记忆与主动消息系统结合",
+      "file": "backend/internal/proactive/prospective_integration.go",
+      "state": "IMPLEMENTED",
+      "endpoints": ["GET /api/v1/proactive/prospective"]
+    }
+  ]
+}

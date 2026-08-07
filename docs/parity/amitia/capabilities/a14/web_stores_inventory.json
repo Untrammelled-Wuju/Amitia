@@ -1,0 +1,224 @@
+{
+  "inventory_id": "INV-A14-WEB-STORES-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "web_pinia_stores",
+  "platform": "web",
+  "items": [
+    {
+      "id": "WS-001",
+      "store": "chat",
+      "source": "front/src/stores/chat.ts",
+      "state_refs": ["messages", "loading", "currentConversationId"],
+      "actions": ["setMessages", "addMessage", "clearMessages", "setConversationId"],
+      "uses_composables": ["useChat", "useChatSSE", "useChatScroll", "useMessageSend", "useWebChatConversation", "useWebChatScroll", "useWebChatSend", "useWebChatSSE"],
+      "capabilities": ["消息列表管理", "加载状态", "当前会话ID"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WS-002",
+      "store": "app",
+      "source": "front/src/stores/app.ts",
+      "state_refs": ["appMode", "sidebarCollapsed", "currentTheme"],
+      "actions": [],
+      "uses_composables": ["useTheme"],
+      "capabilities": ["应用模式", "侧边栏折叠状态", "当前主题"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "WS-003",
+      "store": "extensionUI",
+      "source": "front/src/stores/extensionUI.ts",
+      "state_refs": ["extensionStates", "activeExtension"],
+      "actions": [],
+      "uses_composables": ["useExtensionSlot", "useExtensionPerformance"],
+      "capabilities": ["扩展UI状态管理", "活跃扩展追踪"],
+      "state": "IMPLEMENTED"
+    }
+  ],
+  "composables": [
+    {
+      "id": "WC-001",
+      "composable": "useChat",
+      "source": "front/src/composables/useChat.ts",
+      "capabilities": ["聊天核心逻辑", "会话切换", "消息获取"]
+    },
+    {
+      "id": "WC-002",
+      "composable": "useChatSSE",
+      "source": "front/src/composables/useChatSSE.ts",
+      "capabilities": ["SSE流式连接", "流式消息接收", "重连机制"]
+    },
+    {
+      "id": "WC-003",
+      "composable": "useChatScroll",
+      "source": "front/src/composables/useChatScroll.ts",
+      "capabilities": ["消息滚动", "自动滚到底部", "滚动位置记忆"]
+    },
+    {
+      "id": "WC-004",
+      "composable": "useMessageSend",
+      "source": "front/src/composables/useMessageSend.ts",
+      "capabilities": ["消息发送", "消息状态管理", "发送失败重试"]
+    },
+    {
+      "id": "WC-005",
+      "composable": "useApi",
+      "source": "front/src/composables/useApi.ts",
+      "capabilities": ["HTTP请求封装", "错误拦截", "认证注入"]
+    },
+    {
+      "id": "WC-006",
+      "composable": "useCachedApi",
+      "source": "front/src/composables/useCachedApi.ts",
+      "capabilities": ["缓存API请求", "缓存失效策略", "请求去重"]
+    },
+    {
+      "id": "WC-007",
+      "composable": "useConversation",
+      "source": "front/src/composables/useConversation.ts",
+      "capabilities": ["会话管理", "会话列表获取", "会话切换"]
+    },
+    {
+      "id": "WC-008",
+      "composable": "useDesktopPetInstallations",
+      "source": "front/src/composables/useDesktopPetInstallations.ts",
+      "capabilities": ["桌宠安装管理", "安装列表获取", "安装/卸载操作"]
+    },
+    {
+      "id": "WC-009",
+      "composable": "useEpisodic",
+      "source": "front/src/composables/useEpisodic.ts",
+      "capabilities": ["情景记忆管理", "事件获取", "事件创建"]
+    },
+    {
+      "id": "WC-010",
+      "composable": "useGraph",
+      "source": "front/src/composables/useGraph.ts",
+      "capabilities": ["记忆图谱数据", "节点查询", "关联分析"]
+    },
+    {
+      "id": "WC-011",
+      "composable": "useMemoryHub",
+      "source": "front/src/composables/useMemoryHub.ts",
+      "capabilities": ["记忆中心入口", "记忆搜索", "记忆操作"]
+    },
+    {
+      "id": "WC-012",
+      "composable": "useProfile",
+      "source": "front/src/composables/useProfile.ts",
+      "capabilities": ["用户画像管理", "画像数据获取"]
+    },
+    {
+      "id": "WC-013",
+      "composable": "useTheme",
+      "source": "front/src/composables/useTheme.ts",
+      "capabilities": ["主题切换", "主题持久化", "系统主题跟随"]
+    },
+    {
+      "id": "WC-014",
+      "composable": "useTyping",
+      "source": "front/src/composables/useTyping.ts",
+      "capabilities": ["输入状态管理", "正在输入提示"]
+    },
+    {
+      "id": "WC-015",
+      "composable": "useUIHostSSE",
+      "source": "front/src/composables/useUIHostSSE.ts",
+      "capabilities": ["UI Host SSE连接", "状态推送"]
+    },
+    {
+      "id": "WC-016",
+      "composable": "useVoiceInput",
+      "source": "front/src/composables/useVoiceInput.ts",
+      "capabilities": ["语音输入", "音频录制", "音频发送"]
+    },
+    {
+      "id": "WC-017",
+      "composable": "useWebChatConversation",
+      "source": "front/src/composables/useWebChatConversation.ts",
+      "capabilities": ["Web聊天会话管理"]
+    },
+    {
+      "id": "WC-018",
+      "composable": "useWorldBook",
+      "source": "front/src/composables/useWorldBook.ts",
+      "capabilities": ["世界书管理", "词条操作"]
+    },
+    {
+      "id": "WC-019",
+      "composable": "useGenerationTask",
+      "source": "front/src/composables/useGenerationTask.ts",
+      "capabilities": ["生成任务管理", "任务取消", "任务进度"]
+    },
+    {
+      "id": "WC-020",
+      "composable": "useFixedEvents",
+      "source": "front/src/composables/useFixedEvents.ts",
+      "capabilities": ["固定事件管理"]
+    },
+    {
+      "id": "WC-021",
+      "composable": "useSleepSetting",
+      "source": "front/src/composables/useSleepSetting.ts",
+      "capabilities": ["休眠设置管理"]
+    },
+    {
+      "id": "WC-022",
+      "composable": "useSpecialEvents",
+      "source": "front/src/composables/useSpecialEvents.ts",
+      "capabilities": ["特殊事件管理"]
+    },
+    {
+      "id": "WC-023",
+      "composable": "useMediaUpload",
+      "source": "front/src/composables/useMediaUpload.ts",
+      "capabilities": ["媒体上传", "图片附件"]
+    },
+    {
+      "id": "WC-024",
+      "composable": "useTextInput",
+      "source": "front/src/composables/useTextInput.ts",
+      "capabilities": ["输入框管理", "草稿保存"]
+    },
+    {
+      "id": "WC-025",
+      "composable": "useLifestyleTendency",
+      "source": "front/src/composables/useLifestyleTendency.ts",
+      "capabilities": ["生活方式倾向"]
+    },
+    {
+      "id": "WC-026",
+      "composable": "useWorkProfile",
+      "source": "front/src/composables/useWorkProfile.ts",
+      "capabilities": ["工作画像"]
+    },
+    {
+      "id": "WC-027",
+      "composable": "useActionDefinitions",
+      "source": "front/src/composables/useActionDefinitions.ts",
+      "capabilities": ["动作定义管理"]
+    },
+    {
+      "id": "WC-028",
+      "composable": "useActionEditor",
+      "source": "front/src/composables/useActionEditor.ts",
+      "capabilities": ["动作编辑器逻辑"]
+    },
+    {
+      "id": "WC-029",
+      "composable": "useProcessingTask",
+      "source": "front/src/composables/useProcessingTask.ts",
+      "capabilities": ["处理任务管理"]
+    }
+  ],
+  "metadata": {
+    "framework": "Pinia",
+    "state_management": "Composition API (setup syntax)",
+    "total_stores": 3,
+    "total_composables": 29,
+    "stores_root": "front/src/stores",
+    "composables_root": "front/src/composables",
+    "store_names": ["chat", "app", "extensionUI"]
+  }
+}

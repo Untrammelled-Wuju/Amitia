@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "source": "browser_media_workspace_scan.json + agent_tool_scan.json"
+  },
+  "hooks_and_events": {
+    "hooks": [
+      {
+        "interface": "AIToolHook（sealed AIToolHookDecision: Allow/Block）",
+        "description": "工具调用拦截钩子，可被 AIToolHandler.checkToolInterception 调用链中逐个检查"
+      },
+      {
+        "hook_name": "ToolPkgToolLifecycleBridge",
+        "description": "ToolPkg 工具生命周期桥接（注册为 AIToolHook，用于拦截/Block 工具调用）"
+      },
+      {
+        "hook_name": "ToolPkgPromptHookBridge",
+        "description": "ToolPkg 提示词注入钩子（注入 ToolPkg 专属提示词到对话上下文）"
+      },
+      {
+        "hook_name": "ToolPkgSummaryHookBridge",
+        "description": "ToolPkg 摘要生成钩子"
+      },
+      {
+        "hook_name": "ToolPkgChatInputHookBridge",
+        "description": "ToolPkg 聊天输入处理钩子"
+      },
+      {
+        "hook_name": "ToolPkgChatViewHookBridge",
+        "description": "ToolPkg 聊天视图钩子（ChatViewHookPlugin 接口）"
+      },
+      {
+        "hook_name": "ToolPkgHookBridgeSupport",
+        "description": "钩子注册支撑基础设置"
+      }
+    ],
+    "events": [
+      {
+        "mechanism": "ToolProgressBus",
+        "description": "工具执行进度事件总线（发布/订阅模式）"
+      },
+      {
+        "mechanism": "LiveData",
+        "usage": "UpdateManager.updateStatus（更新状态）"
+      },
+      {
+        "mechanism": "EventBus（间接）",
+        "usage": "ToolPkgCommonBridgePlugin 注册大量内部桥接事件"
+      }
+    ],
+    "schedules": [
+      {
+        "manager": "WorkflowScheduler（core/workflow/WorkflowScheduler.kt）",
+        "mechanism": "WorkManager（PeriodicWorkRequest / OneTimeWorkRequest）",
+        "worker": "WorkflowWorker",
+        "details": "支持定时触发（SCHEDULE_TYPE_SPECIFIC_TIME）、周期触发（SCHEDULE_TYPE_INTERVAL）、延时执行（OneTimeWorkRequest.Builder setInitialDelay）"
+      },
+      {
+        "component": "WorkflowBootReceiver",
+        "trigger": "Intent.ACTION_BOOT_COMPLETED",
+        "details": "开机后重新调度所有 enabled 的 workflow（goAsync + CoroutineScope）"
+      },
+      {
+        "component": "RoomDatabaseBackupScheduler",
+        "mechanism": "WorkManager PeriodicWorkRequest",
+        "interval": "24 HOURS",
+        "details": "RoomDatabaseBackupWorker 周期性数据库备份"
+      },
+      {
+        "component": "OperitApplication",
+        "details": "ensureWorkManagerInitialized() 确保 WorkManager 在启动时初始化"
+      },
+      {
+        "service": "FloatingChatService",
+        "details": "autoExitHandler.postDelayed 实现悬浮窗超时自动退出"
+      }
+    ],
+    "notes": [
+      "Hook 体系基于 AIToolHook 接口链式拦截，支持 Allow/Block 两种决策。ToolPkgHookBridge 系列提供对聊天输入、视图、提示词、摘要、生命周期的全面钩子覆盖。",
+      "事件系统包括：ToolProgressBus（进度事件）、LiveData（UpdateStatus）、内部 EventBus（ToolPkg 桥接）。",
+      "调度系统完全基于 Android WorkManager API（非 AlarmManager/JobScheduler），WorkflowWorker 是核心后台执行者，WorkflowScheduler 管理所有调度策略。",
+      "WorkflowBootReceiver 确保设备重启后所有启用的工作流自动重调度。"
+    ]
+  },
+  "tool_execution_hook_points": {
+    "description": "AIToolHandler implements a hook system (AIToolHook) that allows intercepting tool calls at multiple lifecycle stages",
+    "stages": [
+      {
+        "stage": "onToolCallRequested",
+        "description": "Called when tool call is received"
+      },
+      {
+        "stage": "onToolCallIntercept",
+        "description": "Can block tool execution by returning Block(reason)"
+      },
+      {
+        "stage": "onToolPermissionChecked",
+        "description": "Called after permission check completes"
+      },
+      {
+        "stage": "onToolExecutionStarted",
+        "description": "Called before actual execution begins"
+      },
+      {
+        "stage": "onToolExecutionResult",
+        "description": "Called after result is produced"
+      },
+      {
+        "stage": "onToolExecutionError",
+        "description": "Called on execution exception"
+      },
+      {
+        "stage": "onToolExecutionFinished",
+        "description": "Always called at end of lifecycle"
+      }
+    ],
+    "hook_class": "AIToolHook",
+    "file": "core/tools/AIToolHook.kt"
+  }
+}

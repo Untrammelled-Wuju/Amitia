@@ -1,0 +1,30 @@
+{
+  "id": "ui_entrypoints",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "ui_entrypoints",
+  "description": "UI入口点清单(菜单/按钮/路由/操作入口)",
+  "web_entries": [
+    { "type": "top_menu", "component": "front/src/components/SideNav.vue", "items": ["对话", "角色", "记忆", "扩展", "设置", "仪表盘"] },
+    { "type": "chat_input", "component": "front/src/components/ChatInput.vue", "actions": ["发送消息", "语音输入", "图片上传", "附件"] },
+    { "type": "character_actions", "view": "front/src/views/character/CharacterView.vue", "actions": ["编辑", "测试对话", "导入/导出", "删除"] },
+    { "type": "extension_center", "view": "front/src/views/extensions/ExtensionCenterView.vue", "actions": ["浏览插件", "安装", "配置", "卸载"] },
+    { "type": "kernel_center", "view": "front/src/views/kernel/KernelCenterView.vue", "actions": ["查看事件", "管理任务", "开发控制台", "迁移"] },
+    { "type": "workshop", "view": "front/src/views/creative-workshop/", "actions": ["技能创作", "宠物创作", "动作编辑"] }
+  ],
+  "desktop_entries": [
+    { "type": "tray_menu", "file": "desktop/src/main/tray.ts", "items": ["显示主窗口", "桌宠开关", "退出"] },
+    { "type": "pet_window", "file": "desktop/src/renderer/pet-main.ts", "interaction": ["拖拽", "点击", "右键菜单"] },
+    { "type": "notification", "file": "desktop/src/main/", "items": ["更新可用", "后端异常"] }
+  ],
+  "flutter_entries": [
+    { "type": "drawer", "file": "mobile_app/lib/core/widgets/amitia_drawer.dart", "items": ["全部Flutter路由入口"] },
+    { "type": "bottom_nav", "purpose": "移动端底部导航栏" },
+    { "type": "floating_action", "purpose": "快捷操作按钮" }
+  ],
+  "api_entries": [
+    { "type": "rest_api", "base": "/api/", "docs": "extensions/openapi.json" },
+    { "type": "sse", "endpoints": ["/api/chat(stream)", "/api/reactive", "/api/proactive/reminders/stream"] },
+    { "type": "websocket", "endpoint": "/api/realtime"}
+  ]
+}

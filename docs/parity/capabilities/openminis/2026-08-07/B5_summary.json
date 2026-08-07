@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "baseline": "OMN-2026-08-07-CROSSPLATFORM",
+  "status": "STATIC_AUDIT_PASS",
+  "total_capabilities": 145,
+  "shared": 91,
+  "shared_with_platform_adapter": 2,
+  "ios_only": 31,
+  "android_only": 23,
+  "implemented": 133,
+  "partial": 0,
+  "stub": 0,
+  "mock": 0,
+  "disabled": 0,
+  "feature_flagged": 0,
+  "unreachable": 0,
+  "source_not_released_android": 0,
+  "source_not_verified_ios": 12,
+  "product_claim_only": 0,
+  "documentation_only": 0,
+  "unknown": 0
+}

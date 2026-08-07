@@ -1,0 +1,39 @@
+{
+  "id": "agent_runtime",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "agent_runtime",
+  "description": "Agent运行时执行模型：统一入口、调度编排、工具执行、结果后处理",
+  "orchestrator": {
+    "unified_entry": "backend/internal/interaction.UnifiedEntry",
+    "flow": [
+      "1. Webhook/Chat入口接收消息",
+      "2. UnifiedEntry.Precheck(字符→角色→会话解析)",
+      "3. PromptBuilder 组装系统提示词(character_base+personality+emotion+memory+worldbook+context)",
+      "4. ChatService.Send 调用LLM流式生成",
+      "5. ToolRuntime 解析tool_calls并分发到注册工具",
+      "6. 二次生成(如有工具结果需回填)",
+      "7. ReplySanitizer 去重/去标记化后处理",
+      "8. CommitCoordinator 提交(need/psyche/relationship/outbox等)",
+      "9. Delivery 投递到侧车通道(可选)"
+    ]
+  },
+  "entry_points": [
+    "POST /api/chat — web端直接对话",
+    "POST /api/agent/webhook — 外部通道回调入口",
+    "POST /api/agent/test — 角色测试对话",
+    "POST /api/agent/context-preview — 上下文预览调试"
+  ],
+  "key_files": [
+    "backend/internal/agent/service.go",
+    "backend/internal/agent/handler.go",
+    "backend/internal/agent/router.go",
+    "backend/internal/chat/service.go",
+    "backend/internal/chat/message_pipeline.go",
+    "backend/internal/chat/prompt_builder.go",
+    "backend/internal/chat/tool_runtime.go",
+    "backend/internal/chat/commit_coordinator.go",
+    "backend/internal/interaction/unified_entry.go",
+    "backend/internal/prompt/builder.go"
+  ]
+}

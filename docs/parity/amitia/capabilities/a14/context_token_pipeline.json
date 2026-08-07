@@ -1,0 +1,55 @@
+{
+  "id": "context_token_pipeline",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "context_token",
+  "description": "上下文加载与Token预算管线",
+  "pipeline": [
+    {
+      "step": "context_loaders_sqlite",
+      "description": "从SQLite加载对话历史(消息/摘要/压缩记录)",
+      "file": "backend/internal/chat/message_history.go"
+    },
+    {
+      "step": "character_base_load",
+      "description": "加载角色配置(base identity + personality + runtime plan)",
+      "file": "backend/internal/prompt/builder_character.go"
+    },
+    {
+      "step": "memory_inject",
+      "description": "注入记忆上下文(检索top-k记忆片段拼入system prompt)",
+      "file": "backend/internal/prompt/memory_inject.go"
+    },
+    {
+      "step": "worldbook_load",
+      "description": "加载世界书上下文(角色关联的worldbook条目)",
+      "file": "backend/internal/worldbook/"
+    },
+    {
+      "step": "agent_skill_contribute",
+      "description": "Agent技能贡献上下文(兼容技能注入)",
+      "files": [
+        "backend/internal/prompt/agent_skill_contribution.go",
+        "backend/internal/extension/agent_skill_runtime.go"
+      ]
+    },
+    {
+      "step": "plugin_context",
+      "description": "插件贡献上下文(已启用插件的contribution)",
+      "file": "backend/internal/prompt/plugin_context_test.go"
+    },
+    {
+      "step": "token_budget_apply",
+      "description": "Token预算裁剪(context window限制内按优先级裁剪)",
+      "files": [
+        "backend/internal/prompt/budget.go",
+        "backend/internal/prompt/compiler.go"
+      ]
+    },
+    {
+      "step": "final_render",
+      "description": "最终渲染输出完整system prompt字符串",
+      "file": "backend/internal/prompt/renderer.go"
+    }
+  ]
+}

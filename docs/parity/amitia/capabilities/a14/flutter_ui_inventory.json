@@ -1,0 +1,116 @@
+{
+  "inventory_id": "INV-A14-FLUTTER-UI-2026-08-07",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "flutter_ui_components",
+  "platform": "flutter",
+  "items": [
+    {
+      "id": "UI-001",
+      "component": "AmTheme",
+      "source": "lib/app/theme/app_theme.dart",
+      "type": "ThemeData",
+      "capabilities": ["Material3主题", "暗色/亮色主题切换", "自定义颜色", "自定义间距", "自定义圆角", "自定义字体"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-002",
+      "component": "AppColors",
+      "source": "lib/app/theme/app_colors.dart",
+      "type": "ColorScheme",
+      "capabilities": ["主题色", "成功/警告/错误/信息色", "强调色", "背景色", "边框色", "文本色"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-003",
+      "component": "AppMotion",
+      "source": "lib/app/theme/app_motion.dart",
+      "type": "MotionScheme",
+      "capabilities": ["动画时长", "缓动曲线", "页面过渡动画", "微交互动画"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-004",
+      "component": "AppSpacing",
+      "source": "lib/app/theme/app_spacing.dart",
+      "type": "SpacingScheme",
+      "capabilities": ["内边距系统", "外边距系统", "间距刻度", "响应式间距"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-005",
+      "component": "AppRadius",
+      "source": "lib/app/theme/app_radius.dart",
+      "type": "RadiusScheme",
+      "capabilities": ["圆角刻度", "卡片圆角", "按钮圆角", "输入框圆角"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-006",
+      "component": "AppTypography",
+      "source": "lib/app/theme/app_typography.dart",
+      "type": "TypographyScheme",
+      "capabilities": ["字体系统", "字号刻度", "字重配置", "行高配置"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-007",
+      "component": "AmitiaButton",
+      "source": "lib/core/widgets/amitia_button.dart",
+      "type": "StatelessWidget",
+      "capabilities": ["主按钮", "次按钮", "危险按钮", "幽灵按钮", "加载状态", "图标按钮", "按钮组"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-008",
+      "component": "AmitiaDialogs",
+      "source": "lib/core/widgets/amitia_dialogs.dart",
+      "type": "StatelessWidget",
+      "capabilities": ["确认对话框", "输入对话框", "警告对话框", "底部弹窗", "全屏对话框", "自定义对话框"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-009",
+      "component": "AmitiaDrawer",
+      "source": "lib/core/widgets/amitia_drawer.dart",
+      "type": "StatelessWidget",
+      "capabilities": ["侧边导航抽屉", "多级菜单", "图标导航", "路由跳转", "用户信息面板"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-010",
+      "component": "AmitiaMessage",
+      "source": "lib/core/widgets/amitia_message.dart",
+      "type": "StatelessWidget",
+      "capabilities": ["消息气泡", "角色头像", "消息时间戳", "消息状态(发送中/已发送/失败)", "消息操作(复制/删除/重发)", "流式渲染"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-011",
+      "component": "AmitiaMisc",
+      "source": "lib/core/widgets/amitia_misc.dart",
+      "type": "StatelessWidget",
+      "capabilities": ["状态徽章(AmitiaStatusBadge)", "空状态展示(AmitiaEmptyState)", "加载指示器(AmitiaLoading)", "分隔线", "骨架屏"],
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "UI-012",
+      "component": "AmitiaScaffold",
+      "source": "lib/core/widgets/amitia_scaffold.dart",
+      "type": "StatelessWidget",
+      "capabilities": ["页面框架", "响应式布局", "应用栏", "底部导航", "浮动按钮", "抽屉集成"],
+      "state": "IMPLEMENTED"
+    }
+  ],
+  "metadata": {
+    "total_components": 12,
+    "widget_categories": {
+      "theme_system": 6,
+      "layout_components": 1,
+      "interactive_components": 3,
+      "display_components": 2
+    },
+    "widget_source_root": "lib/core/widgets",
+    "theme_source_root": "lib/app/theme"
+  }
+}

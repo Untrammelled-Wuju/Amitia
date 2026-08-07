@@ -1,0 +1,67 @@
+{
+  "id": "character_life_inventory",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "character_life",
+  "description": "角色生活系统清单：规则、声音、记忆、时间线、主动行为、心理",
+  "systems": [
+    {
+      "name": "life-rules",
+      "description": "角色生活规则(作息表/课程表/班级调整)",
+      "files": [
+        "backend/internal/companion/schedule_service.go",
+        "backend/internal/companion/schedule_builder.go",
+        "backend/internal/companion/class_service.go"
+      ]
+    },
+    {
+      "name": "voice",
+      "description": "角色语音(情感语音合成/音色克隆)",
+      "files": [
+        "backend/internal/tts/",
+        "backend/internal/expression/voice_emotion.go",
+        "backend/internal/character/"
+      ]
+    },
+    {
+      "name": "memory",
+      "description": "角色记忆(工作记忆/自传记忆/情景记忆/图谱记忆)",
+      "files": [
+        "backend/internal/memory/working_memory.go",
+        "backend/internal/memory/autobiographical.go",
+        "backend/internal/memory/pipeline.go",
+        "backend/internal/memory/graph_service.go"
+      ]
+    },
+    {
+      "name": "timeline",
+      "description": "时间线(日程时间线/生活事件/特殊事件)",
+      "files": [
+        "backend/internal/companion/timeline_builder.go",
+        "backend/internal/companion/special_event_service.go",
+        "backend/internal/companion/fixed_event_service.go",
+        "backend/internal/proactive/life_event.go"
+      ]
+    },
+    {
+      "name": "proactive",
+      "description": "主动行为(主动发消息/随机爆发/延迟回复/活动消息)",
+      "files": [
+        "backend/internal/companion/proactive_unified_dispatch.go",
+        "backend/internal/companion/random_burst.go",
+        "backend/internal/companion/delayed_reply_service.go",
+        "backend/internal/companion/active_message_service.go"
+      ]
+    },
+    {
+      "name": "psyche",
+      "description": "心理状态(需求/心情/亲密度/关系)",
+      "files": [
+        "backend/internal/psyche/",
+        "backend/internal/need/",
+        "backend/internal/relationship/",
+        "backend/internal/mood/"
+      ]
+    }
+  ]
+}

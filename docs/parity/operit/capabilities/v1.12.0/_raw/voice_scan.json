@@ -1,0 +1,144 @@
+{
+  "scan_domain": "VOICE_SYSTEM_STT_TTS",
+  "found": true,
+  "scan_timestamp": "2026-08-07",
+  "components": [
+    {
+      "name": "SpeechService Interface (STT)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/SpeechService.kt",
+      "description": "Speech-to-Text engine interface with states: UNINITIALIZED, IDLE, PREPARING, RECOGNIZING, PROCESSING, ERROR. Supports continuous mode, partial results, volume level monitoring, and language selection."
+    },
+    {
+      "name": "SpeechServiceFactory (STT)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/SpeechServiceFactory.kt",
+      "description": "Factory for STT service types: SHERPA_NCNN (local), OPENAI_STT, DEEPGRAM_STT. Uses reference-counted local service lease pattern."
+    },
+    {
+      "name": "SherpaSpeechProvider (Local STT)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/SherpaSpeechProvider.kt",
+      "description": "Local STT via sherpa-ncnn JNI (com.k2fsa.sherpa.ncnn). Lightweight, mobile-optimized ASR engine. Uses ONNX Silero VAD for voice activity detection."
+    },
+    {
+      "name": "SherpaMnnSpeechProvider (Local STT)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/SherpaMnnSpeechProvider.kt",
+      "description": "Local STT via sherpa-mnn within the MNN framework. Alternative to sherpa-ncnn that uses MNN as the inference runtime."
+    },
+    {
+      "name": "DeepgramSttProvider (Cloud STT)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/DeepgramSttProvider.kt",
+      "description": "Cloud STT via Deepgram API. Records WAV audio with VAD-based auto-stop (Silero VAD via ONNX). Supports smart_format, punctuation, language selection. Integrates SpeechPrerollStore for pre-recording buffering."
+    },
+    {
+      "name": "OpenAISttProvider (Cloud STT)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/OpenAISttProvider.kt",
+      "description": "Cloud STT via OpenAI Whisper API endpoint"
+    },
+    {
+      "name": "OnnxSileroVad",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/OnnxSileroVad.kt",
+      "description": "ONNX Runtime implementation of Silero VAD for voice activity detection. Used by both STT providers and wake word listener for real-time speech detection."
+    },
+    {
+      "name": "PersonalWakeListener (Custom Wake Word)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/PersonalWakeListener.kt",
+      "description": "Custom wake word detection via DTW (Dynamic Time Warping) similarity matching against enrolled templates. Configurable similarity thresholds, noise RMS estimation, dynamic thresholding, and VAD-based segmentation."
+    },
+    {
+      "name": "PersonalWakeFeatureExtractor",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/PersonalWakeFeatureExtractor.kt",
+      "description": "Extracts audio features from PCM samples for wake word template enrollment"
+    },
+    {
+      "name": "PersonalWakeEnrollment",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/PersonalWakeEnrollment.kt",
+      "description": "UI service for enrolling (recording) custom wake word templates"
+    },
+    {
+      "name": "SpeechPrerollStore",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/speech/SpeechPrerollStore.kt",
+      "description": "Ring buffer that stores pre-recording audio so STT can capture speech that started before the user pressed the button"
+    }
+  ],
+  "tts_components": [
+    {
+      "name": "VoiceService Interface (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/VoiceService.kt",
+      "description": "TTS interface with speak(), pause(), resume(), stop(), setVoice(). Supports rate/pitch override and extra provider-specific parameters."
+    },
+    {
+      "name": "VoiceServiceFactory (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/VoiceServiceFactory.kt",
+      "description": "Factory for TTS service types: SIMPLE_TTS, HTTP_TTS, OPENAI_WS_TTS, SILICONFLOW_TTS, MINIMAX_TTS, MIMO_TTS, DOUBAO_TTS, OPENAI_TTS, VITS_TTS"
+    },
+    {
+      "name": "OpenAIRealtimeVoiceProvider (TTS + Realtime)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/OpenAIRealtimeVoiceProvider.kt",
+      "description": "OpenAI Realtime WebSocket TTS with bidirectional audio streaming. Supports 10 voices (alloy, ash, ballad, cedar, coral, echo, marin, sage, shimmer, verse). 24kHz PCM output."
+    },
+    {
+      "name": "OpenAIVoiceProvider (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/OpenAIVoiceProvider.kt",
+      "description": "HTTP-based OpenAI TTS (tts-1/tts-1-hd models)"
+    },
+    {
+      "name": "SiliconFlowVoiceProvider (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/SiliconFlowVoiceProvider.kt",
+      "description": "SiliconFlow (硅基流动) cloud TTS"
+    },
+    {
+      "name": "MiniMaxVoiceProvider (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/MiniMaxVoiceProvider.kt",
+      "description": "MiniMax cloud TTS"
+    },
+    {
+      "name": "MimoVoiceProvider (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/MimoVoiceProvider.kt",
+      "description": "MiMo cloud TTS"
+    },
+    {
+      "name": "DoubaoVoiceProvider (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/DoubaoVoiceProvider.kt",
+      "description": "ByteDance豆包 cloud TTS"
+    },
+    {
+      "name": "HttpVoiceProvider (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/HttpVoiceProvider.kt",
+      "description": "Generic HTTP TTS base class for custom endpoint TTS. Supports configurable URL templates."
+    },
+    {
+      "name": "VitsVoiceProvider (Local TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/VitsVoiceProvider.kt",
+      "description": "Local TTS via VITS/Piper ONNX Runtime inference. Runs entirely on-device."
+    },
+    {
+      "name": "AccessibilityVoiceProvider (TTS)",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/AccessibilityVoiceProvider.kt",
+      "description": "SimpleVoiceProvider using Android system Accessibility services for basic TTS"
+    },
+    {
+      "name": "QueuedTtsPlayback",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/QueuedTtsPlayback.kt",
+      "description": "Queue-based TTS playback manager for sequential message speaking"
+    },
+    {
+      "name": "VoiceListFetcher",
+      "path": "app/src/main/java/com/ai/assistance/operit/api/voice/VoiceListFetcher.kt",
+      "description": "Fetches available voice lists from cloud TTS providers"
+    }
+  ],
+  "speech_services_preferences": {
+      "path": "app/src/main/java/com/ai/assistance/operit/data/preferences/SpeechServicesPreferences.kt",
+      "description": "Unified preferences for STT and TTS service type selection, endpoint URLs, API keys, model names, voice IDs, locale tags"
+  },
+  "details": "Operit v1.12.0 has a full-featured voice system spanning both STT (Speech-to-Text) and TTS (Text-to-Speech). For STT there are 2 cloud providers (Deepgram, OpenAI) and 2 local engines (sherpa-ncnn, sherpa-mnn). The system includes custom wake word enrollment via DTW matching, VAD-based auto-stop detection (Silero ONNX), and pre-recording buffers. For TTS there are 8 service types including a real-time WebSocket provider (OpenAI Realtime), multiple cloud Chinese providers, a generic HTTP provider, and a local VITS ONNX provider for offline TTS. Voice features are controlled via SpeechServicesPreferences.",
+  "notes": [
+    "Deepgram STT records in WAV format, auto-stops on silence via VAD",
+    "Personal wake word uses DTW similarity with configurable threshold (default 0.865)",
+    "OpenAI Realtime Voice uses WebSocket (not HTTP) for bidirectional streaming",
+    "VITS local TTS runs via ONNX Runtime on device",
+    "The mnn module also contains sherpa-mnn frameworks (VAD, TTS, Speaker, ASR) as separate C++ components",
+    "SpeechPrerollStore buffers ~0.5s pre-roll audio to avoid clipping first words",
+    "The sherpa-mnn Kotlin API files in mnn module include: WaveReader, Vad, Tts, Speaker, OnlineRecognizer, OfflineRecognizer, KeywordSpotter, AudioTagging, SpokenLanguageIdentification",
+    "Wake word features include dynamic threshold adjustment based on noise floor estimation"
+  ]
+}

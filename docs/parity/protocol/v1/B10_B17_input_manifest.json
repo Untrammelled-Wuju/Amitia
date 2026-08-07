@@ -1,0 +1,22 @@
+{
+  "nextPhases": [
+    "B10",
+    "B11",
+    "B12",
+    "B13",
+    "B14",
+    "B15",
+    "B16",
+    "B17"
+  ],
+  "generatedAt": "2026-08-07T14:45:04+08:00",
+  "previousPhase": "B9",
+  "entryCriteria": [
+    "B9 frozen",
+    "Files generated",
+    "IDs unique",
+    "Sources mapped"
+  ],
+  "manifestId": "B10-B17-INPUT-2026-08-07",
+  "totalCapabilities": 506
+}

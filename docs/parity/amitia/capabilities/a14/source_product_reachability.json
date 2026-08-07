@@ -1,0 +1,29 @@
+{
+  "id": "source_product_reachability",
+  "baseline": "AMT-A14-3daeaf3",
+  "audit_time": "2026-08-07",
+  "domain": "source_product_reachability",
+  "description": "源码文件→产品特性可达性映射(哪个源文件映射到哪个产品功能)",
+  "reachability": [
+    { "source_path": "backend/internal/chat/service.go", "product_feature": "Web端对话发送" },
+    { "source_path": "backend/internal/agent/handler.go", "product_feature": "Agent测试/Webhook回调" },
+    { "source_path": "backend/internal/prompt/builder.go", "product_feature": "提示词构建(对话质量)" },
+    { "source_path": "backend/internal/proactive/pipeline.go", "product_feature": "主动消息推送" },
+    { "source_path": "backend/internal/proactive/dispatch.go", "product_feature": "提醒触发" },
+    { "source_path": "backend/internal/delivery/worker.go", "product_feature": "微信/QQ消息投递" },
+    { "source_path": "backend/internal/extension/plugin_manager.go", "product_feature": "插件管理(扩展中心)" },
+    { "source_path": "backend/internal/extension/workflow_executor.go", "product_feature": "工作流执行" },
+    { "source_path": "backend/internal/companion/schedule_service.go", "product_feature": "伴侣日程管理" },
+    { "source_path": "backend/internal/companion/timeline_builder.go", "product_feature": "角色时间线" },
+    { "source_path": "backend/internal/memory/pipeline.go", "product_feature": "记忆管理(记忆管理器/时间线)" },
+    { "source_path": "backend/internal/qdrant/", "product_feature": "向量检索(记忆搜索)" },
+    { "source_path": "backend/internal/graph/service.go", "product_feature": "关系图谱" },
+    { "source_path": "backend/internal/mcp/manager/", "product_feature": "MCP服务器管理" },
+    { "source_path": "desktop/src/main/core-manager.ts", "product_feature": "桌面端核心管理" },
+    { "source_path": "desktop/src/desktop-pet/animation/", "product_feature": "宠物动画" },
+    { "source_path": "front/src/views/chat-cleanup/", "product_feature": "聊天记录清理" },
+    { "source_path": "front/src/views/extensions/", "product_feature": "扩展中心" },
+    { "source_path": "mobile_app/lib/features/chat/", "product_feature": "移动端对话" },
+    { "source_path": "mobile_app/lib/features/workshop/", "product_feature": "移动端工作坊" }
+  ]
+}

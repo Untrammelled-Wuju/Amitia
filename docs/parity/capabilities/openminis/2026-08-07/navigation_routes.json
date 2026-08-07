@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "routes": [
+    {
+      "route": "/chat",
+      "desc": "Main chat view",
+      "platform": "SHARED"
+    },
+    {
+      "route": "/settings",
+      "desc": "Settings",
+      "platform": "SHARED"
+    },
+    {
+      "route": "/workspace",
+      "desc": "Workspace management",
+      "platform": "IOS"
+    },
+    {
+      "route": "/skills",
+      "desc": "Skill management",
+      "platform": "SHARED"
+    },
+    {
+      "route": "/providers",
+      "desc": "Provider configuration",
+      "platform": "SHARED"
+    },
+    {
+      "route": "/memory",
+      "desc": "Memory management",
+      "platform": "IOS"
+    },
+    {
+      "route": "/browser",
+      "desc": "Browser overlay",
+      "platform": "SHARED"
+    },
+    {
+      "route": "/mcp",
+      "desc": "MCP configuration",
+      "platform": "SHARED"
+    },
+    {
+      "route": "/chat/{sessionId}",
+      "desc": "Specific session",
+      "platform": "SHARED"
+    },
+    {
+      "route": "/onboarding",
+      "desc": "First-run setup",
+      "platform": "SHARED"
+    }
+  ]
+}

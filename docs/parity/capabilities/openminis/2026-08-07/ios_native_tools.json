@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "count": 31,
+  "tools": [
+    {
+      "id": "OMN-0018",
+      "name": "Linux Sandbox (iOS iSH)",
+      "tool_id": "shell_execute",
+      "framework": "04_SANDBOX_RUNTIME",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0083",
+      "name": "iOS Native TTS (AVSpeech)",
+      "tool_id": "apple-speak",
+      "framework": "14_VOICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0084",
+      "name": "iOS Speech Recognition",
+      "tool_id": "apple-speech",
+      "framework": "14_VOICE",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0069",
+      "name": "Read Health Data (HealthKit)",
+      "tool_id": "apple-healthkit",
+      "framework": "15_IOS_HEALTH",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0070",
+      "name": "Write Health Data (HealthKit)",
+      "tool_id": "apple-healthkit",
+      "framework": "15_IOS_HEALTH",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0071",
+      "name": "Calendar Event Create",
+      "tool_id": "",
+      "framework": "16_IOS_CALENDAR_REMINDERS",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0072",
+      "name": "Reminder Create",
+      "tool_id": "apple-reminders",
+      "framework": "16_IOS_CALENDAR_REMINDERS",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0073",
+      "name": "Bluetooth Device Detection",
+      "tool_id": "apple-bluetooth",
+      "framework": "18_IOS_HOMEKIT_BLUETOOTH_NFC",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0074",
+      "name": "HomeKit Device Control",
+      "tool_id": "apple-homekit",
+      "framework": "18_IOS_HOMEKIT_BLUETOOTH_NFC",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0075",
+      "name": "NFC Tag Read",
+      "tool_id": "apple-nfc",
+      "framework": "18_IOS_HOMEKIT_BLUETOOTH_NFC",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0076",
+      "name": "Clipboard Read",
+      "tool_id": "apple-clipboard",
+      "framework": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0077",
+      "name": "Clipboard Write",
+      "tool_id": "apple-clipboard",
+      "framework": "21_ANDROID_SYSTEM_SERVICE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0078",
+      "name": "Location Get",
+      "tool_id": "apple-location",
+      "framework": "17_IOS_CONTACTS_LOCATION_MAPS",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0079",
+      "name": "Weather Query",
+      "tool_id": "apple-weather",
+      "framework": "29_OTHER",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0080",
+      "name": "Media Playback Control",
+      "tool_id": "apple-player",
+      "framework": "19_IOS_PHOTOS_MEDIA_VISION",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0081",
+      "name": "Photo Library Access",
+      "tool_id": "apple-photos",
+      "framework": "19_IOS_PHOTOS_MEDIA_VISION",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0082",
+      "name": "Vision/OCR",
+      "tool_id": "apple-vision",
+      "framework": "19_IOS_PHOTOS_MEDIA_VISION",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0085",
+      "name": "Alarm Create (AlarmKit)",
+      "tool_id": "apple-alarm",
+      "framework": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0086",
+      "name": "Shortcuts/App Intents",
+      "tool_id": "",
+      "framework": "26_UI_AND_PRODUCT_EXPERIENCE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0087",
+      "name": "Share Sheet",
+      "tool_id": "",
+      "framework": "26_UI_AND_PRODUCT_EXPERIENCE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0088",
+      "name": "File Provider Extension",
+      "tool_id": "",
+      "framework": "26_UI_AND_PRODUCT_EXPERIENCE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0089",
+      "name": "iOS Notifications",
+      "tool_id": "apple-notification",
+      "framework": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0090",
+      "name": "NLP Processing",
+      "tool_id": "apple-nlp",
+      "framework": "29_OTHER",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0091",
+      "name": "Device Info",
+      "tool_id": "apple-device",
+      "framework": "29_OTHER",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0092",
+      "name": "Open URL/App",
+      "tool_id": "apple-open",
+      "framework": "29_OTHER",
+      "state": "SOURCE_NOT_VERIFIED_IOS"
+    },
+    {
+      "id": "OMN-0115",
+      "name": "External Folder Mount (iOS)",
+      "tool_id": "",
+      "framework": "07_WORKSPACE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0116",
+      "name": "iOS Permission Flow",
+      "tool_id": "",
+      "framework": "23_PERMISSION_SECURITY_PRIVACY",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0118",
+      "name": "Keychain Storage (iOS)",
+      "tool_id": "",
+      "framework": "23_PERMISSION_SECURITY_PRIVACY",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0122",
+      "name": "Background Execution (iOS)",
+      "tool_id": "",
+      "framework": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0125",
+      "name": "iOS Live Activity",
+      "tool_id": "",
+      "framework": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    },
+    {
+      "id": "OMN-0126",
+      "name": "iOS Background Fetch",
+      "tool_id": "",
+      "framework": "22_NOTIFICATION_BACKGROUND_SCHEDULE",
+      "state": "IMPLEMENTED"
+    }
+  ]
+}
