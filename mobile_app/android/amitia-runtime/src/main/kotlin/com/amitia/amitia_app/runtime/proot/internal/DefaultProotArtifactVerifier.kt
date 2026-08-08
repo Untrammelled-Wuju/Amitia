@@ -7,8 +7,12 @@ import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import java.io.File
 import java.security.MessageDigest
 
-internal class DefaultProotArtifactVerifier(private val locator: ProotBinaryLocator, private val metadataLoader: ProotMetadataVerifier? = null) {
-    fun verify(): ProotAvailability {
+internal fun interface ProotArtifactVerifier {
+    fun verify(): ProotAvailability
+}
+
+internal class DefaultProotArtifactVerifier(private val locator: ProotBinaryLocator, private val metadataLoader: ProotMetadataVerifier? = null) : ProotArtifactVerifier {
+    override fun verify(): ProotAvailability {
         val metadataResult = metadataLoader?.loadArtifact()
         if (metadataResult is ProotMetadataResult.Error) return ProotAvailability.Invalid(metadataResult.error.code, "proot.metadata.invalid")
         val artifact = (metadataResult as? ProotMetadataResult.Success)?.artifact ?: return ProotAvailability.Unavailable(ProotErrorCode.METADATA_MISSING, "proot.metadata.missing")

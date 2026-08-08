@@ -14,4 +14,9 @@ class ProotBindMountTest {
     @Test(expected = IllegalArgumentException::class) fun guest_colon_fails() { ProotBindMount.create("/host", "/mnt:extra") }
     @Test fun equality() { val a = ProotBindMount.create("/host", "/mnt"); val b = ProotBindMount.create("/host", "/mnt"); assertEquals(a, b) }
     @Test fun to_string() { val m = ProotBindMount.create("/host", "/mnt"); assertEquals("/host:/mnt", m.toString()) }
+    @Test(expected = IllegalArgumentException::class) fun host_traversal_fails() { ProotBindMount.create("/host/../../etc", "/mnt") }
+    @Test(expected = IllegalArgumentException::class) fun host_nul_fails() { ProotBindMount.create("/host\u0000", "/mnt") }
+    @Test(expected = IllegalArgumentException::class) fun guest_nul_fails() { ProotBindMount.create("/host", "/mnt\u0000") }
+    @Test(expected = IllegalArgumentException::class) fun host_escape_sdcard_fails() { ProotBindMount.create("/data/local/tmp/../../sdcard", "/mnt") }
+    @Test fun valid_runtime_root_bind() { val m = ProotBindMount.create("/data/user/0/app/files/runtime", "/opt/amitia"); assertEquals("/data/user/0/app/files/runtime", m.host); assertEquals("/opt/amitia", m.guest) }
 }

@@ -6,7 +6,9 @@ class ProotBindMount private constructor(val host: String, val guest: String) {
             require(host.isNotEmpty() && guest.isNotEmpty()) { "empty path" }
             require(host.startsWith("/") && guest.startsWith("/")) { "must be absolute" }
             require(guest != "/") { "guest cannot be root" }
-            require(!guest.contains("..")) { "no traversal" }
+            require(!host.contains("\u0000") && !guest.contains("\u0000")) { "nul byte in path" }
+            require(!host.contains("..")) { "host no traversal" }
+            require(!guest.contains("..")) { "guest no traversal" }
             require(!guest.contains(":") && !host.contains(":")) { "no colon" }
             return ProotBindMount(host, guest)
         }
