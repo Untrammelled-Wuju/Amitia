@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B141-ToolCancellationCutover",
+  "intendedFor": "B141",
+  "description": "取消链路切换迁移输入 — B141 迁移时复用 B43 已建立的取消合同",
+  "cutoverPhases": {
+    "phase1_dual_write": {
+      "description": "新取消路径与旧路径并行，验证新路径正确后切换",
+      "authority": "execution.CancellationController 为新路径权威",
+      "compatibility_layer": "旧代码的取消结果通过适配器转换为新 UnifiedToolResult"
+    },
+    "phase2_cutover": {
+      "description": "切换完成，旧路径退役",
+      "authority": "execution.CancellationController 唯一权威",
+      "cleanup": "旧取消适配代码删除，不再保留入口"
+    },
+    "phase3_verification": {
+      "description": "切割后完整验证：取消传播、迟到结果隔离、幂等性、审计",
+      "validation": "B43 硬化报告中定义的所有验证矩阵重新执行"
+    }
+  },
+  "constraints": {
+    "no_second_system": "切割完成后只保留 execution.CancellationController 单一权威",
+    "migration_safety": "切割过程中不得出现取消信号丢失或迟到结果泄漏"
+  }
+}

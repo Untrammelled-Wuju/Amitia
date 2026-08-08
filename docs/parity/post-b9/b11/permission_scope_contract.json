@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B11",
+  "description": "现有Permission Scope体系合同",
+  "generatedAt": "2026-08-08T00:30:00+08:00",
+
+  "scopeOwner": "backend/internal/extension/kernel/permission/scope.go",
+  "existingScopeTypes": [
+    "ScopeGlobal", "ScopeCharacter", "ScopeConversation", "ScopeExtension",
+    "ScopeModule", "ScopeTool", "ScopeResource", "ScopeTarget", "ScopeInvocation", "ScopeSession"
+  ],
+  "supportedScopes": {
+    "global": "全局作用域",
+    "character": "角色限定",
+    "conversation": "会话限定",
+    "extension": "扩展限定",
+    "module": "模块限定",
+    "tool": "工具限定",
+    "resource": "资源限定（文件/URI）",
+    "target": "目标限定（type+ID+path+URL）",
+    "invocation": "单次调用限定",
+    "session": "会话Session限定"
+  },
+  "resourceScope": "通过PermissionScope.ResourceID + PermissionTarget.Path/URL表达",
+  "providerScope": "通过PermissionSubject.Type=SubjectProvider + ScopeExtension表达",
+  "characterScope": "通过ScopeCharacter.CharacterID表达",
+  "conversationScope": "通过ScopeConversation.ConversationID表达",
+  "addedScopeSemantics": 0,
+  "unresolvedScope": 0
+}

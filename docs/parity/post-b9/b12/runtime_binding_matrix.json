@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime Binding Matrix - 所有RuntimeType Binding定义与未来Provider映射",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "bindings": [
+    {
+      "binding": "builtin",
+      "existingCapability": "RuntimeTypeBuiltin constant",
+      "existingAdapter": "N/A (host internal)",
+      "providerDomain": "HostInternal",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "internal",
+      "existingCapability": "RuntimeTypeInternal constant",
+      "existingAdapter": "Host internal invocation path",
+      "providerDomain": "HostInternal",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "legacy",
+      "existingCapability": "RuntimeTypeLegacy constant",
+      "existingAdapter": "Legacy migration path",
+      "providerDomain": "Legacy",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED - migrated only",
+      "futureImplementationStep": null,
+      "note": "B9P6 已冻结此Adapter，新Provider禁止绑定"
+    },
+    {
+      "binding": "javascript",
+      "existingCapability": "RuntimeTypeJavaScript constant",
+      "existingAdapter": "javascript_main/host.go",
+      "providerDomain": "JavaScriptRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "wasm",
+      "existingCapability": "RuntimeTypeWASM constant",
+      "existingAdapter": "wasm_runtime/host_gateway.go",
+      "providerDomain": "WASMRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "workflow",
+      "existingCapability": "RuntimeTypeWorkflow constant",
+      "existingAdapter": "Workflow execution path",
+      "providerDomain": "WorkflowRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "mcp",
+      "existingCapability": "RuntimeTypeMCP constant",
+      "existingAdapter": "MCP tool path",
+      "providerDomain": "MCPRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "task",
+      "existingCapability": "RuntimeTypeTask constant",
+      "existingAdapter": "task_runtime/",
+      "providerDomain": "TaskRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "trusted_service",
+      "existingCapability": "RuntimeTypeTrustedService constant",
+      "existingAdapter": "trusted_service/rpc_session.go",
+      "providerDomain": "TrustedServiceRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "plugin_js",
+      "existingCapability": "RuntimeTypePluginJS constant",
+      "existingAdapter": "Extension Kernel internal",
+      "providerDomain": "PluginRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "plugin_service",
+      "existingCapability": "RuntimeTypePluginService constant",
+      "existingAdapter": "Extension Kernel internal",
+      "providerDomain": "PluginRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "ALREADY_SUPPORTED",
+      "futureImplementationStep": null
+    },
+    {
+      "binding": "browser",
+      "existingCapability": "RuntimeTypeBrowser constant",
+      "existingAdapter": "NOT_IMPLEMENTED - constant declared only",
+      "providerDomain": "BrowserRuntime",
+      "platform": ["windows", "linux", "macos"],
+      "status": "BINDING_CONTRACT_IMPLEMENTED",
+      "futureImplementationStep": "B79-B92"
+    }
+  ],
+
+  "futureBindings": [
+    {
+      "binding": "android_native (future)",
+      "description": "Android平台原生Provider运行时绑定",
+      "requiredStep": "B55-B78",
+      "contract": "必须实现RuntimeAdapter接口，注册到RuntimeAdapterRegistry"
+    },
+    {
+      "binding": "ios_native (future)",
+      "description": "iOS平台原生Provider运行时绑定",
+      "requiredStep": "B123-B138",
+      "contract": "必须实现RuntimeAdapter接口，注册到RuntimeAdapterRegistry"
+    },
+    {
+      "binding": "desktop_extension (future)",
+      "description": "Desktop平台扩展Provider运行时绑定",
+      "requiredStep": "TBD",
+      "contract": "必须实现RuntimeAdapter接口，注册到RuntimeAdapterRegistry"
+    }
+  ],
+
+  "note": "B12 ADAPTER_ONLY_MODE = RuntimeType enum已定义, 真实Android/iOS/Desktop Adapter实现留给后续步骤"
+}

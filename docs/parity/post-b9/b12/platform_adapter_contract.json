@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Platform Adapter Contract - 后续Platform Provider接入的唯一Canonical合同",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "androidAdapter": {
+    "contract": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegister": "RuntimeAdapterRegistry.Register(RuntimeTypeAndroid, adapterAdapterInstance)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+      "mustReturnValue": "UnifiedToolResult (normalized by adapter)",
+      "mustPropagate": ["ctx (deadline/cancellation)", "binding (RuntimeBinding)", "invocation (ToolInvocationContext)"],
+      "mustNotContain": ["ToolRegistry", "PermissionStore", "AgentPlanner", "GlobalRetryEngine", "GlobalTimeoutEngine"]
+    },
+    "status": "CONTRACT_ONLY",
+    "implementationStep": "B55-B78",
+    "futureProvider": "AndroidAccessibility, AndroidNotification, AndroidHealthBridge..."
+  },
+
+  "iosAdapter": {
+    "contract": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegister": "RuntimeAdapterRegistry.Register(RuntimeTypeIOS, iOSAdapterInstance)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+      "mustReturnValue": "UnifiedToolResult (normalized by adapter)",
+      "mustPropagate": ["ctx (deadline/cancellation)", "binding (RuntimeBinding)", "invocation (ToolInvocationContext)"],
+      "mustNotContain": ["ToolRegistry", "PermissionStore", "AgentPlanner", "GlobalRetryEngine", "GlobalTimeoutEngine"]
+    },
+    "status": "CONTRACT_ONLY",
+    "implementationStep": "B123-B138",
+    "futureProvider": "iOSHealthKit, iOSCalendar, iOSContacts, iOSNotification..."
+  },
+
+  "desktopAdapter": {
+    "contract": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegister": "RuntimeAdapterRegistry.Register(RuntimeTypeDesktop, desktopAdapterInstance)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+      "mustReturnValue": "UnifiedToolResult (normalized by adapter)",
+      "mustPropagate": ["ctx (deadline/cancellation)", "binding (RuntimeBinding)", "invocation (ToolInvocationContext)"],
+      "mustNotContain": ["ToolRegistry", "PermissionStore", "AgentPlanner", "GlobalRetryEngine", "GlobalTimeoutEngine"]
+    },
+    "status": "CONTRACT_ONLY",
+    "implementationStep": "TBD",
+    "futureProvider": "DesktopClipboard, DesktopNotification, DesktopScreenshot..."
+  },
+
+  "browserAdapter": {
+    "contract": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegister": "RuntimeAdapterRegistry.Register(RuntimeTypeBrowser, browserAdapterInstance)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+      "mustReturnValue": "UnifiedToolResult (normalized by adapter)",
+      "mustPropagate": ["ctx (deadline/cancellation)", "binding (RuntimeBinding)", "invocation (ToolInvocationContext)"],
+      "mustNotContain": ["ToolRegistry", "PermissionStore", "AgentPlanner", "GlobalRetryEngine", "GlobalTimeoutEngine"]
+    },
+    "status": "CONTRACT_ONLY",
+    "implementationStep": "B79-B92",
+    "futureProvider": "BrowserRuntime, BrowserTab, BrowserBookmarks..."
+  },
+
+  "sandboxAdapter": {
+    "contract": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegister": "RuntimeAdapterRegistry.Register(RuntimeTypeSandbox, sandboxAdapterInstance)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+      "mustReturnValue": "UnifiedToolResult (normalized by adapter)",
+      "mustPropagate": ["ctx (deadline/cancellation)", "binding (RuntimeBinding)", "invocation (ToolInvocationContext)"]
+    },
+    "status": "CONTRACT_ONLY",
+    "implementationStep": "iOS sandbox step (TBD)",
+    "futureProvider": "iOSSandbox, AndroidLinuxSandbox..."
+  }
+}

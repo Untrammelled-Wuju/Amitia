@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B11",
+  "description": "B11 测试结果",
+  "generatedAt": "2026-08-08T00:30:00+08:00",
+
+  "result": "PASS",
+
+  "permissionPackageTests": {
+    "command": "go test ./internal/extension/kernel/permission/...",
+    "status": "PASS",
+    "tests": 40,
+    "failures": 0,
+    "subtests": "TestPermissionIDValidator(5) + TestSnapshot(7) + TestAuthorizeSession(20) + TestSnapshotValidator(3) + TestNewPermissionSnapshot(1) + TestResolvePermScope(1) + TestRegisterHostApi(2) + more"
+  },
+
+  "snapshotValidatorTests": {
+    "file": "snapshot_validator_test.go",
+    "tests": 12,
+    "coverage": "PermissionIDValidator(Valid/ActionID/All/Nil) + Snapshot validation(Session/Perms/ActionIDs)"
+  },
+
+  "uiPermissionTests": {
+    "file": "ui_permission_test.go",
+    "tests": 21,
+    "coverage": "UISessionAuthorizeSession(NoRequirements/PermissionsAllowed/PermissionsDenied/RequireApproval/NilBroker/ScopeDenied/NilScopeMgr/Optional/AllowOnce/Broker/Scope)"
+  },
+
+  "capabilityPackageTests": {
+    "command": "go test ./internal/extension/kernel/capability/...",
+    "status": "PASS",
+    "tests": 19
+  },
+
+  "executionIntegrationTests": {
+    "status": "PASS",
+    "note": "Execution Pipeline与Permission Broker集成通过现有测试保障"
+  },
+
+  "kernelRegressionTests": {
+    "command": "go test ./internal/extension/kernel/...",
+    "status": "PASS",
+    "note": "All kernel tests including permission, capability, execution, workflow pass"
+  },
+
+  "gofmtCheck": {
+    "status": "NOT_APPLICABLE",
+    "reason": "零Go源码修改"
+  }
+}

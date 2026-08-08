@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "totalComposites": 4,
+  "composites": [
+    {
+      "compositeToolId": "browser.full_automation",
+      "compositeLabel": "Browser Full Automation",
+      "supportingCapabilityIds": [
+        "external/browser/control_close_all_virtual_displays",
+        "external/browser/floating_window_overlay",
+        "external/browser/capture_capture_screenshot",
+        "external/browser/automation_execute_browser",
+        "external/browser/control_virtualdisplayoverlay",
+        "external/browser/control_screen_capture",
+        "external/browser/capture_browser_screenshot",
+        "external/browser/switch_browser_select_option",
+        "external/browser/stop_browser_close",
+        "external/browser/capture_screen_capture",
+        "external/browser/control_reasoning_thinking_display",
+        "external/browser/control_screen_casting",
+        "external/browser/browser_run_code",
+        "external/browser/capture_screen_recording_casting",
+        "external/browser/read_screen_capture",
+        "external/browser/capture_screenshot_share",
+        "external/browser/floatingwindowmanager",
+        "external/browser/stop_browser_close_all",
+        "external/browser/capture_browser_take_screenshot",
+        "external/browser/read_get_terminal_session_screen"
+      ],
+      "primaryCapabilityId": "external/browser/automation_execute_browser",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "description": "Composite: navigate + capture + control + execute + read + extract"
+    },
+    {
+      "compositeToolId": "memory.hybrid_search",
+      "compositeLabel": "Memory Hybrid Search",
+      "supportingCapabilityIds": [
+        "external/memory/read_memory_fuzzy_search",
+        "external/memory/read_query_memory_links",
+        "external/memory/read_get_memory_by_title",
+        "external/memory/read_query_memory",
+        "external/memory/read_memorysearchsettingspreferences",
+        "external/memory/read_memorysearchconfig_memorysearchdebuginfo",
+        "external/memory/read_memory_get_retrieve",
+        "external/memory/read_read_health_data"
+      ],
+      "primaryCapabilityId": "external/memory/read_memory_fuzzy_search",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "description": "Composite: vector search + keyword search + session persistence"
+    },
+    {
+      "compositeToolId": "device.bluetooth_composite",
+      "compositeLabel": "Device Bluetooth Composite",
+      "supportingCapabilityIds": [
+        "external/device/read_bluetooth_send_and_read",
+        "external/character/read_bluetooth_ble_read_characteristic",
+        "external/network/request_enable_bluetooth",
+        "external/device/bluetooth_accept",
+        "external/device/send_bluetooth_send",
+        "external/device/bluetooth_ble_discover_services",
+        "external/character/update_bluetooth_ble_write_and_read_characteristic",
+        "external/notification/read_bluetooth_ble_read_notifications",
+        "external/security/start_permission_bluetooth_connect",
+        "external/device/read_bluetooth_listen",
+        "external/device/read_list_bluetooth_bonded_devices",
+        "external/device/stop_bluetooth_close",
+        "external/device/start_bluetooth_connect",
+        "external/device/bluetooth_device_detection",
+        "external/device/bluetooth_device_scan",
+        "external/device/bluetooth_device_management",
+        "external/device/start_bluetooth_ble_connect",
+        "external/device/read_get_bluetooth_state",
+        "external/device/scan_bluetooth_devices",
+        "external/device/read_bluetooth_read",
+        "external/character/update_bluetooth_ble_write_characteristic"
+      ],
+      "primaryCapabilityId": "external/device/read_bluetooth_send_and_read",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "description": "Composite: BLE discover + read + write + scan + connect"
+    },
+    {
+      "compositeToolId": "process.terminal_session",
+      "compositeLabel": "Terminal Session",
+      "supportingCapabilityIds": [
+        "external/process/execute_hidden_terminal_command",
+        "external/process/create_create_terminal_session",
+        "external/process/execute_in_terminal_session_streaming",
+        "external/process/operitshowershellrunner",
+        "external/process/nlp_processing",
+        "external/process/execute_shell",
+        "external/process/execution_execute_shell",
+        "external/process/standard_runtime_shell_execution",
+        "external/process/stop_close_terminal_session",
+        "external/process/execute_in_terminal_session"
+      ],
+      "primaryCapabilityId": "external/process/create_create_terminal_session",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "description": "Composite: create session + execute + streaming + terminate"
+    }
+  ]
+}

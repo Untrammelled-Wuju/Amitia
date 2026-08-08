@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "toolMappings": [],
+  "note": "B14 does NOT register any Browser Tool in production ToolRegistry. All Tool registrations are deferred to B79-B83 when real Browser Provider is implemented. The contract-only BrowserProvider is NOT registered for production use."
+}

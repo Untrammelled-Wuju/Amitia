@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Agent上下文所有权 - 字段创建者、写权限、生命周期",
+
+  "contextFields": [
+    {
+      "field": "characterId",
+      "createdBy": "interaction.ScopeResolver.Resolve",
+      "writableBy": "interaction.ScopeResolver (once set)",
+      "readOnlyBy": ["chat", "decision", "mindruntime"],
+      "destroyedWhen": "Request completes",
+      "persisted": true,
+      "authority": "interaction.InteractionScope"
+    },
+    {
+      "field": "conversationId",
+      "createdBy": "interaction.ScopeResolver.Resolve",
+      "writableBy": ["chat.commit_coordinator"],
+      "readOnlyBy": ["decision", "mindruntime", "pipelinecheckpoint"],
+      "destroyedWhen": "Conversation deleted",
+      "persisted": true,
+      "authority": "backend/internal/chat/conversation_state"
+    },
+    {
+      "field": "userId",
+      "createdBy": "interaction.ScopeResolver.Resolve",
+      "writableBy": "interaction.ScopeResolver (once set)",
+      "readOnlyBy": ["decision", "mindruntime"],
+      "destroyedWhen": "User deleted",
+      "persisted": true,
+      "authority": "interaction.InteractionScope"
+    },
+    {
+      "field": "traceId",
+      "createdBy": "interaction.UnifiedEntry (stableRequestID)",
+      "writableBy": "interaction.UnifiedEntry (once set)",
+      "readOnlyBy": ["chat", "decision", "mindruntime", "pipelinecheckpoint"],
+      "destroyedWhen": "Request completes",
+      "persisted": false,
+      "authority": "interaction.UnifiedEntry"
+    },
+    {
+      "field": "sessionId",
+      "createdBy": "interaction.ScopeResolver.Resolve",
+      "writableBy": "interaction.ScopeResolver (once set)",
+      "readOnlyBy": ["chat", "decision"],
+      "destroyedWhen": "Session expires",
+      "persisted": true,
+      "authority": "interaction.InteractionScope"
+    },
+    {
+      "field": "goal",
+      "createdBy": "decision.GoalRegistry",
+      "writableBy": ["decision.GoalRegistry", "decision.Arbitration"],
+      "readOnlyBy": ["interaction.RuntimePipeline", "chat"],
+      "destroyedWhen": "Goal achieved/abandoned",
+      "persisted": true,
+      "authority": "decision.GoalRegistry"
+    },
+    {
+      "field": "behaviorPlan",
+      "createdBy": "decision.BehaviorPlanBuilder",
+      "writableBy": ["decision.Arbitration", "decision.BehaviorPlanBuilder"],
+      "readOnlyBy": ["interaction.RuntimePipeline", "chat"],
+      "destroyedWhen": "Plan executed",
+      "persisted": false,
+      "authority": "decision.BehaviorPlanBuilder"
+    },
+    {
+      "field": "expressionPlan",
+      "createdBy": "decision.ExpressionPlan",
+      "writableBy": ["decision.ExpressionControl"],
+      "readOnlyBy": ["chat.expression_render"],
+      "destroyedWhen": "Expression rendered",
+      "persisted": false,
+      "authority": "decision.ExpressionPlan"
+    },
+    {
+      "field": "reflectionCandidate",
+      "createdBy": "mindruntime.ReflectionRun",
+      "writableBy": ["mindruntime.ReflectionSupervisor", "mindruntime.Reconciliation"],
+      "readOnlyBy": ["chat"],
+      "destroyedWhen": "Reflection adopted/rejected",
+      "persisted": true,
+      "authority": "mindruntime.Reconciliation"
+    },
+    {
+      "field": "checkpoint",
+      "createdBy": "pipelinecheckpoint.Manager",
+      "writableBy": ["pipelinecheckpoint.Manager"],
+      "readOnlyBy": ["interaction.Orchestrator", "mindruntime.Replay"],
+      "destroyedWhen": "Conversation deleted",
+      "persisted": true,
+      "authority": "pipelinecheckpoint.Manager"
+    },
+    {
+      "field": "snapshot",
+      "createdBy": "mindruntime.Snapshot",
+      "writableBy": ["mindruntime.Snapshot"],
+      "readOnlyBy": ["mindruntime.Replay", "mindruntime.Reconciliation"],
+      "destroyedWhen": "Consolidated",
+      "persisted": true,
+      "authority": "mindruntime.Snapshot"
+    },
+    {
+      "field": "tokenBudget",
+      "createdBy": "interaction.TokenBudgetManager",
+      "writableBy": ["interaction.TokenBudgetManager"],
+      "readOnlyBy": ["chat", "decision"],
+      "destroyedWhen": "Request completes",
+      "persisted": false,
+      "authority": "interaction.TokenBudgetManager"
+    }
+  ],
+
+  "contextTypes": [
+    {
+      "type": "interaction.UnifiedEntryRequest",
+      "owner": "interaction.UnifiedEntry",
+      "scope": "Request scope",
+      "lifecycle": "Request duration"
+    },
+    {
+      "type": "interaction.ProcessRequest",
+      "owner": "interaction.Orchestrator",
+      "scope": "Orchestration scope",
+      "lifecycle": "Processing duration"
+    },
+    {
+      "type": "interaction.InteractionScope",
+      "owner": "interaction.ScopeResolver",
+      "scope": "Interaction scope",
+      "lifecycle": "Interaction duration"
+    },
+    {
+      "type": "interaction.ContextSnapshot",
+      "owner": "interaction.ContextLoader",
+      "scope": "Pipeline scope",
+      "lifecycle": "Pipeline execution"
+    },
+    {
+      "type": "decision.BehaviorPlan",
+      "owner": "decision.BehaviorPlanBuilder",
+      "scope": "Planning scope",
+      "lifecycle": "Plan execution"
+    },
+    {
+      "type": "mindruntime.ReflectionCandidate",
+      "owner": "mindruntime.ReflectionRun",
+      "scope": "Reflection scope",
+      "lifecycle": "Reflection duration"
+    }
+  ]
+}

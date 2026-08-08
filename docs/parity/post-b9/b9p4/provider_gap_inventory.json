@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "totalGapCount": 24,
+  "gaps": [
+    {
+      "gapId": "PROV-GAP-001",
+      "providerSemantic": "BROWSER_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/browser/automation_execute_browser",
+        "external/browser/browser_run_code",
+        "external/browser/capture_browser_screenshot",
+        "external/browser/capture_browser_take_screenshot",
+        "external/browser/capture_capture_screenshot",
+        "external/browser/capture_screen_capture",
+        "external/browser/capture_screen_recording_casting",
+        "external/browser/capture_screenshot_share",
+        "external/browser/control_close_all_virtual_displays",
+        "external/browser/control_reasoning_thinking_display",
+        "external/browser/control_screen_capture",
+        "external/browser/control_screen_casting",
+        "external/browser/control_virtualdisplayoverlay",
+        "external/browser/floating_window_overlay",
+        "external/browser/floatingwindowmanager",
+        "external/browser/read_get_terminal_session_screen",
+        "external/browser/read_screen_capture",
+        "external/browser/stop_browser_close",
+        "external/browser/stop_browser_close_all",
+        "external/browser/switch_browser_select_option"
+      ],
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B79-B83: Browser Runtime",
+      "platforms": ["DESKTOP"],
+      "complexity": "HIGH",
+      "description": "需要引入Playwright/CDP浏览器自动化引擎作为Provider"
+    },
+    {
+      "gapId": "PROV-GAP-002",
+      "providerSemantic": "SEARCH_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/search/read_android_weather_query",
+        "external/search/read_weather_query",
+        "external/search/vectorindexmanager"
+      ],
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B84-B86: Search Provider",
+      "platforms": ["DESKTOP", "ANDROID", "IOS"],
+      "complexity": "MEDIUM",
+      "description": "需引入搜索引擎API Provider(Google/Bing/Perplexity等)"
+    },
+    {
+      "gapId": "PROV-GAP-003",
+      "providerSemantic": "CALENDAR_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/tool/create_calendar_event_create",
+        "external/tool/stop_android_calendar_access"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Calendar Platform Adapter",
+      "platforms": ["ANDROID", "IOS"],
+      "complexity": "LOW",
+      "description": "需要Android Calendar Provider/iOS EventKit适配器"
+    },
+    {
+      "gapId": "PROV-GAP-004",
+      "providerSemantic": "NOTIFICATION_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/notification/notification_fgs_management",
+        "external/notification/notification_management",
+        "external/notification/read_android_notification_read",
+        "external/notification/read_bluetooth_ble_read_notifications",
+        "external/notification/read_get_notifications",
+        "external/notification/send_send_notification",
+        "external/notification/toast"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Notification Platform Adapter",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要Android NotificationManager适配器(部分可由desktop.notification覆盖)"
+    },
+    {
+      "gapId": "PROV-GAP-005",
+      "providerSemantic": "MICROPHONE_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/voice/capture_permission_record_audio",
+        "external/tool/capture_microphone_recording"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Microphone Platform Adapter",
+      "platforms": ["ANDROID", "IOS"],
+      "complexity": "MEDIUM",
+      "description": "需要Android AudioRecord/iOS AVAudioRecorder适配器"
+    },
+    {
+      "gapId": "PROV-GAP-006",
+      "providerSemantic": "CAMERA_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/device/read_camera_capture",
+        "external/device/capture_camera_image_capture"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Camera Platform Adapter",
+      "platforms": ["ANDROID", "IOS"],
+      "complexity": "MEDIUM",
+      "description": "需要Android CameraX/iOS AVFoundation适配器"
+    },
+    {
+      "gapId": "PROV-GAP-007",
+      "providerSemantic": "LOCATION_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/device/read_get_device_location",
+        "external/tool/read_android_location_get",
+        "external/tool/read_location_get",
+        "external/tool/location_tracking",
+        "external/tool/location_tracking_map_0378"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Location Platform Adapter",
+      "platforms": ["ANDROID", "IOS"],
+      "complexity": "LOW",
+      "description": "需要Android FusedLocationProvider/iOS CoreLocation适配器"
+    },
+    {
+      "gapId": "PROV-GAP-008",
+      "providerSemantic": "NFC_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/device/read_nfc_tag_read"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: NFC Platform Adapter",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要Android NFC Adapter"
+    },
+    {
+      "gapId": "PROV-GAP-009",
+      "providerSemantic": "SYSTEM_SETTINGS_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/device/read_get_system_setting",
+        "external/device/update_modify_system_setting",
+        "external/device/system_settings_manipulation"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: System Settings Platform Adapter",
+      "platforms": ["ANDROID"],
+      "complexity": "MEDIUM",
+      "description": "需要Android Settings.System/ContentResolver适配器"
+    },
+    {
+      "gapId": "PROV-GAP-010",
+      "providerSemantic": "ANDROID_DEVICE_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/device/bluetooth_accept",
+        "external/device/bluetooth_ble_discover_services",
+        "external/device/bluetooth_device_detection",
+        "external/device/bluetooth_device_management",
+        "external/device/bluetooth_device_scan",
+        "external/device/device_admin_privilege",
+        "external/device/device_info",
+        "external/device/device_info_map_0284",
+        "external/device/homekit_device_control",
+        "external/device/read_bluetooth_listen",
+        "external/device/read_bluetooth_read",
+        "external/device/read_bluetooth_send_and_read",
+        "external/device/read_get_bluetooth_state",
+        "external/device/read_list_bluetooth_bonded_devices",
+        "external/device/scan_bluetooth_devices",
+        "external/device/send_bluetooth_send",
+        "external/device/start_bluetooth_ble_connect",
+        "external/device/start_bluetooth_connect",
+        "external/device/stop_bluetooth_close",
+        "external/device/update_modify_system_setting"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B55+: Android Device Provider Extension",
+      "platforms": ["ANDROID"],
+      "complexity": "HIGH",
+      "description": "需要扩展现有mobile_app/android为完整Android设备能力Provider"
+    },
+    {
+      "gapId": "PROV-GAP-011",
+      "providerSemantic": "ANDROID_TOOL_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/tool/read_android_clipboard_read",
+        "external/tool/read_android_contacts_read",
+        "external/tool/send_send_broadcast",
+        "external/tool/send_share_intent",
+        "external/tool/interface_execute_ui",
+        "external/tool/execute_intent",
+        "external/tool/read_shizuku_action_listener"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B55+: Android Tool Provider Extension",
+      "platforms": ["ANDROID"],
+      "complexity": "MEDIUM",
+      "description": "需要扩展Android Intent/Broadcast/Clipboard/SHMS Tool Provider"
+    },
+    {
+      "gapId": "PROV-GAP-012",
+      "providerSemantic": "PERMISSION_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/security/install_permission_request_install_packages",
+        "external/security/permission",
+        "external/security/permission_call_phone",
+        "external/security/read_permission_read_contacts",
+        "external/security/read_permission_read_external_storage",
+        "external/security/read_permission_read_phone_state",
+        "external/security/send_permission_post_notifications",
+        "external/security/send_permission_send_sms",
+        "external/security/start_permission_bluetooth_connect",
+        "external/security/update_permission_write_contacts",
+        "external/security/update_permission_write_settings"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Runtime Permission Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "MEDIUM",
+      "description": "需要Android运行时权限申请Provider(ActivityResultContracts)"
+    },
+    {
+      "gapId": "PROV-GAP-013",
+      "providerSemantic": "SYSTEM_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/system/accessibilitysystemoperationtools",
+        "external/system/input_event_injection",
+        "external/system/install_application_install_uninstall",
+        "external/system/install_install_app",
+        "external/system/install_shizuku_bundled_installer",
+        "external/system/install_uninstall_app",
+        "external/system/open_url_app",
+        "external/system/operitapplication",
+        "external/system/read_get_app_usage_time",
+        "external/system/read_list_installed_apps",
+        "external/system/rootsystemoperationtools",
+        "external/system/shortcuts_app_intents",
+        "external/system/start_start_app",
+        "external/system/update_android_clipboard_write",
+        "external/system/update_update_full_apk",
+        "external/system/update_update_patch_incremental"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B62-B68: Android System Provider Extension",
+      "platforms": ["ANDROID", "DESKTOP"],
+      "complexity": "HIGH",
+      "description": "需要扩展现有update/install工具为完整Android系统Provider"
+    },
+    {
+      "gapId": "PROV-GAP-014",
+      "providerSemantic": "VOICE_CAPTURE_UNIQUE",
+      "affectedCapabilityIds": [
+        "external/voice/capture_permission_record_audio",
+        "external/tool/capture_microphone_recording"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Microphone + AudioRecord",
+      "platforms": ["ANDROID"],
+      "complexity": "MEDIUM",
+      "description": "需要Android录音Provider(AudioRecord/MediaRecorder)"
+    },
+    {
+      "gapId": "PROV-GAP-015",
+      "providerSemantic": "CHARACTER_BLE_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/character/read_bluetooth_ble_read_characteristic",
+        "external/character/update_bluetooth_ble_write_and_read_characteristic",
+        "external/character/update_bluetooth_ble_write_characteristic"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Character BLE Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要Android Bluetooth GATT Provider用于BLE Characteristic读写"
+    },
+    {
+      "gapId": "PROV-GAP-016",
+      "providerSemantic": "CHARACTER_WAKE_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/character/personalwakefeatureextractor",
+        "external/character/read_personalwakelistener"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B55+: Android Wakeup Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要扩展Android Keyphrase Wakeup Provider"
+    },
+    {
+      "gapId": "PROV-GAP-017",
+      "providerSemantic": "CHARACTER_CARD_IMPORT_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/character/install_character_card_sillytavern_import"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B55+: Character Card Import Provider",
+      "platforms": ["DESKTOP"],
+      "complexity": "LOW",
+      "description": "需要扩展SillyTavern角色卡导入Provider"
+    },
+    {
+      "gapId": "PROV-GAP-018",
+      "providerSemantic": "SSH_CONNECTION_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/file/start_sshfileconnectionmanager",
+        "external/tool/sshd_server_manager"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B11: SSH File Connection Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "MEDIUM",
+      "description": "需要SSH/SFTP连接管理Provider"
+    },
+    {
+      "gapId": "PROV-GAP-019",
+      "providerSemantic": "FTP_SERVER_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/tool/ftp_server_manager"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B11: FTP Server Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要FTP Server管理Provider"
+    },
+    {
+      "gapId": "PROV-GAP-020",
+      "providerSemantic": "CLIPBOARD_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/tool/clipboard_access",
+        "external/tool/clipboard_fallback",
+        "external/tool/read_clipboard_read",
+        "external/tool/update_android_clipboard_write"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Clipboard Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要Android ClipboardManager Provider"
+    },
+    {
+      "gapId": "PROV-GAP-021",
+      "providerSemantic": "CONTACTS_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/tool/read_android_contacts_read",
+        "external/security/read_permission_read_contacts",
+        "external/security/update_permission_write_contacts"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Contacts Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要Android ContactsContract Provider"
+    },
+    {
+      "gapId": "PROV-GAP-022",
+      "providerSemantic": "CALL_PHONE_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/security/permission_call_phone"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Phone/SMS Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要Android Telecom Provider"
+    },
+    {
+      "gapId": "PROV-GAP-023",
+      "providerSemantic": "SMS_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/security/send_permission_send_sms",
+        "external/security/read_permission_read_phone_state"
+      ],
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: SMS Provider",
+      "platforms": ["ANDROID"],
+      "complexity": "LOW",
+      "description": "需要Android SmsManager Provider"
+    },
+    {
+      "gapId": "PROV-GAP-024",
+      "providerSemantic": "SHIZUKU_PROVIDER",
+      "affectedCapabilityIds": [
+        "external/system/install_shizuku_bundled_installer",
+        "external/tool/read_shizuku_action_listener"
+      ],
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B62-B68+: Shizuku/ADB Provider Extension",
+      "platforms": ["ANDROID"],
+      "complexity": "HIGH",
+      "description": "需要扩展Shizuku ADB Provider为系统级操作提供能力"
+    }
+  ]
+}

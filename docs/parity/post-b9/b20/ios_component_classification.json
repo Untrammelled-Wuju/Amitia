@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:01:00+08:00",
+  "description": "iOS组件分类 - 每项仅归属单一类别",
+
+  "classificationRules": {
+    "IOS_PROJECT_INFRASTRUCTURE": "Flutter iOS构建壳/入口，非Adapter/Provider",
+    "IOS_PLATFORM_BRIDGE": "Platform与Flutter的通信桥",
+    "IOS_SANDBOX_RUNTIME": "iOS沙盒运行时(iSH/Alpine等)",
+    "IOS_NATIVE_PROVIDER": "iOS原生能力Provider(HealthKit/Calendar等)",
+    "IOS_BACKGROUND_INFRASTRUCTURE": "iOS后台任务/通知等",
+    "IOS_UI_LAYER": "iOS UI层",
+    "IOS_STATE_OWNER": "iOS状态持有",
+    "TEST_ONLY": "测试代码",
+    "LEGACY": "遗留组件",
+    "UNRELATED": "与iOS无关",
+    "UNKNOWN": "未分类(必须=0)"
+  },
+
+  "components": [
+    {
+      "id": "IOS-CLS-001",
+      "component": "AppDelegate.swift",
+      "path": "mobile_app/ios/Runner/AppDelegate.swift",
+      "classification": "IOS_PROJECT_INFRASTRUCTURE",
+      "reason": "仅为Flutter iOS应用入口模板，未实现Runtime Adapter桥接"
+    },
+    {
+      "id": "IOS-CLS-002",
+      "component": "RunnerTests.swift",
+      "path": "mobile_app/ios/RunnerTests/RunnerTests.swift",
+      "classification": "TEST_ONLY",
+      "reason": "空测试模板"
+    },
+    {
+      "id": "IOS-CLS-003",
+      "component": "MethodChannel 'com.amitia.amitia_app/runtime'",
+      "path": "mobile_app/lib/core/backend_connection/providers/runtime_backend_connection_source.dart",
+      "classification": "IOS_PLATFORM_BRIDGE",
+      "reason": "Dart<->Native通信通道，Android/iOS共享，用于后端连接发现"
+    },
+    {
+      "id": "IOS-CLS-004",
+      "component": "BackendConnectionRepository",
+      "path": "mobile_app/lib/core/backend_connection/",
+      "classification": "IOS_PROJECT_INFRASTRUCTURE",
+      "reason": "跨平台连接仓库，不属于iOS-specific Adapter"
+    }
+  ],
+
+  "counts": {
+    "IOS_PROJECT_INFRASTRUCTURE": 2,
+    "IOS_PLATFORM_BRIDGE": 1,
+    "IOS_SANDBOX_RUNTIME": 0,
+    "IOS_NATIVE_PROVIDER": 0,
+    "IOS_BACKGROUND_INFRASTRUCTURE": 0,
+    "IOS_UI_LAYER": 0,
+    "IOS_STATE_OWNER": 0,
+    "TEST_ONLY": 1,
+    "LEGACY": 0,
+    "UNRELATED": 0,
+    "UNKNOWN": 0
+  }
+}

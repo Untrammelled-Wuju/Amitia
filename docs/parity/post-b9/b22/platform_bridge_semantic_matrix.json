@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "Platform Bridge Semantic矩阵 - 验证三平台Bridge层语义一致性（transportOnly DTO）",
+
+  "matrix": [
+    {
+      "contract": "Bridge request DTO",
+      "android": "AndroidBridgeRequest (transportOnly=true)",
+      "ios": "IOSBridgeRequest (transportOnly=true)",
+      "desktop": "DesktopBridgeRequest (transportOnly=true)",
+      "uniform": true,
+      "note": "不同名称但相同语义：均为transport-only请求携带"
+    },
+    {
+      "contract": "Bridge response DTO",
+      "android": "AndroidBridgeResponse (transportOnly=true)",
+      "ios": "IOSBridgeResponse (transportOnly=true)",
+      "desktop": "DesktopBridgeResponse (transportOnly=true)",
+      "uniform": true,
+      "note": "不同名称但相同语义：均为transport-only结果返回"
+    },
+    {
+      "contract": "DTO ownership",
+      "android": "Adapter consumes DTO; Kernel never sees it",
+      "ios": "Adapter consumes DTO; Kernel never sees it",
+      "desktop": "Adapter consumes DTO; Kernel never sees it",
+      "uniform": true
+    },
+    {
+      "contract": "DTO authority",
+      "android": "DTO has no Runtime Authority",
+      "ios": "DTO has no Runtime Authority",
+      "desktop": "DTO has no Runtime Authority",
+      "uniform": true
+    },
+    {
+      "contract": "DTO → Canonical mapping",
+      "android": "BridgeRequest → ToolInvocationContext",
+      "ios": "BridgeRequest → ToolInvocationContext",
+      "desktop": "BridgeRequest → ToolInvocationContext",
+      "uniform": true
+    },
+    {
+      "contract": "Canonical → DTO mapping",
+      "android": "UnifiedToolResult → BridgeResponse",
+      "ios": "UnifiedToolResult → BridgeResponse",
+      "desktop": "UnifiedToolResult → BridgeResponse",
+      "uniform": true
+    },
+    {
+      "contract": "Native error mapping",
+      "android": "BridgeError → ToolError (adapter responsibility)",
+      "ios": "BridgeError → ToolError (adapter responsibility)",
+      "desktop": "BridgeError → ToolError (adapter responsibility)",
+      "uniform": true
+    }
+  ],
+
+  "summary": {
+    "totalContracts": 7,
+    "androidPass": 7,
+    "iosPass": 7,
+    "desktopPass": 7,
+    "anyFail": 0
+  },
+
+  "allDtoAreTransportOnly": true,
+  "noDtoHasRuntimeAuthority": true,
+  "dtoNeverExitsAdapterScope": true,
+  "dtoMappingDirection": "Adapter maps DTO ↔ Canonical",
+
+  "statement": "三个平台的Bridge DTO语义完全一致：transport-only请求/响应携带，拥有者仅为Adapter，DTO不拥有Runtime Authority，不泄露到Kernel层。Adapter负责DTO与Canonical类型之间的双向映射。"
+}

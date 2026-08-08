@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B148-INPUT",
+  "sourceStep": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B148 iOS Sandbox集成输入 - 来自B123冻结的合约",
+
+  "prerequisites": {
+    "B9P8": "PASS",
+    "B12": "PASS_NO_CODE_CHANGE",
+    "B18": "PASS",
+    "B123": "PASS_NO_CODE_CHANGE",
+    "B124": "PASS",
+    "B125": "PASS",
+    "B126": "PASS"
+  },
+
+  "integrationRecord": {
+    "note": "B148为最终集成步骤 - 仅记录canonical信息，B123不执行B148",
+    "purpose": "为最终集成提供完整的Runtime Binding/Provider/RuntimeHost引用"
+  },
+
+  "canonicalRuntimeBinding": {
+    "type": "RuntimeTypeIOS_Native",
+    "value": "ios_native",
+    "location": "backend/internal/extension/kernel/capability/runtime_adapter.go"
+  },
+
+  "providerEntry": {
+    "slot": "ios-sandbox (B124定义)",
+    "providerID": "ios.ish-sandbox (B124定义)",
+    "factory": "iOS Sandbox ProviderFactory (B124创建)"
+  },
+
+  "runtimeHost": {
+    "interface": "RuntimeHost",
+    "implementation": "nativeProcessHost or restrictedHost (根据配置)",
+    "factory": "NewRuntimeHost(ctx HostBuildContext)"
+  },
+
+  "futureBackend": {
+    "ishBackend": "由B124实现 - iSHSandboxBackend",
+    "rootfs": "由B125实现 - Alpine rootfs管理"
+  },
+
+  "integrationPrerequisites": [
+    "RuntimeTypeIOS_Native常量已添加 (B20)",
+    "SandboxBackend接口已定义 (B124)",
+    "iSH Backend已实现 (B124)",
+    "Alpine rootfs安装就绪 (B125)",
+    "生命周期管理完整 (B126)",
+    "Provider已注册到RuntimeOrchestrator (B124)",
+    "RuntimeAdapter已路由到iOS Provider (B20)"
+  ],
+
+  "authorityBoundaries": {
+    "tool": "ToolRegistry",
+    "permission": "PermissionBroker",
+    "execution": "ExecutionPipeline",
+    "runtime": "RuntimeBinding/RuntimeType",
+    "lifecycle": "RuntimeOrchestrator",
+    "sandbox": "IOSSandboxProvider",
+    "resource": "ResourceURI (amitia://)",
+    "state": "RuntimeOrchestrator states",
+    "error": "UnifiedToolResult/ToolError"
+  }
+}

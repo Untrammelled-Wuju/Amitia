@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "description": "B16 Capability Gap Matrix - 每项 Post-B9 Capability 的现有实现状态",
+  "passCondition": "UNKNOWN = 0",
+  "gaps": [
+    {
+      "capabilityId": "builtin/tool/execute_workflow",
+      "numericId": 2011,
+      "domain": "AUTOMATION",
+      "requiredSemantic": "执行工作流",
+      "existingImplementation": ["backend/internal/extension/kernel/workflow/executor.go (WorkflowExecutor)"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "补全 Tool 注册 - 将 WorkflowExecutor 注册为 Agent Callable Tool",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/register_task_goal",
+      "numericId": 2001,
+      "domain": "AUTOMATION",
+      "requiredSemantic": "注册任务目标",
+      "existingImplementation": ["backend/internal/extension/kernel/task_runtime/service.go"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "补全 Tool 注册",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/execute_task_plan",
+      "numericId": 2013,
+      "domain": "AUTOMATION",
+      "requiredSemantic": "执行任务计划",
+      "existingImplementation": ["backend/internal/extension/kernel/task_runtime/executor.go"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "补全 Tool 注册",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/message/voice_reply (voice.generate)",
+      "domain": "VOICE",
+      "requiredSemantic": "语音回复",
+      "existingImplementation": ["tool_migration/registry.go", "backend/internal/agent/tool/voice_reply.go"],
+      "status": "ALREADY_SUPPORTED",
+      "requiredMappingAction": "NO_CODE_CHANGE - 已注册",
+      "futureStep": "N/A"
+    },
+    {
+      "capabilityId": "builtin/tool/manage_voice_preset",
+      "numericId": 2053,
+      "domain": "VOICE",
+      "requiredSemantic": "管理语音预设",
+      "existingImplementation": ["backend/internal/tts/service.go (GetAvailableVoices)", "backend/internal/tts/voice_catalog.go"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "需新建 Voice 配置 Tool 注册（无业务事实源）",
+      "futureStep": "B115"
+    },
+    {
+      "capabilityId": "builtin/tts/* (requiredCapabilityIds)",
+      "domain": "VOICE",
+      "requiredSemantic": "TTS 合成能力",
+      "existingImplementation": ["backend/internal/tts/engine.go (Synthesize)"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "补全 Capability 声明和 Tool 注册",
+      "futureStep": "B115"
+    },
+    {
+      "capabilityId": "builtin/asr/* (requiredCapabilityIds)",
+      "domain": "VOICE",
+      "requiredSemantic": "ASR 转写能力",
+      "existingImplementation": ["backend/internal/asr/asr.go (SubmitTask)"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "补全 Capability 声明和 Tool 注册",
+      "futureStep": "B115"
+    },
+    {
+      "capabilityId": "builtin/model/* (requiredCapabilityIds)",
+      "domain": "MODEL",
+      "requiredSemantic": "模型选择与配置",
+      "existingImplementation": ["backend/internal/chat/model_service.go (CRUD/Activate)"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "补全 Capability 命名空间和可选 Tool 注册",
+      "futureStep": "B111"
+    },
+    {
+      "capabilityId": "builtin/tool/streaming_output",
+      "numericId": 2014,
+      "domain": "MODEL",
+      "requiredSemantic": "流式 LLM 输出",
+      "existingImplementation": ["missing - stream:false hardcoded in llm_client.go"],
+      "status": "MISSING",
+      "requiredMappingAction": "需实现 SSE/WebSocket streaming",
+      "futureStep": "B111"
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_model",
+      "numericId": 2029,
+      "domain": "MODEL",
+      "requiredSemantic": "人格特质模型",
+      "existingImplementation": ["backend/internal/personality/ (未详细扫描)"],
+      "status": "PARTIALLY_SUPPORTED",
+      "requiredMappingAction": "补全 Tool 注册",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_service",
+      "domain": "MODEL",
+      "requiredSemantic": "人格特质服务",
+      "existingImplementation": ["待确认"],
+      "status": "MISSING",
+      "requiredMappingAction": "确认现有实现并注册 Tool",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/belief_batch_process",
+      "numericId": 2006,
+      "domain": "MODEL",
+      "requiredSemantic": "信念批处理",
+      "existingImplementation": ["待确认"],
+      "status": "MISSING",
+      "requiredMappingAction": "确认现有实现并注册 Tool",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/belief_system_engine",
+      "numericId": 2012,
+      "domain": "MODEL",
+      "requiredSemantic": "信念系统引擎",
+      "existingImplementation": ["待确认"],
+      "status": "MISSING",
+      "requiredMappingAction": "确认现有实现并注册 Tool",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/core/schedule",
+      "domain": "AUTOMATION",
+      "requiredSemantic": "创建定时任务",
+      "existingImplementation": ["tool_migration/registry.go", "backend/internal/extension/kernel/schedule/service.go"],
+      "status": "ALREADY_SUPPORTED",
+      "requiredMappingAction": "NO_CODE_CHANGE",
+      "futureStep": "N/A"
+    },
+    {
+      "capabilityId": "builtin/core/get_current_time",
+      "domain": "AUTOMATION",
+      "requiredSemantic": "获取当前时间",
+      "existingImplementation": ["tool_migration/registry.go"],
+      "status": "ALREADY_SUPPORTED",
+      "requiredMappingAction": "NO_CODE_CHANGE",
+      "futureStep": "N/A"
+    }
+  ],
+  "counts": {
+    "totalCapabilities": 15,
+    "ALREADY_SUPPORTED": 3,
+    "PARTIALLY_SUPPORTED": 6,
+    "MISSING": 4,
+    "NOT_APPLICABLE": 0,
+    "UNKNOWN": 0,
+    "OUTSIDE_B16_SCOPE": 2
+  },
+  "gapOwnerSummary": {
+    "B105_B110_Automation": 4,
+    "B111_B114_Model": 2,
+    "B115_B117_Voice": 3,
+    "alreadySupported": 3,
+    "noActionRequired": 3
+  }
+}

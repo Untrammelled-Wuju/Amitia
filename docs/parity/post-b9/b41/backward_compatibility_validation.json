@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "existingToolDefinitionsStillValid": true,
+  "existingModelToolsCompatible": true,
+  "existingBuiltinToolsCompatible": true,
+  "existingMCPToolsCompatible": true,
+  "existingWorkflowToolsCompatible": true,
+  "existingInternalToolsCompatible": true
+}

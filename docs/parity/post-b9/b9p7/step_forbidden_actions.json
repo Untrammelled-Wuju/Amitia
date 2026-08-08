@@ -1,0 +1,1199 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "globalForbiddenDuplicates": [
+    "ToolRegistry2",
+    "CapabilityRegistry2",
+    "ExecutionKernel2",
+    "PermissionBroker2",
+    "PermissionCenter2",
+    "AgentRuntime2",
+    "TaskRuntime2",
+    "WorkflowEngine2",
+    "EventBus2",
+    "HookSystem2",
+    "Scheduler2",
+    "MCPManager2",
+    "MCPToolRegistry2",
+    "SkillRuntime2",
+    "MemorySystem2",
+    "CharacterCore2",
+    "ModelConfig2",
+    "ModelRouter2",
+    "VoiceRuntime2",
+    "Workspace2",
+    "ResourceResolver2",
+    "GlobalRuntimeState2",
+    "GlobalErrorCenter2",
+    "RuntimeHost2",
+    "RuntimeOrchestrator2",
+    "ProcessSupervisor2"
+  ],
+  "steps": [
+    {
+      "stepId": "B10",
+      "forbiddenActions": [
+        "新建Tool Registry",
+        "新建Tool Schema体系",
+        "新建ToolResult体系",
+        "新建Tool Context变体"
+      ]
+    },
+    {
+      "stepId": "B11",
+      "forbiddenActions": [
+        "创建Permission Registry替代",
+        "创建Permission Center 2",
+        "新建Permission Semantics体系"
+      ]
+    },
+    {
+      "stepId": "B12",
+      "forbiddenActions": [
+        "新建Runtime Manager 2",
+        "新建Capability Runtime 2",
+        "新建Native Offload Runtime Kernel"
+      ]
+    },
+    {
+      "stepId": "B13",
+      "forbiddenActions": [
+        "创建Workspace URI 2",
+        "创建Resource Resolver 2",
+        "将minis://设置为主Scheme"
+      ]
+    },
+    {
+      "stepId": "B14",
+      "forbiddenActions": [
+        "Browser Tool Registry",
+        "Browser Permission Center",
+        "Browser Workspace"
+      ]
+    },
+    {
+      "stepId": "B15",
+      "forbiddenActions": [
+        "MediaRuntime2",
+        "ImageProvider2",
+        "VoiceProviderRegistry2"
+      ]
+    },
+    {
+      "stepId": "B16",
+      "forbiddenActions": [
+        "ModelRuntime2",
+        "VoiceRuntime2",
+        "AutomationKernel2"
+      ]
+    },
+    {
+      "stepId": "B17",
+      "forbiddenActions": [
+        "创建Manifest v3独立体系",
+        "Lifecycle2",
+        "ExtensionManager2"
+      ]
+    },
+    {
+      "stepId": "B18",
+      "forbiddenActions": [
+        "修改Extension实现代码",
+        "创建替代Extension机制",
+        "绕过Extension Kernel修改Extension行为"
+      ]
+    },
+    {
+      "stepId": "B19",
+      "forbiddenActions": [
+        "Android Tool Center",
+        "Android Permission Center",
+        "Android Adapter Registry"
+      ]
+    },
+    {
+      "stepId": "B20",
+      "forbiddenActions": [
+        "iOS独立Kernel",
+        "iOS独立Registry",
+        "iOS专用Execution Pipeline"
+      ]
+    },
+    {
+      "stepId": "B21",
+      "forbiddenActions": [
+        "Desktop独立RuntimeKernel",
+        "Desktop专有能力注册体系",
+        "Desktop分离式Permission验证"
+      ]
+    },
+    {
+      "stepId": "B22",
+      "forbiddenActions": [
+        "修改Adapter实现逻辑",
+        "创建替代Adapter Registry",
+        "绕过Adapter直接调用平台API"
+      ]
+    },
+    {
+      "stepId": "B23",
+      "forbiddenActions": [
+        "新建ParityPlanner系统",
+        "独立Planner Registry",
+        "Planner直接操作ExecutionPipeline"
+      ]
+    },
+    {
+      "stepId": "B24",
+      "forbiddenActions": [
+        "新建ObserverRuntime2",
+        "Observer独立数据通道",
+        "绕过现有Observation系统"
+      ]
+    },
+    {
+      "stepId": "B25",
+      "forbiddenActions": [
+        "新建AgentTaskGraphEngine2",
+        "TaskGraph独立Permission系统",
+        "TaskGraph独立Runtime"
+      ]
+    },
+    {
+      "stepId": "B26",
+      "forbiddenActions": [
+        "新建AgentBackgroundRuntime",
+        "Background任务独立调度器",
+        "自建Background事件通道"
+      ]
+    },
+    {
+      "stepId": "B27",
+      "forbiddenActions": [
+        "新建ToolFacade替代实现",
+        "ToolFacade独立Permission检查",
+        "ToolFacade绕过统一Tool Registry"
+      ]
+    },
+    {
+      "stepId": "B28",
+      "forbiddenActions": [
+        "新建MultiAgent独立系统",
+        "MultiAgent定制Runtime",
+        "MultiAgent独立通信通道"
+      ]
+    },
+    {
+      "stepId": "B29",
+      "forbiddenActions": [
+        "新建Context编排独立引擎",
+        "Context独立存储",
+        "绕过统一Context管理"
+      ]
+    },
+    {
+      "stepId": "B30",
+      "forbiddenActions": [
+        "新建ErrorHandling替代体系",
+        "Error独立Registry",
+        "分类Error独立存储"
+      ]
+    },
+    {
+      "stepId": "B31",
+      "forbiddenActions": [
+        "新建StateManagement替代方案",
+        "State独立Runtime",
+        "State独立持久层"
+      ]
+    },
+    {
+      "stepId": "B32",
+      "forbiddenActions": [
+        "新建Agent通信替代协议",
+        "通信独立序列化体系",
+        "绕过统一通信通道"
+      ]
+    },
+    {
+      "stepId": "B33",
+      "forbiddenActions": [
+        "新建ExecutionPipeline2",
+        "独立Pipeline步骤编排",
+        "Pipeline独立审计通道"
+      ]
+    },
+    {
+      "stepId": "B34",
+      "forbiddenActions": [
+        "新建DecisionEngine2",
+        "独立Decision数据存储",
+        "DecisionEngine独立Runtime"
+      ]
+    },
+    {
+      "stepId": "B35",
+      "forbiddenActions": [
+        "新建CheckpointStore2",
+        "Checkpoint独立持久层",
+        "绕过统一Checkpoint系统"
+      ]
+    },
+    {
+      "stepId": "B36",
+      "forbiddenActions": [
+        "新建RecoverySystem替代实现",
+        "Recovery独立状态管理",
+        "Recovery独立Logging"
+      ]
+    },
+    {
+      "stepId": "B37",
+      "forbiddenActions": [
+        "新建ProgressTracker独立系统",
+        "Progress独立存储",
+        "绕过统一Progress管理"
+      ]
+    },
+    {
+      "stepId": "B38",
+      "forbiddenActions": [
+        "新建Capacity替代Runtime",
+        "Capacity独立Kernel",
+        "Capacity独立Permission体系"
+      ]
+    },
+    {
+      "stepId": "B39",
+      "forbiddenActions": [
+        "新建ExecutionPipeline2",
+        "独立Pipeline步骤体系",
+        "Pipeline独立监控通道"
+      ]
+    },
+    {
+      "stepId": "B40",
+      "forbiddenActions": [
+        "新建PermissionBroker2",
+        "独立Permission审批流",
+        "PermissionChecker独立Runtime"
+      ]
+    },
+    {
+      "stepId": "B41",
+      "forbiddenActions": [
+        "新建ToolContext2",
+        "独立Tool Context存储",
+        "ToolContext独立生命周期"
+      ]
+    },
+    {
+      "stepId": "B42",
+      "forbiddenActions": [
+        "新建ToolResult2",
+        "独立Tool Result序列化",
+        "ToolResult独立存储后端"
+      ]
+    },
+    {
+      "stepId": "B43",
+      "forbiddenActions": [
+        "新建AuditSystem2",
+        "独立Audit存储",
+        "Audit独立查询接口"
+      ]
+    },
+    {
+      "stepId": "B44",
+      "forbiddenActions": [
+        "新建QuotaSystem2",
+        "独立Quota计费引擎",
+        "Quota独立限流机制"
+      ]
+    },
+    {
+      "stepId": "B45",
+      "forbiddenActions": [
+        "新建ValidationLayer2",
+        "独立Validation规则引擎",
+        "Validation独立错误报告"
+      ]
+    },
+    {
+      "stepId": "B46",
+      "forbiddenActions": [
+        "新建RateLimiter2",
+        "独立限流计数器",
+        "RateLimiter独立持久层"
+      ]
+    },
+    {
+      "stepId": "B47",
+      "forbiddenActions": [
+        "新建ConcurrencyControl替代实现",
+        "独立并发调度器",
+        "ConcurrencyControl独立状态存储"
+      ]
+    },
+    {
+      "stepId": "B48",
+      "forbiddenActions": [
+        "新建TimeoutManagement替代方案",
+        "独立Timeout调度",
+        "Timeout独立唤醒机制"
+      ]
+    },
+    {
+      "stepId": "B49",
+      "forbiddenActions": [
+        "新建ErrorRecovery替代系统",
+        "独立Recovery策略引擎",
+        "Recovery独立决策模块"
+      ]
+    },
+    {
+      "stepId": "B50",
+      "forbiddenActions": [
+        "新建ResourceLimit替代实现",
+        "独立资源监控",
+        "ResourceLimit独立告警通道"
+      ]
+    },
+    {
+      "stepId": "B51",
+      "forbiddenActions": [
+        "新建SandboxConfig替代体系",
+        "独立Sandbox策略存储",
+        "SandboxConfig独立分发机制"
+      ]
+    },
+    {
+      "stepId": "B52",
+      "forbiddenActions": [
+        "新建ToolExecutionHook替代机制",
+        "独立Hook注册系统",
+        "Hook独立优先级排序"
+      ]
+    },
+    {
+      "stepId": "B53",
+      "forbiddenActions": [
+        "新建ExecutionMonitor替代方案",
+        "独立监控数据存储",
+        "ExecutionMonitor独立展示层"
+      ]
+    },
+    {
+      "stepId": "B54",
+      "forbiddenActions": [
+        "新建FallbackMechanism替代体系",
+        "独立Fallback决策引擎",
+        "FallbackChannel独立管理"
+      ]
+    },
+    {
+      "stepId": "B55",
+      "forbiddenActions": [
+        "新建AndroidToolCenter替代",
+        "独立Tool能力注册表",
+        "AndroidToolCenter独立Permission体系"
+      ]
+    },
+    {
+      "stepId": "B56",
+      "forbiddenActions": [
+        "新建AndroidPermissionCenter替代",
+        "独立Permission审批流",
+        "PermissionCenter独立Scope定义"
+      ]
+    },
+    {
+      "stepId": "B57",
+      "forbiddenActions": [
+        "新建AndroidLogCenter替代方案",
+        "独立Log收集通道",
+        "LogCenter独立存储后端"
+      ]
+    },
+    {
+      "stepId": "B58",
+      "forbiddenActions": [
+        "新建AndroidResourceMonitor替代",
+        "独立资源监控指标",
+        "ResourceMonitor独立告警通道"
+      ]
+    },
+    {
+      "stepId": "B59",
+      "forbiddenActions": [
+        "新建AndroidStateTracker替代实现",
+        "独立状态持久层",
+        "StateTracker独立同步机制"
+      ]
+    },
+    {
+      "stepId": "B60",
+      "forbiddenActions": [
+        "新建AndroidCapability替代注册",
+        "独立Capability发现机制",
+        "Capability独立版本管理"
+      ]
+    },
+    {
+      "stepId": "B61",
+      "forbiddenActions": [
+        "新建AndroidAdapter替代机制",
+        "独立Adapter注册体系",
+        "Adapter独立生命周期管理"
+      ]
+    },
+    {
+      "stepId": "B62",
+      "forbiddenActions": [
+        "新建AndroidNativeTool替代实现",
+        "独立Native Tool Registry",
+        "NativeTool独立沙箱机制"
+      ]
+    },
+    {
+      "stepId": "B63",
+      "forbiddenActions": [
+        "新建AndroidNativePermission替代系统",
+        "独立Native Permission审批",
+        "NativePermission独立Scope"
+      ]
+    },
+    {
+      "stepId": "B64",
+      "forbiddenActions": [
+        "新建AndroidNativeRuntime替代Kernel",
+        "独立Runtime调度器",
+        "Runtime独立资源管理"
+      ]
+    },
+    {
+      "stepId": "B65",
+      "forbiddenActions": [
+        "新建AndroidNativeLogger替代通道",
+        "独立Native Logger存储",
+        "Logger独立查询接口"
+      ]
+    },
+    {
+      "stepId": "B66",
+      "forbiddenActions": [
+        "新建AndroidNativeResource替代监控",
+        "独立Native Resource指标",
+        "Resource独立性能分析"
+      ]
+    },
+    {
+      "stepId": "B67",
+      "forbiddenActions": [
+        "新建AndroidNativeState替代管理",
+        "独立Native State存储",
+        "State独立同步通道"
+      ]
+    },
+    {
+      "stepId": "B68",
+      "forbiddenActions": [
+        "新建AndroidNativeCapability替代注册",
+        "独立Native Capability发现",
+        "Capability独立能力声明"
+      ]
+    },
+    {
+      "stepId": "B69",
+      "forbiddenActions": [
+        "新建MediaProvider替代体系",
+        "独立Media能力注册",
+        "MediaProvider独立编解码Registry"
+      ]
+    },
+    {
+      "stepId": "B70",
+      "forbiddenActions": [
+        "新建AudioProvider替代实现",
+        "独立Audio能力注册",
+        "AudioProvider独立Pipeline"
+      ]
+    },
+    {
+      "stepId": "B71",
+      "forbiddenActions": [
+        "新建VideoProvider替代系统",
+        "独立Video能力注册",
+        "VideoProvider独立渲染通道"
+      ]
+    },
+    {
+      "stepId": "B72",
+      "forbiddenActions": [
+        "新建ImageProvider替代方案",
+        "独立Image能力注册",
+        "ImageProvider独立处理管道"
+      ]
+    },
+    {
+      "stepId": "B73",
+      "forbiddenActions": [
+        "新建CameraProvider替代实现",
+        "独立Camera能力注册",
+        "CameraProvider独立控制通道"
+      ]
+    },
+    {
+      "stepId": "B74",
+      "forbiddenActions": [
+        "新建iOSDevice替代Runtime",
+        "独立iOS Device能力注册",
+        "iOSDevice独立管理通道"
+      ]
+    },
+    {
+      "stepId": "B75",
+      "forbiddenActions": [
+        "新建iOSAudio替代Provider",
+        "独立iOS Audio能力注册",
+        "iOSAudio独立处理管道"
+      ]
+    },
+    {
+      "stepId": "B76",
+      "forbiddenActions": [
+        "新建iOSVideo替代Provider",
+        "独立iOS Video能力注册",
+        "iOSVideo独立渲染通道"
+      ]
+    },
+    {
+      "stepId": "B77",
+      "forbiddenActions": [
+        "新建iOSImage替代Provider",
+        "独立iOS Image能力注册",
+        "iOSImage独立处理Pipeline"
+      ]
+    },
+    {
+      "stepId": "B78",
+      "forbiddenActions": [
+        "新建iOSCamera替代Provider",
+        "独立iOS Camera能力注册",
+        "iOSCamera独立控制逻辑"
+      ]
+    },
+    {
+      "stepId": "B79",
+      "forbiddenActions": [
+        "新建Browser Tool Registry替代",
+        "独立Browser Tool注册体系",
+        "BrowserTool独立Permission Center"
+      ]
+    },
+    {
+      "stepId": "B80",
+      "forbiddenActions": [
+        "新建Browser Runtime替代Kernel",
+        "独立Browser Runtime调度",
+        "BrowserRuntime独立生命周期"
+      ]
+    },
+    {
+      "stepId": "B81",
+      "forbiddenActions": [
+        "新建Browser Permission替代Broker",
+        "独立Browser Permission审批",
+        "Permission独立Scope定义"
+      ]
+    },
+    {
+      "stepId": "B82",
+      "forbiddenActions": [
+        "新建Browser Workspace替代方案",
+        "独立Browser Workspace管理",
+        "Workspace独立URI体系"
+      ]
+    },
+    {
+      "stepId": "B83",
+      "forbiddenActions": [
+        "新建Browser HistoryStore2",
+        "独立Browser History持久层",
+        "HistoryStore独立查询接口"
+      ]
+    },
+    {
+      "stepId": "B84",
+      "forbiddenActions": [
+        "新建Search Tool Registry替代",
+        "独立Search能力注册",
+        "SearchTool独立Permission Center"
+      ]
+    },
+    {
+      "stepId": "B85",
+      "forbiddenActions": [
+        "新建Search HistoryStore2",
+        "独立Search History持久层",
+        "SearchHistory独立查询通道"
+      ]
+    },
+    {
+      "stepId": "B86",
+      "forbiddenActions": [
+        "新建Search Permission替代Center",
+        "独立Search Permission审批",
+        "SearchPermission独立Scope管理"
+      ]
+    },
+    {
+      "stepId": "B87",
+      "forbiddenActions": [
+        "新建MediaCapability替代注册",
+        "独立Media能力声明系统",
+        "MediaCapability独立发现机制"
+      ]
+    },
+    {
+      "stepId": "B88",
+      "forbiddenActions": [
+        "新建MCPCapability替代注册",
+        "独立MCP能力声明体系",
+        "MCPCapability独立发现通道"
+      ]
+    },
+    {
+      "stepId": "B89",
+      "forbiddenActions": [
+        "新建WorkspaceCapability替代注册",
+        "独立Workspace能力声明",
+        "WorkspaceCapability独立发现机制"
+      ]
+    },
+    {
+      "stepId": "B90",
+      "forbiddenActions": [
+        "新建IntegrationCapability替代注册",
+        "独立Integration能力声明",
+        "IntegrationCapability独立发现通道"
+      ]
+    },
+    {
+      "stepId": "B91",
+      "forbiddenActions": [
+        "新建ValidationCapability替代注册",
+        "独立Validation能力声明",
+        "ValidationCapability独立验证引擎"
+      ]
+    },
+    {
+      "stepId": "B92",
+      "forbiddenActions": [
+        "新建MigrationCapability替代注册",
+        "独立Migration能力声明",
+        "MigrationCapability独立执行引擎"
+      ]
+    },
+    {
+      "stepId": "B93",
+      "forbiddenActions": [
+        "新建MCPManager2替代实现",
+        "独立MCP连接管理",
+        "MCPManager独立ToolRegistry"
+      ]
+    },
+    {
+      "stepId": "B94",
+      "forbiddenActions": [
+        "新建MCPToolRegistry2替代体系",
+        "独立MCP Tool注册",
+        "MCPTool独立同步机制"
+      ]
+    },
+    {
+      "stepId": "B95",
+      "forbiddenActions": [
+        "新建SkillRuntime2替代实现",
+        "独立Skill执行引擎",
+        "SkillRuntime独立生命周期"
+      ]
+    },
+    {
+      "stepId": "B96",
+      "forbiddenActions": [
+        "新建SkillRegistry2替代体系",
+        "独立Skill注册机制",
+        "SkillRegistry独立发现通道"
+      ]
+    },
+    {
+      "stepId": "B97",
+      "forbiddenActions": [
+        "新建WorkflowEngine2替代方案",
+        "独立Workflow状态机",
+        "WorkflowEngine独立调度器"
+      ]
+    },
+    {
+      "stepId": "B98",
+      "forbiddenActions": [
+        "新建EventBus2替代机制",
+        "独立事件分发通道",
+        "EventBus独立订阅管理"
+      ]
+    },
+    {
+      "stepId": "B99",
+      "forbiddenActions": [
+        "新建HookSystem2替代实现",
+        "独立Hook注册机制",
+        "HookSystem独立优先级管理"
+      ]
+    },
+    {
+      "stepId": "B100",
+      "forbiddenActions": [
+        "新建Scheduler2替代方案",
+        "独立任务调度器",
+        "Scheduler独立时间轮"
+      ]
+    },
+    {
+      "stepId": "B101",
+      "forbiddenActions": [
+        "新建WorkflowStore替代持久层",
+        "独立Workflow状态存储",
+        "WorkflowStore独立查询接口"
+      ]
+    },
+    {
+      "stepId": "B102",
+      "forbiddenActions": [
+        "新建WorkflowAudit替代通道",
+        "独立Workflow审计日志",
+        "WorkflowAudit独立报告机制"
+      ]
+    },
+    {
+      "stepId": "B103",
+      "forbiddenActions": [
+        "新建MCPConnection替代管理",
+        "独立MCP连接池",
+        "MCPConnection独立重连机制"
+      ]
+    },
+    {
+      "stepId": "B104",
+      "forbiddenActions": [
+        "新建MCPToolSync替代方案",
+        "独立MCP Tool同步器",
+        "MCPToolSync独立版本管理"
+      ]
+    },
+    {
+      "stepId": "B105",
+      "forbiddenActions": [
+        "新建SkillExecutor替代实现",
+        "独立Skill执行通道",
+        "SkillExecutor独立结果处理"
+      ]
+    },
+    {
+      "stepId": "B106",
+      "forbiddenActions": [
+        "新建SkillOrchestrator替代体系",
+        "独立Skill编排引擎",
+        "SkillOrchestrator独立调度逻辑"
+      ]
+    },
+    {
+      "stepId": "B107",
+      "forbiddenActions": [
+        "新建WorkflowOrchestrator替代方案",
+        "独立Workflow编排器",
+        "WorkflowOrchestrator独立状态管理"
+      ]
+    },
+    {
+      "stepId": "B108",
+      "forbiddenActions": [
+        "新建EventDispatcher替代机制",
+        "独立事件分发引擎",
+        "EventDispatcher独立序列化"
+      ]
+    },
+    {
+      "stepId": "B109",
+      "forbiddenActions": [
+        "新建HookExecutor替代实现",
+        "独立Hook执行引擎",
+        "HookExecutor独立错误处理"
+      ]
+    },
+    {
+      "stepId": "B110",
+      "forbiddenActions": [
+        "新建TaskScheduler替代方案",
+        "独立任务调度引擎",
+        "TaskScheduler独立优先级队列"
+      ]
+    },
+    {
+      "stepId": "B111",
+      "forbiddenActions": [
+        "新建ModelConfigs_v2替代体系",
+        "独立Model配置存储",
+        "ModelConfig_v2独立路由逻辑"
+      ]
+    },
+    {
+      "stepId": "B112",
+      "forbiddenActions": [
+        "新建ModelRouter2替代方案",
+        "独立Model路由引擎",
+        "ModelRouter_v2独立负载均衡"
+      ]
+    },
+    {
+      "stepId": "B113",
+      "forbiddenActions": [
+        "新建VoiceRuntime2替代实现",
+        "独立Voice执行引擎",
+        "VoiceRuntime_v2独立编解码"
+      ]
+    },
+    {
+      "stepId": "B114",
+      "forbiddenActions": [
+        "新建ASR Config2替代体系",
+        "独立ASR配置管理",
+        "ASR Config_v2独立路由"
+      ]
+    },
+    {
+      "stepId": "B115",
+      "forbiddenActions": [
+        "新建TTS Config2替代方案",
+        "独立TTS配置管理",
+        "TTS Config_v2独立路由"
+      ]
+    },
+    {
+      "stepId": "B116",
+      "forbiddenActions": [
+        "新建MemorySystem2替代实现",
+        "独立Memory引擎",
+        "MemorySystem_v2独立存储后端"
+      ]
+    },
+    {
+      "stepId": "B117",
+      "forbiddenActions": [
+        "新建MemoryStore2替代方案",
+        "独立Memory存储层",
+        "MemoryStore_v2独立查询接口"
+      ]
+    },
+    {
+      "stepId": "B118",
+      "forbiddenActions": [
+        "新建VectorStore2替代体系",
+        "独立Vector存储引擎",
+        "VectorStore_v2独立检索机制"
+      ]
+    },
+    {
+      "stepId": "B119",
+      "forbiddenActions": [
+        "新建MemoryGraph2替代方案",
+        "独立Memory图谱引擎",
+        "MemoryGraph_v2独立关系管理"
+      ]
+    },
+    {
+      "stepId": "B120",
+      "forbiddenActions": [
+        "新建CharacterCore2替代实现",
+        "独立Character引擎",
+        "CharacterCore_v2独立状态管理"
+      ]
+    },
+    {
+      "stepId": "B121",
+      "forbiddenActions": [
+        "新建CharacterDB替代方案",
+        "独立Character数据存储",
+        "CharacterDB_v2独立查询通道"
+      ]
+    },
+    {
+      "stepId": "B122",
+      "forbiddenActions": [
+        "新建CharacterService替代体系",
+        "独立Character服务层",
+        "CharacterService_v2独立接口"
+      ]
+    },
+    {
+      "stepId": "B123",
+      "forbiddenActions": [
+        "新建IOSSandboxLifecycle2替代实现",
+        "独立iOS沙箱生命周期",
+        "IOSSandboxLifecycle_v2独立驱动"
+      ]
+    },
+    {
+      "stepId": "B124",
+      "forbiddenActions": [
+        "新建IOSRuntimeManager2替代方案",
+        "独立iOS Runtime管理",
+        "IOSRuntimeManager_v2独立调度"
+      ]
+    },
+    {
+      "stepId": "B125",
+      "forbiddenActions": [
+        "新建IOSToolRegistry2替代体系",
+        "独立iOS Tool注册",
+        "IOSToolRegistry_v2独立发现"
+      ]
+    },
+    {
+      "stepId": "B126",
+      "forbiddenActions": [
+        "新建IOSPermissionCenter2替代方案",
+        "独立iOS Permission管理",
+        "IOSPermissionCenter_v2独立审批"
+      ]
+    },
+    {
+      "stepId": "B127",
+      "forbiddenActions": [
+        "新建IOSCapabilityRegistry2替代实现",
+        "独立iOS Capability注册",
+        "IOSCapabilityRegistry_v2独立声明"
+      ]
+    },
+    {
+      "stepId": "B128",
+      "forbiddenActions": [
+        "新建IOSResourceMonitor2替代方案",
+        "独立iOS资源监控",
+        "IOSResourceMonitor_v2独立指标"
+      ]
+    },
+    {
+      "stepId": "B129",
+      "forbiddenActions": [
+        "新建IOSStateTracker2替代实现",
+        "独立iOS状态追踪",
+        "IOSStateTracker_v2独立持久层"
+      ]
+    },
+    {
+      "stepId": "B130",
+      "forbiddenActions": [
+        "新建IOSAdapterRegistry2替代方案",
+        "独立iOS Adapter注册",
+        "IOSAdapterRegistry_v2独立生命周期"
+      ]
+    },
+    {
+      "stepId": "B131",
+      "forbiddenActions": [
+        "新建IOSEventBus2替代实现",
+        "独立iOS事件总线",
+        "IOSEventBus_v2独立订阅"
+      ]
+    },
+    {
+      "stepId": "B132",
+      "forbiddenActions": [
+        "新建IOSWorkflowEngine2替代方案",
+        "独立iOS Workflow引擎",
+        "IOSWorkflowEngine_v2独立调度"
+      ]
+    },
+    {
+      "stepId": "B133",
+      "forbiddenActions": [
+        "新建IOSScheduler2替代实现",
+        "独立iOS调度器",
+        "IOSScheduler_v2独立优先级"
+      ]
+    },
+    {
+      "stepId": "B134",
+      "forbiddenActions": [
+        "新建IOSMemoryManager2替代方案",
+        "独立iOS内存管理",
+        "IOSMemoryManager_v2独立缓存"
+      ]
+    },
+    {
+      "stepId": "B135",
+      "forbiddenActions": [
+        "新建IOSCharacterService2替代实现",
+        "独立iOS Character服务",
+        "IOSCharacterService_v2独立状态"
+      ]
+    },
+    {
+      "stepId": "B136",
+      "forbiddenActions": [
+        "新建IOSVoiceService2替代方案",
+        "独立iOS语音服务",
+        "IOSVoiceService_v2独立编解码"
+      ]
+    },
+    {
+      "stepId": "B137",
+      "forbiddenActions": [
+        "新建IOSModelService2替代实现",
+        "独立iOS模型服务",
+        "IOSModelService_v2独立路由"
+      ]
+    },
+    {
+      "stepId": "B138",
+      "forbiddenActions": [
+        "新建RuntimeSupervisor2替代方案",
+        "独立Runtime监控",
+        "RuntimeSupervisor_v2独立报告"
+      ]
+    },
+    {
+      "stepId": "B139",
+      "forbiddenActions": [
+        "新建统一Runtime替代实现",
+        "独立Runtime调度器",
+        "Runtime独立生命周期管理"
+      ]
+    },
+    {
+      "stepId": "B140",
+      "forbiddenActions": [
+        "新建Agent Runtime替代",
+        "新建Tool Runtime替代",
+        "新建Legacy Registry",
+        "Fallback到Legacy系统",
+        "新增Legacy写入",
+        "永久双写新旧系统"
+      ]
+    },
+    {
+      "stepId": "B141",
+      "forbiddenActions": [
+        "新建Pipeline替代方案",
+        "Redirect到Legacy Pipeline",
+        "创建Pipeline副本",
+        "保留Legacy Pipeline"
+      ]
+    },
+    {
+      "stepId": "B142",
+      "forbiddenActions": [
+        "修改合同验证实现代码",
+        "创建替代验证机制",
+        "绕过统一验证流程"
+      ]
+    },
+    {
+      "stepId": "B143",
+      "forbiddenActions": [
+        "修改Permission分配实现代码",
+        "创建替代Permission体系",
+        "绕过现有Permission审批"
+      ]
+    },
+    {
+      "stepId": "B144",
+      "forbiddenActions": [
+        "修改Contract兼容性检查实现",
+        "创建替代兼容性验证",
+        "绕过统一Contract检查"
+      ]
+    },
+    {
+      "stepId": "B145",
+      "forbiddenActions": [
+        "修改Workflow执行验证实现",
+        "创建替代Workflow验证",
+        "绕过现有Workflow引擎"
+      ]
+    },
+    {
+      "stepId": "B146",
+      "forbiddenActions": [
+        "修改MultiAgent状态验证实现",
+        "创建替代状态验证",
+        "绕过统一状态管理"
+      ]
+    },
+    {
+      "stepId": "B147",
+      "forbiddenActions": [
+        "修改Extension生命周期验证实现",
+        "创建替代Extension验证",
+        "绕过现有Extension管理"
+      ]
+    },
+    {
+      "stepId": "B148",
+      "forbiddenActions": [
+        "修改Android适配验证实现",
+        "创建替代Android验证",
+        "绕过现有Adapter验证"
+      ]
+    },
+    {
+      "stepId": "B149",
+      "forbiddenActions": [
+        "修改iOS适配验证实现",
+        "创建替代iOS验证",
+        "绕过现有Adapter机制"
+      ]
+    },
+    {
+      "stepId": "B150",
+      "forbiddenActions": [
+        "修改Desktop适配验证实现",
+        "创建替代Desktop验证",
+        "绕过现有Adapter层"
+      ]
+    },
+    {
+      "stepId": "B151",
+      "forbiddenActions": [
+        "修改Integration验证实现代码",
+        "创建替代Integration机制",
+        "绕过统一集成验证"
+      ]
+    },
+    {
+      "stepId": "B152",
+      "forbiddenActions": [
+        "修改迁移State验证实现",
+        "创建替代State验证机制",
+        "绕过统一迁移State"
+      ]
+    },
+    {
+      "stepId": "B153",
+      "forbiddenActions": [
+        "修改Pipeline唯一性验证实现",
+        "创建替代Pipeline验证",
+        "绕过唯一性检查"
+      ]
+    },
+    {
+      "stepId": "B154",
+      "forbiddenActions": [
+        "修改整体系统验证实现",
+        "创建替代全局验证机制",
+        "绕过统一验收流程"
+      ]
+    }
+  ]
+}

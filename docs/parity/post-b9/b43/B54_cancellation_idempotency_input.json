@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B54-CancellationIdempotency",
+  "intendedFor": "B54",
+  "description": "取消幂等性保证输入 — 迁移到 B54 时复用 B43 链路",
+  "idempotencyContracts": {
+    "double_cancel": {
+      "description": "对同一 invocationId 重复调用 Cancel()",
+      "expectation": "幂等 — 第二次调用返回已取消状态，不产生副作用",
+      "authority": "execution.CancellationController.Cancel(id) — 幂等"
+    },
+    "cancel_after_completion": {
+      "description": "调用已完成（成功或失败）后发起取消",
+      "expectation": "返回终态已确定，取消为 no-op；不修改已有结果",
+      "authority": "execution.CancellationController — 终态守卫"
+    },
+    "cancel_status_query": {
+      "description": "多个观察者并发查询取消状态",
+      "expectation": "一致性 — 所有查询返回相同的 cancelled/is_cancelled 值",
+      "authority": "CancellationController.IsCancelled(id) — 只读安全"
+    }
+  },
+  "constraints": {
+    "no_new_authority": "幂等保证复用 CancellationController，不引入新的取消状态管理器",
+    "late_result_idempotency": "重复取消后的迟到结果仍然被丢弃，不因幂等性而复活"
+  }
+}

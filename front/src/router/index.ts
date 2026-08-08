@@ -23,8 +23,8 @@ function isLoggedIn(): boolean {
 const router = createRouter({
   history: shouldUseHashRouting() ? createWebHashHistory() : createWebHistory(),
   routes: [
-    { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue") },{ path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
-    { path: "/setup", name: "setup", component: () => import("../views/setup-admin/SetupAdminView.vue") },
+    { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue")},
+    { path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
     { path: "/", redirect: "/chat" },
     { path: "/dashboard", redirect: "/dashboard/data" },
       { path: "/dashboard/run", name: "dashboardRun", component: () => import("@/views/dashboard/RunView.vue"), meta: { requiresAuth: true } },
@@ -139,16 +139,16 @@ const router = createRouter({
 
 router.beforeEach(async (to, _from, next) => {
   const token = getToken()
-  const PUBLIC_PATHS = ["/login", "/setup", "/onboarding", "/privacy", "/usage-boundary"]
+  const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
   const isPublic = PUBLIC_PATHS.includes(to.path)
 
   if (isPublic) {
-    if (token && (to.path === "/login" || to.path === "/setup")) {
+    if (token && to.path === "/login") {
       return next("/chat")
     }
     if (to.path === "/onboarding") {
       try {
-        const res = await apiClient.get("/api/onboarding/status")
+        const res = await apiClient.get("/api/public/onboarding/status")
         const data = res.data?.data || res.data
         if (data?.completed) {
           return next(token ? "/chat" : "/login")
@@ -164,18 +164,10 @@ router.beforeEach(async (to, _from, next) => {
 
   if (!token) {
     try {
-      const res = await apiClient.get("/api/onboarding/status")
+      const res = await apiClient.get("/api/public/onboarding/status")
       const onboardingData = res.data?.data || res.data
       if (!onboardingData?.completed) {
         return next("/onboarding")
-      }
-    } catch {}
-
-    try {
-      const res = await apiClient.get("/api/public/auth/status")
-      const authData = res.data?.data || res.data
-      if (!authData?.hasAdmin) {
-        return next("/setup")
       }
     } catch {}
 

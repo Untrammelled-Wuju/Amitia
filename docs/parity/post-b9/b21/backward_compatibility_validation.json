@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "向后兼容性验证",
+
+  "validations": {
+    "electronDesktopStartup": {
+      "status": "PASS",
+      "note": "Electron启动流程不变，B21不修改启动链路"
+    },
+    "backendStartup": {
+      "status": "PASS",
+      "note": "Backend新增Desktop Adapter注册，但不影响其他启动流程"
+    },
+    "backendProcessControl": {
+      "status": "PASS",
+      "note": "ProcessManager未修改"
+    },
+    "existingIPC": {
+      "status": "PASS",
+      "note": "Electron ↔ Backend HTTP/WebSocket通信未修改"
+    },
+    "existingRuntimeHost": {
+      "status": "PASS",
+      "note": "RPCHost接口未修改"
+    },
+    "existingRuntimeOrchestrator": {
+      "status": "PASS",
+      "note": "RuntimeOrchestrator未修改"
+    },
+    "existingPlatformProcess": {
+      "status": "PASS",
+      "note": "platform/process未修改"
+    },
+    "existingResourceURI": {
+      "status": "PASS",
+      "note": "ResourceURI系统未修改"
+    },
+    "existingExtensionKernel": {
+      "status": "PASS",
+      "note": "Extension Kernel核心未修改，仅新增Adapter注册"
+    },
+    "existingDesktopHost": {
+      "status": "PASS",
+      "note": "DesktopHost未修改，仅新增Provider包装层"
+    },
+    "existingDesktopActionBridge": {
+      "status": "PASS",
+      "note": "DesktopActionBridge未修改"
+    }
+  },
+
+  "overallStatus": "PASS"
+}

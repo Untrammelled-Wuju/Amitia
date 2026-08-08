@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "canonicalSource": "docs/parity/post-b9/b9p6/runtime_adapter_inventory.json",
+  "adapterCount": 13,
+  "existingCount": 10,
+  "newRequiredCount": 3,
+  "adapters": [
+    {
+      "id": "adapter_builtin",
+      "runtimeType": "builtin",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_builtin.go",
+      "capabilityPrefixes": [
+        "builtin/tool/*",
+        "external/file/*",
+        "external/process/*",
+        "external/memory/*",
+        "external/network/*",
+        "external/security/*",
+        "external/system/*",
+        "external/notification/*",
+        "external/search/*",
+        "external/task/*",
+        "external/conversation/*",
+        "external/tool/tool_call_execution",
+        "external/tool/tool_result_observation"
+      ],
+      "description": "Builtin直接执行Adapter(文件系统/Shell/内存/网络等核心操作)"
+    },
+    {
+      "id": "adapter_mcp",
+      "runtimeType": "mcp",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_mcp.go",
+      "capabilityPrefixes": [
+        "external/extension/mcp_tool_invoke",
+        "external/extension/integration_execute_mcp_server",
+        "external/extension/start_mcp_local_server_launch",
+        "external/extension/start_mcp_remote_server_connect"
+      ],
+      "description": "MCP Protocol Tool执行Adapter"
+    },
+    {
+      "id": "adapter_workflow",
+      "runtimeType": "workflow",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_workflow.go",
+      "capabilityPrefixes": [
+        "external/extension/workflow",
+        "external/extension/workflow_dag_execute",
+        "external/extension/create_workflow_create",
+        "builtin/tool/execute_workflow"
+      ],
+      "description": "工作流引擎执行Adapter"
+    },
+    {
+      "id": "adapter_task",
+      "runtimeType": "task",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_task.go",
+      "capabilityPrefixes": [
+        "builtin/tool/execute_task_plan",
+        "external/task/task"
+      ],
+      "description": "Task Runtime Adapter - 执行长期任务计划"
+    },
+    {
+      "id": "adapter_plugin",
+      "runtimeType": "plugin_js",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_plugin.go",
+      "capabilityPrefixes": [
+        "external/extension/install_skill_*",
+        "external/extension/install_package_*",
+        "external/extension/management_execute_*",
+        "external/tool/javascript_execution",
+        "external/tool/js_package_tools"
+      ],
+      "description": "Plugin Host Adapter - 插件安装/执行管理"
+    },
+    {
+      "id": "adapter_plugin_service",
+      "runtimeType": "plugin_service",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_plugin.go",
+      "capabilityPrefixes": [
+        "external/model/*",
+        "external/character/install_*",
+        "external/character/management_execute_*",
+        "external/voice/switch_tts_voice_selection",
+        "external/voice/microphone",
+        "external/voice/audio",
+        "external/extension/toolpkg*"
+      ],
+      "description": "Plugin Service Adapter - Provider服务调用"
+    },
+    {
+      "id": "adapter_trusted_service",
+      "runtimeType": "trusted_service",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_trusted_service.go",
+      "capabilityPrefixes": [
+        "external/extension/*"
+      ],
+      "description": "可信服务Adapter - 扩展/技能包沙盒执行"
+    },
+    {
+      "id": "adapter_javascript",
+      "runtimeType": "javascript",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_javascript.go (or adapter_plugin for JS)",
+      "capabilityPrefixes": [
+        "external/tool/javascript_execution",
+        "external/tool/js_package_tools"
+      ],
+      "description": "JavaScript执行Adapter"
+    },
+    {
+      "id": "adapter_wasm",
+      "runtimeType": "wasm",
+      "status": "EXISTING",
+      "capabilityPrefixes": [],
+      "description": "WebAssembly执行Adapter(暂未活跃分配Capability)"
+    },
+    {
+      "id": "adapter_internal",
+      "runtimeType": "internal",
+      "status": "EXISTING",
+      "implementation": "backend/internal/extension/kernel/capability/adapter_internal.go",
+      "capabilityPrefixes": [
+        "builtin/agent/*",
+        "builtin/conversation/*",
+        "builtin/network/*",
+        "external/agent/run_ui_subagent"
+      ],
+      "description": "内部模块adapter - 心智状态/对话频道/内核API"
+    },
+    {
+      "id": "adapter_browser_runtime",
+      "runtimeType": "browser_runtime",
+      "status": "NEW_PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B79-B83: Browser Runtime",
+      "capabilityPrefixes": [
+        "external/browser/*"
+      ],
+      "description": "浏览器自动化Runtime Adapter(Playwright/CDP) - 需要新建",
+      "complexity": "HIGH",
+      "requiredPlatform": "DESKTOP",
+      "requiredSkills": ["Playwright/CDP接入", "截图/录屏/悬浮窗", "Terminal Session管理"],
+      "blockedBy": [
+        "BROWSER_PROVIDER未实现",
+        "GAP-001 browser.automation Permission缺失"
+      ]
+    },
+    {
+      "id": "adapter_android_native",
+      "runtimeType": "android_native",
+      "status": "NEW_PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B55+",
+      "capabilityPrefixes": [
+        "external/device/*",
+        "external/security/*",
+        "external/system/*",
+        "external/tool/read_android_*",
+        "external/tool/send_*",
+        "external/tool/interface_execute_*",
+        "external/tool/execute_intent",
+        "external/tool/read_shizuku*",
+        "external/notification/*",
+        "external/search/*",
+        "external/voice/capture_*",
+        "external/character/read_bluetooth*"
+      ],
+      "description": "Android原生能力Adapter - 需要新建(Shizuku/ADB/SystemServer连接)",
+      "complexity": "HIGH",
+      "requiredPlatform": "ANDROID",
+      "requiredSkills": ["Shizuku API绑定", "AccessibilityService", "内容提供者读写", "MediaRecorder/Camera2"],
+      "blockedBy": [
+        "Android App层Provider未完善",
+        "大量GAP待实现"
+      ]
+    },
+    {
+      "id": "adapter_ios_native",
+      "runtimeType": "ios_native",
+      "status": "NEW_PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B127+",
+      "capabilityPrefixes": [
+        "external/device/* (iOS subset)"
+      ],
+      "description": "iOS原生能力Adapter - 需要新建",
+      "complexity": "HIGH",
+      "requiredPlatform": "IOS",
+      "requiredSkills": ["CoreLocation", "AVFoundation", "EventKit", "UIKit"],
+      "blockedBy": [
+        "iOS App尚未开发"
+      ]
+    }
+  ]
+}

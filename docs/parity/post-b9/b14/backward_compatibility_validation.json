@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "generatedAt": "2026-08-08T13:30:00+08:00",
+  "result": "PASS",
+  "existingCallersUnaffected": true,
+  "existingKernelContractsUnchanged": true,
+  "existingResourceUriUnchanged": true,
+  "capabilityRegistryExtension": "RuntimeTypeBrowser constant only",
+  "notes": "B14 adds new contract-only package (backend/internal/browser/) and one line to Kernel runtime_adapter.go (RuntimeTypeBrowser constant). No existing files modified except the 1-line extension. No breaking changes to existing Kernel/ResourceURI/Workspace contracts."
+}

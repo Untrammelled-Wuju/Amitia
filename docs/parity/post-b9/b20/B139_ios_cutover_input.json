@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20-B139-INPUT",
+  "generatedAt": "2026-08-08T16:26:00+08:00",
+  "description": "B139 iOS Cutover输入 - 记录Canonical信息供未来Cutover",
+
+  "canonicalAdapter": "iosRuntimeAdapter (backend/internal/extension/kernel/capability/adapter_ios_native.go)",
+  "canonicalRuntimeType": "RuntimeTypeIOS_Native ('ios_native')",
+
+  "binding": {
+    "type": "ios_native",
+    "resolution": "RuntimeAdapterRegistry.Resolve(RuntimeBinding{RuntimeType: 'ios_native'})"
+  },
+
+  "registration": {
+    "method": "Container.WireIOSPlatformAdapter(provider)",
+    "registry": "RuntimeAdapterRegistry (backend/internal/extension/kernel/capability/executor.go)"
+  },
+
+  "bridge": {
+    "transport": "MethodChannel 'com.amitia.amitia_app/runtime'",
+    "requestDTO": "IOSBridgeRequest",
+    "responseDTO": "IOSBridgeResponse"
+  },
+
+  "cutoverPrerequisites": {
+    "B22Pass": "待B22验证iOS Adapter Conformance",
+    "B123_B138Implement": "待B123-B138实现具体Provider",
+    "integrationTests": "待集成测试验收"
+  },
+
+  "note": "B20不执行Cutover，仅记录接入信息供B139使用"
+}

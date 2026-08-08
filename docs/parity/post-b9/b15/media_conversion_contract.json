@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "required": false,
+  "note": "当前项目无统一格式转换需求。未来B87-B89根据实际需要定义。",
+  "existingCapabilities": {
+    "ttsFormatSelection": "TTS支持mp3输出格式选择，由Provider决定",
+    "imageFormat": "Image Provider支持多种输出格式，由Provider决定"
+  }
+}

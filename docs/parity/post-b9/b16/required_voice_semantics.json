@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "domain": "VOICE",
+  "description": "从 B9P8 final_capability_manifest / B9P4 corrected_capability_registry 提取的 Voice 相关语义需求",
+  "requiredSemantics": [
+    {
+      "capabilityId": "builtin/tool/manage_voice_preset",
+      "numericId": 2053,
+      "displayName": "管理语音预设",
+      "domain": "tool",
+      "action": "execute",
+      "permissionSemantics": "TOOL_EXECUTE",
+      "toolExposure": "AGENT_TOOL_OPTIONAL",
+      "note": "TTS 预设管理",
+      "existingImplementation": "backend/internal/tts/service.go (GetAvailableVoices)",
+      "gap": "当前 HTTP API 有 /api/tts/voices，但未注册为 Kernel Tool"
+    },
+    {
+      "capabilityId": "external/voice/read_voicelistfetcher",
+      "numericId": 6800,
+      "displayName": "VOICELISTFETCHER",
+      "domain": "voice",
+      "action": "read",
+      "toolExposure": "REQUIRED",
+      "existingImplementation": "backend/internal/tts/voice_catalog.go",
+      "gap": "未注册为 Kernel Tool"
+    },
+    {
+      "capabilityId": "external/voice/audio",
+      "numericId": 6801,
+      "displayName": "AUDIO",
+      "domain": "voice",
+      "action": "execute",
+      "toolExposure": "REQUIRED",
+      "existingImplementation": "backend/internal/tts/engine.go (Synthesize)",
+      "note": "音频合成能力，通过 HTTP /api/tts/synthesize 暴露"
+    },
+    {
+      "capabilityId": "external/voice/capture_permission_record_audio",
+      "numericId": 6802,
+      "displayName": "PERMISSION_RECORD_AUDIO",
+      "domain": "voice",
+      "action": "capture",
+      "toolExposure": "REQUIRED",
+      "requiresPlatformAdapter": "adapter_android_native"
+    },
+    {
+      "capabilityId": "external/voice/switch_tts_voice_selection",
+      "numericId": 6803,
+      "displayName": "TTS VOICE SELECTION",
+      "domain": "voice",
+      "action": "switch",
+      "toolExposure": "REQUIRED"
+    },
+    {
+      "capabilityId": "external/voice/microphone",
+      "numericId": 6804,
+      "displayName": "MICROPHONE_(OBOE)",
+      "domain": "voice",
+      "action": "execute",
+      "toolExposure": "REQUIRED",
+      "requiresPlatformAdapter": "adapter_android_native"
+    },
+    {
+      "capabilityId": "external/voice/control_queuedttsplayback",
+      "numericId": 6805,
+      "displayName": "QUEUEDTTSPLAYBACK",
+      "domain": "voice",
+      "action": "control",
+      "toolExposure": "REQUIRED"
+    },
+    {
+      "capabilityId": "builtin/tts/* (B16 requiredCapabilityIds)",
+      "description": "B9P8 step_reuse_matrix 声明 requiredCapabilityIds 包含 builtin/tts/*",
+      "status": "GAP",
+      "note": "TTS 合成能力未以 builtin/tts/* Capability ID 注册"
+    },
+    {
+      "capabilityId": "builtin/asr/* (B16 requiredCapabilityIds)",
+      "description": "B9P8 step_reuse_matrix 声明 requiredCapabilityIds 包含 builtin/asr/*",
+      "status": "GAP",
+      "note": "ASR 识别能力未以 builtin/asr/* Capability ID 注册"
+    },
+    {
+      "semantic": "tts_synthesis",
+      "description": "文本转语音",
+      "existingImplementation": "backend/internal/tts/engine.go (Synthesize)",
+      "currentExposure": "HTTP /api/tts/synthesize"
+    },
+    {
+      "semantic": "asr_transcription",
+      "description": "语音转文字",
+      "existingImplementation": "backend/internal/asr/asr.go (SubmitTask)",
+      "currentExposure": "HTTP /api/asr/submit"
+    },
+    {
+      "semantic": "voice_clone",
+      "description": "声音克隆",
+      "existingImplementation": "backend/internal/tts/voice_clone.go (V1/V3)",
+      "currentExposure": "HTTP /api/tts/clone"
+    },
+    {
+      "semantic": "realtime_voice_conversation",
+      "description": "实时语音对话",
+      "existingImplementation": "backend/internal/realtime/proxy.go",
+      "currentExposure": "WebSocket /api/realtime/session",
+      "note": "仅火山引擎 Provider"
+    },
+    {
+      "semantic": "voice_reply",
+      "description": "强制语音回复",
+      "existingImplementation": "backend/internal/agent/tool/voice_reply.go (force_voice_reply)",
+      "toolMigration": "builtin/message/voice_reply",
+      "permissions": ["voice.generate"],
+      "status": "ALREADY_SUPPORTED via Legacy tool_migration"
+    },
+    {
+      "semantic": "wake_word",
+      "description": "唤醒词",
+      "existingImplementation": "missing",
+      "note": "未实现 continuous listening/wake word"
+    },
+    {
+      "semantic": "continuous_voice_session",
+      "description": "持续语音会话",
+      "existingImplementation": "missing",
+      "note": "未实现 always-on voice session"
+    }
+  ],
+  "sourceManifests": [
+    "docs/parity/post-b9/b9p3/corrected_capability_registry.json",
+    "docs/parity/post-b9/b9p4/capability_tool_mapping.json",
+    "docs/parity/post-b9/b9p7/step_reuse_matrix.json (B16 definition)"
+  ]
+}

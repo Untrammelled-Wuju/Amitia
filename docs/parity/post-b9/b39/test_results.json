@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "existingTests": [
+    {
+      "path": "backend/internal/extension/kernel/capability/registry_test.go",
+      "coverage": [
+        "TestToolRegistryIsolation",
+        "TestToolRegistryRegister",
+        "TestToolRegistryUnregister",
+        "TestToolRegistrySetEnabled",
+        "TestBuildToolIDFormat",
+        "TestToolRegistryReplace",
+        "TestToolRegistryReplaceOwnerConflict",
+        "TestToolRegistryBatchRegister",
+        "TestToolRegistryBatchRegisterAtomic",
+        "TestToolRegistryUnregisterByOwner",
+        "TestToolRegistryListBySource",
+        "TestModelNameFromCapabilityID",
+        "TestToolStateVisibleToModel",
+        "TestToolStateExecutable",
+        "TestDefaultAvailabilityEvaluator",
+        "TestToolDefinitionComputedState",
+        "TestCapabilitySourceToToolSource",
+        "TestToolDefinitionOwner"
+      ],
+      "status": "PASS (existing coverage satisfies B38/B39 identity and lifecycle requirements)"
+    }
+  ],
+  "race": "go test -race not re-run because no source code was modified; existing coverage remains valid.",
+  "gofmt": "No modifications, gofmt clean."
+}

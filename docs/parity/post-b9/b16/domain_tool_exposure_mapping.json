@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "description": "每个 Capability 的 Agent Tool 曝光分类",
+  "mappings": [
+    {
+      "capabilityId": "builtin/message/voice_reply",
+      "toolId": "builtin/message/voice_reply",
+      "exposure": "EXISTING_AGENT_TOOL",
+      "note": "已通过 tool_migration 注册，ModelToolName=voice_reply"
+    },
+    {
+      "capabilityId": "builtin/core/schedule",
+      "toolId": "builtin/core/schedule",
+      "exposure": "EXISTING_AGENT_TOOL",
+      "note": "已通过 tool_migration 注册"
+    },
+    {
+      "capabilityId": "builtin/core/get_current_time",
+      "exposure": "EXISTING_AGENT_TOOL"
+    },
+    {
+      "capabilityId": "builtin/memory/query",
+      "exposure": "EXISTING_AGENT_TOOL"
+    },
+    {
+      "capabilityId": "builtin/memory/summary",
+      "exposure": "EXISTING_AGENT_TOOL"
+    },
+    {
+      "capabilityId": "builtin/state/read_need",
+      "exposure": "EXISTING_AGENT_TOOL"
+    },
+    {
+      "capabilityId": "builtin/state/read_psyche",
+      "exposure": "EXISTING_AGENT_TOOL"
+    },
+    {
+      "capabilityId": "builtin/tool/execute_workflow",
+      "exposure": "REQUIRED_AGENT_TOOL",
+      "status": "REQUIRED_NOT_IMPLEMENTED",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/register_task_goal",
+      "exposure": "REQUIRED_AGENT_TOOL",
+      "status": "REQUIRED_NOT_IMPLEMENTED",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/execute_task_plan",
+      "exposure": "REQUIRED_AGENT_TOOL",
+      "status": "REQUIRED_NOT_IMPLEMENTED",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/manage_voice_preset",
+      "exposure": "REQUIRED_AGENT_TOOL",
+      "status": "REQUIRED_NOT_IMPLEMENTED",
+      "futureStep": "B115"
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_model",
+      "exposure": "REQUIRED_AGENT_TOOL",
+      "status": "REQUIRED_NOT_IMPLEMENTED",
+      "futureStep": "B105"
+    },
+    {
+      "capabilityId": "builtin/tool/streaming_output",
+      "exposure": "REQUIRED_AGENT_TOOL",
+      "status": "REQUIRED_NOT_IMPLEMENTED",
+      "futureStep": "B111"
+    },
+    {
+      "capabilityId": "builtin/model/*",
+      "exposure": "NOT_AGENT_CALLABLE",
+      "note": "Model 配置管理是 USER/SYSTEM configuration，非 Agent Tool。但 streaming 能力可能需 Agent Tool 封装"
+    },
+    {
+      "systemId": "WORKFLOW_ENGINE",
+      "exposure": "NON_AGENT (内部系统/Extension API)",
+      "note": "Workflow 引擎本身是内部系统，Agent 通过 workflow.execute Tool 调用"
+    },
+    {
+      "systemId": "TASK_RUNTIME",
+      "exposure": "NON_AGENT (内部系统)"
+    },
+    {
+      "systemId": "EVENT_SYSTEM",
+      "exposure": "SYSTEM_TRIGGER (内部系统)"
+    },
+    {
+      "systemId": "HOOK_SYSTEM",
+      "exposure": "EXTENSION_API (内部系统)"
+    },
+    {
+      "systemId": "SCHEDULE_SYSTEM",
+      "exposure": "USER_CALLABLE + SYSTEM"
+    },
+    {
+      "capabilityId": "builtin/tts/*",
+      "exposure": "NOT_AGENT_CALLABLE",
+      "note": "TTS 是 Tool 的内部依赖，通过 voice_reply 触发，非直接 Agent Tool"
+    },
+    {
+      "capabilityId": "builtin/asr/*",
+      "exposure": "NOT_AGENT_CALLABLE",
+      "note": "ASR 是内部服务，非 Agent 直接调用"
+    }
+  ],
+  "summary": {
+    "EXISTING_AGENT_TOOL": 7,
+    "REQUIRED_AGENT_TOOL": 6,
+    "NOT_AGENT_CALLABLE": 4,
+    "EXTENSION_API": 1,
+    "SYSTEM_TRIGGER": 1,
+    "USER_CALLABLE": 1,
+    "errorExposureCount": 0
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B11",
+  "description": "Platform Authorization Mapping - Kernel Permission与原生授权的关系",
+  "generatedAt": "2026-08-08T00:30:00+08:00",
+
+  "android": {
+    "kernelPermissions": ["network.request", "files.read", "files.write", "files.delete", "process.spawn", "desktop.capture", "desktop.input", "desktop.notification"],
+    "platformAuthorizations": [
+      "android.permission.INTERNET",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.READ_CONTACTS",
+      "android.permission.WRITE_CONTACTS",
+      "android.permission.CAMERA",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.CALL_PHONE",
+      "android.permission.SEND_SMS",
+      "android.permission.READ_PHONE_STATE",
+      "android.permission.REQUEST_INSTALL_PACKAGES",
+      "android.permission.ACCESSIBILITY_SERVICE"
+    ],
+    "note": "Android Platform Authorization (READ_CONTACTS, CAMERA等) 不属于Kernel Permission体系，仅通过此Mapping声明未来Android Provider需要获取的OS权限",
+    "futureStep": "B55-B78 (Android Provider)"
+  },
+
+  "ios": {
+    "kernelPermissions": ["network.request", "files.read", "files.write", "files.delete"],
+    "platformAuthorizations": [
+      "NSCameraUsageDescription",
+      "NSMicrophoneUsageDescription",
+      "NSContactsUsageDescription",
+      "NSCalendarsUsageDescription",
+      "NSRemindersUsageDescription",
+      "NSHealthShareUsageDescription",
+      "NSHealthUpdateUsageDescription",
+      "NSHomeKitUsageDescription",
+      "NSBluetoothAlwaysUsageDescription",
+      "NSDocumentsFolderUsageDescription",
+      "NSBackgroundModes"
+    ],
+    "futureStep": "B123-B138 (iOS Provider)"
+  },
+
+  "desktop": {
+    "kernelPermissions": ["desktop.capture", "desktop.input", "desktop.notification", "files.read", "files.write", "files.delete", "process.spawn", "network.request"],
+    "platformAuthorizations": "Desktop运行时权限通过操作系统UAC/TCC控制，Kernel仅声明desktop.*语义",
+    "futureStep": "B14 (Desktop平台)"
+  },
+
+  "browser_workspace": {
+    "kernelPermissions": ["files.read", "files.write", "network.request", "tool.invoke"],
+    "platformAuthorizations": ["Browser Permissions API", "SAF (Storage Access Framework)", "SSH/SFTP key authorization"],
+    "futureStep": "B79-B92 (Browser/Search/Workspace)"
+  },
+
+  "conclusion": "Kernel Permission体系保持跨平台稳定的业务语义（如files.read, network.request），具体OS Authorization通过各Platform Provider在B12/B14/B55-B138实现"
+}

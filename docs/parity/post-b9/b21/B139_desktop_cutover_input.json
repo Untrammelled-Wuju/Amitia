@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "B139 Desktop Cutover输入",
+
+  "productionAdapterEntry": {
+    "adapter": "desktopRuntimeAdapter",
+    "path": "backend/internal/extension/kernel/capability/adapter_desktop.go",
+    "registrationPoint": "adapter_registration.go"
+  },
+
+  "runtimeBinding": {
+    "type": "RuntimeTypeDesktop_Extension",
+    "currentUsage": "Agent Tool执行Desktop操作时的运行时标识"
+  },
+
+  "currentHostBridge": {
+    "host": "DesktopHost",
+    "bridge": "DesktopHostProvider (in-process Go call)",
+    "futureExtension": "可跨Electron/Go边界扩展为HTTP/WebSocket通信"
+  },
+
+  "cutoverPrerequisites": [
+    "Desktop Platform Adapter已正式实现",
+    "RuntimeAdapterRegistry注册完成",
+    "DesktopHostProvider生产就绪",
+    "B22 Conformance测试通过"
+  ],
+
+  "statement": "B21已完成Desktop Platform Adapter底座建设，B139可直接基于此进行生产化发布"
+}

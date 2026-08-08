@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Applied Runtime Contract Changes",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "appliedChanges": [],
+
+  "summary": {
+    "totalApplied": 0,
+    "reason": "PASS_NO_CODE_CHANGE - 现有Runtime合同已满足B12全部要求"
+  },
+
+  "verifiedExistingContracts": [
+    "RuntimeBinding struct (RuntimeType/RuntimeID/HandlerName/Endpoint/Metadata)",
+    "RuntimeAdapter interface (Supports/Execute/Health)",
+    "RuntimeAdapterRegistry (Register/Resolve)",
+    "DefaultToolExecutor.Execute() → AvailabilityEval → AdapterRegistry → Adapter",
+    "ToolInvocationContext with invocation/trace/permission/deadline propagation",
+    "RuntimeHost interface (Descriptor/Capabilities/Paths/Processes/RuntimeInstanceID)",
+    "RuntimeOrchestrator (Register/StartPhase/StopAll/Snapshot) with component lifecycle",
+    "ProcessSupervisor (Register/Start/WaitReady/Stop/Snapshot) with health monitoring",
+    "RuntimeDescriptor (Host/Kind/Guest/Architecture)",
+    "HostCapabilities (process/filesystem/network/offload support flags)"
+  ]
+}

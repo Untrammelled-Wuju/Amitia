@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "status": "PASS",
+  "stepRange": {"first": "B10", "last": "B154", "total": 145},
+  "classification": {
+    "REUSE": 1,
+    "EXTEND": 72,
+    "ADAPTER_ONLY": 3,
+    "NEW_PROVIDER": 51,
+    "MIGRATION_ONLY": 2,
+    "INTEGRATION_ONLY": 5,
+    "VALIDATION_ONLY": 11,
+    "FORBIDDEN_DUPLICATE": "不适用(施工类型)"
+  },
+  "risk": {
+    "CRITICAL": 40,
+    "HIGH": 50,
+    "MEDIUM": 41,
+    "LOW": 14,
+    "NONE": 0
+  },
+  "coverage": {
+    "classifiedSteps": 145,
+    "unclassifiedSteps": 0,
+    "unresolvedCanonicalTargets": 0,
+    "unresolvedDuplicateRisks": 0,
+    "unassignedParityGaps": 0
+  },
+  "architecture": {
+    "secondToolRegistryAllowed": false,
+    "secondPermissionSystemAllowed": false,
+    "secondExecutionPipelineAllowed": false,
+    "secondAgentRuntimeAllowed": false,
+    "secondMemorySystemAllowed": false,
+    "secondModelConfigAllowed": false,
+    "secondWorkspaceSystemAllowed": false
+  },
+  "gapOwnership": {
+    "toolGap": {"total": 253, "assigned": 253, "unassigned": 0},
+    "permissionGap": {"total": 14, "assigned": 14, "unassigned": 0},
+    "providerGap": {"total": 28, "assigned": 28, "unassigned": 0},
+    "adapterGap": {"total": 3, "assigned": 3, "unassigned": 0}
+  },
+  "businessSourceFilesModified": 0,
+  "historicalPlanFilesModified": 0,
+  "nextStep": "B9P8"
+}

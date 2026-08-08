@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:44:00+08:00",
+  "conflicts": [
+    {
+      "conflictId": "ERR_CONFLICT_001",
+      "b9Error": "ERR_TASK_PLANNING_FAILED_4001",
+      "description": "PLANNING属于Agent Task域，不属于TaskRuntime。当前没有对应的Domain错误源。",
+      "severity": "MEDIUM",
+      "resolution": "PROTOCOL_ERROR_GAP - 需要建立Agent Task Domain Error或标记此B9 Error为Agent域专用"
+    },
+    {
+      "conflictId": "ERR_CONFLICT_002",
+      "b9Error": "ERR_RUNTIME_NOT_READY_5001",
+      "description": "过于笼统。Runtime未就绪在实际Domain中包含：RUNTIME_START_FAILED, RUNTIME_HEALTH_FAILED, RUNTIME_RECONCILE_FAILED, START_FAILED, STOP_FAILED, PROOT_UNAVAILABLE等数十种具体原因。",
+      "severity": "LOW",
+      "resolution": "FAMILY_MAPPING - 作为Protocol大类可以接受，但必须保留domainCode"
+    },
+    {
+      "conflictId": "ERR_CONFLICT_003",
+      "b9Error": "ERR_PERMISSION_DENIED_6001",
+      "description": "过于笼统。权限拒绝在实际Domain中包含：PermissionDecision.deny, OS Permission Denied, Scope Denied, Approval Denied, Permanent Platform Denial等多种语义。",
+      "severity": "LOW",
+      "resolution": "FAMILY_MAPPING - 作为Protocol大类，必须通过domainCode区分具体层次"
+    },
+    {
+      "conflictId": "ERR_CONFLICT_004",
+      "b9Error": "ERR_MODEL_CONNECTION_FAILED_2001",
+      "description": "Domain侧仅TextModelCallError，错误模型过于简单",
+      "severity": "LOW",
+      "resolution": "MODEL_ERROR_MODEL_GAP - 当前Domain错误不足，需后续B111-B114扩展"
+    },
+    {
+      "conflictId": "ERR_CONFLICT_005",
+      "b9Error": "ERR_INTERNAL_UNKNOWN_99001",
+      "description": "通用兜底错误码，掩盖了实际Domain错误",
+      "severity": "LOW",
+      "resolution": "应尽量避免使用，仅在真正未知场景中保留"
+    }
+  ],
+  "missingProtocolErrors": [
+    {
+      "gapId": "PROTOCOL_ERR_GAP_001",
+      "description": "安全认证和安全完整性错误缺乏Protocol大类",
+      "domainCodes": ["ErrInvalidToken", "ErrTokenExpired", "ErrUnsafePath", "ErrPathEscape", "ErrAuthFailOpen"],
+      "suggestedCategory": "ERR_SECURITY_INTEGRITY"
+    },
+    {
+      "gapId": "PROTOCOL_ERR_GAP_002",
+      "description": "图像生成Provider错误缺乏Protocol大类",
+      "domainCodes": ["ErrCodeConfigMissing", "ErrCodeProviderNotRegistered", "ErrCodeModelNotSupported", "ErrCodeAuthFailed", "ErrCodeRateLimited", "ErrCodeServiceError"],
+      "suggestedCategory": "ERR_IMAGE_GENERATION"
+    },
+    {
+      "gapId": "PROTOCOL_ERR_GAP_003",
+      "description": "桌面宠物运行时错误缺乏Protocol大类",
+      "domainCodes": ["ErrRuntimeProtocolMismatch", "ErrRuntimeOffline", "ErrRuntimeBusy", "ErrRuntimeCommandTimeout"],
+      "suggestedCategory": "ERR_PET_RUNTIME"
+    },
+    {
+      "gapId": "PROTOCOL_ERR_GAP_004",
+      "description": "工具/能力安全扫描错误缺乏Protocol大类",
+      "domainCodes": ["ErrInvalidArchive", "ErrPathTraversal", "ErrExecutableNotAllowed", "ErrSignatureInvalid", "ErrPublisherBlocked"],
+      "suggestedCategory": "ERR_SECURITY_SCAN"
+    }
+  ],
+  "summary": {
+    "totalConflicts": 5,
+    "protocolErrorGaps": 4
+  }
+}

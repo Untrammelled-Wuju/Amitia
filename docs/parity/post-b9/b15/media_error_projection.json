@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "note": "Error Projection从B9P8 final_error_projection_manifest.json读取。各Domain Error独立。",
+  "authority": "各Domain独立Error，无统一Media Error Registry",
+  "domains": {
+    "imageGeneration": {
+      "owner": "ProviderError in errors.go",
+      "protocolClass": "IMAGE_* error codes",
+      "retryClass": "never/same_call/query_first/user_action/after_delay"
+    },
+    "vision": {
+      "owner": "HTTP status codes + Chat Model errors",
+      "note": "No dedicated Vision error domain"
+    },
+    "asr": {
+      "owner": "ASR provider errors propagated via Realtime",
+      "note": "No dedicated ASR error file"
+    },
+    "tts": {
+      "owner": "fmt.Errorf wrapping of provider errors",
+      "note": "No dedicated TTS error file"
+    },
+    "realtime": {
+      "owner": "WebSocket/protocol errors",
+      "note": "No dedicated Realtime error file"
+    },
+    "browser": {
+      "owner": "BrowserError in errors.go (B14)",
+      "errorCodes": ["invalid_request", "session_not_found", "tab_not_found", "navigation_failed", "stale_element", "element_not_found", "unsupported_operation", "provider_unavailable", "download_failed", "upload_failed"]
+    }
+  },
+  "noGlobalErrorRegistry": true,
+  "noUnifiedMediaErrorStore": true
+}

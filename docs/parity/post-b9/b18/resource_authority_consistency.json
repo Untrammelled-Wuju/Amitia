@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Resource Authority引用一致性 - amitia:// 作为唯一跨平台资源合同",
+
+  "officialScheme": "amitia",
+  "resourceUriAuthority": "backend/pkg/resourceuri/",
+
+  "references": {
+    "b13": {
+      "scheme": "amitia://",
+      "path": "backend/pkg/resourceuri/resource_uri.go, resource_root.go, resolver.go, physical_resolver.go",
+      "rootContracts": "10种ResourceRoot (workspace/attachments/data/cache/runtime/config/extensions/logs/temp/native)",
+      "securityInvariants": "6项全部满足 (NO_ROOT_ESCAPE, NO_PATH_TRAVERSAL, NO_SECRET_IN_URI, NO_PERMISSION_AUTHORITY_IN_RESOURCEURI, NO_DIRECT_AGENT_PROVIDER_BYPASS, NO_SECOND_RESOURCE_SCHEME)",
+      "status": "CONSISTENT - ResourceURI唯一Authority定义"
+    },
+    "b14": {
+      "browserCompatible": true,
+      "usage": "BrowserUploadRequest/DownloadResult使用ResourceURI (非physicalPath)",
+      "status": "CONSISTENT - Browser复用B13 ResourceURI"
+    },
+    "b15": {
+      "mediaCompatible": true,
+      "usage": "Media输入/输出使用amitia:// ResourceURI (B13 frozen)",
+      "temporaryResource": "amitia://temp/",
+      "persistentResource": "amitia://workspace/",
+      "physicalPathAsContract": false,
+      "status": "CONSISTENT - Media复用B13 ResourceURI"
+    }
+  },
+
+  "workspaceAuthority": "ResourceURI workspace root (amitia://workspace/)",
+  "browserCompatible": true,
+  "mediaCompatible": true,
+  "secondOfficialSchemeCount": 0,
+  "result": "PASS - amitia:// 保持唯一官方Scheme，Browser/Media均复用"
+}

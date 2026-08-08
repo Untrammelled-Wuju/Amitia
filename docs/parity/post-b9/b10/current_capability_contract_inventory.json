@@ -1,0 +1,447 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B10",
+  "description": "Extension Kernel Capability 包现有合同能力清单",
+  "basePath": "backend/internal/extension/kernel/capability/",
+  "generatedAt": "2026-08-07T23:59:00+08:00",
+
+  "capabilityContracts": {
+    "CapabilityDefinition": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": [
+        "ID (CapabilityID)",
+        "Type (CapabilityType)",
+        "Owner (ResourceOwner)",
+        "Source (CapabilitySource)",
+        "Name (string)",
+        "Description (string)",
+        "InputSchema (json.RawMessage)",
+        "OutputSchema (json.RawMessage)",
+        "Permissions ([]PermissionRequirement)",
+        "ScopeRule (ScopeRule)",
+        "RiskLevel (RiskLevel)",
+        "SideEffectLevel (SideEffectLevel)",
+        "Runtime (RuntimeBinding)",
+        "Availability (AvailabilityRule)",
+        "Metadata (map[string]any)"
+      ]
+    },
+    "ToolDefinition": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "extendsCapabilityContract": true,
+      "fields": [
+        "ID (string, B9P3-frozen)",
+        "ModelName (string)",
+        "ExtensionID (string)",
+        "ModuleID (string)",
+        "Source (ToolSource)",
+        "Name (string)",
+        "Description (string)",
+        "Version (string)",
+        "InputSchema (json.RawMessage)",
+        "OutputSchema (json.RawMessage)",
+        "Permissions ([]PermissionRequirement)",
+        "RiskLevel (RiskLevel)",
+        "SideEffect (SideEffectLevel)",
+        "Scope (ScopeRule)",
+        "Enabled (bool)",
+        "Compatible (bool)",
+        "Internal (bool)",
+        "HasSideEffects (bool)",
+        "Idempotent (bool)",
+        "Retryable (bool)",
+        "TimeoutMS (int64)",
+        "Metadata (map[string]any)",
+        "ToolVersion (ToolVersion)",
+        "State (ToolState)",
+        "ModelExposure (ModelExposureRule)",
+        "ExecutionPolicy (ToolExecutionPolicy)",
+        "ResultPolicy (ToolResultPolicy)",
+        "Runtime (RuntimeBinding)"
+      ]
+    },
+    "ToolRegistry": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "status": "ACTIVE",
+      "operations": [
+        "Register",
+        "Replace",
+        "BatchRegister",
+        "BatchReplace",
+        "Unregister",
+        "UnregisterByOwner",
+        "Get",
+        "GetByModelName",
+        "List (with ToolFilter)",
+        "ListByOwner",
+        "ListBySource",
+        "SetEnabled",
+        "RegisterModelName",
+        "ResolveModelName",
+        "Count",
+        "CountBySource",
+        "CountByOwner"
+      ],
+      "indexes": [
+        "items (map[string]ToolDefinition)",
+        "names (map[string]string - model name to id)",
+        "byOwner (map[string][]string)",
+        "bySource (map[ToolSource][]string)"
+      ]
+    },
+    "ToolInvocationContext": {
+      "path": "backend/internal/extension/kernel/capability/invocation.go",
+      "status": "ACTIVE",
+      "fields": [
+        "InvocationID",
+        "ParentID",
+        "UserID",
+        "CharacterID",
+        "ConversationID",
+        "ExtensionID",
+        "ModuleID",
+        "Generation",
+        "Source (InvocationSource)",
+        "ApprovalMode",
+        "ExpiresAt",
+        "IdempotencyKey",
+        "TraceID",
+        "Metadata",
+        "ScheduleID",
+        "TriggerID",
+        "OperationID",
+        "ScopeSnapshotID",
+        "PermissionSnapshotID"
+      ]
+    },
+    "ToolInvocation": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "fields": [
+        "ToolID",
+        "Input (json.RawMessage)",
+        "IdempotencyKey",
+        "TraceID"
+      ]
+    },
+    "UnifiedToolResult": {
+      "path": "backend/internal/extension/kernel/capability/result.go",
+      "status": "ACTIVE",
+      "isCanonicalResultType": true,
+      "fields": [
+        "InvocationID",
+        "Status (ToolResultStatus)",
+        "Content ([]ToolContent)",
+        "Structured (json.RawMessage)",
+        "Error (*ToolError)",
+        "SideEffects ([]RecordedSideEffect)",
+        "Metadata (map[string]any)"
+      ]
+    },
+    "ToolResult": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "isLegacyResultType": false,
+      "note": "保留的轻量结果类型，UnifiedToolResult为Canonical",
+      "fields": [
+        "InvocationID",
+        "Status (string)",
+        "Output (json.RawMessage)",
+        "Error (string)",
+        "VisibleText (string)",
+        "DurationMS (int64)"
+      ]
+    },
+    "ToolError": {
+      "path": "backend/internal/extension/kernel/capability/result.go",
+      "status": "ACTIVE",
+      "isCanonicalErrorType": true,
+      "fields": [
+        "Code (string)",
+        "Message (string)",
+        "Retryable (bool)",
+        "UserVisible (bool)",
+        "Details (map[string]any)",
+        "Cause (error)"
+      ],
+      "errorCodes": [
+        "invalid_input",
+        "permission_denied",
+        "scope_denied",
+        "not_available",
+        "runtime_unavailable",
+        "timeout",
+        "cancelled",
+        "conflict",
+        "rate_limited",
+        "dependency_missing",
+        "connection_lost",
+        "execution_failed",
+        "invalid_result",
+        "internal_error"
+      ]
+    },
+    "RuntimeBinding": {
+      "path": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "status": "ACTIVE",
+      "fields": [
+        "RuntimeType (RuntimeType)",
+        "RuntimeID (string)",
+        "HandlerName (string)",
+        "Endpoint (string)",
+        "Metadata (map[string]any)"
+      ],
+      "runtimeTypes": [
+        "builtin",
+        "plugin_js",
+        "plugin_service",
+        "mcp",
+        "workflow",
+        "internal",
+        "legacy",
+        "javascript",
+        "wasm",
+        "trusted_service",
+        "task"
+      ]
+    },
+    "ToolExecutionPolicy": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": [
+        "Timeout (time.Duration)",
+        "MaxConcurrency (int)",
+        "RetryPolicy (RetryPolicy)",
+        "Idempotent (bool)",
+        "ApprovalRequired (bool)",
+        "AllowBackground (bool)",
+        "MaxDepth (int)",
+        "ResourceLimits (ResourceLimits)"
+      ]
+    },
+    "ResourceLimits": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": [
+        "MaxMemoryBytes (int64)",
+        "MaxCPUPercent (int)"
+      ]
+    },
+    "ModelExposureRule": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": [
+        "ExposedByDefault (bool)",
+        "RequiresActivation (bool)",
+        "Categories ([]string)",
+        "MaxPromptTokens (int)",
+        "Priority (int)"
+      ]
+    },
+    "AvailabilityRule": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": [
+        "Platforms ([]string)",
+        "RequiresRoles ([]string)"
+      ]
+    },
+    "PermissionRequirement": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "note": "仅声明引用，Permission决策归B11",
+      "fields": [
+        "Capability (string)",
+        "Description (string)",
+        "Risk (string)"
+      ]
+    },
+    "ScopeRule": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "fields": [
+        "Type (string)",
+        "ID (string)"
+      ]
+    },
+    "ToolSource": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "values": [
+        "builtin",
+        "plugin",
+        "mcp",
+        "workflow",
+        "internal",
+        "legacy_tool"
+      ]
+    },
+    "CapabilitySource": {
+      "path": "backend/internal/extension/kernel/capability/source.go",
+      "status": "ACTIVE",
+      "values": [
+        "builtin",
+        "plugin",
+        "mcp",
+        "workflow",
+        "computer_use",
+        "provider",
+        "internal",
+        "legacy"
+      ]
+    },
+    "RiskLevel": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "values": ["low", "medium", "high"]
+    },
+    "SideEffectLevel": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "values": [
+        "none",
+        "read_only",
+        "write",
+        "external",
+        "system",
+        "financial",
+        "destructive"
+      ]
+    },
+    "ToolState": {
+      "path": "backend/internal/extension/kernel/capability/state.go",
+      "status": "ACTIVE",
+      "fields": [
+        "Installed (bool)",
+        "ModuleEnabled (bool)",
+        "CapabilityEnabled (bool)",
+        "ScopeAllowed (bool)",
+        "PermissionGranted (bool)",
+        "RuntimeReady (bool)",
+        "DependencyReady (bool)",
+        "Health (HealthStatus)"
+      ],
+      "methods": [
+        "VisibleToModel()",
+        "Executable()"
+      ]
+    },
+    "HealthStatus": {
+      "path": "backend/internal/extension/kernel/capability/state.go",
+      "status": "ACTIVE",
+      "values": ["unknown", "ready", "degraded", "unhealthy", "shutdown"]
+    },
+    "ResourceOwner": {
+      "path": "backend/internal/extension/kernel/capability/owner.go",
+      "status": "ACTIVE",
+      "fields": [
+        "OwnerType (OwnerType)",
+        "OwnerID (string)",
+        "ExtensionID (string)",
+        "ModuleID (string)"
+      ]
+    },
+    "OwnerType": {
+      "path": "backend/internal/extension/kernel/capability/owner.go",
+      "status": "ACTIVE",
+      "values": ["system", "user", "extension", "shared", "temporary"]
+    },
+    "BuildCapabilityID": {
+      "path": "backend/internal/extension/kernel/capability/id.go",
+      "status": "ACTIVE",
+      "note": "B9P3冻结，未修改"
+    },
+    "BuildToolID": {
+      "path": "backend/internal/extension/kernel/capability/tool.go",
+      "status": "ACTIVE",
+      "note": "B9P3冻结，未修改"
+    },
+    "ModelNameFromCapabilityID": {
+      "path": "backend/internal/extension/kernel/capability/id.go",
+      "status": "ACTIVE",
+      "note": "B9P3冻结的ModelName派生规则"
+    },
+    "ResolveModelNameConflicts": {
+      "path": "backend/internal/extension/kernel/capability/id.go",
+      "status": "ACTIVE",
+      "note": "B9P3冻结的ModelName冲突解决"
+    },
+    "AvailabilityEvaluator": {
+      "path": "backend/internal/extension/kernel/capability/availability.go",
+      "status": "ACTIVE",
+      "interface": true,
+      "defaultImpl": "DefaultAvailabilityEvaluator"
+    },
+    "ToolContent": {
+      "path": "backend/internal/extension/kernel/capability/result.go",
+      "status": "ACTIVE",
+      "contentTypes": [
+        "text",
+        "structured",
+        "binary_reference",
+        "resource_reference",
+        "ui_content",
+        "stream",
+        "task_reference"
+      ]
+    },
+    "InvocationSource": {
+      "path": "backend/internal/extension/kernel/capability/invocation.go",
+      "status": "ACTIVE",
+      "values": [
+        "model",
+        "user",
+        "workflow",
+        "plugin",
+        "system",
+        "scheduled_task",
+        "computer_use"
+      ]
+    },
+    "ApprovalMode": {
+      "path": "backend/internal/extension/kernel/capability/invocation.go",
+      "status": "ACTIVE",
+      "values": ["auto", "manual", "session"]
+    },
+    "ToolVersion": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": ["SchemaVersion", "Revision"]
+    },
+    "RetryPolicy": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": ["MaxRetries", "BackoffBase"]
+    },
+    "ToolResultPolicy": {
+      "path": "backend/internal/extension/kernel/capability/definition.go",
+      "status": "ACTIVE",
+      "fields": ["SanitizeError", "MaxOutputBytes"]
+    },
+    "RuntimeAdapter": {
+      "path": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "status": "ACTIVE",
+      "interface": true,
+      "methods": ["Supports", "Execute", "Health"]
+    },
+    "RuntimeAdapterRegistry": {
+      "path": "backend/internal/extension/kernel/capability/executor.go",
+      "status": "ACTIVE",
+      "operations": ["Register", "Resolve"]
+    },
+    "RecordedSideEffect": {
+      "path": "backend/internal/extension/kernel/capability/result.go",
+      "status": "ACTIVE",
+      "fields": ["Type", "Target", "Description", "Reversible", "Metadata"]
+    }
+  },
+
+  "testCoverage": {
+    "registry_test.go": {
+      "testCount": 19,
+      "coverage": "ToolRegistry核心功能：Register、Replace、BatchRegister、BatchReplace、Unregister、UnregisterByOwner、SetEnabled、GetByModelName、ListBySource、ID格式、ModelName解析、ToolState判断、Owner派生、Availability评估、ComputedState、Source映射"
+    }
+  }
+}

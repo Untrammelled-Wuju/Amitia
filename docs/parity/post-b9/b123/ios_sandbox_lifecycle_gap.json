@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 iOS Sandbox Lifecycle Gap - 生命周期相关能力分类",
+
+  "lifecycleCapabilities": [
+    {
+      "capability": "Provider Registration",
+      "description": "注册Provider到Orchestrator",
+      "existingSupport": ["ProviderRegistry.Register()"],
+      "status": "ALREADY_SUPPORTED",
+      "b123Action": "确认现有注册机制适用"
+    },
+    {
+      "capability": "Provider Start",
+      "description": "启动Provider实例",
+      "existingSupport": ["RuntimeOrchestrator.StartPhase()"],
+      "status": "ALREADY_SUPPORTED",
+      "b123Action": "确认现有Start语义适用"
+    },
+    {
+      "capability": "Provider Stop",
+      "description": "停止Provider实例",
+      "existingSupport": ["RuntimeOrchestrator.StopAll()", "ManagedComponent.Stop()"],
+      "status": "ALREADY_SUPPORTED",
+      "b123Action": "确认现有Stop语义适用"
+    },
+    {
+      "capability": "Health Check",
+      "description": "运行时健康检查",
+      "existingSupport": ["RuntimeAdapter.Health()", "HostCapabilities"],
+      "status": "ALREADY_SUPPORTED",
+      "b123Action": "确认现有Health语义适用"
+    },
+    {
+      "capability": "Readiness Check",
+      "description": "就绪检查",
+      "existingSupport": ["ManagedComponent.Ready()"],
+      "status": "ALREADY_SUPPORTED",
+      "b123Action": "确认现有Ready语义适用"
+    },
+    {
+      "capability": "Dependency Management",
+      "description": "组件依赖管理",
+      "existingSupport": ["topologicalSort()", "verifyDependencies()"],
+      "status": "ALREADY_SUPPORTED",
+      "b123Action": "确认现有依赖管理适用"
+    },
+    {
+      "capability": "Rollback",
+      "description": "启动失败回滚",
+      "existingSupport": ["RuntimeOrchestrator.rollback()"],
+      "status": "ALREADY_SUPPORTED",
+      "b123Action": "确认现有回滚机制适用"
+    },
+    {
+      "capability": "Crash Recovery",
+      "description": "崩溃恢复",
+      "existingSupport": ["SurrealDB monitor restart pattern"],
+      "status": "B126_REQUIRED",
+      "b123Action": "记录需求 - B126实现"
+    },
+    {
+      "capability": "iSH Process Start",
+      "description": "启动iSH模拟器进程",
+      "existingSupport": [],
+      "status": "B124_REQUIRED",
+      "b123Action": "记录接口需求"
+    },
+    {
+      "capability": "iSH Process Stop",
+      "description": "停止iSH模拟器进程",
+      "existingSupport": [],
+      "status": "B124_REQUIRED",
+      "b123Action": "记录接口需求"
+    },
+    {
+      "capability": "Rootfs Installation",
+      "description": "Alpine rootfs安装",
+      "existingSupport": [],
+      "status": "B125_REQUIRED",
+      "b123Action": "记录接口需求"
+    },
+    {
+      "capability": "Rootfs Integrity Check",
+      "description": "Rootfs完整性检查",
+      "existingSupport": [],
+      "status": "B125_REQUIRED",
+      "b123Action": "记录接口需求"
+    },
+    {
+      "capability": "Sandbox Cleanup",
+      "description": "Sandbox资源清理",
+      "existingSupport": [],
+      "status": "B126_REQUIRED",
+      "b123Action": "记录接口需求"
+    },
+    {
+      "capability": "Workspace Mount",
+      "description": "用户Workspace挂载到Sandbox",
+      "existingSupport": [],
+      "status": "B125_REQUIRED",
+      "b123Action": "记录挂载需求"
+    }
+  ],
+
+  "summary": {
+    "totalCapabilities": 14,
+    "alreadySupportedCount": 7,
+    "b124RequiredCount": 2,
+    "b125RequiredCount": 3,
+    "b126RequiredCount": 2,
+    "coreRuntimeGapCount": 0,
+    "notRequiredCount": 0,
+    "unknownCount": 0
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Native Offload Contract - 跨平台共享合同定义",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "requestContract": {
+    "identity": {
+      "invocationID": "string - via ToolInvocationContext.InvocationID",
+      "traceID": "string - via ToolInvocationContext.TraceID",
+      "toolID": "string - Canonical Tool ID (not nativeToolId)"
+    },
+    "runtimeBinding": {
+      "runtimeType": "RuntimeType enum value",
+      "runtimeID": "string - specific runtime instance ID",
+      "handlerName": "string - handler within runtime",
+      "endpoint": "string - optional endpoint",
+      "metadata": "map[string]any - binding-specific config (NO secrets)"
+    },
+    "input": {
+      "payload": "json.RawMessage - tool-specific input (not full ToolDefinition)",
+      "note": "Provider should receive minimal necessary input, not entire tool registry"
+    },
+    "context": {
+      "deadline": "via context.Context (ctx.Done())",
+      "userID": "ToolInvocationContext.UserID",
+      "characterID": "ToolInvocationContext.CharacterID",
+      "conversationID": "ToolInvocationContext.ConversationID",
+      "extensionID": "ToolInvocationContext.ExtensionID",
+      "moduleID": "ToolInvocationContext.ModuleID",
+      "permissionSnapshotID": "ToolInvocationContext.PermissionSnapshotID"
+    }
+  },
+
+  "resultContract": {
+    "unifiedResult": "UnifiedToolResult - all provider results must normalize to this",
+    "content": "ToolContent{Type, Text, Data, Stream}",
+    "status": "ToolResultStatus enum",
+    "error": "if any, ToolError with domainCode/retryable/userActionRequired",
+    "allowedDomainDTO": "领域DTO (如 AndroidScreenshotResult) 可存在但必须归一"
+  },
+
+  "context": {
+    "propagation": "ctx (context.Context) 贯穿 Adapter -> Provider",
+    "deadline": "ctx deadline 必须传播",
+    "cancellation": "ctx.Done() 取消信号必须传播",
+    "traceID": "用于跨进程关联 (如IPC/WebSocket)"
+  },
+
+  "cancellation": {
+    "model": "Context cancellation via ctx.CancelFunc",
+    "propagation": "KernelCancels -> ctx.Done() -> Adapter propagates -> Provider cancels",
+    "noSecondSystem": "禁止建立NativeCancellationManager"
+  },
+
+  "timeout": {
+    "kernelTimeout": "ExecutionPipeline.TimeoutCtrl",
+    "providerInternalTimeout": "Domain Provider specific protocol timeout",
+    "adapterDuty": "Only propagate ctx/deadline"
+  },
+
+  "error": {
+    "domainError": "Provider specific error (preserve domainCode)",
+    "normalization": "Adapter must normalize to ToolError/UnifiedToolResult",
+    "preservation": ["domainCode", "retryable", "userActionRequired"],
+    "noSecondErrorStore": "禁止创建RuntimeErrorCenter2"
+  },
+
+  "state": {
+    "healthOnly": "Adapter最多持有health/ready状态",
+    "noGlobalStateStore": "禁止第二RuntimeStateStore",
+    "toolAvailability": "继续使用现有ToolState/AvailabilityEvaluator"
+  },
+
+  "resourceReference": {
+    "scheme": "amitia:// (B9P8 official scheme)",
+    "forbidden": ["raw OS path as portable contract"],
+    "note": "ResourceURI contract留给B13"
+  }
+}

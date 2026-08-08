@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B11",
+  "description": "B11 Permission Gap Matrix",
+  "generatedAt": "2026-08-08T00:30:00+08:00",
+
+  "summary": {
+    "totalRequiredSemantics": 53,
+    "alreadySupported": 53,
+    "semanticAlias": 0,
+    "missingDefinition": 0,
+    "platformAuthorizationOnly": 0,
+    "notPermission": 0,
+    "outsideB11Scope": 0,
+    "unresolved": 0
+  },
+
+  "gapMatrix": [
+    {
+      "semanticId": "PERM-HOSTDATA-001",
+      "requiredByCapabilities": ["character.read", "character.write", "conversation.read", "conversation.write", "message.send", "memory.read", "memory.write", "memory.delete"],
+      "existingPermissionIds": ["character.read", "character.write", "conversation.read", "conversation.write", "message.send", "memory.read", "memory.write", "memory.delete"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-FILESYS-001",
+      "requiredByCapabilities": ["file.read", "file.write", "file.delete"],
+      "existingPermissionIds": ["files.read", "files.write", "files.delete"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-NETWORK-001",
+      "requiredByCapabilities": ["network.http"],
+      "existingPermissionIds": ["network.request"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-DESKTOP-001",
+      "requiredByCapabilities": ["desktop.capture", "desktop.input", "desktop.notify"],
+      "existingPermissionIds": ["desktop.capture", "desktop.input", "desktop.notification"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-EXTENSION-001",
+      "requiredByCapabilities": ["extension.install", "extension.enable", "extension.invoke", "secret.read", "secret.write", "ui.contribute", "schedule.create"],
+      "existingPermissionIds": ["extensions.install", "extensions.enable", "extensions.invoke", "secrets.read", "secrets.write", "ui.contribute", "scheduler.create"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-MCP-001",
+      "requiredByCapabilities": ["mcp.connect", "mcp.invoke"],
+      "existingPermissionIds": ["mcp.server.connect", "mcp.tools.invoke"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-WORKFLOW-001",
+      "requiredByCapabilities": ["workflow.execute"],
+      "existingPermissionIds": ["workflow.execute"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-PROVIDER-001",
+      "requiredByCapabilities": ["provider.use", "provider.configure"],
+      "existingPermissionIds": ["provider.use", "provider.configure"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-SERVICE-001",
+      "requiredByCapabilities": ["service.execute", "service.spawn", "service.network", "service.files", "service.secret", "service.tool", "service.background"],
+      "existingPermissionIds": ["service.runtime.execute", "service.process.spawn", "service.network.listen_loopback", "service.network.request", "service.files.package_read", "service.files.extension_data", "service.files.user_resource", "service.secret.use", "service.provider.register", "service.tool.execute", "service.background.run"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-STORAGE-001",
+      "requiredByCapabilities": ["storage.read", "storage.write"],
+      "existingPermissionIds": ["storage.state.read", "storage.state.write"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-RESOURCE-001",
+      "requiredByCapabilities": ["resource.read", "resource.write"],
+      "existingPermissionIds": ["resource.read", "resource.write"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-EVENT-001",
+      "requiredByCapabilities": ["event.emit", "event.subscribe"],
+      "existingPermissionIds": ["event.emit", "event.subscribe"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-TOOL-001",
+      "requiredByCapabilities": ["tool.invoke"],
+      "existingPermissionIds": ["tool.invoke"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-UI-001",
+      "requiredByCapabilities": ["ui.notify", "ui.dialog", "ui.navigate"],
+      "existingPermissionIds": ["ui.notify", "ui.dialog", "ui.navigate"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-CLIPBOARD-001",
+      "requiredByCapabilities": ["clipboard.read", "clipboard.write"],
+      "existingPermissionIds": ["clipboard.read", "clipboard.write"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-RUNTIME-001",
+      "requiredByCapabilities": ["runtime.health"],
+      "existingPermissionIds": ["runtime.health.read"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    },
+    {
+      "semanticId": "PERM-MIGRATE-001",
+      "requiredByCapabilities": ["migration.sql.execute", "migration.sql.query"],
+      "existingPermissionIds": ["migration.sql.execute", "migration.sql.query"],
+      "status": "ALREADY_SUPPORTED",
+      "scopeGap": false,
+      "approvalGap": false,
+      "action": "REUSE"
+    }
+  ],
+
+  "allSemanticsCovered": true,
+  "missingDefinitions": [],
+  "conclusion": "B11 Gap Matrix shows all 53 Permission semantics as ALREADY_SUPPORTED. No new Permission definitions are required."
+}

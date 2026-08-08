@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop Adapter安全验证",
+
+  "validations": {
+    "rawSecret": {
+      "status": "PASS",
+      "note": "Desktop Adapter不保存password/token/private key/credential"
+    },
+    "rawPortablePhysicalPath": {
+      "status": "PASS",
+      "note": "Adapter不直接暴露物理路径作为Portable Resource ID"
+    },
+    "directProviderCall": {
+      "status": "PASS",
+      "note": "Production代码不绕过RuntimeAdapterRegistry直接调用DesktopProvider"
+    },
+    "permissionBypass": {
+      "status": "PASS",
+      "note": "Adapter不涉及权限决策，所有执行通过PermissionBroker保护"
+    },
+    "executionBypass": {
+      "status": "PASS",
+      "note": "Desktop操作最终通过ExecutionPipeline执行"
+    },
+    "legacyAdapter": {
+      "status": "PASS",
+      "note": "Desktop Adapter不使用LegacyRuntimeAdapter"
+    },
+    "productionFake": {
+      "status": "PASS",
+      "note": "不存在FakeDesktopProvider或NoopDesktopProvider"
+    },
+    "duplicateRegistry": {
+      "status": "PASS",
+      "note": "RuntimeTypeDesktop_Extension仅在adapter_registration.go中注册一次"
+    }
+  },
+
+  "overallStatus": "PASS"
+}

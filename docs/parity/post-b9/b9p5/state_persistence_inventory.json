@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:36:00+08:00",
+  "persistenceAudit": [
+    {
+      "stateModelId": "CAP_HEALTH_001",
+      "typeName": "HealthStatus (capability)",
+      "persistenceLocation": "内存",
+      "storageMechanism": "运行时计算",
+      "dualWriteRisk": false,
+      "notes": "不独立持久化，作为ToolState一部分"
+    },
+    {
+      "stateModelId": "CAP_TOOLSTATE_002",
+      "typeName": "ToolState",
+      "persistenceLocation": "内存",
+      "storageMechanism": "运行时组合计算",
+      "dualWriteRisk": false,
+      "notes": "各字段带json tag但整体不入库"
+    },
+    {
+      "stateModelId": "CAP_RESULT_003",
+      "typeName": "ToolResultStatus",
+      "persistenceLocation": "UnifiedToolResult整体",
+      "storageMechanism": "序列化到结果存储",
+      "dualWriteRisk": false,
+      "notes": "作为结果一部分存储"
+    },
+    {
+      "stateModelId": "TOOL_EXEC_OBS_006",
+      "typeName": "ExecutionStatus (observability)",
+      "persistenceLocation": "内存 + 审计日志",
+      "storageMechanism": "运行时流转，审计事件落库",
+      "dualWriteRisk": false,
+      "notes": "审计日志是唯一持久化形式"
+    },
+    {
+      "stateModelId": "TASK_RUNSTATUS_008",
+      "typeName": "TaskRunStatus",
+      "persistenceLocation": "SQLite (TaskStore)",
+      "storageMechanism": "TaskRun.Status字段",
+      "dualWriteRisk": true,
+      "dualWriteDetail": "TaskState也在内存中维护，但TaskState是TaskRunStatus的视图",
+      "notes": "TaskStore是TaskRunStatus的唯一持久化Store"
+    },
+    {
+      "stateModelId": "RT_SUP_DESIRED_011",
+      "typeName": "DesiredState",
+      "persistenceLocation": "内存 (instanceEntry.desired)",
+      "storageMechanism": "DefaultSupervisor.instances map",
+      "dualWriteRisk": false,
+      "notes": "运行时掉电丢失，通过API重新设置"
+    },
+    {
+      "stateModelId": "RT_SUP_ACTUAL_012",
+      "typeName": "ActualState",
+      "persistenceLocation": "内存 (instanceEntry.actual)",
+      "storageMechanism": "DefaultSupervisor.instances map",
+      "dualWriteRisk": false,
+      "notes": "掉电后重新检测计算"
+    },
+    {
+      "stateModelId": "RT_SUP_CIRCUIT_014",
+      "typeName": "CircuitState",
+      "persistenceLocation": "内存",
+      "storageMechanism": "instanceEntry.circuit",
+      "dualWriteRisk": false,
+      "notes": "熔断器状态不持久化"
+    },
+    {
+      "stateModelId": "AND_RUNTIME_016",
+      "typeName": "RuntimeState",
+      "persistenceLocation": "Android SharedPreferences + 内存",
+      "storageMechanism": "RuntimeStateMachine",
+      "dualWriteRisk": false,
+      "notes": "Android平台持久化"
+    },
+    {
+      "stateModelId": "PERM_DECISION_019",
+      "typeName": "PermissionDecision",
+      "persistenceLocation": "SQLite (kernel_permission_grants) + 内存(PermissionCache)",
+      "storageMechanism": "SQLitePermissionStorage",
+      "dualWriteRisk": true,
+      "dualWriteDetail": "PermissionCache是SQLite的缓存，不是独立Store",
+      "notes": "SQLite为唯一持久化源，Cache是读取缓存"
+    }
+  ],
+  "summary": {
+    "dualWriteRisks": 2,
+    "dualWriteRiskDetails": "均为合法的主-缓存模式(TaskStore/TaskState和SQLite/PermissionCache)，不是真正的双写",
+    "status": "PASS"
+  }
+}

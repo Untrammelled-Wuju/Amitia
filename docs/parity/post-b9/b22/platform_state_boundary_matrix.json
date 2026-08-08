@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "Platform State Boundary矩阵 - 验证三平台State归属权的一致性（State由Kernel持有，非Adapter持有）",
+
+  "matrix": [
+    {
+      "boundary": "State ownership",
+      "android": "Kernel owns state; Android Provider is stateless",
+      "ios": "Kernel owns state; iOS Provider is stateless",
+      "desktop": "Kernel owns state; Desktop Provider is stateless",
+      "uniform": true
+    },
+    {
+      "boundary": "Invocation state store",
+      "android": "Kernel InvocationFSM (canonical)",
+      "ios": "Kernel InvocationFSM (canonical)",
+      "desktop": "Kernel InvocationFSM (canonical)",
+      "uniform": true
+    },
+    {
+      "boundary": "Session state",
+      "android": "Kernel SessionManager (unique)",
+      "ios": "Kernel SessionManager (unique)",
+      "desktop": "Kernel SessionManager (unique)",
+      "uniform": true
+    },
+    {
+      "boundary": "Provider state coupling",
+      "android": "Android Provider holds no Kernel state",
+      "ios": "iOS Provider holds no Kernel state",
+      "desktop": "Desktop Provider holds no Kernel state",
+      "uniform": true
+    },
+    {
+      "boundary": "Adapter state isolation",
+      "android": "Adapter→Bridge→Provider does not override Kernel state",
+      "ios": "Adapter→Bridge→Provider does not override Kernel state",
+      "desktop": "Adapter→Bridge→Provider does not override Kernel state",
+      "uniform": true
+    },
+    {
+      "boundary": "State projection",
+      "android": "Bridge DTO state maps to Kernel state contract only",
+      "ios": "Bridge DTO state maps to Kernel state contract only",
+      "desktop": "Bridge DTO state maps to Kernel state contract only",
+      "uniform": true
+    }
+  ],
+
+  "summary": {
+    "totalBoundaries": 6,
+    "uniformSemanticContract": 6,
+    "platformDependentOSOnly": 0
+  },
+
+  "stateOwnedByKernel": true,
+  "adapterIsStateless": true,
+  "providerIsStateless": true,
+  "bridgeStateMapsToKernelOnly": true,
+  "noPlatformLocalStateStore": true,
+
+  "statement": "State归属在所有三个平台完全一致：State由Kernel统一持有（InvocationFSM、SessionManager），Adapter和Provider均为无状态组件。Bridge DTO状态仅映射到Kernel State合同。"
+}

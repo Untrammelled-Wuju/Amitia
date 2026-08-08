@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19",
+  "generatedAt": "2026-08-08T15:02:00+08:00",
+  "description": "Android Adapter Gap Matrix - 每个B19合同中语义的现有支持状态",
+
+  "gaps": [
+    {
+      "semantic": "RuntimeAdapter interface implementation (Supports/Execute/Health)",
+      "b18Requirement": "Android Platform Adapter必须实现RuntimeAdapter合同",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "新增AndroidRuntimeAdapter实现RuntimeAdapter接口",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "RuntimeTypeAndroid_Native constant",
+      "b18Requirement": "新增android_native RuntimeType以区分Android Native Provider与Embedded Linux",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "在runtime_adapter.go追加RuntimeTypeAndroid_Native常量",
+      "targetPath": "backend/internal/extension/kernel/capability/runtime_adapter.go"
+    },
+    {
+      "semantic": "RuntimeAdapterRegistry.Register(RuntimeTypeAndroid_Native, adapter)",
+      "b18Requirement": "Android Adapter必须注册到现有RuntimeAdapterRegistry",
+      "existingSupport": ["backend/internal/extension/kernel/capability/executor.go (RuntimeAdapterRegistry)"],
+      "status": "MISSING",
+      "action": "添加WireAndroidPlatformAdapter注册方法",
+      "targetPath": "backend/internal/extension/kernel/runtime_caller_wiring.go"
+    },
+    {
+      "semantic": "Android Provider contract interface",
+      "b18Requirement": "定义Android Provider合同，未来B62-B78 Provider实现此合同",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "定义AndroidProvider接口/合同",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go (AndroidProvider interface)"
+    },
+    {
+      "semantic": "Bridge transport (ProtocolDTO)",
+      "b18Requirement": "跨Go/Kotlin的传输层DTO",
+      "existingSupport": ["MethodChannel 'com.amitia.amitia_app/runtime' (exists for BackendConnection)"],
+      "status": "PARTIALLY_SUPPORTED",
+      "action": "扩展AndroidBridgeProtocol DTO定义 - transport only，不含业务逻辑",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "Cancellation propagation",
+      "b18Requirement": "ctx cancellation必须通过Adapter传播到Provider",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "Adapter.Execute实现ctx.Done()监听",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "Deadline propagation",
+      "b18Requirement": "Kernel deadline必须传播到Provider",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "Adapter.Execute使用ctx deadline",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "Error normalization (Android domain error → ToolError)",
+      "b18Requirement": "Android域错误必须映射到ToolError并保留domainCode",
+      "existingSupport": ["ToolError结构已存在", "ErrorCode已定义"],
+      "status": "MISSING",
+      "action": "定义AndroidProviderError到ToolError的映射",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "Provider health check",
+      "b18Requirement": "Adapter.Health()必须报告Android Provider健康状态",
+      "existingSupport": ["HealthStatus类型已定义"],
+      "status": "MISSING",
+      "action": "实现Health()返回HealthReady/HealthUnhealthy/HealthUnknown",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "Provider request id / response correlation",
+      "b18Requirement": "所有跨桥调用必须有invocation ID保证响应对应",
+      "existingSupport": ["ToolInvocationContext.InvocationID已存在"],
+      "status": "MISSING",
+      "action": "Adapter传递InvocationID到AndroidBridgeRequest",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "Provider availability (unsupported capability)",
+      "b18Requirement": "Adapter如果没有具体Provider必须返回unavailable",
+      "existingSupport": ["ErrorCodeNotAvailable已定义"],
+      "status": "MISSING",
+      "action": "默认返回not_available直到具体Provider实现",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go"
+    },
+    {
+      "semantic": "Kernel Permission vs Android OS Authorization boundary",
+      "b18Requirement": "Kernel Permission由PermissionBroker判定；Android OS Authorization由Provider判定",
+      "existingSupport": ["PermissionBroker已存在"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "无需Adapter实现，Adapter消费approved invocation",
+      "targetPath": "N/A"
+    },
+    {
+      "semantic": "Embedded Linux Runtime复用",
+      "b18Requirement": "B55-B61 Linux Provider必须通过RuntimeHost/Orchestrator执行",
+      "existingSupport": ["RuntimeHost", "RuntimeOrchestrator", "ProotComponent已存在"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "B19不实现任何Embedded Linux Provider，留给B55-B61",
+      "targetPath": "N/A"
+    },
+    {
+      "semantic": "RuntimeState不变",
+      "b18Requirement": "Android Embedded Runtime State不能被Adapter修改",
+      "existingSupport": ["RuntimeStateMachine已冻结15种状态"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "B19不修改RuntimeState",
+      "targetPath": "N/A"
+    }
+  ],
+
+  "summary": {
+    "total": 14,
+    "ALREADY_SUPPORTED": 3,
+    "PARTIALLY_SUPPORTED": 1,
+    "MISSING": 10,
+    "OUTSIDE_B19_SCOPE": 0,
+    "UNKNOWN": 0
+  }
+}

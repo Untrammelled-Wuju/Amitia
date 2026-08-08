@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:13:00+08:00",
+  "description": "iOS状态分层 - 各Domain事实源严格分离",
+
+  "toolExecution": {
+    "authority": "ExecutionPipeline + ToolResult",
+    "stateOwner": "backend/internal/extension/kernel/execution/pipeline.go",
+    "states": ["success", "failed", "cancelled", "timed_out"],
+    "note": "Tool执行状态是唯一权威事实源"
+  },
+
+  "adapterAvailability": {
+    "authority": "iosRuntimeAdapter.Health()",
+    "stateOwner": "backend/internal/extension/kernel/capability/adapter_ios_native.go",
+    "states": ["healthy", "unhealthy", "unknown"],
+    "note": "Adapter本身是否可用(是否有Provider注册)"
+  },
+
+  "sandboxRuntime": {
+    "authority": "RuntimeHost + RuntimeOrchestrator (复用)",
+    "stateOwner": "backend/internal/runtimehost/host.go",
+    "states": ["created", "installing", "ready", "stopped", "failed"],
+    "note": "iOS Sandbox生命周期由现有RuntimeHost管理"
+  },
+
+  "providerHealth": {
+    "authority": "iOS Native Provider.Health()",
+    "stateOwner": "未来B127-B138具体Provider",
+    "states": ["ready", "degraded", "unavailable"],
+    "note": "具体业务Provider的健康状态(如HealthKit是否可用)"
+  },
+
+  "nativeAuthorization": {
+    "authority": "iOS系统 + 具体Provider内部",
+    "stateOwner": "iOS System Frameworks / 各Provider",
+    "states": ["authorized", "denied", "not_determined", "restricted"],
+    "note": "iOS系统授权状态，Adapter/PermissionBroker不代为持有"
+  },
+
+  "backgroundTask": {
+    "authority": "TaskRuntime + Schedule (复用现有)",
+    "stateOwner": "backend/internal/extension/kernel/task_runtime/",
+    "note": "iOS BGTaskScheduler仅作为platform scheduling backend，不替代TaskRuntime/Schedule"
+  },
+
+  "noParallelGlobalStateStore": true
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 Source Scope Validation - 验证源码修改边界",
+
+  "modifiedFiles": [],
+  "allowedFiles": [
+    "docs/parity/post-b9/b123/*.json",
+    "docs/parity/post-b9/b123/B123_iOSSandboxHostProvider底座报告.md"
+  ],
+  "unexpectedFiles": [],
+
+  "note": "B123 PASS_NO_CODE_CHANGE - 现有Runtime基础设施完全满足iOS Sandbox Host/Provider底座要求，无需新增源码文件。所有输出为合约文件和下一阶段输入文件。",
+
+  "dependencyValidation": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "pubspecChanged": false,
+    "podfileChanged": false,
+    "databaseChanged": false
+  },
+
+  "scopeBoundary": {
+    "createdDocumentationOnly": true,
+    "noProductionCodeChanges": true,
+    "noTestCodeChanges": true,
+    "noConfigChanges": true,
+    "noDependencyChanges": true
+  },
+
+  "rationale": "现有RuntimeHost/RuntimeOrchestrator/RuntimeAdapterRegistry已经完全通用，能够表达iOS Sandbox Provider。B124才需要新增SandboxBackend接口实现文件。"
+}

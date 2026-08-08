@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Legacy依赖汇总 - B10-B17新增Legacy依赖计数（全部为0）",
+
+  "newLegacyReferences": {
+    "count": 0,
+    "note": "B10-B17无任何新建Legacy引用"
+  },
+  "newLegacyRegistrations": {
+    "count": 0,
+    "note": "B10-B17无新建Legacy Tool注册"
+  },
+  "newLegacyRuntimeBindings": {
+    "count": 0,
+    "note": "B12确认newProviderBoundToLegacyAdapter=0，B14 Browser通过全新RuntimeTypeBrowser绑定"
+  },
+  "newLegacyFallback": {
+    "count": 0,
+    "note": "B10-B17无新建Legacy Fallback路径"
+  },
+
+  "total": 0,
+  "result": "PASS - 无新增Legacy依赖"
+}

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime Security Contract - Runtime层安全约束",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "securityRules": {
+    "NO_DIRECT_AGENT_PROVIDER_CALL": {
+      "description": "Agent不得直接调用Platform Provider.Execute",
+      "rationale": "All capability execution must go through ToolRegistry -> ExecutionPipeline -> Permission",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_PERMISSION_BYPASS": {
+      "description": "Runtime Adapter不得绕过PermissionBroker",
+      "rationale": "Permission Authority remains PermissionBroker (B11)",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_EXECUTION_PIPELINE_BYPASS": {
+      "description": "Platform Provider不得绕过ExecutionPipeline",
+      "rationale": "Execution Authority remains ExecutionPipeline",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_NEW_PROVIDER_ON_LEGACY_ADAPTER": {
+      "description": "新Platform Provider不得绑定RuntimeTypeLegacy",
+      "rationale": "B9P6已冻结Legacy Runtime Adapter",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_SECRET_IN_RUNTIME_BINDING": {
+      "description": "RuntimeBinding.Metadata禁止包含敏感数据 (token/password/API key/private key)",
+      "rationale": "Secret通过现有Secret体系解析",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_RAW_OS_PATH_AS_PORTABLE_RESOURCE": {
+      "description": "禁止将raw OS path作为跨平台Resource合同",
+      "rationale": "使用B9P8 amitia:// scheme 或 B13 ResourceURI",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_SECOND_RUNTIME_HOST": {
+      "description": "禁止创建RuntimeHost2 / NativeRuntimeManager",
+      "rationale": "RuntimeHost Authority remains runtimehost/host.go",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_SECOND_RUNTIME_ORCHESTRATOR": {
+      "description": "禁止创建RuntimeOrchestrator2 / CrossPlatformRuntimeManager2",
+      "rationale": "RuntimeOrchestrator Authority remains runtimeorchestrator/orchestrator.go",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_SECOND_RUNTIME_STATE_STORE": {
+      "description": "禁止创建RuntimeStatus2",
+      "rationale": "不同Runtime状态各有Domain Ownership",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_SECOND_RUNTIME_ERROR_REGISTRY": {
+      "description": "禁止创建RuntimeErrorCenter2",
+      "rationale": "Error follows B9P5 Domain owns; Protocol projects",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_SECOND_PROCESS_SUPERVISOR": {
+      "description": "禁止创建PlatformRuntimeSupervisor",
+      "rationale": "Process Supervisor Authority remains runtimehost/supervisor.go",
+      "enforcement": "HARD_BLOCK"
+    },
+    "NO_PRODUCTION_FAKE_RUNTIME": {
+      "description": "禁止在生产路径注册FakeRuntimeAdapter/FakePlatformProvider",
+      "rationale": "Fake只能用于测试",
+      "enforcement": "HARD_BLOCK"
+    }
+  }
+}

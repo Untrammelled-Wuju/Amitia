@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "totalGapCount": 14,
+  "totalAffectedCapabilities": 498,
+  "gaps": [
+    {
+      "gapId": "GAP-001",
+      "semanticId": "BROWSER_AUTOMATION",
+      "affectedCapabilityIds": [
+        "external/browser/automation_execute_browser",
+        "external/browser/browser_run_code",
+        "external/browser/capture_browser_screenshot",
+        "external/browser/capture_browser_take_screenshot",
+        "external/browser/capture_capture_screenshot",
+        "external/browser/capture_screen_capture",
+        "external/browser/capture_screen_recording_casting",
+        "external/browser/capture_screenshot_share",
+        "external/browser/control_close_all_virtual_displays",
+        "external/browser/control_reasoning_thinking_display",
+        "external/browser/control_screen_capture",
+        "external/browser/control_screen_casting",
+        "external/browser/control_virtualdisplayoverlay",
+        "external/browser/floating_window_overlay",
+        "external/browser/floatingwindowmanager",
+        "external/browser/read_get_terminal_session_screen",
+        "external/browser/read_screen_capture",
+        "external/browser/stop_browser_close",
+        "external/browser/stop_browser_close_all",
+        "external/browser/switch_browser_select_option"
+      ],
+      "description": "浏览器自动化权限(导航/截图/录屏/悬浮窗/控制)无现有Kernel Permission对应",
+      "riskLevel": "HIGH",
+      "recommendedDefinition": {
+        "suggestedId": "browser.automation",
+        "category": "desktop",
+        "riskLevel": "HIGH"
+      },
+      "recommendedStep": "B79-B83: Browser Runtime Patch",
+      "platforms": ["DESKTOP"]
+    },
+    {
+      "gapId": "GAP-002",
+      "semanticId": "SYSTEM_MODIFY",
+      "affectedCapabilityIds": [
+        "external/system/accessibilitysystemoperationtools",
+        "external/system/control_stop_app",
+        "external/system/input_event_injection",
+        "external/system/install_application_install_uninstall",
+        "external/system/install_install_app",
+        "external/system/install_shizuku_bundled_installer",
+        "external/system/install_toolpkg_install_zip",
+        "external/system/install_uninstall_app",
+        "external/system/install_workspace_import_export",
+        "external/system/open_url_app",
+        "external/system/operitapplication",
+        "external/system/read_get_app_usage_time",
+        "external/system/read_list_installed_apps",
+        "external/system/shortcuts_app_intents",
+        "external/system/start_start_app",
+        "external/system/update_android_clipboard_write",
+        "external/system/update_clipboard_write",
+        "external/system/update_update_full_apk",
+        "external/system/update_update_patch_incremental",
+        "external/system/update_update_user_preferences"
+      ],
+      "description": "修改系统设置/安装应用/Root操作等无现有Kernel Permission",
+      "riskLevel": "CRITICAL",
+      "recommendedDefinition": {
+        "suggestedId": "system.modify",
+        "category": "system",
+        "riskLevel": "CRITICAL"
+      },
+      "recommendedStep": "B11: System Capability Provider",
+      "platforms": ["DESKTOP", "ANDROID"]
+    },
+    {
+      "gapId": "GAP-003",
+      "semanticId": "ACCESSIBILITY_CONTROL",
+      "affectedCapabilityIds": [
+        "external/system/accessibilitysystemoperationtools",
+        "external/system/input_event_injection"
+      ],
+      "description": "无障碍服务控制权限无现有Kernel Permission",
+      "riskLevel": "CRITICAL",
+      "recommendedDefinition": {
+        "suggestedId": "system.accessibility",
+        "category": "device",
+        "riskLevel": "CRITICAL"
+      },
+      "recommendedStep": "B11/B62-B68: Android Accessibility Provider",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-004",
+      "semanticId": "SECURITY_PERMISSION",
+      "affectedCapabilityIds": [
+        "external/security/install_permission_request_install_packages",
+        "external/security/permission",
+        "external/security/permission_call_phone",
+        "external/security/read_permission_read_contacts",
+        "external/security/read_permission_read_external_storage",
+        "external/security/read_permission_read_phone_state",
+        "external/security/send_permission_post_notifications",
+        "external/security/send_permission_send_sms",
+        "external/security/start_permission_bluetooth_connect",
+        "external/security/update_permission_write_contacts",
+        "external/security/update_permission_write_settings"
+      ],
+      "description": "安全权限(联系人/短信/通知/安装)无现有Kernel Permission",
+      "riskLevel": "HIGH",
+      "recommendedDefinition": {
+        "suggestedId": "security.permission.manage",
+        "category": "extension",
+        "riskLevel": "HIGH"
+      },
+      "recommendedStep": "B11: Security Permission Platform Adapter",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-005",
+      "semanticId": "DEVICE_ACCESS",
+      "affectedCapabilityIds": [
+        "external/device/bluetooth_accept",
+        "external/device/bluetooth_ble_discover_services",
+        "external/device/bluetooth_device_detection",
+        "external/device/bluetooth_device_management",
+        "external/device/bluetooth_device_scan",
+        "external/device/device_admin_privilege",
+        "external/device/device_info",
+        "external/device/device_info_map_0284",
+        "external/device/homekit_device_control",
+        "external/device/read_bluetooth_listen",
+        "external/device/read_bluetooth_read",
+        "external/device/read_bluetooth_send_and_read",
+        "external/device/read_camera_capture",
+        "external/device/read_get_bluetooth_state",
+        "external/device/read_get_device_location",
+        "external/device/read_get_system_setting",
+        "external/device/read_list_bluetooth_bonded_devices",
+        "external/device/read_nfc_tag_read",
+        "external/device/scan_bluetooth_devices",
+        "external/device/send_bluetooth_send",
+        "external/device/start_bluetooth_ble_connect",
+        "external/device/start_bluetooth_connect",
+        "external/device/stop_bluetooth_close",
+        "external/device/system_settings_manipulation",
+        "external/device/update_modify_system_setting"
+      ],
+      "description": "设备功能(蓝牙/NFC/位置)无现有Kernel Permission",
+      "riskLevel": "HIGH",
+      "recommendedDefinition": {
+        "suggestedId": "device.access",
+        "category": "desktop",
+        "riskLevel": "HIGH"
+      },
+      "recommendedStep": "B11: Device Capability Provider",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-006",
+      "semanticId": "VOICE_CAPTURE",
+      "affectedCapabilityIds": [
+        "external/voice/capture_permission_record_audio",
+        "external/tool/capture_microphone_recording"
+      ],
+      "description": "麦克风录音权限无现有Kernel Permission",
+      "riskLevel": "HIGH",
+      "recommendedDefinition": {
+        "suggestedId": "device.microphone.capture",
+        "category": "desktop",
+        "riskLevel": "HIGH"
+      },
+      "recommendedStep": "B11: Microphone Platform Adapter",
+      "platforms": ["ANDROID", "IOS"]
+    },
+    {
+      "gapId": "GAP-007",
+      "semanticId": "VOICE_READ",
+      "affectedCapabilityIds": [
+        "external/voice/read_voicelistfetcher"
+      ],
+      "description": "读取语音列表无现有Kernel Permission",
+      "riskLevel": "LOW",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.read",
+        "category": "desktop",
+        "riskLevel": "LOW"
+      },
+      "recommendedStep": "B11: Voice Platform Adapter",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-008",
+      "semanticId": "VOICE_CONTROL",
+      "affectedCapabilityIds": [
+        "external/voice/control_queuedttsplayback"
+      ],
+      "description": "语音控制权限无现有Kernel Permission",
+      "riskLevel": "LOW",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.control",
+        "category": "desktop",
+        "riskLevel": "LOW"
+      },
+      "recommendedStep": "B11: Voice Control Platform Adapter",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-009",
+      "semanticId": "VOICE_SWITCH",
+      "affectedCapabilityIds": [
+        "external/voice/switch_tts_voice_selection"
+      ],
+      "description": "切换TTS语音权限无现有Kernel Permission",
+      "riskLevel": "LOW",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.switch",
+        "category": "utility",
+        "riskLevel": "LOW"
+      },
+      "recommendedStep": "B11/TTS Provider: Voice Switching",
+      "platforms": ["DESKTOP", "ANDROID"]
+    },
+    {
+      "gapId": "GAP-010",
+      "semanticId": "VOICE_EXECUTE",
+      "affectedCapabilityIds": [
+        "external/voice/audio",
+        "external/voice/microphone"
+      ],
+      "description": "语音合成/识别执行权限无现有Kernel Permission",
+      "riskLevel": "MEDIUM",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.execute",
+        "category": "provider",
+        "riskLevel": "MEDIUM"
+      },
+      "recommendedStep": "B11: Voice Provider Execute",
+      "platforms": ["DESKTOP", "ANDROID"]
+    },
+    {
+      "gapId": "GAP-011",
+      "semanticId": "NOTIFICATION_READ",
+      "affectedCapabilityIds": [
+        "external/notification/read_android_notification_read",
+        "external/notification/read_bluetooth_ble_read_notifications",
+        "external/notification/read_get_notifications"
+      ],
+      "description": "读取通知权限无现有Kernel Permission",
+      "riskLevel": "LOW",
+      "recommendedDefinition": {
+        "suggestedId": "notification.read",
+        "category": "desktop",
+        "riskLevel": "LOW"
+      },
+      "recommendedStep": "B11: Android Notification Listener",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-012",
+      "semanticId": "FILE_START",
+      "affectedCapabilityIds": [
+        "external/file/start_sshfileconnectionmanager"
+      ],
+      "description": "启动文件连接(SSH)无现有Kernel Permission",
+      "riskLevel": "MEDIUM",
+      "recommendedDefinition": {
+        "suggestedId": "file.connection.manage",
+        "category": "filesystem",
+        "riskLevel": "MEDIUM"
+      },
+      "recommendedStep": "B11: SSH/File Connection Provider",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-013",
+      "semanticId": "TOOL_SEND",
+      "affectedCapabilityCounts": 2,
+      "note": "message.send已存在但语义为发送Tool消息(非文本消息)",
+      "description": "Tool级别的消息广播/Intent发送可能需额外细分",
+      "riskLevel": "MEDIUM",
+      "recommendedStep": "B11: Review tool.send scope vs message.send",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "gapId": "GAP-014",
+      "semanticId": "CALENDAR_ACCESS",
+      "affectedCapabilityIds": [
+        "external/tool/create_calendar_event_create",
+        "external/tool/stop_android_calendar_access"
+      ],
+      "description": "日历读写权限无现有Kernel Permission",
+      "riskLevel": "MEDIUM",
+      "recommendedDefinition": {
+        "suggestedId": "calendar.access",
+        "category": "utility",
+        "riskLevel": "MEDIUM"
+      },
+      "recommendedStep": "B11: Calendar Provider",
+      "platforms": ["ANDROID"]
+    }
+  ]
+}

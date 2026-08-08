@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T17:30:00+08:00",
+  "description": "B124 ISH Backend Authority Boundary - 预期边界(BLOCKED状态下)",
+
+  "authorityBoundaries": [
+    {
+      "authority": "Amitia lifecycle",
+      "owner": "RuntimeHost / RuntimeOrchestrator",
+      "status": "REUSE"
+    },
+    {
+      "authority": "Sandbox domain",
+      "owner": "IOSSandboxProvider (待实现)",
+      "status": "BLOCKED"
+    },
+    {
+      "authority": "iSH execution implementation",
+      "owner": "ISHBackend (NOT_PRESENT - 源码未引入)",
+      "status": "BLOCKED"
+    },
+    {
+      "authority": "Tool execution",
+      "owner": "ExecutionPipeline",
+      "status": "READ_ONLY"
+    },
+    {
+      "authority": "Permission",
+      "owner": "PermissionBroker",
+      "status": "READ_ONLY"
+    },
+    {
+      "authority": "Resource",
+      "owner": "ResourceURI (amitia://)",
+      "status": "READ_ONLY"
+    }
+  ],
+
+  "resolutionOnceUnblocked": {
+    "description": "iSH源码引入后需要重新确认的边界",
+    "items": [
+      "iSH internal state vs Amitia Runtime state 边界",
+      "iSH filesystem vs Amitia App container 隔离",
+      "iSH execution cancellation 传播路径",
+      "Health check 映射到 Runtime health projection"
+    ]
+  }
+}

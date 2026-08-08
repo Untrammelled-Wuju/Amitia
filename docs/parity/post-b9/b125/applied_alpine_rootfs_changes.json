@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "APPLIED",
+
+  "appliedChanges": [
+    {
+      "changeId": "B125-CHG-001",
+      "semantic": "创建RootfsDescriptor value object",
+      "changeType": "ROOTFS_SOURCE",
+      "targetPath": "mobile_app/ios/Runner/Sandbox/RootfsDescriptor.h & .m",
+      "whyRequired": "提供Alpine rootfs元数据描述(version/architecture/digest/url/sourceType/state)",
+      "runtimeLifecycleIncluded": false,
+      "agentToolAdded": false,
+      "result": "APPLIED"
+    },
+    {
+      "changeId": "B125-CHG-002",
+      "semantic": "创建RootfsIntegrityVerifier (SHA-256)",
+      "changeType": "INTEGRITY",
+      "targetPath": "mobile_app/ios/Runner/Sandbox/RootfsIntegrityVerifier.h & .m",
+      "whyRequired": "校验rootfs归档完整性，Fail Closed策略",
+      "runtimeLifecycleIncluded": false,
+      "agentToolAdded": false,
+      "result": "APPLIED"
+    },
+    {
+      "changeId": "B125-CHG-003",
+      "semantic": "创建RootfsResolver",
+      "changeType": "INSTALL_LAYOUT",
+      "targetPath": "mobile_app/ios/Runner/Sandbox/RootfsResolver.h & .m",
+      "whyRequired": "查找已安装rootfs，提供staging/激活目录路径",
+      "runtimeLifecycleIncluded": false,
+      "agentToolAdded": false,
+      "result": "APPLIED"
+    },
+    {
+      "changeId": "B125-CHG-004",
+      "semantic": "创建RootfsInstaller (下载→校验→安全解包→布局验证→原子激活)",
+      "changeType": "SAFE_EXTRACTION",
+      "targetPath": "mobile_app/ios/Runner/Sandbox/RootfsInstaller.h & .m",
+      "whyRequired": "完整rootfs安装流程，支持progress回调",
+      "runtimeLifecycleIncluded": false,
+      "agentToolAdded": false,
+      "result": "APPLIED"
+    },
+    {
+      "changeId": "B125-CHG-005",
+      "semantic": "创建RootfsInstallMethodHandler ( Flutter桥接 )",
+      "changeType": "ISH_BINDING",
+      "targetPath": "mobile_app/ios/Runner/Sandbox/RootfsInstallMethodHandler.swift",
+      "whyRequired": "Flutter调用rootfs安装/查询/校验的MethodChannel",
+      "runtimeLifecycleIncluded": false,
+      "agentToolAdded": false,
+      "result": "APPLIED"
+    },
+    {
+      "changeId": "B125-CHG-006",
+      "semantic": "注册RootfsInstallMethodHandler到AppDelegate",
+      "changeType": "ISH_BINDING",
+      "targetPath": "mobile_app/ios/Runner/AppDelegate.swift",
+      "whyRequired": "启动时注册rootfs method channel",
+      "runtimeLifecycleIncluded": false,
+      "agentToolAdded": false,
+      "result": "APPLIED"
+    }
+  ]
+}

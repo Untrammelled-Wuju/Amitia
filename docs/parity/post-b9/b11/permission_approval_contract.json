@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B11",
+  "description": "现有Permission Approval体系合同",
+  "generatedAt": "2026-08-08T00:30:00+08:00",
+
+  "entities": {
+    "definition": "PermissionDefinition (含DefaultApproval字段，声明权限级别的建议审批模式)",
+    "grant": "PermissionGrant (含Decision字段，记录本次授权的实际决策)",
+    "decision": "PermissionDecision枚举 (deny, allow, require_approval, allow_once, allow_session, allow_persistent)",
+    "approval": "ApprovalMode枚举 (auto, manual, deny, full_control)"
+  },
+
+  "relationship": "PermissionDefinition.DefaultApproval声明'建议审批模式' → PermissionBroker.Evaluate根据Grant状态/Deny优先级/Approval模式计算最终Decision → PermissionGrant记录实际Grant生命周期",
+
+  "existingModes": ["ApprovalAuto", "ApprovalManual", "ApprovalDeny", "ApprovalFullControl"],
+  "existingDecisions": ["DecisionDeny", "DecisionAllow", "DecisionRequireApproval", "DecisionAllowOnce", "DecisionAllowSession", "DecisionAllowPersistent"],
+  "manualApproval": "通过ApprovalManual实现 - 高风险操作要求人工确认",
+  "fullControl": "通过ApprovalFullControl实现 - 极高风险操作由Full Control权限控制",
+  "deny": "通过ApprovalDeny实现 - 策略级禁止",
+
+  "lifecycle": {
+    "allow_once": "单次执行有效",
+    "allow_session": "当前Session有效",
+    "allow_persistent": "持久授权，直到显式Revoke"
+  },
+
+  "addedContract": 0,
+  "unresolved": 0
+}

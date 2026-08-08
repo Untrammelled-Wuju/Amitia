@@ -1,0 +1,10 @@
+[
+  {
+    "changeId": "B40-CHG-001",
+    "semantic": "B40 PASS_NO_CODE_CHANGE — existing ToolDefinition already provides canonical InputSchema/OutputSchema representation, the existing execution pipeline already provides Input/Result validation and the Sanitizer, and the B40 constraints forbid both adding a new JSON Schema library and building a full engine.",
+    "changeType": "NO_CODE_CHANGE",
+    "targetPath": "",
+    "whyRequired": "N/A",
+    "backwardCompatibility": "N/A"
+  }
+]

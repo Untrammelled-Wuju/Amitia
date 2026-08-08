@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "rootContracts": [
+    {
+      "root": "workspace",
+      "purpose": "Agent、用户或扩展可操作的逻辑工作区资源，例如项目文件、文档",
+      "persistence": "persistent",
+      "userVisible": true,
+      "agentAccessible": true,
+      "writable": true,
+      "portable": true,
+      "securityBoundary": "user-data"
+    },
+    {
+      "root": "attachments",
+      "purpose": "消息/文件附件资源",
+      "persistence": "persistent",
+      "userVisible": true,
+      "agentAccessible": true,
+      "writable": true,
+      "portable": true,
+      "securityBoundary": "user-data"
+    },
+    {
+      "root": "data",
+      "persistence": "persistent",
+      "userVisible": false,
+      "agentAccessible": false,
+      "writable": true,
+      "portable": false,
+      "securityBoundary": "app-internal"
+    },
+    {
+      "root": "cache",
+      "purpose": "持久或临时缓存数据",
+      "persistence": "ephemeral",
+      "userVisible": false,
+      "agentAccessible": false,
+      "writable": true,
+      "portable": false,
+      "securityBoundary": "app-internal"
+    },
+    {
+      "root": "runtime",
+      "purpose": "Amitia运行时核心目录（RuntimeHost根），不应当混入workspace",
+      "persistence": "persistent",
+      "userVisible": false,
+      "agentAccessible": false,
+      "writable": false,
+      "portable": false,
+      "securityBoundary": "system-runtime"
+    },
+    {
+      "root": "config",
+      "purpose": "应用配置，URI寻址不自动授予写权限，写由Permission Broker控制",
+      "persistence": "persistent",
+      "userVisible": false,
+      "agentAccessible": false,
+      "writable": true,
+      "portable": false,
+      "securityBoundary": "app-internal"
+    },
+    {
+      "root": "extensions",
+      "purpose": "扩展、技能包、脚本宿主的安装目录",
+      "persistence": "persistent",
+      "userVisible": false,
+      "agentAccessible": false,
+      "writable": true,
+      "portable": false,
+      "securityBoundary": "app-internal"
+    },
+    {
+      "root": "logs",
+      "purpose": "应用日志。URI可被寻址，不自动授予Agent读权限",
+      "persistence": "ephemeral",
+      "userVisible": false,
+      "agentAccessible": false,
+      "writable": true,
+      "portable": false,
+      "securityBoundary": "app-internal"
+    },
+    {
+      "root": "temp",
+      "purpose": "临时文件目录",
+      "persistence": "ephemeral",
+      "userVisible": false,
+      "agentAccessible": false,
+      "writable": true,
+      "portable": false,
+      "securityBoundary": "app-internal"
+    },
+    {
+      "root": "native",
+      "purpose": "虚拟Root，非文件系统资源（如剪贴板、平台特定对象）。PhysicalResolver不解析此类资源",
+      "persistence": "virtual",
+      "userVisible": false,
+      "agentAccessible": true,
+      "writable": false,
+      "portable": true,
+      "securityBoundary": "virtual-backing"
+    }
+  ]
+}

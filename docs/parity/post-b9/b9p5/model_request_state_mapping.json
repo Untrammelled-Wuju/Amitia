@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "domain": "ModelRequest",
+  "historicalB9States": ["CREATED", "QUEUED", "CONNECTING", "STREAMING", "WAITING_TOOL", "COMPLETED", "CANCELLED", "FAILED", "TIMED_OUT"],
+  "canonicalDomain": "无独立ModelRequest状态机",
+  "currentImplementation": "Model Request生命周期由各Chat/LLM Pipeline内部管理",
+  "mappings": [
+    {"b9State": "CREATED", "canonical": "无对应", "type": "NO_MAPPING"},
+    {"b9State": "QUEUED", "canonical": "无对应", "type": "NO_MAPPING"},
+    {"b9State": "CONNECTING", "canonical": "无对应", "type": "NO_MAPPING"},
+    {"b9State": "STREAMING", "canonical": "Chat Pipeline流式响应中", "type": "CONTEXTUAL"},
+    {"b9State": "WAITING_TOOL", "canonical": "Agent等待Tool回调", "type": "CONTEXTUAL"},
+    {"b9State": "COMPLETED", "canonical": "Chat响应完成", "type": "CONTEXTUAL"},
+    {"b9State": "CANCELLED", "canonical": "Chat响应被取消", "type": "CONTEXTUAL"},
+    {"b9State": "FAILED", "canonical": "TextModelCallError", "type": "CONTEXTUAL"},
+    {"b9State": "TIMED_OUT", "canonical": "请求超时", "type": "CONTEXTUAL"}
+  ],
+  "status": "PROTOCOL_PROJECTION_ONLY",
+  "notes": "当前没有独立的ModelRequest状态机。Model Request生命周期由各Chat/LLM Pipeline内部管理。B9 ModelRequestStatus仅作为Protocol层候选，不得实现新的ModelRequestStore。",
+  "summary": {
+    "totalB9States": 9,
+    "mapped": 9,
+    "lossyMappings": 0,
+    "canonicalSource": "Pipeline内部状态"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Agent与Event边界",
+
+  "boundary": {
+    "eventSystemOwns": {
+      "description": "Event系统负责事件投递",
+      "items": [
+        "Event delivery",
+        "Event persistence (outbox)",
+        "Event ordering",
+        "Event subscription"
+      ]
+    },
+    "agentOwns": {
+      "description": "Agent负责事件解释和响应",
+      "items": [
+        "Interpret event content",
+        "Decide response action",
+        "Generate response",
+        "Handle event result"
+      ]
+    }
+  },
+
+  "integrationPoint": {
+    "description": "Agent通过Outbox接收事件，通过Orchestrator生成事件",
+    "eventToAgent": "outbox -> delivery -> agent entry",
+    "agentToEvent": "Orchestrator.Process -> outbox"
+  },
+
+  "canonicalEventSystem": {
+    "owner": "outbox.SQLiteOutboxStore",
+    "sourcePath": "backend/internal/outbox/store_sqlite.go",
+    "status": "EXISTING"
+  }
+}

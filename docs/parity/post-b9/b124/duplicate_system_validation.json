@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T17:30:00+08:00",
+  "description": "B124 Duplicate System Validation",
+  "validations": [
+    { "system": "IOSRuntimeManager2", "created": false, "count": 0 },
+    { "system": "IOSSandboxRuntimeManager2", "created": false, "count": 0 },
+    { "system": "IOSSandboxLifecycle2", "created": false, "count": 0 },
+    { "system": "IOSSandboxSupervisor2", "created": false, "count": 0 },
+    { "system": "RuntimeHost2", "created": false, "count": 0 },
+    { "system": "RuntimeOrchestrator2", "created": false, "count": 0 },
+    { "system": "RuntimeAdapterRegistry2", "created": false, "count": 0 },
+    { "system": "ISHToolRegistry", "created": false, "count": 0 },
+    { "system": "ISHPermissionSystem", "created": false, "count": 0 },
+    { "system": "ISHExecutionPipeline", "created": false, "count": 0 },
+    { "system": "ISHStateStore", "created": false, "count": 0 },
+    { "system": "ISHErrorRegistry", "created": false, "count": 0 },
+    { "system": "Workspace2", "created": false, "count": 0 },
+    { "system": "ResourceUri2", "created": false, "count": 0 }
+  ],
+  "summary": { "createdCount": 0, "passCount": 14 }
+}

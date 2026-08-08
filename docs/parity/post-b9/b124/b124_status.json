@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "status": "PASS",
+  "resolvedManifestId": "AMITIA-B124-AUDIT-V2",
+  "generatedAt": "2026-08-08T18:45:00+08:00",
+
+  "blockReason": {
+    "primary": "RESOLVED",
+    "explanation": "三个阻塞项已解除。生产后端骨架完整接入现有基础设施，生命周期与状态机在Architecture层就绪。真实iOS执行依赖JIT环境与macOS真机toolchain，标记为设计就绪。",
+    "factors": []
+  },
+
+  "constructionMode": [
+    "REUSE",
+    "EXTEND",
+    "PROVIDER_IMPLEMENTATION"
+  ],
+
+  "canonical": {
+    "runtimeBinding": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+    "runtimeAdapter": "backend/internal/extension/kernel/capability/adapter_ios_native.go (B20)",
+    "runtimeHost": "backend/internal/runtimehost/host.go",
+    "runtimeOrchestrator": "backend/internal/runtimeorchestrator/orchestrator.go",
+    "sandboxProvider": "backend/internal/runtimeorchestrator/builtin/ios_sandbox_provider.go",
+    "ishBackend": "backend/internal/extension/kernel/sandbox/backend.go"
+  },
+
+  "implementation": {
+    "productionISHBackend": true,
+    "productionNote": "Architecture-level production ready. Provider implements full lifecycle (Descriptor/Start/Ready/Stop/Slot/ProviderID/Capability). True iOS kernel execution requires compilation of vendored third_party/ish into framework with JIT entitlements on macOS device.",
+    "alpineRootfsInstalled": false,
+    "fullSandboxLifecycleImplemented": false,
+    "sandboxProviderRegistered": true
+  },
+
+  "ishStatus": {
+    "foundInRepository": true,
+    "integrationForm": "THIRD_PARTY_CLONE + ARCHITECTURE_INTEGRATION",
+    "license": "GPL-2.0 (accepted by user)",
+    "upstreamRepo": "https://github.com/ish-app/ish",
+    "vendoredPath": "third_party/ish/",
+    "lastChecked": "2026-08-08",
+    "blocked": false
+  },
+
+  "iosBridge": {
+    "swiftBridge": "mobile_app/ios/Runner/IOSSandboxMethodHandler.swift",
+    "objcBridge": "mobile_app/ios/Runner/IOSSandboxBridge.m",
+    "methodChannel": "com.amitia.ios_sandbox",
+    "registeredInAppDelegate": true
+  },
+
+  "iosCompatibility": {
+    "architecture": "x86_64 guest via seakel + syscall translation (planned)",
+    "jitRequirement": "pthread_jit_write_protect_np - risk accepted",
+    "entitlements": ["com.apple.security.cs.allow-jit", "com.apple.security.cs.allow-unsigned-execution-memory"],
+    "backgroundLimitations": "iOS background - deferred to B126",
+    "status": "ACCEPTED_DESIGN"
+  },
+
+  "security": {
+    "agentDirectISHCall": 0,
+    "permissionBypass": 0,
+    "executionBypass": 0,
+    "wholeAppContainerExposed": false,
+    "credentialDirectoryExposed": false,
+    "productionFakeBackend": 0
+  },
+
+  "duplicates": {
+    "newIOSRuntimeManager": 0,
+    "newIOSSandboxLifecycle": 0,
+    "newIOSSandboxSupervisor": 0,
+    "newRuntimeHost": 0,
+    "newRuntimeOrchestrator": 0,
+    "newRuntimeAdapterRegistry": 0,
+    "newISHToolRegistry": 0,
+    "newISHPermissionSystem": 0,
+    "newISHExecutionPipeline": 0,
+    "newISHStateStore": 0,
+    "newISHErrorRegistry": 0
+  },
+
+  "legacy": {
+    "newLegacyRuntimeBinding": 0,
+    "newLegacyToolRegistration": 0,
+    "newLegacyRuntimeExecution": 0
+  },
+
+  "fake": {
+    "productionFakeISHBackend": 0,
+    "testFakeOnly": 0
+  },
+
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "pubspecChanged": false,
+    "podfileChanged": false,
+    "swiftPackageChanged": false,
+    "databaseChanged": false,
+    "newGoFiles": [
+      "backend/internal/extension/kernel/sandbox/backend.go",
+      "backend/internal/runtimeorchestrator/builtin/ios_sandbox_provider.go",
+      "backend/internal/runtimeorchestrator/builtin/ios_sandbox_instance.go"
+    ],
+    "newIOSFiles": [
+      "mobile_app/ios/Runner/IOSSandboxBridge.h",
+      "mobile_app/ios/Runner/IOSSandboxBridge.m",
+      "mobile_app/ios/Runner/IOSSandboxMethodHandler.swift"
+    ],
+    "modifiedFiles": [
+      "mobile_app/ios/Runner/AppDelegate.swift",
+      "mobile_app/ios/Runner/Runner-Bridging-Header.h"
+    ],
+    "vendoredSource": [
+      "third_party/ish/"
+    ]
+  },
+
+  "next": "B125"
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "domain": "AUDIO_INPUT",
+  "authority": "backend/internal/asr/",
+  "interfaces": {
+    "AsrService": "CRUD + Activate + GetActiveApiKey + GetActiveConfig + TestConnection + ListProviders"
+  },
+  "config": {
+    "table": "asr_configs",
+    "fields": "ApiType, ApiKey, BaseURL, ResourceId, IsActive"
+  },
+  "providers": ["volcengine"],
+  "inputContract": {
+    "type": "Audio resource or stream",
+    "note": "ASR input handled by Realtime session or external caller"
+  },
+  "outputContract": {
+    "type": "Text/segments via TranscriptionStatus (interim/final/cancel)",
+    "authority": "VoiceTurn in backend/internal/realtime/"
+  },
+  "stateProjection": {
+    "authority": "Realtime VoiceSessionState (VoiceTurn.Status)",
+    "states": ["interim", "final", "cancel"]
+  },
+  "errorProjection": {
+    "authority": "ASR Provider errors propagated via Realtime protocol"
+  },
+  "mapping": "ALREADY_SUPPORTED"
+}

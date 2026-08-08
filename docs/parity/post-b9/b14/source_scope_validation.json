@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "generatedAt": "2026-08-08T13:30:00+08:00",
+  "result": "PASS",
+  "modifiedFiles": [
+    {
+      "file": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "change": "Added RuntimeTypeBrowser constant (1 line)"
+    }
+  ],
+  "createdFiles": [
+    "backend/internal/browser/types.go",
+    "backend/internal/browser/errors.go",
+    "backend/internal/browser/provider.go",
+    "backend/internal/browser/contract_test.go"
+  ],
+  "allowedFiles": [
+    "backend/internal/browser/*.go",
+    "backend/internal/extension/kernel/capability/runtime_adapter.go"
+  ],
+  "unexpectedFiles": [],
+  "goModChanged": false,
+  "goSumChanged": false,
+  "databaseChanged": false
+}

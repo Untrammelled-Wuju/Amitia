@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19",
+  "generatedAt": "2026-08-08T15:11:00+08:00",
+  "description": "Android Error Mapping - Android域错误到ToolError的映射",
+
+  "bridgeErrors": [
+    {
+      "androidCode": "BRIDGE_DISCONNECTED",
+      "description": "MethodChannel断开",
+      "toolErrorCode": "ErrorCodeConnectionLost",
+      "retryable": true,
+      "userVisible": false
+    },
+    {
+      "androidCode": "BRIDGE_TIMEOUT",
+      "description": "Bridge调用超时",
+      "toolErrorCode": "ErrorCodeTimeout",
+      "retryable": true,
+      "userVisible": true
+    },
+    {
+      "androidCode": "BRIDGE_INVALID_RESPONSE",
+      "description": "Bridge响应格式错误",
+      "toolErrorCode": "ErrorCodeInternalError",
+      "retryable": false,
+      "userVisible": false
+    }
+  ],
+
+  "providerErrors": [
+    {
+      "androidCode": "PROVIDER_UNAVAILABLE",
+      "description": "Android Provider未实现/未注册",
+      "toolErrorCode": "ErrorCodeNotAvailable",
+      "retryable": false,
+      "userVisible": true,
+      "domainCode": "android.provider.unavailable"
+    },
+    {
+      "androidCode": "AUTHORIZATION_DENIED",
+      "description": "OS权限拒绝",
+      "toolErrorCode": "ErrorCodePermissionDenied",
+      "retryable": false,
+      "userVisible": true,
+      "domainCode": "android.os.authorization_denied"
+    },
+    {
+      "androidCode": "USER_ACTION_REQUIRED",
+      "description": "需要用户手动授权",
+      "toolErrorCode": "ErrorCodePermissionDenied",
+      "retryable": false,
+      "userVisible": true,
+      "domainCode": "android.os.user_action_required"
+    },
+    {
+      "androidCode": "PLATFORM_NOT_SUPPORTED",
+      "description": "Android平台不支持此能力",
+      "toolErrorCode": "ErrorCodeNotAvailable",
+      "retryable": false,
+      "userVisible": true,
+      "domainCode": "android.platform.unsupported"
+    },
+    {
+      "androidCode": "OPERATION_FAILED",
+      "description": "Android Provider业务失败",
+      "toolErrorCode": "ErrorCodeExecutionFailed",
+      "retryable": false,
+      "userVisible": true,
+      "domainCode": "android.operation.failed"
+    }
+  ],
+
+  "constraint": {
+    "preserveDomainCause": true,
+    "noMonoError": true,
+    "bridge_vs_provider_separation": "Bridge Error(传输层)与Provider Error(业务层)使用不同Code空间",
+    "noGlobalErrorRegistry": "B19不创建AndroidGlobalErrorRegistry，使用现有ToolError体系"
+  }
+}

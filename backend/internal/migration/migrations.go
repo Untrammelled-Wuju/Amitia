@@ -142,5 +142,6 @@ func DefaultMigrations() []Migration {
 		DesktopPetImportStagingsMigration(),
 		DesktopPetMigrationControlMigration(),
 		DesktopPetDevicesMigration(),
+		DesktopPetLocalSessionFixMigration(),
 	}
 }

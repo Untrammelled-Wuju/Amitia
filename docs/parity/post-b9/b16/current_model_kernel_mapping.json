@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "domain": "MODEL",
+  "description": "记录当前 Model 域与 Extension Kernel 的现有映射关系",
+  "existingMappings": [
+    {
+      "capabilityId": "N/A (Feature-level)",
+      "description": "LLM 聊天生成",
+      "existingDomain": "backend/internal/chat/service.go",
+      "kernelBridge": "backend/cmd/server/tool_facade_wiring.go (chatToolRuntimeAdapter)",
+      "toolRegistry": "未注册为独立 Tool",
+      "exposure": "host internal service only",
+      "notes": "LLM 调用作为 chat pipeline 能力存在，通过 ModelToolRuntime 接口桥接"
+    },
+    {
+      "capabilityId": "N/A (Feature-level)",
+      "description": "视觉模型理解",
+      "existingDomain": "backend/internal/vision/service.go",
+      "kernelBridge": "无直接桥接",
+      "toolRegistry": "未注册为 Tool",
+      "exposure": "host internal service only",
+      "notes": "视觉模型通过 HTTP /api/vision/configs 暴露"
+    },
+    {
+      "capabilityId": "N/A (Feature-level)",
+      "description": "Embedding 嵌入",
+      "existingDomain": "backend/internal/embedding/embedding.go",
+      "kernelBridge": "无直接桥接",
+      "toolRegistry": "未注册为 Tool",
+      "exposure": "host internal service only"
+    },
+    {
+      "toolId": "builtin/message/voice_reply",
+      "description": "强制语音回复 (uses TTS)",
+      "legacyToolId": "voice_reply",
+      "existingDomain": "backend/internal/agent/tool/voice_reply.go",
+      "toolRegistry": "tool_migration/registry.go",
+      "permissions": ["voice.generate"],
+      "runtimeBinding": "host_internal",
+      "exposure": "间接 - 通过 chat pipeline 触发"
+    },
+    {
+      "description": "ToolDefinition.ModelName 关联",
+      "existingDomain": "backend/internal/extension/kernel/capability/definition.go",
+      "kernelBridge": "ToolFacade.buildKernelModelTools()",
+      "effect": "具有 ModelName 的 Tool 可被特定模型调用",
+      "exposure": "Model-to-Tool mapping, not direct Agent Tool"
+    },
+    {
+      "toolId": "builtin/tool/execute_workflow",
+      "description": "执行工作流 (Agent 可用)",
+      "toolRegistry": "REQUIRED_NOT_IMPLEMENTED (B9P4 mapping)",
+      "existingDomain": "backend/internal/extension/kernel/workflow/executor.go",
+      "exposure": "Workflow 执行器完备，待注册为 Agent Tool"
+    },
+    {
+      "toolId": "builtin/tool/personality_trait_model",
+      "numericId": 2029,
+      "description": "人格特质模型",
+      "toolRegistry": "REQUIRED_NOT_IMPLEMENTED",
+      "exposure": "待实现"
+    },
+    {
+      "toolId": "builtin/tool/belief_batch_process",
+      "numericId": 2006,
+      "description": "信念批处理",
+      "toolRegistry": "REQUIRED_NOT_IMPLEMENTED",
+      "exposure": "待实现"
+    }
+  ],
+  "existingKernelIntegration": {
+    "toolFacadeBridge": "backend/internal/extension/kernel/tool_facade.go",
+    "modelToolRuntimeInterface": "backend/internal/chat/tool_runtime.go (ModelToolRuntime)",
+    "wiringAdapter": "chatToolRuntimeAdapter 在 backend/cmd/server/tool_facade_wiring.go",
+    "note": "Model 能力通过 ToolDefinition.ModelName 和 chatToolRuntimeAdapter 间接接入 Kernel，而非作为独立 Capability/Tool 注册"
+  }
+}

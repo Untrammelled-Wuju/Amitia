@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "capabilityMappings": [
+    {
+      "capabilityId": "external/browser/automation_execute_browser",
+      "status": "CONTRACT_ONLY",
+      "description": "Web automation capability"
+    },
+    {
+      "capabilityId": "external/browser/capture_browser_screenshot",
+      "status": "CONTRACT_ONLY",
+      "description": "Browser screenshot capability"
+    },
+    {
+      "capabilityId": "external/browser/control_close_all_virtual_displays",
+      "status": "NOT_BROWSER_PROVIDER",
+      "description": "Virtual display management, not browser automation"
+    },
+    {
+      "capabilityId": "external/browser/floating_window_overlay",
+      "status": "NOT_BROWSER_PROVIDER",
+      "description": "Window overlay feature, not browser automation"
+    },
+    {
+      "capabilityId": "external/browser/control_virtualdisplayoverlay",
+      "status": "NOT_BROWSER_PROVIDER",
+      "description": "Virtual display control"
+    },
+    {
+      "capabilityId": "external/browser/control_screen_capture",
+      "status": "NOT_BROWSER_PROVIDER",
+      "description": "Screen capture, not browser automation"
+    },
+    {
+      "capabilityId": "external/browser/capture_capture_screenshot",
+      "status": "NOT_BROWSER_PROVIDER",
+      "description": "Generic screenshot capture"
+    }
+  ],
+  "note": "Browser contract capabilities are in CONTRACT_ONLY state. Real registration in ToolRegistry is deferred to B79-B83. Only Provider contract is established in B14."
+}

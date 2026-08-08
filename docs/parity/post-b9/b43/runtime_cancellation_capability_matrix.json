@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B43",
+  "capabilities": {
+    "builtin": "COOPERATIVE_CANCEL",
+    "internal": "COOPERATIVE_CANCEL",
+    "mcp": "COOPERATIVE_CANCEL",
+    "plugin": "COOPERATIVE_CANCEL",
+    "workflow": "NOT_APPLICABLE",
+    "task": "NATIVE_CANCEL (RunStatusCancelled + Cancelling state)",
+    "javascript": "COOPERATIVE_CANCEL (ctx passthrough + 'cancelled' detection)",
+    "wasm": "NOT_APPLICABLE",
+    "trusted_service": "TRANSPORT_CANCEL",
+    "android": "NATIVE_CANCEL (select ctx.Done + handleCtxError)",
+    "ios": "NATIVE_CANCEL",
+    "desktop": "NATIVE_CANCEL"
+  }
+}

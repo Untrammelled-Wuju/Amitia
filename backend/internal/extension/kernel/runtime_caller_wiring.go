@@ -59,3 +59,19 @@ func (c *Container) WireMCPAdapter(caller capability.MCPCallFunc, health capabil
 	}
 	c.AdapterRegistry.Register(capability.RuntimeTypeMCP, mcpAdapter)
 }
+
+func (c *Container) WireAndroidPlatformAdapter(provider capability.AndroidProvider) {
+	if c == nil || c.AdapterRegistry == nil {
+		return
+	}
+	adapter := capability.NewAndroidRuntimeAdapter(provider)
+	c.AdapterRegistry.Register(capability.RuntimeTypeAndroid_Native, adapter)
+}
+
+func (c *Container) WireIOSPlatformAdapter(provider capability.IOSProvider) {
+	if c == nil || c.AdapterRegistry == nil {
+		return
+	}
+	adapter := capability.NewIOSRuntimeAdapter(provider)
+	c.AdapterRegistry.Register(capability.RuntimeTypeIOS_Native, adapter)
+}

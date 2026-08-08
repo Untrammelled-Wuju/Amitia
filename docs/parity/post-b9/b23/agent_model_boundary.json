@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Agent与Model边界",
+
+  "boundary": {
+    "modelDomainOwns": {
+      "description": "Model配置/Provider选择由Model域管理",
+      "items": [
+        "Model configuration (model_configs table)",
+        "Model provider selection",
+        "API key management",
+        "Token limit management",
+        "Model fallback"
+      ]
+    },
+    "agentOwns": {
+      "description": "Agent使用Model进行推理",
+      "items": [
+        "Reasoning",
+        "Planning",
+        "Response generation",
+        "Reflection"
+      ]
+    }
+  },
+
+  "integrationPoint": {
+    "description": "Agent通过chat.ModelService调用LLM",
+    "agentToModel": "Agent -> chat.ModelService -> LLM Provider",
+    "modelToAgent": "LLM Response -> Agent processing"
+  },
+
+  "canonicalModelDomain": {
+    "owner": "backend/internal/chat/model_service",
+    "sourcePath": "backend/internal/chat/model_service.go",
+    "status": "EXISTING"
+  }
+}

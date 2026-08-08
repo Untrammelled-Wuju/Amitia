@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123-B138",
+  "sourceStep": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "B123-B138 iOS/Android Platform Provider输入 - 来自B17/B19/B20的Frozen Contract",
+
+  "frozenContracts": {
+    "providerDeclaration": "ContributionKind=provider + Platform={android|ios} + NativeBridge (B17 provider_declaration_mapping)",
+    "runtimeBinding": "android_native / ios_native (B17 runtime_binding_declaration_mapping futureAdapters)",
+    "permissionMapping": "B11 Kernel Permission → Android Permission / iOS NS*UsageDescription",
+    "resourceURI": "amitia:// ResourceURI在Mobile端PhysicalResolver (B13)",
+    "manifestV2": "Platform-specific Compatibility + RuntimeMeta (B17)"
+  },
+
+  "implementationGaps": [
+    {"gap": "adapter_android_native", "owner": "B19/B123-B138"},
+    {"gap": "adapter_ios_native", "owner": "B20/B123-B138"},
+    {"gap": "Android Native Bridge", "owner": "B123-B138"},
+    {"gap": "iOS Native Bridge", "owner": "B123-B138"},
+    {"gap": "Mobile ResourceURI PhysicalResolver", "owner": "B123-B138"},
+    {"gap": "Platform Permission动态请求", "owner": "B123-B138"}
+  ],
+
+  "dependsOn": ["B19 (Android Adapter)", "B20 (iOS Adapter)", "B22 (Adapter Conformance)"],
+  "note": "B123-B138在B19/B20之后执行，确保共享合同已冻结且Adapter已实现"
+}

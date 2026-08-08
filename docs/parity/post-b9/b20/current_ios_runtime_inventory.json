@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:00:00+08:00",
+  "description": "iOS Runtime现状审计 - 所有发现的iOS Runtime/Bridge/IPC/Provider组件",
+
+  "iosProject": {
+    "exists": true,
+    "path": "mobile_app/ios/",
+    "type": "Flutter iOS Shell",
+    "note": "标准Flutter iOS构建壳，仅包含AppDelegate和RunnerTests，无自定义Runtime服务"
+  },
+
+  "flutterBridges": [
+    {
+      "id": "IOS-BRIDGE-001",
+      "component": "MethodChannel 'com.amitia.amitia_app/runtime'",
+      "path": "mobile_app/lib/core/backend_connection/providers/runtime_backend_connection_source.dart",
+      "role": "Dart侧MethodChannel调用者，wrapper runtime.getBackendConnection，Android/iOS共享同一通道",
+      "platforms": ["android", "ios"],
+      "classification": "EXISTING_PLATFORM_BRIDGE"
+    }
+  ],
+
+  "runtimeServices": [
+  ],
+
+  "sandboxImplementations": [
+  ],
+
+  "nativeProviders": [
+  ],
+
+  "backgroundComponents": [
+  ],
+
+  "stateOwners": [
+  ],
+
+  "productionCallers": [
+    {
+      "id": "IOS-CALLER-001",
+      "caller": "BackendConnectionRepository / _DefaultBackendConnectionRepository",
+      "path": "mobile_app/lib/core/backend_connection/providers/backend_connection_providers.dart",
+      "calls": "RuntimeBackendConnectionSource.resolve()",
+      "purpose": "初始化Flutter端与后端连接，通过MethodChannel获取后端连接信息",
+      "platforms": ["android", "ios"]
+    }
+  ],
+
+  "swiftComponents": [
+    {
+      "id": "IOS-SWIFT-001",
+      "component": "AppDelegate.swift",
+      "path": "mobile_app/ios/Runner/AppDelegate.swift",
+      "role": "Flutter iOS应用入口，仅注册GeneratedPluginRegistrant",
+      "classification": "IOS_PROJECT_INFRASTRUCTURE"
+    },
+    {
+      "id": "IOS-SWIFT-002",
+      "component": "RunnerTests.swift",
+      "path": "mobile_app/ios/RunnerTests/RunnerTests.swift",
+      "角色": "空测试模板",
+      "classification": "TEST_ONLY"
+    }
+  ],
+
+  "summary": {
+    "totalAudited": 4,
+    "iosProjectShellCount": 1,
+    "sharedFlutterBridgeCount": 1,
+    "runtimeServiceCount": 0,
+    "sandboxImplementationCount": 0,
+    "nativeProviderCount": 0,
+    "backgroundComponentCount": 0,
+    "stateOwnerCount": 0,
+    "swiftComponentCount": 2,
+    "productionCallerCount": 1,
+    "unknownCount": 0
+  }
+}

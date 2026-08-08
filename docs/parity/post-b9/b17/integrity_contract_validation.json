@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "description": "Integrity 校验合同 - Manifest 完整性与签名",
+  "manifestIntegrity": {
+    "algorithm": "SHA-256",
+    "contentTreeHash": "Merkle Tree 风格内容哈希根",
+    "fileHashes": "逐文件 SHA-256 清单 (integrity/files.json)"
+  },
+  "signature": {
+    "algorithm": "ed25519",
+    "documentFormat": "amitiax-signature-v1",
+    "payload": "ExtensionID + Version + ManifestHash + ContentTreeHash + PublisherID + KeyID",
+    "messageFormat": "publisherID:treeHash"
+  },
+  "verification": {
+    "integrity": "amitiax.VerifyIntegrity() - 逐文件校验 + 树哈希根校验",
+    "signature": "SignatureVerificationResult (valid/invalid/unknown/revoked/expired)",
+    "trust_levels": ["official", "trusted", "user_trusted", "unknown", "blocked", "revoked", "development"]
+  },
+  "publisher": {
+    "identity": "PublisherMeta{ID, DisplayName, TrustLevel, Contact, Website}",
+    "keyManagement": "trust/identity.go (PublisherKey lifecycle: active/rotated/expired/revoked)",
+    "continuity": "Key rotation with continuity signing"
+  },
+  "principles": [
+    "Manifest 持有 Integrity Meta (声明层)",
+    "amitiax package 执行校验 (执行层)",
+    "trust system 管理密钥 (信任层)"
+  ],
+  "status": "ALREADY_SUPPORTED - Integrity + Signature + Publisher Trust 完整"
+}

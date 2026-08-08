@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "源码边界汇总 - B10-B17+B18源码修改范围验证",
+
+  "stepSourceScopes": {
+    "b10": {"modifiedFiles": 0, "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b11": {"modifiedFiles": 0, "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b12": {"modifiedFiles": 0, "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b13": {"modifiedFiles": 0, "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b14": {"modifiedFiles": 1, "modifiedDetail": "backend/internal/extension/kernel/capability/runtime_adapter.go (+1 line RuntimeTypeBrowser)", "newFiles": 4, "newFilesDetail": "backend/internal/browser/{types,errors,provider,contract_test}.go", "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b15": {"modifiedFiles": 0, "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b16": {"modifiedFiles": 0, "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b17": {"modifiedFiles": 0, "unexpectedFiles": 0, "goModChanged": false, "goSumChanged": false, "databaseChanged": false, "status": "PASS"},
+    "b18": {"modifiedFiles": 0, "unexpectedFiles": 0, "status": "PASS - VALIDATION_ONLY"}
+  },
+
+  "unexpectedModifiedFiles": 0,
+  "goModChanged": false,
+  "goSumChanged": false,
+  "databaseChanged": false,
+  "totalProductionCodeModified": "1 file, +1 line (B14 RuntimeTypeBrowser constant)",
+
+  "result": "PASS - 全部步骤源码边界合规，B18业务源码修改=0"
+}

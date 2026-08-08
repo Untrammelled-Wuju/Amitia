@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "scan": "glob for FakeTool/FakeProvider/MockTool/NoopTool/PlaceholderTool/NotImplementedTool",
+  "findings": [
+    {
+      "path": "backend/internal/runtimeorchestrator/provider_registry_test.go",
+      "symbol": "fakeProviderInstance / fakeProviderFactory",
+      "testOnly": true,
+      "productionReachable": false,
+      "registered": false
+    },
+    {
+      "path": "backend/internal/desktoppet/behavior/adapters/tool.go",
+      "symbol": "NoopToolAdapter",
+      "testOnly": false,
+      "productionReachable": true,
+      "registered": false,
+      "note": "Behavior lifecycle observer, not a tool registration"
+    },
+    {
+      "path": "backend/internal/desktoppet/behavior/ports.go",
+      "symbol": "NoopToolObserver",
+      "testOnly": false,
+      "productionReachable": true,
+      "registered": false,
+      "note": "Behavior observer interface implementation, not a tool registration"
+    },
+    {
+      "path": "backend/internal/imageprovider/backgroundremoval/provider_test.go",
+      "symbol": "fakeProvider",
+      "testOnly": true,
+      "productionReachable": false,
+      "registered": false
+    }
+  ],
+  "productionReachableFakeCount": 0
+}

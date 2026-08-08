@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Deferred Runtime Gap Inventory - 已识别但留给后续步骤的Runtime实现",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "deferredGaps": [
+    {
+      "gapId": "DEF-B55-B78-001",
+      "semantic": "Android Native Provider implementation",
+      "description": "Android平台无障碍/通知/截图等Provider实现",
+      "futureStep": "B55-B78",
+      "note": "B12只定义合同，不实现真实Android Provider"
+    },
+    {
+      "gapId": "DEF-B123-B138-001",
+      "semantic": "iOS Native Provider implementation",
+      "description": "iOS平台HealthKit/Calendar/Contacts等Provider实现",
+      "futureStep": "B123-B138",
+      "note": "B12只定义合同，不实现真实iOS Provider"
+    },
+    {
+      "gapId": "DEF-B79-B92-001",
+      "semantic": "Browser Runtime Provider implementation",
+      "description": "浏览器Runtime/Tab/Bookmarks等Provider实现",
+      "futureStep": "B79-B92",
+      "note": "RuntimeTypeBrowser已声明，留给后续实现"
+    },
+    {
+      "gapId": "DEF-DESKTOP-001",
+      "semantic": "Desktop Clipboard/Screenshot Provider implementation",
+      "description": "Desktop平台剪贴板/截图等Provider实现",
+      "futureStep": "TBD (Desktop Provider)",
+      "note": "留给后续Desktop Provider步骤"
+    },
+    {
+      "gapId": "DEF-B90-B92-001",
+      "semantic": "Workspace Provider implementation",
+      "description": "Workspace搜索/文件等Provider实现",
+      "futureStep": "B90-B92",
+      "note": "Workspace Provider留给后续步骤"
+    }
+  ],
+
+  "summary": {
+    "totalDeferred": 5,
+    "assignedToB55_B78": 1,
+    "assignedToB123_B138": 1,
+    "assignedToB79_B92": 1,
+    "assignedToB90_B92": 1,
+    "unassigned": 1
+  }
+}

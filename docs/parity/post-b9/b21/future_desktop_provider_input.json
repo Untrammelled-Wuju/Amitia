@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "未来Desktop Provider输入清单(B21不实现这些能力)",
+
+  "futureProviders": [
+    {
+      "capability": "System Clipboard",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED"
+    },
+    {
+      "capability": "Desktop Notification",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED"
+    },
+    {
+      "capability": "Screenshot",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED",
+      "mediaContract": "B15 Shared Media Contract"
+    },
+    {
+      "capability": "Screen Recording",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED",
+      "mediaContract": "B15 Shared Media Contract"
+    },
+    {
+      "capability": "Window Management",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED"
+    },
+    {
+      "capability": "File Picker Dialog",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED"
+    },
+    {
+      "capability": "Global Shortcut Registration(System-level)",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED"
+    },
+    {
+      "capability": "Computer Use(Mouse/Keyboard)",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED",
+      "note": "高风险能力，需特殊权限管理"
+    },
+    {
+      "capability": "System Information",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED"
+    },
+    {
+      "capability": "Power Control",
+      "platforms": ["windows", "macos", "linux"],
+      "windows": "FUTURE_PROVIDER",
+      "macos": "FUTURE_PROVIDER",
+      "linux": "FUTURE_PROVIDER",
+      "existing": false,
+      "ownerStep": "EXISTING_DOMAIN_IMPLEMENTATION_REQUIRED",
+      "note": "高风险能力"
+    }
+  ],
+
+  "note": "B21仅建立Desktop Platform Adapter底座，具体Provider由后续步骤按需实现"
+}

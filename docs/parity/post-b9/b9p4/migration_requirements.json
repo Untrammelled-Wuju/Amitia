@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "migrationCategories": {
+    "TOOL_ID_ALIAS": {
+      "count": 253,
+      "description": "V1 Tool ID需迁移为Kernel兼容格式",
+      "affectedExamples": "tool.system.control_CLOSE_ALL_VIRTUAL_DISPLAYS -> browser.close_displays 等",
+      "futureStep": "B140/B141 生产迁移"
+    },
+    "TOOL_REGISTRY_MIGRATION": {
+      "count": 253,
+      "description": "部分旧Tool需注册到Kernel ToolRegistry",
+      "affectedExamples": "MCP/Workflow/Plugin注册清理",
+      "futureStep": "B140/B141"
+    },
+    "PERMISSION_SEMANTIC_MIGRATION": {
+      "count": 14,
+      "description": "Permission语义转化为PermissionDefinition",
+      "futureStep": "B11 实现Permission GAP"
+    },
+    "RUNTIME_BINDING_MIGRATION": {
+      "count": 0,
+      "description": "现有RuntimeBinding已兼容"
+    },
+    "LEGACY_EXECUTION_REMOVAL": {
+      "count": 0,
+      "description": "B9P6确认无生产Legacy执行",
+      "note": "零个生产旁路发现"
+    },
+    "NO_MIGRATION": {
+      "count": 249,
+      "description": "Non-Agent Capability无需迁移"
+    }
+  },
+  "blockingMigrations": [],
+  "futureSteps": [
+    {
+      "step": "B11",
+      "description": "实现14个Permission GAP",
+      "priority": "HIGH"
+    },
+    {
+      "step": "B79-B83",
+      "description": "Browser Runtime",
+      "priority": "HIGH"
+    },
+    {
+      "step": "B84-B86",
+      "description": "Search Provider",
+      "priority": "MEDIUM"
+    },
+    {
+      "step": "B55+",
+      "description": "Android Device Provider",
+      "priority": "MEDIUM"
+    },
+    {
+      "step": "B127+",
+      "description": "iOS Native Provider",
+      "priority": "LOW"
+    },
+    {
+      "step": "B140/B141",
+      "description": "生产迁移+最终Cutover",
+      "priority": "CRITICAL"
+    }
+  ]
+}

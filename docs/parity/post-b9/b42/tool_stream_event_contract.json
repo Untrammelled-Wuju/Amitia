@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B42",
+  "canonicalEventType": "NOT_PRESENT",
+  "invocationIdentity": "NOT_PRESENT",
+  "eventKinds": "NOT_REQUIRED (B42 无实现)",
+  "ordering": "NOT_REQUIRED",
+  "payload": "NOT_REQUIRED",
+  "artifactReference": "NOT_REQUIRED",
+  "progressSemantics": "NOT_REQUIRED",
+  "terminalBehavior": "FinalToolResult 直接完成"
+}

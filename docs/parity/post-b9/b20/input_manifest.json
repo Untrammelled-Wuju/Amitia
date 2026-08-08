@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:28:00+08:00",
+  "description": "B20输入清单 - B20实际读取的前置输入",
+
+  "readInputs": {
+    "B9P8": {
+      "path": "docs/parity/post-b9/b9p8/b9p8_status.json",
+      "status": "PASS"
+    },
+    "B12": {
+      "path": "docs/parity/post-b9/b12/b12_status.json",
+      "status": "PASS_NO_CODE_CHANGE",
+      "additionalDocs": [
+        "docs/parity/post-b9/b12/platform_adapter_contract.json",
+        "docs/parity/post-b9/b12/B123_B138_runtime_input.json"
+      ]
+    },
+    "B18": {
+      "path": "docs/parity/post-b9/b18/b18_status.json",
+      "status": "PASS",
+      "additionalDocs": [
+        "docs/parity/post-b9/b18/platform_adapter_phase_ready.json"
+      ]
+    },
+    "B19": {
+      "path": "docs/parity/post-b9/b19/b19_status.json",
+      "status": "PASS"
+    },
+    "B17": {
+      "path": "docs/parity/post-b9/b17/runtime_binding_declaration_mapping.json",
+      "note": "确认ios_native为futureAdapter待实现"
+    }
+  }
+}

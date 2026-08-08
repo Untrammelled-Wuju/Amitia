@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "nextStep": "B42",
+  "nextOwner": "streaming / cancellation step",
+  "requiredContextInputs": {
+    "invocationIdentity": "ToolInvocationContext.InvocationID",
+    "contextLifetime": "ToolExecutionRequest lifetime + pipeline processing",
+    "resultCorrelation": "UnifiedToolResult.InvocationID",
+    "schemaContract": "ToolDefinition.InputSchema/OutputSchema (B40)",
+    "runtimeProjection": "RuntimeAdapter.Execute receives ToolInvocationContext",
+    "cancelPropagationPoint": "CancellationController.Wrap(ctx, inv); context cancellation propagates downward"
+  }
+}

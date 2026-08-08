@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "B21计划执行的Desktop Adapter变更清单",
+
+  "changes": [
+    {
+      "changeId": "B21-CHG-001",
+      "semantic": "添加RuntimeTypeDesktop_Extension运行时类型常量",
+      "changeType": "ADAPTER_IMPLEMENTATION",
+      "targetPath": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "whyRequired": "B12 contract要求Desktop Adapter注册到RuntimeAdapterRegistry，RuntimeTypeDesktop_Extension是唯一标识",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B21-CHG-002",
+      "semantic": "创建Desktop RuntimeAdapter实现",
+      "changeType": "ADAPTER_IMPLEMENTATION",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_desktop.go",
+      "whyRequired": "实现RuntimeAdapter接口(Supports/Execute/Health)，将Desktop操作接入Extension Kernel标准运行时体系",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B21-CHG-003",
+      "semantic": "注册Desktop Adapter到RuntimeAdapterRegistry",
+      "changeType": "REGISTRATION",
+      "targetPath": "backend/internal/extension/kernel/adapter_registration.go",
+      "whyRequired": "使Desktop Adapter在RuntimeAdapterRegistry中可被发现和执行",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B21-CHG-004",
+      "semantic": "添加Desktop Provider依赖到AdapterRegistrationDeps",
+      "changeType": "BRIDGE_MAPPING",
+      "targetPath": "backend/internal/extension/kernel/adapter_registration.go",
+      "whyRequired": "Desktop Adapter需要DesktopHost引用来执行操作",
+      "providerImplementationIncluded": false
+    }
+  ],
+
+  "totalChanges": 4,
+  "description": "B21仅添加Adapter契约层，不实现具体Desktop业务Provider（Clipboard/Notification等均为后续步骤FUTURE_PROVIDER_GAP）"
+}

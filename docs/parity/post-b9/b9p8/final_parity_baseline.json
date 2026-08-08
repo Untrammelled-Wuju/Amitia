@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P8",
+  "historicalBaseline": {
+    "id": "PARITY-2026-08-07-V1",
+    "status": "FROZEN_HISTORICAL",
+    "totalCapabilities": 506,
+    "note": "Historical baseline frozen at B9V1. Do not modify."
+  },
+  "correctionAddendum": {
+    "id": "ADDENDUM-2026-08-07-001",
+    "status": "EFFECTIVE",
+    "reviewBlocked": 0,
+    "lowConfidence": 0
+  },
+  "effectiveBaseline": {
+    "id": "PARITY-2026-08-07-V1-CORR1",
+    "status": "EFFECTIVE_FROZEN",
+    "totalCapabilities": 502,
+    "scopeStateCounts": {
+      "PRESERVE_AMITIA": 240,
+      "REQUIRED": 258,
+      "REQUIRED_PLATFORM_EQUIVALENT": 4
+    },
+    "profileCounts": {
+      "PROFILE_TOOL": 370,
+      "PROFILE_NATIVE": 35,
+      "PROFILE_DATA": 21,
+      "PROFILE_RUNTIME": 10,
+      "PROFILE_SECURITY": 12,
+      "PROFILE_UI": 9,
+      "PROFILE_EXTENSION": 19,
+      "PROFILE_CORE": 11,
+      "PROFILE_VOICE": 6,
+      "PROFILE_BACKGROUND": 5,
+      "PROFILE_MODEL": 4
+    },
+    "removedEntries": [
+      {"mapId": "MAP-0038", "reason": "Duplicate behavior_key after B7 normalization"},
+      {"mapId": "MAP-0082", "reason": "Duplicate behavior_key after B7 normalization"},
+      {"mapId": "MAP-0083", "reason": "Duplicate behavior_key after B7 normalization"},
+      {"mapId": "MAP-0234", "reason": "Duplicate behavior_key after B7 normalization"}
+    ]
+  },
+  "formula": {
+    "operit": "passed / corrected Operit scope",
+    "openminis": "passed / corrected OpenMinis scope",
+    "amitiaPreservation": "passed / corrected preservation scope",
+    "overall": "passed / corrected total scope",
+    "target": "100%"
+  }
+}

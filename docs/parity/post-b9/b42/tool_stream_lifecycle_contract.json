@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B42",
+  "lifecycle": "NOT_APPLICABLE (无 Tool Stream)",
+  "note": "Execution 直接以 running -> succeeded/failed 状态机完成，不经过显式 Stream OPEN/TERMINATED 状态。"
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "inputPatches": {
+    "B9P1": {"status": "PASS", "path": "docs/parity/post-b9/b9p1/"},
+    "B9P2": {"status": "PASS", "path": "docs/parity/post-b9/b9p2/"},
+    "B9P3": {"status": "PASS", "path": "docs/parity/post-b9/b9p3/"},
+    "B9P4": {"status": "PASS", "path": "docs/parity/post-b9/b9p4/"},
+    "B9P5": {"status": "PASS", "path": "docs/parity/post-b9/b9p5/"},
+    "B9P6": {"status": "PASS", "path": "docs/parity/post-b9/b9p6/"}
+  },
+  "keyInputs": [
+    "docs/parity/post-b9/b9p4/resolved_capability_registry.json",
+    "docs/parity/post-b9/b9p4/resolved_tool_registry.json",
+    "docs/parity/post-b9/b9p4/capability_permission_mapping.json",
+    "docs/parity/post-b9/b9p4/capability_provider_mapping.json",
+    "docs/parity/post-b9/b9p4/runtime_binding_mapping.json",
+    "docs/parity/post-b9/b9p4/capability_execution_contracts.json",
+    "docs/parity/post-b9/b9p4/migration_requirements.json",
+    "docs/parity/post-b9/b9p4/resolved_protocol_contract.json",
+    "docs/parity/post-b9/b9p5/state_source_of_truth.json",
+    "docs/parity/post-b9/b9p5/error_source_of_truth.json",
+    "docs/parity/post-b9/b9p5/state_error_guard.json",
+    "docs/parity/post-b9/b9p6/canonical_system_resolution.json",
+    "docs/parity/post-b9/b9p6/duplicate_system_guard.json",
+    "docs/parity/post-b9/b9p6/production_entry_guard.json"
+  ],
+  "syncedPlanStatus": "未发现独立同步推进计划文档，使用B9P7任务定义中的修订规则作为权威源",
+  "note": "B9P7任务定义中本身含有B10-B154每步范围的详细修订说明（十五节至五十节）"
+}

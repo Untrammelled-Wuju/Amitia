@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T17:30:00+08:00",
+  "description": "B124 iSH现状Inventory - 全仓库搜索结果",
+
+  "searchScope": {
+    "directoriesScanned": [
+      "mobile_app/ios/",
+      "mobile_app/lib/",
+      "backend/",
+      "runtime/",
+      "third_party/",
+      "vendor/"
+    ],
+    "searchTerms": ["ish", "iSH", "ish.app", "x86 emulator", "linux userland", "terminal emulator", "sandbox backend", "linux syscall", "rootfs", "alpine"]
+  },
+
+  "existingISHCode": [],
+  "buildIntegration": [],
+  "swiftBridges": [],
+  "objcBridges": [],
+  "cInterfaces": [],
+  "runtimeEntrypoints": [],
+  "filesystemEntrypoints": [],
+  "terminalEntrypoints": [],
+  "stateOwners": [],
+  "productionCallers": [],
+
+  "relatedButUnrelated": [
+    {
+      "path": "backend/internal/outbox/dispatched_publisher.go",
+      "reason": "包含'dispatched'子串，与iSH无关"
+    },
+    {
+      "path": "backend/internal/desktoppet/generation/outbox_publisher.go",
+      "reason": "包含'dispatched'子串，与iSH无关"
+    }
+  ],
+
+  "existingRootfsCode": {
+    "note": "现有rootfs代码全部为Android特定(PRoot + Ubuntu)，不可用于iOS iSH + Alpine",
+    "androidSpecific": [
+      {
+        "path": "mobile_app/android/amitia-runtime/src/main/kotlin/com/amitia/amitia_app/runtime/install/RootfsManager.kt",
+        "description": "Android rootfs管理 - Ubuntu + PRoot"
+      },
+      {
+        "path": "runtime/build/runtimepackage/android-arm64/rootfs_composer.py",
+        "description": "Android rootfs构建脚本"
+      },
+      {
+        "path": "runtime/build/rootfs/ubuntu-noble-arm64/rootfs.lock.json",
+        "description": "Ubuntu Noble ARM64 rootfs锁定文件"
+      }
+    ]
+  },
+
+  "upstreamISHInfo": {
+    "name": "iSH",
+    "description": "iOS Linux shell app - runs a Linux environment on iOS using a usermode x86 emulator and syscall translation",
+    "repository": "https://github.com/ish-app/ish",
+    "license": "GPL-2.0",
+    "language": "C, Objective-C, Assembly",
+    "architecture": "x86 emulation via seal/kel JIT + ARM64 native",
+    "keyComponents": [
+      "iSH app (Xcode project)",
+      "Linux kernel replacement (syscall translation)",
+      "x86 emulator (seakel)",
+      "Alpine rootfs support"
+    ]
+  },
+
+  "summary": {
+    "foundInRepository": false,
+    "rootfsForIOS": false,
+    "existingSandboxBackend": false,
+    "ishSourceAvailable": false,
+    "attemptedSearchPaths": 6,
+    "totalFilesScanned": "full repository"
+  }
+}

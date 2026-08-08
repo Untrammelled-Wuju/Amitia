@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "description": "Dependency 合同 - Manifest 依赖声明",
+  "declarationAuthority": {
+    "manifestField": "Dependency{Type,ID,Version,Optional,Reason}",
+    "location": "Manifest.Dependencies[] + ModuleMeta.Dependencies[]"
+  },
+  "supportedTypes": [
+    "extension (扩展间依赖)",
+    "module (模块间依赖)",
+    "mcp (MCP 服务依赖)",
+    "provider (Provider 依赖 - 用于 Model/Voice Provider)",
+    "host_api (宿主 API 版本依赖)"
+  ],
+  "resolution": {
+    "authority": "dependency.Resolver (semver, cycle detection, topo sort)",
+    "implementation": "dependency/resolver.go (DefaultResolver)",
+    "strategies": ["exact", "highest_compatible", "lowest_compatible", "installed_preferred", "system_preferred", "user_selected", "isolated"]
+  },
+  "installation": {
+    "authority": "package_install_saga.go + dependency.Resolver.Resolve()",
+    "note": "安装时自动解析并安装缺失依赖"
+  },
+  "conflictDetection": {
+    "supportedConflicts": [
+      "version_conflict", "missing_dependency", "dependency_cycle",
+      "platform_conflict", "architecture_conflict", "host_feature_missing",
+      "exclusive_provider_conflict", "runtime_conflict", "owner_conflict"
+    ]
+  },
+  "principles": [
+    "Manifest 声明依赖需求 (what)",
+    "Resolver 决定如何满足 (how)",
+    "Install Saga 执行安装 (when)",
+    "三者分离，Manifest 不实现解析逻辑"
+  ],
+  "status": "ALREADY_SUPPORTED"
+}

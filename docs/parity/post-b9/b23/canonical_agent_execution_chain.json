@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Canonical Agent执行链 - 基于实际源码确定的执行顺序",
+
+  "chain": [
+    {
+      "step": 1,
+      "layer": "Trigger/Request",
+      "symbol": "interaction.UnifiedEntryRequest",
+      "sourcePath": "backend/internal/interaction/unified_entry.go",
+      "input": "HTTP Request / Webhook / Schedule Trigger",
+      "output": "UnifiedEntryRequest",
+      "authority": "interaction.UnifiedEntry",
+      "productionReachable": true
+    },
+    {
+      "step": 2,
+      "layer": "Agent Entry",
+      "symbol": "interaction.UnifiedEntry.Handle",
+      "sourcePath": "backend/internal/interaction/unified_entry.go",
+      "input": "UnifiedEntryRequest",
+      "output": "OrchestrationResult",
+      "authority": "interaction.UnifiedEntry",
+      "productionReachable": true
+    },
+    {
+      "step": 3,
+      "layer": "Context Resolution",
+      "symbol": "interaction.ScopeResolver.Resolve",
+      "sourcePath": "backend/internal/interaction/scope_resolver.go",
+      "input": "ScopeResolveInput",
+      "output": "ScopeResolution (InteractionScope)",
+      "authority": "interaction.ScopeResolver",
+      "productionReachable": true
+    },
+    {
+      "step": 4,
+      "layer": "Backpressure Check",
+      "symbol": "interaction.UnifiedEntry (BackpressureState)",
+      "sourcePath": "backend/internal/interaction/unified_entry.go",
+      "input": "QueueDepth",
+      "output": "BackpressureStatus (normal/warning/shedding)",
+      "authority": "interaction.UnifiedEntry",
+      "productionReachable": true
+    },
+    {
+      "step": 5,
+      "layer": "Orchestration",
+      "symbol": "interaction.Orchestrator.Process",
+      "sourcePath": "backend/internal/interaction/orchestrator.go",
+      "input": "ProcessRequest",
+      "output": "OrchestrationResult",
+      "authority": "interaction.Orchestrator",
+      "productionReachable": true
+    },
+    {
+      "step": 6,
+      "layer": "Path Classification",
+      "symbol": "interaction.PathClassifier",
+      "sourcePath": "backend/internal/interaction/path_classifier.go",
+      "input": "Context + Message",
+      "output": "PathType (Deep/Standard/Lightweight)",
+      "authority": "interaction.RuntimePipeline",
+      "productionReachable": true
+    },
+    {
+      "step": 7,
+      "layer": "Context Loading",
+      "symbol": "interaction.ContextLoader",
+      "sourcePath": "backend/internal/interaction/context_loader.go",
+      "input": "InteractionScope",
+      "output": "ContextSnapshot",
+      "authority": "interaction.RuntimePipeline",
+      "productionReachable": true
+    },
+    {
+      "step": 8,
+      "layer": "Goal/Intent",
+      "symbol": "decision.GoalRegistry",
+      "sourcePath": "backend/internal/decision/goal_registry.go",
+      "input": "ContextSnapshot",
+      "output": "Goal (current goal state)",
+      "authority": "decision.GoalRegistry",
+      "productionReachable": true
+    },
+    {
+      "step": 9,
+      "layer": "Candidate Generation",
+      "symbol": "decision.CandidateGenerator",
+      "sourcePath": "backend/internal/decision/candidate_generator.go",
+      "input": "Goal + Context",
+      "output": "[]Candidate",
+      "authority": "decision.CandidateRegistry",
+      "productionReachable": true
+    },
+    {
+      "step": 10,
+      "layer": "Scoring",
+      "symbol": "decision.Scoring",
+      "sourcePath": "backend/internal/decision/scoring.go",
+      "input": "[]Candidate + Context",
+      "output": "[]ScoredCandidate",
+      "authority": "decision.Scoring",
+      "productionReachable": true
+    },
+    {
+      "step": 11,
+      "layer": "Hard Constraint Filter",
+      "symbol": "decision.HardConstraintFilter",
+      "sourcePath": "backend/internal/decision/hard_constraint_filter.go",
+      "input": "[]ScoredCandidate",
+      "output": "[]Candidate (filtered)",
+      "authority": "decision.HardConstraintFilter",
+      "productionReachable": true
+    },
+    {
+      "step": 12,
+      "layer": "Arbitration",
+      "symbol": "decision.Arbitration",
+      "sourcePath": "backend/internal/decision/arbitration.go",
+      "input": "[]Candidate + Context",
+      "output": "BehaviorPlan",
+      "authority": "decision.ArbitrationLayer",
+      "productionReachable": true
+    },
+    {
+      "step": 13,
+      "layer": "Planning",
+      "symbol": "decision.BehaviorPlanBuilder",
+      "sourcePath": "backend/internal/decision/behavior_plan_builder.go",
+      "input": "ArbitrationResult + Context",
+      "output": "BehaviorPlan",
+      "authority": "decision.BehaviorPlanBuilder",
+      "productionReachable": true
+    },
+    {
+      "step": 14,
+      "layer": "Expression Planning",
+      "symbol": "decision.ExpressionPlan",
+      "sourcePath": "backend/internal/decision/expression_plan.go",
+      "input": "BehaviorPlan + Appraisal",
+      "output": "ExpressionPlan",
+      "authority": "decision.ExpressionPlan",
+      "productionReachable": true
+    },
+    {
+      "step": 15,
+      "layer": "Action/Execution",
+      "symbol": "chat.MessageService + ToolFacade",
+      "sourcePath": "backend/internal/chat/message_service.go",
+      "input": "RuntimeAssembly (BehaviorPlan + ExpressionPlan)",
+      "output": "ProcessResponse",
+      "authority": "interaction.RuntimePipeline",
+      "productionReachable": true
+    },
+    {
+      "step": 16,
+      "layer": "Tool Execution (if needed)",
+      "symbol": "extension.kernel.ToolFacade",
+      "sourcePath": "backend/internal/extension/kernel/",
+      "input": "ToolInvocation",
+      "output": "UnifiedToolResult",
+      "authority": "extension.kernel.ToolRegistry",
+      "productionReachable": true
+    },
+    {
+      "step": 17,
+      "layer": "Observation/Result",
+      "symbol": "interaction.Orchestrator (ProcessResponse)",
+      "sourcePath": "backend/internal/interaction/orchestrator.go",
+      "input": "ProcessResponse",
+      "output": "OrchestrationResult",
+      "authority": "interaction.Orchestrator",
+      "productionReachable": true
+    },
+    {
+      "step": 18,
+      "layer": "Checkpoint",
+      "symbol": "pipelinecheckpoint.Manager",
+      "sourcePath": "backend/internal/pipelinecheckpoint/manager.go",
+      "input": "ConversationID + Sequence",
+      "output": "Checkpoint Record",
+      "authority": "pipelinecheckpoint.Manager",
+      "productionReachable": true
+    },
+    {
+      "step": 19,
+      "layer": "Reflection",
+      "symbol": "mindruntime.ReflectionRun",
+      "sourcePath": "backend/internal/mindruntime/reflection_run.go",
+      "input": "ReflectionEvidence",
+      "output": "ReflectionCandidate",
+      "authority": "mindruntime.ReflectionRun",
+      "productionReachable": true
+    },
+    {
+      "step": 20,
+      "layer": "Supervisor Review",
+      "symbol": "mindruntime.Supervisor",
+      "sourcePath": "backend/internal/mindruntime/supervisor.go",
+      "input": "SupervisorInput",
+      "output": "SupervisorDecisionRecord",
+      "authority": "mindruntime.Supervisor",
+      "productionReachable": true
+    },
+    {
+      "step": 21,
+      "layer": "Reconciliation",
+      "symbol": "mindruntime.Reconciliation",
+      "sourcePath": "backend/internal/mindruntime/reconciliation.go",
+      "input": "ReflectionCandidate + CurrentState",
+      "output": "ReconciledState",
+      "authority": "mindruntime.Reconciliation",
+      "productionReachable": true
+    },
+    {
+      "step": 22,
+      "layer": "Snapshot",
+      "symbol": "mindruntime.Snapshot",
+      "sourcePath": "backend/internal/mindruntime/snapshot.go",
+      "input": "ReconciledState",
+      "output": "SnapshotRecord",
+      "authority": "mindruntime.Snapshot",
+      "productionReachable": true
+    },
+    {
+      "step": 23,
+      "layer": "Recovery (if needed)",
+      "symbol": "interaction.StartupRecovery",
+      "sourcePath": "backend/internal/interaction/startup_recovery.go",
+      "input": "Checkpoint + Snapshot",
+      "output": "RecoveredState",
+      "authority": "interaction.StartupRecovery",
+      "productionReachable": true
+    }
+  ],
+
+  "summary": {
+    "totalSteps": 23,
+    "entryPoint": "interaction.UnifiedEntry.Handle",
+    "exitPoint": "OrchestrationResult (Response + Events)",
+    "allStepsProductionReachable": true
+  }
+}

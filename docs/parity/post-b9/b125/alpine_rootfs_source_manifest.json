@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "DESIGN_FROZEN",
+
+  "distribution": "Alpine",
+  "sourceType": "BUNDLED_ROOTFS",
+  "source": "Alpine Linux Mini Root Filesystem (x86_64), bundled within app bundle, extracted to writable Application Support on first launch",
+  "version": "3.20.3",
+  "architecture": "x86_64",
+  "expectedDigest": "PENDING_BUNDLE_RELEASE - SHA-256 to be computed at bundle packaging time",
+  "licenseMetadata": [
+    {
+      "component": "Alpine Mini Rootfs",
+      "license": "GPL-2.0, MIT, and various open source (Alpine distribution)"
+    }
+  ],
+  "production": true,
+  "freezeNote": "Strategy frozen: bundled Alpine rootfs. Version/digest will be finalized at bundle packaging. Download-from-remote deferred to B126 upgrade flow."
+}

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "status": "PASS_NO_CODE_CHANGE",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "constructionMode": ["EXTEND"],
+  "canonical": {
+    "manifest": "backend/internal/extension/kernel/manifest_v2/",
+    "schemaVersion": 2,
+    "lifecycle": "Extension Kernel Lifecycle (package_install_saga, enablement, runtime_supervisor)",
+    "contributionRegistry": "TypedContributionInstaller (15 Contribution Kinds)",
+    "compatibilityValidator": "agent_skill.CompatibilityValidator + Manifest.Compatibility",
+    "dependencyAuthority": "dependency.Resolver (semver, cycle detection, platform/arch validation)"
+  },
+  "contract": {
+    "requiredSemanticCount": 18,
+    "alreadySupportedCount": 15,
+    "partialSupportedCount": 3,
+    "implementedGapCount": 0,
+    "deferredGapCount": 5,
+    "unresolvedCount": 0
+  },
+  "declarations": {
+    "modelProviderResolved": true,
+    "voiceProviderResolved": true,
+    "automationResolved": true,
+    "runtimeBindingResolved": true,
+    "permissionResolved": true,
+    "capabilityResolved": true
+  },
+  "duplicates": {
+    "newManifestSystem": 0,
+    "newLifecycleSystem": 0,
+    "newContributionRegistry": 0,
+    "newProviderRegistry": 0,
+    "newPermissionSystem": 0,
+    "newRuntimeSystem": 0,
+    "newExtensionManager": 0
+  },
+  "compatibility": {
+    "legacyManifestCompatible": true,
+    "newRequiredFieldCount": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B18"
+}

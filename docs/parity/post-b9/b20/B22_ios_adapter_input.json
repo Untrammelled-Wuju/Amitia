@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20-B22-INPUT",
+  "generatedAt": "2026-08-08T16:23:00+08:00",
+  "description": "B22 iOS Adapter Conformance输入 - 供B22跨Adapter一致性验收",
+
+  "binding": {
+    "runtimeType": "RuntimeTypeIOS_Native ('ios_native')",
+    "runtimeId": "ios-provider",
+    "resolution": "RuntimeAdapterRegistry.Resolve(binding)返回iosRuntimeAdapter"
+  },
+
+  "request": {
+    "dto": "IOSBridgeRequest",
+    "identity": "InvocationID→RequestID映射",
+    "operation": "binding.HandlerName",
+    "payload": "json.Unmarshal(input)"
+  },
+
+  "result": {
+    "success": "status=success + ToolContent(text/resourceUri)",
+    "failed": "status=failed + ToolError",
+    "cancelled": "status=cancelled + ErrorCodeCancelled",
+    "timedOut": "status=timed_out + ErrorCodeTimeout(retryable)"
+  },
+
+  "cancellation": {
+    "mechanism": "ctx.Done()→handleCtxError",
+    "propagation": "goroutine + select模式",
+    "response": "cancelled状态"
+  },
+
+  "error": {
+    "bridgeErrors": ["BRIDGE_DISCONNECTED→connection_lost", "BRIDGE_TIMEOUT→timeout", "BRIDGE_INVALID_RESPONSE→internal_error"],
+    "providerErrors": ["PROVIDER_UNAVAILABLE→not_available", "AUTHORIZATION_DENIED→permission_denied", "USER_ACTION_REQUIRED→permission_denied", "PLATFORM_NOT_SUPPORTED→not_available"],
+    "contextErrors": ["DeadlineExceeded→timeout", "Canceled→cancelled"]
+  },
+
+  "availability": {
+    "mechanism": "Health(ctx, binding)委托provider.Health(ctx)",
+    "noProvider": "HealthUnhealthy"
+  },
+
+  "registration": {
+    "method": "Container.WireIOSPlatformAdapter(provider)",
+    "registry": "RuntimeAdapterRegistry.Register(RuntimeTypeIOS_Native, adapter)",
+    "uniqueness": "单Adapter单RuntimeType"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P8",
+  "description": "每个B步骤执行前必须遵守的执行协议",
+  "mandatoryPreExecution": [
+    "1. 读取B9P8 resolved_post_b9_manifest.json",
+    "2. 读取final_architecture_guard.json",
+    "3. 读取该Step的Reuse Matrix (final_step_reuse_matrix.json)",
+    "4. 确认Canonical Target",
+    "5. 确认Construction Mode",
+    "6. 确认Forbidden Duplicate",
+    "7. 确认Allowed New Components"
+  ],
+  "executionProtocol": [
+    "1. 搜索现有实现 - 优先查找Extension Kernel中是否已存在等价系统",
+    "2. 检查Forbidden Duplicate - 确认未创建第二套系统",
+    "3. 确定Construction Mode - REUSE/EXTEND/ADAPTER_ONLY/NEW_PROVIDER/MIGRATION_ONLY/INTEGRATION_ONLY/VALIDATION_ONLY",
+    "4. 只在Allowed Path修改 - 严格按照matrix定义修改",
+    "5. 完成必需输出 - 确保step要求的所有output都已交付",
+    "6. 重新扫描重复系统 - 完成后验证未产生重复系统"
+  ],
+  "forbiddenActions": [
+    "修改B9P8冻结的Manifest文件",
+    "修改B9P1~B9P7历史产物",
+    "跳过Architecture Guard检查",
+    "创建非授权的新Registry/系统",
+    "将新建系统引入生产路径",
+    "无来源建设（不在Corrected Scope内）"
+  ],
+  "postExecutionValidation": [
+    "1. 重新计算modified files的SHA256",
+    "2. 扫描是否出现新的重复系统",
+    "3. 验证所有输出文件已生成",
+    "4. 更新step状态"
+  ],
+  "conflict": {
+    "ifB9P8ConflictsWithOldPlan": "B9P8_WINS",
+    "ifB9P8ConflictsWithB9P7": "B9P8_WINS",
+    "ifB9P8ConflictsWithBusinessSource": "需要Correction Addendum"
+  }
+}

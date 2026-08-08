@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "BLOCKED",
+
+  "mapping": {
+    "strategy": "explicit allowlisted ResourceURI-based",
+    "noEntireContainerMount": true,
+    "guestRootNotHostRoot": true,
+    "noNewResourceScheme": true,
+    "noAlpineScheme": true,
+    "noRootfsScheme": true,
+    "noIshfsScheme": true
+  },
+
+  "blocker": "B124未PASS"
+}

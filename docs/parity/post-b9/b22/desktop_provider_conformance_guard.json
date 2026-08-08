@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "Desktop Provider Conformance Guard",
+
+  "guard": {
+    "desktop_host_internal": {
+      "executionDomain": "HOST_INTERNAL",
+      "canonicalRuntime": "Go Backend Runtime",
+      "authority": "RuntimeHost",
+      "statement": "Host内部操作（文件系统、HTTP、配置等）继续由Go Backend执行，不通过Desktop Platform Adapter。"
+    },
+    "desktop_native": {
+      "executionDomain": "DESKTOP_NATIVE",
+      "canonicalRuntime": "Desktop Platform Adapter + Native Provider",
+      "authority": "backend/internal/extension/kernel/capability/adapter_desktop.go",
+      "statement": "Desktop平台特有能力（剪贴板、通知、窗口管理等未来Provider）通过Desktop Platform Adapter的Provider执行。"
+    },
+    "desktop_external_process": {
+      "executionDomain": "EXTERNAL_PROCESS",
+      "canonicalRuntime": "ProcessManager",
+      "authority": "backend/internal/platform/process/",
+      "statement": "外部进程管理继续由ProcessManager负责，不通过Desktop Platform Adapter。"
+    }
+  },
+
+  "boundary": {
+    "hostInternal": {
+      "owner": "Go Backend",
+      "adapter": "Not via Desktop Platform Adapter",
+      "examples": ["filesystem", "HTTP client", "configuration", "logging"]
+    },
+    "desktopNative": {
+      "owner": "Desktop Platform Adapter",
+      "adapter": "desktopRuntimeAdapter",
+      "runtimeType": "desktop_extension",
+      "examples": ["clipboard", "notification", "screenshot", "window control", "global shortcut"]
+    },
+    "externalProcess": {
+      "owner": "ProcessManager",
+      "adapter": "Not via Desktop Platform Adapter",
+      "examples": ["spawned processes", "child processes"]
+    }
+  },
+
+  "conformanceRules": [
+    "所有Desktop Provider的RuntimeAdapter必须注册到同一个RuntimeAdapterRegistry",
+    "所有Desktop Provider的结果必须归一化为UnifiedToolResult",
+    "所有Desktop Provider的错误必须映射为ToolError",
+    "Desktop Provider不得创建DesktopRuntimeManager2或DesktopProcessSupervisor2",
+    "Electron继续作为Desktop Host/Bridge，不成为第二Agent Kernel"
+  ],
+
+  "prohibited": [
+    "DesktopRuntimeManager2",
+    "DesktopProcessSupervisor2",
+    "DesktopPermissionCenter2",
+    "DesktopToolRegistry2"
+  ]
+}

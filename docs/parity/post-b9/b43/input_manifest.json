@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B43",
+  "context": {
+    "precedingTasks": ["B39", "B40", "B41", "B42"],
+    "constructionMode": ["REUSE", "EXTEND"],
+    "forbiddenComponents": [
+      "CancellationManager2",
+      "InvocationCancellationRegistry",
+      "CancellationRuntime",
+      "CancellationPipeline",
+      "LateResultBuffer",
+      "OrphanResultCollector"
+    ]
+  },
+  "inputs": {
+    "b42_status_path": "docs/parity/post-b9/b42/b42_status.json",
+    "b41_status_path": "docs/parity/post-b9/b41/b41_status.json",
+    "b40_status_path": "docs/parity/post-b9/b40/b40_status.json",
+    "b39_status_path": "docs/parity/post-b9/b39/b39_status.json",
+    "b9p8_frozen_matrix_path": "docs/parity/B9P8-frozen-matrix.json",
+    "b43_spec_path": "docs/parity/B9P8-frozen-matrix.json::B43",
+    "authority_file": "docs/parity/post-b9/b43/tool_cancellation_authority.json",
+    "propagation_matrix": "docs/parity/post-b9/b43/cancellation_propagation_matrix.json",
+    "runtime_capability_matrix": "docs/parity/post-b9/b43/runtime_cancellation_capability_matrix.json"
+  },
+  "runtimeArtifacts": {
+    "cancellationController": "backend/internal/extension/kernel/execution/container_builder.go:268",
+    "androidAdapter": "backend/internal/extension/kernel/execution/adapter_android.go",
+    "iosAdapter": "backend/internal/extension/kernel/execution/adapter_ios.go",
+    "desktopAdapter": "backend/internal/extension/kernel/execution/adapter_desktop.go",
+    "javascriptAdapter": "backend/internal/extension/kernel/capability/adapter_javascript.go",
+    "processHost": "backend/internal/extension/kernel/execution/process_host.go"
+  }
+}

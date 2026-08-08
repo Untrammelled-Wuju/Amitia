@@ -23,6 +23,7 @@ type AdapterRegistrationDeps struct {
 	MCPHealth         capability.MCPHealthFunc
 	WorkflowCaller    capability.WorkflowCallFunc
 	BuiltinDispatcher capability.DispatchFunc
+	DesktopProvider   capability.DesktopProvider
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -87,6 +88,11 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 
 	wfAdapter := capability.NewWorkflowRuntimeAdapter(deps.WorkflowCaller)
 	registry.Register(capability.RuntimeTypeWorkflow, wfAdapter)
+
+	if deps.DesktopProvider != nil {
+		desktopAdapter := capability.NewDesktopRuntimeAdapter(deps.DesktopProvider)
+		registry.Register(capability.RuntimeTypeDesktop_Extension, desktopAdapter)
+	}
 
 	return nil
 }

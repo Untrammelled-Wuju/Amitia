@@ -1,0 +1,42 @@
+[
+  {
+    "semantic": "Canonical InputSchema / OutputSchema storage",
+    "existingSupport": ["ToolDefinition.InputSchema/OutputSchema json.RawMessage"],
+    "status": "ALREADY_SUPPORTED",
+    "action": "NO_CODE_CHANGE",
+    "targetPath": "",
+    "futureOwner": ""
+  },
+  {
+    "semantic": "Model projection derives from canonical InputSchema",
+    "existingSupport": ["ToolFacade.buildKernelModelTools / ModelToolView"],
+    "status": "ALREADY_SUPPORTED",
+    "action": "NO_CODE_CHANGE",
+    "targetPath": "",
+    "futureOwner": ""
+  },
+  {
+    "semantic": "MCP Schema -> Canonical InputSchema passthrough",
+    "existingSupport": ["MCPToolAdapter.AdaptTool copies descriptor.InputSchema to ToolDefinition.InputSchema"],
+    "status": "ALREADY_SUPPORTED",
+    "action": "NO_CODE_CHANGE",
+    "targetPath": "",
+    "futureOwner": ""
+  },
+  {
+    "semantic": "Structural JSON-Schema validation library",
+    "existingSupport": [],
+    "status": "OUTSIDE_B40_SCOPE",
+    "action": "DEFER",
+    "targetPath": "",
+    "futureOwner": "future schema-validation step (no new deps allowed in B40)"
+  },
+  {
+    "semantic": "Registration-time basic schema well-formedness",
+    "existingSupport": [],
+    "status": "MISSING",
+    "action": "DEFER",
+    "targetPath": "",
+    "futureOwner": "future registration contract step"
+  }
+]

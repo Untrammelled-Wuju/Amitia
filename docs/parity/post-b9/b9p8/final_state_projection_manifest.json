@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P8",
+  "runtimeAuthority": false,
+  "description": "Domain State owns truth; Protocol projects state; UI displays state",
+  "canonicalStatePaths": [
+    "backend/internal/extension/kernel/capability/state.go",
+    "backend/internal/extension/kernel/observability/status.go",
+    "backend/internal/extension/kernel/capability/result.go",
+    "backend/internal/extension/kernel/task_runtime/models.go",
+    "backend/internal/extension/kernel/runtime_supervisor/types.go",
+    "mobile_app/android/amitia-runtime/src/main/kotlin/com/amitia/amitia_app/runtime/api/RuntimeState.kt",
+    "backend/internal/extension/kernel/permission/grant.go"
+  ],
+  "stateDomains": [
+    "CAPABILITY",
+    "TOOL_EXECUTION",
+    "TOOL_RESULT",
+    "TASK_RUNTIME",
+    "EXTENSION_RUNTIME_DESIRED",
+    "EXTENSION_RUNTIME_ACTUAL",
+    "ANDROID_RUNTIME",
+    "PERMISSION_DECISION",
+    "MODEL_REQUEST",
+    "PROVIDER",
+    "VOICE",
+    "USER_ACTION"
+  ],
+  "counts": {
+    "canonicalStateModel": 24,
+    "derivedStateModel": 2,
+    "observabilityProjection": 4,
+    "protocolProjection": 0,
+    "stateMappingCount": 91,
+    "stateMappingUnknownCount": 0
+  },
+  "guard": {
+    "duplicateCanonicalStateOwner": 0,
+    "unresolvedStateOwner": 0,
+    "protocolStateAsDomainAuthority": false,
+    "protocolStateAsDomainAuthorityCount": 0,
+    "newParallelStateStore": 0
+  },
+  "allowedDuplicates": [
+    {
+      "domain": "TOOL_EXECUTION",
+      "reason": "execution.ExecutionStatus是observability.ExecutionStatus的子集",
+      "classification": "DISTINCT_LAYER_VALID"
+    },
+    {
+      "domain": "TASK_RUNTIME/TaskState",
+      "reason": "TaskState是TaskRunStatus的内存简化视图",
+      "classification": "DERIVED_VIEW_VALID"
+    },
+    {
+      "domain": "EXTENSION_RUNTIME_ACTUAL vs ANDROID_RUNTIME",
+      "reason": "不同平台(Desktop vs Android)，语义不同",
+      "classification": "DISTINCT_DOMAIN"
+    },
+    {
+      "domain": "PERMISSION_DECISION vs B9 PermissionStatus",
+      "reason": "策略决定 vs OS/UI授权状态，不同层次",
+      "classification": "DOMAIN_VS_PRESENTATION"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 ResourceURI/Sandbox Path边界定义",
+
+  "canonicalScheme": {
+    "scheme": "amitia://",
+    "authority": "backend/pkg/resourceuri/",
+    "note": "唯一正式Resource Scheme - 不得新增iossandbox://或ish://"
+  },
+
+  "sandboxInternalPaths": {
+    "examples": ["/root", "/home", "/tmp", "/bin", "/sbin", "/usr"],
+    "treatment": "SandboxPath DTO only - 不作为Portable Resource",
+    "authority": {
+      "runtimeAuthority": false,
+      "portableResourceAuthority": false
+    }
+  },
+
+  "workspaceMapping": {
+    "userWorkspace": "amitia://workspace/...",
+    "sandboxMountPoint": "/workspace or /mnt/workspace (物理/内部路径)",
+    "direction": "用户Workspace通过mount映射进入Sandbox"
+  },
+
+  "forbiddenNewSchemes": [
+    {
+      "scheme": "iossandbox://",
+      "status": "FORBIDDEN",
+      "reason": "不得创建第二正式Resource Scheme"
+    },
+    {
+      "scheme": "ish://",
+      "status": "FORBIDDEN",
+      "reason": "不得创建第二正式Resource Scheme"
+    },
+    {
+      "scheme": "alpine://",
+      "status": "FORBIDDEN",
+      "reason": "不得创建第二正式Resource Scheme"
+    }
+  ],
+
+  "resourceFlow": {
+    "input": "用户通过amitia://引用资源",
+    "processing": "Backend解析ResourceURI",
+    "sandboxInput": "Provider将资源挂载到Sandbox物理路径",
+    "sandboxOutput": "Sandbox内生成资源",
+    "output": "新资源通过amitia://返回给用户"
+  },
+
+  "boundaryValidation": {
+    "newSchemeCreated": 0,
+    "portableResourceAuthorityViolation": 0,
+    "sandboxPathLeakToPortableLayer": 0
+  }
+}

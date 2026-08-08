@@ -1,0 +1,6533 @@
+﻿{
+  "schemaVersion": 1,
+  "runtimeAuthority": false,
+  "mappings": [
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/resolve_interaction_scope"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/update_update_full_apk"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/control_close_all_virtual_displays"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/update_update_user_preferences"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/register_task_goal"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/manage_character_template"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/manage_character_config"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/manage_working_memory"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/orm"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/install_install_app"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/belief_batch_process"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/update_memory_write"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/tool_owned_resource"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/update_modify_system_setting"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_WRITE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.write"
+      ],
+      "capabilityId": "external/file/update_file_edit"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/js_package_tools"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/import_chat"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/execute_workflow"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/execute_hidden_terminal_command"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/create_create_terminal_session"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/send_permission_post_notifications"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_memory_fuzzy_search"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/cross_session_persistence"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/install_workspace_import_export"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/install_application_install_uninstall"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/floating_window_overlay"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/read_permission_read_phone_state"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/belief_system_engine"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/execute_task_plan"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/streaming_output"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/device_info"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/corruption_recovery"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/vision_ocr"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_query_memory_links"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/concurrent_tool_execution"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/preserve_backup_backup"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/transfer_transfer_data"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/skill_parser"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/install_toolpkg_install_zip"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/creative_workshop_service"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/manage_embedding_config"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/generate_share_image"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/structured_log"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/grep_code"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_bluetooth_send_and_read"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CONVERSATION_MANAGE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "conversation.write"
+      ],
+      "capabilityId": "external/conversation/manage_conversation"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "CONVERSATION_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "conversation.write"
+      ],
+      "capabilityId": "builtin/conversation/channel"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/workshop_session_view"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/capture_capture_screenshot"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/active_message_rate_limit"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/skill_protocol_handle"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_INSTALL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.install"
+      ],
+      "capabilityId": "external/extension/install_mcp_plugin_install_server"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_camera_capture"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/update_update_memory"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/config_encryption"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/import_history"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/personality_trait_model"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/data_source_route"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/update_update_memory_link"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/calculator"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/compile_personality_prompt"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/music_status"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/automation_execute_browser"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/ir"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SEARCH_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "external/search/vectorindexmanager"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/permission_call_phone"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/log_view_panel"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/control_virtualdisplayoverlay"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/log_tool_panel"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/worldbook_search_inject"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/platform_security_policy"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/emotion_visual_expression_mapping"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/manage_channel_connector"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/execute_in_terminal_session_streaming"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/auth_context"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "character.read"
+      ],
+      "capabilityId": "external/character/read_bluetooth_ble_read_characteristic"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NETWORK_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "external/network/request_enable_bluetooth"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/bluetooth_accept"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_MANAGEMENT"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "character.write"
+      ],
+      "capabilityId": "external/character/management_execute_character"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/character_processor"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/decision_consistency_check"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/read_get_app_usage_time"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/active_message_recovery"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/schema"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/store_channel_message"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/set_input_text"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/manage_message_dialog_buffer"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/personality_trait_service"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/control_screen_capture"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/build_timeline"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "AGENT_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/agent/psyche"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/send_bluetooth_send"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/unregister_interaction"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/memory_system_service"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/manage_voice_preset"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/desktop_clipboard_bridge"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/minis_offloads"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0102"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0103"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0104"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/read_list_installed_apps"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/bluetooth_ble_discover_services"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0107"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/operitshowershellrunner"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0109"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0110"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/control_media_playback_control"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0112"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0113"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/log_sanitization"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0115"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0116"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/install_uninstall_app"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_UPDATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "character.write"
+      ],
+      "capabilityId": "external/character/update_bluetooth_ble_write_and_read_characteristic"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "notification.read"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NOTIFICATION_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/notification/read_bluetooth_ble_read_notifications"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0120"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/install_data_import"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "device.voice.read"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "VOICE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/voice/read_voicelistfetcher"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0123"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0124"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/delete_delete_memory"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/tool_registry"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_INSTALL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.install"
+      ],
+      "capabilityId": "external/extension/install_skill_installation_import"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0128"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/schema_map_0129"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/hook_tool_lifecycle_intercept"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_get_system_setting"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0132"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/tool_call_execution"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0134"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0135"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0136"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/session_persistence"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0138"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0139"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/debuggersystemoperationtools"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0141"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0142"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/update_clipboard_write"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/fallback_retry"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0145"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0146"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0147"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "character.read"
+      ],
+      "capabilityId": "external/character/read_list_character_cards"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/delete_delete_memory_link"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0150"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0151"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TASK_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "scheduler.create"
+      ],
+      "capabilityId": "external/task/task"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/file/make_directory"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0154"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/open_url_app"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/sshd_server_manager"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/ffmpeg_convert"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0158"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0159"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "AGENT_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/agent/agent_status"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "character.read"
+      ],
+      "capabilityId": "external/character/read_personalwakelistener"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0162"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/capture_browser_screenshot"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "device.voice.execute"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "VOICE_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/voice/audio"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0165"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NOTIFICATION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "desktop.notification"
+      ],
+      "capabilityId": "external/notification/toast"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0167"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_INSTALL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.install"
+      ],
+      "capabilityId": "external/extension/install_skill_import_from_zip"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0169"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0170"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0171"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/control_music_play_queue"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/ipc"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/clipboard_access"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0175"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/control_stop_app"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_INTEGRATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "mcp.server.connect"
+      ],
+      "capabilityId": "external/extension/integration_execute_mcp_server"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/ftp_server_manager"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/switch_browser_select_option"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "AGENT_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/agent/run_ui_subagent"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/create_create_memory"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/indexitem"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0183"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/stop_browser_close"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/control_music_stop"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NOTIFICATION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "desktop.notification"
+      ],
+      "capabilityId": "external/notification/notification_fgs_management"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/toolpkghookbridgesupport"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0188"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/package_proxy"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/tool"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0191"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0192"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/nlp_processing"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NOTIFICATION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "desktop.notification"
+      ],
+      "capabilityId": "external/notification/notification_management"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/ffmpeg_info"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0196"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/toolpkgsummaryhookbridge"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_WRITE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.write"
+      ],
+      "capabilityId": "external/file/update_write_file"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_SEND"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "message.send"
+      ],
+      "capabilityId": "external/tool/send_share_intent"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/workflow_dag_execute"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/read_clipboard_read"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0202"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/capture_camera_image_capture"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0204"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0205"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0206"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0207"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0208"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/photo_library_access"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0210"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0211"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/start_permission_bluetooth_connect"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_CREATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/create_workflow_create"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/ffmpeg_execute"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/token"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_WRITE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.write"
+      ],
+      "capabilityId": "external/file/update_write_file_binary"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/control_cancellation_stop"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0218"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_get_device_location"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/press_key"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0221"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_bluetooth_listen"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/documentchunk_entity"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "file.connection.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_START"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/file/start_sshfileconnectionmanager"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0225"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/rootsystemoperationtools"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0227"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0228"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0229"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/use_package"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0231"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_list_bluetooth_bonded_devices"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/capture_screen_capture"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_CREATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.write"
+      ],
+      "capabilityId": "external/file/create_create_file"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0236"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/execute_shell"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_filesystem_listing"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.microphone.capture"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "VOICE_CAPTURE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/voice/capture_permission_record_audio"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/system_settings_manipulation"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "PROVIDER_BOUND",
+      "permissionSemantics": [
+        "MODEL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "provider.use"
+      ],
+      "capabilityId": "external/model/embedding_embeddingconverter"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_INSTALL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.install"
+      ],
+      "capabilityId": "external/extension/install_skill_install_from_github"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/schema_map_0243"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_INTEGRATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/integration_execute_platform"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_get_memory_by_title"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/music_set_volume"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/assistant_intent_activity"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0248"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0249"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/stop_bluetooth_close"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0251"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_query_memory"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/sleep_delay"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/mcp_tool_invoke"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/manage_cookies"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_memorysearchsettingspreferences"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_INTERFACE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/interface_execute_ui"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/long_press"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0259"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/control_reasoning_thinking_display"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_read_file_full"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/send_permission_send_sms"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0263"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/read_android_contacts_read"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/toolpkgtoollifecyclebridge"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0266"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "AGENT_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/agent/psyche_map_0267"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0268"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0269"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0270"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/execute_intent"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0272"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0273"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0274"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0275"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/control_screen_casting"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/character/personalwakefeatureextractor"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0278"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0279"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0280"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_SEND"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "message.send"
+      ],
+      "capabilityId": "external/tool/send_send_broadcast"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "NETWORK_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "builtin/network/dev_console_api"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NOTIFICATION_SEND"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "desktop.notification"
+      ],
+      "capabilityId": "external/notification/send_send_notification"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/device_info_map_0284"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/control_music_resume"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_file_read"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_MANAGEMENT"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.enable"
+      ],
+      "capabilityId": "external/extension/management_execute_skill"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0288"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/browser_run_code"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_INSTALL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.install"
+      ],
+      "capabilityId": "external/character/install_character_card_sillytavern_import"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0291"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/tool_result_observation"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0293"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/capture_screen_recording_casting"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "PROVIDER_BOUND",
+      "permissionSemantics": [
+        "MODEL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "provider.use"
+      ],
+      "capabilityId": "external/model/cloudembeddingservice"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0296"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/read_get_page_info"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0298"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/execution_execute_shell"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/control_music_play"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0301"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/location_tracking"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/read_screen_capture"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0304"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/update_write_health_data"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0306"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0307"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_DELETE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.delete"
+      ],
+      "capabilityId": "external/file/delete_delete_file"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/install_application_install"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0310"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/minis_uri_scheme"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CAPTURE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "desktop.capture"
+      ],
+      "capabilityId": "external/tool/capture_microphone_recording"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/persistence_execute_database"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0314"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0315"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_read_file_part"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0317"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/memory"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0319"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/permission"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0321"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0322"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/read_permission_read_contacts"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0324"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/start_bluetooth_connect"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0326"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0327"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/tap"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0329"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SEARCH_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "external/search/read_android_weather_query"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0331"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/update_update_patch_incremental"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0333"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0334"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0335"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0336"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/install_permission_request_install_packages"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0338"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/bluetooth_device_detection"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "notification.read"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NOTIFICATION_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/notification/read_get_notifications"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/capture_screenshot_share"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0342"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/swipe"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0344"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0345"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/accessibilitysystemoperationtools"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/bluetooth_device_scan"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0348"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NETWORK_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "external/network/multipart_request"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0350"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/governor"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0352"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0353"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0354"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CREATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "scheduler.create"
+      ],
+      "capabilityId": "external/tool/create_workspace_create"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "notification.read"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NOTIFICATION_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/notification/read_android_notification_read"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NETWORK_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "external/network/api_key_encryption"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/read_location_get"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "device.voice.switch"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "VOICE_SWITCH"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/voice/switch_tts_voice_selection"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_find_files"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0361"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0362"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0363"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0364"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0365"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_STOP"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/stop_android_calendar_access"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0367"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0368"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0369"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0370"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_MANAGEMENT"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.enable"
+      ],
+      "capabilityId": "external/extension/management_execute_extension"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0372"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0373"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0374"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0375"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0376"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/device_admin_privilege"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/location_tracking_map_0378"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0379"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0380"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "device.voice.execute"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "VOICE_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/voice/microphone"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0382"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/control_music_pause"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/bluetooth_device_management"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/homekit_device_control"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/shortcuts_app_intents"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/update_permission_write_contacts"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/share_sheet"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0389"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0390"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0391"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/adminsystemoperationtools"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0393"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_memorysearchconfig_memorysearchdebuginfo"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "PROVIDER_BOUND",
+      "permissionSemantics": [
+        "MODEL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "provider.use"
+      ],
+      "capabilityId": "external/model/onnxsilerovad"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0396"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/start_bluetooth_ble_connect"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0398"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_get_bluetooth_state"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0400"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0401"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "AGENT_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/agent/psyche_map_0402"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/music_seek"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0404"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/update_permission_write_settings"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0406"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0407"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/floatingwindowmanager"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_MANAGEMENT"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/file/management_execute_file"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.invoke"
+      ],
+      "capabilityId": "external/extension/workflow"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SEARCH_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "external/search/read_weather_query"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0412"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_START"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "mcp.server.connect"
+      ],
+      "capabilityId": "external/extension/start_mcp_remote_server_connect"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_filesystem_search"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0415"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "device.voice.control"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "VOICE_CONTROL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/voice/control_queuedttsplayback"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/scan_bluetooth_devices"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "PROVIDER_BOUND",
+      "permissionSemantics": [
+        "MODEL_MANAGEMENT"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "provider.configure"
+      ],
+      "capabilityId": "external/model/management_execute_model"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_memory_get_retrieve"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0420"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_SWITCH"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/switch_workspace_select_switch"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0422"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/stop_browser_close_all"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/minis_attachments"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0425"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_WRITE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.write"
+      ],
+      "capabilityId": "external/file/update_file_write"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0427"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/read_shizuku_action_listener"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_read_file"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/tool_schema"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0431"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/standard_runtime_shell_execution"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0433"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/token_map_0434"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CREATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "scheduler.create"
+      ],
+      "capabilityId": "external/tool/create_calendar_event_create"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/capture_browser_take_screenshot"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_read_file_binary"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0438"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0439"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/delete_memory_delete"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0441"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0442"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0443"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "security.permission.manage"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SECURITY_PERMISSION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/security/read_permission_read_external_storage"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/read_android_location_get"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_nfc_tag_read"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0447"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/thinking_reasoning_mode"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/stop_close_terminal_session"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0450"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/start_start_app"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/read_read_health_data"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0453"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "device.access"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "DEVICE_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/device/read_bluetooth_read"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_INSTALL"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "extensions.install"
+      ],
+      "capabilityId": "external/extension/install_package_plugin_install_receiver"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/image_multimodal_input"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0457"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/update_android_clipboard_write"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/token_map_0459"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0460"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0461"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "PROCESS_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "process.spawn"
+      ],
+      "capabilityId": "external/process/execute_in_terminal_session"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TASK_CREATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "scheduler.create"
+      ],
+      "capabilityId": "external/task/create_reminder_create"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/vision"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0465"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/javascript_execution"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/crash_global_exception_handler"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "CHARACTER_UPDATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "character.write"
+      ],
+      "capabilityId": "external/character/update_bluetooth_ble_write_characteristic"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0469"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/read_android_clipboard_read"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_READ"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.read"
+      ],
+      "capabilityId": "external/file/read_list_files"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0472"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0473"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0474"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "FILE_WRITE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "files.write"
+      ],
+      "capabilityId": "external/file/update_edit_file"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0476"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0477"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0478"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0479"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "NETWORK_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "network.request"
+      ],
+      "capabilityId": "external/network/http_request"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0481"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/input_event_injection"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "AGENT_ENGINEERING"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/agent/engineering_execute_prompt"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0484"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_CREATE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "scheduler.create"
+      ],
+      "capabilityId": "external/tool/create_alarm_create"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0486"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0487"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0488"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0489"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0490"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0491"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0492"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0493"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "MEMORY_ACCESS"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "memory.read"
+      ],
+      "capabilityId": "external/memory/update_memory_edit_update"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0495"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/clipboard_fallback"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/link_memories"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "EXTENSION_START"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "mcp.server.connect"
+      ],
+      "capabilityId": "external/extension/start_mcp_local_server_launch"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0499"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0500"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0501"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "external/tool/logcat_viewer"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [],
+      "exposure": "INTERNAL_ONLY_SUPPORT",
+      "permissionSemantics": [
+        "TOOL_EXECUTE"
+      ],
+      "approvalRequired": false,
+      "existingPermissionIds": [
+        "service.tool.execute"
+      ],
+      "capabilityId": "builtin/tool/general_map_0503"
+    },
+    {
+      "platformAuthorizationRequired": false,
+      "missingPermissionDefinitions": [
+        "browser.automation"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "BROWSER_AUTOMATION"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/browser/read_get_terminal_session_screen"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/operitapplication"
+    },
+    {
+      "platformAuthorizationRequired": true,
+      "missingPermissionDefinitions": [
+        "system.modify"
+      ],
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "permissionSemantics": [
+        "SYSTEM_MODIFY"
+      ],
+      "approvalRequired": true,
+      "existingPermissionIds": [],
+      "capabilityId": "external/system/install_shizuku_bundled_installer"
+    }
+  ],
+  "taskId": "B9P4"
+}

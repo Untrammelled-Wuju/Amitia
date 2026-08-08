@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B43",
+  "terminalCommit": "ctx.Done 原子读 + Cancelled ToolResult 状态不可变",
+  "doubleCompletionGuard": "RuntimeAdapter 内 select 单一出口",
+  "successAndCancelRace": "Provider 内部 select 决定先到达者作为最终结果；Cancelled 接受后 late success 不改变"
+}

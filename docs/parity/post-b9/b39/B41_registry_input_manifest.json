@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "nextStep": "B41",
+  "identityFields": [
+    "ToolDefinition.ID (canonical string)",
+    "ToolDefinition.ModelName",
+    "ToolDefinition.ExtensionID",
+    "ToolDefinition.ModuleID",
+    "ToolDefinition.Source (ToolSource)"
+  ],
+  "sourceProvenance": "ToolDefinition.Source + ExtensionID + ModuleID + Metadata (e.g. mcpServerId)",
+  "runtimeBinding": "ToolDefinition.Runtime (RuntimeBinding)",
+  "capabilityIdentity": "ToolDefinition.ToCapabilityDefinition maps ID -> CapabilityID(td.ID)"
+}

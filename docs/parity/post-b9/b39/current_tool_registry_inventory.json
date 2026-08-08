@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "canonicalRegistryType": "capability.ToolRegistry",
+  "canonicalRegistryPath": "backend/internal/extension/kernel/capability/registry.go",
+  "struct": {
+    "fields": [
+      "mu sync.RWMutex",
+      "items map[string]ToolDefinition",
+      "names map[string]string",
+      "byOwner map[string][]string",
+      "bySource map[ToolSource][]string"
+    ]
+  },
+  "indices": [
+    "items (by canonical Tool ID)",
+    "names (by model-facing name -> tool ID)",
+    "byOwner (by owner key -> []tool ID)",
+    "bySource (by ToolSource -> []tool ID)"
+  ],
+  "registerApis": [
+    "Register(ctx, definition) error",
+    "Replace(ctx, definition) error",
+    "BatchRegister(ctx, definitions) error",
+    "BatchReplace(ctx, definitions) error"
+  ],
+  "unregisterApis": [
+    "Unregister(ctx, id) error",
+    "UnregisterByOwner(ctx, ownerKey) ([]string, error)"
+  ],
+  "lookupApis": [
+    "Get(ctx, id) (ToolDefinition, bool)",
+    "GetByModelName(ctx, name) (ToolDefinition, bool)",
+    "ResolveModelName(name) string"
+  ],
+  "listApis": [
+    "List(ctx, filter) []ToolDefinition",
+    "ListByOwner(ctx, ownerKey) []ToolDefinition",
+    "ListBySource(ctx, source) []ToolDefinition"
+  ],
+  "modelExposureApis": [
+    "ToolExposureManager.GetModelTools (exposure.go)",
+    "ToolFacade.buildKernelModelTools (tool_facade.go)",
+    "ToolFacade.ModelTools"
+  ],
+  "duplicateStrategy": {
+    "Register": "explicit reject if same ID exists (returns error)",
+    "Replace": "reject if same ID with different ExtensionID; same owner allows replace",
+    "BatchRegister": "atomic rollback on duplicate",
+    "BatchReplace": "pre-validates duplicate IDs and cross-owner conflicts; rejects before mutation"
+  },
+  "productionConstructionSites": [
+    {
+      "path": "backend/internal/extension/kernel/container_builder.go",
+      "line": 255,
+      "symbol": "capability.NewToolRegistry()",
+      "note": "Single global production construction"
+    }
+  ],
+  "legacyRegistries": [
+    {
+      "path": "backend/internal/agent/tool/registry.go",
+      "symbol": "package-level tools slice + funcMap",
+      "status": "LEGACY_FROZEN",
+      "note": "ToolFacade.SyncLegacyTools is a no-op; no new registration allowed; final cutover B140/B141"
+    }
+  ],
+  "generatedAt": "2026-08-08T21:30:00+08:00"
+}

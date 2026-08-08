@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop组件分类清单",
+
+  "classifications": [
+    {
+      "component": "Electron Desktop App",
+      "path": "desktop/",
+      "classification": "DESKTOP_APP_HOST",
+      "description": "桌面应用UI宿主"
+    },
+    {
+      "component": "Go Backend Server",
+      "path": "backend/",
+      "classification": "DESKTOP_BACKEND_RUNTIME",
+      "description": "桌面端核心后端运行时"
+    },
+    {
+      "component": "RuntimeHost Interface",
+      "path": "backend/internal/runtimehost/host.go",
+      "classification": "CANONICAL_RUNTIME_HOST",
+      "description": "规范运行时宿主接口"
+    },
+    {
+      "component": "RuntimeOrchestrator",
+      "path": "backend/internal/runtimeorchestrator/orchestrator.go",
+      "classification": "CANONICAL_RUNTIME_ORCHESTRATOR",
+      "description": "规范运行时编排器"
+    },
+    {
+      "component": "ProcessManager (cross-platform)",
+      "path": "backend/internal/platform/process/",
+      "classification": "CANONICAL_PROCESS_SUPERVISOR",
+      "description": "跨平台进程管理器"
+    },
+    {
+      "component": "RuntimeAdapterRegistry",
+      "path": "backend/internal/extension/kernel/capability/executor.go",
+      "classification": "CANONICAL_RUNTIME_HOST",
+      "description": "运行时适配器注册表"
+    },
+    {
+      "component": "DesktopActionBridge",
+      "path": "backend/internal/extension/kernel/desktop_action_bridge.go",
+      "classification": "DESKTOP_PLATFORM_BRIDGE",
+      "description": "桌面平台桥接器"
+    },
+    {
+      "component": "DesktopHost",
+      "path": "backend/internal/extension/kernel/desktop/host.go",
+      "classification": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面原生能力提供者"
+    },
+    {
+      "component": "DesktopAPI",
+      "path": "backend/internal/extension/kernel/desktop/api.go",
+      "classification": "DESKTOP_UI_LAYER",
+      "description": "桌面API HTTP层"
+    },
+    {
+      "component": "DesktopAPIAdapter",
+      "path": "backend/internal/extension/desktop_api_adapter.go",
+      "classification": "DESKTOP_PLATFORM_BRIDGE",
+      "description": "桌面API HTTP适配器"
+    },
+    {
+      "component": "Desktop Permissions",
+      "path": "backend/internal/extension/kernel/desktop/permission.go",
+      "classification": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面权限定义"
+    },
+    {
+      "component": "Desktop Contracts",
+      "path": "backend/internal/extension/kernel/desktop/contract.go",
+      "classification": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面贡献合同定义"
+    },
+    {
+      "component": "Desktop Contributions",
+      "path": "backend/internal/extension/kernel/desktop/contribution.go",
+      "classification": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面贡献管理"
+    },
+    {
+      "component": "Desktop Shortcuts",
+      "path": "backend/internal/extension/kernel/desktop/shortcut.go",
+      "classification": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面快捷键管理"
+    },
+    {
+      "component": "Desktop Snapshot",
+      "path": "backend/internal/extension/kernel/desktop/snapshot.go",
+      "classification": "DESKTOP_STATE_OWNER",
+      "description": "桌面快照状态"
+    },
+    {
+      "component": "Desktop Conflict Resolver",
+      "path": "backend/internal/extension/kernel/desktop/conflict.go",
+      "classification": "DESKTOP_STATE_OWNER",
+      "description": "桌面贡献冲突解决"
+    },
+    {
+      "component": "Windows Platform",
+      "path": "backend/pkg/platform/desktop_windows.go",
+      "classification": "DESKTOP_PLATFORM_BRIDGE",
+      "description": "Windows平台运行时抽象"
+    },
+    {
+      "component": "Linux Platform",
+      "path": "backend/pkg/platform/desktop_linux.go",
+      "classification": "DESKTOP_PLATFORM_BRIDGE",
+      "description": "Linux平台运行时抽象"
+    },
+    {
+      "component": "ExecutionPipeline",
+      "path": "backend/internal/extension/kernel/execution/",
+      "classification": "DESKTOP_BACKEND_RUNTIME",
+      "description": "规范执行管线"
+    },
+    {
+      "component": "PermissionBroker",
+      "path": "backend/internal/extension/kernel/permission/",
+      "classification": "DESKTOP_BACKEND_RUNTIME",
+      "description": "规范权限代理"
+    }
+  ],
+
+  "summary": {
+    "DESKTOP_APP_HOST": 1,
+    "DESKTOP_BACKEND_RUNTIME": 3,
+    "DESKTOP_PLATFORM_BRIDGE": 4,
+    "DESKTOP_NATIVE_PROVIDER": 4,
+    "DESKTOP_UI_LAYER": 1,
+    "DESKTOP_STATE_OWNER": 2,
+    "CANONICAL_RUNTIME_HOST": 2,
+    "CANONICAL_RUNTIME_ORCHESTRATOR": 1,
+    "CANONICAL_PROCESS_SUPERVISOR": 1,
+    "TEST_ONLY": 0,
+    "LEGACY": 0,
+    "UNRELATED": 0,
+    "UNKNOWN": 0
+  }
+}

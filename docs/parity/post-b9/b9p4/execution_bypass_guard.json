@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "guards": [
+    {
+      "ruleId": "NO_AGENT_DIRECT_PROVIDER_CALL",
+      "status": "ENFORCED",
+      "description": "Agent不能直接调用Provider，必须通过Tool/Kernel"
+    },
+    {
+      "ruleId": "NO_AGENT_DIRECT_RUNTIME_ADAPTER_CALL",
+      "status": "ENFORCED",
+      "description": "Agent不能直接调用RuntimeAdapter"
+    },
+    {
+      "ruleId": "NO_TOOL_BYPASS_EXECUTION_PIPELINE",
+      "status": "ENFORCED",
+      "description": "Tool必须走Canonical ExecutionPipeline"
+    },
+    {
+      "ruleId": "NO_TOOL_BYPASS_PERMISSION_BROKER",
+      "status": "ENFORCED",
+      "description": "Tool必须通过PermissionBroker审查"
+    },
+    {
+      "ruleId": "NO_PROVIDER_SELF_EXPOSE_MODEL_TOOL",
+      "status": "ENFORCED",
+      "description": "Provider不能自身作为Tool暴露"
+    },
+    {
+      "ruleId": "NO_MANIFEST_JSON_AS_RUNTIME_REGISTRY",
+      "status": "ENFORCED",
+      "description": "B9P4的resolved_*.json不得加载为运行时注册表"
+    }
+  ],
+  "validation": {
+    "allGuardsEnforced": true,
+    "bypassFound": false
+  }
+}

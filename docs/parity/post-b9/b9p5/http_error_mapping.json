@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:39:00+08:00",
+  "httpMappings": [
+    {
+      "domain": "task_runtime",
+      "owner": "task_runtime.HTTPStatusForErrorCode()",
+      "mappings": [
+        {"code": "task_definition_invalid", "http": 400},
+        {"code": "task_input_invalid", "http": 400},
+        {"code": "task_not_enabled", "http": 503},
+        {"code": "task_permission_denied", "http": 403},
+        {"code": "task_scope_denied", "http": 403},
+        {"code": "task_dependency_unavailable", "http": 503},
+        {"code": "task_queue_full", "http": 429},
+        {"code": "task_runtime_start_failed", "http": 500},
+        {"code": "task_runtime_crashed", "http": 500},
+        {"code": "task_cancelled", "http": 500},
+        {"code": "task_timed_out", "http": 500},
+        {"code": "task_checkpoint_invalid", "http": 400},
+        {"code": "task_checkpoint_incompatible", "http": 400},
+        {"code": "task_result_invalid", "http": 400},
+        {"code": "task_result_too_large", "http": 400},
+        {"code": "task_artifact_failed", "http": 500},
+        {"code": "task_non_idempotent_unknown", "http": 500},
+        {"code": "task_recovery_required", "http": 500},
+        {"code": "task_manual_intervention", "http": 422},
+        {"code": "task_state_transition_invalid", "http": 500},
+        {"code": "task_not_found", "http": 404},
+        {"code": "task_already_exists", "http": 409},
+        {"code": "task_not_cancelable", "http": 500},
+        {"code": "task_not_retryable", "http": 500}
+      ],
+      "protocolOverride": false
+    },
+    {
+      "domain": "extension_package",
+      "owner": "PackageError.HTTPStatus字段",
+      "mappings": "PackageError结构体中内置HTTPStatus字段",
+      "protocolOverride": false
+    },
+    {
+      "domain": "image_provider",
+      "owner": "ProviderError.HTTPStatus字段",
+      "mappings": "ProviderError结构体中内置HTTPStatus字段",
+      "protocolOverride": false
+    }
+  ],
+  "summary": {
+    "domainsWithHttpMapping": 3,
+    "needsUnifiedBoundary": ["capability", "extension_runtime", "chat_model", "mcp"],
+    "conflictCount": 0
+  }
+}

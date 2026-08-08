@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Agent生产旁路验证 - 所有旁路应为0",
+
+  "validation": {
+    "agentDirectProviderCalls": 0,
+    "agentDirectPlatformAdapterCalls": 0,
+    "agentDirectPermissionBypasses": 0,
+    "agentDirectExecutionPipelineBypasses": 0,
+    "newLegacyToolRegistryCalls": 0,
+    "toolDirectProviderBypass": 0,
+    "permissionBypass": 0,
+    "executionBypass": 0
+  },
+
+  "details": {
+    "agentToTool": {
+      "path": "Agent -> interaction.UnifiedEntry -> chat.MessageService -> extension.kernel.ToolFacade",
+      "bypass": false,
+      "notes": "Agent通过Canonical Chain调用Tool"
+    },
+    "agentToProvider": {
+      "path": "Agent does NOT call provider directly",
+      "bypass": false,
+      "notes": "Agent通过Chat Service调用LLM，不直接调用Provider"
+    },
+    "agentToPlatformAdapter": {
+      "path": "Agent does NOT call Platform Adapter directly",
+      "bypass": false,
+      "notes": "Agent通过extension.kernel间接使用Platform Adapter"
+    }
+  },
+
+  "status": "PASS",
+  "source": "B22 Adapter Conformance已验证无旁路"
+}

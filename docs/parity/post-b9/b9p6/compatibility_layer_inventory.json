@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "layers": [
+    {
+      "id": "CHAT_TOOL_ADAPTER",
+      "path": "backend/cmd/server/tool_facade_wiring.go (chatToolRuntimeAdapter)",
+      "classification": "TYPE_COMPATIBILITY",
+      "description": "Converts between chat.ModelToolRuntime interface and kernel.ToolFacade",
+      "dtoConversion": ["SkillScope <-> LegacyScope", "ToolResult <-> LegacyToolResult", "ContextContribution types"],
+      "performsExecution": false,
+      "allowed": true
+    },
+    {
+      "id": "MCP_TOOL_FACADE_SYNC",
+      "path": "backend/cmd/server/tool_facade_wiring.go (mcpToolFacadeSyncerAdapter)",
+      "classification": "TYPE_COMPATIBILITY",
+      "description": "Converts MCP ToolDefinitions to Kernel MCPToolDescriptors",
+      "dtoConversion": ["mcp.ToolDefinition <-> capability.MCPToolDescriptor"],
+      "performsExecution": false,
+      "allowed": true
+    },
+    {
+      "id": "LEGACY_TOOL_ADAPTER",
+      "path": "backend/internal/extension/legacy_tool_adapter.go",
+      "classification": "MIGRATION_COMPATIBILITY",
+      "description": "Converts legacy tool schemas to SkillDefinition format",
+      "performsExecution": false,
+      "temporary": true,
+      "exitCondition": "Remove after migration"
+    },
+    {
+      "id": "LEGACY_SCOPE_CONVERSION",
+      "path": "backend/internal/chat/tool_runtime.go",
+      "classification": "READ_ONLY_LEGACY_COMPATIBILITY",
+      "description": "toolScopeFromExtension converts extension.ExecutionScope to SkillScope",
+      "performsExecution": false,
+      "allowed": true
+    },
+    {
+      "id": "KERNEL_LEGACY_IFACE",
+      "path": "backend/internal/extension/kernel/legacy_runtime_iface.go",
+      "classification": "TYPE_COMPATIBILITY",
+      "description": "Type aliases for backward compatibility (LegacyScope, LegacyToolResult, etc)",
+      "performsExecution": false,
+      "allowed": true
+    },
+    {
+      "id": "DTO_UNIFIED_TO_LEGACY",
+      "path": "backend/internal/extension/kernel/tool_facade.go (unifiedResultToLegacy)",
+      "classification": "TYPE_COMPATIBILITY",
+      "description": "Converts UnifiedToolResult to LegacyToolResult for boundary compatibility",
+      "performsExecution": false,
+      "allowed": true
+    }
+  ],
+  "permanentDualExecution": false,
+  "permanentDualWrite": false,
+  "unknown": 0
+}

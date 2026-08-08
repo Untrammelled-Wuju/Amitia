@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "BLOCKED",
+
+  "integrity": {
+    "algorithm": "SHA-256",
+    "verifyBeforeExtract": true,
+    "verifyAfterExtract": true,
+    "failClosed": true,
+    "sizeCheckOnly": false
+  },
+
+  "mismatchBehavior": {
+    "action": "FAIL_CLOSED",
+    "doNotExtract": true,
+    "doNotActivate": true,
+    "doNotMarkInstalled": true,
+    "markState": "CORRUPT/INTEGRITY_FAILED"
+  },
+
+  "existingIntegrityInfrastructure": {
+    "reusable": "待评估",
+    "newAllowed": "RootfsIntegrityVerifier (薄封装)"
+  },
+
+  "blocker": "无rootfs来源确定，无法具体实施"
+}

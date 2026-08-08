@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:12:00+08:00",
+  "description": "iOS资源边界 - 统一ResourceURI与iOS内部文件引用的严格区分",
+
+  "canonicalLogicalURI": {
+    "scheme": "amitia://",
+    "examples": [
+      "amitia://temp/capture/photo_abc.jpg",
+      "amitia://resource/health/export.xml",
+      "amitia://sandbox/home/user/file.txt"
+    ],
+    "authority": "backend/pkg/resourceuri/",
+    "note": "跨平台统一资源标识"
+  },
+
+  "fileURL": {
+    "format": "file:///var/mobile/Containers/...或file:///private/var/...",
+    "classification": "provider internal reference",
+    "note": "iOS内部文件URL不得暴露为公共ResourceID"
+  },
+
+  "securityScopedURL": {
+    "description": "iOS安全范围URL - 用于访问App沙盒外文件(如File Provider)",
+    "classification": "provider internal reference",
+    "note": "必须在Provider内部使用，不能作为公共ResourceID泄漏"
+  },
+
+  "bookmark": {
+    "description": "iOS Security-scoped Bookmark - 用于持久化访问授权文件",
+    "classification": "provider persistence concern",
+    "note": "Bookmark data是Provider内部持久化手段，B20不实现具体逻辑"
+  },
+
+  "boundaries": {
+    "publicInputOutputUsesResourceURI": true,
+    "rawPhysicalPathExposed": false,
+    "securityScopedUrlExposed": false,
+    "bookmarkBlobExposed": false,
+    "noSecondResourceURISystem": true
+  }
+}

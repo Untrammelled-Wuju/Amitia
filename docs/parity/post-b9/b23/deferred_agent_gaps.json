@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "延后处理的Agent缺口 - 映射到后续步骤",
+
+  "deferredGaps": [
+    {
+      "gap": "Agent执行Context标准化",
+      "description": "统一Agent执行上下文传播机制",
+      "futureOwner": "B24",
+      "priority": "MEDIUM"
+    },
+    {
+      "gap": "Goal分解能力增强",
+      "description": "复杂Goal分解为子目标",
+      "futureOwner": "B25",
+      "priority": "MEDIUM"
+    },
+    {
+      "gap": "Planning算法增强",
+      "description": "更复杂的Planning算法",
+      "futureOwner": "B25-B31",
+      "priority": "LOW"
+    },
+    {
+      "gap": "Reflection策略增强",
+      "description": "更高级的反思策略",
+      "futureOwner": "B26",
+      "priority": "LOW"
+    },
+    {
+      "gap": "Multi-Agent Coordination",
+      "description": "多Agent协调（如确实需要）",
+      "futureOwner": "Future step if proven missing",
+      "priority": "LOW"
+    },
+    {
+      "gap": "Autonomy Policy",
+      "description": "自主策略增强",
+      "futureOwner": "B39-B54",
+      "priority": "LOW"
+    },
+    {
+      "gap": "Recovery增强",
+      "description": "长期恢复增强",
+      "futureOwner": "B39-B54",
+      "priority": "LOW"
+    },
+    {
+      "gap": "Tool Cutover (B140)",
+      "description": "Agent -> ToolFacade最终切接",
+      "futureOwner": "B140",
+      "priority": "DEFERRED"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B10-B12-INPUT",
+  "description": "B10识别的Runtime/Adapter缺口，作为B12输入",
+  "generatedAt": "2026-08-07T23:59:00+08:00",
+  "sourceTask": "B10",
+  "sourceReleaseGate": "POST-B9-B10-RELEASE-GATE",
+
+  "runtimeBindingGaps": [
+    {
+      "gapId": "B12-GAP-001",
+      "semantic": "Android RuntimeAdapter实现",
+      "description": "当前RuntimeBinding声明Android为RuntimeType，但无对应的Android RuntimeAdapter实现",
+      "currentState": "runtime_adapter.go定义了RuntimeBinding/RuntimeAdapter interface",
+      "requiredState": "Android平台完整的RuntimeAdapter，包含Offload/AndroidAccessibility provider的实际逻辑",
+      "priority": "HIGH",
+      "sourceManifest": "final_runtime_manifest.json"
+    },
+    {
+      "gapId": "B12-GAP-002",
+      "semantic": "iOS RuntimeAdapter实现",
+      "description": "当前无iOS平台的RuntimeAdapter实现",
+      "currentState": "声明层存在",
+      "requiredState": "iOS平台RuntimeAdapter，含EventKit/iOS Native Bridge",
+      "priority": "HIGH"
+    },
+    {
+      "gapId": "B12-GAP-003",
+      "semantic": "Native Offload Executor",
+      "description": "缺少统一的Native Offload Executor",
+      "currentState": "各RuntimeType未统一Offload",
+      "requiredState": "Native Offload统一的仲裁逻辑（如网络状态、电量、任务类型）",
+      "priority": "CRITICAL"
+    },
+    {
+      "gapId": "B12-GAP-004",
+      "semantic": "3个缺失的Runtime Adapter",
+      "description": "final_runtime_manifest.json识别的3个newAdapterRequiredCount",
+      "currentState": "existing 10 RuntimeType bindings identify 3 missing adapters",
+      "requiredState": "补齐缺失的适配器实现",
+      "priority": "CRITICAL",
+      "sourceManifest": "docs/parity/post-b9/b9p8/final_runtime_manifest.json"
+    }
+  ],
+
+  "b10FoundationForB12": {
+    "runtimeBindingInterface": "backend/internal/extension/kernel/capability/runtime_adapter.go (RuntimeBinding/RuntimeAdapter)",
+    "runtimeAdapterRegistry": "backend/internal/extension/kernel/capability/executor.go (RuntimeAdapterRegistry)",
+    "runtimeTypes": [
+      "builtin",
+      "plugin_js",
+      "plugin_service",
+      "mcp",
+      "workflow",
+      "internal",
+      "legacy",
+      "javascript",
+      "wasm",
+      "trusted_service",
+      "task"
+    ]
+  },
+
+  "constraints": {
+    "mustIntegrateWithExisting": [
+      "RuntimeBinding struct",
+      "RuntimeAdapter interface (Supports/Execute/Health)",
+      "RuntimeAdapterRegistry"
+    ],
+    "mustNotDuplicate": [
+      "backend/internal/extension/kernel/capability/ (RuntimeAdapterRegistry宗源)"
+    ]
+  }
+}

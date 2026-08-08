@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "当前Desktop Runtime基础设施库存",
+
+  "electronHosts": [
+    {
+      "name": "Electron Desktop",
+      "path": "desktop/",
+      "role": "DESKTOP_UI_HOST",
+      "description": "Electron桌面应用宿主，承载渲染进程和主进程"
+    }
+  ],
+
+  "backendRuntimeServices": [
+    {
+      "name": "Go Backend",
+      "path": "backend/",
+      "role": "DESKTOP_BACKEND_RUNTIME",
+      "description": "Go后端核心服务，承载Extension Kernel和Runtime执行"
+    }
+  ],
+
+  "runtimeHosts": [
+    {
+      "name": "RuntimeHost Interface",
+      "path": "backend/internal/runtimehost/host.go",
+      "role": "CANONICAL_RUNTIME_HOST",
+      "description": "运行时宿主接口，定义Descriptors/Capabilities/Paths/Processes"
+    }
+  ],
+
+  "runtimeOrchestrators": [
+    {
+      "name": "RuntimeOrchestrator",
+      "path": "backend/internal/runtimeorchestrator/orchestrator.go",
+      "role": "CANONICAL_RUNTIME_ORCHESTRATOR",
+      "description": "运行时编排器，管理组件生命周期和依赖"
+    }
+  ],
+
+  "processSupervisors": [
+    {
+      "name": "ProcessManager",
+      "path": "backend/internal/platform/process/process.go",
+      "role": "CANONICAL_PROCESS_SUPERVISOR",
+      "description": "跨平台进程管理器，支持Windows/macOS/Linux"
+    },
+    {
+      "name": "ProcessManager Windows",
+      "path": "backend/internal/platform/process/process_windows.go",
+      "role": "CANONICAL_PROCESS_SUPERVISOR",
+      "description": "Windows平台进程管理实现"
+    },
+    {
+      "name": "ProcessManager Linux",
+      "path": "backend/internal/platform/process/process_linux.go",
+      "role": "CANONICAL_PROCESS_SUPERVISOR",
+      "description": "Linux平台进程管理实现"
+    },
+    {
+      "name": "ProcessManager Darwin",
+      "path": "backend/internal/platform/process/process_darwin.go",
+      "role": "CANONICAL_PROCESS_SUPERVISOR",
+      "description": "macOS平台进程管理实现"
+    }
+  ],
+
+  "ipcBridges": [
+    {
+      "name": "DesktopActionBridge",
+      "path": "backend/internal/extension/kernel/desktop_action_bridge.go",
+      "role": "DESKTOP_PLATFORM_BRIDGE",
+      "description": "桌面动作桥接器，将Desktop Host操作路由到ExecutionPipeline"
+    },
+    {
+      "name": "DesktopAPIAdapter",
+      "path": "backend/internal/extension/desktop_api_adapter.go",
+      "role": "DESKTOP_PLATFORM_BRIDGE",
+      "description": "桌面API HTTP适配器，暴露桌面操作REST接口"
+    }
+  ],
+
+  "nativeProviders": [
+    {
+      "name": "DesktopHost",
+      "path": "backend/internal/extension/kernel/desktop/host.go",
+      "role": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面原生能力宿主，管理贡献注册、权限检查、资源管理"
+    },
+    {
+      "name": "DesktopAPI",
+      "path": "backend/internal/extension/kernel/desktop/api.go",
+      "role": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面API实现，提供贡献管理、快照、冲突解决等HTTP处理"
+    }
+  ],
+
+  "platformImplementations": [
+    {
+      "name": "Windows Platform",
+      "path": "backend/pkg/platform/desktop_windows.go",
+      "role": "DESKTOP_NATIVE_PROVIDER",
+      "description": "Windows平台运行时抽象，提供进程管理和PID文件"
+    },
+    {
+      "name": "Linux Platform",
+      "path": "backend/pkg/platform/desktop_linux.go",
+      "role": "DESKTOP_NATIVE_PROVIDER",
+      "description": "Linux平台运行时抽象，提供进程管理和PID文件"
+    },
+    {
+      "name": "Darwin Platform",
+      "path": "backend/pkg/platform/desktop_darwin.go",
+      "role": "DESKTOP_NATIVE_PROVIDER",
+      "description": "macOS平台运行时抽象"
+    }
+  ],
+
+  "stateOwners": [
+    {
+      "name": "DesktopHost State",
+      "path": "backend/internal/extension/kernel/desktop/host.go",
+      "role": "DESKTOP_STATE_OWNER",
+      "description": "桌面贡献状态、快照、冲突记录"
+    },
+    {
+      "name": "RuntimeOrchestrator State",
+      "path": "backend/internal/runtimeorchestrator/",
+      "role": "CANONICAL_STATE_OWNER",
+      "description": "编排器组件状态"
+    }
+  ],
+
+  "productionCallers": [
+    {
+      "name": "DesktopActionBridge.ExecuteAction",
+      "path": "backend/internal/extension/kernel/desktop_action_bridge.go",
+      "role": "DESKTOP_BACKEND_RUNTIME",
+      "description": "桌面动作执行入口，路由到ExecutionPipeline"
+    },
+    {
+      "name": "DesktopHost.InvokeAction",
+      "path": "backend/internal/extension/kernel/desktop/host.go",
+      "role": "DESKTOP_NATIVE_PROVIDER",
+      "description": "桌面贡献动作调用入口"
+    }
+  ],
+
+  "existingAdapters": [
+    {
+      "name": "AndroidRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "runtimeType": "android_native",
+      "status": "IMPLEMENTED",
+      "description": "Android平台原生运行时适配器"
+    },
+    {
+      "name": "BuiltinRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_builtin.go",
+      "runtimeType": "builtin",
+      "status": "IMPLEMENTED",
+      "description": "内建运行时适配器"
+    },
+    {
+      "name": "InternalRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_internal.go",
+      "runtimeType": "internal",
+      "status": "IMPLEMENTED",
+      "description": "内部运行时适配器"
+    },
+    {
+      "name": "JavaScriptRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_javascript.go",
+      "runtimeType": "javascript",
+      "status": "IMPLEMENTED",
+      "description": "JavaScript运行时适配器"
+    },
+    {
+      "name": "WASMRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_wasmrt.go",
+      "runtimeType": "wasm",
+      "status": "IMPLEMENTED",
+      "description": "WASM运行时适配器"
+    },
+    {
+      "name": "MCPRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_mcp.go",
+      "runtimeType": "mcp",
+      "status": "IMPLEMENTED",
+      "description": "MCP运行时适配器"
+    },
+    {
+      "name": "WorkflowRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_workflow.go",
+      "runtimeType": "workflow",
+      "status": "IMPLEMENTED",
+      "description": "工作流运行时适配器"
+    },
+    {
+      "name": "TaskRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_task.go",
+      "runtimeType": "task",
+      "status": "IMPLEMENTED",
+      "description": "任务运行时适配器"
+    },
+    {
+      "name": "TrustedServiceRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_trusted_service.go",
+      "runtimeType": "trusted_service",
+      "status": "IMPLEMENTED",
+      "description": "可信服务运行时适配器"
+    }
+  ],
+
+  "missingAdapters": [
+    {
+      "name": "DesktopRuntimeAdapter",
+      "runtimeType": "desktop_extension (to be added)",
+      "status": "MISSING - B21 implementation target",
+      "description": "Desktop平台扩展运行时适配器，目标是在RuntimeAdapterRegistry中注册"
+    }
+  ],
+
+  "runtimeTypes": [
+    "builtin",
+    "plugin_js",
+    "plugin_service",
+    "mcp",
+    "workflow",
+    "internal",
+    "legacy",
+    "javascript",
+    "wasm",
+    "trusted_service",
+    "task",
+    "browser",
+    "android_native",
+    "desktop_extension (B21新增)"
+  ]
+}

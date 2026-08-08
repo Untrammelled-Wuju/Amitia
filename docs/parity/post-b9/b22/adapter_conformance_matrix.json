@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "三平台Adapter统一Conformance矩阵",
+
+  "matrix": [
+    {"contract": "Canonical RuntimeAdapter", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "RuntimeBinding", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Registration", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Request validation", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Invocation ID", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Context propagation", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Trace propagation", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Deadline", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Cancellation", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Result normalization", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Error normalization", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Availability", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Permission boundary", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "OS authorization boundary", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "ResourceURI", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "State ownership", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Provider ownership", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Legacy prohibition", "android": "PASS", "ios": "PASS", "desktop": "PASS"},
+    {"contract": "Production Fake", "android": "PASS", "ios": "PASS", "desktop": "PASS"}
+  ],
+
+  "summary": {
+    "totalContracts": 19,
+    "androidPass": 19,
+    "iosPass": 19,
+    "desktopPass": 19,
+    "anyFail": 0,
+    "anyUnknown": 0,
+    "anyPartial": 0
+  },
+
+  "conformanceStatement": "Android、iOS、Desktop三个Platform Adapter全部通过同一Canonical RuntimeAdapter合同的19项验证，证明三者是同一合同的不同平台实现。"
+}

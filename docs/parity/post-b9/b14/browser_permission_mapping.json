@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "permissionMappings": [
+    {
+      "browserCapability": "browser.navigate",
+      "permission": "TOOL_EXECUTE",
+      "risk": "medium"
+    },
+    {
+      "browserCapability": "browser.dom.snapshot",
+      "permission": "TOOL_EXECUTE",
+      "risk": "low"
+    },
+    {
+      "browserCapability": "browser.resource.download",
+      "permission": "RESOURCE_ACCESS",
+      "risk": "medium"
+    },
+    {
+      "browserCapability": "browser.resource.upload",
+      "permission": "RESOURCE_ACCESS",
+      "risk": "medium"
+    },
+    {
+      "browserCapability": "browser.interact.click",
+      "permission": "TOOL_EXECUTE",
+      "risk": "medium"
+    }
+  ],
+  "notes": "All permissions REUSE existing Kernel PermissionDefinition. No new permission center. Browser does not own permission authority."
+}

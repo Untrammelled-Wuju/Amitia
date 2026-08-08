@@ -1,0 +1,4572 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "historicalRegistryId": "PARITY-2026-08-07-V1-TOOL-REGISTRY",
+  "totalHistoricalTools": 506,
+  "resolutions": [
+    {
+      "historicalToolId": "tool.tool.execute_CN",
+      "mapId": "MAP-0001",
+      "correctedCapabilityId": "builtin/tool/resolve_interaction_scope",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.update_UPDATE_FULL_APK",
+      "mapId": "MAP-0002",
+      "correctedCapabilityId": "external/system/update_update_full_apk",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.update",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.system.control_CLOSE_ALL_VIRTUAL_DISPLAYS",
+      "mapId": "MAP-0003",
+      "correctedCapabilityId": "external/browser/control_close_all_virtual_displays",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.system.update_UPDATE_USER_PREFERENCES",
+      "mapId": "MAP-0004",
+      "correctedCapabilityId": "external/system/update_update_user_preferences",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.update",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_1",
+      "mapId": "MAP-0005",
+      "correctedCapabilityId": "builtin/tool/register_task_goal",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "task.goal.register",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_2",
+      "mapId": "MAP-0006",
+      "correctedCapabilityId": "builtin/tool/manage_character_template",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.template.manage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_3",
+      "mapId": "MAP-0007",
+      "correctedCapabilityId": "builtin/tool/manage_character_config",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.config.manage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_4",
+      "mapId": "MAP-0008",
+      "correctedCapabilityId": "builtin/tool/manage_working_memory",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.manage_working",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_ORMCN",
+      "mapId": "MAP-0009",
+      "correctedCapabilityId": "builtin/tool/orm",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.install_INSTALL_APP",
+      "mapId": "MAP-0010",
+      "correctedCapabilityId": "external/system/install_install_app",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_5",
+      "mapId": "MAP-0011",
+      "correctedCapabilityId": "builtin/tool/belief_batch_process",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "belief.batch",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_6",
+      "mapId": "MAP-0012",
+      "correctedCapabilityId": "builtin/tool/general",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.update_MEMORY WRITE",
+      "mapId": "MAP-0013",
+      "correctedCapabilityId": "external/memory/update_memory_write",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TOOL OWNED RESOURCECN",
+      "mapId": "MAP-0014",
+      "correctedCapabilityId": "builtin/tool/tool_owned_resource",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.update_MODIFY_SYSTEM_SETTING",
+      "mapId": "MAP-0015",
+      "correctedCapabilityId": "external/device/update_modify_system_setting",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.settings",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.update_FILE EDIT",
+      "mapId": "MAP-0016",
+      "correctedCapabilityId": "external/file/update_file_edit",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_JS PACKAGE TOOLS (DYNAMIC)",
+      "mapId": "MAP-0017",
+      "correctedCapabilityId": "external/tool/js_package_tools",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"EXTENSION_API_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_7",
+      "mapId": "MAP-0018",
+      "correctedCapabilityId": "builtin/tool/import_chat",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "chat.import",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_8",
+      "mapId": "MAP-0019",
+      "correctedCapabilityId": "builtin/tool/execute_workflow",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "workflow.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.process.execute_EXECUTE_HIDDEN_TERMINAL_COMMAND",
+      "mapId": "MAP-0020",
+      "correctedCapabilityId": "external/process/execute_hidden_terminal_command",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.process.create_CREATE_TERMINAL_SESSION",
+      "mapId": "MAP-0021",
+      "correctedCapabilityId": "external/process/create_create_terminal_session",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.create",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.security.send_PERMISSION_POST_NOTIFICATIONS",
+      "mapId": "MAP-0022",
+      "correctedCapabilityId": "external/security/send_permission_post_notifications",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.send_permission_post_notifications",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.read_MEMORY FUZZY SEARCH",
+      "mapId": "MAP-0023",
+      "correctedCapabilityId": "external/memory/read_memory_fuzzy_search",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.execute_CROSS-SESSION PERSISTENCE",
+      "mapId": "MAP-0024",
+      "correctedCapabilityId": "external/memory/cross_session_persistence",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.session",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.system.install_WORKSPACE IMPORT/EXPORT",
+      "mapId": "MAP-0025",
+      "correctedCapabilityId": "external/system/install_workspace_import_export",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.system.install_APPLICATION_INSTALL_UNINSTALL",
+      "mapId": "MAP-0026",
+      "correctedCapabilityId": "external/system/install_application_install_uninstall",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.browser.execute_FLOATING_WINDOW_OVERLAY",
+      "mapId": "MAP-0027",
+      "correctedCapabilityId": "external/browser/floating_window_overlay",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.floating_window_overlay",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.security.read_PERMISSION_READ_PHONE_STATE",
+      "mapId": "MAP-0028",
+      "correctedCapabilityId": "external/security/read_permission_read_phone_state",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.read_permission_read_phone_state",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_9",
+      "mapId": "MAP-0029",
+      "correctedCapabilityId": "builtin/tool/belief_system_engine",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "belief.system",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_10",
+      "mapId": "MAP-0030",
+      "correctedCapabilityId": "builtin/tool/execute_task_plan",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "task.plan.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_STREAMING OUTPUT",
+      "mapId": "MAP-0031",
+      "correctedCapabilityId": "external/tool/streaming_output",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"EXTENSION_API_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.execute_DEVICE INFO",
+      "mapId": "MAP-0032",
+      "correctedCapabilityId": "external/device/device_info",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.info",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CORRUPTION RECOVERY",
+      "mapId": "MAP-0033",
+      "correctedCapabilityId": "external/tool/corruption_recovery",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"SYSTEM_EVENT_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_VISION/OCR",
+      "mapId": "MAP-0034",
+      "correctedCapabilityId": "external/tool/vision_ocr",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.vision_ocr",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.read_QUERY_MEMORY_LINKS",
+      "mapId": "MAP-0035",
+      "correctedCapabilityId": "external/memory/read_query_memory_links",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CONCURRENT TOOL EXECUTION",
+      "mapId": "MAP-0036",
+      "correctedCapabilityId": "external/tool/concurrent_tool_execution",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.preservation_BACKUP_BACKUP",
+      "mapId": "MAP-0037",
+      "correctedCapabilityId": "external/memory/preserve_backup_backup",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.backup",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.preservation_1",
+      "mapId": "MAP-0038",
+      "correctedCapabilityId": null,
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "No corrected capability found for this mapId"
+    },
+    {
+      "historicalToolId": "tool.tool.transfer_TRANSFER_DATA",
+      "mapId": "MAP-0039",
+      "correctedCapabilityId": "external/memory/transfer_transfer_data",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.session",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_11",
+      "mapId": "MAP-0040",
+      "correctedCapabilityId": "builtin/tool/skill_parser",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.install_TOOLPKG_INSTALL_ZIP",
+      "mapId": "MAP-0041",
+      "correctedCapabilityId": "external/system/install_toolpkg_install_zip",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_12",
+      "mapId": "MAP-0042",
+      "correctedCapabilityId": "builtin/tool/creative_workshop_service",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_13",
+      "mapId": "MAP-0043",
+      "correctedCapabilityId": "builtin/tool/manage_embedding_config",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_14",
+      "mapId": "MAP-0044",
+      "correctedCapabilityId": "builtin/tool/generate_share_image",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_15",
+      "mapId": "MAP-0045",
+      "correctedCapabilityId": "builtin/tool/structured_log",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_GREP_CODE",
+      "mapId": "MAP-0046",
+      "correctedCapabilityId": "external/tool/grep_code",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.grep_code",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.read_BLUETOOTH_SEND_AND_READ",
+      "mapId": "MAP-0047",
+      "correctedCapabilityId": "external/device/read_bluetooth_send_and_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.conversation.manage_CONVERSATION",
+      "mapId": "MAP-0048",
+      "correctedCapabilityId": "external/conversation/manage_conversation",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "conversation.manage_conversation",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CHANNEL",
+      "mapId": "MAP-0049",
+      "correctedCapabilityId": "builtin/conversation/channel",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "conversation.channel",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_16",
+      "mapId": "MAP-0050",
+      "correctedCapabilityId": "builtin/tool/workshop_session_view",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.capture_CAPTURE_SCREENSHOT",
+      "mapId": "MAP-0051",
+      "correctedCapabilityId": "external/browser/capture_capture_screenshot",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_17",
+      "mapId": "MAP-0052",
+      "correctedCapabilityId": "builtin/tool/active_message_rate_limit",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_18",
+      "mapId": "MAP-0053",
+      "correctedCapabilityId": "builtin/tool/skill_protocol_handle",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.extension.install_MCP_PLUGIN_INSTALL_&_SERVER",
+      "mapId": "MAP-0054",
+      "correctedCapabilityId": "external/extension/install_mcp_plugin_install_server",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.read_CAMERA_CAPTURE_(IMAGEREADER)",
+      "mapId": "MAP-0055",
+      "correctedCapabilityId": "external/device/read_camera_capture",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.camera",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.update_UPDATE_MEMORY",
+      "mapId": "MAP-0056",
+      "correctedCapabilityId": "external/memory/update_update_memory",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_19",
+      "mapId": "MAP-0057",
+      "correctedCapabilityId": "builtin/tool/config_encryption",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_20",
+      "mapId": "MAP-0058",
+      "correctedCapabilityId": "builtin/tool/import_history",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "tool.import_history",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_21",
+      "mapId": "MAP-0059",
+      "correctedCapabilityId": "builtin/tool/personality_trait_model",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.personality.model",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_22",
+      "mapId": "MAP-0060",
+      "correctedCapabilityId": "builtin/tool/data_source_route",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.update_UPDATE_MEMORY_LINK",
+      "mapId": "MAP-0061",
+      "correctedCapabilityId": "external/memory/update_update_memory_link",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CALCULATOR",
+      "mapId": "MAP-0062",
+      "correctedCapabilityId": "external/tool/calculator",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.calculator",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_23",
+      "mapId": "MAP-0063",
+      "correctedCapabilityId": "builtin/tool/compile_personality_prompt",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MUSIC_STATUS",
+      "mapId": "MAP-0064",
+      "correctedCapabilityId": "external/tool/music_status",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.music_status",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.browser.automation_EXECUTE_BROWSER",
+      "mapId": "MAP-0065",
+      "correctedCapabilityId": "external/browser/automation_execute_browser",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_IRCN",
+      "mapId": "MAP-0066",
+      "correctedCapabilityId": "builtin/tool/ir",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.execute_VECTORINDEXMANAGER",
+      "mapId": "MAP-0067",
+      "correctedCapabilityId": "external/search/vectorindexmanager",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "search.vectorindexmanager",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.security.execute_PERMISSION_CALL_PHONE",
+      "mapId": "MAP-0068",
+      "correctedCapabilityId": "external/security/permission_call_phone",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.permission_call_phone",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_24",
+      "mapId": "MAP-0069",
+      "correctedCapabilityId": "builtin/tool/log_view_panel",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.control_VIRTUALDISPLAYOVERLAY",
+      "mapId": "MAP-0070",
+      "correctedCapabilityId": "external/browser/control_virtualdisplayoverlay",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_25",
+      "mapId": "MAP-0071",
+      "correctedCapabilityId": "builtin/tool/log_tool_panel",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_26",
+      "mapId": "MAP-0072",
+      "correctedCapabilityId": "builtin/tool/worldbook_search_inject",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_27",
+      "mapId": "MAP-0073",
+      "correctedCapabilityId": "builtin/tool/platform_security_policy",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_28",
+      "mapId": "MAP-0074",
+      "correctedCapabilityId": "builtin/tool/emotion_visual_expression_mapping",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_29",
+      "mapId": "MAP-0075",
+      "correctedCapabilityId": "builtin/tool/manage_channel_connector",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.execute_EXECUTE_IN_TERMINAL_SESSION_STREAMING",
+      "mapId": "MAP-0076",
+      "correctedCapabilityId": "external/process/execute_in_terminal_session_streaming",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_30",
+      "mapId": "MAP-0077",
+      "correctedCapabilityId": "builtin/tool/auth_context",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.character.read_BLUETOOTH_BLE_READ_CHARACTERISTIC",
+      "mapId": "MAP-0078",
+      "correctedCapabilityId": "external/character/read_bluetooth_ble_read_characteristic",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_REQUEST_ENABLE_BLUETOOTH",
+      "mapId": "MAP-0079",
+      "correctedCapabilityId": "external/network/request_enable_bluetooth",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "network.request_enable_bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_BLUETOOTH_ACCEPT",
+      "mapId": "MAP-0080",
+      "correctedCapabilityId": "external/device/bluetooth_accept",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.character.management_EXECUTE_CHARACTER",
+      "mapId": "MAP-0081",
+      "correctedCapabilityId": "external/character/management_execute_character",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.character.management_1",
+      "mapId": "MAP-0082",
+      "correctedCapabilityId": null,
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "No corrected capability found for this mapId"
+    },
+    {
+      "historicalToolId": "tool.character.management_2",
+      "mapId": "MAP-0083",
+      "correctedCapabilityId": null,
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "No corrected capability found for this mapId"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_31",
+      "mapId": "MAP-0084",
+      "correctedCapabilityId": "builtin/tool/character_processor",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_32",
+      "mapId": "MAP-0085",
+      "correctedCapabilityId": "builtin/tool/decision_consistency_check",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "decision.consistency_check",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.read_GET_APP_USAGE_TIME",
+      "mapId": "MAP-0086",
+      "correctedCapabilityId": "external/system/read_get_app_usage_time",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_33",
+      "mapId": "MAP-0087",
+      "correctedCapabilityId": "builtin/tool/active_message_recovery",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"SYSTEM_EVENT_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_SCHEMACN",
+      "mapId": "MAP-0088",
+      "correctedCapabilityId": "builtin/tool/schema",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_34",
+      "mapId": "MAP-0089",
+      "correctedCapabilityId": "builtin/tool/store_channel_message",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_SET_INPUT_TEXT",
+      "mapId": "MAP-0090",
+      "correctedCapabilityId": "external/tool/set_input_text",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.set_input_text",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_35",
+      "mapId": "MAP-0091",
+      "correctedCapabilityId": "builtin/tool/manage_message_dialog_buffer",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_36",
+      "mapId": "MAP-0092",
+      "correctedCapabilityId": "builtin/tool/personality_trait_service",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.personality.service",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.control_SCREEN_CAPTURE_(VIRTUALDISPLAY_MANAGER)",
+      "mapId": "MAP-0093",
+      "correctedCapabilityId": "external/browser/control_screen_capture",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_37",
+      "mapId": "MAP-0094",
+      "correctedCapabilityId": "builtin/tool/build_timeline",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.agent.execute_PSYCHECN",
+      "mapId": "MAP-0095",
+      "correctedCapabilityId": "builtin/agent/psyche",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.send_BLUETOOTH_SEND",
+      "mapId": "MAP-0096",
+      "correctedCapabilityId": "external/device/send_bluetooth_send",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_38",
+      "mapId": "MAP-0097",
+      "correctedCapabilityId": "builtin/tool/unregister_interaction",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_39",
+      "mapId": "MAP-0098",
+      "correctedCapabilityId": "builtin/tool/memory_system_service",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.system_service",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_40",
+      "mapId": "MAP-0099",
+      "correctedCapabilityId": "builtin/tool/manage_voice_preset",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "voice.preset.manage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_41",
+      "mapId": "MAP-0100",
+      "correctedCapabilityId": "builtin/tool/desktop_clipboard_bridge",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "tool.desktop_clipboard_bridge",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MINIS://OFFLOADS/",
+      "mapId": "MAP-0101",
+      "correctedCapabilityId": "external/tool/minis_offloads",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"PLATFORM_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_42",
+      "mapId": "MAP-0102",
+      "correctedCapabilityId": "builtin/tool/general_map_0102",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_43",
+      "mapId": "MAP-0103",
+      "correctedCapabilityId": "builtin/tool/general_map_0103",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_44",
+      "mapId": "MAP-0104",
+      "correctedCapabilityId": "builtin/tool/general_map_0104",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.read_LIST_INSTALLED_APPS",
+      "mapId": "MAP-0105",
+      "correctedCapabilityId": "external/system/read_list_installed_apps",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_BLUETOOTH_BLE_DISCOVER_SERVICES",
+      "mapId": "MAP-0106",
+      "correctedCapabilityId": "external/device/bluetooth_ble_discover_services",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_45",
+      "mapId": "MAP-0107",
+      "correctedCapabilityId": "builtin/tool/general_map_0107",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.execute_OPERITSHOWERSHELLRUNNER",
+      "mapId": "MAP-0108",
+      "correctedCapabilityId": "external/process/operitshowershellrunner",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.operitshowershellrunner",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_46",
+      "mapId": "MAP-0109",
+      "correctedCapabilityId": "builtin/tool/general_map_0109",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_47",
+      "mapId": "MAP-0110",
+      "correctedCapabilityId": "builtin/tool/general_map_0110",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.control_MEDIA PLAYBACK CONTROL",
+      "mapId": "MAP-0111",
+      "correctedCapabilityId": "external/tool/control_media_playback_control",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.control_media_playback_control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_48",
+      "mapId": "MAP-0112",
+      "correctedCapabilityId": "builtin/tool/general_map_0112",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_49",
+      "mapId": "MAP-0113",
+      "correctedCapabilityId": "builtin/tool/general_map_0113",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_LOG SANITIZATION",
+      "mapId": "MAP-0114",
+      "correctedCapabilityId": "external/tool/log_sanitization",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_50",
+      "mapId": "MAP-0115",
+      "correctedCapabilityId": "builtin/tool/general_map_0115",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_51",
+      "mapId": "MAP-0116",
+      "correctedCapabilityId": "builtin/tool/general_map_0116",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.install_UNINSTALL_APP",
+      "mapId": "MAP-0117",
+      "correctedCapabilityId": "external/system/install_uninstall_app",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.character.update_BLUETOOTH_BLE_WRITE_AND_READ_CHARACTERISTIC",
+      "mapId": "MAP-0118",
+      "correctedCapabilityId": "external/character/update_bluetooth_ble_write_and_read_characteristic",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.notification.read_BLUETOOTH_BLE_READ_NOTIFICATIONS",
+      "mapId": "MAP-0119",
+      "correctedCapabilityId": "external/notification/read_bluetooth_ble_read_notifications",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "notification.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_52",
+      "mapId": "MAP-0120",
+      "correctedCapabilityId": "builtin/tool/general_map_0120",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.install_DATA IMPORT",
+      "mapId": "MAP-0121",
+      "correctedCapabilityId": "external/memory/install_data_import",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.import",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.voice.read_VOICELISTFETCHER",
+      "mapId": "MAP-0122",
+      "correctedCapabilityId": "external/voice/read_voicelistfetcher",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "voice.read_voicelistfetcher",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_53",
+      "mapId": "MAP-0123",
+      "correctedCapabilityId": "builtin/tool/general_map_0123",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_54",
+      "mapId": "MAP-0124",
+      "correctedCapabilityId": "builtin/tool/general_map_0124",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.delete_DELETE_MEMORY",
+      "mapId": "MAP-0125",
+      "correctedCapabilityId": "external/memory/delete_delete_memory",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.delete",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TOOL REGISTRY",
+      "mapId": "MAP-0126",
+      "correctedCapabilityId": "external/tool/tool_registry",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.extension.install_SKILL INSTALLATION/IMPORT",
+      "mapId": "MAP-0127",
+      "correctedCapabilityId": "external/extension/install_skill_installation_import",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_55",
+      "mapId": "MAP-0128",
+      "correctedCapabilityId": "builtin/tool/general_map_0128",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CNSCHEMA",
+      "mapId": "MAP-0129",
+      "correctedCapabilityId": "builtin/tool/schema_map_0129",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.extension.execute_HOOK_TOOL_LIFECYCLE_INTERCEPT",
+      "mapId": "MAP-0130",
+      "correctedCapabilityId": "external/extension/hook_tool_lifecycle_intercept",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"EXTENSION_API_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.read_GET_SYSTEM_SETTING",
+      "mapId": "MAP-0131",
+      "correctedCapabilityId": "external/device/read_get_system_setting",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.settings",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_56",
+      "mapId": "MAP-0132",
+      "correctedCapabilityId": "builtin/tool/general_map_0132",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TOOL CALL EXECUTION",
+      "mapId": "MAP-0133",
+      "correctedCapabilityId": "external/tool/tool_call_execution",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_57",
+      "mapId": "MAP-0134",
+      "correctedCapabilityId": "builtin/tool/general_map_0134",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_58",
+      "mapId": "MAP-0135",
+      "correctedCapabilityId": "builtin/tool/general_map_0135",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_59",
+      "mapId": "MAP-0136",
+      "correctedCapabilityId": "builtin/tool/general_map_0136",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.execute_SESSION PERSISTENCE",
+      "mapId": "MAP-0137",
+      "correctedCapabilityId": "external/memory/session_persistence",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.session",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_60",
+      "mapId": "MAP-0138",
+      "correctedCapabilityId": "builtin/tool/general_map_0138",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_61",
+      "mapId": "MAP-0139",
+      "correctedCapabilityId": "builtin/tool/general_map_0139",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_DEBUGGERSYSTEMOPERATIONTOOLS",
+      "mapId": "MAP-0140",
+      "correctedCapabilityId": "external/tool/debuggersystemoperationtools",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_62",
+      "mapId": "MAP-0141",
+      "correctedCapabilityId": "builtin/tool/general_map_0141",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_63",
+      "mapId": "MAP-0142",
+      "correctedCapabilityId": "builtin/tool/general_map_0142",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.update_CLIPBOARD WRITE",
+      "mapId": "MAP-0143",
+      "correctedCapabilityId": "external/system/update_clipboard_write",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.update",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_FALLBACK & RETRY",
+      "mapId": "MAP-0144",
+      "correctedCapabilityId": "external/tool/fallback_retry",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_64",
+      "mapId": "MAP-0145",
+      "correctedCapabilityId": "builtin/tool/general_map_0145",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_65",
+      "mapId": "MAP-0146",
+      "correctedCapabilityId": "builtin/tool/general_map_0146",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_66",
+      "mapId": "MAP-0147",
+      "correctedCapabilityId": "builtin/tool/general_map_0147",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.character.read_LIST_CHARACTER_CARDS",
+      "mapId": "MAP-0148",
+      "correctedCapabilityId": "external/character/read_list_character_cards",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.delete_DELETE_MEMORY_LINK",
+      "mapId": "MAP-0149",
+      "correctedCapabilityId": "external/memory/delete_delete_memory_link",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.delete",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_67",
+      "mapId": "MAP-0150",
+      "correctedCapabilityId": "builtin/tool/general_map_0150",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_68",
+      "mapId": "MAP-0151",
+      "correctedCapabilityId": "builtin/tool/general_map_0151",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.task.execute_TASK",
+      "mapId": "MAP-0152",
+      "correctedCapabilityId": "external/task/task",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "task.task",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.execute_MAKE_DIRECTORY",
+      "mapId": "MAP-0153",
+      "correctedCapabilityId": "external/file/make_directory",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.make_directory",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_69",
+      "mapId": "MAP-0154",
+      "correctedCapabilityId": "builtin/tool/general_map_0154",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_OPEN URL/APP",
+      "mapId": "MAP-0155",
+      "correctedCapabilityId": "external/system/open_url_app",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_SSHD_SERVER_MANAGER",
+      "mapId": "MAP-0156",
+      "correctedCapabilityId": "external/tool/sshd_server_manager",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.sshd_server_manager",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_FFMPEG_CONVERT",
+      "mapId": "MAP-0157",
+      "correctedCapabilityId": "external/tool/ffmpeg_convert",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.ffmpeg_convert",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_70",
+      "mapId": "MAP-0158",
+      "correctedCapabilityId": "builtin/tool/general_map_0158",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_71",
+      "mapId": "MAP-0159",
+      "correctedCapabilityId": "builtin/tool/general_map_0159",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.agent.execute_AGENT_STATUS",
+      "mapId": "MAP-0160",
+      "correctedCapabilityId": "external/agent/agent_status",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "agent.agent_status",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.task.read_PERSONALWAKELISTENER_(CUSTOM_WAKE_WORD)",
+      "mapId": "MAP-0161",
+      "correctedCapabilityId": "external/character/read_personalwakelistener",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_72",
+      "mapId": "MAP-0162",
+      "correctedCapabilityId": "builtin/tool/general_map_0162",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.browser.capture_BROWSER SCREENSHOT",
+      "mapId": "MAP-0163",
+      "correctedCapabilityId": "external/browser/capture_browser_screenshot",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.voice.execute_AUDIO",
+      "mapId": "MAP-0164",
+      "correctedCapabilityId": "external/voice/audio",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "voice.audio",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_73",
+      "mapId": "MAP-0165",
+      "correctedCapabilityId": "builtin/tool/general_map_0165",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.notification.execute_TOAST",
+      "mapId": "MAP-0166",
+      "correctedCapabilityId": "external/notification/toast",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "notification.toast",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_74",
+      "mapId": "MAP-0167",
+      "correctedCapabilityId": "builtin/tool/general_map_0167",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.extension.install_SKILL_IMPORT_FROM_ZIP",
+      "mapId": "MAP-0168",
+      "correctedCapabilityId": "external/extension/install_skill_import_from_zip",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_75",
+      "mapId": "MAP-0169",
+      "correctedCapabilityId": "builtin/tool/general_map_0169",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_76",
+      "mapId": "MAP-0170",
+      "correctedCapabilityId": "builtin/tool/general_map_0170",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_77",
+      "mapId": "MAP-0171",
+      "correctedCapabilityId": "builtin/tool/general_map_0171",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.control_MUSIC_PLAY_QUEUE",
+      "mapId": "MAP-0172",
+      "correctedCapabilityId": "external/tool/control_music_play_queue",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.control_music_play_queue",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CNIPCCN",
+      "mapId": "MAP-0173",
+      "correctedCapabilityId": "builtin/tool/ipc",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CLIPBOARD_ACCESS",
+      "mapId": "MAP-0174",
+      "correctedCapabilityId": "external/tool/clipboard_access",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.clipboard_access",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_78",
+      "mapId": "MAP-0175",
+      "correctedCapabilityId": "builtin/tool/general_map_0175",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.control_STOP_APP",
+      "mapId": "MAP-0176",
+      "correctedCapabilityId": "external/system/control_stop_app",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.integration_EXECUTE_MCP_SERVER",
+      "mapId": "MAP-0177",
+      "correctedCapabilityId": "external/extension/integration_execute_mcp_server",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.manage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_FTP_SERVER_MANAGER",
+      "mapId": "MAP-0178",
+      "correctedCapabilityId": "external/tool/ftp_server_manager",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.ftp_server_manager",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.browser.switch_BROWSER_SELECT_OPTION",
+      "mapId": "MAP-0179",
+      "correctedCapabilityId": "external/browser/switch_browser_select_option",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.switch_browser_select_option",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.agent.execute_RUN_UI_SUBAGENT",
+      "mapId": "MAP-0180",
+      "correctedCapabilityId": "external/agent/run_ui_subagent",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "agent.run_ui_subagent",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.create_CREATE_MEMORY",
+      "mapId": "MAP-0181",
+      "correctedCapabilityId": "external/memory/create_create_memory",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.import",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_INDEXITEM",
+      "mapId": "MAP-0182",
+      "correctedCapabilityId": "external/tool/indexitem",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_79",
+      "mapId": "MAP-0183",
+      "correctedCapabilityId": "builtin/tool/general_map_0183",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.browser.stop_BROWSER_CLOSE",
+      "mapId": "MAP-0184",
+      "correctedCapabilityId": "external/browser/stop_browser_close",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.close",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.control_MUSIC_STOP",
+      "mapId": "MAP-0185",
+      "correctedCapabilityId": "external/tool/control_music_stop",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.control_music_stop",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.notification.execute_NOTIFICATION_FGS_MANAGEMENT",
+      "mapId": "MAP-0186",
+      "correctedCapabilityId": "external/notification/notification_fgs_management",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "notification.fgs",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.execute_TOOLPKGHOOKBRIDGESUPPORT",
+      "mapId": "MAP-0187",
+      "correctedCapabilityId": "external/extension/toolpkghookbridgesupport",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"EXTENSION_API_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_80",
+      "mapId": "MAP-0188",
+      "correctedCapabilityId": "builtin/tool/general_map_0188",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_PACKAGE_PROXY",
+      "mapId": "MAP-0189",
+      "correctedCapabilityId": "external/tool/package_proxy",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TOOLCN",
+      "mapId": "MAP-0190",
+      "correctedCapabilityId": "builtin/tool/tool",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_81",
+      "mapId": "MAP-0191",
+      "correctedCapabilityId": "builtin/tool/general_map_0191",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_82",
+      "mapId": "MAP-0192",
+      "correctedCapabilityId": "builtin/tool/general_map_0192",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.execute_NLP PROCESSING",
+      "mapId": "MAP-0193",
+      "correctedCapabilityId": "external/process/nlp_processing",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.nlp",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.notification.execute_NOTIFICATION_MANAGEMENT",
+      "mapId": "MAP-0194",
+      "correctedCapabilityId": "external/notification/notification_management",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "notification.notification_management",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_FFMPEG_INFO",
+      "mapId": "MAP-0195",
+      "correctedCapabilityId": "external/tool/ffmpeg_info",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.ffmpeg_info",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_83",
+      "mapId": "MAP-0196",
+      "correctedCapabilityId": "builtin/tool/general_map_0196",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.extension.execute_TOOLPKGSUMMARYHOOKBRIDGE",
+      "mapId": "MAP-0197",
+      "correctedCapabilityId": "external/extension/toolpkgsummaryhookbridge",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"EXTENSION_API_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.file.update_WRITE_FILE",
+      "mapId": "MAP-0198",
+      "correctedCapabilityId": "external/file/update_write_file",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.send_SHARE_INTENT_(ACTION_SEND)",
+      "mapId": "MAP-0199",
+      "correctedCapabilityId": "external/tool/send_share_intent",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.send_share_intent",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.execute_WORKFLOW_DAG_EXECUTE",
+      "mapId": "MAP-0200",
+      "correctedCapabilityId": "external/extension/workflow_dag_execute",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "workflow.extension",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.read_CLIPBOARD READ",
+      "mapId": "MAP-0201",
+      "correctedCapabilityId": "external/tool/read_clipboard_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.read_clipboard_read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_84",
+      "mapId": "MAP-0202",
+      "correctedCapabilityId": "builtin/tool/general_map_0202",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.capture_CAMERA_IMAGE_CAPTURE",
+      "mapId": "MAP-0203",
+      "correctedCapabilityId": "external/device/capture_camera_image_capture",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.camera",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_85",
+      "mapId": "MAP-0204",
+      "correctedCapabilityId": "builtin/tool/general_map_0204",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_86",
+      "mapId": "MAP-0205",
+      "correctedCapabilityId": "builtin/tool/general_map_0205",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_87",
+      "mapId": "MAP-0206",
+      "correctedCapabilityId": "builtin/tool/general_map_0206",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_88",
+      "mapId": "MAP-0207",
+      "correctedCapabilityId": "builtin/tool/general_map_0207",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_89",
+      "mapId": "MAP-0208",
+      "correctedCapabilityId": "builtin/tool/general_map_0208",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_PHOTO LIBRARY ACCESS",
+      "mapId": "MAP-0209",
+      "correctedCapabilityId": "external/tool/photo_library_access",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.photo_library_access",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_90",
+      "mapId": "MAP-0210",
+      "correctedCapabilityId": "builtin/tool/general_map_0210",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_91",
+      "mapId": "MAP-0211",
+      "correctedCapabilityId": "builtin/tool/general_map_0211",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.security.start_PERMISSION_BLUETOOTH_CONNECT",
+      "mapId": "MAP-0212",
+      "correctedCapabilityId": "external/security/start_permission_bluetooth_connect",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.start_permission_bluetooth_connect",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.create_WORKFLOW_CREATE",
+      "mapId": "MAP-0213",
+      "correctedCapabilityId": "external/extension/create_workflow_create",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "workflow.extension",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_FFMPEG_EXECUTE",
+      "mapId": "MAP-0214",
+      "correctedCapabilityId": "external/tool/ffmpeg_execute",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.ffmpeg_execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TOKENCN",
+      "mapId": "MAP-0215",
+      "correctedCapabilityId": "builtin/tool/token",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.file.update_WRITE_FILE_BINARY",
+      "mapId": "MAP-0216",
+      "correctedCapabilityId": "external/file/update_write_file_binary",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.control_CANCELLATION & STOP",
+      "mapId": "MAP-0217",
+      "correctedCapabilityId": "external/tool/control_cancellation_stop",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_92",
+      "mapId": "MAP-0218",
+      "correctedCapabilityId": "builtin/tool/general_map_0218",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.read_GET_DEVICE_LOCATION",
+      "mapId": "MAP-0219",
+      "correctedCapabilityId": "external/device/read_get_device_location",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_PRESS_KEY",
+      "mapId": "MAP-0220",
+      "correctedCapabilityId": "external/tool/press_key",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.press_key",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_93",
+      "mapId": "MAP-0221",
+      "correctedCapabilityId": "builtin/tool/general_map_0221",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.read_BLUETOOTH_LISTEN",
+      "mapId": "MAP-0222",
+      "correctedCapabilityId": "external/device/read_bluetooth_listen",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_DOCUMENTCHUNK_ENTITY",
+      "mapId": "MAP-0223",
+      "correctedCapabilityId": "external/tool/documentchunk_entity",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.file.start_SSHFILECONNECTIONMANAGER",
+      "mapId": "MAP-0224",
+      "correctedCapabilityId": "external/file/start_sshfileconnectionmanager",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.start_sshfileconnectionmanager",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_94",
+      "mapId": "MAP-0225",
+      "correctedCapabilityId": "builtin/tool/general_map_0225",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.execute_ROOTSYSTEMOPERATIONTOOLS",
+      "mapId": "MAP-0226",
+      "correctedCapabilityId": "external/system/rootsystemoperationtools",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.advanced",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_95",
+      "mapId": "MAP-0227",
+      "correctedCapabilityId": "builtin/tool/general_map_0227",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_96",
+      "mapId": "MAP-0228",
+      "correctedCapabilityId": "builtin/tool/general_map_0228",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_97",
+      "mapId": "MAP-0229",
+      "correctedCapabilityId": "builtin/tool/general_map_0229",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_USE_PACKAGE",
+      "mapId": "MAP-0230",
+      "correctedCapabilityId": "external/tool/use_package",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.use_package",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_98",
+      "mapId": "MAP-0231",
+      "correctedCapabilityId": "builtin/tool/general_map_0231",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.read_LIST_BLUETOOTH_BONDED_DEVICES",
+      "mapId": "MAP-0232",
+      "correctedCapabilityId": "external/device/read_list_bluetooth_bonded_devices",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.capture_SCREEN_CAPTURE_(SCREENSHOT)",
+      "mapId": "MAP-0233",
+      "correctedCapabilityId": "external/browser/capture_screen_capture",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.capture_1",
+      "mapId": "MAP-0234",
+      "correctedCapabilityId": null,
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "No corrected capability found for this mapId"
+    },
+    {
+      "historicalToolId": "tool.file.create_CREATE_FILE",
+      "mapId": "MAP-0235",
+      "correctedCapabilityId": "external/file/create_create_file",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.create",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_99",
+      "mapId": "MAP-0236",
+      "correctedCapabilityId": "builtin/tool/general_map_0236",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.execute_EXECUTE_SHELL",
+      "mapId": "MAP-0237",
+      "correctedCapabilityId": "external/process/execute_shell",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_FILESYSTEM LISTING",
+      "mapId": "MAP-0238",
+      "correctedCapabilityId": "external/file/read_filesystem_listing",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.voice.capture_PERMISSION_RECORD_AUDIO",
+      "mapId": "MAP-0239",
+      "correctedCapabilityId": "external/voice/capture_permission_record_audio",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "voice.capture_permission_record_audio",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_SYSTEM_SETTINGS_MANIPULATION",
+      "mapId": "MAP-0240",
+      "correctedCapabilityId": "external/device/system_settings_manipulation",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.settings",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.model.execute_EMBEDDING_/_EMBEDDINGCONVERTER",
+      "mapId": "MAP-0241",
+      "correctedCapabilityId": "external/model/embedding_embeddingconverter",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "provider.model.embedding_embeddingconverter",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.install_SKILL_INSTALL_FROM_GITHUB",
+      "mapId": "MAP-0242",
+      "correctedCapabilityId": "external/extension/install_skill_install_from_github",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CNSCHEMACN",
+      "mapId": "MAP-0243",
+      "correctedCapabilityId": "builtin/tool/schema_map_0243",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.integration_EXECUTE_PLATFORM",
+      "mapId": "MAP-0244",
+      "correctedCapabilityId": "external/tool/integration_execute_platform",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"NOT_AGENT_CALLABLE\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.read_GET_MEMORY_BY_TITLE",
+      "mapId": "MAP-0245",
+      "correctedCapabilityId": "external/memory/read_get_memory_by_title",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MUSIC_SET_VOLUME",
+      "mapId": "MAP-0246",
+      "correctedCapabilityId": "external/tool/music_set_volume",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.music_set_volume",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_ASSISTANT_INTENT_ACTIVITY",
+      "mapId": "MAP-0247",
+      "correctedCapabilityId": "external/tool/assistant_intent_activity",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.assistant_intent_activity",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_100",
+      "mapId": "MAP-0248",
+      "correctedCapabilityId": "builtin/tool/general_map_0248",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_101",
+      "mapId": "MAP-0249",
+      "correctedCapabilityId": "builtin/tool/general_map_0249",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.stop_BLUETOOTH_CLOSE",
+      "mapId": "MAP-0250",
+      "correctedCapabilityId": "external/device/stop_bluetooth_close",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_102",
+      "mapId": "MAP-0251",
+      "correctedCapabilityId": "builtin/tool/general_map_0251",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.read_QUERY_MEMORY",
+      "mapId": "MAP-0252",
+      "correctedCapabilityId": "external/memory/read_query_memory",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_SLEEP_DELAY",
+      "mapId": "MAP-0253",
+      "correctedCapabilityId": "external/tool/sleep_delay",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.sleep_delay",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.execute_MCP_TOOL_INVOKE",
+      "mapId": "MAP-0254",
+      "correctedCapabilityId": "external/extension/mcp_tool_invoke",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "mcp.server",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MANAGE_COOKIES",
+      "mapId": "MAP-0255",
+      "correctedCapabilityId": "external/tool/manage_cookies",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.manage_cookies",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.read_MEMORYSEARCHSETTINGSPREFERENCES",
+      "mapId": "MAP-0256",
+      "correctedCapabilityId": "external/memory/read_memorysearchsettingspreferences",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.interface_EXECUTE_UI",
+      "mapId": "MAP-0257",
+      "correctedCapabilityId": "external/tool/interface_execute_ui",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.interface_execute_ui",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_LONG_PRESS",
+      "mapId": "MAP-0258",
+      "correctedCapabilityId": "external/tool/long_press",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.long_press",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_103",
+      "mapId": "MAP-0259",
+      "correctedCapabilityId": "builtin/tool/general_map_0259",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.control_REASONING/THINKING DISPLAY",
+      "mapId": "MAP-0260",
+      "correctedCapabilityId": "external/browser/control_reasoning_thinking_display",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_READ_FILE_FULL",
+      "mapId": "MAP-0261",
+      "correctedCapabilityId": "external/file/read_read_file_full",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.security.send_PERMISSION_SEND_SMS",
+      "mapId": "MAP-0262",
+      "correctedCapabilityId": "external/security/send_permission_send_sms",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.send_permission_send_sms",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_104",
+      "mapId": "MAP-0263",
+      "correctedCapabilityId": "builtin/tool/general_map_0263",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.read_ANDROID CONTACTS READ",
+      "mapId": "MAP-0264",
+      "correctedCapabilityId": "external/tool/read_android_contacts_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.read_android_contacts_read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.execute_TOOLPKGTOOLLIFECYCLEBRIDGE",
+      "mapId": "MAP-0265",
+      "correctedCapabilityId": "external/extension/toolpkgtoollifecyclebridge",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"EXTENSION_API_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_105",
+      "mapId": "MAP-0266",
+      "correctedCapabilityId": "builtin/tool/general_map_0266",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.agent.execute_1",
+      "mapId": "MAP-0267",
+      "correctedCapabilityId": "builtin/agent/psyche_map_0267",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_106",
+      "mapId": "MAP-0268",
+      "correctedCapabilityId": "builtin/tool/general_map_0268",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_107",
+      "mapId": "MAP-0269",
+      "correctedCapabilityId": "builtin/tool/general_map_0269",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_108",
+      "mapId": "MAP-0270",
+      "correctedCapabilityId": "builtin/tool/general_map_0270",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_EXECUTE_INTENT",
+      "mapId": "MAP-0271",
+      "correctedCapabilityId": "external/tool/execute_intent",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.execute_intent",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_109",
+      "mapId": "MAP-0272",
+      "correctedCapabilityId": "builtin/tool/general_map_0272",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_110",
+      "mapId": "MAP-0273",
+      "correctedCapabilityId": "builtin/tool/general_map_0273",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_111",
+      "mapId": "MAP-0274",
+      "correctedCapabilityId": "builtin/tool/general_map_0274",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_112",
+      "mapId": "MAP-0275",
+      "correctedCapabilityId": "builtin/tool/general_map_0275",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.control_SCREEN_CASTING_(VIRTUALDISPLAY_OVERLAY)",
+      "mapId": "MAP-0276",
+      "correctedCapabilityId": "external/browser/control_screen_casting",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.task.execute_PERSONALWAKEFEATUREEXTRACTOR",
+      "mapId": "MAP-0277",
+      "correctedCapabilityId": "external/character/personalwakefeatureextractor",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_113",
+      "mapId": "MAP-0278",
+      "correctedCapabilityId": "builtin/tool/general_map_0278",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_114",
+      "mapId": "MAP-0279",
+      "correctedCapabilityId": "builtin/tool/general_map_0279",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_115",
+      "mapId": "MAP-0280",
+      "correctedCapabilityId": "builtin/tool/general_map_0280",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.send_SEND_BROADCAST",
+      "mapId": "MAP-0281",
+      "correctedCapabilityId": "external/tool/send_send_broadcast",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.send_send_broadcast",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CNDEV CONSOLE API",
+      "mapId": "MAP-0282",
+      "correctedCapabilityId": "builtin/network/dev_console_api",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.notification.send_SEND_NOTIFICATION",
+      "mapId": "MAP-0283",
+      "correctedCapabilityId": "external/notification/send_send_notification",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "notification.send",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_DEVICE_INFO",
+      "mapId": "MAP-0284",
+      "correctedCapabilityId": "external/device/device_info_map_0284",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.info",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.control_MUSIC_RESUME",
+      "mapId": "MAP-0285",
+      "correctedCapabilityId": "external/tool/control_music_resume",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.control_music_resume",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_FILE READ",
+      "mapId": "MAP-0286",
+      "correctedCapabilityId": "external/file/read_file_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.management_EXECUTE_SKILL",
+      "mapId": "MAP-0287",
+      "correctedCapabilityId": "external/extension/management_execute_skill",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.manage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_116",
+      "mapId": "MAP-0288",
+      "correctedCapabilityId": "builtin/tool/general_map_0288",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.browser.execute_BROWSER_RUN_CODE",
+      "mapId": "MAP-0289",
+      "correctedCapabilityId": "external/browser/browser_run_code",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.browser_run_code",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.character.install_CHARACTER_CARD_SILLYTAVERN_IMPORT",
+      "mapId": "MAP-0290",
+      "correctedCapabilityId": "external/character/install_character_card_sillytavern_import",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.import",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_117",
+      "mapId": "MAP-0291",
+      "correctedCapabilityId": "builtin/tool/general_map_0291",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TOOL RESULT OBSERVATION",
+      "mapId": "MAP-0292",
+      "correctedCapabilityId": "external/tool/tool_result_observation",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_118",
+      "mapId": "MAP-0293",
+      "correctedCapabilityId": "builtin/tool/general_map_0293",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.capture_SCREEN_RECORDING___CASTING_(SHOWER)",
+      "mapId": "MAP-0294",
+      "correctedCapabilityId": "external/browser/capture_screen_recording_casting",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.model.execute_CLOUDEMBEDDINGSERVICE",
+      "mapId": "MAP-0295",
+      "correctedCapabilityId": "external/model/cloudembeddingservice",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "provider.model.cloudembeddingservice",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_119",
+      "mapId": "MAP-0296",
+      "correctedCapabilityId": "builtin/tool/general_map_0296",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.read_GET_PAGE_INFO",
+      "mapId": "MAP-0297",
+      "correctedCapabilityId": "external/tool/read_get_page_info",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.read_get_page_info",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_120",
+      "mapId": "MAP-0298",
+      "correctedCapabilityId": "builtin/tool/general_map_0298",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.execution_EXECUTE_SHELL",
+      "mapId": "MAP-0299",
+      "correctedCapabilityId": "external/process/execution_execute_shell",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.control_MUSIC_PLAY",
+      "mapId": "MAP-0300",
+      "correctedCapabilityId": "external/tool/control_music_play",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.control_music_play",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_121",
+      "mapId": "MAP-0301",
+      "correctedCapabilityId": "builtin/tool/general_map_0301",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_LOCATION_TRACKING_(CONTINUOUS)",
+      "mapId": "MAP-0302",
+      "correctedCapabilityId": "external/tool/location_tracking",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.location_tracking",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.read_SCREEN_CAPTURE_(IMAGEREADER)",
+      "mapId": "MAP-0303",
+      "correctedCapabilityId": "external/browser/read_screen_capture",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_122",
+      "mapId": "MAP-0304",
+      "correctedCapabilityId": "builtin/tool/general_map_0304",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.update_WRITE HEALTH DATA (HEALTHKIT)",
+      "mapId": "MAP-0305",
+      "correctedCapabilityId": "external/memory/update_write_health_data",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_123",
+      "mapId": "MAP-0306",
+      "correctedCapabilityId": "builtin/tool/general_map_0306",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_124",
+      "mapId": "MAP-0307",
+      "correctedCapabilityId": "builtin/tool/general_map_0307",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.file.delete_DELETE_FILE",
+      "mapId": "MAP-0308",
+      "correctedCapabilityId": "external/file/delete_delete_file",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.delete",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.system.install_APPLICATION_INSTALL_(APK)",
+      "mapId": "MAP-0309",
+      "correctedCapabilityId": "external/system/install_application_install",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_125",
+      "mapId": "MAP-0310",
+      "correctedCapabilityId": "builtin/tool/general_map_0310",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MINIS:// URI SCHEME",
+      "mapId": "MAP-0311",
+      "correctedCapabilityId": "external/tool/minis_uri_scheme",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"PLATFORM_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.voice.capture_MICROPHONE_RECORDING",
+      "mapId": "MAP-0312",
+      "correctedCapabilityId": "external/tool/capture_microphone_recording",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"NOT_AGENT_CALLABLE\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.persistence_EXECUTE_DATABASE",
+      "mapId": "MAP-0313",
+      "correctedCapabilityId": "external/memory/persistence_execute_database",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.session",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_126",
+      "mapId": "MAP-0314",
+      "correctedCapabilityId": "builtin/tool/general_map_0314",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_127",
+      "mapId": "MAP-0315",
+      "correctedCapabilityId": "builtin/tool/general_map_0315",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.file.read_READ_FILE_PART",
+      "mapId": "MAP-0316",
+      "correctedCapabilityId": "external/file/read_read_file_part",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_128",
+      "mapId": "MAP-0317",
+      "correctedCapabilityId": "builtin/tool/general_map_0317",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.execute_MEMORY",
+      "mapId": "MAP-0318",
+      "correctedCapabilityId": "external/memory/memory",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.memory",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_129",
+      "mapId": "MAP-0319",
+      "correctedCapabilityId": "builtin/tool/general_map_0319",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.security.execute_PERMISSION",
+      "mapId": "MAP-0320",
+      "correctedCapabilityId": "external/security/permission",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.permission",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_130",
+      "mapId": "MAP-0321",
+      "correctedCapabilityId": "builtin/tool/general_map_0321",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_131",
+      "mapId": "MAP-0322",
+      "correctedCapabilityId": "builtin/tool/general_map_0322",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.security.read_PERMISSION_READ_CONTACTS",
+      "mapId": "MAP-0323",
+      "correctedCapabilityId": "external/security/read_permission_read_contacts",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.read_permission_read_contacts",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_132",
+      "mapId": "MAP-0324",
+      "correctedCapabilityId": "builtin/tool/general_map_0324",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.start_BLUETOOTH_CONNECT",
+      "mapId": "MAP-0325",
+      "correctedCapabilityId": "external/device/start_bluetooth_connect",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_133",
+      "mapId": "MAP-0326",
+      "correctedCapabilityId": "builtin/tool/general_map_0326",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_134",
+      "mapId": "MAP-0327",
+      "correctedCapabilityId": "builtin/tool/general_map_0327",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TAP",
+      "mapId": "MAP-0328",
+      "correctedCapabilityId": "external/tool/tap",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.tap",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_135",
+      "mapId": "MAP-0329",
+      "correctedCapabilityId": "builtin/tool/general_map_0329",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.read_ANDROID WEATHER QUERY",
+      "mapId": "MAP-0330",
+      "correctedCapabilityId": "external/search/read_android_weather_query",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "search.read_android_weather_query",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_136",
+      "mapId": "MAP-0331",
+      "correctedCapabilityId": "builtin/tool/general_map_0331",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.update_UPDATE_PATCH_INCREMENTAL",
+      "mapId": "MAP-0332",
+      "correctedCapabilityId": "external/system/update_update_patch_incremental",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.update",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_137",
+      "mapId": "MAP-0333",
+      "correctedCapabilityId": "builtin/tool/general_map_0333",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_138",
+      "mapId": "MAP-0334",
+      "correctedCapabilityId": "builtin/tool/general_map_0334",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_139",
+      "mapId": "MAP-0335",
+      "correctedCapabilityId": "builtin/tool/general_map_0335",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_140",
+      "mapId": "MAP-0336",
+      "correctedCapabilityId": "builtin/tool/general_map_0336",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.security.install_PERMISSION_REQUEST_INSTALL_PACKAGES",
+      "mapId": "MAP-0337",
+      "correctedCapabilityId": "external/security/install_permission_request_install_packages",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.install_permission_request_install_packages",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_141",
+      "mapId": "MAP-0338",
+      "correctedCapabilityId": "builtin/tool/general_map_0338",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.execute_BLUETOOTH DEVICE DETECTION",
+      "mapId": "MAP-0339",
+      "correctedCapabilityId": "external/device/bluetooth_device_detection",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.notification.read_GET_NOTIFICATIONS",
+      "mapId": "MAP-0340",
+      "correctedCapabilityId": "external/notification/read_get_notifications",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "notification.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.capture_SCREENSHOT_SHARE",
+      "mapId": "MAP-0341",
+      "correctedCapabilityId": "external/browser/capture_screenshot_share",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_142",
+      "mapId": "MAP-0342",
+      "correctedCapabilityId": "builtin/tool/general_map_0342",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_SWIPE",
+      "mapId": "MAP-0343",
+      "correctedCapabilityId": "external/tool/swipe",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.swipe",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_143",
+      "mapId": "MAP-0344",
+      "correctedCapabilityId": "builtin/tool/general_map_0344",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_144",
+      "mapId": "MAP-0345",
+      "correctedCapabilityId": "builtin/tool/general_map_0345",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.execute_ACCESSIBILITYSYSTEMOPERATIONTOOLS",
+      "mapId": "MAP-0346",
+      "correctedCapabilityId": "external/system/accessibilitysystemoperationtools",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.advanced",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_BLUETOOTH_DEVICE_SCAN",
+      "mapId": "MAP-0347",
+      "correctedCapabilityId": "external/device/bluetooth_device_scan",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_145",
+      "mapId": "MAP-0348",
+      "correctedCapabilityId": "builtin/tool/general_map_0348",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MULTIPART_REQUEST",
+      "mapId": "MAP-0349",
+      "correctedCapabilityId": "external/network/multipart_request",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "network.multipart_request",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_146",
+      "mapId": "MAP-0350",
+      "correctedCapabilityId": "builtin/tool/general_map_0350",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CNGOVERNOR",
+      "mapId": "MAP-0351",
+      "correctedCapabilityId": "builtin/tool/governor",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_147",
+      "mapId": "MAP-0352",
+      "correctedCapabilityId": "builtin/tool/general_map_0352",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_148",
+      "mapId": "MAP-0353",
+      "correctedCapabilityId": "builtin/tool/general_map_0353",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_149",
+      "mapId": "MAP-0354",
+      "correctedCapabilityId": "builtin/tool/general_map_0354",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.create_WORKSPACE CREATE",
+      "mapId": "MAP-0355",
+      "correctedCapabilityId": "external/tool/create_workspace_create",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.create_workspace_create",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.notification.read_ANDROID NOTIFICATION READ",
+      "mapId": "MAP-0356",
+      "correctedCapabilityId": "external/notification/read_android_notification_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "notification.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_API KEY ENCRYPTION",
+      "mapId": "MAP-0357",
+      "correctedCapabilityId": "external/network/api_key_encryption",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "network.api_key_encryption",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.read_LOCATION GET",
+      "mapId": "MAP-0358",
+      "correctedCapabilityId": "external/tool/read_location_get",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.read_location_get",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.voice.switch_TTS VOICE SELECTION",
+      "mapId": "MAP-0359",
+      "correctedCapabilityId": "external/voice/switch_tts_voice_selection",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "voice.switch_tts_voice_selection",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_FIND_FILES",
+      "mapId": "MAP-0360",
+      "correctedCapabilityId": "external/file/read_find_files",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_150",
+      "mapId": "MAP-0361",
+      "correctedCapabilityId": "builtin/tool/general_map_0361",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_151",
+      "mapId": "MAP-0362",
+      "correctedCapabilityId": "builtin/tool/general_map_0362",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_152",
+      "mapId": "MAP-0363",
+      "correctedCapabilityId": "builtin/tool/general_map_0363",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_153",
+      "mapId": "MAP-0364",
+      "correctedCapabilityId": "builtin/tool/general_map_0364",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_154",
+      "mapId": "MAP-0365",
+      "correctedCapabilityId": "builtin/tool/general_map_0365",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.stop_ANDROID CALENDAR ACCESS",
+      "mapId": "MAP-0366",
+      "correctedCapabilityId": "external/tool/stop_android_calendar_access",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.stop_android_calendar_access",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_155",
+      "mapId": "MAP-0367",
+      "correctedCapabilityId": "builtin/tool/general_map_0367",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_156",
+      "mapId": "MAP-0368",
+      "correctedCapabilityId": "builtin/tool/general_map_0368",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_157",
+      "mapId": "MAP-0369",
+      "correctedCapabilityId": "builtin/tool/general_map_0369",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_158",
+      "mapId": "MAP-0370",
+      "correctedCapabilityId": "builtin/tool/general_map_0370",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.extension.management_EXECUTE_EXTENSION",
+      "mapId": "MAP-0371",
+      "correctedCapabilityId": "external/extension/management_execute_extension",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.manage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_159",
+      "mapId": "MAP-0372",
+      "correctedCapabilityId": "builtin/tool/general_map_0372",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_160",
+      "mapId": "MAP-0373",
+      "correctedCapabilityId": "builtin/tool/general_map_0373",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_161",
+      "mapId": "MAP-0374",
+      "correctedCapabilityId": "builtin/tool/general_map_0374",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_162",
+      "mapId": "MAP-0375",
+      "correctedCapabilityId": "builtin/tool/general_map_0375",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_163",
+      "mapId": "MAP-0376",
+      "correctedCapabilityId": "builtin/tool/general_map_0376",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.execute_DEVICE_ADMIN_PRIVILEGE",
+      "mapId": "MAP-0377",
+      "correctedCapabilityId": "external/device/device_admin_privilege",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.admin",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_LOCATION_TRACKING",
+      "mapId": "MAP-0378",
+      "correctedCapabilityId": "external/tool/location_tracking_map_0378",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.location_tracking_map_0378",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_164",
+      "mapId": "MAP-0379",
+      "correctedCapabilityId": "builtin/tool/general_map_0379",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_165",
+      "mapId": "MAP-0380",
+      "correctedCapabilityId": "builtin/tool/general_map_0380",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.voice.execute_MICROPHONE_(OBOE)",
+      "mapId": "MAP-0381",
+      "correctedCapabilityId": "external/voice/microphone",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "voice.microphone",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_166",
+      "mapId": "MAP-0382",
+      "correctedCapabilityId": "builtin/tool/general_map_0382",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.control_MUSIC_PAUSE",
+      "mapId": "MAP-0383",
+      "correctedCapabilityId": "external/tool/control_music_pause",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.control_music_pause",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_BLUETOOTH_DEVICE_MANAGEMENT",
+      "mapId": "MAP-0384",
+      "correctedCapabilityId": "external/device/bluetooth_device_management",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_HOMEKIT DEVICE CONTROL",
+      "mapId": "MAP-0385",
+      "correctedCapabilityId": "external/device/homekit_device_control",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.homekit",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_SHORTCUTS/APP INTENTS",
+      "mapId": "MAP-0386",
+      "correctedCapabilityId": "external/system/shortcuts_app_intents",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.advanced",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.security.update_PERMISSION_WRITE_CONTACTS",
+      "mapId": "MAP-0387",
+      "correctedCapabilityId": "external/security/update_permission_write_contacts",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.update_permission_write_contacts",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_SHARE SHEET",
+      "mapId": "MAP-0388",
+      "correctedCapabilityId": "external/tool/share_sheet",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.share_sheet",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_167",
+      "mapId": "MAP-0389",
+      "correctedCapabilityId": "builtin/tool/general_map_0389",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_168",
+      "mapId": "MAP-0390",
+      "correctedCapabilityId": "builtin/tool/general_map_0390",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_169",
+      "mapId": "MAP-0391",
+      "correctedCapabilityId": "builtin/tool/general_map_0391",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_ADMINSYSTEMOPERATIONTOOLS",
+      "mapId": "MAP-0392",
+      "correctedCapabilityId": "external/tool/adminsystemoperationtools",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.adminsystemoperationtools",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_170",
+      "mapId": "MAP-0393",
+      "correctedCapabilityId": "builtin/tool/general_map_0393",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.read_MEMORYSEARCHCONFIG_/_MEMORYSEARCHDEBUGINFO",
+      "mapId": "MAP-0394",
+      "correctedCapabilityId": "external/memory/read_memorysearchconfig_memorysearchdebuginfo",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.model.execute_ONNXSILEROVAD",
+      "mapId": "MAP-0395",
+      "correctedCapabilityId": "external/model/onnxsilerovad",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "provider.model.onnxsilerovad",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_171",
+      "mapId": "MAP-0396",
+      "correctedCapabilityId": "builtin/tool/general_map_0396",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.start_BLUETOOTH_BLE_CONNECT",
+      "mapId": "MAP-0397",
+      "correctedCapabilityId": "external/device/start_bluetooth_ble_connect",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_172",
+      "mapId": "MAP-0398",
+      "correctedCapabilityId": "builtin/tool/general_map_0398",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.read_GET_BLUETOOTH_STATE",
+      "mapId": "MAP-0399",
+      "correctedCapabilityId": "external/device/read_get_bluetooth_state",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_173",
+      "mapId": "MAP-0400",
+      "correctedCapabilityId": "builtin/tool/general_map_0400",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_174",
+      "mapId": "MAP-0401",
+      "correctedCapabilityId": "builtin/tool/general_map_0401",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.agent.execute_2",
+      "mapId": "MAP-0402",
+      "correctedCapabilityId": "builtin/agent/psyche_map_0402",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MUSIC_SEEK",
+      "mapId": "MAP-0403",
+      "correctedCapabilityId": "external/tool/music_seek",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.music_seek",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_175",
+      "mapId": "MAP-0404",
+      "correctedCapabilityId": "builtin/tool/general_map_0404",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.security.update_PERMISSION_WRITE_SETTINGS",
+      "mapId": "MAP-0405",
+      "correctedCapabilityId": "external/security/update_permission_write_settings",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.update_permission_write_settings",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_176",
+      "mapId": "MAP-0406",
+      "correctedCapabilityId": "builtin/tool/general_map_0406",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_177",
+      "mapId": "MAP-0407",
+      "correctedCapabilityId": "builtin/tool/general_map_0407",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.browser.execute_FLOATINGWINDOWMANAGER",
+      "mapId": "MAP-0408",
+      "correctedCapabilityId": "external/browser/floatingwindowmanager",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.floating_window",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.management_EXECUTE_FILE",
+      "mapId": "MAP-0409",
+      "correctedCapabilityId": "external/file/management_execute_file",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.manage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.execute_WORKFLOW",
+      "mapId": "MAP-0410",
+      "correctedCapabilityId": "external/extension/workflow",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "workflow.extension",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.read_WEATHER QUERY",
+      "mapId": "MAP-0411",
+      "correctedCapabilityId": "external/search/read_weather_query",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "search.read_weather_query",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_178",
+      "mapId": "MAP-0412",
+      "correctedCapabilityId": "builtin/tool/general_map_0412",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.extension.start_MCP_REMOTE_SERVER_CONNECT",
+      "mapId": "MAP-0413",
+      "correctedCapabilityId": "external/extension/start_mcp_remote_server_connect",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "mcp.server",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_FILESYSTEM SEARCH",
+      "mapId": "MAP-0414",
+      "correctedCapabilityId": "external/file/read_filesystem_search",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_179",
+      "mapId": "MAP-0415",
+      "correctedCapabilityId": "builtin/tool/general_map_0415",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.voice.control_QUEUEDTTSPLAYBACK",
+      "mapId": "MAP-0416",
+      "correctedCapabilityId": "external/voice/control_queuedttsplayback",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "voice.control_queuedttsplayback",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.device.execute_SCAN_BLUETOOTH_DEVICES",
+      "mapId": "MAP-0417",
+      "correctedCapabilityId": "external/device/scan_bluetooth_devices",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.model.management_EXECUTE_MODEL",
+      "mapId": "MAP-0418",
+      "correctedCapabilityId": "external/model/management_execute_model",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "provider.model.management_execute_model",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.memory.read_MEMORY GET/RETRIEVE",
+      "mapId": "MAP-0419",
+      "correctedCapabilityId": "external/memory/read_memory_get_retrieve",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_180",
+      "mapId": "MAP-0420",
+      "correctedCapabilityId": "builtin/tool/general_map_0420",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.switch_WORKSPACE SELECT/SWITCH",
+      "mapId": "MAP-0421",
+      "correctedCapabilityId": "external/tool/switch_workspace_select_switch",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.switch_workspace_select_switch",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_181",
+      "mapId": "MAP-0422",
+      "correctedCapabilityId": "builtin/tool/general_map_0422",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.browser.stop_BROWSER_CLOSE_ALL",
+      "mapId": "MAP-0423",
+      "correctedCapabilityId": "external/browser/stop_browser_close_all",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.close",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_MINIS://ATTACHMENTS/",
+      "mapId": "MAP-0424",
+      "correctedCapabilityId": "external/tool/minis_attachments",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"PLATFORM_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_182",
+      "mapId": "MAP-0425",
+      "correctedCapabilityId": "builtin/tool/general_map_0425",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.file.update_FILE WRITE",
+      "mapId": "MAP-0426",
+      "correctedCapabilityId": "external/file/update_file_write",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_183",
+      "mapId": "MAP-0427",
+      "correctedCapabilityId": "builtin/tool/general_map_0427",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.read_SHIZUKU_ACTION_LISTENER_(UI)",
+      "mapId": "MAP-0428",
+      "correctedCapabilityId": "external/tool/read_shizuku_action_listener",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.read_shizuku_action_listener",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_READ_FILE",
+      "mapId": "MAP-0429",
+      "correctedCapabilityId": "external/file/read_read_file",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_TOOL SCHEMACN",
+      "mapId": "MAP-0430",
+      "correctedCapabilityId": "builtin/tool/tool_schema",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_184",
+      "mapId": "MAP-0431",
+      "correctedCapabilityId": "builtin/tool/general_map_0431",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.execute_STANDARD_RUNTIME_SHELL_EXECUTION",
+      "mapId": "MAP-0432",
+      "correctedCapabilityId": "external/process/standard_runtime_shell_execution",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_185",
+      "mapId": "MAP-0433",
+      "correctedCapabilityId": "builtin/tool/general_map_0433",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_186",
+      "mapId": "MAP-0434",
+      "correctedCapabilityId": "builtin/tool/token_map_0434",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.create_CALENDAR EVENT CREATE",
+      "mapId": "MAP-0435",
+      "correctedCapabilityId": "external/tool/create_calendar_event_create",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.create_calendar_event_create",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.browser.capture_BROWSER_TAKE_SCREENSHOT",
+      "mapId": "MAP-0436",
+      "correctedCapabilityId": "external/browser/capture_browser_take_screenshot",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.capture",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_READ_FILE_BINARY",
+      "mapId": "MAP-0437",
+      "correctedCapabilityId": "external/file/read_read_file_binary",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_187",
+      "mapId": "MAP-0438",
+      "correctedCapabilityId": "builtin/tool/general_map_0438",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_188",
+      "mapId": "MAP-0439",
+      "correctedCapabilityId": "builtin/tool/general_map_0439",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.delete_MEMORY DELETE",
+      "mapId": "MAP-0440",
+      "correctedCapabilityId": "external/memory/delete_memory_delete",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.delete",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_189",
+      "mapId": "MAP-0441",
+      "correctedCapabilityId": "builtin/tool/general_map_0441",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_190",
+      "mapId": "MAP-0442",
+      "correctedCapabilityId": "builtin/tool/general_map_0442",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_191",
+      "mapId": "MAP-0443",
+      "correctedCapabilityId": "builtin/tool/general_map_0443",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.security.read_PERMISSION_READ_EXTERNAL_STORAGE",
+      "mapId": "MAP-0444",
+      "correctedCapabilityId": "external/security/read_permission_read_external_storage",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "security.read_permission_read_external_storage",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.read_ANDROID LOCATION GET",
+      "mapId": "MAP-0445",
+      "correctedCapabilityId": "external/tool/read_android_location_get",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.read_android_location_get",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.system.read_NFC TAG READ",
+      "mapId": "MAP-0446",
+      "correctedCapabilityId": "external/device/read_nfc_tag_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.nfc",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_192",
+      "mapId": "MAP-0447",
+      "correctedCapabilityId": "builtin/tool/general_map_0447",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_THINKING/REASONING MODE",
+      "mapId": "MAP-0448",
+      "correctedCapabilityId": "external/tool/thinking_reasoning_mode",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.thinking_reasoning_mode",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.process.stop_CLOSE_TERMINAL_SESSION",
+      "mapId": "MAP-0449",
+      "correctedCapabilityId": "external/process/stop_close_terminal_session",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.terminate",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_193",
+      "mapId": "MAP-0450",
+      "correctedCapabilityId": "builtin/tool/general_map_0450",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.start_START_APP",
+      "mapId": "MAP-0451",
+      "correctedCapabilityId": "external/system/start_start_app",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.read_READ HEALTH DATA (HEALTHKIT)",
+      "mapId": "MAP-0452",
+      "correctedCapabilityId": "external/memory/read_read_health_data",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_194",
+      "mapId": "MAP-0453",
+      "correctedCapabilityId": "builtin/tool/general_map_0453",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.device.read_BLUETOOTH_READ",
+      "mapId": "MAP-0454",
+      "correctedCapabilityId": "external/device/read_bluetooth_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "device.bluetooth",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.install_PACKAGE_PLUGIN_INSTALL_RECEIVER",
+      "mapId": "MAP-0455",
+      "correctedCapabilityId": "external/extension/install_package_plugin_install_receiver",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "extension.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_IMAGE/MULTIMODAL INPUT",
+      "mapId": "MAP-0456",
+      "correctedCapabilityId": "external/tool/image_multimodal_input",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.image_multimodal_input",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_195",
+      "mapId": "MAP-0457",
+      "correctedCapabilityId": "builtin/tool/general_map_0457",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.update_ANDROID CLIPBOARD WRITE",
+      "mapId": "MAP-0458",
+      "correctedCapabilityId": "external/system/update_android_clipboard_write",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.update",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_196",
+      "mapId": "MAP-0459",
+      "correctedCapabilityId": "builtin/tool/token_map_0459",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_197",
+      "mapId": "MAP-0460",
+      "correctedCapabilityId": "builtin/tool/general_map_0460",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_198",
+      "mapId": "MAP-0461",
+      "correctedCapabilityId": "builtin/tool/general_map_0461",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.execute_EXECUTE_IN_TERMINAL_SESSION",
+      "mapId": "MAP-0462",
+      "correctedCapabilityId": "external/process/execute_in_terminal_session",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "process.execute",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.task.create_REMINDER CREATE",
+      "mapId": "MAP-0463",
+      "correctedCapabilityId": "external/task/create_reminder_create",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "task.create_reminder_create",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_VISIONCN",
+      "mapId": "MAP-0464",
+      "correctedCapabilityId": "builtin/tool/vision",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "vision.analyze",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_199",
+      "mapId": "MAP-0465",
+      "correctedCapabilityId": "builtin/tool/general_map_0465",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_JAVASCRIPT_EXECUTION_(JS_BRIDGE)",
+      "mapId": "MAP-0466",
+      "correctedCapabilityId": "external/tool/javascript_execution",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"EXTENSION_API_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CRASH_GLOBAL_EXCEPTION_HANDLER",
+      "mapId": "MAP-0467",
+      "correctedCapabilityId": "external/tool/crash_global_exception_handler",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"SYSTEM_EVENT_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.character.update_BLUETOOTH_BLE_WRITE_CHARACTERISTIC",
+      "mapId": "MAP-0468",
+      "correctedCapabilityId": "external/character/update_bluetooth_ble_write_characteristic",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "character.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_200",
+      "mapId": "MAP-0469",
+      "correctedCapabilityId": "builtin/tool/general_map_0469",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.read_ANDROID CLIPBOARD READ",
+      "mapId": "MAP-0470",
+      "correctedCapabilityId": "external/tool/read_android_clipboard_read",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.read_android_clipboard_read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.file.read_LIST_FILES",
+      "mapId": "MAP-0471",
+      "correctedCapabilityId": "external/file/read_list_files",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_201",
+      "mapId": "MAP-0472",
+      "correctedCapabilityId": "builtin/tool/general_map_0472",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_202",
+      "mapId": "MAP-0473",
+      "correctedCapabilityId": "builtin/tool/general_map_0473",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_203",
+      "mapId": "MAP-0474",
+      "correctedCapabilityId": "builtin/tool/general_map_0474",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.file.update_EDIT_FILE",
+      "mapId": "MAP-0475",
+      "correctedCapabilityId": "external/file/update_edit_file",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "file.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_204",
+      "mapId": "MAP-0476",
+      "correctedCapabilityId": "builtin/tool/general_map_0476",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_205",
+      "mapId": "MAP-0477",
+      "correctedCapabilityId": "builtin/tool/general_map_0477",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_206",
+      "mapId": "MAP-0478",
+      "correctedCapabilityId": "builtin/tool/general_map_0478",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_207",
+      "mapId": "MAP-0479",
+      "correctedCapabilityId": "builtin/tool/general_map_0479",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.network.execute_HTTP_REQUEST",
+      "mapId": "MAP-0480",
+      "correctedCapabilityId": "external/network/http_request",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "network.http_request",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_208",
+      "mapId": "MAP-0481",
+      "correctedCapabilityId": "builtin/tool/general_map_0481",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.execute_INPUT_EVENT_INJECTION_(SHIZUKU_ADB)",
+      "mapId": "MAP-0482",
+      "correctedCapabilityId": "external/system/input_event_injection",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.control",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.agent.engineering_EXECUTE_PROMPT",
+      "mapId": "MAP-0483",
+      "correctedCapabilityId": "external/agent/engineering_execute_prompt",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "agent.engineering_execute_prompt",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_209",
+      "mapId": "MAP-0484",
+      "correctedCapabilityId": "builtin/tool/general_map_0484",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.create_ALARM CREATE (ALARMKIT)",
+      "mapId": "MAP-0485",
+      "correctedCapabilityId": "external/tool/create_alarm_create",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.create_alarm_create",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_210",
+      "mapId": "MAP-0486",
+      "correctedCapabilityId": "builtin/tool/general_map_0486",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_211",
+      "mapId": "MAP-0487",
+      "correctedCapabilityId": "builtin/tool/general_map_0487",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_212",
+      "mapId": "MAP-0488",
+      "correctedCapabilityId": "builtin/tool/general_map_0488",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_213",
+      "mapId": "MAP-0489",
+      "correctedCapabilityId": "builtin/tool/general_map_0489",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_214",
+      "mapId": "MAP-0490",
+      "correctedCapabilityId": "builtin/tool/general_map_0490",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_215",
+      "mapId": "MAP-0491",
+      "correctedCapabilityId": "builtin/tool/general_map_0491",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_216",
+      "mapId": "MAP-0492",
+      "correctedCapabilityId": "builtin/tool/general_map_0492",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_217",
+      "mapId": "MAP-0493",
+      "correctedCapabilityId": "builtin/tool/general_map_0493",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.memory.update_MEMORY EDIT/UPDATE",
+      "mapId": "MAP-0494",
+      "correctedCapabilityId": "external/memory/update_memory_edit_update",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "memory.write",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_218",
+      "mapId": "MAP-0495",
+      "correctedCapabilityId": "builtin/tool/general_map_0495",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_CLIPBOARD_FALLBACK",
+      "mapId": "MAP-0496",
+      "correctedCapabilityId": "external/tool/clipboard_fallback",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.clipboard_fallback",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_LINK_MEMORIES",
+      "mapId": "MAP-0497",
+      "correctedCapabilityId": "external/tool/link_memories",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "external.tool.link_memories",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.extension.start_MCP_LOCAL_SERVER_LAUNCH",
+      "mapId": "MAP-0498",
+      "correctedCapabilityId": "external/extension/start_mcp_local_server_launch",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "mcp.server",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_219",
+      "mapId": "MAP-0499",
+      "correctedCapabilityId": "builtin/tool/general_map_0499",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_220",
+      "mapId": "MAP-0500",
+      "correctedCapabilityId": "builtin/tool/general_map_0500",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_221",
+      "mapId": "MAP-0501",
+      "correctedCapabilityId": "builtin/tool/general_map_0501",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_LOGCAT_VIEWER",
+      "mapId": "MAP-0502",
+      "correctedCapabilityId": "external/tool/logcat_viewer",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"UI_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_222",
+      "mapId": "MAP-0503",
+      "correctedCapabilityId": "builtin/tool/general_map_0503",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"INTERNAL_ONLY_SUPPORT\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.process.read_GET_TERMINAL_SESSION_SCREEN",
+      "mapId": "MAP-0504",
+      "correctedCapabilityId": "external/browser/read_get_terminal_session_screen",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "browser.read",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    },
+    {
+      "historicalToolId": "tool.tool.execute_OPERITAPPLICATION",
+      "mapId": "MAP-0505",
+      "correctedCapabilityId": "external/system/operitapplication",
+      "resolution": "NOT_ACTUALLY_A_TOOL",
+      "correctedToolId": null,
+      "runtimeResolvable": false,
+      "reason": "Exposure=\"PLATFORM_ONLY\" - Agent does not directly call this capability"
+    },
+    {
+      "historicalToolId": "tool.system.install_SHIZUKU_BUNDLED_INSTALLER",
+      "mapId": "MAP-0506",
+      "correctedCapabilityId": "external/system/install_shizuku_bundled_installer",
+      "resolution": "MIGRATE_TO_KERNEL_TOOL_ID",
+      "correctedToolId": "system.install",
+      "runtimeResolvable": true,
+      "reason": "Historical tool ID format incompatible with kernel format"
+    }
+  ],
+  "summary": {
+    "RETAIN_VALID": 0,
+    "MIGRATE_TO_KERNEL_TOOL_ID": 253,
+    "NOT_ACTUALLY_A_TOOL": 253,
+    "DEPRECATED_HISTORICAL": 0,
+    "MERGED_TOOL": 0,
+    "SPLIT_TOOL": 0,
+    "UNKNOWN": 0
+  }
+}

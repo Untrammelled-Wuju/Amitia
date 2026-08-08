@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "bypasses": [],
+  "scanCoverage": {
+    "scannedFunctions": ["Execute", "Dispatch", "Run", "Invoke", "Call", "ExecuteModelTool", "ExecuteTool", "ExecuteSkill", "ExecuteWorkflow"],
+    "scannedDirectories": ["backend/cmd/server/", "backend/internal/chat/", "backend/internal/extension/", "backend/internal/extension/kernel/"],
+    "chatDirectExecutionCheck": "PASS - chat.execute uses s.toolRuntime (chatToolRuntimeAdapter -> ToolFacade)",
+    "mcpDirectExecutionCheck": "PASS - MCP uses mcpToolFacadeSyncerAdapter -> ToolFacade",
+    "workflowDirectExecutionCheck": "PASS - Workflow executor uses PermissionBroker.Evaluate",
+    "scheduleDirectExecutionCheck": "PASS - Schedule uses KernelToolExecutorAdapter(executionKernel)"
+  },
+  "summary": {
+    "PRODUCTION_TOOL_BYPASS": 0,
+    "PRODUCTION_PERMISSION_BYPASS": 0,
+    "PRODUCTION_EXECUTION_BYPASS": 0,
+    "VALID_DOMAIN_DIRECT_CALL": 0,
+    "TEST_ONLY": 0,
+    "MIGRATION_ONLY": 0,
+    "UNKNOWN": 0
+  }
+}

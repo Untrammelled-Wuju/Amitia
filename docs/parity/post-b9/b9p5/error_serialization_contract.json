@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:40:00+08:00",
+  "contract": {
+    "description": "API/跨端错误序列化边界格式",
+    "format": "JSON",
+    "fields": [
+      {
+        "name": "protocolCode",
+        "type": "string",
+        "required": true,
+        "description": "跨端稳定大类，如ERR_TASK_EXECUTION_FAILED_4002",
+        "example": "ERR_TASK_EXECUTION_FAILED_4002"
+      },
+      {
+        "name": "domain",
+        "type": "string",
+        "required": true,
+        "description": "来源领域标识",
+        "example": "task_runtime"
+      },
+      {
+        "name": "domainCode",
+        "type": "string",
+        "required": true,
+        "description": "精确领域错误码",
+        "example": "task_checkpoint_invalid"
+      },
+      {
+        "name": "message",
+        "type": "string",
+        "required": true,
+        "description": "用户可读描述(已脱敏)"
+      },
+      {
+        "name": "retryable",
+        "type": "boolean",
+        "required": true,
+        "description": "是否可重试(由Domain Error决定)"
+      },
+      {
+        "name": "userVisible",
+        "type": "boolean",
+        "required": true,
+        "description": "是否向用户展示"
+      },
+      {
+        "name": "userActionRequired",
+        "type": "boolean",
+        "required": true,
+        "description": "是否需要用户干预"
+      },
+      {
+        "name": "details",
+        "type": "object",
+        "required": false,
+        "description": "额外上下文(已脱敏)"
+      },
+      {
+        "name": "traceId",
+        "type": "string",
+        "required": true,
+        "description": "分布式追踪ID"
+      },
+      {
+        "name": "timestamp",
+        "type": "string (ISO8601)",
+        "required": true,
+        "description": "错误发生时间"
+      }
+    ],
+    "prohibitedFields": [
+      "stackTrace",
+      "sqlError",
+      "internalPath",
+      "apiKey",
+      "token",
+      "cookie",
+      "internalSecret"
+    ],
+    "recommendation": "不要求所有内部Error类型立即改成该结构，但API边界必须遵循此格式序列化"
+  }
+}

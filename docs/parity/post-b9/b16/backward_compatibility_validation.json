@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "description": "向后兼容性验证",
+  "checks": [
+    {
+      "check": "现有 Model Config 不失效",
+      "status": "PASS",
+      "note": "无代码修改，model_configs 表结构和 API 不变"
+    },
+    {
+      "check": "现有 Provider ID 不失效",
+      "status": "PASS",
+      "note": "无代码修改，19 chat + 5 vision + 8 tts + 4 asr Provider 不变"
+    },
+    {
+      "check": "现有语音 Provider 配置不失效",
+      "status": "PASS",
+      "note": "tts_configs / asr_configs 表无变更"
+    },
+    {
+      "check": "现有 Workflow 定义不失效",
+      "status": "PASS",
+      "note": "Workflow DAG 引擎无修改"
+    },
+    {
+      "check": "现有 Schedule 不失效",
+      "status": "PASS",
+      "note": "Schedule 调度器无修改"
+    },
+    {
+      "check": "现有 Task checkpoint 不失效",
+      "status": "PASS",
+      "note": "Task 运行时无修改"
+    },
+    {
+      "check": "voice_reply Tool 注册不变",
+      "status": "PASS",
+      "note": "tool_migration/registry.go 无修改"
+    },
+    {
+      "check": "LLM Client 调用链路不变",
+      "status": "PASS",
+      "note": "llm_client.go 无修改"
+    }
+  ],
+  "result": "PASS - 无代码修改，完全向后兼容"
+}

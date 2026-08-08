@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "generatedAt": "2026-08-08T13:30:00+08:00",
+  "existingBrowserDomain": false,
+  "existingAutomationProviders": [],
+  "existingWebViews": [],
+  "existingHttpClients": [
+    {
+      "file": "backend/internal/realtime/proxy.go",
+      "description": "WebSocket proxy for realtime audio/dialog, NOT a Browser Provider. 'browser' refers to client WebSocket connection."
+    }
+  ],
+  "existingBrowserToolDefinitions": [],
+  "existingRuntimeBindings": [],
+  "existingPermissionMappings": [],
+  "existingResourceIntegrations": [],
+  "productionCallers": []
+}

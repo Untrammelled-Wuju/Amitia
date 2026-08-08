@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5-B9P4-Manifest",
+  "generatedAt": "2026-08-07T18:33:00+08:00",
+  "description": "B9P5为B9P4提供的正式输入清单",
+  "inputs": [
+    {
+      "id": "STATE_SOURCE_OF_TRUTH",
+      "file": "state_source_of_truth.json",
+      "description": "状态事实源定义，每个Domain的Canonical Owner和协议投影关系",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "PROTOCOL_STATE_MAPPING",
+      "file": "protocol_state_mapping.json",
+      "description": "B9协议状态到Canonical状态的完整映射(91条)",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "ERROR_SOURCE_OF_TRUTH",
+      "file": "error_source_of_truth.json",
+      "description": "错误事实源定义，33个Domain Error Family",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "PROTOCOL_ERROR_MAPPING",
+      "file": "protocol_error_mapping.json",
+      "description": "B9 Protocol Error到Domain Error的映射(21条)",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "STATE_ERROR_GUARD",
+      "file": "state_error_guard.json",
+      "description": "状态/错误架构护栏规则(14条)",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "STATE_MACHINE_OWNERSHIP",
+      "file": "state_machine_ownership.json",
+      "description": "状态机Owner唯一性定义(10个Domain)",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "B9P4_STATE_ERROR_INPUT",
+      "file": "b9p4_state_error_input.json",
+      "description": "B9P4整合用的State/Error输入",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "CANONICAL_STATE_INVENTORY",
+      "file": "canonical_state_inventory.json",
+      "description": "Canoncial状态清单(24个状态模型)",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "CANONICAL_ERROR_INVENTORY",
+      "file": "canonical_error_inventory.json",
+      "description": "Canoncial错误清单(33个错误Family，240+错误码)",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "DUPLICATE_STATE_RISK",
+      "file": "duplicate_state_risk.json",
+      "description": "状态重复风险评估",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "STATE_PERSISTENCE_INVENTORY",
+      "file": "state_persistence_inventory.json",
+      "description": "状态持久化审计清单",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "PROJECTION_RULES",
+      "file": "state_projection_rules.json",
+      "description": "状态投影规则定义",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "RETRYABILITY_MAPPING",
+      "file": "retryability_mapping.json",
+      "description": "重试权归属映射",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "HTTP_ERROR_MAPPING",
+      "file": "http_error_mapping.json",
+      "description": "HTTP错误映射记录",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "ERROR_SERIALIZATION_CONTRACT",
+      "file": "error_serialization_contract.json",
+      "description": "错误序列化边界合同",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "USER_ACTION_MAPPING",
+      "file": "user_action_mapping.json",
+      "description": "用户Action映射",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "PROTOCOL_STATE_CONFLICTS",
+      "file": "protocol_state_conflicts.json",
+      "description": "协议状态冲突分析",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "PROTOCOL_ERROR_CONFLICTS",
+      "file": "protocol_error_conflicts.json",
+      "description": "协议错误冲突分析",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "STATE_DOMAIN_BOUNDARIES",
+      "file": "state_domain_boundaries.json",
+      "description": "状态领域边界定义",
+      "status": "COMPLETE"
+    },
+    {
+      "id": "ERROR_DOMAIN_BOUNDARIES",
+      "file": "error_domain_boundaries.json",
+      "description": "错误领域边界定义",
+      "status": "COMPLETE"
+    }
+  ],
+  "nextStep": "B9P4"
+}

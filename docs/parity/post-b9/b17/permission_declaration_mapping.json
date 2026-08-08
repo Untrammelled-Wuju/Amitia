@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "description": "Permission Declaration 映射 - Manifest 如何声明权限需求",
+  "authority": "PermissionDefinitionRegistry + PermissionBroker",
+  "principle": "Manifest 声明 Permission 引用，不定义 Grant；Manifest 不拥有 Grant Authority",
+  "existingDeclarations": [
+    {
+      "permissionId": "voice.generate",
+      "usedBy": "builtin/message/voice_reply",
+      "manifestRepresentation": "ContributionMeta.RequiredPermissions[] = [voice.generate]",
+      "grantAuthority": "PermissionBroker (NOT Manifest)"
+    },
+    {
+      "permissionId": "schedule.create",
+      "usedBy": "builtin/core/schedule",
+      "manifestRepresentation": "PermissionReq{Name=schedule.create}",
+      "grantAuthority": "PermissionBroker"
+    },
+    {
+      "permissionId": "TOOL_EXECUTE",
+      "usedBy": "all built-in tools",
+      "manifestRepresentation": "Manifest.Permissions[]",
+      "grantAuthority": "PermissionBroker"
+    },
+    {
+      "permissionId": "EXTENSION_MANAGE",
+      "requiredBy": "B9P8 B17 definition",
+      "manifestRepresentation": "Manifest.Permissions[] (extension management)",
+      "grantAuthority": "PermissionBroker"
+    },
+    {
+      "permissionId": "memory.read",
+      "usedBy": "memory tools",
+      "manifestRepresentation": "PermissionReq{Name=memory.read}",
+      "grantAuthority": "PermissionBroker"
+    }
+  ],
+  "manifestPermissions": {
+    "Purpose": "声明该扩展运行时需要哪些权限",
+    "field": "PermissionReq{Name, Reason, Required, Scope}",
+    "NOT_Grant": "Manifest 不自动批准 Permission，用户/管理员仍需通过 PermissionBroker 审批"
+  },
+  "failClosedPrinciple": {
+    "description": "Manifest 引用不存在的 Permission 时，validation 应拒绝安装",
+    "implementation": "Unknown Permission -> validation error or install blocked",
+    "currentBehavior": "Manifest 已有 Validator，可扩展校验 Permission ID 存在性"
+  },
+  "summary": {
+    "existingDeclaredPermissions": 5,
+    "extendedPermissions": 0,
+    "unknownPermissionReferences": 0,
+    "manifestHasGrantAuthority": false
+  }
+}

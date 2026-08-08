@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B42",
+  "canonicalStreamAuthorityCount": 1,
+  "finalResultAuthorityCount": 1,
+  "doubleCompletionCount": 0,
+  "eventAfterCompletionCount": 0,
+  "crossInvocationEventCount": 0,
+  "unknownEventOwnerCount": 0,
+  "productionFakeStreamingProviderCount": 0
+}

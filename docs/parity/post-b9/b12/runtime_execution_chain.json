@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime Execution Chain - 唯一正式执行链",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "canonicalChain": {
+    "step1": {
+      "name": "Tool/Capability Definition",
+      "authority": "ToolRegistry (backend/internal/extension/kernel/capability/registry.go)",
+      "purpose": "Single source of truth for tool definitions with RuntimeBinding"
+    },
+    "step2": {
+      "name": "ExecutionPipeline",
+      "authority": "ExecutionPipeline (backend/internal/extension/kernel/execution/pipeline.go)",
+      "gates": [
+        "InvocationValidator", "InputValidator", "AvailabilityGate", "ScopeGate",
+        "PermissionGate", "ApprovalGate", "ConcurrencyCtrl", "RateLimiter",
+        "IdempotencyGuard", "RetryCtrl", "TimeoutCtrl", "CancellationCtrl", "DepthGuard"
+      ]
+    },
+    "step3": {
+      "name": "Permission Evaluation",
+      "authority": "PermissionBroker (backend/internal/extension/kernel/permission/broker.go)",
+      "integration": "ExecutionPipeline.PermissionGate calls PermissionBroker.Evaluate()"
+    },
+    "step4": {
+      "name": "RuntimeDispatcher",
+      "authority": "DefaultToolExecutor or ExecutionPipeline.Dispatcher",
+      "action": "Resolve RuntimeBinding from ToolDefinition.Runtime"
+    },
+    "step5": {
+      "name": "RuntimeAdapterRegistry",
+      "authority": "RuntimeAdapterRegistry (capability/executor.go)",
+      "action": "Resolve RuntimeAdapter via RuntimeAdapterRegistry.Resolve(binding)"
+    },
+    "step6": {
+      "name": "RuntimeAdapter",
+      "interface": "RuntimeAdapter.Execute(ctx, binding, invocation, input)",
+      "action": "Translate, validate binding-specific input, delegate to provider"
+    },
+    "step7": {
+      "name": "Platform Provider / Runtime",
+      "examples": ["AndroidAccessibility", "iOSHealthKit", "DesktopClipboard", "BrowserRuntime", "WASM", "JavaScript"],
+      "action": "Execute capability on specific platform/runtime"
+    },
+    "step8": {
+      "name": "Result Normalization",
+      "authority": "RuntimeAdapter.Execute returns UnifiedToolResult",
+      "action": "Domain provider results normalized back to unified contract"
+    },
+    "step9": {
+      "name": "Post-execution Pipeline",
+      "gates": ["ResultValidator", "Sanitizer", "SideEffectRec", "AuditRec", "MetricsRec", "CircuitBreaker"]
+    },
+    "step10": {
+      "name": "RuntimeHost / RuntimeOrchestrator",
+      "authority": "RuntimeHost (runtimehost/host.go) + RuntimeOrchestrator (runtimeorchestrator/orchestrator.go)",
+      "purpose": "Runtime lifecycle management, process supervision, health monitoring"
+    }
+  },
+
+  "forbiddenPaths": [
+    "Agent -> Provider (direct)",
+    "Tool -> Provider (direct, bypassing ExecutionPipeline)",
+    "Agent -> RuntimeAdapter (direct)",
+    "Agent -> Platform Provider (direct)",
+    "New provider on LegacyRuntimeAdapter"
+  ],
+
+  "notes": [
+    "Permission Authority remains PermissionBroker (no bypass)",
+    "Execution Authority remains ExecutionPipeline (no bypass)",
+    "Tool Authority remains ToolRegistry (single source of truth)",
+    "RuntimeAdapterRegistry remains the only adapter registry",
+    "All paths go through UnifiedToolResult"
+  ]
+}

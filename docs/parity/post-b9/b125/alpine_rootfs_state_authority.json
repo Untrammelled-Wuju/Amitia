@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "BLOCKED",
+
+  "stateAuthority": {
+    "rootfsInstallStateOwner": "B125 Rootfs Install Domain",
+    "rootfsInstallStates": ["NOT_INSTALLED", "INSTALLING", "INSTALLED", "CORRUPT", "FAILED"],
+    "runtimeStateOwner": "B126 Runtime Lifecycle (deferred)",
+    "ishBackendStateOwner": "B124 iSH Backend",
+    "toolExecutionStateOwner": "Tool Execution Domain (B126+)"
+  },
+
+  "separation": {
+    "rootfsInstalledEqualsRuntimeReady": false,
+    "rootfsInstalledEqualsToolExecutable": false,
+    "note": "Rootfs INSTALLED ≠ Runtime READY"
+  },
+
+  "sameSemanticDualWriter": 0,
+
+  "blocker": "B124未PASS，state owner未建立"
+}

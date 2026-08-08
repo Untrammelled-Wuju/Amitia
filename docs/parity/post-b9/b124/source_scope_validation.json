@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T17:30:00+08:00",
+  "description": "B124 Source Scope Validation",
+  "status": "DOCUMENTATION_ONLY",
+  "modifiedFiles": [],
+  "allowedFiles": ["docs/parity/post-b9/b124/*"],
+  "unexpectedFiles": [],
+  "dependencyValidation": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "pubspecChanged": false,
+    "podfileChanged": false,
+    "swiftPackageChanged": false,
+    "databaseChanged": false
+  }
+}

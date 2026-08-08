@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "description": "源码作用域验证",
+  "modifiedFiles": [],
+  "allowedFiles": [
+    "docs/parity/post-b9/b16/*"
+  ],
+  "unexpectedFiles": [],
+  "goModChanged": false,
+  "goSumChanged": false,
+  "databaseChanged": false,
+  "note": "B16 为合同映射步骤，仅生成 docs/ 目录下的 JSON 报告文件。无源码修改",
+  "validation": {
+    "withinAllowedPaths": true,
+    "noUnplannedModifications": true,
+    "scope": "合同映射 + 审计文档输出"
+  }
+}

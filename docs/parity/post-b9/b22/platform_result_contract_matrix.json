@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "Platform Result合同矩阵 - 验证Android/iOS/Desktop返回的Result合同完全一致",
+
+  "matrix": [
+    {
+      "contract": "Result type",
+      "android": "UnifiedToolResult (Canonical)",
+      "ios": "UnifiedToolResult (Canonical)",
+      "desktop": "UnifiedToolResult (Canonical)",
+      "uniform": true
+    },
+    {
+      "contract": "Status values",
+      "android": "success/failed/cancelled/timed_out",
+      "ios": "success/failed/cancelled/timed_out",
+      "desktop": "success/failed/cancelled/timed_out",
+      "uniform": true
+    },
+    {
+      "contract": "Structured output",
+      "android": "json.RawMessage",
+      "ios": "json.RawMessage",
+      "desktop": "json.RawMessage",
+      "uniform": true
+    },
+    {
+      "contract": "Text content",
+      "android": "ToolContent{text}",
+      "ios": "ToolContent{text}",
+      "desktop": "ToolContent{text}",
+      "uniform": true
+    },
+    {
+      "contract": "Resource reference",
+      "android": "ToolContent{resourceUri}",
+      "ios": "ToolContent{resourceUri}",
+      "desktop": "ToolContent{resourceUri}",
+      "uniform": true
+    },
+    {
+      "contract": "Bridge DTO consumed by adapter only",
+      "android": true,
+      "ios": true,
+      "desktop": true,
+      "uniform": true
+    }
+  ],
+
+  "summary": {
+    "totalContracts": 6,
+    "androidPass": 6,
+    "iosPass": 6,
+    "desktopPass": 6,
+    "anyFail": 0
+  },
+
+  "noPlatformSpecificResultType": true,
+  "allUseUnifiedToolResult": true,
+  "bridgeDtoNeverLeaksToConsumer": true,
+
+  "statement": "Android、iOS、Desktop三个Platform Adapter的Result合同完全一致，全部使用UnifiedToolResult作为Canonical Result类型，不存在平台专属Result类型。"
+}

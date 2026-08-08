@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "domain": "MODEL",
+  "description": "从 B9P8 final_capability_manifest / B9P4 corrected_capability_registry 提取的 Model 相关语义需求",
+  "requiredSemantics": [
+    {
+      "capabilityId": "builtin/tool/execute_workflow",
+      "numericId": 2011,
+      "displayName": "执行工作流",
+      "domain": "tool",
+      "action": "execute",
+      "permissionSemantics": "TOOL_EXECUTE",
+      "toolExposure": "AGENT_TOOL_REQUIRED",
+      "note": "工具执行，非 Model 语义本身，但与 Model 调用 Workflow 相关"
+    },
+    {
+      "capabilityId": "builtin/tool/manage_voice_preset",
+      "numericId": 2053,
+      "displayName": "管理语音预设",
+      "domain": "tool",
+      "action": "execute",
+      "permissionSemantics": "TOOL_EXECUTE",
+      "toolExposure": "AGENT_TOOL_OPTIONAL",
+      "note": "Voice 配置，间接与 Model 预设相关"
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_model",
+      "numericId": 2029,
+      "displayName": "人格特质模型",
+      "domain": "tool",
+      "action": "execute",
+      "permissionSemantics": "TOOL_EXECUTE",
+      "toolExposure": "AGENT_TOOL_OPTIONAL",
+      "note": "Model 人格能力"
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_service",
+      "displayName": "人格特质服务",
+      "domain": "tool",
+      "action": "execute",
+      "note": "Model 人格能力"
+    },
+    {
+      "capabilityId": "builtin/tool/streaming_output",
+      "numericId": 2014,
+      "displayName": "流式输出",
+      "domain": "tool",
+      "action": "execute",
+      "permissionSemantics": "TOOL_EXECUTE",
+      "toolExposure": "REQUIRED",
+      "note": "当前 backend 不支持 streaming (stream=false hardcoded)，属于 Gap"
+    },
+    {
+      "capabilityId": "builtin/model/* (B16 requiredCapabilityIds)",
+      "description": "B9P8 step_reuse_matrix 声明 requiredCapabilityIds 包含 builtin/model/*",
+      "status": "GAP",
+      "note": "当前 corrected_capability_registry.json 中没有以 builtin/model/* 命名的 capability。Model 能力以 ToolDefinition.ModelName 间接关联"
+    },
+    {
+      "semantic": "text_generation",
+      "description": "LLM 聊天生成 (chat completion)",
+      "existingImplementation": "backend/internal/chat/llm_client.go (callLLMMode)",
+      "currentExposure": "host internal only (not Agent Tool)"
+    },
+    {
+      "semantic": "streaming_chat",
+      "description": "流式 LLM 聊天",
+      "existingImplementation": "missing",
+      "note": "当前 stream: false 硬编码，无 SSE/WebSocket streaming"
+    },
+    {
+      "semantic": "embedding",
+      "description": "文本嵌入向量",
+      "existingImplementation": "backend/internal/embedding/embedding.go",
+      "currentExposure": "host internal service"
+    },
+    {
+      "semantic": "vision_understanding",
+      "description": "视觉理解/图片分析",
+      "existingImplementation": "backend/internal/vision/service.go",
+      "providerProtocols": ["volcengine_responses_api"],
+      "currentExposure": "host internal service"
+    },
+    {
+      "semantic": "image_generation",
+      "description": "图片生成",
+      "existingImplementation": "image_gen_configs 表存在",
+      "note": "配置表已定义但 Service 未实现完整"
+    },
+    {
+      "semantic": "responses_api",
+      "description": "OpenAI Responses API 协议",
+      "existingImplementation": "missing",
+      "note": "仅视觉模型使用 ARK Responses 端点，非 OpenAI Responses API"
+    },
+    {
+      "semantic": "model_selection",
+      "description": "模型选择/路由",
+      "existingImplementation": "backend/internal/chat/model_service.go (GetActive/ActivateModel)",
+      "currentExposure": "config - Agent 不直接选择"
+    },
+    {
+      "semantic": "scenario_routing",
+      "description": "场景路由 (model_scenario_routes)",
+      "existingImplementation": "backend/internal/chat/repository.go (GetModelRoutes)",
+      "currentExposure": "config layer"
+    }
+  ],
+  "sourceManifests": [
+    "docs/parity/post-b9/b9p3/corrected_capability_registry.json",
+    "docs/parity/post-b9/b9p4/capability_tool_mapping.json",
+    "docs/parity/post-b9/b9p7/step_reuse_matrix.json (B16 definition)"
+  ]
+}

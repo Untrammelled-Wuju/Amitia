@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B43",
+  "existingNonStreamToolsUnaffected": true,
+  "existingCancelToolsWork": true,
+  "noBreakingCancelSemantics": true
+}

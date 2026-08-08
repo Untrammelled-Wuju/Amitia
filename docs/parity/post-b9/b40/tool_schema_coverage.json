@@ -1,0 +1,12 @@
+[
+  {
+    "toolId": "* (all registered ToolDefinition instances)",
+    "source": "any",
+    "inputSchema": "ToolDefinition.InputSchema",
+    "inputValidation": "InputValidator (sizeonly) + InvocationValidator",
+    "outputSchema": "ToolDefinition.OutputSchema",
+    "outputValidation": "ResultValidator (size/status/empty-content)",
+    "modelProjection": "ToolFacade.buildKernelModelTools / exposure.GetModelTools",
+    "status": "VALID_SCHEMA"
+  }
+]

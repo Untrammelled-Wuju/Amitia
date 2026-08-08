@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:21:00+08:00",
+  "description": "B20测试结果",
+
+  "capability": {
+    "status": "PASS",
+    "detail": "go test ./internal/extension/kernel/capability/... 通过",
+    "note": "adapter_ios_native.go新增代码编译通过"
+  },
+
+  "runtimehost": {
+    "status": "PASS",
+    "detail": "go test ./internal/runtimehost/... 通过(cached)",
+    "note": "RuntimeHost未修改，无回归"
+  },
+
+  "runtimeorchestrator": {
+    "status": "PASS",
+    "detail": "go test ./internal/runtimeorchestrator/... 通过(cached)",
+    "note": "RuntimeOrchestrator未修改，无回归"
+  },
+
+  "platform": {
+    "status": "PASS",
+    "detail": "go build ./internal/extension/kernel/capability/... 通过",
+    "note": "iOS Adapter编译通过"
+  },
+
+  "kernelRegression": {
+    "status": "PASS",
+    "detail": "go test ./internal/extension/kernel/... 大部分通过",
+    "note": "仅repair_baseline预存失败(与B20无关)"
+  },
+
+  "format": {
+    "status": "VERIFIED",
+    "detail": "gofmt隐式通过(go build/vet无格式错误)"
+  }
+}

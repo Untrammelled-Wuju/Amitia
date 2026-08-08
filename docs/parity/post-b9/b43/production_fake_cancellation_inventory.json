@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B43",
+  "description": "生产伪取消实现清单 — 扫描结果确认不存在任何伪/假取消实现",
+  "scanTimestamp": "2026-08-08",
+  "result": "NO_FAKE_CANCELLATION_IMPLEMENTATIONS_FOUND",
+  "scannedPatterns": [
+    "interface stubs not connected to execution pipeline",
+    "status-only cancellation flags without propagation",
+    "cancel methods that do not block adapter execution",
+    "orphan cancellation counters that are never checked"
+  ],
+  "findings": [],
+  "verificationMethod": "AST analysis of all cancel/Cancel/Cancellation identifiers in backend/internal/extension/kernel/ excluding test files",
+  "count": 0
+}

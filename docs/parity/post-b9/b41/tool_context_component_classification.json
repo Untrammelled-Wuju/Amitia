@@ -1,0 +1,39 @@
+[
+  {
+    "component": "capability.ToolInvocationContext",
+    "classification": "CANONICAL_TOOL_INVOCATION",
+    "path": "backend/internal/extension/kernel/capability/invocation.go"
+  },
+  {
+    "component": "capability.ToolInvocation (legacy struct)",
+    "classification": "LEGACY_CONTEXT",
+    "path": "backend/internal/extension/kernel/capability/tool.go",
+    "note": "Thin data struct (ToolID, Input, IdempotencyKey, TraceID). Replaced by ToolInvocationContext on ToolExecutionRequest.Invocation."
+  },
+  {
+    "component": "execution.ToolExecutionRequest",
+    "classification": "EXECUTION_PIPELINE_CONTEXT",
+    "path": "backend/internal/extension/kernel/execution/kernel.go",
+    "note": "Carries canonical ToolInvocationContext as its Invocation field."
+  },
+  {
+    "component": "execution.ExecutionPipeline",
+    "classification": "EXECUTION_PIPELINE_CONTEXT",
+    "path": "backend/internal/extension/kernel/execution/pipeline.go"
+  },
+  {
+    "component": "capability.RuntimeAdapterRegistry + DefaultToolExecutor",
+    "classification": "RUNTIME_PROJECTION",
+    "path": "backend/internal/extension/kernel/capability/executor.go"
+  },
+  {
+    "component": "BuiltinRuntimeAdapter / MCPRuntimeAdapter / WorkflowRuntimeAdapter / etc.",
+    "classification": "RUNTIME_PROJECTION",
+    "path": "backend/internal/extension/kernel/capability/adapter_*.go"
+  },
+  {
+    "component": "InvocationSource enum",
+    "classification": "CANONICAL_TOOL_INVOCATION",
+    "note": "model / user / workflow / plugin / system / scheduled_task / computer_use"
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "note": "Media Metadata按各Domain现有合同，无统一Media Metadata合同。B15不新增。",
+  "commonMetadata": {
+    "exists": false,
+    "required": false,
+    "reason": "各Domain有独立Metadata需求，Domain-specific types suffice"
+  },
+  "image": {
+    "mimeType": "In CandidateImage.GeneratedImage",
+    "format": "Implicit from MIME",
+    "width": "In CandidateImage/GeneratedImage",
+    "height": "In CandidateImage/GeneratedImage"
+  },
+  "audio": {
+    "mimeType": "Implicit (mp3 default)",
+    "duration": "In SynthesizeResponse",
+    "sampleRate": "In audioParams (TTS) or AudioConfig (Realtime)",
+    "channels": "In AudioConfig (Realtime)"
+  },
+  "video": {
+    "exists": false,
+    "note": "Future B87-B89"
+  },
+  "formatRegistryCreated": false,
+  "newMetadataContract": false
+}

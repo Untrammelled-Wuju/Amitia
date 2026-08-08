@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Checkpoint所有权矩阵 - 不同Checkpoint类型及其Owner",
+
+  "checkpointTypes": [
+    {
+      "checkpointType": "Pipeline Checkpoint",
+      "owner": "pipelinecheckpoint.Manager",
+      "sourcePath": "backend/internal/pipelinecheckpoint/manager.go",
+      "scope": "Conversation + PipelineType",
+      "persistence": "SQLite (pipeline_checkpoints table)",
+      "recoveryConsumer": "interaction.Orchestrator, chat.Handler",
+      "overlap": "None",
+      "description": "对话处理进度检查点，跟踪已处理的消息序列"
+    },
+    {
+      "checkpointType": "Mind Snapshot",
+      "owner": "mindruntime.Snapshot",
+      "sourcePath": "backend/internal/mindruntime/snapshot.go",
+      "scope": "Character",
+      "persistence": "SurrealDB",
+      "recoveryConsumer": "mindruntime.Replay, mindruntime.Reconciliation",
+      "overlap": "None",
+      "description": "Mind状态快照，用于恢复和重放"
+    },
+    {
+      "checkpointType": "Interaction Tracker",
+      "owner": "interaction.InteractionTracker",
+      "sourcePath": "backend/internal/interaction/tracker.go",
+      "scope": "Interaction (RequestID)",
+      "persistence": "In-memory + SQLite",
+      "recoveryConsumer": "interaction.Orchestrator, interaction.StartupRecovery",
+      "overlap": "None",
+      "description": "交互追踪，记录交互状态"
+    },
+    {
+      "checkpointType": "Queue Checkpoint",
+      "owner": "queue.RuntimeQueueStore",
+      "sourcePath": "backend/internal/queue/runtime_queue_store.go",
+      "scope": "Task",
+      "persistence": "SQLite",
+      "recoveryConsumer": "queue.PriorityQueue",
+      "overlap": "None",
+      "description": "队列任务持久化"
+    },
+    {
+      "checkpointType": "Outbox Record",
+      "owner": "outbox.SQLiteOutboxStore",
+      "sourcePath": "backend/internal/outbox/store_sqlite.go",
+      "scope": "Event",
+      "persistence": "SQLite",
+      "recoveryConsumer": "delivery worker",
+      "overlap": "None",
+      "description": "事件Outbox，用于可靠事件投递"
+    }
+  ],
+
+  "summary": {
+    "totalCheckpointTypes": 5,
+    "sameSemanticDualWriter": 0,
+    "authorityConflicts": 0,
+    "notes": "每种Checkpoint职责不同，无同一语义双写问题"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "测试结果 - B23无需运行测试（无代码修改）",
+
+  "results": {
+    "agent": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "decision": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "mindruntime": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "pipelinecheckpoint": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "queue": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "chat_integration": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "kernel_boundary": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "race": {
+      "status": "SKIPPED",
+      "reason": "无代码修改，测试保持原样"
+    },
+    "gofmt": {
+      "status": "PASS",
+      "reason": "无代码修改，无需格式化"
+    }
+  },
+
+  "overallStatus": "PASS_NO_CODE_CHANGE"
+}

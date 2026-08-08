@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19-B22-INPUT",
+  "generatedAt": "2026-08-08T15:21:00+08:00",
+  "description": "B22 Adapter Conformance Android输入 - 供统一Conformance",
+
+  "androidAdapter": {
+    "canonicalEntry": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+    "runtimeType": "RuntimeTypeAndroid_Native",
+    "runtimeBinding": "android_native",
+    "registrationPoint": "RuntimeAdapterRegistry.Register(RuntimeTypeAndroid_Native, adapter)"
+  },
+
+  "binding": {
+    "canResolve": true,
+    "rejectsUnsupported": true,
+    "adapterLookupCorrect": true
+  },
+
+  "request": {
+    "validation": true,
+    "contextPropagation": true,
+    "providerIdentity": true
+  },
+
+  "result": {
+    "normalization": true,
+    "unifiedToolResult": true,
+    "invocationIDPreserved": true
+  },
+
+  "cancellation": {
+    "propagation": true,
+    "pendingCleanup": true
+  },
+
+  "error": {
+    "normalization": true,
+    "domainCodePreserved": true,
+    "bridgeVsProviderSeparation": true
+  },
+
+  "availability": {
+    "unavailableWhenNoProvider": true,
+    "healthCorrect": true
+  },
+
+  "registration": {
+    "exactlyOne": true,
+    "canonicalLocation": true,
+    "noLegacyBinding": true
+  }
+}

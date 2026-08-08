@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:18:00+08:00",
+  "description": "验证B20未创建任何重复系统 - 全部必须为0",
+
+  "newIOSToolRegistry": 0,
+  "newIOSCapabilityRegistry": 0,
+  "newIOSPermissionBroker": 0,
+  "newIOSPermissionStore": 0,
+  "newIOSExecutionPipeline": 0,
+  "newRuntimeAdapterRegistry": 0,
+  "newIOSRuntimeHost": 0,
+  "newIOSRuntimeOrchestrator": 0,
+  "newIOSRuntimeManager": 0,
+  "newIOSStateStore": 0,
+  "newIOSErrorRegistry": 0,
+  "newIOSProviderGlobalRegistry": 0,
+  "newIOSTaskRuntime": 0,
+  "newIOSScheduler": 0,
+
+  "canonicalSystems": {
+    "toolRegistry": "唯一 ToolRegistry (existing)",
+    "executionPipeline": "唯一 ExecutionPipeline (existing)",
+    "permissionBroker": "唯一 PermissionBroker (existing)",
+    "runtimeAdapterRegistry": "唯一 RuntimeAdapterRegistry (existing, 新增iOS Adapter注册)",
+    "runtimeHost": "唯一 RuntimeHost (existing, 复用)",
+    "runtimeOrchestrator": "唯一 RuntimeOrchestrator (existing, 复用)",
+    "taskRuntime": "唯一 TaskRuntime (existing, 复用)",
+    "schedule": "唯一 Schedule (existing, 复用)",
+    "resourceURI": "唯一 ResourceURI (existing)",
+    "stateStore": "无 (各Domain状态已分层)",
+    "errorRegistry": "无 (使用现有ToolError)"
+  }
+}

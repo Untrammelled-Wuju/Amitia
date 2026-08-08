@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P8",
+  "runtimeAuthority": false,
+  "description": "Legacy系统分类为迁移源/只读/兼容层/冻结运行时/测试用，禁止生产执行",
+  "legacySystems": [
+    {
+      "systemId": "LEGACY_AGENT_TOOL",
+      "name": "AgentTool",
+      "canonicalPaths": ["backend/internal/agent/tool/"],
+      "role": "Type definitions + migration source",
+      "classification": "MIGRATION_SOURCE",
+      "status": "MIGRATION_ONLY",
+      "exitCondition": "所有Type/Function完全迁移到Extension Kernel后删除"
+    },
+    {
+      "systemId": "LEGACY_EXTENSION_RUNTIME",
+      "name": "ExtensionRuntime",
+      "canonicalPaths": ["backend/internal/extension/runtime.go"],
+      "role": "Legacy runtime bridge + kernel bridge",
+      "classification": "FROZEN_RUNTIME",
+      "status": "LEGACY_FROZEN",
+      "exitCondition": "Kernel完全独立运行后可移除"
+    }
+  ],
+  "counts": {
+    "legacySystemCount": 12,
+    "productionLegacyRegistryReaders": 0,
+    "productionLegacyRegistryWriters": 0,
+    "productionLegacyExecutors": 0,
+    "productionLegacyFallbacks": 0,
+    "temporaryMigrationAdapters": 8,
+    "migrationAdapterWithoutExitCondition": 0,
+    "productionFallbackAllowed": 0,
+    "newRegistrationsAllowed": 0,
+    "permanentDualRegistration": 0
+  },
+  "classificationSummary": {
+    "TYPE_ONLY": 0,
+    "READ_ONLY": 0,
+    "MIGRATION_SOURCE": 2,
+    "COMPATIBILITY": 0,
+    "FROZEN_RUNTIME": 2,
+    "TEST_ONLY": 0
+  },
+  "guard": {
+    "productionLegacyExecution": false,
+    "productionLegacyFallbackAllowed": false,
+    "permanentDualRegistrationAllowed": false,
+    "newLegacyRegistrationAllowed": false
+  }
+}

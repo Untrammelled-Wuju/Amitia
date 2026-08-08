@@ -1,0 +1,2540 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "totalAgentCallable": 253,
+  "required": 147,
+  "optional": 106,
+  "capabilities": [
+    {
+      "capabilityId": "external/system/update_update_full_apk",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0002",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0002"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/control_close_all_virtual_displays",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0003",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0003"
+      ]
+    },
+    {
+      "capabilityId": "external/system/update_update_user_preferences",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0004",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0004"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/register_task_goal",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0005",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0005"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/manage_character_template",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0006",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0006"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/manage_character_config",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0007",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0007"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/manage_working_memory",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0008",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0008"
+      ]
+    },
+    {
+      "capabilityId": "external/system/install_install_app",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0010",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0010"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/belief_batch_process",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0011",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0011"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/update_memory_write",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0013",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0013"
+      ]
+    },
+    {
+      "capabilityId": "external/device/update_modify_system_setting",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0015",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0015"
+      ]
+    },
+    {
+      "capabilityId": "external/file/update_file_edit",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0016",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0016"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/import_chat",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0018",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0018"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/execute_workflow",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0019",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0019"
+      ]
+    },
+    {
+      "capabilityId": "external/process/execute_hidden_terminal_command",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0020",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0020"
+      ]
+    },
+    {
+      "capabilityId": "external/process/create_create_terminal_session",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0021",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0021"
+      ]
+    },
+    {
+      "capabilityId": "external/security/send_permission_post_notifications",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0022",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0022"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_memory_fuzzy_search",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0023",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0023"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/cross_session_persistence",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0024",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0024"
+      ]
+    },
+    {
+      "capabilityId": "external/system/install_workspace_import_export",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0025",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0025"
+      ]
+    },
+    {
+      "capabilityId": "external/system/install_application_install_uninstall",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0026",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0026"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/floating_window_overlay",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0027",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0027"
+      ]
+    },
+    {
+      "capabilityId": "external/security/read_permission_read_phone_state",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0028",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0028"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/belief_system_engine",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0029",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0029"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/execute_task_plan",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0030",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0030"
+      ]
+    },
+    {
+      "capabilityId": "external/device/device_info",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0032",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0032"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/vision_ocr",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0034",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0034"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_query_memory_links",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0035",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0035"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/preserve_backup_backup",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0037",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0037"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/transfer_transfer_data",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0039",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0039"
+      ]
+    },
+    {
+      "capabilityId": "external/system/install_toolpkg_install_zip",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0041",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0041"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/grep_code",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0046",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0046"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_bluetooth_send_and_read",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0047",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0047"
+      ]
+    },
+    {
+      "capabilityId": "external/conversation/manage_conversation",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0048",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0048"
+      ]
+    },
+    {
+      "capabilityId": "builtin/conversation/channel",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0049",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0049"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/capture_capture_screenshot",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0051",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0051"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/install_mcp_plugin_install_server",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0054",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0054"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_camera_capture",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0055",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0055"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/update_update_memory",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0056",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0056"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/import_history",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0058",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0058"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_model",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0059",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0059"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/update_update_memory_link",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0061",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0061"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/calculator",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0062",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0062"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/music_status",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0064",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0064"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/automation_execute_browser",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0065",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0065"
+      ]
+    },
+    {
+      "capabilityId": "external/search/vectorindexmanager",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0067",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0067"
+      ]
+    },
+    {
+      "capabilityId": "external/security/permission_call_phone",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0068",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0068"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/control_virtualdisplayoverlay",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0070",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0070"
+      ]
+    },
+    {
+      "capabilityId": "external/process/execute_in_terminal_session_streaming",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0076",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0076"
+      ]
+    },
+    {
+      "capabilityId": "external/character/read_bluetooth_ble_read_characteristic",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0078",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0078"
+      ]
+    },
+    {
+      "capabilityId": "external/network/request_enable_bluetooth",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0079",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0079"
+      ]
+    },
+    {
+      "capabilityId": "external/device/bluetooth_accept",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0080",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0080"
+      ]
+    },
+    {
+      "capabilityId": "external/character/management_execute_character",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0081",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0081"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/decision_consistency_check",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0085",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0085"
+      ]
+    },
+    {
+      "capabilityId": "external/system/read_get_app_usage_time",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0086",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0086"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/set_input_text",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0090",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0090"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_service",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0092",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0092"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/control_screen_capture",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0093",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0093"
+      ]
+    },
+    {
+      "capabilityId": "external/device/send_bluetooth_send",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0096",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0096"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/memory_system_service",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0098",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0098"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/manage_voice_preset",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0099",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0099"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/desktop_clipboard_bridge",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0100",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0100"
+      ]
+    },
+    {
+      "capabilityId": "external/system/read_list_installed_apps",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0105",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0105"
+      ]
+    },
+    {
+      "capabilityId": "external/device/bluetooth_ble_discover_services",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0106",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0106"
+      ]
+    },
+    {
+      "capabilityId": "external/process/operitshowershellrunner",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0108",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0108"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/control_media_playback_control",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0111",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0111"
+      ]
+    },
+    {
+      "capabilityId": "external/system/install_uninstall_app",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0117",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0117"
+      ]
+    },
+    {
+      "capabilityId": "external/character/update_bluetooth_ble_write_and_read_characteristic",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0118",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0118"
+      ]
+    },
+    {
+      "capabilityId": "external/notification/read_bluetooth_ble_read_notifications",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0119",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0119"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/install_data_import",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0121",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0121"
+      ]
+    },
+    {
+      "capabilityId": "external/voice/read_voicelistfetcher",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0122",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0122"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/delete_delete_memory",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0125",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0125"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/install_skill_installation_import",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0127",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0127"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_get_system_setting",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0131",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0131"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/session_persistence",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0137",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0137"
+      ]
+    },
+    {
+      "capabilityId": "external/system/update_clipboard_write",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0143",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0143"
+      ]
+    },
+    {
+      "capabilityId": "external/character/read_list_character_cards",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0148",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0148"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/delete_delete_memory_link",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0149",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0149"
+      ]
+    },
+    {
+      "capabilityId": "external/task/task",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0152",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0152"
+      ]
+    },
+    {
+      "capabilityId": "external/file/make_directory",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0153",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0153"
+      ]
+    },
+    {
+      "capabilityId": "external/system/open_url_app",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0155",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0155"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/sshd_server_manager",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0156",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0156"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/ffmpeg_convert",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0157",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0157"
+      ]
+    },
+    {
+      "capabilityId": "external/agent/agent_status",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0160",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0160"
+      ]
+    },
+    {
+      "capabilityId": "external/character/read_personalwakelistener",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0161",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0161"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/capture_browser_screenshot",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0163",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0163"
+      ]
+    },
+    {
+      "capabilityId": "external/voice/audio",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0164",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0164"
+      ]
+    },
+    {
+      "capabilityId": "external/notification/toast",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0166",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0166"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/install_skill_import_from_zip",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0168",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0168"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/control_music_play_queue",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0172",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0172"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/clipboard_access",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0174",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0174"
+      ]
+    },
+    {
+      "capabilityId": "external/system/control_stop_app",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0176",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0176"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/integration_execute_mcp_server",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0177",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0177"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/ftp_server_manager",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0178",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0178"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/switch_browser_select_option",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0179",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0179"
+      ]
+    },
+    {
+      "capabilityId": "external/agent/run_ui_subagent",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0180",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0180"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/create_create_memory",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0181",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0181"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/stop_browser_close",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0184",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0184"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/control_music_stop",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0185",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0185"
+      ]
+    },
+    {
+      "capabilityId": "external/notification/notification_fgs_management",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0186",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0186"
+      ]
+    },
+    {
+      "capabilityId": "external/process/nlp_processing",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0193",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0193"
+      ]
+    },
+    {
+      "capabilityId": "external/notification/notification_management",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0194",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0194"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/ffmpeg_info",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0195",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0195"
+      ]
+    },
+    {
+      "capabilityId": "external/file/update_write_file",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0198",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0198"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/send_share_intent",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0199",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0199"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/workflow_dag_execute",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0200",
+      "runtimeBinding": "workflow",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0200"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/read_clipboard_read",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0201",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0201"
+      ]
+    },
+    {
+      "capabilityId": "external/device/capture_camera_image_capture",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0203",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0203"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/photo_library_access",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0209",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0209"
+      ]
+    },
+    {
+      "capabilityId": "external/security/start_permission_bluetooth_connect",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0212",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0212"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/create_workflow_create",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0213",
+      "runtimeBinding": "workflow",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0213"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/ffmpeg_execute",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0214",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0214"
+      ]
+    },
+    {
+      "capabilityId": "external/file/update_write_file_binary",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0216",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0216"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_get_device_location",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0219",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0219"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/press_key",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0220",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0220"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_bluetooth_listen",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0222",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0222"
+      ]
+    },
+    {
+      "capabilityId": "external/file/start_sshfileconnectionmanager",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0224",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0224"
+      ]
+    },
+    {
+      "capabilityId": "external/system/rootsystemoperationtools",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0226",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0226"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/use_package",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0230",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0230"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_list_bluetooth_bonded_devices",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0232",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0232"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/capture_screen_capture",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0233",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0233"
+      ]
+    },
+    {
+      "capabilityId": "external/file/create_create_file",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0235",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0235"
+      ]
+    },
+    {
+      "capabilityId": "external/process/execute_shell",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0237",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0237"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_filesystem_listing",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0238",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0238"
+      ]
+    },
+    {
+      "capabilityId": "external/voice/capture_permission_record_audio",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0239",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0239"
+      ]
+    },
+    {
+      "capabilityId": "external/device/system_settings_manipulation",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0240",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0240"
+      ]
+    },
+    {
+      "capabilityId": "external/model/embedding_embeddingconverter",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0241",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0241"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/install_skill_install_from_github",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0242",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0242"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_get_memory_by_title",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0245",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0245"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/music_set_volume",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0246",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0246"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/assistant_intent_activity",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0247",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0247"
+      ]
+    },
+    {
+      "capabilityId": "external/device/stop_bluetooth_close",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0250",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0250"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_query_memory",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0252",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0252"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/sleep_delay",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0253",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0253"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/mcp_tool_invoke",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0254",
+      "runtimeBinding": "mcp",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0254"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/manage_cookies",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0255",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0255"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_memorysearchsettingspreferences",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0256",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0256"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/interface_execute_ui",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0257",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0257"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/long_press",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0258",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0258"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/control_reasoning_thinking_display",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0260",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0260"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_read_file_full",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0261",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0261"
+      ]
+    },
+    {
+      "capabilityId": "external/security/send_permission_send_sms",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0262",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0262"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/read_android_contacts_read",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0264",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0264"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/execute_intent",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0271",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0271"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/control_screen_casting",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0276",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0276"
+      ]
+    },
+    {
+      "capabilityId": "external/character/personalwakefeatureextractor",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0277",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0277"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/send_send_broadcast",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0281",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0281"
+      ]
+    },
+    {
+      "capabilityId": "external/notification/send_send_notification",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0283",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0283"
+      ]
+    },
+    {
+      "capabilityId": "external/device/device_info_map_0284",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0284",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0284"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/control_music_resume",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0285",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0285"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_file_read",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0286",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0286"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/management_execute_skill",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0287",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0287"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/browser_run_code",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0289",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0289"
+      ]
+    },
+    {
+      "capabilityId": "external/character/install_character_card_sillytavern_import",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0290",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0290"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/capture_screen_recording_casting",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0294",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0294"
+      ]
+    },
+    {
+      "capabilityId": "external/model/cloudembeddingservice",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0295",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0295"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/read_get_page_info",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0297",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0297"
+      ]
+    },
+    {
+      "capabilityId": "external/process/execution_execute_shell",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0299",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0299"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/control_music_play",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0300",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0300"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/location_tracking",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0302",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0302"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/read_screen_capture",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0303",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0303"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/update_write_health_data",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0305",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0305"
+      ]
+    },
+    {
+      "capabilityId": "external/file/delete_delete_file",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0308",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0308"
+      ]
+    },
+    {
+      "capabilityId": "external/system/install_application_install",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0309",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0309"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/persistence_execute_database",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0313",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0313"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_read_file_part",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0316",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0316"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/memory",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0318",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0318"
+      ]
+    },
+    {
+      "capabilityId": "external/security/permission",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0320",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0320"
+      ]
+    },
+    {
+      "capabilityId": "external/security/read_permission_read_contacts",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0323",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0323"
+      ]
+    },
+    {
+      "capabilityId": "external/device/start_bluetooth_connect",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0325",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0325"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/tap",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0328",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0328"
+      ]
+    },
+    {
+      "capabilityId": "external/search/read_android_weather_query",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0330",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0330"
+      ]
+    },
+    {
+      "capabilityId": "external/system/update_update_patch_incremental",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0332",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0332"
+      ]
+    },
+    {
+      "capabilityId": "external/security/install_permission_request_install_packages",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0337",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0337"
+      ]
+    },
+    {
+      "capabilityId": "external/device/bluetooth_device_detection",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0339",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0339"
+      ]
+    },
+    {
+      "capabilityId": "external/notification/read_get_notifications",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0340",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0340"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/capture_screenshot_share",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0341",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0341"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/swipe",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0343",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0343"
+      ]
+    },
+    {
+      "capabilityId": "external/system/accessibilitysystemoperationtools",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0346",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0346"
+      ]
+    },
+    {
+      "capabilityId": "external/device/bluetooth_device_scan",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0347",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0347"
+      ]
+    },
+    {
+      "capabilityId": "external/network/multipart_request",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0349",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0349"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/create_workspace_create",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0355",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0355"
+      ]
+    },
+    {
+      "capabilityId": "external/notification/read_android_notification_read",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0356",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0356"
+      ]
+    },
+    {
+      "capabilityId": "external/network/api_key_encryption",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0357",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0357"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/read_location_get",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0358",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0358"
+      ]
+    },
+    {
+      "capabilityId": "external/voice/switch_tts_voice_selection",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0359",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0359"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_find_files",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0360",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0360"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/stop_android_calendar_access",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0366",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0366"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/management_execute_extension",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0371",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0371"
+      ]
+    },
+    {
+      "capabilityId": "external/device/device_admin_privilege",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0377",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0377"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/location_tracking_map_0378",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0378",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0378"
+      ]
+    },
+    {
+      "capabilityId": "external/voice/microphone",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0381",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0381"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/control_music_pause",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0383",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0383"
+      ]
+    },
+    {
+      "capabilityId": "external/device/bluetooth_device_management",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0384",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0384"
+      ]
+    },
+    {
+      "capabilityId": "external/device/homekit_device_control",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0385",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0385"
+      ]
+    },
+    {
+      "capabilityId": "external/system/shortcuts_app_intents",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0386",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0386"
+      ]
+    },
+    {
+      "capabilityId": "external/security/update_permission_write_contacts",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0387",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0387"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/share_sheet",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0388",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0388"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/adminsystemoperationtools",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0392",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0392"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_memorysearchconfig_memorysearchdebuginfo",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0394",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0394"
+      ]
+    },
+    {
+      "capabilityId": "external/model/onnxsilerovad",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0395",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0395"
+      ]
+    },
+    {
+      "capabilityId": "external/device/start_bluetooth_ble_connect",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0397",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0397"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_get_bluetooth_state",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0399",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0399"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/music_seek",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0403",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0403"
+      ]
+    },
+    {
+      "capabilityId": "external/security/update_permission_write_settings",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0405",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0405"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/floatingwindowmanager",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0408",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0408"
+      ]
+    },
+    {
+      "capabilityId": "external/file/management_execute_file",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0409",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0409"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/workflow",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0410",
+      "runtimeBinding": "workflow",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0410"
+      ]
+    },
+    {
+      "capabilityId": "external/search/read_weather_query",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0411",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0411"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/start_mcp_remote_server_connect",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0413",
+      "runtimeBinding": "mcp",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0413"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_filesystem_search",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0414",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0414"
+      ]
+    },
+    {
+      "capabilityId": "external/voice/control_queuedttsplayback",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0416",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0416"
+      ]
+    },
+    {
+      "capabilityId": "external/device/scan_bluetooth_devices",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0417",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0417"
+      ]
+    },
+    {
+      "capabilityId": "external/model/management_execute_model",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0418",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0418"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_memory_get_retrieve",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0419",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0419"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/switch_workspace_select_switch",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0421",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0421"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/stop_browser_close_all",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0423",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0423"
+      ]
+    },
+    {
+      "capabilityId": "external/file/update_file_write",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0426",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0426"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/read_shizuku_action_listener",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0428",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0428"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_read_file",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0429",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0429"
+      ]
+    },
+    {
+      "capabilityId": "external/process/standard_runtime_shell_execution",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0432",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0432"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/create_calendar_event_create",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0435",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0435"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/capture_browser_take_screenshot",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0436",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0436"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_read_file_binary",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0437",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0437"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/delete_memory_delete",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0440",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0440"
+      ]
+    },
+    {
+      "capabilityId": "external/security/read_permission_read_external_storage",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0444",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0444"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/read_android_location_get",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0445",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0445"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_nfc_tag_read",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0446",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0446"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/thinking_reasoning_mode",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0448",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0448"
+      ]
+    },
+    {
+      "capabilityId": "external/process/stop_close_terminal_session",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0449",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0449"
+      ]
+    },
+    {
+      "capabilityId": "external/system/start_start_app",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0451",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0451"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/read_read_health_data",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0452",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0452"
+      ]
+    },
+    {
+      "capabilityId": "external/device/read_bluetooth_read",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0454",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0454"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/install_package_plugin_install_receiver",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0455",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0455"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/image_multimodal_input",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0456",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0456"
+      ]
+    },
+    {
+      "capabilityId": "external/system/update_android_clipboard_write",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0458",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0458"
+      ]
+    },
+    {
+      "capabilityId": "external/process/execute_in_terminal_session",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0462",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0462"
+      ]
+    },
+    {
+      "capabilityId": "external/task/create_reminder_create",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0463",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0463"
+      ]
+    },
+    {
+      "capabilityId": "builtin/tool/vision",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0464",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0464"
+      ]
+    },
+    {
+      "capabilityId": "external/character/update_bluetooth_ble_write_characteristic",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0468",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0468"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/read_android_clipboard_read",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0470",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0470"
+      ]
+    },
+    {
+      "capabilityId": "external/file/read_list_files",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0471",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0471"
+      ]
+    },
+    {
+      "capabilityId": "external/file/update_edit_file",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0475",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0475"
+      ]
+    },
+    {
+      "capabilityId": "external/network/http_request",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0480",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0480"
+      ]
+    },
+    {
+      "capabilityId": "external/system/input_event_injection",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0482",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0482"
+      ]
+    },
+    {
+      "capabilityId": "external/agent/engineering_execute_prompt",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0483",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0483"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/create_alarm_create",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0485",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0485"
+      ]
+    },
+    {
+      "capabilityId": "external/memory/update_memory_edit_update",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0494",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0494"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/clipboard_fallback",
+      "exposure": "AGENT_TOOL_OPTIONAL",
+      "scopeItemId": "MAP-0496",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0496"
+      ]
+    },
+    {
+      "capabilityId": "external/tool/link_memories",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0497",
+      "runtimeBinding": "builtin",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0497"
+      ]
+    },
+    {
+      "capabilityId": "external/extension/start_mcp_local_server_launch",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0498",
+      "runtimeBinding": "mcp",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0498"
+      ]
+    },
+    {
+      "capabilityId": "external/browser/read_get_terminal_session_screen",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0504",
+      "runtimeBinding": "plugin_js",
+      "highRisk": false,
+      "sourceEvidence": [
+        "MAP-0504"
+      ]
+    },
+    {
+      "capabilityId": "external/system/install_shizuku_bundled_installer",
+      "exposure": "AGENT_TOOL_REQUIRED",
+      "scopeItemId": "MAP-0506",
+      "runtimeBinding": "builtin",
+      "highRisk": true,
+      "sourceEvidence": [
+        "MAP-0506"
+      ]
+    }
+  ]
+}

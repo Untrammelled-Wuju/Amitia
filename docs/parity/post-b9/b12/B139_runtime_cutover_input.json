@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12-B139-INPUT",
+  "description": "B139 Runtime Cutover输入 - 最终Platform Adapter切入正式Runtime体系",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "cutoverRequirements": {
+    "description": "B139负责最终Platform Adapter切入正式Runtime体系 - B12提供合同准备",
+    "scope": {
+      "android": "Android Adapter/Android Provider正式接入Runtime体系",
+      "ios": "iOS Adapter/iOS Provider正式接入Runtime体系",
+      "desktop": "Desktop Adapter正式接入Runtime体系"
+    }
+  },
+
+  "preConditions": {
+    "b12ContractComplete": true,
+    "adapterAdmissionRulesDefined": true,
+    "securityContractDefined": true,
+    "platformAdapterContractDocumented": true
+  },
+
+  "cutoverContract": {
+    "android": {
+      "contract": "Android Adapter must conform to RuntimeAdapter interface",
+      "registration": "RuntimeAdapterRegistry.Register(RuntimeTypeAndroid, androidAdapter)",
+      "permission": "Integration with PermissionBroker verified",
+      "resultNormalization": "UnifiedToolResult path verified",
+      "health": "Health() endpoint reports Android Provider status"
+    },
+    "ios": {
+      "contract": "iOS Adapter must conform to RuntimeAdapter interface",
+      "registration": "RuntimeAdapterRegistry.Register(RuntimeTypeIOS, iOSAdapter)",
+      "permission": "Integration with PermissionBroker verified",
+      "resultNormalization": "UnifiedToolResult path verified",
+      "health": "Health() endpoint reports iOS Provider status"
+    },
+    "desktop": {
+      "contract": "Desktop Adapter must conform to RuntimeAdapter interface",
+      "registration": "RuntimeAdapterRegistry.Register(RuntimeTypeDesktop, desktopAdapter)",
+      "permission": "Integration with PermissionBroker verified",
+      "resultNormalization": "UnifiedToolResult path verified",
+      "health": "Health() endpoint reports Desktop Provider status"
+    }
+  },
+
+  "forbiddenAtB139": [
+    "NO_RUNTIME_HOST_SECOND - RuntimeHost保持唯一",
+    "NO_RUNTIME_ORCHESTRATOR_SECOND - RuntimeOrchestrator保持唯一",
+    "NO_RUNTIME_ADAPTER_REGISTRY_SECOND - RuntimeAdapterRegistry保持唯一",
+    "NO_ANDROID_RUNTIME_MANAGER2 - Android接入现有Adapter体系",
+    "NO_IOS_RUNTIME_MANAGER2 - iOS接入现有Adapter体系",
+    "NO_DESKTOP_RUNTIME_MANAGER2 - Desktop接入现有Adapter体系"
+  ]
+}

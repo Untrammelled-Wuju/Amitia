@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19",
+  "generatedAt": "2026-08-08T15:04:00+08:00",
+  "description": "Android Provider合同 - 未来B62-B78 Android Native Provider必须遵守的规则",
+
+  "providerInterface": "AndroidProvider",
+  "contract": {
+    "mustImplement": "AndroidProvider interface (Execute/Health)",
+    "mustRegister": "通过Adapter注册，不直接注册Tool",
+    "mustUsePermission": "Kernel Permission已通过PermissionBroker判定后才能到达Provider",
+    "mustReturnValue": "通过Bridge Response，由Adapter归一为UnifiedToolResult",
+    "mustPropagate": ["ctx cancellation", "invocation ID", "deadline"],
+    "mustNotContain": [
+      "independent ToolRegistry",
+      "independent PermissionStore",
+      "independent AgentPlanner",
+      "independent global state",
+      "independent RetryEngine",
+      "independent TimeoutEngine"
+    ]
+  },
+
+  "permissionBoundary": {
+    "kernelAuthority": "PermissionBroker - 判定Kernel Permission决定是否调用Provider",
+    "platformAuthorization": "AndroidProvider负责OS级权限(如android.permission.CAMERA)，返回USER_ACTION_REQUIRED/DENIED等",
+    "adapterStoresNeither": true
+  },
+
+  "stateBoundary": {
+    "androidEmbeddedRuntimeState": "Android RuntimeStateMachine (NOT_MODIFIED)",
+    "adapterAvailability": "从Bridge和Runtime派生，不持久化",
+    "providerHealth": "Provider Domain State (health/unhealthy/unavailable)",
+    "osAuthorization": "Provider内部状态",
+    "toolExecutionState": "ExecutionPipeline统一状态"
+  },
+
+  "errorBoundary": {
+    "bridgeError": "METHOD_CHANNEL_DISCONNECTED, BRIDGE_TIMEOUT -> ToolError(ErrorCodeConnectionLost/ErrorCodeTimeout)",
+    "providerError": "ACCESSIBILITY_DISABLED, NOTIFICATION_PERMISSION_DENIED -> ToolError(ErrorCodePermissionDenied + domainCode)",
+    "availabilityError": "PROVIDER_UNAVAILABLE -> ToolError(ErrorCodeNotAvailable)"
+  },
+
+  "futureProviderSteps": "B62-B78",
+  "contractOnly": true
+}

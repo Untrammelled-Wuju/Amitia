@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "当前Runtime Infrastructure Inventory",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "runtimeBindingTypes": [
+    {
+      "name": "RuntimeType",
+      "path": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "constants": [
+        "builtin", "plugin_js", "plugin_service", "mcp", "workflow",
+        "internal", "legacy", "javascript", "wasm", "trusted_service", "task", "browser"
+      ],
+      "count": 12
+    },
+    {
+      "name": "RuntimeBinding",
+      "path": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "fields": ["RuntimeType", "RuntimeID", "HandlerName", "Endpoint", "Metadata"]
+    }
+  ],
+
+  "runtimeAdapters": [
+    {
+      "name": "RuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "interface": ["Supports(binding)", "Execute(ctx, binding, invocation, input)", "Health(ctx, binding)"]
+    }
+  ],
+
+  "runtimeAdapterRegistry": {
+    "path": "backend/internal/extension/kernel/capability/executor.go",
+    "type": "RuntimeAdapterRegistry",
+    "methods": ["Register(rt, adapter)", "Resolve(binding)"],
+    "isCanonical": true
+  },
+
+  "runtimeDispatcher": {
+    "path": "backend/internal/extension/kernel/capability/executor.go",
+    "type": "DefaultToolExecutor",
+    "method": "Execute(ctx, tool, invocation, input)",
+    "integratesWith": ["AvailabilityEval", "AdapterRegistry"]
+  },
+
+  "runtimeHost": {
+    "path": "backend/internal/runtimehost/host.go",
+    "interface": "RuntimeHost",
+    "methods": ["Descriptor()", "Capabilities()", "Paths()", "Processes()", "RuntimeInstanceID()"],
+    "implementations": ["nativeProcessHost"],
+    "isCanonical": true
+  },
+
+  "runtimeOrchestrator": {
+    "path": "backend/internal/runtimeorchestrator/orchestrator.go",
+    "type": "RuntimeOrchestrator",
+    "methods": ["Register(component)", "StartPhase(ctx, phase)", "StopAll(ctx)", "Snapshot()"],
+    "stateModel": ["created", "starting", "ready", "degraded", "blocked", "stopping", "stopped"],
+    "componentModel": true,
+    "isCanonical": true
+  },
+
+  "processSupervisors": [
+    {
+      "name": "ProcessSupervisor",
+      "path": "backend/internal/runtimehost/supervisor.go",
+      "interface": ["Register", "Unregister", "Start", "WaitReady", "Restart", "Stop", "StopAll", "Snapshot", "List", "Subscribe"],
+      "implementation": "defaultProcessSupervisor"
+    }
+  ],
+
+  "platformAbstractions": [
+    {
+      "name": "RuntimeDescriptor",
+      "path": "backend/pkg/platform/runtime_descriptor.go",
+      "fields": ["Host", "Kind", "Guest", "Architecture"],
+      "hostPlatforms": ["unknown", "android", "ios", "windows", "macos", "linux"],
+      "runtimeKinds": ["unknown", "native-process", "proot", "embedded", "sandbox", "remote"],
+      "guestPlatforms": ["unknown", "none", "android", "ios", "windows", "macos", "linux"]
+    }
+  ],
+
+  "processManager": {
+    "path": "backend/internal/platform/process/",
+    "platforms": ["windows", "linux", "darwin", "restricted", "other"],
+    "files": ["manager.go", "process.go", "environment.go", "export.go", "isolation.go"]
+  },
+
+  "runtimeSupervisor": {
+    "path": "backend/internal/extension/kernel/runtime_supervisor/",
+    "type": "DefaultSupervisor",
+    "methods": ["RegisterFactory", "Reconcile", "Invoke", "Stop", "Drain", "Restart", "Snapshot"],
+    "domain": "Extension Runtime Lifecycle (DesiredState/ActualState/Circuit/Health)",
+    "files": ["supervisor.go", "types.go", "fake.go", "errors.go", "definition_id.go"]
+  },
+
+  "extensionRuntime": {
+    "path": "backend/internal/extension/kernel/runtime.go",
+    "type": "Runtime",
+    "methods": ["Install", "List", "Recover", "ConfirmPackageUninstall", "SignUninstallConfirmation", "VerifyUninstallConfirmation"],
+    "note": "Extension package management runtime, distinct from platform adapter runtime"
+  },
+
+  "executionPipeline": {
+    "path": "backend/internal/extension/kernel/execution/pipeline.go",
+    "type": "ExecutionPipeline",
+    "gates": [
+      "InvocationValidator", "InputValidator", "AvailabilityGate",
+      "ScopeGate", "PermissionGate", "ApprovalGate",
+      "ConcurrencyCtrl", "RateLimiter", "IdempotencyGuard",
+      "RetryCtrl", "TimeoutCtrl", "CancellationCtrl",
+      "DepthGuard", "Dispatcher", "ResultValidator",
+      "Sanitizer", "SideEffectRec", "AuditRec", "MetricsRec", "CircuitBreaker"
+    ],
+    "canonical": true
+  },
+
+  "productionCallers": [
+    "ExecutionPipeline -> RuntimeDispatcher -> RuntimeAdapterRegistry -> RuntimeAdapter",
+    "RuntimeSupervisor -> RuntimeFactory -> Extension Runtime instances",
+    "RuntimeHost (nativeProcessHost) -> ProcessManager -> OS Process",
+    "RuntimeOrchestrator -> ManagedComponent lifecycle"
+  ]
+}

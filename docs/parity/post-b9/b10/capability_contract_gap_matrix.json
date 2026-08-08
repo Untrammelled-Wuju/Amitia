@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B10",
+  "description": "B10 Capability/Tool合同Gap分析矩阵",
+  "generatedAt": "2026-08-07T23:59:00+08:00",
+  "summary": {
+    "totalRequiredSemantics": 16,
+    "alreadySupported": 16,
+    "partiallySupported": 0,
+    "missing": 0,
+    "outsideB10Scope": 0,
+    "notRequired": 0,
+    "unresolved": 0
+  },
+
+  "gapMatrix": [
+    {
+      "contractId": "CAP-001",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability唯一标识符 (source/namespace/name)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/id.go",
+        "type": "CapabilityID / BuildCapabilityID",
+        "field": "CapabilityID string type + BuildCapabilityID(source, namespace, name)",
+        "evidence": "B9P3冻结的BuildCapabilityID、BuildToolID体系，无需修改"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-002",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability分类体系 (tool/workflow_entry/provider_action等)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/source.go",
+        "type": "CapabilityType",
+        "field": "CapabilityType (tool/workflow_entry/provider_action/desktop_action/internal_action)",
+        "evidence": "完整的CapabilityType枚举，支持8种能力类型"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-003",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability归属信息 (Owner/Source)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/owner.go + source.go",
+        "type": "ResourceOwner + CapabilitySource",
+        "field": "OwnerType/system/user/extension/shared/temporary + CapabilitySource枚举",
+        "evidence": "完整的ResourceOwner结构和CapabilitySource/CapabilitySourceToToolSource映射"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-004",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability输入/输出契约",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/definition.go",
+        "type": "CapabilityDefinition.InputSchema/OutputSchema",
+        "field": "InputSchema json.RawMessage + OutputSchema json.RawMessage",
+        "evidence": "CapabilityDefinition和ToolDefinition都支持完整的InputSchema/OutputSchema声明"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-005",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability权限需求声明",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/tool.go",
+        "type": "[]PermissionRequirement",
+        "field": "PermissionRequirement{Capability, Description, Risk}",
+        "evidence": "PermissionRequirement用于声明能力所需的权限ID和风险标记，决策由B11处理"
+      },
+      "action": "REUSE - 零修改（Permission决策归B11）",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-006",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability作用域规则",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/tool.go",
+        "type": "ScopeRule",
+        "field": "ScopeRule{Type, ID}",
+        "evidence": "ScopeRule用于声明能力作用域约束"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-007",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability风险等级",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/tool.go",
+        "type": "RiskLevel",
+        "field": "RiskLevel枚举 (low/medium/high)",
+        "evidence": "RiskLevel枚举完整，已用于CapabilityDefinition和ToolDefinition"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-008",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability副作用等级",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/tool.go",
+        "type": "SideEffectLevel",
+        "field": "SideEffectLevel枚举 (none/read_only/write/external/system/financial/destructive)",
+        "evidence": "SideEffectLevel枚举完整（7个等级），另有HasSideEffects布尔字段"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-009",
+      "finalManifestSource": "final_capability_manifest.json",
+      "requiredSemantic": "Capability运行时绑定",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+        "type": "RuntimeBinding + RuntimeType",
+        "field": "RuntimeType枚举(11种) + RuntimeBinding{RuntimeType, RuntimeID, HandlerName, Endpoint, Metadata}",
+        "evidence": "RuntimeBinding完整声明了运行时类型、ID、处理器名、端点和元数据"
+      },
+      "action": "REUSE - 零修改（Adapter实现归B12）",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-010",
+      "finalManifestSource": "final_tool_manifest.json",
+      "requiredSemantic": "Tool注册与查询 (Register/Replace/Batch/Get/List/Index)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/registry.go",
+        "type": "ToolRegistry",
+        "field": "18个方法：Register/Replace/BatchRegister/BatchReplace/Unregister/UnregisterByOwner/Get/GetByModelName/List/ListByOwner/ListBySource/SetEnabled/RegisterModelName/ResolveModelName/Count/CountBySource/CountByOwner",
+        "evidence": "ToolRegistry具备完整的注册、查询、索引、ModelName解析能力，包含byOwner和bySource二级索引"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-011",
+      "finalManifestSource": "final_tool_manifest.json",
+      "requiredSemantic": "Tool调用上下文 (完整的调用元数据)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/invocation.go",
+        "type": "ToolInvocationContext",
+        "field": "InvocationID/ParentID/UserID/CharacterID/ConversationID/ExtensionID/ModuleID/Generation/Source/ApprovalMode/ExpiresAt/IdempotencyKey/TraceID/Metadata/ScheduleID/TriggerID/OperationID/ScopeSnapshotID/PermissionSnapshotID",
+        "evidence": "ToolInvocationContext携带18个字段，覆盖完整调用链追踪"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-012",
+      "finalManifestSource": "final_tool_manifest.json",
+      "requiredSemantic": "Tool结果契约 (UnifiedToolResult)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/result.go",
+        "type": "UnifiedToolResult",
+        "field": "InvocationID/Status/Content/Structured/Error/SideEffects/Metadata",
+        "evidence": "UnifiedToolResult为Canonical结果类型，支持7种Content类型（含stream）、取消状态、副作用记录"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-013",
+      "finalManifestSource": "final_tool_manifest.json",
+      "requiredSemantic": "Tool错误契约 (ToolError标准化)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/result.go",
+        "type": "ToolError",
+        "field": "Code/Message/Retryable/UserVisible/Details/Cause + 14种ErrorCode常量",
+        "evidence": "ToolError实现error接口，包含Unwrap支持Cause链，14种标准错误码覆盖完整错误分类"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-014",
+      "finalManifestSource": "final_tool_manifest.json",
+      "requiredSemantic": "Tool可用性判定 (AvailabilityEvaluator + ToolState)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/availability.go + state.go",
+        "type": "AvailabilityEvaluator + ToolState",
+        "field": "AvailabilityResult{Visible/Executable/Reasons} + ToolState{8个状态字段} + DefaultAvailabilityEvaluator",
+        "evidence": "AvailabilityEvaluator接口 + DefaultAvailabilityEvaluator实现，通过ToolState的VisibleToModel/Executable方法集成Scope/Runtime评估"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-015",
+      "finalManifestSource": "final_tool_manifest.json",
+      "requiredSemantic": "Tool执行策略 (Timeout/Concurrency/Retry/Idempotent等)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/definition.go",
+        "type": "ToolExecutionPolicy + ResourceLimits",
+        "field": "Timeout/MaxConcurrency/RetryPolicy/Idempotent/ApprovalRequired/AllowBackground/MaxDepth/ResourceLimits(MaxMemoryBytes/MaxCPUPercent)",
+        "evidence": "ToolExecutionPolicy完整声明了所有执行策略字段；另外有ToolDefinition.TimeoutMS作为便捷字段"
+      },
+      "action": "REUSE - 零修改（策略执行归B39-B54）",
+      "targetPath": null,
+      "futureStep": null
+    },
+    {
+      "contractId": "CAP-016",
+      "finalManifestSource": "final_tool_manifest.json",
+      "requiredSemantic": "Tool模型暴露策略 (B9P4冻结的ExposurePolicy)",
+      "existingSupport": {
+        "status": "ALREADY_SUPPORTED",
+        "sourcePath": "backend/internal/extension/kernel/capability/definition.go + exposure.go",
+        "type": "ModelExposureRule + ToolExposureManager",
+        "field": "ExposedByDefault/RequiresActivation/Categories/MaxPromptTokens/Priority + ToolExposureManager.GetModelTools",
+        "evidence": "ModelExposureRule提供完整的曝光策略声明，ToolExposureManager按优先级和token预算选择可见工具"
+      },
+      "action": "REUSE - 零修改",
+      "targetPath": null,
+      "futureStep": null
+    }
+  ]
+}

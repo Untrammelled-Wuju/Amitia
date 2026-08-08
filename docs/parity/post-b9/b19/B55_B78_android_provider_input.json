@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19-B55-B78-INPUT",
+  "generatedAt": "2026-08-08T15:22:00+08:00",
+  "description": "B55-B78 Android Provider实现输入 - 分类Linux与Native",
+
+  "androidAdapterCanonicalEntry": {
+    "adapter": "androidRuntimeAdapter",
+    "path": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+    "providerInterface": "AndroidProvider"
+  },
+
+  "runtimeBinding": {
+    "androidNative": "RuntimeTypeAndroid_Native",
+    "embeddedLinux": "RuntimeTypeBuiltin/Internal (existing)"
+  },
+
+  "providerContract": {
+    "interface": "AndroidProvider { Execute(ctx, request) AndroidBridgeResponse; Health() HealthStatus }",
+    "mustRegister": "通过AndroidRuntimeAdapter注册",
+    "mustNotRegisterGlobalTool": true
+  },
+
+  "permissionBoundary": {
+    "kernelPermission": "PermissionBroker判定 + Kernel Permission ID如 service.android.*",
+    "platformAuthorization": "Android Provider内部处理OS权限 (android.permission.*)"
+  },
+
+  "resourceBoundary": {
+    "canonicalScheme": "amitia://",
+    "androidContentScheme": "content://仅限Provider内部"
+  },
+
+  "errorContract": {
+    "bridgeErrors": ["BRIDGE_DISCONNECTED -> ErrorCodeConnectionLost", "BRIDGE_TIMEOUT -> ErrorCodeTimeout"],
+    "providerErrors": ["AUTHORIZATION_DENIED -> ErrorCodePermissionDenied", "USER_ACTION_REQUIRED -> ErrorCodePermissionDenied + domainCode"]
+  },
+
+  "stateBoundary": {
+    "runtimeState": "RuntimeStateMachine (不修改)",
+    "adapterAvailability": "动态派生",
+    "providerHealth": "各Provider报告"
+  },
+
+  "registrationRules": {
+    "noGlobalRegistry": true,
+    "providerPerCapability": true,
+    "adapterMediation": true
+  },
+
+  "legacyProhibition": {
+    "noLegacyRuntimeAdapter": true,
+    "noBypassKernel": true
+  },
+
+  "linuxProviders": [
+    {
+      "step": "B55",
+      "capability": "shell/exec",
+      "type": "EMBEDDED_LINUX_PROVIDER",
+      "routing": "RuntimeHost (不经过Android Adapter)"
+    },
+    {
+      "step": "B55-B61",
+      "capability": "filesystem/process",
+      "type": "EMBEDDED_LINUX_PROVIDER",
+      "routing": "RuntimeHost + ProotComponent"
+    }
+  ],
+
+  "nativeProviders": [
+    {
+      "step": "B62-B65",
+      "capability": "accessibility",
+      "type": "ANDROID_NATIVE_PROVIDER",
+      "routing": "Android Adapter -> MethodChannel -> AccessibilityService"
+    },
+    {
+      "step": "B66",
+      "capability": "adb",
+      "type": "ANDROID_NATIVE_PROVIDER",
+      "routing": "Android Adapter -> Bridge"
+    },
+    {
+      "step": "B70-B71",
+      "capability": "screenshot",
+      "type": "ANDROID_NATIVE_PROVIDER",
+      "routing": "Android Adapter -> Bridge"
+    },
+    {
+      "step": "B72",
+      "capability": "camera",
+      "type": "ANDROID_NATIVE_PROVIDER",
+      "routing": "Android Adapter -> Bridge"
+    },
+    {
+      "step": "B73",
+      "capability": "notification",
+      "type": "ANDROID_NATIVE_PROVIDER",
+      "routing": "Android Adapter -> Bridge"
+    },
+    {
+      "step": "B74",
+      "capability": "clipboard",
+      "type": "ANDROID_NATIVE_PROVIDER",
+      "routing": "Android Adapter -> Bridge"
+    }
+  ]
+}

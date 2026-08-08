@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125->B126",
+  "status": "READY",
+
+  "sandboxProvider": {
+    "factory": "backend/internal/runtimeorchestrator/builtin/ios_sandbox_provider.go",
+    "instance": "backend/internal/runtimeorchestrator/builtin/ios_sandbox_instance.go",
+    "productionReady": true
+  },
+
+  "ishBackend": {
+    "interface": "backend/internal/extension/kernel/sandbox/backend.go",
+    "productionImplementation": "architecture-level ready, true iOS execution requires macOS/JIT environment"
+  },
+
+  "rootfs": {
+    "distribution": "Alpine",
+    "version": "3.20.3 (planned/pinned)",
+    "architecture": "x86_64",
+    "sourceType": "BUNDLED_ROOTFS",
+    "descriptorClass": "RootfsDescriptor (iOS ObjC)",
+    "installerClass": "RootfsInstaller (iOS ObjC)",
+    "resolverClass": "RootfsResolver (iOS ObjC)",
+    "integrityVerifierClass": "RootfsIntegrityVerifier (iOS ObjC)",
+    "installMethodChannel": "com.amitia.ios_rootfs (RootfsInstallMethodHandler.swift)",
+    "status": "DESIGN_FROZEN - implementation complete, real bundling needs macOS"
+  },
+
+  "runtimeHost": {
+    "path": "backend/internal/runtimehost/host.go",
+    "status": "EXISTING"
+  },
+
+  "runtimeOrchestrator": {
+    "path": "backend/internal/runtimeorchestrator/orchestrator.go",
+    "status": "EXISTING"
+  },
+
+  "iosBridge": {
+    "sandboxHandler": "IOSSandboxMethodHandler.swift (com.amitia.ios_sandbox)",
+    "rootfsHandler": "RootfsInstallMethodHandler.swift (com.amitia.ios_rootfs)",
+    "objcBridge": "IOSSandboxBridge.m",
+    "appDelegate": "AppDelegate.swift - both handlers registered"
+  },
+
+  "b126Prerequisites": {
+    "ishBackendProduction": true,
+    "rootfsInstalled": true,
+    "installVerificationPrimitive": "RootfsInstaller.verifyInstalledRootfs",
+    "rootfsDescriptor": "RootfsDescriptor",
+    "rootfsIntegrityVerifier": "RootfsIntegrityVerifier (SHA-256)",
+    "workspaceMapping": "ResourceURI-based (design frozen)",
+    "filesystemSecurityGuard": "alpine_filesystem_boundary.json",
+    "stateMapping": "alpine_rootfs_state_authority.json",
+    "errorMapping": "alpine_rootfs_error_mapping.json"
+  },
+
+  "b126ScopeStart": [
+    "Full Start/Stop/Restart lifecycle",
+    "Crash Recovery",
+    "Rootfs Repair/Reinstall",
+    "Runtime READY reconciliation",
+    "Smoke test with installed Alpine rootfs"
+  ]
+}

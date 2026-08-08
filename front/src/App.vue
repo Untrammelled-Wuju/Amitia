@@ -3,6 +3,9 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
+  <div id="amitia-debug-banner" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:red;color:white;padding:4px 8px;font-size:12px;font-family:monospace;" v-if="debugInfo">
+    DEBUG: {{ debugInfo }}
+  </div>
   <DesktopTitleBar v-if="isDesktopShell()" />
   <UpdateDialog />
   <MCPInteractionGuard v-if="!isPublicPage && !renderError" />
@@ -40,6 +43,7 @@ const router = useRouter();
 const route = useRoute();
 const renderError = ref(false);
 const capturedError = ref<string | null>(null);
+const debugInfo = ref("");
 
 const TOKEN_KEY = "ai-companion-token";
 
@@ -66,24 +70,47 @@ onErrorCaptured((err, _instance, info) => {
 });
 
 onMounted(async () => {
+  debugInfo.value = `path=${route.path}`;
+  console.log("[App] onMounted: route.path =", route.path);
+
+  // TEST: always redirect to onboarding
+  debugInfo.value = "FORCE REDIRECT";
+  router.replace("/onboarding");
+  return;
+
+  // (Below is dead code for testing)
   try {
     const { loadFromServer } = useTheme();
     await loadFromServer();
   } catch {}
 
+  debugInfo.value = `path=${route.path} pub=${publicPaths.some((p) => route.path === p)}`;
+  console.log("[App] onMounted: route.path =", route.path, "isPublic:", publicPaths.some((p) => route.path === p));
+
   if (publicPaths.some((p) => route.path === p)) {
+    debugInfo.value += " | SKIP(public)";
+    console.log("[App] onMounted: skipping - already on public path");
     return;
   }
 
   const token = getToken();
+  debugInfo.value += ` | tok=${token ? "Y" : "N"}`;
+  console.log("[App] onMounted: token =", token ? "exists" : "null");
 
   try {
-    const onboardingRes = await apiClient.get("/api/onboarding/status");
+    const onboardingRes = await apiClient.get("/api/public/onboarding/status");
+    const rawData = JSON.stringify(onboardingRes.data);
+    debugInfo.value += ` | onboard=${rawData.substring(0, 80)}`;
+    console.log("[App] onboarding status response:", rawData);
     const onboardingData = onboardingRes.data?.data || onboardingRes.data;
     if (!onboardingData?.completed) {
+      debugInfo.value += " | REDIRECT→onboarding";
+      console.log("[App] onboarding not completed, redirecting to /onboarding");
       router.replace("/onboarding");
       return;
     }
+    debugInfo.value += " | onboard=completed";
+    console.log("[App] onboarding IS completed, continuing");
 
     try {
       const authRes = await apiClient.get("/api/public/auth/status");
@@ -106,11 +133,13 @@ onMounted(async () => {
           localStorage.removeItem(TOKEN_KEY);
           router.replace("/login");
         }
-      } catch {
+            } catch (e) {
+        console.error("[App] auth/me check error:", e);
         localStorage.removeItem(TOKEN_KEY);
         router.replace("/login");
       }
-    } catch {
+    } catch (e) {
+      console.error("[App] auth/status check error:", e);
       if (token) {
         try {
           const meRes = await apiClient.get("/api/auth/me");
@@ -125,7 +154,9 @@ onMounted(async () => {
         }
       }
     }
-  } catch {}
+  } catch (e) {
+    console.error("[App] outer try error:", e);
+  }
 });
 </script>
 
@@ -178,18 +209,17 @@ html.amitia-desktop-shell .search-overlay {
   opacity: 0;
 }
 
-.no-leave.route-slide-leave-active {
+..no-leave.route-slide-leave-active {
   transition: none;
 }
 .no-leave.route-slide-leave-to {
   opacity: 1;
 }
 
-.no-leave.route-slide-enter-active {
+..no-leave.route-slide-enter-active {
   transition: none;
 }
-.no-leave.route-slide-enter-from {
+..no-leave.route-slide-enter-from {
   opacity: 1;
 }
 </style>
-

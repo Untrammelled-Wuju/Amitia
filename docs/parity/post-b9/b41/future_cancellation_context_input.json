@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "nextOwner": "B42/B43 cancellation step",
+  "contextContract": "ToolInvocationContext already carries InvocationID (correlation), ExpiresAt (deadline), and supports context.Context cancellation.",
+  "propagationStages": "Caller ctx -> ExecutionPipeline.CancellationCtrl -> Dispatch -> adapter -> provider",
+  "remainingGap": "Full cross-runtime cancellation control loop is owned by cancellation step."
+}

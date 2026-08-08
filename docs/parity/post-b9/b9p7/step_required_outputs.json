@@ -1,0 +1,1346 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "commonRequiredOutputs": [
+    "无新Global Registry创建",
+    "无新Parallel Permission系统创建",
+    "无新Parallel State Store创建",
+    "无新Legacy fallback创建",
+    "无新增TODO/MOCK/UNVERIFIED实现"
+  ],
+  "steps": [
+    {
+      "stepId": "B10",
+      "requiredOutputs": [
+        "Tool Contract Gap审计报告",
+        "补全字段变更日志",
+        "无新Tool Registry创建证明",
+        "无新Permission系统创建证明"
+      ]
+    },
+    {
+      "stepId": "B11",
+      "requiredOutputs": [
+        "Permission Gap审计报告",
+        "PermissionDefinitionRegistry变更日志",
+        "无新建Permission引擎证明",
+        "无Parallel Permission系统创建证明"
+      ]
+    },
+    {
+      "stepId": "B12",
+      "requiredOutputs": [
+        "Tool-Event Hook绑定审计报告",
+        "Event/Hook扩展变更日志",
+        "无新建Event系统证明",
+        "Capability-Event映射一致性校验"
+      ]
+    },
+    {
+      "stepId": "B13",
+      "requiredOutputs": [
+        "Capability-Hook映射审计报告",
+        "Hook定义扩展变更日志",
+        "无新建Hook调度系统证明",
+        "生命周期Hook一致性校验"
+      ]
+    },
+    {
+      "stepId": "B14",
+      "requiredOutputs": [
+        "Browser Tool Contract Gap审计报告",
+        "Capability-Provider绑定变更日志",
+        "无新建Browser引擎证明",
+        "Browser Session-Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B15",
+      "requiredOutputs": [
+        "Media Tool Contract Gap审计报告",
+        "FFmpeg/ImageGeneration/TTS/ASR变更日志",
+        "无新建Media引擎证明",
+        "Media Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B16",
+      "requiredOutputs": [
+        "ResourceURI绑定审计报告",
+        "Provider URI解析变更日志",
+        "无新建Resource系统证明",
+        "URI-Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B17",
+      "requiredOutputs": [
+        "Schedule Gap审计报告",
+        "Schedule扩展变更日志",
+        "无新建Schedule系统证明",
+        "Capability-Schedule一致性校验"
+      ]
+    },
+    {
+      "stepId": "B18",
+      "requiredOutputs": [
+        "ToolFacade Contract一致性校验报告",
+        "Contract覆盖率变更日志",
+        "无新建Facade系统证明",
+        "双向Provider引用完整性校验"
+      ]
+    },
+    {
+      "stepId": "B19",
+      "requiredOutputs": [
+        "Android Adapter集成审计报告",
+        "RuntimeHost Adapter变更日志",
+        "无新建Android引擎证明",
+        "Capability Adapter一致性校验"
+      ]
+    },
+    {
+      "stepId": "B20",
+      "requiredOutputs": [
+        "iOS Native Offload审计报告",
+        "RuntimeHost Offload变更日志",
+        "无新建iOS引擎证明",
+        "Offload Adapter一致性校验"
+      ]
+    },
+    {
+      "stepId": "B21",
+      "requiredOutputs": [
+        "Desktop Process Adapter审计报告",
+        "Process Adapter变更日志",
+        "无新建Desktop引擎证明",
+        "Process Adapter一致性校验"
+      ]
+    },
+    {
+      "stepId": "B22",
+      "requiredOutputs": [
+        "Adapter统一接口审计报告",
+        "AdapterMesh集成变更日志",
+        "无新建Adapter编排系统证明",
+        "Adapter一致性收敛校验"
+      ]
+    },
+    {
+      "stepId": "B23",
+      "requiredOutputs": [
+        "Planner迁移审计报告",
+        "Extension Kernel Planner变更日志",
+        "无新独立Planner模块证明",
+        "Planner-Kernel一致性校验"
+      ]
+    },
+    {
+      "stepId": "B24",
+      "requiredOutputs": [
+        "Observer迁移审计报告",
+        "mindruntime Observer变更日志",
+        "无新独立Observer模块证明",
+        "Observer-Mind一致性校验"
+      ]
+    },
+    {
+      "stepId": "B25",
+      "requiredOutputs": [
+        "TaskGraph迁移审计报告",
+        "workflow TaskGraph变更日志",
+        "无新独立TaskGraph模块证明",
+        "TaskGraph-Workflow一致性校验"
+      ]
+    },
+    {
+      "stepId": "B26",
+      "requiredOutputs": [
+        "Background Task迁移审计报告",
+        "task_runtime BackgroundTask变更日志",
+        "无新独立BackgroundTask模块证明",
+        "BackgroundTask-TaskRuntime一致性校验"
+      ]
+    },
+    {
+      "stepId": "B27",
+      "requiredOutputs": [
+        "MultiAgent迁移审计报告",
+        "Extension Kernel MultiAgent变更日志",
+        "无新独立MultiAgent模块证明",
+        "MultiAgent-Kernel一致性校验"
+      ]
+    },
+    {
+      "stepId": "B28",
+      "requiredOutputs": [
+        "SubAgent迁移审计报告",
+        "agent_skill SubAgent变更日志",
+        "无新独立SubAgent模块证明",
+        "SubAgent-Skill一致性校验"
+      ]
+    },
+    {
+      "stepId": "B29",
+      "requiredOutputs": [
+        "Skill Orchestration迁移审计报告",
+        "agent_skill编排变更日志",
+        "无新独立Skill编排模块证明",
+        "Skill编排-Kernel一致性校验"
+      ]
+    },
+    {
+      "stepId": "B30",
+      "requiredOutputs": [
+        "Memory Augmented Agent迁移审计报告",
+        "memory Agent变更日志",
+        "无新独立MemoryAgent模块证明",
+        "MemoryAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B31",
+      "requiredOutputs": [
+        "Tool Augmented Agent迁移审计报告",
+        "Extension Kernel ToolAgent变更日志",
+        "无新独立ToolAgent模块证明",
+        "ToolAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B32",
+      "requiredOutputs": [
+        "Planning Agent迁移审计报告",
+        "workflow/task_runtime PlanningAgent变更日志",
+        "无新独立PlanningAgent模块证明",
+        "PlanningAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B33",
+      "requiredOutputs": [
+        "Reflective Agent迁移审计报告",
+        "mindruntime ReflectiveAgent变更日志",
+        "无新独立ReflectiveAgent模块证明",
+        "ReflectiveAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B34",
+      "requiredOutputs": [
+        "Collaborative Agent迁移审计报告",
+        "MultiAgent CollaborativeAgent变更日志",
+        "无新独立CollaborativeAgent模块证明",
+        "CollaborativeAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B35",
+      "requiredOutputs": [
+        "Adaptive Agent迁移审计报告",
+        "Extension Kernel AdaptiveAgent变更日志",
+        "无新独立AdaptiveAgent模块证明",
+        "AdaptiveAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B36",
+      "requiredOutputs": [
+        "ContextAware Agent迁移审计报告",
+        "memory/mindruntime ContextAwareAgent变更日志",
+        "无新独立ContextAwareAgent模块证明",
+        "ContextAwareAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B37",
+      "requiredOutputs": [
+        "GoalDriven Agent迁移审计报告",
+        "workflow/task_runtime GoalDrivenAgent变更日志",
+        "无新独立GoalDrivenAgent模块证明",
+        "GoalDrivenAgent一致性校验"
+      ]
+    },
+    {
+      "stepId": "B38",
+      "requiredOutputs": [
+        "Agent能力迁移收敛审计报告",
+        "全部Agent迁移变更日志汇总",
+        "无新独立Agent模块证明",
+        "Agent收敛一致性总校验"
+      ]
+    },
+    {
+      "stepId": "B39",
+      "requiredOutputs": [
+        "Provider Gap Hardening审计报告",
+        "ExecutionPipeline扩展变更日志",
+        "无新独立Pipeline证明",
+        "Pipeline-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B40",
+      "requiredOutputs": [
+        "Permission Gap Hardening审计报告",
+        "PermissionBroker扩展变更日志",
+        "无新独立Permission引擎证明",
+        "Permission-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B41",
+      "requiredOutputs": [
+        "Tool Gap Hardening审计报告",
+        "ToolFacade扩展变更日志",
+        "无新独立Tool引擎证明",
+        "Tool-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B42",
+      "requiredOutputs": [
+        "Adapter Gap Hardening审计报告",
+        "RuntimeAdapterRegistry扩展变更日志",
+        "无新独立Adapter引擎证明",
+        "Adapter-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B43",
+      "requiredOutputs": [
+        "Capability Gap Hardening审计报告",
+        "ToolRegistry扩展变更日志",
+        "无新独立Capability引擎证明",
+        "Capability-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B44",
+      "requiredOutputs": [
+        "Event Gap Hardening审计报告",
+        "ExecutionPipeline Event扩展变更日志",
+        "无新独立Event引擎证明",
+        "Event-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B45",
+      "requiredOutputs": [
+        "Schedule Gap Hardening审计报告",
+        "PermissionBroker Schedule扩展变更日志",
+        "无新独立Schedule引擎证明",
+        "Schedule-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B46",
+      "requiredOutputs": [
+        "Resource Gap Hardening审计报告",
+        "ResourceURI扩展变更日志",
+        "无新独立Resource引擎证明",
+        "Resource-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B47",
+      "requiredOutputs": [
+        "Hook Gap Hardening审计报告",
+        "Hook系统扩展变更日志",
+        "无新独立Hook引擎证明",
+        "Hook-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B48",
+      "requiredOutputs": [
+        "Execution Gap Hardening审计报告",
+        "Schedule系统扩展变更日志",
+        "无新独立Execution引擎证明",
+        "Execution-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B49",
+      "requiredOutputs": [
+        "State Gap Hardening审计报告",
+        "task_runtime扩展变更日志",
+        "无新独立State引擎证明",
+        "State-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B50",
+      "requiredOutputs": [
+        "Workflow Gap Hardening审计报告",
+        "workflow扩展变更日志",
+        "无新独立Workflow引擎证明",
+        "Workflow-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B51",
+      "requiredOutputs": [
+        "Mind Gap Hardening审计报告",
+        "mindruntime扩展变更日志",
+        "无新独立Mind引擎证明",
+        "Mind-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B52",
+      "requiredOutputs": [
+        "Validation Gap Hardening审计报告",
+        "PermissionBroker Validation扩展变更日志",
+        "无新独立Validation引擎证明",
+        "Validation-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B53",
+      "requiredOutputs": [
+        "ErrorHandling Gap Hardening审计报告",
+        "ToolFacade ErrorHandling扩展变更日志",
+        "无新独立ErrorHandling引擎证明",
+        "ErrorHandling-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B54",
+      "requiredOutputs": [
+        "ResourceURI Gap Hardening审计报告",
+        "ResourceURI扩展变更日志",
+        "无新独立ResourceURI引擎证明",
+        "ResourceURI-Gap修复一致性校验"
+      ]
+    },
+    {
+      "stepId": "B55",
+      "requiredOutputs": [
+        "LinuxShell/Terminal Provider创建审计报告",
+        "Linux Shell/Terminal Provider变更日志",
+        "无替代RuntimeHost证明",
+        "无新建ShellToolRegistry证明",
+        "Shell/Terminal Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B56",
+      "requiredOutputs": [
+        "Android进程管理Provider审计报告",
+        "进程管理Provider变更日志",
+        "无替代RuntimeHost证明",
+        "进程管理Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B57",
+      "requiredOutputs": [
+        "Android FileSystem Provider审计报告",
+        "FileSystem Provider变更日志",
+        "无替代RuntimeHost证明",
+        "FileSystem Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B58",
+      "requiredOutputs": [
+        "Android Network Provider审计报告",
+        "Network Provider变更日志",
+        "无替代RuntimeHost证明",
+        "Network Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B59",
+      "requiredOutputs": [
+        "Android Storage Provider审计报告",
+        "Storage Provider变更日志",
+        "无替代RuntimeHost证明",
+        "Storage Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B60",
+      "requiredOutputs": [
+        "Android Camera Provider审计报告",
+        "Camera Provider变更日志",
+        "无替代RuntimeHost证明",
+        "Camera Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B61",
+      "requiredOutputs": [
+        "Android Sensor Provider审计报告",
+        "Sensor Provider变更日志",
+        "无替代RuntimeHost证明",
+        "Sensor Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B62",
+      "requiredOutputs": [
+        "Android Accessibility Provider审计报告",
+        "Accessibility Provider变更日志",
+        "无替代Kernel证明",
+        "无新建AndroidToolCenter证明",
+        "无新建AndroidPermissionCenter证明",
+        "Accessibility Provider集成校验"
+      ]
+    },
+    {
+      "stepId": "B63",
+      "requiredOutputs": [
+        "Android Location Provider审计报告",
+        "Location Provider变更日志",
+        "无替代RuntimeHost证明",
+        "Location Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B64",
+      "requiredOutputs": [
+        "Android Notification Provider审计报告",
+        "Notification Provider变更日志",
+        "无替代RuntimeHost证明",
+        "Notification Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B65",
+      "requiredOutputs": [
+        "Android MediaSession Provider审计报告",
+        "MediaSession Provider变更日志",
+        "无替代RuntimeHost证明",
+        "MediaSession Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B66",
+      "requiredOutputs": [
+        "Android Telephony Provider审计报告",
+        "Telephony Provider变更日志",
+        "无替代RuntimeHost证明",
+        "Telephony Provider-RuntimeHost集成校验"
+      ]
+    },
+    {
+      "stepId": "B67",
+      "requiredOutputs": [
+        "Android Permission Provider审计报告",
+        "Permission Provider变更日志",
+        "无替代PermissionBroker证明",
+        "Permission Provider-Kernel集成校验"
+      ]
+    },
+    {
+      "stepId": "B68",
+      "requiredOutputs": [
+        "Android Runtime收敛审计报告",
+        "全部Android Runtime Provider变更日志汇总",
+        "无替代RuntimeHost证明",
+        "Android Runtime总集成校验"
+      ]
+    },
+    {
+      "stepId": "B69",
+      "requiredOutputs": [
+        "Image Generation Provider审计报告",
+        "imageprovider变更日志",
+        "无替代imageprovider引擎证明",
+        "Image Generation Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B70",
+      "requiredOutputs": [
+        "Image Recognition Provider审计报告",
+        "imageprovider变更日志",
+        "无替代imageprovider引擎证明",
+        "Image Recognition Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B71",
+      "requiredOutputs": [
+        "TTS Provider审计报告",
+        "tts变更日志",
+        "无替代tts引擎证明",
+        "TTS Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B72",
+      "requiredOutputs": [
+        "ASR Provider审计报告",
+        "asr变更日志",
+        "无替代asr引擎证明",
+        "ASR Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B73",
+      "requiredOutputs": [
+        "Video Processing Provider审计报告",
+        "imageprovider变更日志",
+        "无替代imageprovider引擎证明",
+        "Video Processing Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B74",
+      "requiredOutputs": [
+        "Audio Processing Provider审计报告",
+        "tts/asr/imageprovider变更日志",
+        "无替代音频引擎证明",
+        "Audio Processing Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B75",
+      "requiredOutputs": [
+        "Screen Capture Provider审计报告",
+        "imageprovider变更日志",
+        "无替代imageprovider引擎证明",
+        "Screen Capture Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B76",
+      "requiredOutputs": [
+        "Webcam Provider审计报告",
+        "imageprovider变更日志",
+        "无替代imageprovider引擎证明",
+        "Webcam Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B77",
+      "requiredOutputs": [
+        "Audio Stream Provider审计报告",
+        "tts/asr变更日志",
+        "无替代音频引擎证明",
+        "Audio Stream Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B78",
+      "requiredOutputs": [
+        "Media/Device收敛审计报告",
+        "全部Media/Device Provider变更日志汇总",
+        "无替代Media系统证明",
+        "Media/Device总校验"
+      ]
+    },
+    {
+      "stepId": "B79",
+      "requiredOutputs": [
+        "Browser Runtime Provider审计报告",
+        "browser-runtime变更日志",
+        "无新建BrowserToolRegistry证明",
+        "无新建BrowserPermissionBroker证明",
+        "无新建BrowserWorkspace证明",
+        "Browser Runtime Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B80",
+      "requiredOutputs": [
+        "Browser DOM操作审计报告",
+        "browser-runtime DOM扩展变更日志",
+        "无新建Browser系统证明",
+        "DOM操作一致性校验"
+      ]
+    },
+    {
+      "stepId": "B81",
+      "requiredOutputs": [
+        "Browser脚本注入审计报告",
+        "browser-runtime脚本扩展变更日志",
+        "无新建Browser系统证明",
+        "脚本注入一致性校验"
+      ]
+    },
+    {
+      "stepId": "B82",
+      "requiredOutputs": [
+        "Browser网络拦截审计报告",
+        "browser-runtime拦截扩展变更日志",
+        "无新建Browser系统证明",
+        "网络拦截一致性校验"
+      ]
+    },
+    {
+      "stepId": "B83",
+      "requiredOutputs": [
+        "Browser Provider收敛审计报告",
+        "Browser Provider完整变更日志",
+        "无新建Browser系统证明",
+        "Browser权限控制一致性校验"
+      ]
+    },
+    {
+      "stepId": "B84",
+      "requiredOutputs": [
+        "Search Engine Provider审计报告",
+        "Search Engine Provider变更日志",
+        "无替代Deep Search系统证明",
+        "Search Engine Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B85",
+      "requiredOutputs": [
+        "Search索引审计报告",
+        "本地Search索引变更日志",
+        "无替代本地Search系统证明",
+        "Search索引一致性校验"
+      ]
+    },
+    {
+      "stepId": "B86",
+      "requiredOutputs": [
+        "Search Provider收敛审计报告",
+        "Search结果聚合变更日志",
+        "无替代Search系统证明",
+        "Search Provider一致性总校验"
+      ]
+    },
+    {
+      "stepId": "B87",
+      "requiredOutputs": [
+        "Media-Workspace集成审计报告",
+        "Media-Workspace绑定变更日志",
+        "无新建Media引擎证明",
+        "Media-Workspace一致性校验"
+      ]
+    },
+    {
+      "stepId": "B88",
+      "requiredOutputs": [
+        "MCP-Workspace集成审计报告",
+        "MCP-Workspace绑定变更日志",
+        "无新建MCP引擎证明",
+        "MCP-Workspace一致性校验"
+      ]
+    },
+    {
+      "stepId": "B89",
+      "requiredOutputs": [
+        "Workspace-Kernel集成审计报告",
+        "Workspace-Kernel绑定变更日志",
+        "无新建Workspace引擎证明",
+        "Workspace-Kernel一致性校验"
+      ]
+    },
+    {
+      "stepId": "B90",
+      "requiredOutputs": [
+        "跨Provider权限集成审计报告",
+        "跨Provider权限变更日志",
+        "无新建Permission系统证明",
+        "跨Provider权限一致性校验"
+      ]
+    },
+    {
+      "stepId": "B91",
+      "requiredOutputs": [
+        "Provider-Tool映射审计报呿",
+        "Provider-Tool映射变更日志",
+        "无新建Tool系统证明",
+        "Provider-Tool一致性校验"
+      ]
+    },
+    {
+      "stepId": "B92",
+      "requiredOutputs": [
+        "Media/MCP/Workspace收敛审计报告",
+        "统一Provider注册变更日志",
+        "无新建Provider系统证明",
+        "Media/MCP/Workspace总校验"
+      ]
+    },
+    {
+      "stepId": "B93",
+      "requiredOutputs": [
+        "MCP Tool注册审计报告",
+        "mcp ToolFacade扩展变更日志",
+        "无新建MCPManager2证明",
+        "无新建MCPToolRegistry2证明",
+        "无第二MCP执行链证明",
+        "MCP Tool一致性校验"
+      ]
+    },
+    {
+      "stepId": "B94",
+      "requiredOutputs": [
+        "MCP Server Discovery审计报告",
+        "mcp Server注册变更日志",
+        "无新建MCP管理系统证明",
+        "Server Discovery一致性校验"
+      ]
+    },
+    {
+      "stepId": "B95",
+      "requiredOutputs": [
+        "MCP Tool协商审计报告",
+        "Capability协商变更日志",
+        "无新建Capability管理系统证明",
+        "Tool协商一致性校验"
+      ]
+    },
+    {
+      "stepId": "B96",
+      "requiredOutputs": [
+        "MCP Session审计报告",
+        "mcp Session管理变更日志",
+        "无新建Session管理系统证明",
+        "Session一致性校验"
+      ]
+    },
+    {
+      "stepId": "B97",
+      "requiredOutputs": [
+        "MCP Protocol适配审计报告",
+        "mcp Protocol变更日志",
+        "无新建Protocol引擎证明",
+        "Protocol适配一致性校验"
+      ]
+    },
+    {
+      "stepId": "B98",
+      "requiredOutputs": [
+        "MCP权限审计报告",
+        "PermissionBroker MCP扩展变更日志",
+        "无新建Permission引擎证明",
+        "MCP权限一致性校验"
+      ]
+    },
+    {
+      "stepId": "B99",
+      "requiredOutputs": [
+        "Skill注册审计报告",
+        "agent_skill Skill注册变更日志",
+        "无新建Skill服务证明",
+        "Skill注册一致性校验"
+      ]
+    },
+    {
+      "stepId": "B100",
+      "requiredOutputs": [
+        "Skill编排审计报告",
+        "agent_skill编排变更日志",
+        "无新建Skill编排引擎证明",
+        "Skill编排一致性校验"
+      ]
+    },
+    {
+      "stepId": "B101",
+      "requiredOutputs": [
+        "Skill发现审计报告",
+        "Skill调度变更日志",
+        "无新建Skill发现引擎证明",
+        "Skill发现一致性校验"
+      ]
+    },
+    {
+      "stepId": "B102",
+      "requiredOutputs": [
+        "Skill生命周期审计报告",
+        "Skill状态管理变更日志",
+        "无新建Skill生命周期引擎证明",
+        "Skill生命周期一致性校验"
+      ]
+    },
+    {
+      "stepId": "B103",
+      "requiredOutputs": [
+        "Workflow引擎审计报告",
+        "workflow引擎扩展变更日志",
+        "无新建WorkflowEngine2证明",
+        "无新建WorkflowStateStore2证明",
+        "无独立Workflow Compiler证明",
+        "Workflow引擎一致性校验"
+      ]
+    },
+    {
+      "stepId": "B104",
+      "requiredOutputs": [
+        "Workflow调度审计报告",
+        "Workflow状态机扩展变更日志",
+        "无新建Workflow引擎证明",
+        "Workflow调度一致性校验"
+      ]
+    },
+    {
+      "stepId": "B105",
+      "requiredOutputs": [
+        "Workflow并行执行审计报告",
+        "并行调度变更日志",
+        "无新建Workflow引擎证明",
+        "并行执行一致性校验"
+      ]
+    },
+    {
+      "stepId": "B106",
+      "requiredOutputs": [
+        "Workflow错误处理审计报告",
+        "容错扩展变更日志",
+        "无新建Workflow引擎证明",
+        "错误处理一致性校验"
+      ]
+    },
+    {
+      "stepId": "B107",
+      "requiredOutputs": [
+        "Workflow-task_runtime集成审计报告",
+        "状态同步变更日志",
+        "无新建Workflow引擎证明",
+        "Workflow-task_runtime一致性校验"
+      ]
+    },
+    {
+      "stepId": "B108",
+      "requiredOutputs": [
+        "Workflow-Hook集成审计报告",
+        "Workflow-Hook扩展变更日志",
+        "无新建Hook系统证明",
+        "Workflow-Hook一致性校验"
+      ]
+    },
+    {
+      "stepId": "B109",
+      "requiredOutputs": [
+        "Workflow-Event集成审计报告",
+        "Event驱动扩展变更日志",
+        "无新建Event系统证明",
+        "Workflow-Event一致性校验"
+      ]
+    },
+    {
+      "stepId": "B110",
+      "requiredOutputs": [
+        "MCP/Skill/Workflow收敛审计报告",
+        "统一注册变更日志",
+        "无新建Orchestration引擎证明",
+        "MCP/Skill/Workflow总校验"
+      ]
+    },
+    {
+      "stepId": "B111",
+      "requiredOutputs": [
+        "ResponsesAPI Adapter审计报告",
+        "model_service变更日志",
+        "MNN Local Provider集成变更日志",
+        "无新建ModelConfigs_v2证明",
+        "无新建ModelRouter2证明",
+        "无第二模型配置页面证明",
+        "Model Service一致性校验"
+      ]
+    },
+    {
+      "stepId": "B112",
+      "requiredOutputs": [
+        "Embedding Provider审计报告",
+        "model_service Embedding变更日志",
+        "无新建Embedding引擎证明",
+        "Embedding Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B113",
+      "requiredOutputs": [
+        "Local Model Provider审计报告",
+        "model_service Local Model变更日志",
+        "无新建Local Model引擎证明",
+        "Local Model Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B114",
+      "requiredOutputs": [
+        "Model fallback审计报告",
+        "model_service Fallback变更日志",
+        "无新建Model引擎证明",
+        "Model fallback一致性校验"
+      ]
+    },
+    {
+      "stepId": "B115",
+      "requiredOutputs": [
+        "Voice Provider审计报告",
+        "character Voice集成变更日志",
+        "无新建Voice引擎证明",
+        "Voice Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B116",
+      "requiredOutputs": [
+        "Character状态审计报告",
+        "character状态管理变更日志",
+        "无新建Character引擎证明",
+        "Character状态一致性校验"
+      ]
+    },
+    {
+      "stepId": "B117",
+      "requiredOutputs": [
+        "Character调度审计报告",
+        "character调度变更日志",
+        "无新建Character引擎证明",
+        "Character调度一致性校验"
+      ]
+    },
+    {
+      "stepId": "B118",
+      "requiredOutputs": [
+        "Memory Store审计报告",
+        "memory Store变更日志",
+        "无新建MemorySystem2证明",
+        "无新建MemoryStore2证明",
+        "无新建VectorStore2证明",
+        "无新建MemoryGraph2证明",
+        "Memory Store一致性校验"
+      ]
+    },
+    {
+      "stepId": "B119",
+      "requiredOutputs": [
+        "Memory检索审计报告",
+        "memory检索变更日志",
+        "无新建Memory引擎证明",
+        "Memory检索一致性校验"
+      ]
+    },
+    {
+      "stepId": "B120",
+      "requiredOutputs": [
+        "Memory持久化审计报告",
+        "memory持久化变更日志",
+        "无新建Memory引擎证明",
+        "Memory持久化一致性校验"
+      ]
+    },
+    {
+      "stepId": "B121",
+      "requiredOutputs": [
+        "Character存储审计报告",
+        "character DB变更日志",
+        "无新建CharacterCore2证明",
+        "无新建CharacterDB2证明",
+        "无新建CharacterService2证明",
+        "Character存储一致性校验"
+      ]
+    },
+    {
+      "stepId": "B122",
+      "requiredOutputs": [
+        "Model/Voice/Memory/Character收敛审计报告",
+        "统一Provider注册变更日志",
+        "无新建Provider引擎证明",
+        "Model/Voice/Memory/Character总校验"
+      ]
+    },
+    {
+      "stepId": "B123",
+      "requiredOutputs": [
+        "iOS Alchemy Provider审计报告",
+        "iOS Alchemy Provider变更日志",
+        "无新建IOSSandboxLifecycle2证明",
+        "无新建IOSRuntimeManager2证明",
+        "无新建RuntimeSupervisor2证明",
+        "iOS Alchemy Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B124",
+      "requiredOutputs": [
+        "iOS FileSystem Sandbox审计报告",
+        "iOS文件系统变更日志",
+        "无新建iOS Sandbox引擎证明",
+        "FileSystem Sandbox一致性校验"
+      ]
+    },
+    {
+      "stepId": "B125",
+      "requiredOutputs": [
+        "iOS Network Sandbox审计报告",
+        "iOS网络变更日志",
+        "无新建iOS Sandbox引擎证明",
+        "Network Sandbox一致性校验"
+      ]
+    },
+    {
+      "stepId": "B126",
+      "requiredOutputs": [
+        "iOS Process Sandbox审计报告",
+        "iOS进程变更日志",
+        "无新建iOS Sandbox引擎证明",
+        "Process Sandbox一致性校验"
+      ]
+    },
+    {
+      "stepId": "B127",
+      "requiredOutputs": [
+        "HealthKit Provider审计报告",
+        "HealthKit Provider变更日志",
+        "无替代iOS健康系统证明",
+        "HealthKit Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B128",
+      "requiredOutputs": [
+        "HomeKit Provider审计报告",
+        "HomeKit Provider变更日志",
+        "无替代iOS智能家居系统证明",
+        "HomeKit Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B129",
+      "requiredOutputs": [
+        "CoreML Provider审计报告",
+        "CoreML Provider变更日志",
+        "无替代iOS CoreML系统证明",
+        "CoreML Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B130",
+      "requiredOutputs": [
+        "CallKit Provider审计报告",
+        "CallKit Provider变更日志",
+        "无替代iOS通话系统证明",
+        "CallKit Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B131",
+      "requiredOutputs": [
+        "NFC Provider审计报告",
+        "NFC Provider变更日志",
+        "无替代iOS NFC系统证明",
+        "NFC Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B132",
+      "requiredOutputs": [
+        "ARKit Provider审计报告",
+        "ARKit Provider变更日志",
+        "无替代iOS AR系统证明",
+        "ARKit Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B133",
+      "requiredOutputs": [
+        "PassKit Provider审计报告",
+        "PassKit Provider变更日志",
+        "无替代iOS支付系统证明",
+        "PassKit Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B134",
+      "requiredOutputs": [
+        "CarPlay Provider审计报告",
+        "CarPlay Provider变更日志",
+        "无替代iOS CarPlay系统证明",
+        "CarPlay Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B135",
+      "requiredOutputs": [
+        "WatchConnectivity Provider审计报告",
+        "WatchConnectivity Provider变更日志",
+        "无替代iOS手表系统证明",
+        "WatchConnectivity Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B136",
+      "requiredOutputs": [
+        "Intents Provider审计报告",
+        "Intents Provider变更日志",
+        "无替代iOS Intents系统证明",
+        "Intents Provider一致性校验"
+      ]
+    },
+    {
+      "stepId": "B137",
+      "requiredOutputs": [
+        "iOS Sandbox收敛审计报告",
+        "全部iOS Sandbox改变日志汇总",
+        "无替代iOS Sandbox引擎证明",
+        "iOS Sandbox总校验"
+      ]
+    },
+    {
+      "stepId": "B138",
+      "requiredOutputs": [
+        "iOS Alchemy Provider收敛审计报告",
+        "统一Capability变更日志",
+        "无新建iOS Alchemy系统证明",
+        "iOS Alchemy总校验"
+      ]
+    },
+    {
+      "stepId": "B139",
+      "requiredOutputs": [
+        "Unified Adapter审计报告",
+        "三端Adapter统一变更日志",
+        "无新建Adapter编排系统证明",
+        "Unified Adapter一致性校验"
+      ]
+    },
+    {
+      "stepId": "B140",
+      "requiredOutputs": [
+        "ToolFacade Final Cutover审计报告",
+        "Legacy fallback清零变更日志",
+        "无新建Agent Runtime证明",
+        "无新建Tool Runtime证明",
+        "无新建Legacy Registry证明",
+        "无fallback到Legacy证明",
+        "ToolFacade最终Cutover一致性校验"
+      ]
+    },
+    {
+      "stepId": "B141",
+      "requiredOutputs": [
+        "ExecutionPipeline Cutover审计报告",
+        "唯一生产执行链变更日志",
+        "无新建Tool Runtime证明",
+        "无新建Execution Pipeline证明",
+        "无Redirect到Legacy证明",
+        "ExecutionPipeline-Cutover一致性校验"
+      ]
+    },
+    {
+      "stepId": "B142",
+      "requiredOutputs": [
+        "Provider验证审计报告",
+        "Provider集成测试报告",
+        "无新建Provider引擎证明",
+        "Provider验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B143",
+      "requiredOutputs": [
+        "Skill验证审计报告",
+        "Skill集成测试报告",
+        "无新建Skill引擎证明",
+        "Skill验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B144",
+      "requiredOutputs": [
+        "Workflow验证审计报告",
+        "Workflow集成测试报告",
+        "无新建Workflow引擎证明",
+        "Workflow验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B145",
+      "requiredOutputs": [
+        "Adapter收敛验证审计报告",
+        "Adapter集成测试报告",
+        "无新建Adapter引擎证明",
+        "Adapter验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B146",
+      "requiredOutputs": [
+        "Permission收敛验证审计报告",
+        "Permission集成测试报告",
+        "无新建Permission引擎证明",
+        "Permission验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B147",
+      "requiredOutputs": [
+        "MCP收敛验证审计报告",
+        "MCP集成测试报告",
+        "无新建MCP引擎证明",
+        "MCP验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B148",
+      "requiredOutputs": [
+        "Provider收敛验证审计报告",
+        "Provider集成测试报告",
+        "无新建Provider引擎证明",
+        "Provider验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B149",
+      "requiredOutputs": [
+        "跨平台收敛验证审计报告",
+        "三端集成测试报告",
+        "无新建跨平台引擎证明",
+        "跨平台验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B150",
+      "requiredOutputs": [
+        "系统完整性验证审计报告",
+        "端到端E2E测试报告",
+        "无新建系统引擎证明",
+        "系统完整性验证一致性校验"
+      ]
+    },
+    {
+      "stepId": "B151",
+      "requiredOutputs": [
+        "Legacy/Mock/TODO/UNVERIFIED扫搔审计报告",
+        "零Legacy消除变更日志",
+        "无新增Legacy写入证明",
+        "无新增Legacy Tool证明",
+        "无永久Dual Write证明",
+        "无新增MOCK/TODO/UNVERIFIED证明",
+        "Legacy sweep最终一致性校验"
+      ]
+    },
+    {
+      "stepId": "B152",
+      "requiredOutputs": [
+        "Regression测试审计报告",
+        "Cutover验证报告",
+        "无新Regression证明",
+        "Regression一致性校验"
+      ]
+    },
+    {
+      "stepId": "B153",
+      "requiredOutputs": [
+        "ExitConditions验收审计报告",
+        "收敛验收检查单",
+        "无新增不满足ExitCondition项证明",
+        "ExitConditions一致性校验"
+      ]
+    },
+    {
+      "stepId": "B154",
+      "requiredOutputs": [
+        "最终验收审计报告",
+        "完整测试报告",
+        "Go-Live签核文档",
+        "无未解决Blocker证明",
+        "Go-Live最终一致性校验"
+      ]
+    }
+  ]
+}

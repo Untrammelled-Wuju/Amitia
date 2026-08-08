@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B40",
+  "nextOwner": "B141",
+  "canonicalSchemaAuthority": "ToolDefinition.InputSchema/OutputSchema json.RawMessage",
+  "legacySchemaRepresentations": "agent/tool/Parameters (Properties/Required/Type/Description)",
+  "modelProjectionAuthority": "ToolFacade.buildKernelModelTools",
+  "validationAuthority": "execution.InputValidator + ResultValidator + Sanitizer",
+  "remainingCompatibilityBridges": "Legacy agent/tool projection is the only secondary schema form; it does not hold runtime authority."
+}

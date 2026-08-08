@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:14:00+08:00",
+  "description": "iOS错误投影 - iOS Bridge/Provider错误到统一ToolError的映射",
+
+  "bridgeErrorMapping": {
+    "note": "传输层错误 - 与业务逻辑无关",
+    "BRIDGE_DISCONNECTED": {
+      "toolErrorCode": "connection_lost",
+      "retryable": true,
+      "description": "iOS Bridge通信断连"
+    },
+    "BRIDGE_TIMEOUT": {
+      "toolErrorCode": "timeout",
+      "retryable": true,
+      "description": "iOS Bridge通信超时"
+    },
+    "BRIDGE_INVALID_RESPONSE": {
+      "toolErrorCode": "internal_error",
+      "retryable": false,
+      "description": "iOS Bridge响应格式非法"
+    }
+  },
+
+  "providerErrorMapping": {
+    "note": "Provider域错误 - 与iOS平台能力相关",
+    "PROVIDER_UNAVAILABLE": {
+      "toolErrorCode": "not_available",
+      "retryable": false,
+      "description": "iOS Provider未注册或不可用"
+    },
+    "AUTHORIZATION_DENIED": {
+      "toolErrorCode": "permission_denied",
+      "retryable": false,
+      "description": "iOS系统授权被拒绝"
+    },
+    "USER_ACTION_REQUIRED": {
+      "toolErrorCode": "permission_denied",
+      "retryable": false,
+      "description": "需要用户进入系统设置或执行操作"
+    },
+    "PLATFORM_NOT_SUPPORTED": {
+      "toolErrorCode": "not_available",
+      "retryable": false,
+      "description": "当前iOS版本不支持此能力"
+    }
+  },
+
+  "contextErrorMapping": {
+    "context.DeadlineExceeded": {
+      "toolResultStatus": "timed_out",
+      "toolErrorCode": "timeout",
+      "retryable": true
+    },
+    "context.Canceled": {
+      "toolResultStatus": "cancelled",
+      "toolErrorCode": "cancelled",
+      "retryable": false
+    }
+  },
+
+  "noGlobalIosErrorRegistry": true,
+  "errorAuthority": "现有ToolError体系 (backend/internal/extension/kernel/capability/result.go)"
+}

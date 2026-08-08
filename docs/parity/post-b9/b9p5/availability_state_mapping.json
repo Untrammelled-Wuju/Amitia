@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "domain": "Availability",
+  "historicalB9States": ["UNAVAILABLE", "PERMISSION_REQUIRED", "RUNTIME_NOT_READY", "DISABLED", "AVAILABLE", "UNSUPPORTED_PLATFORM", "DEPENDENCY_MISSING", "DEGRADED"],
+  "canonicalDomain": "capability.ToolState",
+  "canonicalStates": ["Installed", "ModuleEnabled", "CapabilityEnabled", "ScopeAllowed", "PermissionGranted", "RuntimeReady", "DependencyReady", "Health"],
+  "mappings": [
+    {
+      "b9State": "AVAILABLE",
+      "canonicalMapping": "ToolState所有字段为true + Health=ready",
+      "type": "CONTEXTUAL",
+      "lossy": false
+    },
+    {
+      "b9State": "UNAVAILABLE",
+      "canonicalMapping": "Health=unhealthy 或 Health=shutdown",
+      "type": "MANY_TO_ONE",
+      "lossy": true
+    },
+    {
+      "b9State": "DISABLED",
+      "canonicalMapping": "!ModuleEnabled 或 !CapabilityEnabled",
+      "type": "MANY_TO_ONE",
+      "lossy": false
+    },
+    {
+      "b9State": "UNSUPPORTED_PLATFORM",
+      "canonicalMapping": "Capability.CandidateDecision判定",
+      "type": "CONTEXTUAL",
+      "lossy": false
+    },
+    {
+      "b9State": "PERMISSION_REQUIRED",
+      "canonicalMapping": "PermissionDecision=require_approval",
+      "type": "ONE_TO_ONE",
+      "lossy": false
+    },
+    {
+      "b9State": "DEPENDENCY_MISSING",
+      "canonicalMapping": "ToolState.DependencyReady=false",
+      "type": "ONE_TO_ONE",
+      "lossy": false
+    },
+    {
+      "b9State": "RUNTIME_NOT_READY",
+      "canonicalMapping": "ToolState.RuntimeReady=false",
+      "type": "ONE_TO_ONE",
+      "lossy": false
+    },
+    {
+      "b9State": "DEGRADED",
+      "canonicalMapping": "Health=degraded",
+      "type": "ONE_TO_ONE",
+      "lossy": false
+    }
+  ],
+  "summary": {
+    "totalB9States": 8,
+    "mapped": 8,
+    "unmapped": 0,
+    "lossyMappings": 1
+  }
+}

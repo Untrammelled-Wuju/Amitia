@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "generatedAt": "2026-08-08T13:30:00+08:00",
+  "note": "All real Browser Provider implementations are deferred to B79-B83 per correctedResponsibility and task rules.",
+  "deferredItems": [
+    {
+      "item": "BrowserProvider production implementation (Playwright/CDP/Chromium)",
+      "futureStepRange": "B79-B83",
+      "detail": "Provider code that actually launches browser engine, connects to CDP, manages process lifecycle"
+    },
+    {
+      "item": "Browser Runtime Adapter implementation",
+      "futureStepRange": "B79-B83",
+      "detail": "RuntimeAdapter.Execute implementation that dispatches to provider"
+    },
+    {
+      "item": "Browser Tool Registration in ToolRegistry",
+      "futureStepRange": "B79-B83",
+      "detail": "Real ToolDefinition for browser.navigate, browser.dom.snapshot, etc."
+    },
+    {
+      "item": "Browser Permission Wiring to PermissionBroker",
+      "futureStepRange": "B79-B83",
+      "detail": "Capability-to-permission binding for runtime"
+    },
+    {
+      "item": "Navigation execution",
+      "futureStepRange": "B79-B83",
+      "detail": "Real URL loading via browser engine"
+    },
+    {
+      "item": "DOM execution",
+      "futureStepRange": "B79-B83",
+      "detail": "Real DOM snapshot, element finding"
+    },
+    {
+      "item": "Interaction execution",
+      "futureStepRange": "B79-B83",
+      "detail": "Real click/input/select/hover/scroll via browser engine"
+    },
+    {
+      "item": "Download execution",
+      "futureStepRange": "B79-B83",
+      "detail": "Real file download to amitia:// destination"
+    },
+    {
+      "item": "Upload execution",
+      "futureStepRange": "B79-B83",
+      "detail": "Real file upload from amitia:// source"
+    },
+    {
+      "item": "Screenshot capture",
+      "futureStepRange": "B79-B83",
+      "detail": "Real browser screenshot"
+    },
+    {
+      "item": "Cadence",
+      "futureStepRange": "B79-B83",
+      "detail": "All real Browser operations will be implemented in B79-B83"
+    },
+    {
+      "item": "Browser health monitoring",
+      "futureStepRange": "B79-B83",
+      "detail": "Provider health check via RuntimeAdapter.Health"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "modifiedFiles": [],
+  "allowedFiles": [
+    "docs/parity/post-b9/b17/*"
+  ],
+  "unexpectedFiles": [],
+  "goModChanged": false,
+  "goSumChanged": false,
+  "databaseChanged": false,
+  "note": "B17 为合同审计步骤，仅生成 docs/ 目录下的 JSON 报告文件。无源码修改。"
+}

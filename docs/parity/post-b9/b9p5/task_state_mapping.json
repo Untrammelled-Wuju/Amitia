@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "domain": "Task",
+  "historicalB9States": ["CREATED", "QUEUED", "PLANNING", "RUNNING", "WAITING_TOOL", "WAITING_PERMISSION", "WAITING_USER", "PAUSED", "RESUMING", "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT", "RECOVERING"],
+  "canonicalDomain": "task_runtime.TaskRunStatus",
+  "canonicalStates": ["created", "queued", "starting", "running", "checkpointing", "pausing", "paused", "resuming", "cancelling", "cancelled", "succeeded", "failed", "timed_out", "recovery_required", "manual_intervention"],
+  "mappings": [
+    {"b9State": "CREATED", "canonical": "created", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "QUEUED", "canonical": "queued", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "PLANNING", "canonical": "无对应(属于Agent域)", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "RUNNING", "canonical": "running/checkpointing/pausing/resuming", "type": "MANY_TO_ONE", "lossy": true},
+    {"b9State": "WAITING_TOOL", "canonical": "无对应(属于Agent Pipeline)", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "WAITING_PERMISSION", "canonical": "无对应(属于PermissionBroker)", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "WAITING_USER", "canonical": "无对应(属于Agent/Conversation)", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "PAUSED", "canonical": "paused", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "RESUMING", "canonical": "resuming", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "SUCCEEDED", "canonical": "succeeded", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "FAILED", "canonical": "failed", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "CANCELLED", "canonical": "cancelled", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "TIMED_OUT", "canonical": "timed_out", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "RECOVERING", "canonical": "recovery_required", "type": "ONE_TO_ONE", "lossy": true}
+  ],
+  "domainSplit": {
+    "b9StatesBelongsToOtherDomains": ["PLANNING", "WAITING_TOOL", "WAITING_PERMISSION", "WAITING_USER"],
+    "targetDomain": "Agent Task / Planner / Conversation"
+  },
+  "canonicalOnlyStates": ["checkpointing", "pausing", "recovery_required", "manual_intervention"],
+  "summary": {
+    "totalB9States": 14,
+    "mapped": 10,
+    "unmapped": 4,
+    "lossyMappings": 2,
+    "requiresDomainSplit": 4
+  }
+}

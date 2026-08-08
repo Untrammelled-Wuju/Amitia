@@ -1,0 +1,1329 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "commonRequiredInputs": [
+    "B9P7 step_reuse_matrix.json",
+    "B9P4 resolved_protocol_contract.json",
+    "B9P6 canonical_system_resolution.json",
+    "B9P5 protocol_state_mapping.json",
+    "B9P5 protocol_error_mapping.json"
+  ],
+  "steps": [
+    {
+      "stepId": "B10",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "B9P4 resolved_tool_registry.json",
+        "B9P4 capability_tool_mapping.json",
+        "现有ToolDefinition/CapabilityDefinition源码"
+      ]
+    },
+    {
+      "stepId": "B11",
+      "requiredInputs": [
+        "B9P4 permission_gap_inventory.json",
+        "B9P4 capability_permission_mapping.json",
+        "现有PermissionDefinitionRegistry源码",
+        "B9P4 permission_semantic_registry.json"
+      ]
+    },
+    {
+      "stepId": "B12",
+      "requiredInputs": [
+        "B9P4 resolved_tool_registry.json",
+        "B9P4 tool_event_mapping.json",
+        "现有Event/Hook/Schedule源码",
+        "ToolContract事件扩展规格"
+      ]
+    },
+    {
+      "stepId": "B13",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "B9P4 capability_hook_mapping.json",
+        "现有Hook定义源码",
+        "Capability生命周期规格"
+      ]
+    },
+    {
+      "stepId": "B14",
+      "requiredInputs": [
+        "B9P4 resolved_tool_registry.json",
+        "Browser Tool Contract规格",
+        "现有BrowserSessionProvider源码",
+        "Capability-Provider绑定规格"
+      ]
+    },
+    {
+      "stepId": "B15",
+      "requiredInputs": [
+        "B9P4 resolved_tool_registry.json",
+        "Media Tool Contact规格",
+        "现有ImageGeneration/TTS/ASR源码",
+        "FFmpeg处理管线规格"
+      ]
+    },
+    {
+      "stepId": "B16",
+      "requiredInputs": [
+        "B9P4 resolved_protocol_contract.json",
+        "ResourceURI解析规格",
+        "现有ResourceURI源码",
+        "Provider URI绑定规范"
+      ]
+    },
+    {
+      "stepId": "B17",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "B9P4 capability_schedule_mapping.json",
+        "现有Schedule源码",
+        "定时任务Capability规格"
+      ]
+    },
+    {
+      "stepId": "B18",
+      "requiredInputs": [
+        "B9P4 capability_tool_mapping.json",
+        "B9P4 resolved_capability_registry.json",
+        "Contract一致性校验工具",
+        "现有ToolFacade源码"
+      ]
+    },
+    {
+      "stepId": "B19",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "RuntimeHost/Orchestrator源码",
+        "Android平台SDK文档",
+        "Capability Adapter规格"
+      ]
+    },
+    {
+      "stepId": "B20",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "RuntimeHost/Orchestrator源码",
+        "iOS平台SDK文档",
+        "Native Offload Adapter规格"
+      ]
+    },
+    {
+      "stepId": "B21",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "ProcessSupervisor源码",
+        "Desktop进程管理规格",
+        "跨平台Process Adapter规格"
+      ]
+    },
+    {
+      "stepId": "B22",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "RuntimeOrchestrator源码",
+        "Adapter统一接口规格",
+        "ServiceMesh集成文档"
+      ]
+    },
+    {
+      "stepId": "B23",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有Planner/Goal源码",
+        "Extension Kernel源码",
+        "Capability迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B24",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有Observer/Reflection源码",
+        "mindruntime源码",
+        "Mind能力迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B25",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有TaskGraph源码",
+        "workflow源码",
+        "TaskGraph迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B26",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有BackgroundTask源码",
+        "task_runtime源码",
+        "背景任务迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B27",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有MultiAgent源码",
+        "Extension Kernel源码",
+        "MultiAgent迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B28",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有SubAgent源码",
+        "agent_skill源码",
+        "SubAgent能力迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B29",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有SkillOrchestration源码",
+        "agent_skill源码",
+        "Skill编排迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B30",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有MemoryAugmentedAgent源码",
+        "memory源码",
+        "Memory增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B31",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有ToolAugmentedAgent源码",
+        "Extension Kernel源码",
+        "Tool增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B32",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有PlanningAgent源码",
+        "workflow/task_runtime源码",
+        "Planning增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B33",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有ReflectiveAgent源码",
+        "mindruntime源码",
+        "Reflective增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B34",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有CollaborativeAgent源码",
+        "MultiAgent集成源码",
+        "Collaborative增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B35",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有AdaptiveAgent源码",
+        "Extension Kernel源码",
+        "Adaptive增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B36",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有ContextAwareAgent源码",
+        "memory/mindruntime源码",
+        "ContextAware增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B37",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有GoalDrivenAgent源码",
+        "workflow/task_runtime源码",
+        "GoalDriven增强迁移映射表"
+      ]
+    },
+    {
+      "stepId": "B38",
+      "requiredInputs": [
+        "B9P4 resolved_capability_registry.json",
+        "现有所有剩余Agent源码",
+        "Extension Kernel源码",
+        "Agent迁移收敛校验表"
+      ]
+    },
+    {
+      "stepId": "B39",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有ExecutionPipeline源码",
+        "Provider Gap修复映射表",
+        "Pipeline扩展规格"
+      ]
+    },
+    {
+      "stepId": "B40",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有PermissionBroker源码",
+        "Permission Gap修复映射表",
+        "Permission校验扩展规格"
+      ]
+    },
+    {
+      "stepId": "B41",
+      "requiredInputs": [
+        "B9P4 tool_gap_inventory.json",
+        "现有ToolFacade源码",
+        "Tool Gap修复映射表",
+        "Tool执行路径补全规格"
+      ]
+    },
+    {
+      "stepId": "B42",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有RuntimeAdapterRegistry源码",
+        "Adapter Gap修复映射表",
+        "Provider绑定补全规格"
+      ]
+    },
+    {
+      "stepId": "B43",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有ToolRegistry源码",
+        "Capability Gap修复映射表",
+        "Capability注册补全规格"
+      ]
+    },
+    {
+      "stepId": "B44",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有ExecutionPipeline源码",
+        "Event Gap修复映射表",
+        "Event驱动补全规格"
+      ]
+    },
+    {
+      "stepId": "B45",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有PermissionBroker源码",
+        "Schedule Gap修复映射表",
+        "Schedule权限补全规格"
+      ]
+    },
+    {
+      "stepId": "B46",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有ResourceURI源码",
+        "Resource Gap修复映射表",
+        "Provider资源绑定规格"
+      ]
+    },
+    {
+      "stepId": "B47",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有Hook系统源码",
+        "Hook Gap修复映射表",
+        "Hook扩展补全规格"
+      ]
+    },
+    {
+      "stepId": "B48",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有Schedule系统源码",
+        "Execution Gap修复映射表",
+        "Schedule执行补全规格"
+      ]
+    },
+    {
+      "stepId": "B49",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有task_runtime源码",
+        "State Gap修复映射表",
+        "状态管理补全规格"
+      ]
+    },
+    {
+      "stepId": "B50",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有workflow源码",
+        "Workflow Gap修复映射表",
+        "Workflow引擎补全规格"
+      ]
+    },
+    {
+      "stepId": "B51",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有mindruntime源码",
+        "Mind Gap修复映射表",
+        "Mind运行时补全规格"
+      ]
+    },
+    {
+      "stepId": "B52",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有Permission Broker源码",
+        "Validation Gap修复映射表",
+        "验证管线补全规格"
+      ]
+    },
+    {
+      "stepId": "B53",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有ToolFacade源码",
+        "ErrorHandling Gap修复映射表",
+        "错误处理补全规格"
+      ]
+    },
+    {
+      "stepId": "B54",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有ResourceURI源码",
+        "ResourceURI Gap修复映射表",
+        "URI解析补全规格"
+      ]
+    },
+    {
+      "stepId": "B55",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生Shell API文档",
+        "RuntimeHost/Orchestrator API",
+        "Linux/Shell Provider规格"
+      ]
+    },
+    {
+      "stepId": "B56",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生进程管理API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android进程管理规格"
+      ]
+    },
+    {
+      "stepId": "B57",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生文件系统API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android文件系统Provider规格"
+      ]
+    },
+    {
+      "stepId": "B58",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生网络API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android网络Provider规格"
+      ]
+    },
+    {
+      "stepId": "B59",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生存储API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android存储Provider规格"
+      ]
+    },
+    {
+      "stepId": "B60",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生相机API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android相机Provider规格"
+      ]
+    },
+    {
+      "stepId": "B61",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生传感器API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android传感器Provider规格"
+      ]
+    },
+    {
+      "stepId": "B62",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android Accessibility API文档",
+        "Android无障碍服务规格",
+        "Provider集成映射表"
+      ]
+    },
+    {
+      "stepId": "B63",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生位置API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android位置Provider规格"
+      ]
+    },
+    {
+      "stepId": "B64",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生通知API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android通知Provider规格"
+      ]
+    },
+    {
+      "stepId": "B65",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生MediaSession API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android MediaSession Provider规格"
+      ]
+    },
+    {
+      "stepId": "B66",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生Telephony API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android Telephony Provider规格"
+      ]
+    },
+    {
+      "stepId": "B67",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生权限管理API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android权限Provider规格"
+      ]
+    },
+    {
+      "stepId": "B68",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Android原生运行时完整API文档",
+        "RuntimeHost/Orchestrator API",
+        "Android Runtime收敛校验表"
+      ]
+    },
+    {
+      "stepId": "B69",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有imageprovider源码",
+        "Image Generation Provider规格",
+        "图片生成扩展规格"
+      ]
+    },
+    {
+      "stepId": "B70",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有imageprovider源码",
+        "Image Recognition Provider规格",
+        "图片识别扩展规格"
+      ]
+    },
+    {
+      "stepId": "B71",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有tts源码",
+        "TTS Provider规格",
+        "语音合成扩展规格"
+      ]
+    },
+    {
+      "stepId": "B72",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有asr源码",
+        "ASR Provider规格",
+        "语音识别扩展规格"
+      ]
+    },
+    {
+      "stepId": "B73",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有imageprovider源码",
+        "Video Processing Provider规格",
+        "视频处理扩展规格"
+      ]
+    },
+    {
+      "stepId": "B74",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有tts/asr/imageprovider源码",
+        "Audio Processing Provider规格",
+        "音频处理管线规格"
+      ]
+    },
+    {
+      "stepId": "B75",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有imageprovider源码",
+        "Screen Capture Provider规格",
+        "屏幕捕获扩展规格"
+      ]
+    },
+    {
+      "stepId": "B76",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有imageprovider源码",
+        "Webcam Provider规格",
+        "摄像头访问扩展规格"
+      ]
+    },
+    {
+      "stepId": "B77",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "现有tts/asr源码",
+        "Audio Stream Provider规格",
+        "音频流扩展规格"
+      ]
+    },
+    {
+      "stepId": "B78",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Media/Device Provider完整清单",
+        "ResourceURI源码",
+        "Media/Device收敛校验表"
+      ]
+    },
+    {
+      "stepId": "B79",
+      "requiredInputs": [
+        "B9P4 browser_provider_gap.json",
+        "RuntimeBinding browser_runtime源码",
+        "Playwright/Puppeteer文档",
+        "Browser会话管理规格"
+      ]
+    },
+    {
+      "stepId": "B80",
+      "requiredInputs": [
+        "B9P4 browser_provider_gap.json",
+        "RuntimeBinding browser_runtime源码",
+        "Playwright/Puppeteer文档",
+        "Browser DOM操作规格"
+      ]
+    },
+    {
+      "stepId": "B81",
+      "requiredInputs": [
+        "B9P4 browser_provider_gap.json",
+        "RuntimeBinding browser_runtime源码",
+        "Playwright/Puppeteer文档",
+        "Browser脚本注入规格"
+      ]
+    },
+    {
+      "stepId": "B82",
+      "requiredInputs": [
+        "B9P4 browser_provider_gap.json",
+        "RuntimeBinding browser_runtime源码",
+        "Playwright/Puppeteer文档",
+        "Browser网络拦截规格"
+      ]
+    },
+    {
+      "stepId": "B83",
+      "requiredInputs": [
+        "B9P4 browser_provider_gap.json",
+        "RuntimeBinding browser_runtime源码",
+        "Browser权限控制规格",
+        "Browser Provider收敛校验表"
+      ]
+    },
+    {
+      "stepId": "B84",
+      "requiredInputs": [
+        "B9P4 search_provider_gap.json",
+        "Deep Search Web API文档",
+        "Search Engine Provider规格",
+        "搜索引擎扩展规格"
+      ]
+    },
+    {
+      "stepId": "B85",
+      "requiredInputs": [
+        "B9P4 search_provider_gap.json",
+        "Deep Search Web API文档",
+        "Search索引规格",
+        "本地Search Provider规格"
+      ]
+    },
+    {
+      "stepId": "B86",
+      "requiredInputs": [
+        "B9P4 search_provider_gap.json",
+        "Deep Search Web API文档",
+        "Search结果聚合规格",
+        "Search Provider收敛校验表"
+      ]
+    },
+    {
+      "stepId": "B87",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Media Provider清单",
+        "Workspace Provider规格",
+        "Media-Workspace集成映射表"
+      ]
+    },
+    {
+      "stepId": "B88",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "MCP Provider清单",
+        "ResourceURI源码",
+        "MCP-Workspace集成映射表"
+      ]
+    },
+    {
+      "stepId": "B89",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Workspace Provider清单",
+        "Extension Kernel源码",
+        "Workspace-Kernel集成映射表"
+      ]
+    },
+    {
+      "stepId": "B90",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Media/MCP Provider清单",
+        "PermissionBroker源码",
+        "跨Provider权限集成映射表"
+      ]
+    },
+    {
+      "stepId": "B91",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Media/MCP/Workspace源码",
+        "ToolFacade源码",
+        "Provider-Tool映射集成规格"
+      ]
+    },
+    {
+      "stepId": "B92",
+      "requiredInputs": [
+        "B9P4 provider_gap_inventory.json",
+        "Media/MCP/Workspace Provider清单",
+        "统一Provider注册表",
+        "Media/MCP/Workspace收敛校验表"
+      ]
+    },
+    {
+      "stepId": "B93",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "B9P4 permission_mcp_mapping.json",
+        "internal/mcp源码",
+        "Extension Kernel ToolFacade源码",
+        "MCP Tool注册规格"
+      ]
+    },
+    {
+      "stepId": "B94",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "internal/mcp源码",
+        "MCP Server Discovery规格",
+        "Server注册扩展规格"
+      ]
+    },
+    {
+      "stepId": "B95",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "internal/mcp源码",
+        "MCP Tool协商规格",
+        "Capability协商扩展规格"
+      ]
+    },
+    {
+      "stepId": "B96",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "internal/mcp源码",
+        "MCP Session规格",
+        "Session管理扩展规格"
+      ]
+    },
+    {
+      "stepId": "B97",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "internal/mcp源码",
+        "MCP Protocol适配规格",
+        "Protocol层扩展规格"
+      ]
+    },
+    {
+      "stepId": "B98",
+      "requiredInputs": [
+        "B9P4 permission_mcp_mapping.json",
+        "internal/mcp源码",
+        "PermissionBroker源码",
+        "MCP权限规格",
+        "Permission扩展规格"
+      ]
+    },
+    {
+      "stepId": "B99",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "internal/mcp源码",
+        "agent_skill源码",
+        "Skill注册规格"
+      ]
+    },
+    {
+      "stepId": "B100",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "agent_skill源码",
+        "Skill编排规格",
+        "Skill依赖解析规格"
+      ]
+    },
+    {
+      "stepId": "B101",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "agent_skill源码",
+        "Skill发现机制规格",
+        "Skill调度扩展规格"
+      ]
+    },
+    {
+      "stepId": "B102",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "agent_skill源码",
+        "Skill生命周期规格",
+        "Skill状态管理扩展规格"
+      ]
+    },
+    {
+      "stepId": "B103",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "workflow源码",
+        "Extension Kernel源码",
+        "Workflow引擎规格",
+        "Workflow执行管线扩展规格"
+      ]
+    },
+    {
+      "stepId": "B104",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "workflow源码",
+        "Workflow调度规格",
+        "Workflow状态机扩展规格"
+      ]
+    },
+    {
+      "stepId": "B105",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "workflow源码",
+        "Workflow并行执行规格",
+        "并行调度扩展规格"
+      ]
+    },
+    {
+      "stepId": "B106",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "workflow源码",
+        "Workflow错误处理规格",
+        "容错扩展规格"
+      ]
+    },
+    {
+      "stepId": "B107",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "Extension Kernel源码",
+        "workflow/task_runtime源码",
+        "Workflow-task_runtime集成规格",
+        "状态同步扩展规格"
+      ]
+    },
+    {
+      "stepId": "B108",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "Extension Kernel源码",
+        "Workflow-hook集成规格",
+        "Hook扩展规格"
+      ]
+    },
+    {
+      "stepId": "B109",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "Extension Kernel源码",
+        "Workflow-event集成规格",
+        "Event驱动扩展规格"
+      ]
+    },
+    {
+      "stepId": "B110",
+      "requiredInputs": [
+        "B9P4 tool_mcp_mapping.json",
+        "Extension Kernel/MCP/Skill/Workflow完整源码",
+        "收敛校验规格",
+        "统一注册校验规格"
+      ]
+    },
+    {
+      "stepId": "B111",
+      "requiredInputs": [
+        "现有ModelService配置",
+        "model_service源码",
+        "本地模型文档",
+        "ResponsesAPI Adapter规格",
+        "MNN Local Provider规格"
+      ]
+    },
+    {
+      "stepId": "B112",
+      "requiredInputs": [
+        "现有ModelService配置",
+        "model_service源码",
+        "Embedding Provider规格",
+        "模型路由扩展规格"
+      ]
+    },
+    {
+      "stepId": "B113",
+      "requiredInputs": [
+        "现有ModelService配置",
+        "model_service源码",
+        "本地模型文档",
+        "Local Model Provider规格",
+        "设备端推理扩展规格"
+      ]
+    },
+    {
+      "stepId": "B114",
+      "requiredInputs": [
+        "现有ModelService配置",
+        "model_service源码",
+        "Model fallback规格",
+        "模型降级扩展规格"
+      ]
+    },
+    {
+      "stepId": "B115",
+      "requiredInputs": [
+        "现有Character配置",
+        "character源码",
+        "Voice Provider规格",
+        "Character-Voice集成规格"
+      ]
+    },
+    {
+      "stepId": "B116",
+      "requiredInputs": [
+        "现有Character配置",
+        "character源码",
+        "Character状态规格",
+        "Character状态管理扩展规格"
+      ]
+    },
+    {
+      "stepId": "B117",
+      "requiredInputs": [
+        "现有Character配置",
+        "character源码",
+        "Character调度规格",
+        "Character调度扩展规格"
+      ]
+    },
+    {
+      "stepId": "B118",
+      "requiredInputs": [
+        "现有Memory配置",
+        "memory源码",
+        "Memory系统规格",
+        "Memory Store规格",
+        "Memory Graph规格"
+      ]
+    },
+    {
+      "stepId": "B119",
+      "requiredInputs": [
+        "现有Memory配置",
+        "memory源码",
+        "Memory检索规格",
+        "向量检索扩展规格"
+      ]
+    },
+    {
+      "stepId": "B120",
+      "requiredInputs": [
+        "现有Memory配置",
+        "memory源码",
+        "Memory持久化规格",
+        "持久化扩展规格"
+      ]
+    },
+    {
+      "stepId": "B121",
+      "requiredInputs": [
+        "现有Character配置",
+        "character源码",
+        "Character系统规格",
+        "Character DB规格",
+        "Character Service规格"
+      ]
+    },
+    {
+      "stepId": "B122",
+      "requiredInputs": [
+        "现有Model/Voice/Memory/Character完整源码",
+        "收敛校验规格",
+        "统一Provider注册校验",
+        "Provider集成收敛规格"
+      ]
+    },
+    {
+      "stepId": "B123",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "RuntimeHost API",
+        "AlChemy Provider规格",
+        "iOS原生沙箱规格"
+      ]
+    },
+    {
+      "stepId": "B124",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "RuntimeHost API",
+        "iOS文件系统沙箱规格",
+        "iOS存储隔离规格"
+      ]
+    },
+    {
+      "stepId": "B125",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "RuntimeHost API",
+        "iOS网络沙箱规格",
+        "iOS网络隔离规格"
+      ]
+    },
+    {
+      "stepId": "B126",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "RuntimeHost API",
+        "iOS进程沙箱规格",
+        "iOS进程隔离规格"
+      ]
+    },
+    {
+      "stepId": "B127",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS HealthKit API文档",
+        "HealthKit Provider规格",
+        "健康数据安全规格"
+      ]
+    },
+    {
+      "stepId": "B128",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS HomeKit API文档",
+        "HomeKit Provider规格",
+        "智能设备集成规格"
+      ]
+    },
+    {
+      "stepId": "B129",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS CoreML API文档",
+        "CoreML Provider规格",
+        "设备端推理规格"
+      ]
+    },
+    {
+      "stepId": "B130",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS CallKit API文档",
+        "CallKit Provider规格",
+        "通话集成规格"
+      ]
+    },
+    {
+      "stepId": "B131",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS NFC API文档",
+        "NFC Provider规格",
+        "NFC读写规格"
+      ]
+    },
+    {
+      "stepId": "B132",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS ARKit API文档",
+        "ARKit Provider规格",
+        "AR增强规格"
+      ]
+    },
+    {
+      "stepId": "B133",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS PassKit API文档",
+        "PassKit Provider规格",
+        "支付集成规格"
+      ]
+    },
+    {
+      "stepId": "B134",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS CarPlay API文档",
+        "CarPlay Provider规格",
+        "车载集成规格"
+      ]
+    },
+    {
+      "stepId": "B135",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS WatchConnectivity API文档",
+        "WatchConnectivity Provider规格",
+        "手表集成规格"
+      ]
+    },
+    {
+      "stepId": "B136",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "iOS Intents API文档",
+        "Intents Provider规格",
+        "Siri集成规格"
+      ]
+    },
+    {
+      "stepId": "B137",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "RuntimeHost API",
+        "iOS沙箱收敛校验规格",
+        "端到端集成规格"
+      ]
+    },
+    {
+      "stepId": "B138",
+      "requiredInputs": [
+        "iOS SDK文档",
+        "RuntimeHost API",
+        "iOS Alchemy Provider收敛规格",
+        "统一Capability校验表"
+      ]
+    },
+    {
+      "stepId": "B139",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "RuntimeHost/Orchestrator API",
+        "iOS/Android/Desktop Adapter源码",
+        "Unified Adaptor规格",
+        "收敛适配规格"
+      ]
+    },
+    {
+      "stepId": "B140",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "Extension Kernel ToolFacade源码",
+        "现有Legacy Tool系统源码",
+        "Tool cutover规格",
+        "Legacy fallback消除规格"
+      ]
+    },
+    {
+      "stepId": "B141",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "ExecutionPipeline源码",
+        "现有Alternative Execution链源码",
+        "Pipeline唯一生产执行链规格",
+        "备用链消除规格"
+      ]
+    },
+    {
+      "stepId": "B142",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有Provider源码",
+        "Provider验证规格",
+        "Provider集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B143",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有Skill源码",
+        "Skill验证规格",
+        "Skill集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B144",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有Workflow源码",
+        "Workflow验证规格",
+        "Workflow集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B145",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有Adapter源码",
+        "Adapter收敛验证规格",
+        "Adapter集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B146",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有Permission源码",
+        "Permission收敛验证规格",
+        "Permission集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B147",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有MCP源码",
+        "MCP收敛验证规格",
+        "MCP集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B148",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有Character/Model/Voice源码",
+        "统一Provider收敛验证规格",
+        "Provider集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B149",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "所有iOS/Android原生源码",
+        "跨平台收敛验证规格",
+        "三端集成测试规格"
+      ]
+    },
+    {
+      "stepId": "B150",
+      "requiredInputs": [
+        "B9P4 migration_requirements.json",
+        "全部源码和文档",
+        "系统完整性验证规格",
+        "端到端E2E测试规格"
+      ]
+    },
+    {
+      "stepId": "B151",
+      "requiredInputs": [
+        "全代码扫描工具",
+        "Legacy/Mock/TODO/UNVERIFIED扫描规格",
+        "Legacy消除清单",
+        "零Legacy/Mock/TODO/UNVERIFIED规格"
+      ]
+    },
+    {
+      "stepId": "B152",
+      "requiredInputs": [
+        "全代码扫描工具",
+        "Regression测试套件",
+        "Cutover验证规格",
+        "回归测试规格"
+      ]
+    },
+    {
+      "stepId": "B153",
+      "requiredInputs": [
+        "全代码扫描工具",
+        "ExitConditions验收规格",
+        "收敛验收检查单",
+        "全部验证文档"
+      ]
+    },
+    {
+      "stepId": "B154",
+      "requiredInputs": [
+        "全代码扫描工具",
+        "最终验收规格",
+        "完整测试报告",
+        "Go-Live签核文档"
+      ]
+    }
+  ]
+}

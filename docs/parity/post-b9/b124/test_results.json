@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T17:30:00+08:00",
+  "description": "B124 Test Results - BLOCKED无法执行",
+  "status": "BLOCKED",
+  "message": "iSH源码未引入，无法构建和测试Backend",
+  "tests": {
+    "ishBackendBuild": "SKIPPED (no iSH code)",
+    "providerIntegration": "SKIPPED",
+    "runtimeHost": "N/A",
+    "backendUnavailable": "N/A",
+    "rootfsMissing": "N/A",
+    "filesystemIsolation": "N/A",
+    "permissionBypass": "N/A"
+  }
+}

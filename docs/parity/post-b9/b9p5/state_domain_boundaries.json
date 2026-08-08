@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:45:00+08:00",
+  "domains": [
+    {
+      "domainId": "CAPABILITY",
+      "name": "Capability可用性",
+      "canonicalPath": "backend/internal/extension/kernel/capability/state.go",
+      "owner": "CapabilityManager",
+      "states": ["HealthStatus", "ToolState"],
+      "protocolMapping": "B9 AvailabilityStatus",
+      "responsibilities": ["能力可见性评估", "工具可执行性综合判断"],
+      "strictBoundary": true
+    },
+    {
+      "domainId": "TOOL_EXECUTION",
+      "name": "Tool执行生命周期",
+      "canonicalPath": "backend/internal/extension/kernel/observability/status.go",
+      "owner": "ObservabilityAudit",
+      "states": ["ExecutionStatus"],
+      "protocolMapping": "B9 ToolExecutionStatus",
+      "responsibilities": ["工具调用全生命周期状态跟踪", "审计日志记录"],
+      "strictBoundary": true
+    },
+    {
+      "domainId": "TOOL_RESULT",
+      "name": "Tool调用结果",
+      "canonicalPath": "backend/internal/extension/kernel/capability/result.go",
+      "owner": "ToolExecutor",
+      "states": ["ToolResultStatus"],
+      "protocolMapping": "无直接对应",
+      "responsibilities": ["调用结果状态", "最终结果记录"],
+      "strictBoundary": true
+    },
+    {
+      "domainId": "TASK_RUNTIME",
+      "name": "Task运行时状态",
+      "canonicalPath": "backend/internal/extension/kernel/task_runtime/models.go",
+      "owner": "TaskExecutor",
+      "states": ["TaskRunStatus", "ProcessHostState"],
+      "protocolMapping": "B9 TaskStatus (部分)",
+      "responsibilities": ["任务执行状态机", "检查点/恢复/暂停/恢复"],
+      "strictBoundary": true,
+      "notes": "B9 TaskStatus中的PLANNING/WAITING_TOOL/WAITING_USER不属于此域"
+    },
+    {
+      "domainId": "EXTENSION_RUNTIME",
+      "name": "Extension Runtime状态",
+      "canonicalPath": "backend/internal/extension/kernel/runtime_supervisor/types.go",
+      "owner": "DefaultSupervisor",
+      "states": ["DesiredState", "ActualState", "HealthStatus", "CircuitState"],
+      "protocolMapping": "B9 RuntimeStatus (部分)",
+      "responsibilities": ["扩展运行时实例管理", "健康检查", "熔断器"],
+      "strictBoundary": true
+    },
+    {
+      "domainId": "ANDROID_RUNTIME",
+      "name": "Android内嵌Runtime状态",
+      "canonicalPath": "mobile_app/android/amitia-runtime/RuntimeState.kt",
+      "owner": "RuntimeStateMachine",
+      "states": ["RuntimeState", "RuntimeComponentState", "RuntimeProgressStage"],
+      "protocolMapping": "B9 RuntimeStatus (部分)",
+      "responsibilities": ["Android内嵌Ubuntu/Backend Runtime生命周期"],
+      "strictBoundary": true,
+      "notes": "与Extension Runtime属于不同平台，不得合并"
+    },
+    {
+      "domainId": "PERMISSION_POLICY",
+      "name": "Permission策略决定",
+      "canonicalPath": "backend/internal/extension/kernel/permission/grant.go",
+      "owner": "PermissionBroker",
+      "states": ["PermissionDecision", "GrantIssuer"],
+      "protocolMapping": "B9 PermissionStatus (部分)",
+      "responsibilities": ["权限策略决定", "授权管理"],
+      "strictBoundary": true,
+      "notes": "与OS层面的Authorization不同层次"
+    },
+    {
+      "domainId": "PROVIDER",
+      "name": "Provider状态",
+      "canonicalPath": "各Provider自行维护",
+      "owner": "各Provider实现",
+      "states": ["各Provider自有health/availability"],
+      "protocolMapping": "B9 ProviderStatus",
+      "responsibilities": ["注册/健康/可用性由各Provider自行维护"],
+      "strictBoundary": false,
+      "notes": "当前没有统一的Provider状态Store，B9状态为PROTOCOL_ONLY"
+    },
+    {
+      "domainId": "EXTENSION_LIFECYCLE",
+      "name": "Extension生命周期",
+      "canonicalPath": "backend/internal/extension/kernel/package*.go",
+      "owner": "PackageManager/LifecycleManager",
+      "states": ["包操作状态", "生命周期状态"],
+      "protocolMapping": "B9 ExtensionStatus",
+      "responsibilities": ["扩展安装/更新/启用/禁用/卸载"],
+      "strictBoundary": false,
+      "notes": "当前Package操作未使用统一状态枚举，而是通过各操作实现返回值表达"
+    },
+    {
+      "domainId": "DESKTOPPET_RUNTIME",
+      "name": "桌面宠物运行时桥接",
+      "canonicalPath": "backend/internal/desktoppet/runtime/types.go",
+      "owner": "RuntimeBridge",
+      "states": ["RuntimeState"],
+      "protocolMapping": "无直接B9对应",
+      "responsibilities": ["桌面宠物后端与UI运行时桥接状态"],
+      "strictBoundary": true
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P8",
+  "runtimeAuthority": false,
+  "note": "该JSON为Parity Manifest，不是运行时Tool Registry。实际生产事实源仍是extension/kernel/capability.ToolRegistry",
+  "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+  "counts": {
+    "agentCallableCapability": 253,
+    "resolvedTool": 253,
+    "existingTool": 0,
+    "requiredNotImplemented": 253,
+    "historicalToolTotal": 506,
+    "historicalMigrate": 253,
+    "historicalNotActuallyTool": 253,
+    "toolWithoutCapability": 0,
+    "historicalUnresolved": 0
+  },
+  "classification": {
+    "EXISTING": 0,
+    "EXISTING_NEEDS_MIGRATION": 0,
+    "REQUIRED_NOT_IMPLEMENTED": 253,
+    "DEPRECATED": 0
+  },
+  "validation": {
+    "agentCallableWithoutToolContract": 0,
+    "toolWithoutCapability": 0,
+    "historicalToolUnresolved": 0
+  }
+}

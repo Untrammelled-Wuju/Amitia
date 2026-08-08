@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "BLOCKED",
+  "timestamp": "2026-08-08T18:30:00+08:00",
+
+  "inputs": {
+    "b9p8": {
+      "path": "docs/parity/post-b9/b9p8/",
+      "status": "PASS"
+    },
+    "b123": {
+      "path": "docs/parity/post-b9/b123/",
+      "status": "PASS_NO_CODE_CHANGE"
+    },
+    "b124": {
+      "path": "docs/parity/post-b9/b124/",
+      "status": "IN_PROGRESS_PARTIAL - NOT_PASS"
+    },
+    "stepReuseMatrix": {
+      "path": "docs/parity/post-b9/b9p8/final_step_reuse_matrix.json",
+      "note": "矩阵中B125映射为iOS Tool注册，与Alpine rootfs规范存在差异"
+    }
+  },
+
+  "conflict": {
+    "note": "B9P8 final_step_reuse_matrix定义B125为'iOS Tool注册到ToolRegistry' (EXTEND, IOSAlchemyProvider)。本规范(B125)定位为Alpine rootfs接入。优先级: B9P8 > B125。但B125因B124未PASS而BLOCKED，冲突不影响当前状态。"
+  }
+}

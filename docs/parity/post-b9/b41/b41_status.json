@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "status": "PASS_NO_CODE_CHANGE",
+  "constructionMode": ["REUSE", "EXTEND"],
+  "canonical": {
+    "toolInvocation": "capability.ToolInvocationContext (backend/internal/extension/kernel/capability/invocation.go)",
+    "invocationBuilder": "Caller-side construction; ToolFacade is the canonical entry",
+    "executionContext": "execution.ToolExecutionRequest (kernel.go) wraps ToolInvocationContext as Invocation",
+    "runtimeProjection": "RuntimeAdapter.Execute adapter signatures accept ToolInvocationContext"
+  },
+  "identity": {
+    "invocationIdAuthorityCount": 1,
+    "identityMutationCount": 0,
+    "globalCurrentInvocationCount": 0
+  },
+  "propagation": {
+    "trace": "PASS",
+    "deadline": "PASS",
+    "cancellation": "PASS",
+    "scope": "PASS",
+    "runtime": "PASS",
+    "resource": "PASS"
+  },
+  "security": {
+    "modelForgeableSystemIdentity": false,
+    "modelForgeablePermissionDecision": false,
+    "rawSecretInContext": false,
+    "agentDirectProviderContextBypass": 0
+  },
+  "duplicates": {
+    "newToolContextSystem": 0,
+    "newExecutionContextSystem": 0,
+    "newInvocationRegistry": 0,
+    "newCancellationManager": 0,
+    "newScopeSystem": 0,
+    "newTraceSystem": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B42"
+}

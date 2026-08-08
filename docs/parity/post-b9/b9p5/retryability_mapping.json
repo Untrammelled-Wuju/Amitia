@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:38:00+08:00",
+  "retryabilityRules": [
+    {
+      "domain": "task_runtime",
+      "owner": "task_runtime.IsRetryableErrorCode()",
+      "retryableCodes": ["task_runtime_start_failed", "task_runtime_crashed"],
+      "nonRetryableCodes": "其他所有task_*错误",
+      "protocolOverride": false,
+      "notes": "Domain显式决定，Protocol不能覆盖"
+    },
+    {
+      "domain": "capability",
+      "owner": "ToolError.Retryable字段 (各adapter硬编码)",
+      "retryableCodes": ["timeout"],
+      "nonRetryableCodes": ["invalid_input", "permission_denied", "scope_denied", "cancelled"],
+      "protocolOverride": false,
+      "notes": "当前仅timeout标记为Retryable"
+    },
+    {
+      "domain": "extension_package",
+      "owner": "PackageError.Retryable字段",
+      "retryableCodes": ["ErrPackageLeaseAcquireFailed"],
+      "nonRetryableCodes": ["ErrPackageAlreadyInstalled", "ErrPackageNotInstalled", "ErrInvalidArchive", "ErrPathTraversal", "ErrSignatureInvalid"],
+      "protocolOverride": false,
+      "notes": "PackageError结构体内置Retryable字段"
+    },
+    {
+      "domain": "image_provider",
+      "owner": "ProviderError.RetryClass字段",
+      "retryableCodes": ["ErrCodeRateLimited", "ErrCodeServiceError"],
+      "nonRetryableCodes": ["ErrCodeConfigMissing", "ErrCodeProviderNotRegistered", "ErrCodeModelNotSupported", "ErrCodeAuthFailed"],
+      "protocolOverride": false,
+      "notes": "ProviderError使用RetryClass而非bool"
+    },
+    {
+      "domain": "desktop_update",
+      "owner": "各操作逻辑",
+      "retryableCodes": ["ErrDownloadFailed"],
+      "nonRetryableCodes": ["ErrHashMismatch", "ErrSignatureInvalid", "ErrPreflightFailed", "ErrManualIntervention", "ErrUpdateConflict"],
+      "protocolOverride": false,
+      "notes": "文件系统/签名错误不可重试"
+    }
+  ],
+  "summary": {
+    "domainWithRetryRule": 5,
+    "protocolDefault": "仅在Domain未cover时使用",
+    "conflictCount": 0
+  }
+}

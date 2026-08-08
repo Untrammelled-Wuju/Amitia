@@ -1,0 +1,920 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:20:00+08:00",
+  "mappings": [
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "AVAILABLE",
+      "canonicalDomain": "capability.ToolState",
+      "canonicalState": ["Installed+ModuleEnabled+CapabilityEnabled+ScopeAllowed+PermissionGranted+RuntimeReady+DependencyReady+ready"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "UNAVAILABLE",
+      "canonicalDomain": "capability.HealthStatus",
+      "canonicalState": ["unhealthy", "shutdown"],
+      "mappingType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "DISABLED",
+      "canonicalDomain": "capability.ToolState",
+      "canonicalState": ["!ModuleEnabled OR !CapabilityEnabled"],
+      "mappingType": "MANY_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "UNSUPPORTED_PLATFORM",
+      "canonicalDomain": "capability.ToolState",
+      "canonicalState": ["由Capability.CandidateDecision决定"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "PERMISSION_REQUIRED",
+      "canonicalDomain": "permission.PermissionDecision",
+      "canonicalState": ["require_approval"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "DEPENDENCY_MISSING",
+      "canonicalDomain": "capability.ToolState",
+      "canonicalState": ["!DependencyReady"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "RUNTIME_NOT_READY",
+      "canonicalDomain": "capability.ToolState",
+      "canonicalState": ["!RuntimeReady"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Availability",
+      "historicalB9State": "DEGRADED",
+      "canonicalDomain": "capability.HealthStatus",
+      "canonicalState": ["degraded"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "PENDING",
+      "canonicalDomain": "tool_execution.ExecutionStatus",
+      "canonicalState": ["queued"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "VALIDATING",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["由ToolExecutor在执行前校验"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "WAITING_PERMISSION",
+      "canonicalDomain": "tool_execution.ExecutionStatus",
+      "canonicalState": ["awaiting_approval"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "READY",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["执行内核不维护READY状态"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "RUNNING",
+      "canonicalDomain": "tool_execution.ExecutionStatus",
+      "canonicalState": ["running"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "PAUSED",
+      "canonicalDomain": "无对应",
+      "canonicalState": ["ToolExecution不支持暂停"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_STATE_EXTENSION_REQUIRED"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "CANCELLING",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["Observe层记录请求取消事件"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "CANCELLED",
+      "canonicalDomain": "tool_execution.ExecutionStatus",
+      "canonicalState": ["cancelled"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "SUCCEEDED",
+      "canonicalDomain": "tool_execution.ExecutionStatus",
+      "canonicalState": ["succeeded", "partially_succeeded"],
+      "mappingType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "FAILED",
+      "canonicalDomain": "tool_execution.ExecutionStatus",
+      "canonicalState": ["failed"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ToolExecution",
+      "historicalB9State": "TIMED_OUT",
+      "canonicalDomain": "tool_execution.ExecutionStatus",
+      "canonicalState": ["timed_out"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "CREATED",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["created"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "QUEUED",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["queued"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "PLANNING",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["属于Agent/Planner域，不在TaskRuntime"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "REQUIRES_DOMAIN_SPLIT"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "RUNNING",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["running", "checkpointing", "pausing", "resuming"],
+      "mappingType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "WAITING_TOOL",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["属于Agent Pipeline状态"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "REQUIRES_DOMAIN_SPLIT"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "WAITING_PERMISSION",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["属于PermissionBroker域"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "REQUIRES_DOMAIN_SPLIT"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "WAITING_USER",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["属于Agent/Conversation域"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "REQUIRES_DOMAIN_SPLIT"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "PAUSED",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["paused"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "RESUMING",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["resuming"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "SUCCEEDED",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["succeeded"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "FAILED",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["failed"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "CANCELLED",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["cancelled"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "TIMED_OUT",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["timed_out"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Task",
+      "historicalB9State": "RECOVERING",
+      "canonicalDomain": "task_runtime.TaskRunStatus",
+      "canonicalState": ["recovery_required"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "NOT_INSTALLED",
+      "canonicalDomain": "android_runtime.RuntimeState",
+      "canonicalState": ["NOT_INSTALLED"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "INSTALLING",
+      "canonicalDomain": "android_runtime.RuntimeState",
+      "canonicalState": ["INSTALLING"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "INSTALLED",
+      "canonicalDomain": "android_runtime.RuntimeState",
+      "canonicalState": ["INSTALLED"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "STARTING",
+      "canonicalDomain": "extension_runtime.ActualState / android_runtime.RuntimeState",
+      "canonicalState": ["starting"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "READY",
+      "canonicalDomain": "extension_runtime.ActualState / android_runtime.RuntimeState",
+      "canonicalState": ["ready"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "DEGRADED",
+      "canonicalDomain": "extension_runtime.ActualState / android_runtime.RuntimeState",
+      "canonicalState": ["degraded"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "STOPPING",
+      "canonicalDomain": "extension_runtime.ActualState / android_runtime.RuntimeState",
+      "canonicalState": ["stopping"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "STOPPED",
+      "canonicalDomain": "extension_runtime.ActualState / android_runtime.RuntimeState",
+      "canonicalState": ["stopped"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "CRASHED",
+      "canonicalDomain": "extension_runtime.ActualState",
+      "canonicalState": ["crashed"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "RECOVERING",
+      "canonicalDomain": "android_runtime.RuntimeState",
+      "canonicalState": ["REPAIRING"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Runtime",
+      "historicalB9State": "FAILED",
+      "canonicalDomain": "extension_runtime.ActualState / android_runtime.RuntimeState",
+      "canonicalState": ["failed"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "UNKNOWN",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["无PermissionBroker不返回UNKNOWN"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "NOT_REQUIRED",
+      "canonicalDomain": "permission.PermissionDecision",
+      "canonicalState": ["allow(无需审批)"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "NOT_REQUESTED",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["属于UI/OS层面"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "REQUESTING",
+      "canonicalDomain": "permission.PermissionDecision",
+      "canonicalState": ["require_approval(要求审批但未响应)"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "GRANTED",
+      "canonicalDomain": "permission.PermissionDecision",
+      "canonicalState": ["allow", "allow_once", "allow_session", "allow_persistent"],
+      "mappingType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "DENIED",
+      "canonicalDomain": "permission.PermissionDecision",
+      "canonicalState": ["deny"],
+      "mappingType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "DENIED_PERMANENTLY",
+      "canonicalDomain": "permission.PermissionDecision",
+      "canonicalState": ["deny(通过GrantIssuer=permanent判断)"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "RESTRICTED",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["属于OS层面限制"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Permission",
+      "historicalB9State": "UNSUPPORTED",
+      "canonicalDomain": "无直接对应",
+      "canonicalState": ["能力不存在"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "UNREGISTERED",
+      "canonicalDomain": "无统一Provider状态源",
+      "canonicalState": ["各Provider自行维护registration"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "REGISTERED",
+      "canonicalDomain": "无统一Provider状态源",
+      "canonicalState": ["各Provider已注册"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "INITIALIZING",
+      "canonicalDomain": "无统一Provider状态源",
+      "canonicalState": ["Provider初始化中"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "READY",
+      "canonicalDomain": "各Provider健康检查",
+      "canonicalState": ["Provider健康"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "DEGRADED",
+      "canonicalDomain": "各Provider健康检查",
+      "canonicalState": ["Provider降级"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "UNAVAILABLE",
+      "canonicalDomain": "各Provider健康检查",
+      "canonicalState": ["Provider不可用"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "FAILED",
+      "canonicalDomain": "各Provider健康检查",
+      "canonicalState": ["Provider失败"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Provider",
+      "historicalB9State": "DISABLED",
+      "canonicalDomain": "各Provider配置",
+      "canonicalState": ["Provider配置禁用"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "DISCOVERED",
+      "canonicalDomain": "extension_kernel.package状态",
+      "canonicalState": ["包已发现未安装"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "INSTALLING",
+      "canonicalDomain": "extension_kernel.package状态",
+      "canonicalState": ["包安装中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "INSTALLED",
+      "canonicalDomain": "extension_kernel.package状态",
+      "canonicalState": ["包已安装"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "ENABLING",
+      "canonicalDomain": "extension_kernel.lifecycle状态",
+      "canonicalState": ["启用中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "ENABLED",
+      "canonicalDomain": "extension_kernel.lifecycle状态",
+      "canonicalState": ["已启用"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "DISABLING",
+      "canonicalDomain": "extension_kernel.lifecycle状态",
+      "canonicalState": ["禁用中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "DISABLED",
+      "canonicalDomain": "extension_kernel.lifecycle状态",
+      "canonicalState": ["已禁用"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "UPDATING",
+      "canonicalDomain": "extension_kernel.package状态",
+      "canonicalState": ["更新中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "UNINSTALLING",
+      "canonicalDomain": "extension_kernel.package状态",
+      "canonicalState": ["卸载中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "FAILED",
+      "canonicalDomain": "extension_kernel.lifecycle状态",
+      "canonicalState": ["操作失败"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "Extension",
+      "historicalB9State": "INCOMPATIBLE",
+      "canonicalDomain": "extension_kernel.package状态",
+      "canonicalState": ["包不兼容"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "VALID_PROTOCOL_PROJECTION"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "CREATED",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["请求已创建"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "QUEUED",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["请求已入队"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "CONNECTING",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["连接中"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "STREAMING",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["流式传输中"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "WAITING_TOOL",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["等待工具调用"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "COMPLETED",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["已完成"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "CANCELLED",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["已取消"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "FAILED",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["失败"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "ModelRequest",
+      "historicalB9State": "TIMED_OUT",
+      "canonicalDomain": "无独立ModelRequest状态机",
+      "canonicalState": ["超时"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "IDLE",
+      "canonicalDomain": "无独立Voice状态机",
+      "canonicalState": ["空闲"],
+      "mappingType": "NO_MAPPING",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "LISTENING",
+      "canonicalDomain": "ASR录音状态",
+      "canonicalState": ["录音中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "TRANSCRIBING",
+      "canonicalDomain": "ASR识别中",
+      "canonicalState": ["识别中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "SYNTHESIZING",
+      "canonicalDomain": "TTS合成中",
+      "canonicalState": ["合成中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "BUFFERING",
+      "canonicalDomain": "TTS缓冲中",
+      "canonicalState": ["缓冲中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "PLAYING",
+      "canonicalDomain": "播放中",
+      "canonicalState": ["播放中"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "PAUSED",
+      "canonicalDomain": "暂停中",
+      "canonicalState": ["暂停"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "INTERRUPTED",
+      "canonicalDomain": "被打断",
+      "canonicalState": ["中断"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    },
+    {
+      "protocolDomain": "Voice",
+      "historicalB9State": "FAILED",
+      "canonicalDomain": "语音处理失败",
+      "canonicalState": ["失败"],
+      "mappingType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "status": "PROTOCOL_ONLY"
+    }
+  ],
+  "summary": {
+    "totalMappings": 91,
+    "oneToOne": 20,
+    "manyToOne": 7,
+    "contextual": 25,
+    "noMapping": 39,
+    "lossyCount": 11,
+    "reverseWritable": 0,
+    "validProtocolProjection": 52,
+    "protocolOnly": 39,
+    "requiresDomainSplit": 5,
+    "protocolStateExtensionRequired": 1
+  }
+}

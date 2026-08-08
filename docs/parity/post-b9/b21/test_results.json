@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "B21测试结果",
+
+  "testRuns": [
+    {
+      "package": "backend/internal/extension/kernel/capability",
+      "command": "go test ./internal/extension/kernel/capability/...",
+      "result": "PASS",
+      "duration": "0.888s"
+    },
+    {
+      "package": "backend/internal/extension/kernel/desktop",
+      "command": "go test ./internal/extension/kernel/desktop/...",
+      "result": "PASS",
+      "duration": "2.007s"
+    },
+    {
+      "package": "backend/internal/runtimehost",
+      "command": "go test ./internal/runtimehost/...",
+      "result": "PASS (cached)",
+      "duration": "cached"
+    },
+    {
+      "package": "backend/internal/runtimeorchestrator",
+      "command": "go test ./internal/runtimeorchestrator/...",
+      "result": "PASS (cached)",
+      "duration": "cached"
+    },
+    {
+      "package": "backend/pkg/platform",
+      "command": "go test ./pkg/platform/...",
+      "result": "PASS (cached)",
+      "duration": "cached"
+    },
+    {
+      "package": "backend/internal/extension/kernel/capability (race)",
+      "command": "go test -race ./internal/extension/kernel/capability/...",
+      "result": "PASS",
+      "duration": "1.940s"
+    },
+    {
+      "package": "backend/internal/extension/kernel/desktop (race)",
+      "command": "go test -race ./internal/extension/kernel/desktop/...",
+      "result": "PASS",
+      "duration": "5.600s"
+    }
+  ],
+
+  "knownFailures": [
+    {
+      "package": "backend/internal/runtimeorchestrator/builtin",
+      "reason": "pre-existing: surrealdbpkg.StartSurreal undefined - unrelated to B21"
+    }
+  ],
+
+  "overallStatus": "PASS"
+}

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "targetStep": "B105-B110",
+  "description": "B17 为 B105-B110 (Automation Gap completion) 准备的 Manifest 输入",
+  "requiredManifestSupport": [
+    {
+      "capability": "JS/WASM Execution",
+      "manifestRuntimeType": "javascript/wasm",
+      "contributionKind": "tool",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "capability": "Workflow Contribution",
+      "manifestContributionKind": "workflow",
+      "runtimeBinding": "workflow",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "capability": "Hook Contribution",
+      "manifestContributionKind": "hook",
+      "runtimeBinding": "builtin",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "capability": "Event Subscription",
+      "manifestContributionKind": "event_subscription",
+      "runtimeBinding": "builtin",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "capability": "Schedule Contribution",
+      "manifestContributionKind": "schedule",
+      "runtimeBinding": "builtin",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "capability": "TaskRuntime Contribution",
+      "manifestContributionKind": "background_task",
+      "runtimeBinding": "task",
+      "status": "ALREADY_SUPPORTED"
+    }
+  ],
+  "note": "B105-B110 所有 Manifest 需求已满足，无需 Manifest 变更"
+}

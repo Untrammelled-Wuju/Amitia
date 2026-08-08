@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20-B127-B138-INPUT",
+  "generatedAt": "2026-08-08T16:25:00+08:00",
+  "description": "B127-B138 iOS Native Provider输入 - 未来iOS原生能力实现的设计约束",
+
+  "iosAdapterEntry": {
+    "adapter": "iosRuntimeAdapter (backend/internal/extension/kernel/capability/adapter_ios_native.go)",
+    "runtimeType": "RuntimeTypeIOS_Native ('ios_native')",
+    "wiring": "Container.WireIOSPlatformAdapter(provider)"
+  },
+
+  "providerContract": {
+    "interface": "IOSProvider",
+    "methods": ["Execute(ctx, IOSBridgeRequest) IOSBridgeResponse", "Health(ctx) HealthStatus"],
+    "implementation": "各业务Provider通过实现IOSProvider接口接入"
+  },
+
+  "permissionBoundary": {
+    "kernelPermission": "通过PermissionBroker检查ios.*权限",
+    "osAuthorization": "各Provider内部使用iOS框架请求系统授权",
+    "userActionRequired": "映射到USER_ACTION_REQUIRED错误码"
+  },
+
+  "osAuthorizationBoundary": {
+    "healthKit": "HKHealthStore.requestAuthorization内部处理",
+    "calendar": "EKEventStore.requestAccess内部处理",
+    "contacts": "CNContactStore.requestAccess内部处理",
+    "homeKit": "HMHomeManager内部处理",
+    "bluetooth": "CBCentralManager内部处理"
+  },
+
+  "runtimeBinding": {
+    "type": "ios_native",
+    "handlerName": "具体Provider标识(如healthkit.read)"
+  },
+
+  "resourceMediaBoundary": {
+    "scheme": "amitia://",
+    "tempFile": "通过amitia://temp/暴露，不使用file://"
+  },
+
+  "stateErrorContract": {
+    "toolState": "success/failed/cancelled/timed_out",
+    "providerErrors": "IOSError格式，映射到ToolError",
+    "noGlobalStateStore": true
+  },
+
+  "toolRegistrationRule": {
+    "note": "所有iOS能力Tool仍通过现有ToolRegistry注册",
+    "contributionKind": "provider",
+    "platform": "ios"
+  },
+
+  "legacyProhibition": {
+    "note": "新iOS Provider必须绑定iosRuntimeAdapter，禁止走LegacyRuntimeAdapter"
+  }
+}

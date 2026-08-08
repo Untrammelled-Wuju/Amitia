@@ -1,0 +1,4625 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/",
+  "canonicalToolRegistry": "backend/internal/extension/kernel/capability/registry.go",
+  "canonicalPermissionBroker": "backend/internal/extension/kernel/permission/broker.go",
+  "totalContracts": 253,
+  "contracts": [
+    {
+      "capabilityId": "external/system/update_update_full_apk",
+      "agentCallable": true,
+      "toolIds": [
+        "system.update"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/control_close_all_virtual_displays",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.control"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/update_update_user_preferences",
+      "agentCallable": true,
+      "toolIds": [
+        "system.update"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/register_task_goal",
+      "agentCallable": true,
+      "toolIds": [
+        "task.goal.register"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/manage_character_template",
+      "agentCallable": true,
+      "toolIds": [
+        "character.template.manage"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/manage_character_config",
+      "agentCallable": true,
+      "toolIds": [
+        "character.config.manage"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/manage_working_memory",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.manage_working"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/install_install_app",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/belief_batch_process",
+      "agentCallable": true,
+      "toolIds": [
+        "belief.batch"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/update_memory_write",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.write"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/update_modify_system_setting",
+      "agentCallable": true,
+      "toolIds": [
+        "device.settings"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/update_file_edit",
+      "agentCallable": true,
+      "toolIds": [
+        "file.write"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/import_chat",
+      "agentCallable": true,
+      "toolIds": [
+        "chat.import"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/execute_workflow",
+      "agentCallable": true,
+      "toolIds": [
+        "workflow.execute"
+      ],
+      "permissionRequirements": "workflow.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "workflow",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/execute_hidden_terminal_command",
+      "agentCallable": true,
+      "toolIds": [
+        "process.execute"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/create_create_terminal_session",
+      "agentCallable": true,
+      "toolIds": [
+        "process.create"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/send_permission_post_notifications",
+      "agentCallable": true,
+      "toolIds": [
+        "security.send_permission_post_notifications"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_memory_fuzzy_search",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/cross_session_persistence",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.session"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/install_workspace_import_export",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/install_application_install_uninstall",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/floating_window_overlay",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.floating_window_overlay"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/read_permission_read_phone_state",
+      "agentCallable": true,
+      "toolIds": [
+        "security.read_permission_read_phone_state"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/belief_system_engine",
+      "agentCallable": true,
+      "toolIds": [
+        "belief.system"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/execute_task_plan",
+      "agentCallable": true,
+      "toolIds": [
+        "task.plan.execute"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "task_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/device_info",
+      "agentCallable": true,
+      "toolIds": [
+        "device.info"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/vision_ocr",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.vision_ocr"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_query_memory_links",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/preserve_backup_backup",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.backup"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/transfer_transfer_data",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.session"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/install_toolpkg_install_zip",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/grep_code",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.grep_code"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_bluetooth_send_and_read",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/conversation/manage_conversation",
+      "agentCallable": true,
+      "toolIds": [
+        "conversation.manage_conversation"
+      ],
+      "permissionRequirements": "conversation.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "conversation_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/conversation/channel",
+      "agentCallable": true,
+      "toolIds": [
+        "conversation.channel"
+      ],
+      "permissionRequirements": "conversation.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "internal",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/capture_capture_screenshot",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/install_mcp_plugin_install_server",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.install"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "mcp",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_camera_capture",
+      "agentCallable": true,
+      "toolIds": [
+        "device.camera"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/update_update_memory",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.write"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/import_history",
+      "agentCallable": true,
+      "toolIds": [
+        "tool.import_history"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_model",
+      "agentCallable": true,
+      "toolIds": [
+        "character.personality.model"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/update_update_memory_link",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.write"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/calculator",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.calculator"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/music_status",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.music_status"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/automation_execute_browser",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.execute"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/search/vectorindexmanager",
+      "agentCallable": true,
+      "toolIds": [
+        "search.vectorindexmanager"
+      ],
+      "permissionRequirements": "network.request",
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "search_provider",
+      "provider": "SEARCH_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/permission_call_phone",
+      "agentCallable": true,
+      "toolIds": [
+        "security.permission_call_phone"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/control_virtualdisplayoverlay",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.control"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/execute_in_terminal_session_streaming",
+      "agentCallable": true,
+      "toolIds": [
+        "process.execute"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/read_bluetooth_ble_read_characteristic",
+      "agentCallable": true,
+      "toolIds": [
+        "character.read"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/network/request_enable_bluetooth",
+      "agentCallable": true,
+      "toolIds": [
+        "network.request_enable_bluetooth"
+      ],
+      "permissionRequirements": "network.request",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/bluetooth_accept",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/management_execute_character",
+      "agentCallable": true,
+      "toolIds": [
+        "character.write"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/decision_consistency_check",
+      "agentCallable": true,
+      "toolIds": [
+        "decision.consistency_check"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/read_get_app_usage_time",
+      "agentCallable": true,
+      "toolIds": [
+        "system.read"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/set_input_text",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.set_input_text"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/personality_trait_service",
+      "agentCallable": true,
+      "toolIds": [
+        "character.personality.service"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/control_screen_capture",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/send_bluetooth_send",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/memory_system_service",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.system_service"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/manage_voice_preset",
+      "agentCallable": true,
+      "toolIds": [
+        "voice.preset.manage"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/desktop_clipboard_bridge",
+      "agentCallable": true,
+      "toolIds": [
+        "tool.desktop_clipboard_bridge"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/read_list_installed_apps",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/bluetooth_ble_discover_services",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/operitshowershellrunner",
+      "agentCallable": true,
+      "toolIds": [
+        "process.operitshowershellrunner"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/control_media_playback_control",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.control_media_playback_control"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/install_uninstall_app",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/update_bluetooth_ble_write_and_read_characteristic",
+      "agentCallable": true,
+      "toolIds": [
+        "character.read"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/notification/read_bluetooth_ble_read_notifications",
+      "agentCallable": true,
+      "toolIds": [
+        "notification.read"
+      ],
+      "permissionRequirements": "notification.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/install_data_import",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.import"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/voice/read_voicelistfetcher",
+      "agentCallable": true,
+      "toolIds": [
+        "voice.read_voicelistfetcher"
+      ],
+      "permissionRequirements": "device.voice.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "voice_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/delete_delete_memory",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.delete"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/install_skill_installation_import",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.install"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "extension_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_get_system_setting",
+      "agentCallable": true,
+      "toolIds": [
+        "device.settings"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/session_persistence",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.session"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/update_clipboard_write",
+      "agentCallable": true,
+      "toolIds": [
+        "system.update"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/read_list_character_cards",
+      "agentCallable": true,
+      "toolIds": [
+        "character.read"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/delete_delete_memory_link",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.delete"
+      ],
+      "permissionRequirements": "memory.delete",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/task/task",
+      "agentCallable": true,
+      "toolIds": [
+        "task.task"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "task_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/make_directory",
+      "agentCallable": true,
+      "toolIds": [
+        "file.make_directory"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/open_url_app",
+      "agentCallable": true,
+      "toolIds": [
+        "system.control"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/sshd_server_manager",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.sshd_server_manager"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "process_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/ffmpeg_convert",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.ffmpeg_convert"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "process_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/agent/agent_status",
+      "agentCallable": true,
+      "toolIds": [
+        "agent.agent_status"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "agent_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/read_personalwakelistener",
+      "agentCallable": true,
+      "toolIds": [
+        "character.read"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/capture_browser_screenshot",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/voice/audio",
+      "agentCallable": true,
+      "toolIds": [
+        "voice.audio"
+      ],
+      "permissionRequirements": "device.voice.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tts_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/notification/toast",
+      "agentCallable": true,
+      "toolIds": [
+        "notification.toast"
+      ],
+      "permissionRequirements": "notification.send",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/install_skill_import_from_zip",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.install"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "extension_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/control_music_play_queue",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.control_music_play_queue"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/clipboard_access",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.clipboard_access"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/control_stop_app",
+      "agentCallable": true,
+      "toolIds": [
+        "system.control"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/integration_execute_mcp_server",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.manage"
+      ],
+      "permissionRequirements": "mcp.tools.invoke",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "mcp",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/ftp_server_manager",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.ftp_server_manager"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "process_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/switch_browser_select_option",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.switch_browser_select_option"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/agent/run_ui_subagent",
+      "agentCallable": true,
+      "toolIds": [
+        "agent.run_ui_subagent"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "agent_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/create_create_memory",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.import"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/stop_browser_close",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.close"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/control_music_stop",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.control_music_stop"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/notification/notification_fgs_management",
+      "agentCallable": true,
+      "toolIds": [
+        "notification.fgs"
+      ],
+      "permissionRequirements": "notification.send",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/nlp_processing",
+      "agentCallable": true,
+      "toolIds": [
+        "process.nlp"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/notification/notification_management",
+      "agentCallable": true,
+      "toolIds": [
+        "notification.notification_management"
+      ],
+      "permissionRequirements": "notification.send",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/ffmpeg_info",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.ffmpeg_info"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "process_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/update_write_file",
+      "agentCallable": true,
+      "toolIds": [
+        "file.write"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/send_share_intent",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.send_share_intent"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/workflow_dag_execute",
+      "agentCallable": true,
+      "toolIds": [
+        "workflow.extension"
+      ],
+      "permissionRequirements": "workflow.execute",
+      "runtimeBinding": "workflow",
+      "runtimeAdapter": "workflow",
+      "provider": "workflow_executor",
+      "executionEntry": "ExecutionPipeline.Execute -> WorkflowAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/read_clipboard_read",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.read_clipboard_read"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/capture_camera_image_capture",
+      "agentCallable": true,
+      "toolIds": [
+        "device.camera"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/photo_library_access",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.photo_library_access"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/start_permission_bluetooth_connect",
+      "agentCallable": true,
+      "toolIds": [
+        "security.start_permission_bluetooth_connect"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/create_workflow_create",
+      "agentCallable": true,
+      "toolIds": [
+        "workflow.extension"
+      ],
+      "permissionRequirements": "workflow.execute",
+      "runtimeBinding": "workflow",
+      "runtimeAdapter": "workflow",
+      "provider": "workflow_executor",
+      "executionEntry": "ExecutionPipeline.Execute -> WorkflowAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/ffmpeg_execute",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.ffmpeg_execute"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "process_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/update_write_file_binary",
+      "agentCallable": true,
+      "toolIds": [
+        "file.write"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_get_device_location",
+      "agentCallable": true,
+      "toolIds": [
+        "device.read"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/press_key",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.press_key"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_bluetooth_listen",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/start_sshfileconnectionmanager",
+      "agentCallable": true,
+      "toolIds": [
+        "file.start_sshfileconnectionmanager"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/rootsystemoperationtools",
+      "agentCallable": true,
+      "toolIds": [
+        "system.advanced"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/use_package",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.use_package"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_list_bluetooth_bonded_devices",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/capture_screen_capture",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/create_create_file",
+      "agentCallable": true,
+      "toolIds": [
+        "file.create"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/execute_shell",
+      "agentCallable": true,
+      "toolIds": [
+        "process.execute"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_filesystem_listing",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/voice/capture_permission_record_audio",
+      "agentCallable": true,
+      "toolIds": [
+        "voice.capture_permission_record_audio"
+      ],
+      "permissionRequirements": "device.voice.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "voice_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/system_settings_manipulation",
+      "agentCallable": true,
+      "toolIds": [
+        "device.settings"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/model/embedding_embeddingconverter",
+      "agentCallable": true,
+      "toolIds": [
+        "provider.model.embedding_embeddingconverter"
+      ],
+      "permissionRequirements": "provider.use",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "model_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/install_skill_install_from_github",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.install"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "extension_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_get_memory_by_title",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/music_set_volume",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.music_set_volume"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/assistant_intent_activity",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.assistant_intent_activity"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/stop_bluetooth_close",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_query_memory",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/sleep_delay",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.sleep_delay"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/mcp_tool_invoke",
+      "agentCallable": true,
+      "toolIds": [
+        "mcp.server"
+      ],
+      "permissionRequirements": "mcp.tools.invoke",
+      "runtimeBinding": "mcp",
+      "runtimeAdapter": "mcp",
+      "provider": "mcp_tool_facade",
+      "executionEntry": "ExecutionPipeline.Execute -> MCPAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/manage_cookies",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.manage_cookies"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_memorysearchsettingspreferences",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/interface_execute_ui",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.interface_execute_ui"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/long_press",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.long_press"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/control_reasoning_thinking_display",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.control"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_read_file_full",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/send_permission_send_sms",
+      "agentCallable": true,
+      "toolIds": [
+        "security.send_permission_send_sms"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/read_android_contacts_read",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.read_android_contacts_read"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/execute_intent",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.execute_intent"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/control_screen_casting",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.control"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/personalwakefeatureextractor",
+      "agentCallable": true,
+      "toolIds": [
+        "character.read"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/send_send_broadcast",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.send_send_broadcast"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/notification/send_send_notification",
+      "agentCallable": true,
+      "toolIds": [
+        "notification.send"
+      ],
+      "permissionRequirements": "notification.send",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/device_info_map_0284",
+      "agentCallable": true,
+      "toolIds": [
+        "device.info"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/control_music_resume",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.control_music_resume"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_file_read",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/management_execute_skill",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.manage"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "extension_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/browser_run_code",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.browser_run_code"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/install_character_card_sillytavern_import",
+      "agentCallable": true,
+      "toolIds": [
+        "character.import"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/capture_screen_recording_casting",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/model/cloudembeddingservice",
+      "agentCallable": true,
+      "toolIds": [
+        "provider.model.cloudembeddingservice"
+      ],
+      "permissionRequirements": "provider.use",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "model_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/read_get_page_info",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.read_get_page_info"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/execution_execute_shell",
+      "agentCallable": true,
+      "toolIds": [
+        "process.execute"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/control_music_play",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.control_music_play"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/location_tracking",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.location_tracking"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/read_screen_capture",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/update_write_health_data",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.write"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/delete_delete_file",
+      "agentCallable": true,
+      "toolIds": [
+        "file.delete"
+      ],
+      "permissionRequirements": "files.delete",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/install_application_install",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/persistence_execute_database",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.session"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_read_file_part",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/memory",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.memory"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/permission",
+      "agentCallable": true,
+      "toolIds": [
+        "security.permission"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/read_permission_read_contacts",
+      "agentCallable": true,
+      "toolIds": [
+        "security.read_permission_read_contacts"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/start_bluetooth_connect",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/tap",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.tap"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/search/read_android_weather_query",
+      "agentCallable": true,
+      "toolIds": [
+        "search.read_android_weather_query"
+      ],
+      "permissionRequirements": "network.request",
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "search_provider",
+      "provider": "SEARCH_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/update_update_patch_incremental",
+      "agentCallable": true,
+      "toolIds": [
+        "system.update"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/install_permission_request_install_packages",
+      "agentCallable": true,
+      "toolIds": [
+        "security.install_permission_request_install_packages"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/bluetooth_device_detection",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/notification/read_get_notifications",
+      "agentCallable": true,
+      "toolIds": [
+        "notification.read"
+      ],
+      "permissionRequirements": "notification.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/capture_screenshot_share",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/swipe",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.swipe"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/accessibilitysystemoperationtools",
+      "agentCallable": true,
+      "toolIds": [
+        "system.advanced"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/bluetooth_device_scan",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/network/multipart_request",
+      "agentCallable": true,
+      "toolIds": [
+        "network.multipart_request"
+      ],
+      "permissionRequirements": "network.request",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/create_workspace_create",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.create_workspace_create"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/notification/read_android_notification_read",
+      "agentCallable": true,
+      "toolIds": [
+        "notification.read"
+      ],
+      "permissionRequirements": "notification.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/network/api_key_encryption",
+      "agentCallable": true,
+      "toolIds": [
+        "network.api_key_encryption"
+      ],
+      "permissionRequirements": "network.request",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/read_location_get",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.read_location_get"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/voice/switch_tts_voice_selection",
+      "agentCallable": true,
+      "toolIds": [
+        "voice.switch_tts_voice_selection"
+      ],
+      "permissionRequirements": "device.voice.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tts_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_find_files",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/stop_android_calendar_access",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.stop_android_calendar_access"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/management_execute_extension",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.manage"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "extension_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/device_admin_privilege",
+      "agentCallable": true,
+      "toolIds": [
+        "device.admin"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/location_tracking_map_0378",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.location_tracking_map_0378"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/voice/microphone",
+      "agentCallable": true,
+      "toolIds": [
+        "voice.microphone"
+      ],
+      "permissionRequirements": "device.voice.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tts_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/control_music_pause",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.control_music_pause"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/bluetooth_device_management",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/homekit_device_control",
+      "agentCallable": true,
+      "toolIds": [
+        "device.homekit"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/shortcuts_app_intents",
+      "agentCallable": true,
+      "toolIds": [
+        "system.advanced"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/update_permission_write_contacts",
+      "agentCallable": true,
+      "toolIds": [
+        "security.update_permission_write_contacts"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/share_sheet",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.share_sheet"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/adminsystemoperationtools",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.adminsystemoperationtools"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_memorysearchconfig_memorysearchdebuginfo",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/model/onnxsilerovad",
+      "agentCallable": true,
+      "toolIds": [
+        "provider.model.onnxsilerovad"
+      ],
+      "permissionRequirements": "provider.use",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "model_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/start_bluetooth_ble_connect",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_get_bluetooth_state",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/music_seek",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.music_seek"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/update_permission_write_settings",
+      "agentCallable": true,
+      "toolIds": [
+        "security.update_permission_write_settings"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/floatingwindowmanager",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.floating_window"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/management_execute_file",
+      "agentCallable": true,
+      "toolIds": [
+        "file.manage"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/workflow",
+      "agentCallable": true,
+      "toolIds": [
+        "workflow.extension"
+      ],
+      "permissionRequirements": "workflow.execute",
+      "runtimeBinding": "workflow",
+      "runtimeAdapter": "workflow",
+      "provider": "workflow_executor",
+      "executionEntry": "ExecutionPipeline.Execute -> WorkflowAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/search/read_weather_query",
+      "agentCallable": true,
+      "toolIds": [
+        "search.read_weather_query"
+      ],
+      "permissionRequirements": "network.request",
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "search_provider",
+      "provider": "SEARCH_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/start_mcp_remote_server_connect",
+      "agentCallable": true,
+      "toolIds": [
+        "mcp.server"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "mcp",
+      "runtimeAdapter": "mcp",
+      "provider": "mcp_tool_facade",
+      "executionEntry": "ExecutionPipeline.Execute -> MCPAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_filesystem_search",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/voice/control_queuedttsplayback",
+      "agentCallable": true,
+      "toolIds": [
+        "voice.control_queuedttsplayback"
+      ],
+      "permissionRequirements": "device.voice.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "voice_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/scan_bluetooth_devices",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/model/management_execute_model",
+      "agentCallable": true,
+      "toolIds": [
+        "provider.model.management_execute_model"
+      ],
+      "permissionRequirements": "provider.use",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "model_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_memory_get_retrieve",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/switch_workspace_select_switch",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.switch_workspace_select_switch"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/stop_browser_close_all",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.close"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/update_file_write",
+      "agentCallable": true,
+      "toolIds": [
+        "file.write"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/read_shizuku_action_listener",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.read_shizuku_action_listener"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_read_file",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/standard_runtime_shell_execution",
+      "agentCallable": true,
+      "toolIds": [
+        "process.execute"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/create_calendar_event_create",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.create_calendar_event_create"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/capture_browser_take_screenshot",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.capture"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_read_file_binary",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/delete_memory_delete",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.delete"
+      ],
+      "permissionRequirements": "memory.delete",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/security/read_permission_read_external_storage",
+      "agentCallable": true,
+      "toolIds": [
+        "security.read_permission_read_external_storage"
+      ],
+      "permissionRequirements": "security.permission.manage",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "permission_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/read_android_location_get",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.read_android_location_get"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_nfc_tag_read",
+      "agentCallable": true,
+      "toolIds": [
+        "device.nfc"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/thinking_reasoning_mode",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.thinking_reasoning_mode"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/stop_close_terminal_session",
+      "agentCallable": true,
+      "toolIds": [
+        "process.terminate"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/start_start_app",
+      "agentCallable": true,
+      "toolIds": [
+        "system.control"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/read_read_health_data",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.read"
+      ],
+      "permissionRequirements": "memory.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/device/read_bluetooth_read",
+      "agentCallable": true,
+      "toolIds": [
+        "device.bluetooth"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "device_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/install_package_plugin_install_receiver",
+      "agentCallable": true,
+      "toolIds": [
+        "extension.install"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "extension_provider",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/image_multimodal_input",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.image_multimodal_input"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/update_android_clipboard_write",
+      "agentCallable": true,
+      "toolIds": [
+        "system.update"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/process/execute_in_terminal_session",
+      "agentCallable": true,
+      "toolIds": [
+        "process.execute"
+      ],
+      "permissionRequirements": "process.spawn",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/task/create_reminder_create",
+      "agentCallable": true,
+      "toolIds": [
+        "task.create_reminder_create"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "task_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "builtin/tool/vision",
+      "agentCallable": true,
+      "toolIds": [
+        "vision.analyze"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/character/update_bluetooth_ble_write_characteristic",
+      "agentCallable": true,
+      "toolIds": [
+        "character.write"
+      ],
+      "permissionRequirements": "device.access",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "character_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/read_android_clipboard_read",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.read_android_clipboard_read"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/read_list_files",
+      "agentCallable": true,
+      "toolIds": [
+        "file.read"
+      ],
+      "permissionRequirements": "files.read",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/file/update_edit_file",
+      "agentCallable": true,
+      "toolIds": [
+        "file.write"
+      ],
+      "permissionRequirements": "files.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/network/http_request",
+      "agentCallable": true,
+      "toolIds": [
+        "network.http_request"
+      ],
+      "permissionRequirements": "network.request",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/input_event_injection",
+      "agentCallable": true,
+      "toolIds": [
+        "system.control"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/agent/engineering_execute_prompt",
+      "agentCallable": true,
+      "toolIds": [
+        "agent.engineering_execute_prompt"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "agent_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/create_alarm_create",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.create_alarm_create"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/memory/update_memory_edit_update",
+      "agentCallable": true,
+      "toolIds": [
+        "memory.write"
+      ],
+      "permissionRequirements": "memory.write",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "builtin",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/clipboard_fallback",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.clipboard_fallback"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "OPTIONAL",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/tool/link_memories",
+      "agentCallable": true,
+      "toolIds": [
+        "external.tool.link_memories"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "tool_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/extension/start_mcp_local_server_launch",
+      "agentCallable": true,
+      "toolIds": [
+        "mcp.server"
+      ],
+      "permissionRequirements": "service.tool.execute",
+      "runtimeBinding": "mcp",
+      "runtimeAdapter": "mcp",
+      "provider": "mcp_tool_facade",
+      "executionEntry": "ExecutionPipeline.Execute -> MCPAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/browser/read_get_terminal_session_screen",
+      "agentCallable": true,
+      "toolIds": [
+        "browser.read"
+      ],
+      "permissionRequirements": [
+        "network.request",
+        "browser.automation"
+      ],
+      "runtimeBinding": "plugin_js",
+      "runtimeAdapter": "browser_provider",
+      "provider": "BROWSER_PROVIDER",
+      "executionEntry": "ExecutionPipeline.Execute -> PluginJSAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    },
+    {
+      "capabilityId": "external/system/install_shizuku_bundled_installer",
+      "agentCallable": true,
+      "toolIds": [
+        "system.install"
+      ],
+      "permissionRequirements": "system.modify",
+      "runtimeBinding": "builtin",
+      "runtimeAdapter": "system_runtime",
+      "provider": null,
+      "executionEntry": "ExecutionPipeline.Execute -> BuiltinAdapter.Execute",
+      "canonicalRegistry": "backend/internal/extension/kernel/capability/registry.go",
+      "canonicalExecutionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+      "stateProjection": "ExecutionStatus",
+      "errorProjection": "ToolError",
+      "acceptanceContract": "REQUIRED",
+      "supportingComponents": []
+    }
+  ]
+}

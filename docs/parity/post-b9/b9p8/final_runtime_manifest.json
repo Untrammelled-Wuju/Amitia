@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P8",
+  "runtimeAuthority": false,
+  "note": "实际运行时由RuntimeHost + RuntimeOrchestrator + RuntimeAdapterRegistry统一调度",
+  "canonicalAuthorities": {
+    "RuntimeHost": "backend/internal/extension/kernel/host",
+    "RuntimeOrchestrator": "backend/internal/extension/kernel/runtime_supervisor",
+    "RuntimeAdapterRegistry": "backend/internal/extension/kernel/capability"
+  },
+  "counts": {
+    "existingRuntimeBindingCount": 10,
+    "newAdapterRequiredCount": 3,
+    "unresolvedBindingCount": 0,
+    "unknownRuntimeBinding": 0
+  },
+  "gapTotal": 3,
+  "gapAssigned": 3,
+  "gapUnassigned": 0,
+  "duplicateSystemGuard": {
+    "globalRuntimeHostDuplicate": 0,
+    "globalRuntimeOrchestratorDuplicate": 0,
+    "parallelToolRuntime": 0
+  }
+}

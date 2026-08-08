@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "dedupeMechanism": "ToolRegistry.registerModelNameUnsafe applies numeric suffix (_2, _3...) when an equivalent name is already registered under a different tool ID",
+  "conflicts": [],
+  "unresolvedConflictCount": 0,
+  "duplicateModelNameCount": 0,
+  "notes": [
+    "Current deterministic resolution protects against silent model-name collision.",
+    "ResolveModelNameConflicts in id.go provides an additional layer for name derivation.",
+    "No production model-name conflicts found; dedupe mechanism is active and has a built-in safety cap at suffix 100."
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "note": "B14 Browser合同已建立，B14 Media资源已复用ResourceURI。B15无需新增Bridge。",
+  "browserScreenshot": {
+    "contract": "BrowserScreenshotResult { ResourceURI, Width, Height } (B14)",
+    "resourceURILinkage": "amitia://temp/screenshots/<filename>",
+    "mimeType": "Implicit (PNG/JPEG based on format parameter)",
+    "note": "B14已完成ResourceURI映射，B15无需额外适配"
+  },
+  "browserDownload": {
+    "contract": "BrowserDownloadResult { ResourceURI, Filename, SizeBytes, ContentType } (B14)",
+    "resourceURILinkage": "amitia://workspace/downloads/... or amitia://attachments/...",
+    "mimeTypeAgreement": "ContentType为标准MIME",
+    "note": "B14已完成ResourceURI + MIME映射"
+  },
+  "browserUpload": {
+    "contract": "BrowserUploadRequest/Result { ResourceURI } (B14)",
+    "resourceURILinkage": "amitra:// scheme",
+    "note": "B14已完成ResourceURI映射"
+  },
+  "browserMIME": {
+    "authority": "BrowserDownloadResult.ContentType",
+    "note": "标准MIME类型，无需统一Media Metadata合同"
+  },
+  "compatibility": "PASS",
+  "newBridgeRequired": false
+}

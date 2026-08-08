@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "toolDefinitionAuthority": "backend/internal/extension/kernel/capability/tool.go (ToolDefinition struct)",
+  "toolRegistryAuthority": "backend/internal/extension/kernel/capability/registry.go (ToolRegistry)",
+  "modelExposureAuthority": "backend/internal/extension/kernel/tool_facade.go (ToolFacade.ModelTools)",
+  "executionResolverAuthority": "backend/internal/extension/kernel/container_builder.go (ExecutionPipeline.ToolResolver closure over the same ToolRegistry)",
+  "legacyRegistryStatus": "FROZEN (backend/internal/agent/tool/registry.go, no new production registration)",
+  "registryOwnsDefinitions": true,
+  "registryOwnsPermission": false,
+  "registryOwnsExecution": false,
+  "registryOwnsRuntimeLifecycle": false
+}

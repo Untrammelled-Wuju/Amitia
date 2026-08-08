@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 iOS Sandbox Provider合约 - Provider唯一权威定义",
+
+  "providerRole": "IOS_SANDBOX_PROVIDER",
+  "providerIdentity": {
+    "slot": "ios-sandbox (future - B124定义)",
+    "providerID": "ios.ish-sandbox (future - B124定义)"
+  },
+
+  "authorityFlags": {
+    "runtimeAuthority": false,
+    "lifecycleAuthority": false,
+    "permissionAuthority": false,
+    "toolAuthority": false,
+    "resourceAuthority": false,
+    "stateAuthority": false,
+    "errorAuthority": false
+  },
+
+  "canonicalRuntimeHost": {
+    "interface": "RuntimeHost in backend/internal/runtimehost/host.go",
+    "factory": "NewRuntimeHost() in backend/internal/runtimehost/factory.go",
+    "note": "iOS Sandbox复用此Host抽象"
+  },
+
+  "canonicalRuntimeBinding": {
+    "type": "RuntimeTypeIOS_Native (B20定义)",
+    "value": "ios_native",
+    "note": "通过B20 iOS Platform Adapter路由到Sandbox Provider"
+  },
+
+  "backendImplementation": {
+    "status": "DEFERRED_B124",
+    "interfaceDefinition": "SandboxBackend (B123定义于ios_sandbox_backend_contract.json)",
+    "productionImplementation": "等待B124实现iSHSandboxBackend"
+  },
+
+  "rootfsImplementation": {
+    "status": "DEFERRED_B125",
+    "description": "Alpine rootfs安装/完整性/挂载"
+  },
+
+  "lifecycleCompletion": {
+    "status": "DEFERRED_B126",
+    "description": "完整Sandbox start/stop/recovery/cleanup闭环"
+  },
+
+  "providerResponsibilities": [
+    "识别Sandbox运行后端 (iSH)",
+    "建立Runtime-specific配置",
+    "将RuntimeHost请求映射到Sandbox后端",
+    "暴露Sandbox可用性",
+    "准备Sandbox runtime descriptor",
+    "返回domain errors"
+  ],
+
+  "providerNonResponsibilities": [
+    "全局Tool注册 (ToolRegistry authority)",
+    "Permission decision (PermissionBroker authority)",
+    "Task scheduling (ExecutionPipeline authority)",
+    "Agent planning",
+    "全局生命周期 (RuntimeOrchestrator authority)",
+    "全局state storage",
+    "ResourceURI定义 (amitia:// authority)"
+  ],
+
+  "integrationPoints": {
+    "runtimeOrchestrator": "通过ProviderFactory注册",
+    "runtimeAdapterRegistry": "通过RuntimeTypeIOS_Native绑定",
+    "permissionBroker": "所有执行经过Kernel Permission检查",
+    "executionPipeline": "Sandbox内Tool执行经过Pipeline"
+  },
+
+  "forbiddenDuplicates": [
+    "IOSSandboxRuntimeManager2",
+    "IOSSandboxLifecycle2",
+    "IOSSandboxSupervisor2",
+    "IOSSandboxToolRegistry",
+    "IOSSandboxPermissionBroker",
+    "IOSSandboxExecutionPipeline",
+    "IOSSandboxStateStore",
+    "IOSSandboxErrorRegistry"
+  ]
+}

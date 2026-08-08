@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "domain": "AUTOMATION",
+  "description": "Automation Domain 不是传统 Provider 驱动域",
+  "providerModel": "NOT_APPLICABLE",
+  "note": "Workflow/Task/Event/Hook/Schedule 不是通过 Provider 体系提供能力。它们各自是独立 Canonical System，通过 Extension Kernel 注册中心提供。Provider 概念在此域不适用，Capability Mapping 通过 RuntimeAdapter 完成。",
+  "mappings": [
+    {
+      "systemId": "WORKFLOW_ENGINE",
+      "capabilitySemantic": "工作流定义与执行",
+      "providerModel": "NOT_APPLICABLE",
+      "canonicalDomain": "backend/internal/extension/kernel/workflow/runtime",
+      "registrationMechanism": "ContainerBuilder + adapter_workflow RuntimeAdapter",
+      "handlerRegistry": "WorkflowExecutor (builtin_handlers.go)"
+    },
+    {
+      "systemId": "TASK_RUNTIME",
+      "capabilitySemantic": "任务运行时执行",
+      "providerModel": "NOT_APPLICABLE",
+      "canonicalDomain": "backend/internal/extension/kernel/task_runtime/",
+      "registrationMechanism": "ContainerBuilder + TaskSupervisorFactory + adapter_task"
+    },
+    {
+      "systemId": "EVENT_SYSTEM",
+      "capabilitySemantic": "事件发布订阅",
+      "providerModel": "NOT_APPLICABLE",
+      "canonicalDomain": "backend/internal/extension/kernel/event/",
+      "registrationMechanism": "ContainerBuilder + runtime_bridge.go"
+    },
+    {
+      "systemId": "HOOK_SYSTEM",
+      "capabilitySemantic": "生命周期钩子",
+      "providerModel": "NOT_APPLICABLE",
+      "canonicalDomain": "backend/internal/extension/kernel/hook/",
+      "registrationMechanism": "ContainerBuilder + Pipeline"
+    },
+    {
+      "systemId": "SCHEDULE_SYSTEM",
+      "capabilitySemantic": "定时任务调度",
+      "providerModel": "NOT_APPLICABLE",
+      "canonicalDomain": "backend/internal/extension/kernel/schedule/",
+      "registrationMechanism": "ContainerBuilder + ScheduleExecutor",
+      "targetAdapters": ["tool", "workflow", "task", "runtime_handler"]
+    }
+  ],
+  "summary": {
+    "note": "Automation 域无传统 Provider 概念，所有系统通过 Extension Kernel 容器注册。Provider Provider合同在此域表现为 Canonical Domain + RuntimeAdapter 注册。",
+    "providerModel": "NOT_APPLICABLE for all 5 subsystems"
+  }
+}

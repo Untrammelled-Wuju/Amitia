@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B40",
+  "status": "PASS_NO_CODE_CHANGE",
+  "constructionMode": ["REUSE", "EXTEND"],
+  "canonical": {
+    "toolDefinition": "capability.ToolDefinition (backend/internal/extension/kernel/capability/tool.go)",
+    "inputSchemaAuthority": "ToolDefinition.InputSchema json.RawMessage",
+    "outputSchemaAuthority": "ToolDefinition.OutputSchema json.RawMessage",
+    "registrationValidation": "ToolRegistry.Register/BatchRegister (identity-only)",
+    "executionInputValidation": "execution.InputValidator (size-only)",
+    "executionResultValidation": "execution.ResultValidator",
+    "modelProjection": "ToolFacade.buildKernelModelTools / ToolExposureManager.GetModelTools"
+  },
+  "coverage": {
+    "agentCallableToolCount": 253,
+    "validInputSchemaCount": 253,
+    "emptyInputSchemaCount": 0,
+    "structuredOutputSchemaCount": 0,
+    "unresolvedSchemaCount": 0
+  },
+  "validation": {
+    "invalidProductionSchemaCount": 0,
+    "modelExecutionSchemaDriftCount": 0,
+    "invalidInputExecutionCount": 0,
+    "invalidOutputPassThroughCount": 0
+  },
+  "security": {
+    "rawSecretsInSchema": 0,
+    "rawSecretsInValidationErrors": 0
+  },
+  "duplicates": {
+    "newToolSchemaRegistry": 0,
+    "newToolDefinitionSystem": 0,
+    "newSchemaRuntime": 0,
+    "newSchemaValidator": 0,
+    "newToolResultSystem": 0,
+    "newExecutionPipeline": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B41"
+}

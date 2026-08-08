@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "generatedAt": "2026-08-08T00:15:00+08:00",
+  "note": "所有18项所需语义均已由现有backend/pkg/resourceuri/实现，无GAP。B13判定为PASS_NO_CODE_CHANGE。",
+  "gapMatrix": [
+    {
+      "semantic": "uri.parse",
+      "requiredBy": ["B10", "B14", "B90-B92", "production callers"],
+      "existing": "resourceuri.Parse / MustParse",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_uri.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "uri.normalize",
+      "requiredBy": ["B10", "B14", "B90-B92"],
+      "existing": "normalizeAndValidatePath: dot collapse, segment filtering",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_uri.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "uri.serialize",
+      "requiredBy": ["B10", "B14", "DB persistence", "IPC"],
+      "existing": "ResourceURI.String() with url.PathEscape per-segment",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_uri.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "uri.root-validation",
+      "requiredBy": ["B10", "B14"],
+      "existing": "parseResourceRoot with allow-list (10 roots)",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_root.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "root.workspace",
+      "requiredBy": ["B9P4 Workspace semantic"],
+      "existing": "ResourceRootWorkspace filesystem root",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_root.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "root.attachments",
+      "requiredBy": ["B14 uploads", "B90-B92 attachments"],
+      "existing": "ResourceRootAttachments, set under DataDir/attachments",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_root.go + physical_resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "resolver.resolve",
+      "requiredBy": ["B10", "production"],
+      "existing": "PhysicalResolver.Resolve(uri)",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/physical_resolver.go + resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "resolver.reverse",
+      "requiredBy": ["B10", "B14"],
+      "existing": "PhysicalResolver.Reverse(localPath)",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/physical_resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "resolver.traversal-protection",
+      "requiredBy": ["B10", "B14", "B90-B92"],
+      "existing": "normalizeAndValidatePath detects .. / %2e%2e / backslash + assertWithinRoot defense-in-depth",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_uri.go + physical_resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "resolver.root-escape-protection",
+      "requiredBy": ["B10", "B14"],
+      "existing": "PhysicalResolver.Resolve uses assertWithinRoot on joined path",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/physical_resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "resource.kind.filesystem-vs-virtual",
+      "requiredBy": ["B14 browser download"],
+      "existing": "ResourceKind enum (Filesystem / Virtual) and Root().IsVirtual()",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_root.go + resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "resource.handle-non-filesystem",
+      "requiredBy": ["B14 temporary resource", "native clipboard"],
+      "existing": "native Virtual root returns ResourceKindVirtual + ErrNonFilesystemResource",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/physical_resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "uri.no-secret",
+      "requiredBy": ["B9P5 Error projection / security"],
+      "existing": "Parse rejects userinfo, port, fragment, query",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_uri.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "uri.unicode-path",
+      "requiredBy": ["B14", "Browser upload"],
+      "existing": "Normalize keeps UTF-8 segments; String() uses url.PathEscape",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_uri.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "cross-platform-path",
+      "requiredBy": ["B90+ Android SAF", "desktop win/linux/mac"],
+      "existing": "Logical URI always slash; Physical Resolver uses filepath.Join / filepath.Separator",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/physical_resolver.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "uri.query-fragment-rejection",
+      "requiredBy": ["security"],
+      "existing": "Parse rejects ?, #, @userinfo, ports",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_uri.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "provider-virtual-root",
+      "requiredBy": ["B90+", "B14 Browser download"],
+      "existing": "native Virtual root provides canonical extension point; Provider may back via new Root or via binding",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/resource_root.go + resolver.go (extensible)",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    },
+    {
+      "semantic": "error-classification",
+      "requiredBy": ["B9P5 error projection"],
+      "existing": "ErrInvalidScheme / ErrInvalidRoot / ErrInvalidPath / ErrPathTraversal / ErrUnsupportedResource / ErrNonFilesystemResource / ErrResourceOutsideRoots / ErrRootNotConfigured",
+      "status": "ALREADY_SUPPORTED",
+      "target": "backend/pkg/resourceuri/errors.go",
+      "action": "REUSE",
+      "futureStep": "N/A"
+    }
+  ]
+}

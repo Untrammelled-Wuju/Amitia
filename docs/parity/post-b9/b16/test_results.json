@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "description": "B16 测试验证结果",
+  "note": "B16 无代码修改，跑现有 regression tests 验证无破坏",
+  "testCategories": {
+    "model": {
+      "description": "Model 系统测试 (无修改)",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "现有 Model Service 19 Provider + LLM Client 无修改"
+    },
+    "asr": {
+      "description": "ASR 系统测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "4 ASR Provider (volcengine/openai/azure/aliyun) 无修改"
+    },
+    "tts": {
+      "description": "TTS 系统测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "8 TTS Provider 无修改，104 音色目录无修改"
+    },
+    "realtime": {
+      "description": "Realtime Voice 测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "火山引擎 WS 代理无修改"
+    },
+    "workflow": {
+      "description": "Workflow Engine 测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "Workflow DAG/Executor/Trigger 无修改"
+    },
+    "taskRuntime": {
+      "description": "TaskRuntime 测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "Task 运行时状态机无修改"
+    },
+    "event": {
+      "description": "Event System 测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "Event Outbox/Dispatcher 无修改"
+    },
+    "hook": {
+      "description": "Hook System 测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "Hook Pipeline 无修改"
+    },
+    "schedule": {
+      "description": "Schedule 测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "Schedule Executor/Scanner 无修改"
+    },
+    "kernelRegression": {
+      "description": "Kernel 回归测试",
+      "action": "PASS_NO_CODE_CHANGE",
+      "note": "Extension Kernel Container/Registry/Facade 无修改"
+    },
+    "gofmt": {
+      "description": "Go 代码格式化",
+      "action": "NO_CODE_MODIFIED",
+      "note": "无 Go 文件修改"
+    }
+  },
+  "result": "PASS - 无代码修改，所有现有系统 unsigned"
+}

@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "B24-B38 Agent阶段输入 - 所有后续步骤必须使用的Canonical系统引用",
+
+  "input": {
+    "canonicalAgentEntry": {
+      "symbol": "interaction.UnifiedEntry",
+      "path": "backend/internal/interaction/unified_entry.go",
+      "usage": "唯一Agent入口，所有后续步骤必须通过此入口"
+    },
+    "existingGoalSystem": {
+      "symbol": "decision.GoalRegistry",
+      "path": "backend/internal/decision/goal_registry.go",
+      "usage": "目标注册中心，Goal相关增强必须扩展此系统"
+    },
+    "existingDecisionSystem": {
+      "symbol": "decision.Arbitration + interaction.RuntimePipeline",
+      "path": "backend/internal/decision/arbitration.go",
+      "usage": "决策系统，Decision相关增强必须扩展此系统"
+    },
+    "existingPlannerBehaviorSystem": {
+      "symbol": "decision.BehaviorPlanBuilder + decision.CandidateGenerator",
+      "path": "backend/internal/decision/behavior_plan_builder.go",
+      "usage": "行为规划系统，Planning相关增强必须扩展此系统"
+    },
+    "existingReflection": {
+      "symbol": "mindruntime.ReflectionRun",
+      "path": "backend/internal/mindruntime/reflection_run.go",
+      "usage": "反思系统，Reflection相关增强必须扩展此系统"
+    },
+    "existingSupervisor": {
+      "symbol": "mindruntime.Supervisor",
+      "path": "backend/internal/mindruntime/supervisor.go",
+      "usage": "监督器，Supervisor相关增强必须扩展此系统"
+    },
+    "existingTrigger": {
+      "symbol": "companion.schedule_service + companion.proactive_unified_dispatch",
+      "path": "backend/internal/companion/",
+      "usage": "触发系统，Trigger相关增强必须扩展此系统"
+    },
+    "existingCheckpoint": {
+      "symbol": "pipelinecheckpoint.Manager",
+      "path": "backend/internal/pipelinecheckpoint/manager.go",
+      "usage": "检查点系统，Checkpoint相关增强必须扩展此系统"
+    },
+    "existingQueue": {
+      "symbol": "queue.PriorityQueue",
+      "path": "backend/internal/queue/priority.go",
+      "usage": "队列系统，Queue相关增强必须扩展此系统"
+    },
+    "existingTaskRuntimeWorkflowBoundary": {
+      "symbol": "interaction.RuntimePipeline + extension.kernel.workflow",
+      "path": "backend/internal/interaction/runtime_pipeline.go",
+      "usage": "任务运行时/工作流边界，长期执行必须交给Runtime"
+    },
+    "existingToolExecutionBoundary": {
+      "symbol": "extension.kernel.ToolFacade/ToolRegistry/ExecutionPipeline",
+      "path": "backend/internal/extension/kernel/",
+      "usage": "Tool执行边界，Agent不直接执行Tool"
+    },
+    "existingMemoryBoundary": {
+      "symbol": "backend/internal/memory",
+      "path": "backend/internal/memory/",
+      "usage": "记忆边界，Agent仅消费记忆"
+    },
+    "existingModelBoundary": {
+      "symbol": "backend/internal/chat/model_service",
+      "path": "backend/internal/chat/model_service.go",
+      "usage": "模型边界，Agent使用模型进行推理"
+    },
+    "existingCharacterBoundary": {
+      "symbol": "backend/internal/character",
+      "path": "backend/internal/character/",
+      "usage": "角色边界，Agent读取角色上下文"
+    }
+  },
+
+  "duplicateGuards": {
+    "forbiddenNewSystems": [
+      "AgentRuntime2", "AgentCore2", "AgentOrchestrator2",
+      "Planner2", "DecisionEngine2", "GoalManager2",
+      "Observer2", "ReflectionRuntime2",
+      "AgentSupervisor2", "MindSupervisor2",
+      "TaskGraph2", "AgentTaskGraph2",
+      "Checkpoint2", "AgentCheckpointStore2",
+      "AgentQueue2", "AgentScheduler2",
+      "AgentToolRegistry2", "AgentPermissionSystem2", "AgentExecutionPipeline2",
+      "AgentStateStore2", "AgentErrorRegistry2",
+      "AgentMemorySystem2", "AgentModelRouter2",
+      "AgentEventBus2", "AgentHookSystem2", "WorkflowEngine2"
+    ]
+  }
+}

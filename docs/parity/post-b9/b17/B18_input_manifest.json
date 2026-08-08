@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "targetStep": "B18",
+  "description": "B17 为 B18 (统一验收) 准备的输入",
+  "b16ModelVoiceAutomationStatus": "PASS_NO_CODE_CHANGE",
+  "b17ManifestLifecycleStatus": "PASS_NO_CODE_CHANGE",
+  "canonicalManifestAuthority": "backend/internal/extension/kernel/manifest_v2/",
+  "manifestSchemaVersion": 2,
+  "contributionAuthority": "TypedContributionInstaller (15 Kinds including provider)",
+  "runtimeDeclarations": {
+    "existing": 10,
+    "note": "10 种 Runtime Binding 覆盖所有现有需求"
+  },
+  "permissionDeclarations": {
+    "authority": "PermissionDefinitionRegistry",
+    "manifestRole": "declaration only (no grant authority)"
+  },
+  "capabilityDeclarations": {
+    "authority": "corrected_capability_registry.json",
+    "manifestRole": "reference only (no definition authority)"
+  },
+  "duplicateGuard": {
+    "newManifestSystem": 0,
+    "newLifecycleSystem": 0,
+    "newContributionRegistry": 0,
+    "newProviderRegistry": 0,
+    "note": "B17 未创建任何第二套系统"
+  },
+  "summary": "Manifest v2 已完整覆盖 Post-B9 合同需求，B18 可直接验收"
+}

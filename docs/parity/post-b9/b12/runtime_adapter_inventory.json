@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime Adapter Inventory - 现有Adapter清单",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "existingAdapters": [
+    {
+      "runtimeType": "builtin",
+      "category": "HOST_INTERNAL",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Host internal capability execution"
+    },
+    {
+      "runtimeType": "internal",
+      "category": "HOST_INTERNAL",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Host internal tools"
+    },
+    {
+      "runtimeType": "legacy",
+      "category": "MIGRATION_ONLY",
+      "status": "ALREADY_SUPPORTED",
+      "note": "B9P6 frozen, new providers FORBIDDEN"
+    },
+    {
+      "runtimeType": "javascript",
+      "category": "SANDBOX",
+      "status": "ALREADY_SUPPORTED",
+      "implementation": "javascript_main/host.go"
+    },
+    {
+      "runtimeType": "wasm",
+      "category": "SANDBOX",
+      "status": "ALREADY_SUPPORTED",
+      "implementation": "wasm_runtime/host_gateway.go"
+    },
+    {
+      "runtimeType": "workflow",
+      "category": "DOMAIN",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "runtimeType": "mcp",
+      "category": "DOMAIN",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "runtimeType": "task",
+      "category": "DOMAIN",
+      "status": "ALREADY_SUPPORTED",
+      "implementation": "task_runtime/"
+    },
+    {
+      "runtimeType": "trusted_service",
+      "category": "DOMAIN",
+      "status": "ALREADY_SUPPORTED",
+      "implementation": "trusted_service/rpc_session.go"
+    },
+    {
+      "runtimeType": "plugin_js",
+      "category": "PLUGIN",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "runtimeType": "plugin_service",
+      "category": "PLUGIN",
+      "status": "ALREADY_SUPPORTED"
+    },
+    {
+      "runtimeType": "browser",
+      "category": "FUTURE",
+      "status": "BINDING_DECLARED",
+      "implementationStep": "B79-B92"
+    }
+  ],
+
+  "futureAdapters": [
+    {
+      "runtimeType": "android_native (future)",
+      "category": "PLATFORM",
+      "status": "OUTSIDE_B12_SCOPE",
+      "implementationStep": "B55-B78"
+    },
+    {
+      "runtimeType": "ios_native (future)",
+      "category": "PLATFORM",
+      "status": "OUTSIDE_B12_SCOPE",
+      "implementationStep": "B123-B138"
+    },
+    {
+      "runtimeType": "desktop_extension (future)",
+      "category": "PLATFORM",
+      "status": "OUTSIDE_B12_SCOPE",
+      "implementationStep": "TBD"
+    }
+  ],
+
+  "summary": {
+    "totalExisting": 12,
+    "alreadyImplemented": 11,
+    "bindingOnly": 1,
+    "futureCount": 3
+  }
+}

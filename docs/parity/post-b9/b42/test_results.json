@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B42",
+  "existingTests": [
+    {"package": "backend/internal/extension/kernel", "note": "pipeline_test.go 覆盖 ToolExecutionRequest -> Result 的完整链路，当前回归"},
+    {"package": "backend/internal/extension/kernel", "note": "tool_facade_wiring + execution 仍在现有测试保护中"}
+  ],
+  "backpressure": "未新增 streaming 路径",
+  "race": "未新增 streaming 路径",
+  "goroutine": "未新增 streaming 路径",
+  "gofmt": "无修改"
+}

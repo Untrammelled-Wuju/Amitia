@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "targetStep": "B115-B117",
+  "description": "B16 为 B115-B117 (Voice Gap completion) 准备的输入",
+  "requiredVoiceCapabilities": [
+    {
+      "capabilityId": "wake_word",
+      "requiredStep": "B115",
+      "description": "实现唤醒词检测",
+      "note": "需要新增 continuous listening 架构"
+    },
+    {
+      "capabilityId": "continuous_voice_session",
+      "requiredStep": "B115",
+      "description": "实现持续语音会话模式",
+      "currentLimitation": "当前 VoiceEntry 是单回合模式 (turn-based)",
+      "requiredChanges": [
+        "ASR continuous streaming",
+        "会话状态机扩展",
+        "唤醒词驱动激活"
+      ]
+    },
+    {
+      "capabilityId": "voice_preset_management_tool",
+      "requiredStep": "B115",
+      "description": "将 TTS 音色管理注册为 Agent Callable Tool",
+      "currentImplementation": "backend/internal/tts/voice_catalog.go (104 presets)",
+      "gap": "未通过 ToolRegistry 注册"
+    },
+    {
+      "capabilityId": "new_tts_provider",
+      "requiredStep": "B116",
+      "description": "新增 TTS Provider 可扩展点",
+      "note": "当前 TTS Provider 硬编码在 engine.go switch 中"
+    },
+    {
+      "capabilityId": "new_asr_provider",
+      "requiredStep": "B116",
+      "description": "新增 ASR Provider 可扩展点"
+    },
+    {
+      "capabilityId": "android_audio_capture",
+      "requiredStep": "B116",
+      "description": "Android 平台音频采集能力",
+      "requiresPlatformAdapter": "adapter_android_native"
+    }
+  ],
+  "preservedConstraints": [
+    "tts_configs / asr_configs 表为唯一事实源",
+    "禁止新建 voice_configs_v2 / tts_provider_config_v2 / asr_provider_config_v2",
+    "禁止新建 VoiceRuntime2 / VoiceProviderRegistry2",
+    "现有 8 TTS + 4 ASR Provider 不得重构",
+    "Realtime (火山引擎 WS 代理) 保持现有架构"
+  ],
+  "existingASRProviders": ["volcengine", "openai", "azure", "aliyun"],
+  "existingTTSProviders": ["volcengine", "openai", "azure", "edge", "elevenlabs", "minimax", "aliyun", "cosyvoice"],
+  "existingRealtimeProvider": "volcengine (WebSocket proxy)"
+}

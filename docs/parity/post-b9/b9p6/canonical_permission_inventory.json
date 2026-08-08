@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "permissionSystems": [
+    {
+      "id": "KERNEL_PERMISSION_BROKER",
+      "path": "backend/internal/extension/kernel/permission/broker.go",
+      "type": "CANONICAL_TOOL_PERMISSION_BROKER",
+      "sha256Verified": true,
+      "description": "Extension/Tool唯一Kernel权限决策中心",
+      "interface": "PermissionBroker",
+      "implementation": "DefaultPermissionBroker",
+      "consumers": [
+        "ExecutionPipeline.PermissionGate",
+        "Workflow StepGuard",
+        "Schedule Service",
+        "Host API Gateway",
+        "Hook Service"
+      ],
+      "decisionTypes": ["DecisionAllow", "DecisionAllowOnce", "DecisionAllowPersistent", "DecisionAllowSession", "DecisionDeny", "DecisionRequireApproval"]
+    },
+    {
+      "id": "KERNEL_PERMISSION_DEFINITION_REGISTRY",
+      "path": "backend/internal/extension/kernel/permission/definition_registry.go",
+      "type": "PERMISSION_DEFINITION_REGISTRY",
+      "description": "Permission definitions (capability contracts)"
+    },
+    {
+      "id": "SCOPE_MANAGER",
+      "path": "backend/internal/extension/kernel/scope/",
+      "type": "SCOPE_MANAGER",
+      "description": "Scope evaluation (character, conversation, session, extension)"
+    },
+    {
+      "id": "PLATFORM_OS_PERMISSIONS",
+      "path": ["AndroidManifest.xml", "iOS Info.plist"],
+      "type": "PLATFORM_PERMISSION_PROVIDER",
+      "description": "OS-level permissions (separate from Extension Kernel)",
+      "futureWork": "Map into unified Capability Permission contract"
+    },
+    {
+      "id": "LEGACY_EXTENSION_PERMISSION",
+      "path": "backend/internal/extension/permission.go",
+      "type": "LEGACY_FROZEN",
+      "productionDecisionMaking": false,
+      "description": "Legacy permission check functions (frozen, no new)"
+    }
+  ],
+  "globalToolPermissionBrokerCount": 1,
+  "globalToolPermissionBrokerPath": "backend/internal/extension/kernel/permission/broker.go"
+}

@@ -2,7 +2,7 @@ allowBuilds:
   b: true
   d: true
   e: true
-  esbuild: set this to true or false
+  esbuild: true
   i: true
   l: true
   s: true

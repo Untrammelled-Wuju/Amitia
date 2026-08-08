@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19-B139-INPUT",
+  "generatedAt": "2026-08-08T15:23:00+08:00",
+  "description": "B139 Android Cutover输入 - 仅记录不执行Cutover",
+
+  "androidAdapterProductionEntry": {
+    "adapter": "androidRuntimeAdapter",
+    "path": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+    "runtimeType": "RuntimeTypeAndroid_Native"
+  },
+
+  "binding": {
+    "type": "android_native",
+    "runtimeId": "android_native"
+  },
+
+  "registration": {
+    "method": "Container.WireAndroidPlatformAdapter(androidProvider)",
+    "registry": "RuntimeAdapterRegistry.Register(RuntimeTypeAndroid_Native, adapter)"
+  },
+
+  "currentBridge": {
+    "mechanism": "MethodChannel 'com.amitia.amitia_app/runtime'",
+    "note": "如需扩展Provider Invoke消息需要增强Bridge协议"
+  },
+
+  "cutoverPreconditions": {
+    "allAndroidProvidersImplemented": false,
+    "bridgeExtendedIfNeeded": false,
+    "registrationWired": false,
+    "healthCheckEndpointVerified": false
+  }
+}

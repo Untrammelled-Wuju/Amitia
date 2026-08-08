@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "duplicateRegistries": [],
+  "analysis": {
+    "ToolRegistry": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "instances": 1,
+      "createdBy": "kernel.NewToolRegistry() in container_builder.go",
+      "consumedBy": ["ToolFacade", "ExecutionKernel.ToolResolver"]
+    },
+    "LegacyToolRegistry": {
+      "path": "backend/internal/agent/tool/registry.go",
+      "classification": "LEGACY_MIGRATION_SOURCE",
+      "notDuplicate": "Serves different lifecycle phase (migration source only)"
+    },
+    "MCPRegistry": {
+      "path": "backend/internal/mcp/",
+      "classification": "DOMAIN_REGISTRY_VALID",
+      "description": "MCP Server connection management, not Agent Tool registry",
+      "notDuplicate": "Manages MCP transport/OAuth/server health, not Tool definitions"
+    }
+  },
+  "duplicateProductionRegistryCount": 0
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "domain": "ToolExecution",
+  "historicalB9States": ["PENDING", "VALIDATING", "WAITING_PERMISSION", "READY", "RUNNING", "PAUSED", "CANCELLING", "CANCELLED", "SUCCEEDED", "FAILED", "TIMED_OUT"],
+  "canonicalDomain": "observability.ExecutionStatus",
+  "canonicalStates": ["created", "queued", "awaiting_approval", "running", "retrying", "succeeded", "failed", "cancelled", "timed_out", "denied", "rate_limited", "circuit_open", "invalid", "partially_succeeded", "interrupted"],
+  "mappings": [
+    {"b9State": "PENDING", "canonical": "queued", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "VALIDATING", "canonical": "无直接对应", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "WAITING_PERMISSION", "canonical": "awaiting_approval", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "READY", "canonical": "无对应", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "RUNNING", "canonical": "running", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "PAUSED", "canonical": "无对应(ToolExecution不支持暂停)", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "CANCELLING", "canonical": "无直接对应", "type": "NO_MAPPING", "lossy": false},
+    {"b9State": "CANCELLED", "canonical": "cancelled", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "SUCCEEDED", "canonical": "succeeded 或 partially_succeeded", "type": "MANY_TO_ONE", "lossy": true},
+    {"b9State": "FAILED", "canonical": "failed", "type": "ONE_TO_ONE", "lossy": false},
+    {"b9State": "TIMED_OUT", "canonical": "timed_out", "type": "ONE_TO_ONE", "lossy": false}
+  ],
+  "canonicalOnlyStates": ["retrying", "denied", "rate_limited", "circuit_open", "invalid", "partially_succeeded", "interrupted"],
+  "b9OnlyStates": ["VALIDATING", "READY", "PAUSED", "CANCELLING"],
+  "gap": {
+    "missingB9State": "ToolExecution的retrying/denied/rate_limited/circuit_open/invalid/partially_succeeded/interrupted需要B9覆盖"
+  },
+  "summary": {
+    "totalB9States": 11,
+    "mapped": 7,
+    "unmapped": 4,
+    "lossyMappings": 1,
+    "canonicalStatesNotInB9": 7
+  }
+}

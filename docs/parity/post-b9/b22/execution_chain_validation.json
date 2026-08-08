@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "执行链验证 - 验证三平台ExecutionChain的完整性（Permission→Adapter→Provider→Result）",
+
+  "executionChain": {
+    "kernelEntry": "ToolInvocationContext (via ToolRegistry)",
+    "step1_PermissionCheck": {
+      "authority": "PermissionBroker",
+      "android": "Invocation-time check",
+      "ios": "Invocation-time check",
+      "desktop": "Invocation-time check",
+      "uniform": true,
+      "bypassCount": 0
+    },
+    "step2_AdapterSelection": {
+      "authority": "RuntimeAdapterRegistry",
+      "android": "RuntimeTypeAndroid_Native → androidRuntimeAdapter",
+      "ios": "RuntimeTypeIOS_Native → iosRuntimeAdapter",
+      "desktop": "RuntimeTypeDesktop_Extension → desktopRuntimeAdapter",
+      "uniform": true,
+      "bypassCount": 0
+    },
+    "step3_BridgeMarshal": {
+      "authority": "Platform Adapter (internal)",
+      "android": "ToolInvocationContext → AndroidBridgeRequest",
+      "ios": "ToolInvocationContext → IOSBridgeRequest",
+      "desktop": "ToolInvocationContext → DesktopBridgeRequest",
+      "uniform": true,
+      "bypassCount": 0
+    },
+    "step4_NativeExecution": {
+      "authority": "Provider",
+      "android": "Android Provider executes native capability",
+      "ios": "iOS Provider executes native capability",
+      "desktop": "Desktop Provider executes native capability",
+      "uniform": false,
+      "note": "执行器因平台能力而异，预期内的差异"
+    },
+    "step5_ResultNormalization": {
+      "authority": "Platform Adapter (internal)",
+      "android": "AndroidBridgeResponse → UnifiedToolResult",
+      "ios": "IOSBridgeResponse → UnifiedToolResult",
+      "desktop": "DesktopBridgeResponse → UnifiedToolResult",
+      "uniform": true,
+      "bypassCount": 0
+    },
+    "step6_ResultReturn": {
+      "authority": "ExecutionPipeline",
+      "android": "UnifiedToolResult (canonical)",
+      "ios": "UnifiedToolResult (canonical)",
+      "desktop": "UnifiedToolResult (canonical)",
+      "uniform": true,
+      "bypassCount": 0
+    }
+  },
+
+  "validation": {
+    "chainCompleteness": "PASS",
+    "permissionStepPresent": true,
+    "adapterStepPresent": true,
+    "bridgeStepPresent": true,
+    "providerStepPresent": true,
+    "resultNormalizationPresent": true,
+    "noShortCircuits": true,
+    "noBypasses": true
+  },
+
+  "security": {
+    "permissionBypassCount": 0,
+    "adapterBypassCount": 0,
+    "resultBypassCount": 0,
+    "nativeErrorLeakCount": 0
+  },
+
+  "statement": "执行链在所有三个平台保持完整一致：PermissionBroker→RuntimeAdapterRegistry→Bridge→Provider→AdapterResultNormalization→ExecutionPipeline。无短路、无绕过。"
+}

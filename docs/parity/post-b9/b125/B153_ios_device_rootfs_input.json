@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125->B153",
+  "status": "FUTURE - 依赖前置步骤",
+
+  "deviceValidation": {
+    "install": "PENDING",
+    "integrity": "PENDING",
+    "storage": "PENDING",
+    "launch": "PENDING",
+    "filesystem": "PENDING",
+    "workspaceMapping": "PENDING",
+    "guestIsolation": "PENDING"
+  },
+
+  "blockers": ["B124未PASS", "B125未执行", "B126未执行"]
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "newToolContextSystem": 0,
+  "newExecutionContextSystem": 0,
+  "newInvocationRegistry": 0,
+  "newCancellationManager": 0,
+  "newScopeSystem": 0,
+  "newPermissionContextAuthority": 0,
+  "newRuntimeContextAuthority": 0,
+  "newWorkspaceContextSystem": 0,
+  "newTraceSystem": 0
+}

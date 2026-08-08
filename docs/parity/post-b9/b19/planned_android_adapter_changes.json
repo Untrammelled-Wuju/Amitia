@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19",
+  "generatedAt": "2026-08-08T15:18:00+08:00",
+  "description": "Planned Android Adapter Changes - 计划修改清单",
+
+  "changes": [
+    {
+      "changeId": "B19-CHG-001",
+      "semantic": "新增RuntimeTypeAndroid_Native常量",
+      "changeType": "ADAPTER_IMPLEMENTATION",
+      "targetPath": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "whyRequired": "B12 contract要求android_native RuntimeType以区分Android Native Provider与Embedded Linux",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B19-CHG-002",
+      "semantic": "实现AndroidRuntimeAdapter - RuntimeAdapter接口",
+      "changeType": "ADAPTER_IMPLEMENTATION",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "whyRequired": "RuntimeAdapter合同要求Supports/Execute/Health三个方法",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B19-CHG-003",
+      "semantic": "定义AndroidProvider接口",
+      "changeType": "ADAPTER_IMPLEMENTATION",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "whyRequired": "Android Provider合同边界 - 后续B62-B77 Provider实现此接口",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B19-CHG-004",
+      "semantic": "定义Bridge传输DTO (AndroidBridgeRequest/AndroidBridgeResponse)",
+      "changeType": "TRANSPORT_DTO",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "whyRequired": "跨端传输层协议 - transport-only，含requestId/protocolVersion/operation/payload",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B19-CHG-005",
+      "semantic": "实现健康检查逻辑",
+      "changeType": "ADAPTER_IMPLEMENTATION",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "whyRequired": "Health()返回HealthReady/HealthUnhealthy/HealthUnknown",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B19-CHG-006",
+      "semantic": "实现Android错误到ToolError映射",
+      "changeType": "ERROR_MAPPING",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "whyRequired": "保证Bridge/Provider异常正确映射到UnifiedToolResult",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B19-CHG-007",
+      "semantic": "实现Cancellation/Deadline传播",
+      "changeType": "ADAPTER_IMPLEMENTATION",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "whyRequired": "保证ctx取消和deadline正确传播",
+      "providerImplementationIncluded": false
+    },
+    {
+      "changeId": "B19-CHG-008",
+      "semantic": "新增WireAndroidPlatformAdapter注册方法",
+      "changeType": "REGISTRATION",
+      "targetPath": "backend/internal/extension/kernel/runtime_caller_wiring.go",
+      "whyRequired": "将AndroidAdapter注册到RuntimeAdapterRegistry",
+      "providerImplementationIncluded": false
+    }
+  ]
+}

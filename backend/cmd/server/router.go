@@ -115,6 +115,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		c.JSON(httpStatus, gin.H{"code": httpStatus, "msg": overallStatus, "data": result})
 	})
 
+	systemSvc := system.NewService(ctx)
+	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry)
+
 	public := r.Group("/api/public")
 	{
 		userRepo := user.NewRepository(ctx)
@@ -124,6 +127,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		public.GET("/auth/status", userHandler.Status)
 		public.POST("/auth/setup", userHandler.Setup)
 		public.POST("/auth/login", userHandler.Login)
+
+		public.GET("/onboarding/status", systemHandler.OnboardingStatus)
+		public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
 	}
 
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)

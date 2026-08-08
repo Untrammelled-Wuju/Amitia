@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "newContractRequired": false,
+  "canonicalExistingContract": "backend/pkg/resourceuri/resolver.go 中的 ResourceResolver 接口（Resolve + Reverse）以及 ResourceKind（Filesystem / Virtual）",
+  "reason": "现有ResourceResolver接口已经可以作为最小Provider合同；ResourceKind（Filesystem / Virtual）为本地物理Resolver与未来Provider（SAF/SFTP/SSH/Git）之间提供了明确的Kind区分点。无需在B13新建Provider合同。未来Provider合同扩展属于B14和B90-B92范围。"
+}

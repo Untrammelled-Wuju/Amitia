@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "runtimes": [
+    {
+      "id": "JAVASCRIPT_RUNTIME",
+      "path": "backend/internal/extension/kernel/javascript_main/",
+      "classification": "CANONICAL_RUNTIME_ADAPTER",
+      "role": "JavaScript extension execution"
+    },
+    {
+      "id": "WASM_RUNTIME",
+      "path": "backend/internal/extension/kernel/wasm_runtime/",
+      "classification": "CANONICAL_RUNTIME_ADAPTER",
+      "role": "WASM extension execution"
+    },
+    {
+      "id": "TASK_RUNTIME",
+      "path": "backend/internal/extension/kernel/task_runtime/",
+      "classification": "CANONICAL_RUNTIME_ADAPTER",
+      "role": "Long-running background tasks"
+    },
+    {
+      "id": "MCP_REMOTE",
+      "path": "backend/internal/mcp/",
+      "classification": "CANONICAL_RUNTIME_ADAPTER",
+      "role": "MCP remote tool execution"
+    },
+    {
+      "id": "WORKFLOW_RUNTIME",
+      "path": "backend/internal/extension/kernel/workflow/",
+      "classification": "CANONICAL_RUNTIME_ADAPTER",
+      "role": "Workflow execution"
+    },
+    {
+      "id": "TRUSTED_SERVICE",
+      "path": "backend/internal/extension/kernel/trusted_service/",
+      "classification": "CANONICAL_RUNTIME_ADAPTER",
+      "role": "Trusted service processes"
+    },
+    {
+      "id": "DESKTOP_PET_RUNTIME",
+      "path": "backend/internal/desktoppet/runtime/",
+      "classification": "DOMAIN_RUNTIME",
+      "role": "Desktop pet runtime (NOT an Extension Kernel runtime)"
+    },
+    {
+      "id": "LEGACY_RUNTIME_ADAPTER",
+      "path": "backend/internal/extension/kernel/capability/adapter_legacy.go",
+      "classification": "TEMPORARY_MIGRATION_ADAPTER",
+      "productionFallbackAllowed": false,
+      "exitCondition": "Remove after all legacy tools migrated"
+    }
+  ],
+  "duplicateRuntimeAdapterCount": 0,
+  "unifiedContract": "All runtime adapters implement RuntimeAdapter/RuntimeBinding interface"
+}

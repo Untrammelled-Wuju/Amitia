@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "rules": [
+    {
+      "id": "NO_SECOND_GLOBAL_TOOL_REGISTRY",
+      "severity": "BLOCKER",
+      "description": "禁止创建第二套全局Agent Tool Registry",
+      "canonicalTarget": "backend/internal/extension/kernel/capability.ToolRegistry",
+      "enforcementPoint": "NewToolRegistry() 只允许在 ContainerBuilder 中调用"
+    },
+    {
+      "id": "NO_SECOND_TOOL_EXECUTION_PIPELINE",
+      "severity": "BLOCKER",
+      "description": "禁止绕过ExecutionPipeline创建独立通用Tool执行器",
+      "canonicalTarget": "backend/internal/extension/kernel/execution.ExecutionPipeline"
+    },
+    {
+      "id": "NO_SECOND_PERMISSION_BROKER",
+      "severity": "BLOCKER",
+      "description": "禁止创建第二套Kernel Permission决策系统",
+      "canonicalTarget": "backend/internal/extension/kernel/permission.PermissionBroker"
+    },
+    {
+      "id": "NO_PARALLEL_AGENT_TOOL_RUNTIME",
+      "severity": "BLOCKER",
+      "description": "禁止向Chat绑定非ToolFacade的ModelToolRuntime实现",
+      "canonicalTarget": "chatToolRuntimeAdapter(ToolFacade)"
+    },
+    {
+      "id": "NO_PERMANENT_LEGACY_FALLBACK",
+      "severity": "BLOCKER",
+      "description": "生产环境禁止启用FallbackOnError = true",
+      "canonicalTarget": "DefaultToolFacadeConfig{FallbackOnError: false}"
+    },
+    {
+      "id": "NO_NEW_TOOL_IN_LEGACY_REGISTRY",
+      "severity": "BLOCKER",
+      "description": "禁止向旧Registry注册任何新Tool",
+      "canonicalTarget": "backend/internal/agent/tool.Registry"
+    },
+    {
+      "id": "NO_NEW_PROVIDER_ON_LEGACY_RUNTIME_ADAPTER",
+      "severity": "BLOCKER",
+      "description": "B10以后新Provider禁止注册到LegacyRuntimeAdapter",
+      "canonicalTarget": "backend/internal/extension/kernel/capability/adapter_legacy.go"
+    },
+    {
+      "id": "NO_SECOND_MCP_TOOL_EXPOSURE_PATH",
+      "severity": "BLOCKER",
+      "description": "MCP Tool只能通过ToolFacade.SyncMCPTools注册到Kernel",
+      "canonicalTarget": "mcpToolFacadeSyncerAdapter -> ToolFacade.SyncMCPTools"
+    },
+    {
+      "id": "NO_SECOND_SKILL_RUNTIME",
+      "severity": "BLOCKER",
+      "description": "禁止在Kernel AgentSkill之外另立Skill执行系统",
+      "canonicalTarget": "backend/internal/extension/kernel/agent_skill.AgentSkillCatalog"
+    },
+    {
+      "id": "NO_SECOND_WORKFLOW_ENGINE",
+      "severity": "BLOCKER",
+      "description": "禁止在Kernel Workflow之外另立Workflow执行引擎",
+      "canonicalTarget": "backend/internal/extension/kernel/workflow.WorkflowExecutor"
+    },
+    {
+      "id": "NO_SECOND_EVENT_BUS",
+      "severity": "BLOCKER",
+      "description": "禁止在Kernel Event之外另立事件系统",
+      "canonicalTarget": "backend/internal/extension/kernel/event.Service"
+    },
+    {
+      "id": "NO_SECOND_HOOK_SYSTEM",
+      "severity": "BLOCKER",
+      "description": "禁止在Kernel Hook之外另立Hook系统",
+      "canonicalTarget": "backend/internal/extension/kernel/hook.Service"
+    },
+    {
+      "id": "NO_SECOND_SCHEDULER",
+      "severity": "BLOCKER",
+      "description": "禁止在Kernel Schedule之外另立调度系统",
+      "canonicalTarget": "backend/internal/extension/kernel/schedule.Service"
+    },
+    {
+      "id": "NO_SECOND_TASK_RUNTIME",
+      "severity": "BLOCKER",
+      "description": "禁止在Kernel TaskRuntime之外另立长任务系统",
+      "canonicalTarget": "backend/internal/extension/kernel/task_runtime.Service"
+    },
+    {
+      "id": "NO_HOST_API_PERMISSION_BYPASS",
+      "severity": "BLOCKER",
+      "description": "Host API必须经过PermissionBroker和ScopeManager",
+      "canonicalTarget": "backend/internal/extension/kernel/host_api.Gateway"
+    },
+    {
+      "id": "PROVIDER_MUST_USE_TOOL_REGISTRY",
+      "severity": "BLOCKER",
+      "description": "所有Future Provider必须注册到Canonical ToolRegistry，禁止自行暴露Tool给模型",
+      "canonicalTarget": "backend/internal/extension/kernel/capability.ToolRegistry"
+    }
+  ]
+}

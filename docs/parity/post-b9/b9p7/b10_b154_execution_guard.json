@@ -1,0 +1,1913 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "effectiveAfter": "B9P8",
+  "globalRules": [
+    "所有步骤必须声明Construction Mode且不得为FORBIDDEN_DUPLICATE",
+    "所有步骤必须引用Canonical Target路径（来自B9P6）",
+    "所有步骤完成后必须验证无平行系统创建",
+    "每个B步骤开始前必须读取future_prompt_guard.json的规则",
+    "高风险步骤(CRITICAL)必须显式声明Forbidden Actions并逐项确认",
+    "Provider步骤必须确认不直接暴露ModelTools、不绕过Permission、不绕过Pipeline",
+    "Adapter步骤必须确认不创建独立状态事实源、不创建独立权限事实源",
+    "Migration步骤必须写入唯一方向Legacy→Canonical，禁止反向桥接",
+    "INTEGRATION_ONLY步骤禁止修改模块实现，只允许接线声明"
+  ],
+  "steps": {
+    "B10": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ToolRegistry", "path": "backend/internal/extension/kernel/capability/registry.go", "action": "REUSE"},
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "EXTEND"},
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "REUSE"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": [],
+      "forbiddenDuplicates": ["ToolRegistry2", "ToolRuntime2", "NewToolSchema", "NewToolResult", "NewToolContext", "CapabilityRegistry2", "ExecutionKernel2"],
+      "requiredInputs": ["B9P4 resolved_capability_registry.json", "B9P4 resolved_tool_registry.json", "现有ToolDefinition源码", "B9P4 capability_tool_mapping.json"],
+      "requiredChecks": ["无新Tool Registry创建", "无新Permission系统创建", "Tool Contract Gap清单已补全", "所有Tool可通过ToolFacade访问"]
+    },
+    "B11": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "PermissionDefinitionRegistry", "path": "backend/internal/extension/kernel/permission/definition_registry.go", "action": "EXTEND"},
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "EXTEND"}
+      ],
+      "allowedNewComponents": ["仅补缺失PermissionDefinition", "缺失Scope声明", "缺失Approval语义定义"],
+      "forbiddenDuplicates": ["PermissionCenter2", "ParityPermissionRegistry", "第二PermissionBroker", "PermissionBroker2", "独立审批引擎"],
+      "requiredInputs": ["B9P4 permission_gap_inventory.json", "B9P4 capability_permission_mapping.json", "现有PermissionDefinitionRegistry源码", "B9P4 resolved_permission_mapping.json"],
+      "requiredChecks": ["14个GAP全部有实现", "无新Permission系统创建", "所有Permission通过PermissionBroker审批", "Scope继承语义完整"]
+    },
+    "B12": {
+      "constructionModes": ["EXTEND", "ADAPTER"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "RuntimeAdapter", "path": "backend/internal/extension/kernel/capability/", "action": "EXTEND"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/host.go", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["缺失RuntimeAdapter实现", "平台能力绑定声明"],
+      "forbiddenDuplicates": ["RuntimeManager2", "CapabilityRuntime2", "NativeOffloadRuntimeKernel", "独立Runtime调度器"],
+      "requiredInputs": ["B9P4 runtime_adapter_mapping.json", "现有RuntimeAdapter源码", "现有Native Offload能力清单"],
+      "requiredChecks": ["Native Offload能力已覆盖", "RuntimeAdapter Registry唯一", "无独立Runtime Kernel"]
+    },
+    "B13": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ResourceURI", "path": "backend/pkg/resourceuri/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["新增workspace:// scheme支持", "新增saf:// scheme支持新增sftp:// extension"],
+      "forbiddenDuplicates": ["WorkspaceURI2", "ResourceResolver2", "minis主Scheme覆盖"],
+      "requiredInputs": ["B9P4 resolved_protocol_contract.json", "现有ResourceURI源码", "现有Workspace URI schema"],
+      "requiredChecks": ["workspace/SAF/SFTP已支持", "不创建替代UR解析器", "minis://不设置为主Scheme"]
+    },
+    "B14": {
+      "constructionModes": ["NEW_PROVIDER", "EXTEND"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "BrowserProvider", "path": "backend/internal/extensions/providers/browser/", "action": "NEW_PROVIDER"},
+        {"system": "BrowserSessionProvider", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Browser Provider实现", "CDP/Playwright引擎绑定", "Browser Tool Definitions（注册到统一ToolRegistry）"],
+      "forbiddenDuplicates": ["BrowserToolRegistry", "BrowserPermissionCenter", "BrowserWorkspace", "Browser Runtime Kernel"],
+      "requiredInputs": ["B9P4 capability_provider_mapping.json", "现有Browser Tool清单", "CDP协议定义"],
+      "requiredChecks": ["Browser Tool走统一ToolRegistry", "Browser Permission走PermissionBroker", "Browser Runtime走RuntimeOrchestrator"]
+    },
+    "B15": {
+      "constructionModes": ["REUSE", "EXTEND", "NEW_PROVIDER"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "FFmpegMediaProvider", "path": "backend/internal/extensions/providers/media/", "action": "NEW_PROVIDER"},
+        {"system": "ImageGeneration", "path": "backend/internal/imageprovider/", "action": "REUSE"},
+        {"system": "TTS", "path": "backend/internal/tts/", "action": "REUSE"},
+        {"system": "ASR", "path": "backend/internal/asr/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["FFmpeg Media Provider实现", "Media Tool Definitions"],
+      "forbiddenDuplicates": ["MediaRuntime2", "ImageProvider2", "VoiceProviderRegistry2", "Voice2", "Provider2"],
+      "requiredInputs": ["B9P4 provider_semantic_registry.json", "现有ImageProvider/TTS/ASR源码", "Media能力清单"],
+      "requiredChecks": ["Image/Voice Provider复用现有系统", "FFmpeg走NEW_PROVIDER模型", "无Voice2/Media2创建"]
+    },
+    "B16": {
+      "constructionModes": ["REUSE", "EXTEND"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "ModelService", "path": "backend/internal/chat/model_service/", "action": "REUSE"},
+        {"system": "CapabilityDefinition", "path": "backend/internal/extension/kernel/capability/", "action": "REUSE"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "EXTEND"}
+      ],
+      "allowedNewComponents": ["缺失Model/Voice/Automation能力声明"],
+      "forbiddenDuplicates": ["ModelRuntime2", "VoiceRuntime2", "AutomationKernel2", "ModelConfig2", "ModelRouter2"],
+      "requiredInputs": ["现有Model Service源码", "现有Voice Provider源码", "现有Automation触发机制"],
+      "requiredChecks": ["Model/Voice/Automation映射到Kernel", "无替代Model体系", "无替代Voice体系"]
+    },
+    "B17": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ContributionRegistry", "path": "backend/internal/extension/kernel/contribution/registry.go", "action": "EXTEND"},
+        {"system": "SlotRegistry", "path": "backend/internal/extension/kernel/extension_slots/registry.go", "action": "EXTEND"},
+        {"system": "SchemaRegistry", "path": "backend/internal/extension/kernel/schema_ui/schema.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Manifest新增字段", "版本化声明扩展"],
+      "forbiddenDuplicates": ["Manifest v3独立体系", "Lifecycle2", "ExtensionManager2"],
+      "requiredInputs": ["现有Extension Manifest定义", "现有Lifecycle代码", "现有ExtensionManager源码"],
+      "requiredChecks": ["Manifest保持现有体系", "无v3独立Lifecycle", "无ExtensionManager替代"]
+    },
+    "B18": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"},
+        {"system": "ToolRegistry", "path": "backend/internal/extension/kernel/capability/registry.go", "action": "REUSE"},
+        {"system": "CapabilityDefinition", "path": "backend/internal/extension/kernel/capability/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": [],
+      "forbiddenDuplicates": ["任何替代Extension实现", "任何替代Extension机制"],
+      "requiredInputs": ["B10-B17所有输出物", "Extension Kernel完整源码"],
+      "requiredChecks": ["Extension Kernel唯一性确认", "无新增Registry/Execution/Permission系统", "无绕过Extension Kernel的行为"]
+    },
+    "B19": {
+      "constructionModes": ["ADAPTER_ONLY", "EXTEND"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "AndroidCapabilityAdapter", "path": "android-capability-adapter/", "action": "ADAPTER_ONLY"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Capability Adapter实现", "Android Tool能力声明", "Android Permission Adapter"],
+      "forbiddenDuplicates": ["AndroidToolCenter", "AndroidPermissionCenter", "AndroidAdapterRegistry", "独立Android Runtime"],
+      "requiredInputs": ["Android能力审计报告", "现有RuntimeOrchestrator源码", "Android Framework API清单"],
+      "requiredChecks": ["Android Tool走统一ToolRegistry", "Android Permission走PermissionBroker", "Android Runtime走RuntimeOrchestrator"]
+    },
+    "B20": {
+      "constructionModes": ["ADAPTER_ONLY", "EXTEND"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "IOSCapabilityAdapter", "path": "ios-capability-adapter/", "action": "ADAPTER_ONLY"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS Capability Adapter实现", "iOS Tool能力声明", "iOS Permission Adapter"],
+      "forbiddenDuplicates": ["IOS独立Kernel", "IOS独立Registry", "IOS专用ExecutionPipeline", "IOSRuntimeManager2"],
+      "requiredInputs": ["iOS能力审计报告", "RuntimeOrchestrator源码", "iOS Framework API清单"],
+      "requiredChecks": ["iOS Tool走统一ToolRegistry", "iOS Permission走PermissionBroker", "iOS Runtime走RuntimeOrchestrator"]
+    },
+    "B21": {
+      "constructionModes": ["ADAPTER_ONLY", "EXTEND"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "DesktopProcessAdapter", "path": "desktop-capability-adapter/", "action": "ADAPTER_ONLY"},
+        {"system": "ProcessSupervisor", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Desktop Process Adapter实现", "Desktop Tool能力声明"],
+      "forbiddenDuplicates": ["Desktop独立RuntimeKernel", "Desktop专有能力注册体系", "Desktop分离式Permission验证"],
+      "requiredInputs": ["Desktop能力审计报告", "ProcessSupervisor源码", "Desktop系统API清单"],
+      "requiredChecks": ["Desktop Tool走统一ToolRegistry", "Desktop Process走ProcessSupervisor", "无独立Desktop Runtime"]
+    },
+    "B22": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "AdapterUnifiedInterface", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": [],
+      "forbiddenDuplicates": ["替代Adapter Registry", "绕过Adapter直接调用平台API"],
+      "requiredInputs": ["B19-B21的Adapter实现", "RuntimeOrchestrator源码"],
+      "requiredChecks": ["Adapter层行为一致", "Adapter生命周期正确", "无绕过Adapter的平台直调"]
+    },
+    "B23": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "MindRuntime", "path": "backend/internal/mindruntime/", "action": "MIGRATION_ONLY"},
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "REUSE"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["旧Planner系统迁移适配器", "Planner能力纳入MindRuntime"],
+      "forbiddenDuplicates": ["ParityPlanner系统", "独立PlannerRegistry", "Planner直接操作ExecutionPipeline"],
+      "requiredInputs": ["旧Planner源码", "MindRuntime接口定义", "B9P4 migration_requirements.json"],
+      "requiredChecks": ["Planner已迁移到MindRuntime", "无新增Planner系统", "无新增Planner Registry"]
+    },
+    "B24": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "MindRuntime", "path": "backend/internal/mindruntime/", "action": "MIGRATION_ONLY"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["旧Observer系统迁移适配器", "Observer数据通道纳入MindRuntime"],
+      "forbiddenDuplicates": ["ObserverRuntime2", "Observer独立数据通道", "绕过现有Observation系统"],
+      "requiredInputs": ["旧Observer源码", "MindRuntime接口定义", "Observer数据流清单"],
+      "requiredChecks": ["Observer已纳入MindRuntime", "无Observer独立Runtime", "无新增Observation Registry"]
+    },
+    "B25": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "WorkflowEngine", "path": "backend/internal/extension/kernel/workflow/", "action": "MIGRATION_ONLY"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["旧TaskGraph迁移适配器", "TaskGraph能力纳入Workflow"],
+      "forbiddenDuplicates": ["AgentTaskGraphEngine2", "TaskGraph独立Permission系统", "TaskGraph独立Runtime"],
+      "requiredInputs": ["旧TaskGraph源码", "Workflow接口定义", "TaskGraph依赖清单"],
+      "requiredChecks": ["TaskGraph已迁移到Workflow", "无新增TaskGraph系统", "TaskGraph状态走Canonical State Store"]
+    },
+    "B26": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "MIGRATION_ONLY"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Background能力迁移适配器", "Background任务纳管到TaskRuntime"],
+      "forbiddenDuplicates": ["AgentBackgroundRuntime", "Background任务独立调度器", "自建Background事件通道"],
+      "requiredInputs": ["Background能力源码", "TaskRuntime接口定义", "Background调度依赖"],
+      "requiredChecks": ["Background已纳入TaskRuntime", "无Background独立Runtime", "Background事件走EventSystem"]
+    },
+    "B27": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "MIGRATION_ONLY"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ToolFacade替代实现迁移", "旧ToolFacade功能纳入Canonical"],
+      "forbiddenDuplicates": ["新建ToolFacade替代实现", "ToolFacade独立Permission检查", "绕过统一ToolRegistry"],
+      "requiredInputs": ["旧ToolFacade源码", "Canonical ToolFacade定义", "现有Tool同步机制"],
+      "requiredChecks": ["ToolFacade唯一性确认", "无替代Facade实现", "所有Model Tool调用走Canonical Facade"]
+    },
+    "B28": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "AgentSkill", "path": "backend/internal/extension/kernel/agent_skill/", "action": "MIGRATION_ONLY"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MultiAgent通信纳入AgentSkill", "MultiAgent状态同步走Canonical"],
+      "forbiddenDuplicates": ["新建MultiAgent独立系统", "MultiAgent定制Runtime", "MultiAgent独立通信通道"],
+      "requiredInputs": ["MultiAgent源码", "AgentSkill接口定义", "MultiAgent通信协议"],
+      "requiredChecks": ["MultiAgent已纳入AgentSkill", "无MultiAgent独立Runtime", "MultiAgent通信走Canonical通道"]
+    },
+    "B29": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B29范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "MIGRATION_ONLY"},
+        {"system": "Context编排", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Context编排能力纳入Extension Kernel"],
+      "forbiddenDuplicates": ["新建Context编排独立引擎", "Context独立存储", "绕过统一Context管理"],
+      "requiredInputs": ["Context编排源码", "Extension Kernel Context接口"],
+      "requiredChecks": ["Context走Extension Kernel", "无独立Context引擎", "无Context替代存储"]
+    },
+    "B30": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B29范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ErrorSystem", "path": "backend/internal/extension/kernel/", "action": "MIGRATION_ONLY"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Error分类能力迁移", "Error处理走Canonical"],
+      "forbiddenDuplicates": ["新建ErrorHandling替代体系", "Error独立Registry", "分类Error独立存储"],
+      "requiredInputs": ["ErrorHandling源码", "Extension Kernel Error接口"],
+      "requiredChecks": ["Error走Extension Kernel", "无Error独立类体系", "无Error独立存储"]
+    },
+    "B31": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B29范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "StateManagement", "path": "backend/internal/extension/kernel/", "action": "MIGRATION_ONLY"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["State管理能力纳入Extension Kernel"],
+      "forbiddenDuplicates": ["新建StateManagement替代方案", "State独立Runtime", "State独立持久层"],
+      "requiredInputs": ["StateManagement源码", "Extension Kernel State接口"],
+      "requiredChecks": ["State走Extension Kernel", "无State独立Runtime", "无State替代持久层"]
+    },
+    "B32": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B37范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "MIGRATION_ONLY"},
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Agent通信协议纳入Workflow", "通信走TaskRuntime调度"],
+      "forbiddenDuplicates": ["新建Agent通信替代协议", "通信独立序列化体系", "绕过统一通信通道"],
+      "requiredInputs": ["Agent通信源码", "Workflow/TaskRuntime接口"],
+      "requiredChecks": ["通信走Workflow/TaskRuntime", "无独立通信协议", "无通信替代序列化"]
+    },
+    "B33": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B37范式",
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "MIGRATION_ONLY"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ExecutionPipeline能力优化", "Pipeline步骤走Canonical"],
+      "forbiddenDuplicates": ["新建ExecutionPipeline2", "独立Pipeline步骤编排", "Pipeline独立审计通道"],
+      "requiredInputs": ["Pipeline源码", "ExecutionPipeline接口定义"],
+      "requiredChecks": ["Pipeline唯一性确认", "无Pipeline2", "无独立Pipeline编排"]
+    },
+    "B34": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "DecisionEngine", "path": "backend/internal/extension/kernel/", "action": "MIGRATION_ONLY"},
+        {"system": "MindRuntime", "path": "backend/internal/mindruntime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["DecisionEngine能力纳入MindRuntime", "决策数据走MindRuntime"],
+      "forbiddenDuplicates": ["DecisionEngine2", "独立Decision数据存储", "DecisionEngine独立Runtime"],
+      "requiredInputs": ["DecisionEngine源码", "MindRuntime接口定义", "决策依赖清单"],
+      "requiredChecks": ["DecisionEngine已纳入MindRuntime", "无DecisionEngine2", "无独立决策数据源"]
+    },
+    "B35": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B37范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "CheckpointStore", "path": "backend/internal/extension/kernel/", "action": "MIGRATION_ONLY"}
+      ],
+      "allowedNewComponents": ["Checkpoint能力纳入Extension Kernel"],
+      "forbiddenDuplicates": ["新建CheckpointStore2", "Checkpoint独立持久层", "绕过统一Checkpoint系统"],
+      "requiredInputs": ["CheckpointStore源码", "Extension Kernel接口"],
+      "requiredChecks": ["Checkpoint走Extension Kernel", "无CheckpointStore2", "无独立Checkpoint持久层"]
+    },
+    "B36": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B37范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "RecoverySystem", "path": "backend/internal/mindruntime/", "action": "MIGRATION_ONLY"},
+        {"system": "MindRuntime", "path": "backend/internal/mindruntime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Recovery能力纳入MindRuntime"],
+      "forbiddenDuplicates": ["新建RecoverySystem替代实现", "Recovery独立状态管理", "Recovery独立Logging"],
+      "requiredInputs": ["Recovery源码", "MindRuntime接口"],
+      "requiredChecks": ["Recovery走MindRuntime", "无Recovery独立Runtime", "无Recovery独立状态"]
+    },
+    "B37": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B37范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ProgressTracker", "path": "backend/internal/extension/kernel/task_runtime/", "action": "MIGRATION_ONLY"},
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Progress能力纳入TaskRuntime"],
+      "forbiddenDuplicates": ["新建ProgressTracker独立系统", "Progress独立存储", "绕过统一Progress管理"],
+      "requiredInputs": ["ProgressTracker源码", "TaskRuntime接口"],
+      "requiredChecks": ["Progress走TaskRuntime", "无Progress独立系统", "无Progress独立存储"]
+    },
+    "B38": {
+      "constructionModes": ["MIGRATION_ONLY", "REUSE"],
+      "inheritFrom": "批量迁移Guard B23-B37范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Capacity", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "MIGRATION_ONLY"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Capacity能力纳入Extension Kernel"],
+      "forbiddenDuplicates": ["新建Capacity替代Runtime", "Capacity独立Kernel", "Capacity独立Permission体系"],
+      "requiredInputs": ["Capacity源码", "Extension Kernel接口"],
+      "requiredChecks": ["Capacity走Extension Kernel", "无Capacity独立Runtime", "无Capacity独立Kernel"]
+    },
+    "B39": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "EXTEND"},
+        {"system": "ToolRegistry", "path": "backend/internal/extension/kernel/capability/registry.go", "action": "REUSE"},
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Pipeline缺失错误传播补全", "重试链路补全", "Pipeline监控扩展"],
+      "forbiddenDuplicates": ["ExecutionPipeline2", "独立Pipeline步骤体系", "Pipeline独立监控通道"],
+      "requiredInputs": ["ExecutionPipeline源码", "错误传播清单", "重试策略定义"],
+      "requiredChecks": ["Pipeline全覆盖Parity错误模型", "无Pipeline2创建", "无监控替代通道"]
+    },
+    "B40": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "EXTEND"},
+        {"system": "PermissionDefinitionRegistry", "path": "backend/internal/extension/kernel/permission/definition_registry.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Broker Scope继承补全", "审批链补全", "Broker缓存优化"],
+      "forbiddenDuplicates": ["PermissionBroker2", "独立Permission审批流", "PermissionChecker独立Runtime"],
+      "requiredInputs": ["PermissionBroker源码", "Scope继承定义", "审批链模型"],
+      "requiredChecks": ["Permission全流程Parity覆盖", "无PermissionBroker2创建", "无Checker独立Runtime"]
+    },
+    "B41": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "EXTEND"},
+        {"system": "ToolRegistry", "path": "backend/internal/extension/kernel/capability/registry.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ToolContext生命周期字段补全", "传播语义补全"],
+      "forbiddenDuplicates": ["ToolContext2", "独立Tool Context存储", "ToolContext独立生命周期"],
+      "requiredInputs": ["ToolFacade ToolContext定义", "生命周期传播字段清单"],
+      "requiredChecks": ["ToolContext全字段覆盖", "无ToolContext2", "无Context独立存储"]
+    },
+    "B42": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "RuntimeAdapterRegistry", "path": "backend/internal/extension/kernel/capability/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ToolResult错误码补全", "元数据结构补全"],
+      "forbiddenDuplicates": ["ToolResult2", "独立Tool Result序列化", "ToolResult独立存储后端"],
+      "requiredInputs": ["ToolFacade ToolResult定义", "错误码清单", "元数据定义"],
+      "requiredChecks": ["ToolResult全类型覆盖", "无ToolResult2", "无Result独立存储"]
+    },
+    "B43": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ToolRegistry", "path": "backend/internal/extension/kernel/capability/registry.go", "action": "EXTEND"},
+        {"system": "CapabilityDefinition", "path": "backend/internal/extension/kernel/capability/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["AuditSystem日志字段补全", "检索路径扩展"],
+      "forbiddenDuplicates": ["AuditSystem2", "独立Audit存储", "Audit独立查询接口"],
+      "requiredInputs": ["AuditSystem源码", "日志字段清单", "检索需求"],
+      "requiredChecks": ["Audit全覆盖", "无AuditSystem2", "无Audit独立存储"]
+    },
+    "B44": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "EXTEND"},
+        {"system": "EventSystem", "path": "backend/internal/extension/kernel/event/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["QuotaSystem计费维度补全", "限流维度扩展"],
+      "forbiddenDuplicates": ["QuotaSystem2", "独立Quota计费引擎", "Quota独立限流机制"],
+      "requiredInputs": ["QuotaSystem源码", "计费维度清单", "限流策略"],
+      "requiredChecks": ["QuotaParity覆盖", "无QuotaSystem2", "无Quota独立引擎"]
+    },
+    "B45": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "EXTEND"},
+        {"system": "Schedule", "path": "backend/internal/extension/kernel/schedule/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ValidationLayer规则覆盖率补全"],
+      "forbiddenDuplicates": ["ValidationLayer2", "独立Validation规则引擎", "Validation独立错误报告"],
+      "requiredInputs": ["ValidationLayer源码", "校验规则清单"],
+      "requiredChecks": ["Validation全覆盖", "无ValidationLayer2", "无Validation独立引擎"]
+    },
+    "B46": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ResourceURI", "path": "backend/pkg/resourceuri/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["RateLimiter多维策略补全"],
+      "forbiddenDuplicates": ["RateLimiter2", "独立限流计数器", "RateLimiter独立持久层"],
+      "requiredInputs": ["RateLimiter源码", "限流策略清单"],
+      "requiredChecks": ["RateLimiter全覆盖", "无RateLimiter2", "无独立限流持久层"]
+    },
+    "B47": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "HookSystem", "path": "backend/internal/extension/kernel/hook/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ConcurrencyControl锁粒度优化", "公平性补全"],
+      "forbiddenDuplicates": ["ConcurrencyControl替代实现", "独立并发调度器", "ConcurrencyControl独立状态存储"],
+      "requiredInputs": ["ConcurrencyControl源码", "锁粒度策略"],
+      "requiredChecks": ["Concurrency全覆盖", "无Concurrency独立实现", "无独立并发调度"]
+    },
+    "B48": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Schedule", "path": "backend/internal/extension/kernel/schedule/", "action": "EXTEND"},
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["TimeoutManagement唤醒补全", "级联机制补全"],
+      "forbiddenDuplicates": ["TimeoutManagement替代方案", "独立Timeout调度", "Timeout独立唤醒机制"],
+      "requiredInputs": ["TimeoutManagement源码", "Timeout策略", "级联定义"],
+      "requiredChecks": ["Timeout全覆盖", "无Timeout独立方案", "无Timeout独立调度"]
+    },
+    "B49": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ErrorRecovery决策链补全", "回退逻辑补全"],
+      "forbiddenDuplicates": ["ErrorRecovery替代系统", "独立Recovery策略引擎", "Recovery独立决策模块"],
+      "requiredInputs": ["ErrorRecovery源码", "决策链定义", "回退策略"],
+      "requiredChecks": ["Recovery全覆盖", "无Recovery独立系统", "无Recovery独立引擎"]
+    },
+    "B50": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ResourceLimit度量补全", "告警链路补全"],
+      "forbiddenDuplicates": ["ResourceLimit替代实现", "独立资源监控", "ResourceLimit独立告警通道"],
+      "requiredInputs": ["ResourceLimit源码", "度量维度清单", "告警链路"],
+      "requiredChecks": ["ResourceLimit全覆盖", "无ResourceLimit独立系统", "无独立资源监控"]
+    },
+    "B51": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "MindRuntime", "path": "backend/internal/mindruntime/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["SandboxConfig策略声明补全", "分发链补全"],
+      "forbiddenDuplicates": ["SandboxConfig替代体系", "独立Sandbox策略存储", "SandboxConfig独立分发机制"],
+      "requiredInputs": ["SandboxConfig源码", "策略定义清单", "分发链路"],
+      "requiredChecks": ["SandboxConfig全覆盖", "无SandboxConfig替代体系", "无独立策略存储"]
+    },
+    "B52": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "EXTEND"},
+        {"system": "Validation", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ToolExecutionHook注册补全", "优先级排序补全"],
+      "forbiddenDuplicates": ["ToolExecutionHook替代机制", "独立Hook注册系统", "Hook独立优先级排序"],
+      "requiredInputs": ["ToolExecutionHook源码", "Hook注册清单", "优先级定义"],
+      "requiredChecks": ["Hook全覆盖", "无Hook替代机制", "无独立Hook注册"]
+    },
+    "B53": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "EXTEND"},
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ExecutionMonitor展示补全", "告警补全"],
+      "forbiddenDuplicates": ["ExecutionMonitor替代方案", "独立监控数据存储", "ExecutionMonitor独立展示层"],
+      "requiredInputs": ["ExecutionMonitor源码", "展示需求清单", "告警规则"],
+      "requiredChecks": ["Monitor全覆盖", "无Monitor替代方案", "无独立监控存储"]
+    },
+    "B54": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "批量Hardening B39-B54范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ResourceURI", "path": "backend/pkg/resourceuri/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["FallbackMechanism决策链补全", "告警补全"],
+      "forbiddenDuplicates": ["FallbackMechanism替代体系", "独立Fallback决策引擎", "FallbackChannel独立管理"],
+      "requiredInputs": ["FallbackMechanism源码", "决策链定义", "告警渠道"],
+      "requiredChecks": ["Fallback全覆盖", "无Fallback替代体系", "无独立Fallback引擎"]
+    },
+    "B55": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "LinuxShellProvider", "path": "backend/internal/extensions/providers/linux/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Linux Shell Provider实现", "Shell Tool Definitions"],
+      "forbiddenDuplicates": ["AndroidToolCenter替代", "独立Tool能力注册表", "AndroidToolCenter独立Permission体系"],
+      "requiredInputs": ["Linux Shell API清单", "RuntimeOrchestrator接口定义", "Platform能力清单"],
+      "requiredChecks": ["Linux Shell Provider走NEW_PROVIDER", "无AndroidToolCenter创建", "Provider注册到RuntimeOrchestrator"]
+    },
+    "B56": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidProcessProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Process Provider实现", "Process Tool Definitions"],
+      "forbiddenDuplicates": ["AndroidPermissionCenter替代", "独立Permission审批流", "PermissionCenter独立Scope定义"],
+      "requiredInputs": ["Android能力清单", "RuntimeOrchestrator接口"],
+      "requiredChecks": ["Android Provider走NEW_PROVIDER", "无PermissionCenter创建", "无独立Scope体系"]
+    },
+    "B57": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidFileSystemProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android FileSystem Provider"],
+      "forbiddenDuplicates": ["AndroidLogCenter替代", "独立Log收集通道", "LogCenter独立存储后端"],
+      "requiredInputs": ["Android File System API能力", "RuntimeOrchestrator接口"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无LogCenter创建", "Log走统一通道"]
+    },
+    "B58": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidNetworkProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Network Provider"],
+      "forbiddenDuplicates": ["AndroidResourceMonitor替代", "独立资源监控指标", "ResourceMonitor独立告警通道"],
+      "requiredInputs": ["Android Network API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无ResourceMonitor独立实现"]
+    },
+    "B59": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidStorageProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Storage Provider"],
+      "forbiddenDuplicates": ["AndroidStateTracker替代", "独立状态持久层", "StateTracker独立同步机制"],
+      "requiredInputs": ["Android Storage API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无StateTracker独立实现"]
+    },
+    "B60": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidCameraProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Camera Provider"],
+      "forbiddenDuplicates": ["AndroidCapability替代注册", "独立Capability发现机制", "Capability独立版本管理"],
+      "requiredInputs": ["Android Camera API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Capability独立注册"]
+    },
+    "B61": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidSensorProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Sensor Provider"],
+      "forbiddenDuplicates": ["AndroidAdapter替代机制", "独立Adapter注册体系", "Adapter独立生命周期管理"],
+      "requiredInputs": ["Android Sensor API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Adapter替代机制"]
+    },
+    "B62": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "AndroidAccessibilityProvider", "path": "android-native-provider/", "action": "NEW_PROVIDER"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Accessibility Provider", "Accessibility Tool Definitions"],
+      "forbiddenDuplicates": ["AndroidNativeTool替代实现", "独立Native Tool Registry", "NativeTool独立沙箱机制"],
+      "requiredInputs": ["Android Accessibility API清单", "Extension Kernel接口"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Native Tool独立Registry", "Provider注册到Extension Kernel"]
+    },
+    "B63": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidLocationProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Location Provider"],
+      "forbiddenDuplicates": ["AndroidNativePermission替代系统", "独立Native Permission审批", "NativePermission独立Scope"],
+      "requiredInputs": ["Android Location API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Native Permission替代系统"]
+    },
+    "B64": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidNotificationProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Notification Provider"],
+      "forbiddenDuplicates": ["AndroidNativeRuntime替代Kernel", "独立Runtime调度器", "Runtime独立资源管理"],
+      "requiredInputs": ["Android Notification API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Native Runtime替代Kernel"]
+    },
+    "B65": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidMediaSessionProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android MediaSession Provider"],
+      "forbiddenDuplicates": ["AndroidNativeLogger替代通道", "独立Native Logger存储", "Logger独立查询接口"],
+      "requiredInputs": ["Android MediaSession API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Native Logger替代"]
+    },
+    "B66": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AndroidTelephonyProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Telephony Provider", "Telephony Tool Definitions"],
+      "forbiddenDuplicates": ["AndroidNativeResource替代监控", "独立Native Resource指标", "Resource独立性能分析"],
+      "requiredInputs": ["Android Telephony API清单", "RuntimeOrchestrator接口"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Native Resource替代监控", "Provider注册到RuntimeOrchestrator"]
+    },
+    "B67": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Android Provider B55-B68范式",
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "AndroidPermissionProvider", "path": "backend/internal/extensions/providers/android/", "action": "NEW_PROVIDER"},
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android Permission Provider"],
+      "forbiddenDuplicates": ["AndroidNativeState替代管理", "独立Native State存储", "State独立同步通道"],
+      "requiredInputs": ["Android Permission API能力", "PermissionBroker接口"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无Native State替代管理", "Permission走Broker"]
+    },
+    "B68": {
+      "constructionModes": ["INTEGRATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android所有Provider与Runtime接线", "Provider声明注册"],
+      "forbiddenDuplicates": ["AndroidNativeCapability替代注册", "独立Native Capability发现", "Capability独立能力声明"],
+      "requiredInputs": ["B55-B67所有Android Provider实现", "RuntimeOrchestrator接线定义"],
+      "requiredChecks": ["所有Android Provider已接入RuntimeOrchestrator", "无新Registry创建", "无独立接线层"]
+    },
+    "B69": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "ImageGenerationProvider", "path": "backend/internal/imageprovider/", "action": "NEW_PROVIDER"},
+        {"system": "ImageProvider", "path": "backend/internal/imageprovider/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Image Generation Provider实现", "Image Generation Tool Definitions"],
+      "forbiddenDuplicates": ["MediaProvider替代体系", "独立Media能力注册", "MediaProvider独立编解码Registry"],
+      "requiredInputs": ["ImageProvider源码", "Image Generation API清单"],
+      "requiredChecks": ["Image Generation走NEW_PROVIDER", "无MediaProvider替代体系", "Provider注册到统一系统"]
+    },
+    "B70": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Media Provider B69-B78范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ImageRecognitionProvider", "path": "backend/internal/imageprovider/", "action": "NEW_PROVIDER"},
+        {"system": "ImageProvider", "path": "backend/internal/imageprovider/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Image Recognition Provider"],
+      "forbiddenDuplicates": ["AudioProvider替代实现", "独立Audio能力注册", "AudioProvider独立Pipeline"],
+      "requiredInputs": ["Image Recognition API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无AudioProvider替代"]
+    },
+    "B71": {
+      "constructionModes": ["REUSE", "EXTEND"],
+      "inheritFrom": "Media Provider B69-B78范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "TTSProvider", "path": "backend/internal/tts/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["TTS Provider缺失能力补全"],
+      "forbiddenDuplicates": ["VideoProvider替代系统", "独立Video能力注册", "VideoProvider独立渲染通道"],
+      "requiredInputs": ["TTS源码", "Provider能力清单"],
+      "requiredChecks": ["TTS走REUSE+EXTEND", "无VideoProvider替代"]
+    },
+    "B72": {
+      "constructionModes": ["REUSE", "EXTEND"],
+      "inheritFrom": "Media Provider B69-B78范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ASRProvider", "path": "backend/internal/asr/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ASR Provider缺失能力补全"],
+      "forbiddenDuplicates": ["ImageProvider替代方案", "独立Image能力注册", "ImageProvider独立处理管道"],
+      "requiredInputs": ["ASR源码", "Provider能力清单"],
+      "requiredChecks": ["ASR走REUSE+EXTEND", "无ImageProvider替代"]
+    },
+    "B73": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Media Provider B69-B78范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "VideoProcessingProvider", "path": "backend/internal/imageprovider/", "action": "NEW_PROVIDER"},
+        {"system": "ImageProvider", "path": "backend/internal/imageprovider/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Video Processing Provider"],
+      "forbiddenDuplicates": ["CameraProvider替代实现", "独立Camera能力注册", "CameraProvider独立控制通道"],
+      "requiredInputs": ["Video Processing API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无CameraProvider替代"]
+    },
+    "B74": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "AudioProcessingProvider", "path": "backend/internal/tts|asr/", "action": "NEW_PROVIDER"},
+        {"system": "TTS", "path": "backend/internal/tts/", "action": "REUSE"},
+        {"system": "ASR", "path": "backend/internal/asr/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Audio Processing Provider", "Audio Tool Definitions"],
+      "forbiddenDuplicates": ["IOSDevice替代Runtime", "独立iOS Device能力注册", "IOSDevice独立管理通道"],
+      "requiredInputs": ["Audio Processing API清单", "TTS/ASR接口定义"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无IOSDevice替代Runtime", "Provider共享TTS/ASR基础设施"]
+    },
+    "B75": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Media Provider B69-B78范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ScreenCaptureProvider", "path": "backend/internal/imageprovider/", "action": "NEW_PROVIDER"},
+        {"system": "ImageProvider", "path": "backend/internal/imageprovider/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Screen Capture Provider"],
+      "forbiddenDuplicates": ["IOSAudio替代Provider", "独立iOS Audio能力注册", "IOSAudio独立处理管道"],
+      "requiredInputs": ["Screen Capture API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无IOSAudio替代"]
+    },
+    "B76": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Media Provider B69-B78范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "WebcamProvider", "path": "backend/internal/imageprovider/", "action": "NEW_PROVIDER"},
+        {"system": "ImageProvider", "path": "backend/internal/imageprovider/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Webcam Provider"],
+      "forbiddenDuplicates": ["IOSVideo替代Provider", "独立iOS Video能力注册", "IOSVideo独立渲染通道"],
+      "requiredInputs": ["Webcam API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无IOSVideo替代"]
+    },
+    "B77": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Media Provider B69-B78范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AudioStreamProvider", "path": "backend/internal/tts|asr/", "action": "NEW_PROVIDER"},
+        {"system": "TTS", "path": "backend/internal/tts/", "action": "REUSE"},
+        {"system": "ASR", "path": "backend/internal/asr/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Audio Stream Provider"],
+      "forbiddenDuplicates": ["IOSImage替代Provider", "独立iOS Image能力注册", "IOSImage独立处理Pipeline"],
+      "requiredInputs": ["Audio Stream API能力"],
+      "requiredChecks": ["Provider走NEW_PROVIDER", "无IOSImage替代"]
+    },
+    "B78": {
+      "constructionModes": ["INTEGRATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "MediaProviderRegistry", "path": "backend/internal/imageprovider/tts|asr/", "action": "REUSE"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["所有Media Provider与ToolFacade接线", "Media能力注册声明"],
+      "forbiddenDuplicates": ["IOSCamera替代Provider", "独立iOS Camera能力注册", "iOSCamera独立控制逻辑"],
+      "requiredInputs": ["B69-B77所有Media Provider实现", "ToolFacade接线定义"],
+      "requiredChecks": ["所有Media Provider已接入ToolFacade", "无新Media Registry创建", "Media能力统一走ToolFacade"]
+    },
+    "B79": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "BrowserRuntimeProvider", "path": "browser-provider/", "action": "NEW_PROVIDER"},
+        {"system": "BrowserSessionProvider", "path": "browser-runtime/", "action": "REUSE"},
+        {"system": "BrowserRuntimeBinding", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Browser Runtime Provider实现", "CDP/Playwright引擎", "Browser Tool Definitions（注册到统一ToolRegistry）"],
+      "forbiddenDuplicates": ["BrowserToolRegistry替代", "独立Browser Tool注册体系", "BrowserTool独立Permission Center", "Browser独立Runtime Kernel"],
+      "requiredInputs": ["CDP协议定义", "Playwright API清单", "RuntimeOrchestrator接口", "Browser能力需求"],
+      "requiredChecks": ["Browser走统一ToolRegistry", "无Browser独立Registry", "Browser Runtime走RuntimeOrchestrator", "Browser Provider不直接暴露ModelTool"]
+    },
+    "B80": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "BrowserRuntimeProvider", "path": "browser-provider/", "action": "EXTEND"},
+        {"system": "BrowserSessionProvider", "path": "browser-runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Browser Runtime缺失能力扩展", "Session管理增强"],
+      "forbiddenDuplicates": ["BrowserRuntime替代Kernel", "独立Browser Runtime调度", "BrowserRuntime独立生命周期"],
+      "requiredInputs": ["Browser Runtime源码", "Runtime能力需求清单"],
+      "requiredChecks": ["Browser Runtime无替代Kernel", "Session走BrowserSessionProvider", "无Browser独立调度"]
+    },
+    "B81": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "BrowserRuntimeProvider", "path": "browser-provider/", "action": "EXTEND"},
+        {"system": "BrowserSessionProvider", "path": "browser-runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Browser Permission能力纳入PermissionBroker", "Browser Tool Definitions权限字段"],
+      "forbiddenDuplicates": ["BrowserPermission替代Broker", "独立Browser Permission审批", "Permission独立Scope定义"],
+      "requiredInputs": ["PermissionBroker接口", "Browser Permission需求清单"],
+      "requiredChecks": ["Browser Permission走PermissionBroker", "无Browser独立Permission系统", "无独立Scope定义"]
+    },
+    "B82": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "BrowserRuntimeProvider", "path": "browser-provider/", "action": "EXTEND"},
+        {"system": "BrowserSessionProvider", "path": "browser-runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Browser Workspace能力纳入统一Workspace"],
+      "forbiddenDuplicates": ["BrowserWorkspace替代方案", "独立Browser Workspace管理", "Workspace独立URI体系"],
+      "requiredInputs": ["Workspace定义", "Browser Workspace需求清单"],
+      "requiredChecks": ["Browser Workspace走统一Workspace", "无Browser独立Workspace", "无独立URI体系"]
+    },
+    "B83": {
+      "constructionModes": ["REUSE", "REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "BrowserRuntimeProvider", "path": "browser-provider/", "action": "REUSE"},
+        {"system": "BrowserSessionProvider", "path": "browser-runtime/", "action": "REUSE"},
+        {"system": "BrowserRuntimeBinding", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Browser History纳入统一History存储"],
+      "forbiddenDuplicates": ["BrowserHistoryStore2", "独立Browser History持久层", "HistoryStore独立查询接口"],
+      "requiredInputs": ["History存储接口", "Browser History需求"],
+      "requiredChecks": ["Browser History走统一History存储", "无HistoryStore2", "无独立History查询"]
+    },
+    "B84": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "SearchEngineProvider", "path": "backend/internal/search/", "action": "NEW_PROVIDER"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Search Engine Provider实现", "Search Tool Definitions", "搜索能力注册到ToolRegistry"],
+      "forbiddenDuplicates": ["SearchToolRegistry替代", "独立Search能力注册", "SearchTool独立Permission Center"],
+      "requiredInputs": ["搜索引擎API清单", "ToolFacade接口"],
+      "requiredChecks": ["Search走NEW_PROVIDER", "无Search独立Registry", "Search Tool走ToolFacade"]
+    },
+    "B85": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "SearchEngineProvider", "path": "backend/internal/search/", "action": "EXTEND"},
+        {"system": "Memory", "path": "backend/internal/memory/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Search History纳入统一History"],
+      "forbiddenDuplicates": ["SearchHistoryStore2", "独立Search History持久层", "SearchHistory独立查询通道"],
+      "requiredInputs": ["Memory接口", "History接口"],
+      "requiredChecks": ["Search History走Memory/History", "无SearchHistoryStore2", "无独立查询"]
+    },
+    "B86": {
+      "constructionModes": ["REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "SearchEngineProvider", "path": "backend/internal/search/", "action": "REUSE"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Search Permission走PermissionBroker"],
+      "forbiddenDuplicates": ["SearchPermission替代Center", "独立Search Permission审批", "SearchPermission独立Scope管理"],
+      "requiredInputs": ["PermissionBroker接口", "Search Permission需求"],
+      "requiredChecks": ["Search Permission走PermissionBroker", "无SearchPermission独立Center"]
+    },
+    "B87": {
+      "constructionModes": ["REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "MediaProvider", "path": "backend/internal/imageprovider/tts|asr/", "action": "REUSE"},
+        {"system": "WorkspaceProvider", "path": "backend/internal/workspace/", "action": "EXTEND"}
+      ],
+      "allowedNewComponents": ["Media Capability声明补全"],
+      "forbiddenDuplicates": ["MediaCapability替代注册", "独立Media能力声明系统", "MediaCapability独立发现机制"],
+      "requiredInputs": ["Media Provider源码", "Capability声明清单"],
+      "requiredChecks": ["Media Capability走统一Capability注册", "无Media独立Capability声明"]
+    },
+    "B88": {
+      "constructionModes": ["REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "REUSE"},
+        {"system": "WorkspaceProvider", "path": "backend/internal/workspace/", "action": "EXTEND"}
+      ],
+      "allowedNewComponents": ["MCP Capability声明补全"],
+      "forbiddenDuplicates": ["MCPCapability替代注册", "独立MCP能力声明体系", "MCPCapability独立发现通道"],
+      "requiredInputs": ["MCP源码", "Capability声明清单"],
+      "requiredChecks": ["MCP Capability走统一Capability注册", "无MCP独立Capability声明"]
+    },
+    "B89": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "WorkspaceProvider", "path": "backend/internal/workspace/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workspace能力扩展", "Workspace Capability声明"],
+      "forbiddenDuplicates": ["WorkspaceCapability替代注册", "独立Workspace能力声明", "WorkspaceCapability独立发现机制"],
+      "requiredInputs": ["Workspace源码", "Workspace Capability声明清单"],
+      "requiredChecks": ["Workspace Capability走统一Capability注册", "无Workspace独立Capability声明"]
+    },
+    "B90": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "EXTEND"},
+        {"system": "MediaProvider", "path": "backend/internal/imageprovider/tts|asr/", "action": "REUSE"},
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Integration Capability声明补全"],
+      "forbiddenDuplicates": ["IntegrationCapability替代注册", "独立Integration能力声明", "IntegrationCapability独立发现通道"],
+      "requiredInputs": ["Integration源码", "Capability声明清单"],
+      "requiredChecks": ["Integration Capability走统一Capability注册", "无Integration独立Capability声明"]
+    },
+    "B91": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "EXTEND"},
+        {"system": "MediaProvider", "path": "backend/internal/imageprovider/tts|asr/", "action": "REUSE"},
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Validation Capability声明补全"],
+      "forbiddenDuplicates": ["ValidationCapability替代注册", "独立Validation能力声明", "ValidationCapability独立验证引擎"],
+      "requiredInputs": ["Validation源码", "Capability声明清单"],
+      "requiredChecks": ["Validation Capability走统一Capability注册", "无Validation独立Capability声明"]
+    },
+    "B92": {
+      "constructionModes": ["REUSE"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"},
+        {"system": "CapabilityDefinition", "path": "backend/internal/extension/kernel/capability/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Migration Capability声明补全"],
+      "forbiddenDuplicates": ["MigrationCapability替代注册", "独立Migration能力声明", "MigrationCapability独立执行引擎"],
+      "requiredInputs": ["Capability Definition源码", "Migration能力清单"],
+      "requiredChecks": ["Migration Capability走统一Capability注册", "无Migration独立Capability声明"]
+    },
+    "B93": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "MCPToolRegistry", "path": "backend/internal/mcp/", "action": "EXTEND"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP Tool同步到ToolFacade"],
+      "forbiddenDuplicates": ["MCPManager2替代实现", "独立MCP连接管理", "MCPManager独立ToolRegistry"],
+      "requiredInputs": ["MCP源码", "ToolFacade源码", "MCP Tool同步需求"],
+      "requiredChecks": ["MCP Tool通过ToolFacade同步", "无MCPManager2创建", "无独立MCP Tool Registry"]
+    },
+    "B94": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP B93-B102范式",
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "EXTEND"},
+        {"system": "ToolRegistry", "path": "backend/internal/extension/kernel/capability/registry.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP Tool同步机制增强"],
+      "forbiddenDuplicates": ["MCPToolRegistry2替代体系", "独立MCP Tool注册", "MCPTool独立同步机制"],
+      "requiredInputs": ["MCP源码", "ToolRegistry源码"],
+      "requiredChecks": ["MCP Tool走ToolRegistry", "无MCPToolRegistry2"]
+    },
+    "B95": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP B93-B102范式",
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "EXTEND"},
+        {"system": "CapabilityDefinition", "path": "backend/internal/extension/kernel/capability/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP Capability Definition同步"],
+      "forbiddenDuplicates": ["SkillRuntime2替代实现", "独立Skill执行引擎", "SkillRuntime独立生命周期"],
+      "requiredInputs": ["MCP源码", "Skill/CapabilityDefinition"],
+      "requiredChecks": ["Skill/Capability同步到MCP", "无独立SkillRuntime"]
+    },
+    "B96": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP B93-B102范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "EXTEND"},
+        {"system": "Session", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP Session增强"],
+      "forbiddenDuplicates": ["SkillRegistry2替代体系", "独立Skill注册机制", "SkillRegistry独立发现通道"],
+      "requiredInputs": ["MCP源码", "Session接口"],
+      "requiredChecks": ["MCP Session走统一Session", "无SkillRegistry2"]
+    },
+    "B97": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "EXTEND"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP Runtime纳入RuntimeOrchestrator"],
+      "forbiddenDuplicates": ["WorkflowEngine2替代方案", "独立Workflow状态机", "WorkflowEngine独立调度器"],
+      "requiredInputs": ["MCP源码", "RuntimeOrchestrator源码", "MCP Runtime需求"],
+      "requiredChecks": ["MCP Runtime走RuntimeOrchestrator", "无WorkflowEngine2", "无独立Workflow状态机"]
+    },
+    "B98": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP B93-B102范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "EXTEND"},
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "EXTEND"},
+        {"system": "PermissionDefinitionRegistry", "path": "backend/internal/extension/kernel/permission/definition_registry.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP Permission同步到PermissionBroker"],
+      "forbiddenDuplicates": ["EventBus2替代机制", "独立事件分发通道", "EventBus独立订阅管理"],
+      "requiredInputs": ["MCP源码", "PermissionBroker源码"],
+      "requiredChecks": ["MCP Permission走PermissionBroker", "无EventBus2"]
+    },
+    "B99": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP B93-B102范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "EXTEND"},
+        {"system": "AgentSkill", "path": "backend/internal/extension/kernel/agent_skill/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP AgentSkill同步"],
+      "forbiddenDuplicates": ["HookSystem2替代实现", "独立Hook注册机制", "HookSystem独立优先级管理"],
+      "requiredInputs": ["MCP源码", "AgentSkill源码"],
+      "requiredChecks": ["MCP Skill走AgentSkill", "无HookSystem2"]
+    },
+    "B100": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP/Skill B93-B102范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AgentSkill", "path": "backend/internal/extension/kernel/agent_skill/", "action": "EXTEND"},
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["AgentSkill能力扩展"],
+      "forbiddenDuplicates": ["Scheduler2替代方案", "独立任务调度器", "Scheduler独立时间轮"],
+      "requiredInputs": ["AgentSkill源码", "MCP源码"],
+      "requiredChecks": ["AgentSkill扩展无Scheduler2", "无独立任务调度"]
+    },
+    "B101": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP/Skill B93-B102范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AgentSkill", "path": "backend/internal/extension/kernel/agent_skill/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["AgentSkill Extension Kernel集成"],
+      "forbiddenDuplicates": ["WorkflowStore替代持久层", "独立Workflow状态存储", "WorkflowStore独立查询接口"],
+      "requiredInputs": ["AgentSkill源码", "Extension Kernel接口"],
+      "requiredChecks": ["AgentSkill走Extension Kernel", "无WorkflowStore替代"]
+    },
+    "B102": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "MCP/Skill B93-B102范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "AgentSkill", "path": "backend/internal/extension/kernel/agent_skill/", "action": "EXTEND"},
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["AgentSkill与TaskRuntime集成"],
+      "forbiddenDuplicates": ["WorkflowAudit替代通道", "独立Workflow审计日志", "WorkflowAudit独立报告机制"],
+      "requiredInputs": ["AgentSkill源码", "TaskRuntime源码"],
+      "requiredChecks": ["AgentSkill走TaskRuntime", "无WorkflowAudit替代"]
+    },
+    "B103": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "WorkflowEngine", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"},
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow Engine能力增强", "Workflow状态机优化执行调度"],
+      "forbiddenDuplicates": ["MCPConnection替代管理", "独立MCP连接池", "MCPConnection独立重连机制"],
+      "requiredInputs": ["Workflow Engine源码", "MCP Connection源码", "Workflow需求清单"],
+      "requiredChecks": ["Workflow走WorkflowEngine", "无MCPConnection独立管理", "Workflow状态无独立存储"]
+    },
+    "B104": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "Workflow B103-B109范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "Schedule", "path": "backend/internal/extension/kernel/schedule/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow Schedule集成"],
+      "forbiddenDuplicates": ["MCPToolSync替代方案", "独立MCP Tool同步器", "MCPToolSync独立版本管理"],
+      "requiredInputs": ["Workflow源码", "Schedule源码"],
+      "requiredChecks": ["Workflow Schedule走Schedule系统", "无MCPToolSync替代"]
+    },
+    "B105": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "Workflow B103-B109范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow执行走Pipeline"],
+      "forbiddenDuplicates": ["SkillExecutor替代实现", "独立Skill执行通道", "SkillExecutor独立结果处理"],
+      "requiredInputs": ["Workflow源码", "ExecutionPipeline源码"],
+      "requiredChecks": ["Workflow执行走ExecutionPipeline", "无SkillExecutor替代"]
+    },
+    "B106": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "REUSE"},
+        {"system": "HookSystem", "path": "backend/internal/extension/kernel/hook/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow Hook集成", "Workflow事件触发Hook"],
+      "forbiddenDuplicates": ["SkillOrchestrator替代体系", "独立Skill编排引擎", "SkillOrchestrator独立调度逻辑"],
+      "requiredInputs": ["Workflow源码", "HookSystem源码", "Workflow/Hook需求"],
+      "requiredChecks": ["Workflow Hook走HookSystem", "无SkillOrchestrator替代", "无独立编排引擎"]
+    },
+    "B107": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow Task调度纳入TaskRuntime", "Workflow状态走TaskRuntime"],
+      "forbiddenDuplicates": ["WorkflowOrchestrator替代方案", "独立Workflow编排器", "WorkflowOrchestrator独立状态管理"],
+      "requiredInputs": ["Workflow源码", "TaskRuntime源码", "Workflow/TaskRuntime需求"],
+      "requiredChecks": ["Workflow Task走TaskRuntime", "无WorkflowOrchestrator替代", "无独立状态管理"]
+    },
+    "B108": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "Workflow B103-B109范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "HookSystem", "path": "backend/internal/extension/kernel/hook/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow Hook扩展"],
+      "forbiddenDuplicates": ["EventDispatcher替代机制", "独立事件分发引擎", "EventDispatcher独立序列化"],
+      "requiredInputs": ["Workflow源码", "HookSystem源码"],
+      "requiredChecks": ["Workflow事件走HookSystem", "无EventDispatcher替代"]
+    },
+    "B109": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "Workflow B103-B109范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "EXTEND"},
+        {"system": "EventSystem", "path": "backend/internal/extension/kernel/event/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow Event扩展"],
+      "forbiddenDuplicates": ["HookExecutor替代实现", "独立Hook执行引擎", "HookExecutor独立错误处理"],
+      "requiredInputs": ["Workflow源码", "EventSystem源码"],
+      "requiredChecks": ["Workflow事件走EventSystem", "无HookExecutor替代"]
+    },
+    "B110": {
+      "constructionModes": ["INTEGRATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"},
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "REUSE"},
+        {"system": "AgentSkill", "path": "backend/internal/extension/kernel/agent_skill/", "action": "REUSE"},
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MCP/Skill/Workflow/Hook/Schedule接线"],
+      "forbiddenDuplicates": ["TaskScheduler替代方案", "独立任务调度引擎", "TaskScheduler独立优先级队列"],
+      "requiredInputs": ["B93-B109所有输出物", "接线定义清单"],
+      "requiredChecks": ["所有模块已通过接线集成", "无独立Scheduler创建", "所有调度走Canonical"]
+    },
+    "B111": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "ResponsesAPIAdapter", "path": "backend/internal/chat/", "action": "NEW_PROVIDER"},
+        {"system": "MNNLocalProvider", "path": "backend/internal/embeddings/", "action": "NEW_PROVIDER"},
+        {"system": "ModelService", "path": "backend/internal/chat/model_service/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Responses API Adapter", "MNN Local Provider", "Local Model Tool Definitions"],
+      "forbiddenDuplicates": ["ModelConfigs_v2替代体系", "独立Model配置存储", "ModelConfig_v2独立路由逻辑"],
+      "requiredInputs": ["ModelService源码", "Responses API协议定义", "MNN API清单"],
+      "requiredChecks": ["Responses API/MNN走NEW_PROVIDER", "无ModelConfigs_v2创建", "Model配置统一走ModelService"]
+    },
+    "B112": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "Model/Voice/Memory B111-B122范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ModelService", "path": "backend/internal/chat/model_service/", "action": "EXTEND"},
+        {"system": "Embedding", "path": "backend/internal/embedding/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["ModelService增强", "Embedding集成"],
+      "forbiddenDuplicates": ["ModelRouter2替代方案", "独立Model路由引擎", "ModelRouter_v2独立负载均衡"],
+      "requiredInputs": ["ModelService源码", "Embedding源码"],
+      "requiredChecks": ["ModelService无ModelRouter2替代", "Embedding统一走Embedding系统"]
+    },
+    "B113": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "inheritFrom": "Model/Voice/Memory B111-B122范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "LocalModelProvider", "path": "backend/internal/chat/model_service/", "action": "NEW_PROVIDER"},
+        {"system": "ModelService", "path": "backend/internal/chat/model_service/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Local Model Provider实现"],
+      "forbiddenDuplicates": ["VoiceRuntime2替代实现", "独立Voice执行引擎", "VoiceRuntime_v2独立编解码"],
+      "requiredInputs": ["ModelService源码", "Local Model API清单"],
+      "requiredChecks": ["Local Model走NEW_PROVIDER", "无VoiceRuntime2创建"]
+    },
+    "B114": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "Model/Voice/Memory B111-B122范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ModelService", "path": "backend/internal/chat/model_service/", "action": "EXTEND"},
+        {"system": "ResponsesAPIAdapter", "path": "backend/internal/chat/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Model/Responses API集成"],
+      "forbiddenDuplicates": ["ASR Config2替代体系", "独立ASR配置管理", "ASR Config_v2独立路由"],
+      "requiredInputs": ["ModelService源码", "ResponsesAPIAdapter源码"],
+      "requiredChecks": ["走REUSE+EXTEND", "无ASR Config2替代"]
+    },
+    "B115": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "VoiceProvider", "path": "backend/internal/tts|character/", "action": "NEW_PROVIDER"},
+        {"system": "Character", "path": "backend/internal/character/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Voice Provider实现", "Voice Tool Definitions", "CharacterVoiceToolDefinitions"],
+      "forbiddenDuplicates": ["TTS Config2替代方案", "独立TTS配置管理", "TTS Config_v2独立路由"],
+      "requiredInputs": ["TTS源码", "Character源码", "Voice API清单"],
+      "requiredChecks": ["Voice走NEW_PROVIDER", "无TTS Config2替代", "Character保持REUSE"]
+    },
+    "B116": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "Model/Voice/Memory B111-B122范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Character", "path": "backend/internal/character/", "action": "EXTEND"}
+      ],
+      "allowedNewComponents": ["Character能力扩展"],
+      "forbiddenDuplicates": ["MemorySystem2替代实现", "独立Memory引擎", "MemorySystem_v2独立存储后端"],
+      "requiredInputs": ["Character源码"],
+      "requiredChecks": ["Character能力走Character", "无MemorySystem2替代"]
+    },
+    "B117": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "Model/Voice/Memory B111-B122范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Character", "path": "backend/internal/character/", "action": "EXTEND"},
+        {"system": "Schedule", "path": "backend/internal/extension/kernel/schedule/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Character Schedule集成"],
+      "forbiddenDuplicates": ["MemoryStore2替代方案", "独立Memory存储层", "MemoryStore_v2独立查询接口"],
+      "requiredInputs": ["Character源码", "Schedule源码"],
+      "requiredChecks": ["Character Schedule走Schedule系统", "无MemoryStore2替代"]
+    },
+    "B118": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "MemoryStore", "path": "backend/internal/memory/", "action": "EXTEND"},
+        {"system": "MemoryGraph", "path": "backend/internal/memory/", "action": "EXTEND"},
+        {"system": "VectorStore", "path": "backend/internal/memory/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Memory Store能力扩展", "Memory Graph能力扩展"],
+      "forbiddenDuplicates": ["VectorStore2替代体系", "独立Vector存储引擎", "VectorStore_v2独立检索机制"],
+      "requiredInputs": ["Memory源码", "Vector Store源码", "Memory需求清单"],
+      "requiredChecks": ["Memory走统一Memory系统", "无VectorStore2替代", "Memory Graph无独立系统"]
+    },
+    "B119": {
+      "constructionModes": ["EXTEND"],
+      "inheritFrom": "Model/Voice/Memory B111-B122范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Memory", "path": "backend/internal/memory/", "action": "EXTEND"}
+      ],
+      "allowedNewComponents": ["Memory能力扩展"],
+      "forbiddenDuplicates": ["MemoryGraph2替代方案", "独立Memory图谱引擎", "MemoryGraph_v2独立关系管理"],
+      "requiredInputs": ["Memory源码"],
+      "requiredChecks": ["Memory走统一系统", "无MemoryGraph2替代"]
+    },
+    "B120": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "Model/Voice/Memory B111-B122范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "Memory", "path": "backend/internal/memory/", "action": "EXTEND"},
+        {"system": "Persistence", "path": "backend/internal/memory/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Memory Persistence集成"],
+      "forbiddenDuplicates": ["CharacterCore2替代实现", "独立Character引擎", "CharacterCore_v2独立状态管理"],
+      "requiredInputs": ["Memory源码", "Persistence接口"],
+      "requiredChecks": ["Memory Persistence走Persistence接口", "无CharacterCore2替代"]
+    },
+    "B121": {
+      "constructionModes": ["EXTEND"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "CharacterStore", "path": "backend/internal/character/", "action": "EXTEND"},
+        {"system": "CharacterService", "path": "backend/internal/character/", "action": "EXTEND"},
+        {"system": "Memory", "path": "backend/internal/memory/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Character Store能力扩展", "Character Service能力扩展"],
+      "forbiddenDuplicates": ["CharacterDB替代方案", "独立Character数据存储", "CharacterDB_v2独立查询通道"],
+      "requiredInputs": ["Character源码", "Memory源码", "Character需求清单"],
+      "requiredChecks": ["Character走统一Character系统", "无CharacterDB替代", "Character数据走Canonical存储"]
+    },
+    "B122": {
+      "constructionModes": ["INTEGRATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ModelService", "path": "backend/internal/chat/model_service/", "action": "REUSE"},
+        {"system": "VoiceProvider", "path": "backend/internal/tts|character/", "action": "REUSE"},
+        {"system": "Memory", "path": "backend/internal/memory/", "action": "REUSE"},
+        {"system": "Character", "path": "backend/internal/character/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Model/Voice/Memory/Character接线"],
+      "forbiddenDuplicates": ["CharacterService替代体系", "独立Character服务层", "CharacterService_v2独立接口"],
+      "requiredInputs": ["B111-B121所有输出物"],
+      "requiredChecks": ["所有模块已完成接线", "无CharacterService替代"]
+    },
+    "B123": {
+      "constructionModes": ["NEW_PROVIDER", "REUSE"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "IOSAlchemyProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS Alchemy Provider实现", "iOS Sandbox生命周期", "iOS Tool Definitions"],
+      "forbiddenDuplicates": ["IOSSandboxLifecycle2替代实现", "独立iOS沙箱生命周期", "IOSSandboxLifecycle_v2独立驱动"],
+      "requiredInputs": ["iOS Alchemy API清单", "RuntimeOrchestrator接口", "iOS沙箱需求"],
+      "requiredChecks": ["iOS Alchemy走NEW_PROVIDER", "无IOSSandboxLifecycle2替代", "Provider注册到RuntimeOrchestrator"]
+    },
+    "B124": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "IOSAlchemyProvider", "path": "ios-sandbox-provider/", "action": "EXTEND"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS Alchemy能力扩展"],
+      "forbiddenDuplicates": ["IOSRuntimeManager2替代方案", "独立iOS Runtime管理", "IOSRuntimeManager_v2独立调度"],
+      "requiredInputs": ["iOS Alchemy源码", "RuntimeHost接口"],
+      "requiredChecks": ["iOS能力扩展无RuntimeManager替代", "调度走RuntimeHost"]
+    },
+    "B125": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "IOSAlchemyProvider", "path": "ios-sandbox-provider/", "action": "EXTEND"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS Tool注册到ToolRegistry"],
+      "forbiddenDuplicates": ["IOSToolRegistry2替代体系", "独立iOS Tool注册", "IOSToolRegistry_v2独立发现"],
+      "requiredInputs": ["iOS Tool清单", "ToolRegistry接口"],
+      "requiredChecks": ["iOS Tool走ToolRegistry", "无IOSToolRegistry2创建"]
+    },
+    "B126": {
+      "constructionModes": ["EXTEND", "REUSE"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "IOSAlchemyProvider", "path": "ios-sandbox-provider/", "action": "EXTEND"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS Permission走PermissionBroker"],
+      "forbiddenDuplicates": ["IOSPermissionCenter2替代方案", "独立iOS Permission管理", "IOSPermissionCenter_v2独立审批"],
+      "requiredInputs": ["PermissionBroker接口", "iOS Permission需求"],
+      "requiredChecks": ["iOS Permission走PermissionBroker", "无IOSPermissionCenter2创建"]
+    },
+    "B127": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "riskLevel": "HIGH",
+      "canonicalTargets": [
+        {"system": "HealthKitProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["HealthKit Provider实现", "HealthKit Tool Definitions"],
+      "forbiddenDuplicates": ["IOSCapabilityRegistry2替代实现", "独立iOS Capability注册", "IOSCapabilityRegistry_v2独立声明"],
+      "requiredInputs": ["HealthKit API清单", "iOS沙箱接口"],
+      "requiredChecks": ["HealthKit走NEW_PROVIDER", "无IOSCapabilityRegistry2创建"]
+    },
+    "B128": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "HomeKitProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["HomeKit Provider实现"],
+      "forbiddenDuplicates": ["IOSResourceMonitor2替代方案", "独立iOS资源监控", "IOSResourceMonitor_v2独立指标"],
+      "requiredInputs": ["HomeKit API清单"],
+      "requiredChecks": ["HomeKit走NEW_PROVIDER", "无IOSResourceMonitor2创建"]
+    },
+    "B129": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "CoreMLProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["CoreML Provider实现"],
+      "forbiddenDuplicates": ["IOSStateTracker2替代实现", "独立iOS状态追踪", "IOSStateTracker_v2独立持久层"],
+      "requiredInputs": ["CoreML API清单"],
+      "requiredChecks": ["CoreML走NEW_PROVIDER", "无IOSStateTracker2创建"]
+    },
+    "B130": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "CallKitProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["CallKit Provider实现"],
+      "forbiddenDuplicates": ["IOSAdapterRegistry2替代方案", "独立iOS Adapter注册", "IOSAdapterRegistry_v2独立生命周期"],
+      "requiredInputs": ["CallKit API清单"],
+      "requiredChecks": ["CallKit走NEW_PROVIDER", "无IOSAdapterRegistry2创建"]
+    },
+    "B131": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "NFCProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["NFC Provider实现", "NFC Tool Definitions"],
+      "forbiddenDuplicates": ["IOSEventBus2替代实现", "独立iOS事件总线", "IOSEventBus_v2独立订阅"],
+      "requiredInputs": ["NFC API清单", "iOS沙箱接口"],
+      "requiredChecks": ["NFC走NEW_PROVIDER", "无IOSEventBus2创建"]
+    },
+    "B132": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "ARKitProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["ARKit Provider实现"],
+      "forbiddenDuplicates": ["IOSWorkflowEngine2替代方案", "独立iOS Workflow引擎", "IOSWorkflowEngine_v2独立调度"],
+      "requiredInputs": ["ARKit API清单"],
+      "requiredChecks": ["ARKit走NEW_PROVIDER", "无IOSWorkflowEngine2创建"]
+    },
+    "B133": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "PassKitProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["PassKit Provider实现"],
+      "forbiddenDuplicates": ["IOSScheduler2替代实现", "独立iOS调度器", "IOSScheduler_v2独立优先级"],
+      "requiredInputs": ["PassKit API清单"],
+      "requiredChecks": ["PassKit走NEW_PROVIDER", "无IOSScheduler2创建"]
+    },
+    "B134": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "CarPlayProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["CarPlay Provider实现"],
+      "forbiddenDuplicates": ["IOSMemoryManager2替代方案", "独立iOS内存管理", "IOSMemoryManager_v2独立缓存"],
+      "requiredInputs": ["CarPlay API清单"],
+      "requiredChecks": ["CarPlay走NEW_PROVIDER", "无IOSMemoryManager2创建"]
+    },
+    "B135": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "WatchConnectivityProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["WatchConnectivity Provider实现"],
+      "forbiddenDuplicates": ["IOSCharacterService2替代实现", "独立iOS Character服务", "IOSCharacterService_v2独立状态"],
+      "requiredInputs": ["WatchConnectivity API清单"],
+      "requiredChecks": ["WatchConnectivity走NEW_PROVIDER", "无IOSCharacterService2创建"]
+    },
+    "B136": {
+      "constructionModes": ["NEW_PROVIDER"],
+      "inheritFrom": "iOS Provider B123-B138范式",
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "IntentsProvider", "path": "ios-sandbox-provider/", "action": "NEW_PROVIDER"}
+      ],
+      "allowedNewComponents": ["Intents Provider实现"],
+      "forbiddenDuplicates": ["IOSVoiceService2替代方案", "独立iOS语音服务", "IOSVoiceService_v2独立编解码"],
+      "requiredInputs": ["Intents API清单"],
+      "requiredChecks": ["Intents走NEW_PROVIDER", "无IOSVoiceService2创建"]
+    },
+    "B137": {
+      "constructionModes": ["REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "IOSAlchemyProvider", "path": "ios-sandbox-provider/", "action": "REUSE"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS所有Provider与RuntimeHost接线"],
+      "forbiddenDuplicates": ["IOSModelService2替代实现", "独立iOS模型服务", "IOSModelService_v2独立路由"],
+      "requiredInputs": ["B123-B136所有iOS Provider实现"],
+      "requiredChecks": ["所有iOS Provider已接线", "无IOSModelService2创建"]
+    },
+    "B138": {
+      "constructionModes": ["REUSE"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "IOSAlchemyProvider", "path": "ios-sandbox-provider/", "action": "REUSE"},
+        {"system": "CapabilityDefinition", "path": "backend/internal/extension/kernel/capability/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS Provider与CapabilityDefinition接线"],
+      "forbiddenDuplicates": ["RuntimeSupervisor2替代方案", "独立Runtime监控", "RuntimeSupervisor_v2独立报告"],
+      "requiredInputs": ["iOS Provider源码", "CapabilityDefinition接口"],
+      "requiredChecks": ["iOS Provider走CapabilityDefinition", "无RuntimeSupervisor2创建"]
+    },
+    "B139": {
+      "constructionModes": ["ADAPTER_ONLY"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "UnifiedCapabilityAdapter", "path": "backend/internal/runtimeorchestrator/", "action": "ADAPTER_ONLY"},
+        {"system": "RuntimeHost", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["三端统一Adapter接入"],
+      "forbiddenDuplicates": ["新建统一Runtime替代实现", "独立Runtime调度器", "Runtime独立生命周期管理"],
+      "requiredInputs": ["B19/B20/B21 Adapter实现", "RuntimeOrchestrator接线定义"],
+      "requiredChecks": ["三端Adapter走UnifiedCapabilityAdapter", "无替代Runtime创建", "Adapter不创建独立状态事实源"]
+    },
+    "B140": {
+      "constructionModes": ["MIGRATION_ONLY"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"},
+        {"system": "LegacyToolSystem", "path": "whole-codebase-migration/", "action": "MIGRATION_ONLY"}
+      ],
+      "allowedNewComponents": ["Legacy Tool系统迁移到ToolFacade/ExtensionKernel"],
+      "forbiddenDuplicates": ["新建Agent Runtime替代", "新建Tool Runtime替代", "新建Legacy Registry", "Fallback到Legacy系统", "新增Legacy写入", "永久双写新旧系统"],
+      "requiredInputs": ["Legacy Tool源码", "ToolFacade接口", "迁移计划"],
+      "requiredChecks": ["Legacy Tool已100%迁移", "无Legacy Registry残留", "无Fallback路径", "无Legacy写入保持"]
+    },
+    "B141": {
+      "constructionModes": ["MIGRATION_ONLY"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ExecutionPipeline", "path": "backend/internal/extension/kernel/execution/pipeline.go", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"},
+        {"system": "AlternativeExecutionChain", "path": "whole-codebase-migration/", "action": "MIGRATION_ONLY"}
+      ],
+      "allowedNewComponents": ["Legacy Execution Pipeline迁移到Canonical"],
+      "forbiddenDuplicates": ["新建Pipeline替代方案", "Redirect到Legacy Pipeline", "创建Pipeline副本", "保留Legacy Pipeline"],
+      "requiredInputs": ["Legacy Execution Pipeline源码", "Canonical ExecutionPipeline接口"],
+      "requiredChecks": ["Pipeline唯一性确认", "无Legacy Pipeline残留", "无Pipeline副本保留", "无Redirect到Legacy"]
+    },
+    "B142": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"},
+        {"system": "ProviderRegistry", "path": "backend/internal/extension/kernel/capability/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Contract一致性验证报告"],
+      "forbiddenDuplicates": ["修改合同验证实现代码", "创建替代验证机制", "绕过统一验证流程"],
+      "requiredInputs": ["B10-B18 Contract层所有输出物", "Contract定义清单"],
+      "requiredChecks": ["Contract一致性验证通过", "无替代验证机制创建"]
+    },
+    "B143": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "AgentSkill", "path": "backend/internal/extension/kernel/agent_skill/", "action": "REUSE"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Permission一致性验证报告"],
+      "forbiddenDuplicates": ["修改Permission分配实现代码", "创建替代Permission体系", "绕过现有Permission审批"],
+      "requiredInputs": ["B11/B40 Permission层所有输出物"],
+      "requiredChecks": ["Permission一致性验证通过", "无替代Permission体系创建"]
+    },
+    "B144": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "Workflow", "path": "backend/internal/extension/kernel/workflow/", "action": "REUSE"},
+        {"system": "TaskRuntime", "path": "backend/internal/extension/kernel/task_runtime/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Contract兼容性验证报告"],
+      "forbiddenDuplicates": ["修改Contract兼容性检查实现", "创建替代兼容性验证", "绕过统一Contract检查"],
+      "requiredInputs": ["B39-B54 Hardening所有输出物", "兼容性基线"],
+      "requiredChecks": ["兼容性100%验证", "无替代兼容验证机制"]
+    },
+    "B145": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "Adapter", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Workflow执行验证报告"],
+      "forbiddenDuplicates": ["修改Workflow执行验证实现", "创建替代Workflow验证", "绕过现有Workflow引擎"],
+      "requiredInputs": ["B103-B109 Workflow所有输出物"],
+      "requiredChecks": ["Workflow执行正确性100%", "无替代Workflow验证"]
+    },
+    "B146": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "PermissionBroker", "path": "backend/internal/extension/kernel/permission/broker.go", "action": "REUSE"},
+        {"system": "PermissionDefinitionRegistry", "path": "backend/internal/extension/kernel/permission/definition_registry.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["MultiAgent状态验证报告"],
+      "forbiddenDuplicates": ["修改MultiAgent状态验证实现", "创建替代状态验证", "绕过统一状态管理"],
+      "requiredInputs": ["B27/B34 Migration所有输出物"],
+      "requiredChecks": ["MultiAgent状态正确性100%", "无替代状态验证"]
+    },
+    "B147": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "MCP", "path": "backend/internal/mcp/", "action": "REUSE"},
+        {"system": "ToolFacade", "path": "backend/internal/extension/kernel/tool_facade.go", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Extension生命周期验证报告"],
+      "forbiddenDuplicates": ["修改Extension生命周期验证实现", "创建替代Extension验证", "绕过现有Extension管理"],
+      "requiredInputs": ["B140/B141 Migration输出物", "Extension生命周期定义"],
+      "requiredChecks": ["Extension生命周期100%正确", "无替代Extension验证"]
+    },
+    "B148": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ModelService", "path": "backend/internal/chat/model_service/", "action": "REUSE"},
+        {"system": "Character", "path": "backend/internal/character/", "action": "REUSE"},
+        {"system": "Memory", "path": "backend/internal/memory/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Android适配验证报告"],
+      "forbiddenDuplicates": ["修改Android适配验证实现", "创建替代Android验证", "绕过现有Adapter验证"],
+      "requiredInputs": ["B19 Android Adapter输出物"],
+      "requiredChecks": ["Android适配100%正确", "无替代Adapter验证"]
+    },
+    "B149": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["iOS适配验证报告"],
+      "forbiddenDuplicates": ["修改iOS适配验证实现", "创建替代iOS验证", "绕过现有Adapter机制"],
+      "requiredInputs": ["B20 iOS Adapter输出物", "B123-B138 iOS Provider输出"],
+      "requiredChecks": ["iOS适配100%正确", "无替代Adapter验证"]
+    },
+    "B150": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"},
+        {"system": "RuntimeOrchestrator", "path": "backend/internal/runtimeorchestrator/", "action": "REUSE"},
+        {"system": "AllProviders", "path": "backend/internal/extensions/providers/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Desktop适配验证报告"],
+      "forbiddenDuplicates": ["修改Desktop适配验证实现", "创建替代Desktop验证", "绕过现有Adapter层"],
+      "requiredInputs": ["B21 Desktop Adapter输出物"],
+      "requiredChecks": ["Desktop适配100%正确", "无替代Adapter验证"]
+    },
+    "B151": {
+      "constructionModes": ["EXTEND", "MIGRATION_ONLY"],
+      "riskLevel": "MEDIUM",
+      "canonicalTargets": [
+        {"system": "LegacyAudit", "path": "whole-codebase-migration/", "action": "EXTEND"},
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"},
+        {"system": "LegacySystem", "path": "legacy-audit/", "action": "MIGRATION_ONLY"}
+      ],
+      "allowedNewComponents": ["Legacy系统审计报告", "Integration验证报告"],
+      "forbiddenDuplicates": ["修改Integration验证实现代码", "创建替代Integration机制", "绕过统一集成验证"],
+      "requiredInputs": ["所有Legacy系统源码", "Legacy审计清单", "B139-B150所有验证输出"],
+      "requiredChecks": ["Legacy系统全部审计", "无替代Integration验证"]
+    },
+    "B152": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "ExtensionKernel", "path": "backend/internal/extension/kernel/", "action": "REUSE"},
+        {"system": "AllProviders", "path": "backend/internal/extensions/providers/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["迁移State验证报告"],
+      "forbiddenDuplicates": ["修改迁移State验证实现", "创建替代State验证机制", "绕过统一迁移State"],
+      "requiredInputs": ["B140-B141 Migration输出物", "所有Provider/系统状态"],
+      "requiredChecks": ["迁移后状态100%正确", "无替代State验证"]
+    },
+    "B153": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "CRITICAL",
+      "canonicalTargets": [
+        {"system": "ExitConditions", "path": "backend/internal/extension/kernel/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["Pipeline唯一性验证报告"],
+      "forbiddenDuplicates": ["修改Pipeline唯一性验证实现", "创建替代Pipeline验证", "绕过唯一性检查"],
+      "requiredInputs": ["B141 Pipeline唯一性输出物", "所有Execution Pipeline实现"],
+      "requiredChecks": ["Pipeline唯一性100%确认", "无替代Pipeline验证", "无平行Pipeline存在"]
+    },
+    "B154": {
+      "constructionModes": ["VALIDATION_ONLY"],
+      "riskLevel": "LOW",
+      "canonicalTargets": [
+        {"system": "GoLiveVerification", "path": "whole-codebase-migration/", "action": "REUSE"}
+      ],
+      "allowedNewComponents": ["整体系统验收验证报告", "Go-Live宣言"],
+      "forbiddenDuplicates": ["修改整体系统验证实现", "创建替代全局验证机制", "绕过统一验收流程"],
+      "requiredInputs": ["B142-B153所有验证输出", "Go-Live检查清单"],
+      "requiredChecks": ["整体系统100%验收通过", "无替代全局验证", "Go-Live宣言签署"]
+    }
+  },
+  "inheritRules": {
+    "批量迁移Guard B23-B29范式": {
+      "description": "B23-B29范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "MIGRATION_ONLY + REUSE现有系统",
+      "sharedRules": ["所有Legacy能力迁移到Extension Kernel或MindRuntime", "禁止创建替代系统", "禁止保留Legacy写入路径", "禁止长期双写"],
+      "forbiddenDuplicates": ["任何与目标系统同名的第二实现", "任何独立状态事实源", "任何独立权限事实源"]
+    },
+    "批量迁移Guard B23-B37范式": {
+      "description": "B23-B37范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "MIGRATION_ONLY + REUSE目标系统(Workflow/TaskRuntime/ToolFacade等)",
+      "sharedRules": ["所有Legacy能力迁移到目标Canonical系统", "禁止创建替代系统", "禁止保留Legacy写入路径"],
+      "forbiddenDuplicates": ["任何与目标系统同名的第二实现", "独立Runtime", "独立持久层", "独立调度器"]
+    },
+    "批量Hardening B39-B54范式": {
+      "description": "B39-B54范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "EXTEND现有系统以覆盖缺失Parity能力",
+      "sharedRules": ["所有Hardening在现有系统上扩展", "禁止创建替代系统", "禁止修改现有核心接口签名"],
+      "forbiddenDuplicates": ["任何2号替代系统", "任何独立引擎", "任何独立存储"]
+    },
+    "Android Provider B55-B68范式": {
+      "description": "B55-B68范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "NEW_PROVIDER + REUSE RuntimeOrchestrator/RuntimeHost",
+      "sharedRules": ["所有Android Provider走NEW_PROVIDER模型", "Provider注册到RuntimeOrchestrator", "不创建独立Registry/Permission/Runtime"],
+      "forbiddenDuplicates": ["任何2号Android系统", "独立ToolCenter", "独立PermissionCenter", "独立LogCenter"]
+    },
+    "Media Provider B69-B78范式": {
+      "description": "B69-B78范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "NEW_PROVIDER/EXTEND/REUSE",
+      "sharedRules": ["Image/Audio/Video/Media走NEW_PROVIDER或EXTEND", "Provider复用ImageProvider/TTS/ASR基础设施", "不创建独立Media Registry"],
+      "forbiddenDuplicates": ["任何2号Media系统", "独立Provider Registry", "独立编解码Registry"]
+    },
+    "MCP B93-B102范式": {
+      "description": "B93-B102范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "EXTEND现有MCP/ToolFacade/ToolRegistry系统",
+      "sharedRules": ["MCP能力通过ToolFacade/ToolRegistry同步", "不创建独立MCP Registry", "不创建独立MCP Runtime"],
+      "forbiddenDuplicates": ["MCPManager2", "MCPToolRegistry2", "SkillRuntime2", "SkillRegistry2"]
+    },
+    "MCP/Skill B93-B102范式": {
+      "description": "B93-B102范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "EXTEND",
+      "sharedRules": ["MCP/Skill走EXTEND现有系统", "不创建独立系统"],
+      "forbiddenDuplicates": ["任何2号MCP/Skill系统"]
+    },
+    "Workflow B103-B109范式": {
+      "description": "B103-B109范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "EXTEND Workflow现有能力",
+      "sharedRules": ["Workflow能力在现有Workflow Engine上扩展", "不创建WorkflowEngine2", "不创建独立Workflow Runtime"],
+      "forbiddenDuplicates": ["WorkflowEngine2", "SkillOrchestrator", "EventDispatcher", "HookExecutor"]
+    },
+    "Model/Voice/Memory B111-B122范式": {
+      "description": "B111-B122范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "NEW_PROVIDER/EXTEND/REUSE ModelService/Character/Memory/Voice",
+      "sharedRules": ["Model/Voice/Memory能力通过NEW_PROVIDER或EXTEND实现", "不创建独立Model/Voice/Memory注册系统"],
+      "forbiddenDuplicates": ["ModelConfigs_v2", "ModelRouter2", "VoiceRuntime2", "TTS Config2", "ASR Config2", "MemorySystem2", "MemoryStore2", "VectorStore2", "MemoryGraph2", "CharacterCore2"]
+    },
+    "iOS Provider B123-B138范式": {
+      "description": "B123-B138范围内未被单独列出详细Guard的步骤，遵循此通用范式。",
+      "commonPattern": "NEW_PROVIDER/EXTEND/REUSE",
+      "sharedRules": ["所有iOS Provider走NEW_PROVIDER或EXTEND模型", "Provider注册到RuntimeOrchestrator", "不创建独立iOS Kernel/Registry/Runtime"],
+      "forbiddenDuplicates": ["IOSCapabilityRegistry2", "IOSToolRegistry2", "IOSPermissionCenter2", "IOSRuntimeManager2", "IOSStateTracker2", "IOSEventBus2", "IOSWorkflowEngine2", "IOSScheduler2", "IOSMemoryManager2", "IOSCharacterService2", "IOSVoiceService2", "IOSModelService2", "RuntimeSupervisor2", "IOSSandboxLifecycle2"]
+    }
+  }
+}

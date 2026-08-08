@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop Platform Adapter合同",
+
+  "canonicalAdapter": "backend/internal/extension/kernel/capability/adapter_desktop.go (desktopRuntimeAdapter)",
+  "runtimeBinding": "RuntimeTypeDesktop_Extension",
+  "runtimeAdapterRegistry": "backend/internal/extension/kernel/capability/executor.go (RuntimeAdapterRegistry)",
+  "runtimeHost": "backend/internal/runtimehost/host.go (RuntimeHost)",
+  "runtimeOrchestrator": "backend/internal/runtimeorchestrator/orchestrator.go (RuntimeOrchestrator)",
+  "processAuthority": "backend/internal/platform/process/process.go (ProcessManager)",
+  "bridge": "backend/internal/extension/kernel/desktop/desktop_provider.go (DesktopHostProvider)",
+
+  "platforms": [
+    "windows",
+    "macos",
+    "linux"
+  ],
+
+  "contract": {
+    "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+    "mustRegister": "RuntimeAdapterRegistry.Register(RuntimeTypeDesktop_Extension, desktopRuntimeAdapterInstance)",
+    "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+    "mustReturnValue": "UnifiedToolResult (normalized by adapter)",
+    "mustPropagate": ["ctx (deadline/cancellation)", "binding (RuntimeBinding)", "invocation (ToolInvocationContext)"],
+    "mustNotContain": ["ToolRegistry", "PermissionStore", "AgentPlanner", "GlobalRetryEngine", "GlobalTimeoutEngine"]
+  },
+
+  "productionProvidersAddedByB21": 1,
+  "legacyAdapterUsed": false,
+
+  "productionProvider": {
+    "name": "DesktopHostProvider",
+    "path": "backend/internal/extension/kernel/desktop/desktop_provider.go",
+    "implements": "capability.DesktopProvider接口",
+    "wiresTo": "desktop.DesktopHost.InvokeAction + desktop.DesktopActionBridge.ExecuteAction"
+  }
+}

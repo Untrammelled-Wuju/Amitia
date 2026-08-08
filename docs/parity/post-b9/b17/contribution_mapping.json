@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "status": "ALREADY_SUPPORTED",
+  "mappings": [
+    {
+      "contribution": "Tool",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "tool",
+      "targetRegistry": "ToolRegistry.Replace()",
+      "runtimeBinding": "RuntimeMeta.Type={javascript,mcp,workflow,static,wasm}"
+    },
+    {
+      "contribution": "Skill",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "agent_skill",
+      "targetRegistry": "AgentSkillCatalog.Register()"
+    },
+    {
+      "contribution": "MCP",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "mcp_server",
+      "targetRegistry": "MCPToolAdapter.RegisterServerWithDefinition()"
+    },
+    {
+      "contribution": "Workflow",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "workflow",
+      "targetRegistry": "WorkflowRegistry.Register()"
+    },
+    {
+      "contribution": "Hook",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "hook",
+      "targetRegistry": "HookService.Lifecycle.InstallContribution()"
+    },
+    {
+      "contribution": "Event_Subscription",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "event_subscription",
+      "targetRegistry": "EventService.RegisterSubscription()"
+    },
+    {
+      "contribution": "Schedule",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "schedule",
+      "targetRegistry": "ScheduleService.InstallDefinition()"
+    },
+    {
+      "contribution": "Background_Task",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "background_task",
+      "targetRegistry": "TaskRuntimeService.PutTaskDefinition()"
+    },
+    {
+      "contribution": "UI",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "ui_page/ui_panel/ui_chat/ui_context_action/ui_desktop",
+      "targetRegistry": "UIHost.RegisterContribution()"
+    },
+    {
+      "contribution": "Resource",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "resource",
+      "targetRegistry": "ResourceContentStore"
+    },
+    {
+      "contribution": "Model Provider",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "provider",
+      "targetRegistry": "Host-internal service Model Service (ModelConfig.is_active)",
+      "representation": "ContributionKind=provider + ModuleType=service + RuntimeMeta=host_internal"
+    },
+    {
+      "contribution": "Voice Provider",
+      "status": "ALREADY_SUPPORTED",
+      "manifestKind": "provider",
+      "targetRegistry": "Host-internal TTS/ASR services",
+      "representation": "ContributionKind=provider + ModuleType=service"
+    },
+    {
+      "contribution": "Browser Provider",
+      "status": "FUTURE_REQUIRED",
+      "manifestKind": "provider",
+      "futureStep": "B123+"
+    },
+    {
+      "contribution": "Search Provider",
+      "status": "FUTURE_REQUIRED",
+      "manifestKind": "provider",
+      "futureStep": "B123+"
+    },
+    {
+      "contribution": "Android Native Provider",
+      "status": "FUTURE_REQUIRED",
+      "manifestKind": "provider",
+      "futureStep": "B123-B138"
+    },
+    {
+      "contribution": "iOS Native Provider",
+      "status": "FUTURE_REQUIRED",
+      "manifestKind": "provider",
+      "futureStep": "B123-B138"
+    }
+  ],
+  "summary": {
+    "EXISTING": 12,
+    "EXTENDED": 0,
+    "NOT_REQUIRED": 0,
+    "FUTURE": 4
+  }
+}

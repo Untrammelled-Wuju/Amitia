@@ -1,0 +1,12 @@
+[
+  {
+    "gap": "Canonical Tool Stream Event 类型与 Sink 接口",
+    "reasonDeferred": "B42 禁止创建 ToolStreamingRuntime2/StreamEvent Factory 等新组件；Cancel/Timeout Controller 属于 B43+",
+    "futureOwner": "dedicated Tool Streaming step (post-B54 或并行)"
+  },
+  {
+    "gap": "SSE/WebSocket Transport Projection",
+    "reasonDeferred": "无 Transport layer streaming endpoint 现状",
+    "futureOwner": "dedicated Tool Streaming step"
+  }
+]

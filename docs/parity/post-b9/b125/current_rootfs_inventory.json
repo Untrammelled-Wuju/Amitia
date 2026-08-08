@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "generatedAt": "2026-08-08T18:30:00+08:00",
+  "description": "B125当前rootfs现状审计",
+
+  "searchPaths": [
+    "mobile_app/ios/",
+    "mobile_app/lib/",
+    "backend/",
+    "runtime/",
+    "assets/",
+    "third_party/",
+    "vendor/"
+  ],
+
+  "searchTerms": [
+    "alpine", "rootfs", "root filesystem", "tar.gz", "tar.xz",
+    "extract", "archive", "bootstrap", "busybox", "apk",
+    "filesystem image"
+  ],
+
+  "findings": {
+    "alpineRootfsFound": false,
+    "alpineRootfsPath": null,
+    "rootfsType": "NONE",
+    "ishBackendProduction": false,
+    "ishSourceVendored": true,
+    "ishSourcePath": "third_party/ish/",
+    "ishSourceStatus": "vendored but not compiled to production backend"
+  },
+
+  "existingRelevantCode": {
+    "backend/internal/extension/kernel/sandbox/backend.go": "B124创建的SandboxBackend接口(生产后端为stub)",
+    "mobile_app/ios/Runner/IOSSandboxBridge.m": "B124创建的iOS骨架实现",
+    "third_party/ish/": "iSH源码克隆(GPLv2)"
+  },
+
+  "productionBlocker": "无生产级iSH后端可承载rootfs，因B124未实现生产执行能力"
+}

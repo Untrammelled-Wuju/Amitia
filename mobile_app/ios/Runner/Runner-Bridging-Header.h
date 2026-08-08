@@ -1,1 +1,6 @@
 #import "GeneratedPluginRegistrant.h"
+#import "IOSSandboxBridge.h"
+#import "RootfsDescriptor.h"
+#import "RootfsResolver.h"
+#import "RootfsIntegrityVerifier.h"
+#import "RootfsInstaller.h"

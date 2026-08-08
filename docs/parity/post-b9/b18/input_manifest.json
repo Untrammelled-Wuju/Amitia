@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:35:00+08:00",
+  "status": "PASS",
+  "description": "B18输入清单 - 全部前置步骤已完成",
+
+  "prerequisites": {
+    "B9P8": {"status": "PASS", "path": "docs/parity/post-b9/b9p8/"},
+    "B10": {"status": "PASS_NO_CODE_CHANGE", "path": "docs/parity/post-b9/b10/"},
+    "B11": {"status": "PASS_NO_CODE_CHANGE", "path": "docs/parity/post-b9/b11/"},
+    "B12": {"status": "PASS_NO_CODE_CHANGE", "path": "docs/parity/post-b9/b12/"},
+    "B13": {"status": "PASS_NO_CODE_CHANGE", "path": "docs/parity/post-b9/b13/"},
+    "B14": {"status": "PASS", "path": "docs/parity/post-b9/b14/"},
+    "B15": {"status": "PASS_NO_CODE_CHANGE", "path": "docs/parity/post-b9/b15/"},
+    "B16": {"status": "PASS_NO_CODE_CHANGE", "path": "docs/parity/post-b9/b16/"},
+    "B17": {"status": "PASS_NO_CODE_CHANGE", "path": "docs/parity/post-b9/b17/"}
+  },
+
+  "b9p8FrozenManifests": {
+    "post_b9_freeze_manifest.json": "READ_ONLY",
+    "final_capability_manifest.json": "READ_ONLY",
+    "final_tool_manifest.json": "READ_ONLY",
+    "final_permission_manifest.json": "READ_ONLY",
+    "final_provider_manifest.json": "READ_ONLY",
+    "final_runtime_manifest.json": "READ_ONLY",
+    "final_state_projection_manifest.json": "READ_ONLY",
+    "final_error_projection_manifest.json": "READ_ONLY",
+    "final_canonical_system_manifest.json": "READ_ONLY",
+    "final_step_reuse_matrix.json": "READ_ONLY",
+    "final_architecture_guard.json": "READ_ONLY",
+    "final_execution_guard.json": "READ_ONLY",
+    "resolved_post_b9_manifest.json": "READ_ONLY"
+  }
+}

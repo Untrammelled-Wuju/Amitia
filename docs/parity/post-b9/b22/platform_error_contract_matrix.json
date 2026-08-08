@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "Platform Error合同矩阵 - 验证Android/iOS/Desktop的错误合同完全一致并映射到Canonical ToolError",
+
+  "matrix": [
+    {
+      "contract": "Error type",
+      "android": "ToolError (Canonical)",
+      "ios": "ToolError (Canonical)",
+      "desktop": "ToolError (Canonical)",
+      "uniform": true
+    },
+    {
+      "contract": "Error codes",
+      "android": "PermissionDenied/RuntimeUnavailable/Timeout/ExecutionFailed/Unknown",
+      "ios": "PermissionDenied/RuntimeUnavailable/Timeout/ExecutionFailed/Unknown",
+      "desktop": "PermissionDenied/RuntimeUnavailable/Timeout/ExecutionFailed/Unknown",
+      "uniform": true
+    },
+    {
+      "contract": "Error wrapping",
+      "android": "errors.As → ToolError with Kind field",
+      "ios": "errors.As → ToolError with Kind field",
+      "desktop": "errors.As → ToolError with Kind field",
+      "uniform": true
+    },
+    {
+      "contract": "Permission error",
+      "android": "ToolError{Kind: PermissionDenied} via PermissionBroker",
+      "ios": "ToolError{Kind: PermissionDenied} via PermissionBroker",
+      "desktop": "ToolError{Kind: PermissionDenied} via PermissionBroker",
+      "uniform": true
+    },
+    {
+      "contract": "Timeout error",
+      "android": "ToolError{Kind: Timeout} on ctx deadline",
+      "ios": "ToolError{Kind: Timeout} on ctx deadline",
+      "desktop": "ToolError{Kind: Timeout} on ctx deadline",
+      "uniform": true
+    },
+    {
+      "contract": "Bridge native error mapping",
+      "android": "AndroidBridgeError → ToolError (via adapter error_mapping)",
+      "ios": "IOSBridgeError → ToolError (via adapter error_mapping)",
+      "desktop": "DesktopBridgeError → ToolError (via adapter error_mapping)",
+      "uniform": true,
+      "note": "Bridge层错误统一映射为Canonical ToolError，不泄露到消费者"
+    }
+  ],
+
+  "summary": {
+    "totalContracts": 6,
+    "androidPass": 6,
+    "iosPass": 6,
+    "desktopPass": 6,
+    "anyFail": 0
+  },
+
+  "noPlatformSpecificErrorType": true,
+  "allUseToolError": true,
+  "bridgeErrorAlwaysMappedToCanonical": true,
+  "toolErrorIsTerminalResult": true,
+
+  "statement": "Android、iOS、Desktop三个Platform Adapter的错误合同完全一致，全部使用ToolError作为Canonical错误类型，Bridge层原生错误统一映射为ToolError。"
+}

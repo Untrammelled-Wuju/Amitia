@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T17:30:00+08:00",
+  "description": "B124 iSH状态映射预期(BLOCKED)",
+
+  "stateMapping": [
+    {
+      "stateLayer": "RuntimeHost State",
+      "owner": "RuntimeOrchestrator",
+      "b124Access": "READ_ONLY"
+    },
+    {
+      "stateLayer": "Sandbox Provider State",
+      "owner": "IOSSandboxProvider (待实现)",
+      "b124Access": "OWN_STATE"
+    },
+    {
+      "stateLayer": "ISH Backend State",
+      "owner": "ISHBackend (NOT_PRESENT)",
+      "b124Access": "DEFERRED"
+    },
+    {
+      "stateLayer": "ISH Session State",
+      "owner": "ISHBackend内部 (预期)",
+      "b124Access": "DEFERRED"
+    },
+    {
+      "stateLayer": "Rootfs State",
+      "owner": "B125",
+      "b124Access": "READ_ONLY (consume only)"
+    },
+    {
+      "stateLayer": "Tool Execution State",
+      "owner": "ExecutionPipeline",
+      "b124Access": "READ_ONLY"
+    }
+  ],
+  "parallelISHStateStore": 0
+}

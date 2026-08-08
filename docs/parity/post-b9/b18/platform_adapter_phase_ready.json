@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Platform Adapter阶段放行条件 - B18确认全部满足",
+
+  "status": "PASS",
+
+  "conditions": {
+    "capabilityContractReady": true,
+    "permissionContractReady": true,
+    "runtimeBindingReady": true,
+    "nativeOffloadContractReady": true,
+    "resourceContractReady": true,
+    "manifestDeclarationReady": true
+  },
+
+  "readinessMatrix": {
+    "androidAdapterAllowed": true,
+    "iosAdapterAllowed": true,
+    "desktopAdapterAllowed": true,
+    "conformanceStep": "B22"
+  },
+
+  "frozenContractsForAdapterPhase": {
+    "toolRegistry": "backend/internal/extension/kernel/capability/registry.go - Adapter Phase不可修改",
+    "executionPipeline": "backend/internal/extension/kernel/execution/pipeline.go - Adapter Phase仅扩展Adapter",
+    "permissionBroker": "backend/internal/extension/kernel/permission/broker.go - Adapter Phase仅扩展Mapping",
+    "runtimeAdapterInterface": "RuntimeAdapter interface - Adapter Phase仅新增实现",
+    "resourceUri": "backend/pkg/resourceuri/ - Adapter Phase不可修改",
+    "manifestV2": "backend/internal/extension/kernel/manifest_v2/ - Adapter Phase不可修改"
+  },
+
+  "approvedSteps": ["B19 (Android Adapter)", "B20 (iOS Adapter)", "B21 (Desktop Adapter)"]
+}

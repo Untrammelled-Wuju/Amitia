@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime Contract Gap Matrix",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "gapMatrix": [
+    {
+      "semantic": "RuntimeBinding definition",
+      "requiredByCapabilities": ["all runtime-bound capabilities"],
+      "requiredByTools": ["all tools with runtime binding"],
+      "existingSupport": ["capability/runtime_adapter.go RuntimeBinding struct"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "RuntimeAdapter interface",
+      "requiredByCapabilities": ["tool execution"],
+      "requiredByTools": ["253 tools via ToolRegistry"],
+      "existingSupport": ["capability/runtime_adapter.go RuntimeAdapter interface"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "RuntimeAdapterRegistry",
+      "requiredByCapabilities": ["runtime dispatch"],
+      "requiredByTools": ["tool execution dispatch"],
+      "existingSupport": ["capability/executor.go RuntimeAdapterRegistry"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Native Offload Request contract",
+      "requiredByCapabilities": ["android_accessibility", "ios_healthkit", "desktop_clipboard"],
+      "requiredByTools": ["future platform tools"],
+      "existingSupport": ["ToolInvocationContext (invocationId, traceId, expiresAt, metadata)"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Native Offload Result contract",
+      "requiredByCapabilities": ["all platform capabilities"],
+      "requiredByTools": ["future platform tools"],
+      "existingSupport": ["UnifiedToolResult in capability/result.go"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Context propagation",
+      "requiredByCapabilities": ["all"],
+      "requiredByTools": ["all 253 tools"],
+      "existingSupport": ["ToolInvocationContext (userId, characterId, conversationId, extensionId, moduleId, traceId, permissionSnapshotId)"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Cancellation propagation",
+      "requiredByCapabilities": ["all"],
+      "requiredByTools": ["all 253 tools"],
+      "existingSupport": ["ctx propagation + ExecutionPipeline.CancellationCtrl"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Timeout propagation",
+      "requiredByCapabilities": ["all"],
+      "requiredByTools": ["all 253 tools"],
+      "existingSupport": ["ToolInvocationContext.ExpiresAt + ctx deadline"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Error normalization",
+      "requiredByCapabilities": ["all"],
+      "requiredByTools": ["all 253 tools"],
+      "existingSupport": ["ToolError (14 codes) in capability/result.go"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Platform capability metadata",
+      "requiredByCapabilities": ["platform availability"],
+      "requiredByTools": ["platform tools"],
+      "existingSupport": ["HostCapabilities in runtimehost/capability.go, RuntimeDescriptor in pkg/platform"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Runtime capability discovery",
+      "requiredByCapabilities": ["future platform capabilities"],
+      "requiredByTools": ["future platform tools"],
+      "existingSupport": ["RuntimeAdapter.Health() + AvailabilityEvaluator"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Adapter conformance contract",
+      "requiredByCapabilities": ["all"],
+      "requiredByTools": ["all"],
+      "existingSupport": ["RuntimeAdapter interface (Supports/Execute/Health)"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Invocation correlation",
+      "requiredByCapabilities": ["all"],
+      "requiredByTools": ["all"],
+      "existingSupport": ["ToolInvocationContext.InvocationID + TraceID propagation"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Permission context propagation",
+      "requiredByCapabilities": ["all permission-gated"],
+      "requiredByTools": ["all 253 tools"],
+      "existingSupport": ["ExecutionPipeline.PermissionGate + PermissionSnapshotID"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Legacy adapter boundary",
+      "requiredByCapabilities": ["legacy tools"],
+      "requiredByTools": ["legacy tool set"],
+      "existingSupport": ["RuntimeTypeLegacy + explicit legacy migration"],
+      "status": "ALREADY_SUPPORTED",
+      "b12Action": "PASS_NO_CODE_CHANGE",
+      "futureStep": null
+    },
+    {
+      "semantic": "Android RuntimeAdapter implementation",
+      "requiredByCapabilities": ["android_*"],
+      "requiredByTools": ["android tools"],
+      "existingSupport": [],
+      "status": "OUTSIDE_B12_SCOPE",
+      "b12Action": "DEFERRED_TO_B55_B78",
+      "futureStep": "B55-B78"
+    },
+    {
+      "semantic": "iOS RuntimeAdapter implementation",
+      "requiredByCapabilities": ["ios_*"],
+      "requiredByTools": ["iOS tools"],
+      "existingSupport": [],
+      "status": "OUTSIDE_B12_SCOPE",
+      "b12Action": "DEFERRED_TO_B123_B138",
+      "futureStep": "B123-B138"
+    },
+    {
+      "semantic": "Browser RuntimeAdapter implementation",
+      "requiredByCapabilities": ["browser_*"],
+      "requiredByTools": ["browser tools"],
+      "existingSupport": ["RuntimeTypeBrowser declared"],
+      "status": "OUTSIDE_B12_SCOPE",
+      "b12Action": "DEFERRED_TO_B79_B92",
+      "futureStep": "B79-B92"
+    }
+  ],
+
+  "summary": {
+    "totalRequiredSemantics": 18,
+    "alreadySupported": 15,
+    "partialSupported": 0,
+    "missing": 0,
+    "outsideB12Scope": 3,
+    "unknown": 0
+  }
+}

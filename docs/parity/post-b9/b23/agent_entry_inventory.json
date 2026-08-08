@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Agent生产入口清单 - 所有入口最终汇入interaction.UnifiedEntry",
+
+  "entries": [
+    {
+      "sourcePath": "backend/internal/chat/handler.go",
+      "symbol": "chat.Handler",
+      "caller": "HTTP API /api/chat/*",
+      "productionReachable": true,
+      "entryType": "CHAT_ENTRY",
+      "usesCanonicalAgentChain": true,
+      "directToolExecution": false,
+      "directProviderExecution": false,
+      "duplicateAgentRuntime": false,
+      "convergesTo": "interaction.UnifiedEntry.Handle()"
+    },
+    {
+      "sourcePath": "backend/internal/agent/handler.go",
+      "symbol": "agent.Handler.Webhook",
+      "caller": "HTTP API /api/agent/webhook",
+      "productionReachable": true,
+      "entryType": "CHAT_ENTRY",
+      "usesCanonicalAgentChain": true,
+      "directToolExecution": false,
+      "directProviderExecution": false,
+      "duplicateAgentRuntime": false,
+      "convergesTo": "interaction.UnifiedEntry.Handle()"
+    },
+    {
+      "sourcePath": "backend/internal/agent/handler.go",
+      "symbol": "agent.Handler.Test",
+      "caller": "HTTP API /api/agent/test",
+      "productionReachable": true,
+      "entryType": "CHAT_ENTRY",
+      "usesCanonicalAgentChain": false,
+      "directToolExecution": false,
+      "directProviderExecution": true,
+      "duplicateAgentRuntime": false,
+      "notes": "直接调用LLM，不走Canonical Agent Chain，仅用于测试"
+    },
+    {
+      "sourcePath": "backend/internal/interaction/unified_entry.go",
+      "symbol": "interaction.UnifiedEntry.Handle",
+      "caller": "Chat/Webhook/Companion/Voice",
+      "productionReachable": true,
+      "entryType": "CANONICAL_AGENT_ENTRY",
+      "usesCanonicalAgentChain": true,
+      "directToolExecution": false,
+      "directProviderExecution": false,
+      "duplicateAgentRuntime": false,
+      "notes": "唯一Canonical Agent入口"
+    },
+    {
+      "sourcePath": "backend/internal/interaction/voice_entry.go",
+      "symbol": "interaction.VoiceEntry",
+      "caller": "HTTP API /api/voice/*",
+      "productionReachable": true,
+      "entryType": "CHAT_ENTRY",
+      "usesCanonicalAgentChain": true,
+      "directToolExecution": false,
+      "directProviderExecution": false,
+      "duplicateAgentRuntime": false,
+      "convergesTo": "interaction.UnifiedEntry.Handle()"
+    },
+    {
+      "sourcePath": "backend/internal/companion/proactive_unified_dispatch.go",
+      "symbol": "companion.service.submitProactiveMessage",
+      "caller": "定时器/调度器",
+      "productionReachable": true,
+      "entryType": "SCHEDULED_ENTRY",
+      "usesCanonicalAgentChain": true,
+      "directToolExecution": false,
+      "directProviderExecution": false,
+      "duplicateAgentRuntime": false,
+      "convergesTo": "interaction.UnifiedEntry.Handle()",
+      "notes": "主动消息统一分发入口"
+    },
+    {
+      "sourcePath": "backend/internal/companion/schedule_service.go",
+      "symbol": "companion.scheduleService",
+      "caller": "定时调度",
+      "productionReachable": true,
+      "entryType": "SCHEDULED_ENTRY",
+      "usesCanonicalAgentChain": true,
+      "directToolExecution": false,
+      "directProviderExecution": false,
+      "duplicateAgentRuntime": false,
+      "convergesTo": "companion.submitProactiveMessage -> interaction.UnifiedEntry.Handle()"
+    }
+  ],
+
+  "summary": {
+    "totalEntries": 7,
+    "canonicalAgentEntry": 1,
+    "chatEntry": 3,
+    "scheduledEntry": 2,
+    "testOnly": 1,
+    "duplicateProductionEntry": 0,
+    "unknown": 0
+  }
+}

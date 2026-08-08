@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "invocationId": "ToolInvocationContext.InvocationID (required, immutable)",
+  "requestId": "NOT_APPLICABLE (no separate request ID beyond InvocationID)",
+  "traceId": "ToolInvocationContext.TraceID (caller-supplied)",
+  "parentChild": "ToolInvocationContext.ParentID supports parent/child identity",
+  "attempt": "No attempt context field yet; retry is tracked by PipelineController only"
+}

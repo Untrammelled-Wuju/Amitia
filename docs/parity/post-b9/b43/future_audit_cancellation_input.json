@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B44-AuditCancellation",
+  "intendedFor": "B44",
+  "description": "取消操作的审计追踪输入",
+  "auditFields": {
+    "cancelInitiator": {
+      "description": "取消发起方标识（user, system, parent_task, scope_expiry）",
+      "source": "capability.ToolInvocationContext.ScopeSnapshotID 或系统标识"
+    },
+    "cancelReason": {
+      "description": "取消原因码",
+      "values": ["user_cancelled", "parent_cancelled", "scope_expired", "runtime_shutdown", "timeout"]
+    },
+    "cancelTimestamp": {
+      "description": "取消事件时间戳（UTC）",
+      "source": "CancellationController.CancelAt 时间"
+    },
+    "invocationId": {
+      "description": "被取消的调用 ID",
+      "source": "capability.ToolInvocationContext.InvocationID"
+    },
+    "cancelPropagationPath": {
+      "description": "取消传播路径记录（从发起方到最终 RuntimeAdapter）",
+      "collection": "通过 Span/Trace 上下文自动收集"
+    }
+  },
+  "privacyConstraints": {
+    "no_payload_logging": "审计日志不记录工具调用输入/输出载荷",
+    "no_pii_in_reason": "取消原因字段不得包含用户个人信息"
+  },
+  "invariant": "审计是取消的观察者，不参与取消决策路径"
+}

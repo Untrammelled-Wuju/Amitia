@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B10",
+  "description": "B10 向后兼容性验证",
+  "generatedAt": "2026-08-07T23:59:00+08:00",
+
+  "result": "PASS (B10未做任何代码修改，原有兼容性完整保留)",
+
+  "validations": {
+    "existingToolDefinitionsStillValid": {
+      "status": "PASS",
+      "evidence": "零修改，所有现有ToolDefinition继续有效"
+    },
+    "zeroValueSafe": {
+      "status": "PASS",
+      "evidence": "无新增字段，零值安全性不变"
+    },
+    "registryRoundTrip": {
+      "status": "PASS",
+      "evidence": "existing registry_test.go TestToolRegistryRegister/TestToolRegistryReplace/TestToolRegistryBatchRegister 验证"
+    },
+    "modelExposureStable": {
+      "status": "PASS",
+      "evidence": "B9P4冻结的ToolExposureManager未改变"
+    },
+    "existingResultContractStable": {
+      "status": "PASS",
+      "evidence": "UnifiedToolResult和ToolResult的JSON序列化结构未改变"
+    },
+    "existingIDContractStable": {
+      "status": "PASS",
+      "evidence": "BuildCapabilityID/BuildToolID/ModelNameFromCapabilityID行为保持不变，registry_test.TestBuildToolIDFormat验证"
+    },
+    "existingRuntimeBindingStable": {
+      "status": "PASS",
+      "evidence": "RuntimeBinding结构无修改"
+    },
+    "existingPolicyContractStable": {
+      "status": "PASS",
+      "evidence": "ToolExecutionPolicy/ResourceLimits/ModelExposureRule结构无修改"
+    },
+    "existingErrorContractStable": {
+      "status": "PASS",
+      "evidence": "ToolError/ErrorCode常量无修改"
+    },
+    "existingStateContractStable": {
+      "status": "PASS",
+      "evidence": "ToolState/HealthStatus/AvailabilityResult结构无修改，ToolState.VisibleToModel/Executable行为通过TestToolStateVisibleToModel和TestToolStateExecutable验证"
+    }
+  },
+
+  "testVerification": {
+    "capabilityTests": "PASS (19 tests)",
+    "capabilityRaceTests": "PASS (19 tests with -race)",
+    "kernelRegressions": "PASS (existing capability tests pass)"
+  }
+}

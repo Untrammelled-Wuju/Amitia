@@ -1,0 +1,758 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "riskDistribution": {
+    "CRITICAL": [
+      "B10","B11","B12","B13","B14","B16","B17","B19","B20","B21",
+      "B23","B24","B25","B26","B28","B34","B38","B39","B40","B41",
+      "B42","B55","B62","B79","B80","B81","B93","B94","B95","B97",
+      "B98","B103","B106","B111","B118","B121","B139","B140","B141","B151"
+    ],
+    "HIGH": [
+      "B15","B27","B29","B30","B31","B32","B33","B35","B36","B37",
+      "B43","B44","B45","B46","B47","B48","B49","B50","B51","B52",
+      "B53","B54","B63","B64","B65","B74","B82","B83","B84","B87",
+      "B96","B99","B100","B101","B102","B104","B105","B107","B108","B109",
+      "B110","B113","B115","B116","B119","B120","B122","B123","B124","B127"
+    ],
+    "MEDIUM": [
+      "B56","B57","B58","B59","B60","B61","B66","B67","B68","B69",
+      "B70","B71","B72","B73","B75","B76","B77","B78","B85","B86",
+      "B88","B89","B90","B91","B92","B112","B114","B117","B125","B126",
+      "B128","B129","B130","B131","B132","B133","B134","B135","B136","B137",
+      "B138"
+    ],
+    "LOW": [
+      "B18","B22","B142","B143","B144","B145","B146","B147","B148","B149",
+      "B150","B152","B153","B154"
+    ],
+    "NONE": []
+  },
+  "stepRisks": [
+    {
+      "stepId": "B10",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建新Tool Registry/Permission/Execution Kernel"
+    },
+    {
+      "stepId": "B11",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建替代Permission系统"
+    },
+    {
+      "stepId": "B12",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建替代Runtime Manager/Kernel"
+    },
+    {
+      "stepId": "B13",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建替代Workspace URI体系/Resource Resolver"
+    },
+    {
+      "stepId": "B14",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Browser独立Tool Registry/Permission/Workspace"
+    },
+    {
+      "stepId": "B15",
+      "riskLevel": "HIGH",
+      "reason": "可能创建MediaRuntime2/ImageProvider2/VoiceProviderRegistry2"
+    },
+    {
+      "stepId": "B16",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建ModelRuntime2/VoiceRuntime2/AutomationKernel2"
+    },
+    {
+      "stepId": "B17",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Manifest v3独立体系/Lifecycle2/ExtensionManager2"
+    },
+    {
+      "stepId": "B18",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，不涉及代码修改"
+    },
+    {
+      "stepId": "B19",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Android独立Tool/Permission Center/Adapter Registry"
+    },
+    {
+      "stepId": "B20",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建iOS独立Kernel/Registry"
+    },
+    {
+      "stepId": "B21",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Desktop独立RuntimeKernel"
+    },
+    {
+      "stepId": "B22",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，不涉及代码修改"
+    },
+    {
+      "stepId": "B23",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建ParityPlanner替代系统"
+    },
+    {
+      "stepId": "B24",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建ObserverRuntime2替代系统"
+    },
+    {
+      "stepId": "B25",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建AgentTaskGraphEngine2替代系统"
+    },
+    {
+      "stepId": "B26",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建AgentBackgroundRuntime替代系统"
+    },
+    {
+      "stepId": "B27",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ToolFacade替代实现"
+    },
+    {
+      "stepId": "B28",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建MultiAgent独立系统"
+    },
+    {
+      "stepId": "B29",
+      "riskLevel": "HIGH",
+      "reason": "可能创建Context编排独立引擎"
+    },
+    {
+      "stepId": "B30",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ErrorHandling替代体系"
+    },
+    {
+      "stepId": "B31",
+      "riskLevel": "HIGH",
+      "reason": "可能创建StateManagement替代方案"
+    },
+    {
+      "stepId": "B32",
+      "riskLevel": "HIGH",
+      "reason": "可能创建Agent通信替代协议"
+    },
+    {
+      "stepId": "B33",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ExecutionPipeline2"
+    },
+    {
+      "stepId": "B34",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建DecisionEngine2"
+    },
+    {
+      "stepId": "B35",
+      "riskLevel": "HIGH",
+      "reason": "可能创建CheckpointStore2"
+    },
+    {
+      "stepId": "B36",
+      "riskLevel": "HIGH",
+      "reason": "可能创建RecoverySystem替代实现"
+    },
+    {
+      "stepId": "B37",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ProgressTracker独立系统"
+    },
+    {
+      "stepId": "B38",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Capacity替代Runtime"
+    },
+    {
+      "stepId": "B39",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建ExecutionPipeline2替代方案"
+    },
+    {
+      "stepId": "B40",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建PermissionBroker2替代方案"
+    },
+    {
+      "stepId": "B41",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建ToolContext2替代方案"
+    },
+    {
+      "stepId": "B42",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建ToolResult2替代方案"
+    },
+    {
+      "stepId": "B43",
+      "riskLevel": "HIGH",
+      "reason": "可能创建AuditSystem2替代方案"
+    },
+    {
+      "stepId": "B44",
+      "riskLevel": "HIGH",
+      "reason": "可能创建QuotaSystem2替代方案"
+    },
+    {
+      "stepId": "B45",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ValidationLayer2替代方案"
+    },
+    {
+      "stepId": "B46",
+      "riskLevel": "HIGH",
+      "reason": "可能创建RateLimiter2替代方案"
+    },
+    {
+      "stepId": "B47",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ConcurrencyControl替代方案"
+    },
+    {
+      "stepId": "B48",
+      "riskLevel": "HIGH",
+      "reason": "可能创建TimeoutManagement替代方案"
+    },
+    {
+      "stepId": "B49",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ErrorRecovery替代系统"
+    },
+    {
+      "stepId": "B50",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ResourceLimit替代实现"
+    },
+    {
+      "stepId": "B51",
+      "riskLevel": "HIGH",
+      "reason": "可能创建SandboxConfig替代体系"
+    },
+    {
+      "stepId": "B52",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ToolExecutionHook替代机制"
+    },
+    {
+      "stepId": "B53",
+      "riskLevel": "HIGH",
+      "reason": "可能创建ExecutionMonitor替代方案"
+    },
+    {
+      "stepId": "B54",
+      "riskLevel": "HIGH",
+      "reason": "可能创建FallbackMechanism替代体系"
+    },
+    {
+      "stepId": "B55",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建AndroidToolCenter替代方案"
+    },
+    {
+      "stepId": "B56",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidPermissionCenter替代方案"
+    },
+    {
+      "stepId": "B57",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidLogCenter替代方案"
+    },
+    {
+      "stepId": "B58",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidResourceMonitor替代方案"
+    },
+    {
+      "stepId": "B59",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidStateTracker替代方案"
+    },
+    {
+      "stepId": "B60",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidCapability替代注册"
+    },
+    {
+      "stepId": "B61",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidAdapter替代机制"
+    },
+    {
+      "stepId": "B62",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建AndroidNativeTool替代实现"
+    },
+    {
+      "stepId": "B63",
+      "riskLevel": "HIGH",
+      "reason": "可能创建AndroidNativePermission替代系统"
+    },
+    {
+      "stepId": "B64",
+      "riskLevel": "HIGH",
+      "reason": "可能创建AndroidNativeRuntime替代Kernel"
+    },
+    {
+      "stepId": "B65",
+      "riskLevel": "HIGH",
+      "reason": "可能创建AndroidNativeLogger替代通道"
+    },
+    {
+      "stepId": "B66",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidNativeResource替代监控"
+    },
+    {
+      "stepId": "B67",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidNativeState替代管理"
+    },
+    {
+      "stepId": "B68",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AndroidNativeCapability替代注册"
+    },
+    {
+      "stepId": "B69",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建MediaProvider替代体系"
+    },
+    {
+      "stepId": "B70",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建AudioProvider替代实现"
+    },
+    {
+      "stepId": "B71",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建VideoProvider替代系统"
+    },
+    {
+      "stepId": "B72",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建ImageProvider替代方案"
+    },
+    {
+      "stepId": "B73",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建CameraProvider替代实现"
+    },
+    {
+      "stepId": "B74",
+      "riskLevel": "HIGH",
+      "reason": "可能创建iOSDevice替代Runtime"
+    },
+    {
+      "stepId": "B75",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建iOSAudio替代Provider"
+    },
+    {
+      "stepId": "B76",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建iOSVideo替代Provider"
+    },
+    {
+      "stepId": "B77",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建iOSImage替代Provider"
+    },
+    {
+      "stepId": "B78",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建iOSCamera替代Provider"
+    },
+    {
+      "stepId": "B79",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Browser Tool Registry替代方案"
+    },
+    {
+      "stepId": "B80",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Browser Runtime替代Kernel"
+    },
+    {
+      "stepId": "B81",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Browser Permission替代Broker"
+    },
+    {
+      "stepId": "B82",
+      "riskLevel": "HIGH",
+      "reason": "可能创建Browser Workspace替代方案"
+    },
+    {
+      "stepId": "B83",
+      "riskLevel": "HIGH",
+      "reason": "可能创建Browser HistoryStore2"
+    },
+    {
+      "stepId": "B84",
+      "riskLevel": "HIGH",
+      "reason": "可能创建Search Tool Registry替代方案"
+    },
+    {
+      "stepId": "B85",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建Search HistoryStore2"
+    },
+    {
+      "stepId": "B86",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建Search Permission替代Center"
+    },
+    {
+      "stepId": "B87",
+      "riskLevel": "HIGH",
+      "reason": "可能创建MediaCapability替代注册"
+    },
+    {
+      "stepId": "B88",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建MCPCapability替代注册"
+    },
+    {
+      "stepId": "B89",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建WorkspaceCapability替代注册"
+    },
+    {
+      "stepId": "B90",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IntegrationCapability替代注册"
+    },
+    {
+      "stepId": "B91",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建ValidationCapability替代注册"
+    },
+    {
+      "stepId": "B92",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建MigrationCapability替代注册"
+    },
+    {
+      "stepId": "B93",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建MCPManager2替代实现"
+    },
+    {
+      "stepId": "B94",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建MCPToolRegistry2替代体系"
+    },
+    {
+      "stepId": "B95",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建SkillRuntime2替代实现"
+    },
+    {
+      "stepId": "B96",
+      "riskLevel": "HIGH",
+      "reason": "可能创建SkillRegistry2替代体系"
+    },
+    {
+      "stepId": "B97",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建WorkflowEngine2替代方案"
+    },
+    {
+      "stepId": "B98",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建EventBus2替代机制"
+    },
+    {
+      "stepId": "B99",
+      "riskLevel": "HIGH",
+      "reason": "可能创建HookSystem2替代实现"
+    },
+    {
+      "stepId": "B100",
+      "riskLevel": "HIGH",
+      "reason": "可能创建Scheduler2替代方案"
+    },
+    {
+      "stepId": "B101",
+      "riskLevel": "HIGH",
+      "reason": "可能创建WorkflowStore替代持久层"
+    },
+    {
+      "stepId": "B102",
+      "riskLevel": "HIGH",
+      "reason": "可能创建WorkflowAudit替代通道"
+    },
+    {
+      "stepId": "B103",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建MCPConnection替代管理"
+    },
+    {
+      "stepId": "B104",
+      "riskLevel": "HIGH",
+      "reason": "可能创建MCPToolSync替代方案"
+    },
+    {
+      "stepId": "B105",
+      "riskLevel": "HIGH",
+      "reason": "可能创建SkillExecutor替代实现"
+    },
+    {
+      "stepId": "B106",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建SkillOrchestrator替代体系"
+    },
+    {
+      "stepId": "B107",
+      "riskLevel": "HIGH",
+      "reason": "可能创建WorkflowOrchestrator替代方案"
+    },
+    {
+      "stepId": "B108",
+      "riskLevel": "HIGH",
+      "reason": "可能创建EventDispatcher替代机制"
+    },
+    {
+      "stepId": "B109",
+      "riskLevel": "HIGH",
+      "reason": "可能创建HookExecutor替代实现"
+    },
+    {
+      "stepId": "B110",
+      "riskLevel": "HIGH",
+      "reason": "可能创建TaskScheduler替代方案"
+    },
+    {
+      "stepId": "B111",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建ModelConfigs_v2替代体系"
+    },
+    {
+      "stepId": "B112",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建ModelRouter2替代方案"
+    },
+    {
+      "stepId": "B113",
+      "riskLevel": "HIGH",
+      "reason": "可能创建VoiceRuntime2替代实现"
+    },
+    {
+      "stepId": "B114",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建ASR Config2替代体系"
+    },
+    {
+      "stepId": "B115",
+      "riskLevel": "HIGH",
+      "reason": "可能创建TTS Config2替代方案"
+    },
+    {
+      "stepId": "B116",
+      "riskLevel": "HIGH",
+      "reason": "可能创建MemorySystem2替代实现"
+    },
+    {
+      "stepId": "B117",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建MemoryStore2替代方案"
+    },
+    {
+      "stepId": "B118",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建VectorStore2替代体系"
+    },
+    {
+      "stepId": "B119",
+      "riskLevel": "HIGH",
+      "reason": "可能创建MemoryGraph2替代方案"
+    },
+    {
+      "stepId": "B120",
+      "riskLevel": "HIGH",
+      "reason": "可能创建CharacterCore2替代实现"
+    },
+    {
+      "stepId": "B121",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建CharacterDB替代方案"
+    },
+    {
+      "stepId": "B122",
+      "riskLevel": "HIGH",
+      "reason": "可能创建CharacterService替代体系"
+    },
+    {
+      "stepId": "B123",
+      "riskLevel": "HIGH",
+      "reason": "可能创建IOSSandboxLifecycle2替代实现"
+    },
+    {
+      "stepId": "B124",
+      "riskLevel": "HIGH",
+      "reason": "可能创建IOSRuntimeManager2替代方案"
+    },
+    {
+      "stepId": "B125",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSToolRegistry2替代体系"
+    },
+    {
+      "stepId": "B126",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSPermissionCenter2替代方案"
+    },
+    {
+      "stepId": "B127",
+      "riskLevel": "HIGH",
+      "reason": "可能创建IOSCapabilityRegistry2替代实现"
+    },
+    {
+      "stepId": "B128",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSResourceMonitor2替代方案"
+    },
+    {
+      "stepId": "B129",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSStateTracker2替代实现"
+    },
+    {
+      "stepId": "B130",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSAdapterRegistry2替代方案"
+    },
+    {
+      "stepId": "B131",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSEventBus2替代实现"
+    },
+    {
+      "stepId": "B132",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSWorkflowEngine2替代方案"
+    },
+    {
+      "stepId": "B133",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSScheduler2替代实现"
+    },
+    {
+      "stepId": "B134",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSMemoryManager2替代方案"
+    },
+    {
+      "stepId": "B135",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSCharacterService2替代实现"
+    },
+    {
+      "stepId": "B136",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSVoiceService2替代方案"
+    },
+    {
+      "stepId": "B137",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建IOSModelService2替代实现"
+    },
+    {
+      "stepId": "B138",
+      "riskLevel": "MEDIUM",
+      "reason": "可能创建RuntimeSupervisor2替代方案"
+    },
+    {
+      "stepId": "B139",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建统一Runtime替代实现"
+    },
+    {
+      "stepId": "B140",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Agent Runtime/Tool Runtime替代或保留Legacy Registry"
+    },
+    {
+      "stepId": "B141",
+      "riskLevel": "CRITICAL",
+      "reason": "可能创建Pipeline替代方案或Redirect到Legacy Pipeline"
+    },
+    {
+      "stepId": "B142",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计合同一致性"
+    },
+    {
+      "stepId": "B143",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计Permission分配一致性"
+    },
+    {
+      "stepId": "B144",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计Contract兼容性"
+    },
+    {
+      "stepId": "B145",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计Workflow执行正确性"
+    },
+    {
+      "stepId": "B146",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计MultiAgent状态"
+    },
+    {
+      "stepId": "B147",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计Extension生命周期"
+    },
+    {
+      "stepId": "B148",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计Android适配逻辑"
+    },
+    {
+      "stepId": "B149",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计iOS适配逻辑"
+    },
+    {
+      "stepId": "B150",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计Desktop适配逻辑"
+    },
+    {
+      "stepId": "B151",
+      "riskLevel": "CRITICAL",
+      "reason": "验证步骤涉及全局集成完整性，一旦遗漏可能导致重复系统"
+    },
+    {
+      "stepId": "B152",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计迁移后状态"
+    },
+    {
+      "stepId": "B153",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计Pipeline唯一链"
+    },
+    {
+      "stepId": "B154",
+      "riskLevel": "LOW",
+      "reason": "纯验证步骤，仅审计全局正确性"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "canonicalDomain": "backend/internal/browser/provider.go",
+  "newDomainPackageCreated": true,
+  "providerNeutral": true,
+  "productionProviderImplemented": false,
+  "registryRequired": false,
+  "runtimeBinding": "RuntimeTypeBrowser = 'browser' (Kernel runtime_adapter.go)",
+  "resourceContract": "B13 amitia:// ResourceURI",
+  "permissionAuthority": "existing Kernel PermissionDefinition",
+  "executionAuthority": "existing Kernel ToolExecutor"
+}

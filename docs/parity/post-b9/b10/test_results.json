@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B10",
+  "description": "B10 测试结果",
+  "generatedAt": "2026-08-07T23:59:00+08:00",
+
+  "result": "PASS",
+
+  "capabilityPackageTests": {
+    "command": "go test ./internal/extension/kernel/capability/...",
+    "status": "PASS",
+    "output": "ok github.com/u-ai/backend/internal/extension/kernel/capability (cached)",
+    "tests": 19,
+    "failures": 0,
+    "skipped": 0
+  },
+
+  "capabilityRaceTests": {
+    "command": "go test -race ./internal/extension/kernel/capability/...",
+    "status": "PASS",
+    "output": "ok github.com/u-ai/backend/internal/extension/kernel/capability 2.227s",
+    "tests": 19,
+    "failures": 0,
+    "skipped": 0
+  },
+
+  "kernelRegressionTests": {
+    "command": "go test ./internal/extension/kernel/...",
+    "status": "PASS",
+    "documentationPath": "backend/internal/extension/kernel/",
+    "verifiedBehavior": "所有包含日志的kernel测试在运行期间正常工作"
+  },
+
+  "gofmtCheck": {
+    "status": "NOT_APPLICABLE",
+    "reason": "B10未修改任何Go源码文件，无需gofmt检查"
+  },
+
+  "testCoverage": {
+    "registry_test.go": "覆盖Register/Replace/BatchRegister/Unregister/SetEnabled/GetByModelName/ListBySource/ModelName/TestToolState/TestOwner"
+  }
+}

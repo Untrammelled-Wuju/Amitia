@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B10",
+  "description": "B10负责的最终合同语义清单（从B9P8 Final Manifests抽取）",
+  "generatedAt": "2026-08-07T23:59:00+08:00",
+  "sourceManifests": [
+    "final_capability_manifest.json",
+    "final_tool_manifest.json",
+    "resolved_post_b9_manifest.json"
+  ],
+
+  "requiredSemantics": [
+    {
+      "semanticId": "CAP-001",
+      "semantic": "Capability唯一标识符",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "IDENTIFIER_CONTRACT",
+      "requirement": "Capability必须有稳定的唯一ID，格式为 source/namespace/name"
+    },
+    {
+      "semanticId": "CAP-002",
+      "semantic": "Capability分类体系",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "METADATA",
+      "requirement": "Capability分为tool、workflow_entry、provider_action等类型"
+    },
+    {
+      "semanticId": "CAP-003",
+      "semantic": "Capability归属信息",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "OWNER_CONTRACT",
+      "requirement": "Capability必须声明Owner/Source"
+    },
+    {
+      "semanticId": "CAP-004",
+      "semantic": "Capability输入/输出契约",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "INPUT_OUTPUT_CONTRACT",
+      "requirement": "Capability必须声明InputSchema和OutputSchema"
+    },
+    {
+      "semanticId": "CAP-005",
+      "semantic": "Capability权限需求声明",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "PERMISSION_DECLARATION",
+      "requirement": "Capability声明其PermissionRequirement（仅声明）"
+    },
+    {
+      "semanticId": "CAP-006",
+      "semantic": "Capability作用域规则",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "SCOPE_CONTRACT",
+      "requirement": "Capability声明ScopeRule"
+    },
+    {
+      "semanticId": "CAP-007",
+      "semantic": "Capability风险等级",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "RISK_CONTRACT",
+      "requirement": "Capability声明RiskLevel"
+    },
+    {
+      "semanticId": "CAP-008",
+      "semantic": "Capability副作用等级",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "SIDE_EFFECT_CONTRACT",
+      "requirement": "Capability声明SideEffectLevel"
+    },
+    {
+      "semanticId": "CAP-009",
+      "semantic": "Capability运行时绑定",
+      "manifestSource": "final_capability_manifest.json",
+      "b10Scope": "RUNTIME_BINDING_CONTRACT",
+      "requirement": "Capability声明RuntimeBinding"
+    },
+    {
+      "semanticId": "CAP-010",
+      "semantic": "Tool注册与查询",
+      "manifestSource": "final_tool_manifest.json",
+      "b10Scope": "REGISTRY_CONTRACT",
+      "requirement": "ToolRegistry提供完整的注册、替换、查询、索引能力"
+    },
+    {
+      "semanticId": "CAP-011",
+      "semantic": "Tool调用上下文",
+      "manifestSource": "final_tool_manifest.json",
+      "b10Scope": "INVOCATION_CONTRACT",
+      "requirement": "ToolInvocationContext携带完整的调用元数据"
+    },
+    {
+      "semanticId": "CAP-012",
+      "semantic": "Tool结果契约",
+      "manifestSource": "final_tool_manifest.json",
+      "b10Scope": "RESULT_CONTRACT",
+      "requirement": "UnifiedToolResult提供统一的结果契约（Content/Structured/Error/SideEffects）"
+    },
+    {
+      "semanticId": "CAP-013",
+      "semantic": "Tool错误契约",
+      "manifestSource": "final_tool_manifest.json",
+      "b10Scope": "ERROR_CONTRACT",
+      "requirement": "ToolError提供标准化的错误分类（Code/Message/Retryable/UserVisible/Details）"
+    },
+    {
+      "semanticId": "CAP-014",
+      "semantic": "Tool可用性判定",
+      "manifestSource": "final_tool_manifest.json",
+      "b10Scope": "AVAILABILITY_CONTRACT",
+      "requirement": "AvailabilityEvaluator基于ToolState和Scope/Runtime状态判定Visible/Executable"
+    },
+    {
+      "semanticId": "CAP-015",
+      "semantic": "Tool执行策略",
+      "manifestSource": "final_tool_manifest.json",
+      "b10Scope": "POLICY_CONTRACT",
+      "requirement": "ToolExecutionPolicy声明Timeout/Concurrency/Retry/Idempotent等"
+    },
+    {
+      "semanticId": "CAP-016",
+      "semantic": "Tool模型暴露策略",
+      "manifestSource": "final_tool_manifest.json",
+      "b10Scope": "EXPOSURE_CONTRACT",
+      "requirement": "ModelExposureRule声明VisibleToModel/B9P4冻结的ExposurePolicy"
+    }
+  ]
+}

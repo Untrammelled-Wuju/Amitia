@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "note": "Permission Authority继续为PermissionBroker。无Media专用Permission。",
+  "mappings": {
+    "imageGeneration": {
+      "files.write": "Generated image saved to workspace",
+      "provider.use": "Domain internal, no separate permission"
+    },
+    "vision": {
+      "files.read": "Read image for analysis",
+      "provider.use": "Domain internal"
+    },
+    "asr": {
+      "microphone.use": "Platform microphone authorization (Android/iOS)",
+      "files.read": "Read audio resource"
+    },
+    "tts": {
+      "files.write": "Audio cache output",
+      "network": "TTS API calls"
+    },
+    "realtime": {
+      "microphone.use": "Platform microphone authorization",
+      "network": "WebSocket realtime connection"
+    },
+    "browser": {
+      "browser.use": "Browser tool permission (B14)",
+      "files.read": "Download resources",
+      "files.write": "Screenshot/upload resources"
+    }
+  },
+  "authority": "PermissionBroker (existing)",
+  "newPermissionCreated": false
+}

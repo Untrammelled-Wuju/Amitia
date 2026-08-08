@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "State Authority - 确认Domain State由各自Domain持有，无Global State Store",
+
+  "domains": {
+    "runtime": {
+      "owner": "backend/internal/extension/kernel/runtime_supervisor/ (DesiredState + ActualState + Health + Circuit) + runtimeorchestrator/state.go + runtimehost/process_state.go + capability/state.go",
+      "protocolProjection": "N/A",
+      "noGlobalStateStore": true
+    },
+    "browser": {
+      "owner": "BrowserSessionState + BrowserTabState (B14 backend/internal/browser/types.go)",
+      "protocolProjection": "Browser tool status",
+      "noGlobalStateStore": true
+    },
+    "mediaImage": {
+      "owner": "SubmissionState (accepted/processing/succeeded/failed/unknown)",
+      "protocolProjection": "Tool result status if exposed",
+      "noGlobalStateStore": true
+    },
+    "mediaVoice": {
+      "owner": "VoiceSessionState (realtime) + VoiceTurn.Status (ASR interim/final/cancel)",
+      "protocolProjection": "interaction_voice_session",
+      "noGlobalStateStore": true
+    },
+    "mediaAsr": {
+      "owner": "VoiceTurn.Status (interim/final/cancel)",
+      "protocolProjection": "Realtime UI",
+      "noGlobalStateStore": true
+    },
+    "mediaTts": {
+      "owner": "Synchronous, caller-managed",
+      "protocolProjection": "Chat Pipeline Status",
+      "noGlobalStateStore": true
+    },
+    "workflow": {
+      "owner": "WorkflowRun.RunStatus (running/succeeded/failed/cancelled/compensating/compensated)",
+      "protocolProjection": "workflow_run_status",
+      "noGlobalStateStore": true
+    },
+    "task": {
+      "owner": "TaskRunStatus (15 states)",
+      "protocolProjection": "task_run_status",
+      "noGlobalStateStore": true
+    },
+    "event": {
+      "owner": "OutboxStatus + DeliveryStatus",
+      "protocolProjection": "event_outbox_status + event_delivery_status",
+      "noGlobalStateStore": true
+    },
+    "schedule": {
+      "owner": "ScheduleRunStatus (14 states)",
+      "protocolProjection": "schedule_run_status",
+      "noGlobalStateStore": true
+    },
+    "extensionLifecycle": {
+      "owner": "enablement.StateStore (enabled/disabled/partially_disabled/requires_recovery) + DesiredRuntimeState (started/stopped/paused/quarantine) + ActualRuntimeState (starting/running/ready/degraded/stopped/crashed/quarantined)",
+      "protocolProjection": "N/A",
+      "noGlobalStateStore": true
+    },
+    "platformAuthorization": {
+      "owner": "Platform-specific (Android Permission Manager, iOS Permission States)",
+      "protocolProjection": "N/A - Platform Authorization != Kernel Permission",
+      "noGlobalStateStore": true
+    }
+  },
+
+  "sameSemanticDualStateOwner": 0,
+  "globalStateStoreCount": 0,
+  "result": "PASS - 所有Domain State由各自Domain持有，无Global State Store"
+}

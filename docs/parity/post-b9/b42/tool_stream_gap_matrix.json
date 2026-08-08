@@ -1,0 +1,8 @@
+[
+  {"semantic": "Canonical Invocation ID 贯穿 Tool 执行", "existingOwner": "ToolInvocationContext.InvocationID", "existingSupport": ["pipeline / result / audit 全部携带"], "status": "ALREADY_SUPPORTED", "b42Action": "NO_CODE_CHANGE"},
+  {"semantic": "Final ToolResult 唯一事实源", "existingOwner": "capability.UnifiedToolResult", "existingSupport": ["DefaultToolExecutor 唯一出口"], "status": "ALREADY_SUPPORTED", "b42Action": "NO_CODE_CHANGE"},
+  {"semantic": "Incremental Stream Event 类型与 Sink", "existingOwner": "NOT_PRESENT", "existingSupport": [], "status": "MISSING_SHARED_CONTRACT", "b42Action": "DEFER", "futureOwner": "dedicated streaming step"},
+  {"semantic": "Context Cancel 传播点", "existingOwner": "CancellationController.Wrap + context.Context", "existingSupport": ["pipeline.go"], "status": "ALREADY_SUPPORTED", "b42Action": "NO_CODE_CHANGE"},
+  {"semantic": "Timeout 传播", "existingOwner": "TimeoutController.WithTimeout", "existingSupport": ["pipeline.go"], "status": "ALREADY_SUPPORTED", "b42Action": "NO_CODE_CHANGE"},
+  {"semantic": "LLM Token Stream 与 Tool Stream 边界", "existingOwner": "B42 只负责 Tool Stream", "existingSupport": ["情绪 AffectDelta 不是 Tool Stream"], "status": "ALREADY_SUPPORTED", "b42Action": "NO_CODE_CHANGE"}
+]

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "description": "重复系统验证 - 确认 B17 未创建任何第二套系统",
+  "newManifestSystem": 0,
+  "newLifecycleSystem": 0,
+  "newContributionRegistry": 0,
+  "newProviderRegistry": 0,
+  "newPermissionSystem": 0,
+  "newRuntimeRegistry": 0,
+  "newExtensionManager": 0,
+  "newProductionFakeProvider": 0,
+  "validation": {
+    "manifestAuthority": "backend/internal/extension/kernel/manifest_v2/ 唯一",
+    "lifecycleAuthority": "Extension Kernel Saga 唯一 (无 Lifecycle2)",
+    "contributionRegistry": "TypedContributionInstaller 唯一 (15 Kind)",
+    "providerRegistry": "无独立 Provider Registry (Provider 通过 Contribution 表达)",
+    "permissionSystem": "PermissionDefinitionRegistry + PermissionBroker 唯一",
+    "runtimeRegistry": "RuntimeAdapterRegistry 唯一",
+    "extensionManager": "ContainerBuilder + ExtensionKernel 唯一",
+    "fakeProvider": "0 生产环境占位 Provider"
+  },
+  "result": "PASS - 所有第二系统计数为 0"
+}

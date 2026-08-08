@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B40",
+  "registration": "No structural schema validation at registration (intentional deferral — no JSON Schema library, B40 forbids dependency addition).",
+  "executionInput": "InputValidator.Validate size-only; InvocationValidator validates invocation fields.",
+  "executionResult": "ResultValidator.Validate enforces status default, empty-result translation, and output byte cap.",
+  "errorMapping": "errors are mapped to capability.ErrorCodeInvalidInput / ErrorCodeInvalidResult / etc. via failWithAudit / ResultValidator.",
+  "secretLeakProtection": "Sanitizer redacts registered sensitive keys in ToolError.Details and result structured/content."
+}

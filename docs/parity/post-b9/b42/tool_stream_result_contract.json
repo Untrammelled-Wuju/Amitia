@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B42",
+  "partialEventIsFinalResult": false,
+  "finalResultAuthority": "capability.UnifiedToolResult",
+  "completionAuthority": "DefaultToolExecutor / ExecutionPipeline",
+  "errorAuthority": "capability.ToolError",
+  "outputSchemaValidationRelation": "UnifiedToolResult.Structured 创建后由 ResultValidator 校验；无独立 Stream Output Schema 校验阶段"
+}

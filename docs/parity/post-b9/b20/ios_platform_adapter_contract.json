@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:08:00+08:00",
+  "description": "iOS Platform Adapter正式合同",
+
+  "canonicalAdapter": "iosRuntimeAdapter (in backend/internal/extension/kernel/capability/adapter_ios_native.go)",
+  "runtimeType": "RuntimeTypeIOS_Native ('ios_native')",
+  "runtimeBinding": {
+    "type": "ios_native",
+    "runtimeId": "ios-provider",
+    "handlerName": "(ios provider name)",
+    "endpoint": "",
+    "metadata": {
+      "note": "No raw secrets allowed; provider identity only"
+    }
+  },
+  "runtimeAdapterRegistry": {
+    "path": "backend/internal/extension/kernel/capability/executor.go",
+    "registration": "RuntimeAdapterRegistry.Register(RuntimeTypeIOS_Native, adapter)",
+    "wiringMethod": "Container.WireIOSPlatformAdapter(iosProvider IOSProvider)"
+  },
+  "runtimeHost": {
+    "path": "backend/internal/runtimehost/host.go",
+    "reuse": true,
+    "relationship": "未来iOS Sandbox依赖的Runtime由RuntimeHost管理"
+  },
+  "runtimeOrchestrator": {
+    "path": "backend/internal/runtimeorchestrator/orchestrator.go",
+    "reuse": true,
+    "relationship": "iOS Runtime生命周期由Orchestrator管理"
+  },
+  "bridge": {
+    "existing": "MethodChannel 'com.amitia.amitia_app/runtime' (Android/iOS共享)",
+    "reuse": true,
+    "extension": "iOS Provider Invoke消息复用Bridge protocol定义，不建新通道",
+    "note": "iOS Platform Adapter与Android共享同一MethodChannel，通过不同RuntimeType区分路由"
+  },
+  "productionProviderCount": 0,
+  "legacyAdapterUsed": false
+}

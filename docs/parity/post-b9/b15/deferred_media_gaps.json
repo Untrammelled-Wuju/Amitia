@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "note": "B15不实现FFmpeg/Video/Format Conversion。留给B87-B89。",
+  "gaps": [
+    {
+      "gap": "NEW_VIDEO_PROVIDER",
+      "futureStep": "B87-B89",
+      "note": "无当前需求"
+    },
+    {
+      "gap": "FFMPEG_IMPLEMENTATION",
+      "futureStep": "B87-B89",
+      "note": "视频转码/处理"
+    },
+    {
+      "gap": "MEDIA_PROBE_IMPLEMENTATION",
+      "futureStep": "B87-B89",
+      "note": "文件元数据探测"
+    },
+    {
+      "gap": "FORMAT_CONVERSION",
+      "futureStep": "B87-B89",
+      "note": "格式转换"
+    },
+    {
+      "gap": "FRAME_EXTRACTION",
+      "futureStep": "B87-B89",
+      "note": "视频抽帧"
+    }
+  ]
+}

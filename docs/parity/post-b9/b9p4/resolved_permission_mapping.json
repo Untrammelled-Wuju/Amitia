@@ -1,0 +1,422 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "canonicalBroker": "backend/internal/extension/kernel/permission/broker.go",
+  "mappings": [
+    {
+      "semanticId": "TOOL_EXECUTE",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_READ",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_CONTROL",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_CREATE",
+      "kernelPermissionId": "scheduler.create",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_SEND",
+      "kernelPermissionId": "message.send",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_CAPTURE",
+      "kernelPermissionId": "desktop.capture",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_INTEGRATION",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_INTERFACE",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_STOP",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TOOL_SWITCH",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "FILE_READ",
+      "kernelPermissionId": "files.read",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "FILE_WRITE",
+      "kernelPermissionId": "files.write",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "FILE_CREATE",
+      "kernelPermissionId": "files.write",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "FILE_DELETE",
+      "kernelPermissionId": "files.delete",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "FILE_MANAGEMENT",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "FILE_EXECUTE",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "FILE_START",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "file.connection.manage",
+        "category": "filesystem",
+        "riskLevel": "MEDIUM"
+      },
+      "futureStep": "B11: SSH/File Connection Provider"
+    },
+    {
+      "semanticId": "PROCESS_EXECUTE",
+      "kernelPermissionId": "process.spawn",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "NETWORK_EXECUTE",
+      "kernelPermissionId": "network.request",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "MEMORY_ACCESS",
+      "kernelPermissionId": "memory.read",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "MEMORY_READ",
+      "kernelPermissionId": "memory.read",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "MEMORY_WRITE",
+      "kernelPermissionId": "memory.write",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "MEMORY_DELETE",
+      "kernelPermissionId": "memory.delete",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "BROWSER_AUTOMATION",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "browser.automation",
+        "category": "desktop",
+        "riskLevel": "HIGH"
+      },
+      "futureStep": "B79-B83: Browser Runtime Patch"
+    },
+    {
+      "semanticId": "SYSTEM_MODIFY",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "system.modify",
+        "category": "system",
+        "riskLevel": "CRITICAL"
+      },
+      "futureStep": "B11: System Capability Provider"
+    },
+    {
+      "semanticId": "ACCESSIBILITY_CONTROL",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "system.accessibility",
+        "category": "device",
+        "riskLevel": "CRITICAL"
+      },
+      "futureStep": "B11/B62-B68: Android Accessibility Provider"
+    },
+    {
+      "semanticId": "SECURITY_PERMISSION",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "security.permission.manage",
+        "category": "extension",
+        "riskLevel": "HIGH"
+      },
+      "futureStep": "B11: Security Permission Platform Adapter"
+    },
+    {
+      "semanticId": "DEVICE_ACCESS",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "device.access",
+        "category": "desktop",
+        "riskLevel": "HIGH"
+      },
+      "futureStep": "B11: Device Capability Provider"
+    },
+    {
+      "semanticId": "VOICE_CAPTURE",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "device.microphone.capture",
+        "category": "desktop",
+        "riskLevel": "HIGH"
+      },
+      "futureStep": "B11: Microphone Platform Adapter"
+    },
+    {
+      "semanticId": "VOICE_READ",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.read",
+        "category": "desktop",
+        "riskLevel": "LOW"
+      },
+      "futureStep": "B11: Voice Platform Adapter"
+    },
+    {
+      "semanticId": "VOICE_CONTROL",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.control",
+        "category": "desktop",
+        "riskLevel": "LOW"
+      },
+      "futureStep": "B11: Voice Control Platform Adapter"
+    },
+    {
+      "semanticId": "VOICE_SWITCH",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.switch",
+        "category": "utility",
+        "riskLevel": "LOW"
+      },
+      "futureStep": "B11/TTS Provider: Voice Switching"
+    },
+    {
+      "semanticId": "VOICE_EXECUTE",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "device.voice.execute",
+        "category": "provider",
+        "riskLevel": "LOW"
+      },
+      "futureStep": "B11: Voice Provider Execute"
+    },
+    {
+      "semanticId": "NOTIFICATION_READ",
+      "kernelPermissionId": null,
+      "resolution": "MISSING_PERMISSION_DEFINITION",
+      "status": "GAP",
+      "recommendedDefinition": {
+        "suggestedId": "notification.read",
+        "category": "desktop",
+        "riskLevel": "LOW"
+      },
+      "futureStep": "B11: Android Notification Listener"
+    },
+    {
+      "semanticId": "NOTIFICATION_EXECUTE",
+      "kernelPermissionId": "desktop.notification",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "NOTIFICATION_SEND",
+      "kernelPermissionId": "desktop.notification",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "EXTENSION_INSTALL",
+      "kernelPermissionId": "extensions.install",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "EXTENSION_EXECUTE",
+      "kernelPermissionId": "extensions.invoke",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "EXTENSION_MANAGEMENT",
+      "kernelPermissionId": "extensions.enable",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "EXTENSION_CREATE",
+      "kernelPermissionId": "extensions.invoke",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "EXTENSION_START",
+      "kernelPermissionId": "mcp.server.connect",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "EXTENSION_INTEGRATION",
+      "kernelPermissionId": "mcp.server.connect",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "CHARACTER_READ",
+      "kernelPermissionId": "character.read",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "CHARACTER_UPDATE",
+      "kernelPermissionId": "character.write",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "CHARACTER_EXECUTE",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "CHARACTER_INSTALL",
+      "kernelPermissionId": "extensions.install",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "CHARACTER_MANAGEMENT",
+      "kernelPermissionId": "character.write",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "CONVERSATION_MANAGE",
+      "kernelPermissionId": "conversation.write",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "CONVERSATION_EXECUTE",
+      "kernelPermissionId": "conversation.write",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "MODEL_EXECUTE",
+      "kernelPermissionId": "provider.use",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "MODEL_MANAGEMENT",
+      "kernelPermissionId": "provider.configure",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "SEARCH_EXECUTE",
+      "kernelPermissionId": "network.request",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "SEARCH_READ",
+      "kernelPermissionId": "network.request",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TASK_CREATE",
+      "kernelPermissionId": "scheduler.create",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "TASK_EXECUTE",
+      "kernelPermissionId": "scheduler.create",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "AGENT_EXECUTE",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    },
+    {
+      "semanticId": "AGENT_ENGINEERING",
+      "kernelPermissionId": "service.tool.execute",
+      "resolution": "REUSE_EXISTING",
+      "status": "ACTIVE"
+    }
+  ]
+}

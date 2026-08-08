@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime Bypass Inventory - 现有Runtime调用路径扫描",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "bypassInventory": [
+    {
+      "source": "Runtime installer",
+      "target": "RuntimeHost.ProcessManager",
+      "productionReachable": false,
+      "classification": "VALID_RUNTIME_MANAGEMENT_CALL",
+      "bypassesToolRegistry": false,
+      "bypassesPermission": false,
+      "bypassesExecutionPipeline": false,
+      "note": "Runtime installation is infrastructure operation, not agent capability"
+    },
+    {
+      "source": "Health checker",
+      "target": "RuntimeHost.ProcessSupervisor",
+      "productionReachable": false,
+      "classification": "VALID_RUNTIME_MANAGEMENT_CALL",
+      "bypassesToolRegistry": false,
+      "bypassesPermission": false,
+      "bypassesExecutionPipeline": false,
+      "note": "Health monitoring is infrastructure, not agent capability"
+    },
+    {
+      "source": "RuntimeOrchestrator",
+      "target": "RuntimeHost (ManagedComponent)",
+      "productionReachable": true,
+      "classification": "VALID_RUNTIME_MANAGEMENT_CALL",
+      "bypassesToolRegistry": false,
+      "bypassesPermission": false,
+      "bypassesExecutionPipeline": false,
+      "note": "Component lifecycle management (Start/Ready/Stop) - not agent capability"
+    },
+    {
+      "source": "ExecutionPipeline.PermissionGate",
+      "target": "PermissionBroker",
+      "productionReachable": true,
+      "classification": "CANONICAL_PATH",
+      "bypassesToolRegistry": false,
+      "bypassesPermission": false,
+      "bypassesExecutionPipeline": false,
+      "note": "Correct path: Execution -> Permission"
+    },
+    {
+      "source": "DefaultToolExecutor",
+      "target": "RuntimeAdapterRegistry",
+      "productionReachable": true,
+      "classification": "CANONICAL_PATH",
+      "bypassesToolRegistry": false,
+      "bypassesPermission": false,
+      "bypassesExecutionPipeline": false,
+      "note": "Correct path: Pipeline -> Adapter"
+    }
+  ],
+
+  "summary": {
+    "totalFindings": 5,
+    "validInternalCalls": 3,
+    "canonicalPaths": 2,
+    "productionCapabilityBypass": 0,
+    "unknown": 0
+  },
+
+  "conclusion": "No production-capability bypass detected. All runtime management calls are infrastructure-level."
+}

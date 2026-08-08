@@ -19,6 +19,10 @@ const (
 	RuntimeTypeWASM           RuntimeType = "wasm"
 	RuntimeTypeTrustedService RuntimeType = "trusted_service"
 	RuntimeTypeTask           RuntimeType = "task"
+	RuntimeTypeBrowser        RuntimeType = "browser"
+	RuntimeTypeAndroid_Native     RuntimeType = "android_native"
+	RuntimeTypeIOS_Native         RuntimeType = "ios_native"
+	RuntimeTypeDesktop_Extension  RuntimeType = "desktop_extension"
 )
 
 type RuntimeBinding struct {

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:09:00+08:00",
+  "description": "iOS Provider合同 - 未来B123-B138实现Provider时必须遵守的边界",
+
+  "providerInterface": {
+    "name": "IOSProvider",
+    "path": "backend/internal/extension/kernel/capability/adapter_ios_native.go",
+    "methods": [
+      "Execute(ctx context.Context, request IOSBridgeRequest) IOSBridgeResponse",
+      "Health(ctx context.Context) HealthStatus"
+    ]
+  },
+
+  "providerMustImplement": {
+    "platformBehavior": "执行平台特定操作（如HealthKit读数据、EventKit操作日历）",
+    "bridgeExecution": "通过Bridge接收IOSBridgeRequest并返回IOSBridgeResponse",
+    "healthReporting": "报告Provider健康状态 (Healthy/Degraded/Unhealthy)",
+    "contextRespect": "遵守ctx中的deadline和cancellation",
+    "errorMapping": "返回结构化的IOSError而非原始系统错误"
+  },
+
+  "providerMustNotContain": {
+    "toolRegistration": "Provider不得注册Tool，Tool注册由ToolRegistry统一管理",
+    "permissionManagement": "Provider不得持有/修改Kernel Permission授权状态",
+    "executionPipeline": "Provider不得创建独立执行管线",
+    "agentState": "Provider不得持有Agent状态",
+    "globalRuntime": "Provider不得管理全局Runtime生命周期",
+    "legacyAdapter": "新Provider必须绑定iosRuntimeAdapter而非LegacyRuntimeAdapter"
+  },
+
+  "providerCategories": {
+    "sandboxProvider": {
+      "steps": "B123-B126",
+      "responsibility": "iOS沙盒环境执行(shell/filesystem/toolchain)",
+      "runtime": "复用RuntimeHost生命周期"
+    },
+    "nativeProvider": {
+      "steps": "B127-B138",
+      "responsibility": "iOS系统能力(HealthKit/Calendar/Contacts/HomeKit/Bluetooth等)",
+      "runtime": "iOS系统API"
+    }
+  }
+}

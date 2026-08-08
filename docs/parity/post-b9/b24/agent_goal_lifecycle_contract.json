@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B24",
+  "generatedAt": "2026-08-08T17:45:00+08:00",
+  "lifecycle": {
+    "create": {
+      "description": "Caller constructs Goal struct and calls GoalRegistry.Register",
+      "caller": "Agent system (interaction/chat/companion)",
+      "authority": "decision.GoalRegistry"
+    },
+    "activate": {
+      "description": "Goal transitions from pending to active",
+      "method": "GoalRegistry.UpdateStatus(id, GoalActive, progress)"
+    },
+    "progress": {
+      "description": "Goal progress updated via UpdateStatus",
+      "field": "Progress (0.0-1.0)"
+    },
+    "satisfy": {
+      "description": "Goal achieved when Progress=1.0 or business logic determines completion",
+      "status": "GoalStatusAchieved"
+    },
+    "supersede": {
+      "description": "New goal replaces old one",
+      "mechanism": "Interaction Supersede + Goal status = abandoned",
+      "authority": "interaction.StateMachine + decision.GoalRegistry"
+    },
+    "abandon": {
+      "description": "Goal explicitly abandoned by user or system",
+      "status": "GoalStatusAbandoned"
+    },
+    "fail": {
+      "description": "Goal cannot be achieved (derived from repeated failures)",
+      "note": "No explicit FAILED status; abandoned or wish used instead"
+    },
+    "wish": {
+      "description": "Long-term aspiration that may never be fully achieved",
+      "status": "GoalStatusWish",
+      "method": "GoalRegistry.PromoteToWish"
+    },
+    "dispose": {
+      "description": "Remove from registry",
+      "method": "GoalRegistry.Remove"
+    }
+  }
+}

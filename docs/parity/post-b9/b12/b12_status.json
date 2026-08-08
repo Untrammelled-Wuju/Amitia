@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "status": "PASS_NO_CODE_CHANGE",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "constructionMode": [
+    "REUSE",
+    "EXTEND",
+    "ADAPTER_ONLY"
+  ],
+
+  "canonical": {
+    "runtimeBindingAuthority": "backend/internal/extension/kernel/capability/runtime_adapter.go (RuntimeBinding)",
+    "runtimeAdapterRegistry": "backend/internal/extension/kernel/capability/executor.go (RuntimeAdapterRegistry)",
+    "runtimeHost": "backend/internal/runtimehost/host.go (RuntimeHost + nativeProcessHost)",
+    "runtimeOrchestrator": "backend/internal/runtimeorchestrator/orchestrator.go (RuntimeOrchestrator)",
+    "processSupervisor": "backend/internal/runtimehost/supervisor.go (ProcessSupervisor + defaultProcessSupervisor)"
+  },
+
+  "contract": {
+    "requiredSemanticCount": 18,
+    "alreadySupportedCount": 18,
+    "partialSupportedCount": 0,
+    "implementedGapCount": 0,
+    "deferredGapCount": 5,
+    "unresolvedCount": 0
+  },
+
+  "adapter": {
+    "existingCount": 12,
+    "futureAndroid": true,
+    "futureIos": true,
+    "futureDesktop": true,
+    "futureBrowser": true
+  },
+
+  "security": {
+    "productionCapabilityBypass": 0,
+    "permissionBypass": 0,
+    "executionBypass": 0,
+    "newProviderBoundToLegacyAdapter": 0,
+    "productionFakeRuntime": 0
+  },
+
+  "duplicates": {
+    "newRuntimeAdapterRegistry": 0,
+    "newRuntimeHost": 0,
+    "newRuntimeOrchestrator": 0,
+    "newProcessSupervisor": 0,
+    "newPermissionSystem": 0,
+    "newExecutionPipeline": 0,
+    "newRuntimeStateStore": 0
+  },
+
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+
+  "tests": {
+    "capability": "PASS",
+    "runtimehost": "PASS",
+    "runtimeorchestrator": "PASS",
+    "platform": "PASS",
+    "kernelRegression": "PASS"
+  },
+
+  "next": "B18"
+}

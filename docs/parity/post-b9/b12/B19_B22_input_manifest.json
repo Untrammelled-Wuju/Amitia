@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12-B19-B22-INPUT",
+  "description": "B19-B22 Adapter 实现输入 - Android/iOS/Desktop Adapter合同要求",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "androidAdapter": {
+    "requirements": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegisterAt": "RuntimeAdapterRegistry.Register(RuntimeTypeAndroid_Native, adapter)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker (B11 contract)",
+      "mustReturnValue": "UnifiedToolResult normalized from Android domain DTOs",
+      "mustPropagateContext": ["ctx cancellation", "binding metadata", "ToolInvocationContext.InvocationID", "ToolInvocationContext.PermissionSnapshotID"],
+      "mustNotContain": ["independent ToolRegistry", "independent PermissionStore", "independent global state"],
+      "mustFollowAdmissionRules": "runtime_adapter_admission_rules.json"
+    },
+    "conformance": {
+      "canResolve": "Supports(binding) must return true for android_native runtimeType",
+      "validateBinding": "Validate Android-specific binding metadata (no raw secrets)",
+      "execute": "Delegate to Android Provider via IPC/Bridge",
+      "cancelPropagation": "Must support Android cancel -> ctx.Done() propagation",
+      "errorNormalization": "Map Android errors to ToolError codes (preserve domainCode)",
+      "health": "Report Android Provider health via HealthStatus"
+    }
+  },
+
+  "iosAdapter": {
+    "requirements": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegisterAt": "RuntimeAdapterRegistry.Register(RuntimeTypeIOS_Native, adapter)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+      "mustReturnValue": "UnifiedToolResult normalized from iOS domain DTOs",
+      "mustPropagateContext": ["ctx cancellation", "binding metadata", "ToolInvocationContext.InvocationID", "ToolInvocationContext.PermissionSnapshotID"],
+      "mustNotContain": ["independent ToolRegistry", "independent PermissionStore", "independent global state"]
+    }
+  },
+
+  "desktopAdapter": {
+    "requirements": {
+      "mustImplement": "RuntimeAdapter interface (Supports/Execute/Health)",
+      "mustRegisterAt": "RuntimeAdapterRegistry.Register(RuntimeTypeDesktop_Extension, adapter)",
+      "mustUsePermission": "BrokerPermissionChecker via PermissionBroker",
+      "mustReturnValue": "UnifiedToolResult normalized from desktop domain DTOs",
+      "mustPropagateContext": ["ctx cancellation", "binding metadata", "ToolInvocationContext.InvocationID"]
+    }
+  },
+
+  "conformanceTestRequirements": [
+    "binding resolution - verify adapter.Supports() correctly identifies binding",
+    "unsupported binding - verify adapter rejects unknown runtime type",
+    "adapter lookup - RuntimeAdapterRegistry.Resolve returns correct adapter",
+    "context propagation - verify ctx cancellation propagates to provider",
+    "error normalization - verify domain errors map to ToolError codes",
+    "health - verify Health() returns correct status",
+    "duplicate register - verify second register for same RuntimeType conflicts"
+  ]
+}

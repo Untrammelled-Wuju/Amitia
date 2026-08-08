@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:02:00+08:00",
+  "description": "iOS Adapter Gap Matrix - 每个Gap对应的B18需求、现有支持、处理动作",
+
+  "gaps": [
+    {
+      "semantic": "iOS RuntimeAdapter接口实现",
+      "b18Requirement": "B18 platform_adapter_phase_ready: iosAdapterAllowed=true - 需RuntimeAdapter实现",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "B20创建adapter_ios_native.go实现RuntimeAdapter接口",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_ios_native.go"
+    },
+    {
+      "semantic": "RuntimeType IOS_Native常量",
+      "b18Requirement": "B12 runtime_adapter_admission_rules: 需RuntimeType标识iOS执行域",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "B20在runtime_adapter.go新增RuntimeTypeIOS_Native常量",
+      "targetPath": "backend/internal/extension/kernel/capability/runtime_adapter.go"
+    },
+    {
+      "semantic": "WireIOSPlatformAdapter注册方法",
+      "b18Requirement": "B18 platform_adapter_contract: 注册到Canonical RuntimeAdapterRegistry",
+      "existingSupport": ["backend/internal/extension/kernel/runtime_caller_wiring.go (包含WireAndroidPlatformAdapter模式)"],
+      "status": "MISSING",
+      "action": "B20在runtime_caller_wiring.go新增WireIOSPlatformAdapter方法",
+      "targetPath": "backend/internal/extension/kernel/runtime_caller_wiring.go"
+    },
+    {
+      "semantic": "iOS Bridge Request/Response DTO",
+      "b18Requirement": "B12 runtime_binding_matrix: iOS Provider需通过bridge传递结构化请求",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "B20创建iOS Bridge DTO (复用Android Bridge pattern，共享MethodChannel)",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_ios_native.go"
+    },
+    {
+      "semantic": "iOS Provider接口定义",
+      "b18Requirement": "B12 native_offload_contract: iOS Native Provider需实现统一Provider接口",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "B20定义iOSProvider接口(类似AndroidProvider)，不涉及业务Provider实现",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_ios_native.go"
+    },
+    {
+      "semantic": "iOS Sandbox合同边界",
+      "b18Requirement": "B12 B123_B126_ios_sandbox_input: iOS Sandbox必须复用RuntimeAdapter/RuntimeHost",
+      "existingSupport": ["RuntimeHost (backend/internal/runtimehost/host.go)", "RuntimeOrchestrator (backend/internal/runtimeorchestrator/orchestrator.go)"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "B20在ios_platform_adapter_contract.json确认未来Sandbox复用现有Runtime基础设施",
+      "targetPath": "docs/parity/post-b9/b20/ios_platform_adapter_contract.json"
+    },
+    {
+      "semantic": "iOS系统权限映射",
+      "b18Requirement": "B11 ios.permissionMapping: Kernel Permission与iOS Authorization分离",
+      "existingSupport": ["PermissionBroker (backend/internal/extension/kernel/permission/)"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "B20在ios_permission_boundary.json确认权限边界，不改PermissionBroker",
+      "targetPath": "docs/parity/post-b9/b20/ios_permission_boundary.json"
+    },
+    {
+      "semantic": "iOS业务Provider实现(HealthKit/Calendar/Contacts等)",
+      "b18Requirement": "B12 platform_adapter_contract: iOS Adapter不得包含业务Provider",
+      "existingSupport": [],
+      "status": "OUTSIDE_B20_SCOPE",
+      "action": "Defer到B123-B138",
+      "targetPath": "N/A"
+    }
+  ],
+
+  "summary": {
+    "totalGaps": 8,
+    "missingCount": 5,
+    "alreadySupportedCount": 2,
+    "outsideB20ScopeCount": 1,
+    "partiallySupportedCount": 0,
+    "unknownCount": 0
+  }
+}

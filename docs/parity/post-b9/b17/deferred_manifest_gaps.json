@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "description": "B17 未实现的 Manifest Gap - 已分配未来步骤",
+  "deferredGaps": [
+    {
+      "gapId": "B17-GAP-001",
+      "type": "FUTURE_RUNTIME_ADAPTER",
+      "description": "Browser Runtime Provider (B123+) 需要新增 adapter_browser_runtime",
+      "futureStep": "B123+",
+      "note": "Manifest 通过 RuntimeMeta.Type=<new> + Dependency 表达， Adapter 实现归未来步骤"
+    },
+    {
+      "gapId": "B17-GAP-002",
+      "type": "FUTURE_PLATFORM_ADAPTER",
+      "description": "Android Native Provider (B124-B138) 需要 adapter_android_native",
+      "futureStep": "B124-B138"
+    },
+    {
+      "gapId": "B17-GAP-003",
+      "type": "FUTURE_PLATFORM_ADAPTER",
+      "description": "iOS Native Provider (B124-B138) 需要 adapter_ios_native",
+      "futureStep": "B124-B138"
+    },
+    {
+      "gapId": "B17-GAP-004",
+      "type": "FUTURE_MARKETPLACE",
+      "description": "Extension marketplace metadata (发布渠道/评分/统计)",
+      "futureStep": "后续市场步骤",
+      "note": "Manifest 已有 DevelopmentMeta + ExtensionMeta，市场元数据为后续"
+    },
+    {
+      "gapId": "B17-GAP-005",
+      "type": "FUTURE_SECURITY",
+      "description": "Permission 变更重审批流程 (update 新增权限需重新授权)",
+      "futureStep": "后续安全步骤",
+      "note": "当前 Manifest Manifest 已声明 Permission，重审批流归后续"
+    },
+    {
+      "gapId": "B17-GAP-006",
+      "type": "FUTURE_AUTO_UPDATE",
+      "description": "自动更新引擎 (download + swap + health check)",
+      "futureStep": "后续更新步骤",
+      "note": "Manifest LifecycleMeta.AutoUpdate=true 已声明偏好，执行归后续"
+    },
+    {
+      "gapId": "B17-GAP-007",
+      "type": "FUTURE_PROVIDER_HEALTH",
+      "description": "Provider 运行时健康检查实现",
+      "futureStep": "B111-B117",
+      "note": "Manifest 不持有运行时健康状态，健康检查归 Provider 层"
+    }
+  ],
+  "counts": {
+    "totalGaps": 7,
+    "futureAdapter": 3,
+    "futureMarketplace": 1,
+    "futureSecurity": 1,
+    "futureAutoUpdate": 1,
+    "futureProviderHealth": 1
+  }
+}

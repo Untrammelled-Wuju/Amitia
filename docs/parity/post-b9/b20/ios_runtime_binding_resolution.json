@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:06:00+08:00",
+  "description": "iOS RuntimeBinding 解析 - 使用B17/B12冻结合同",
+
+  "iosNativeBinding": {
+    "runtimeType": "RuntimeTypeIOS_Native (value: 'ios_native')",
+    "runtimeId": "ios-provider",
+    "handlerName": "(future ios provider name)",
+    "endpoint": "",
+    "metadata": {
+      "note": "No raw secrets allowed; provider identity only"
+    }
+  },
+
+  "iosSandboxBinding": {
+    "note": "NOT_DEFINED_IN_B20 - 未来B123-B126定义",
+    "futureStep": "B123-B126",
+    "principle": "必须复用现有RuntimeAdapter合同，不得新建iOS Sandbox RuntimeBinding体系"
+  },
+
+  "runtimeAdapterRegistry": {
+    "path": "backend/internal/extension/kernel/capability/executor.go",
+    "registration": "RuntimeAdapterRegistry.Register(RuntimeTypeIOS_Native, adapter)",
+    "wiringMethod": "Container.WireIOSPlatformAdapter(iosProvider IOSProvider)",
+    "uniqueness": "唯一iOS Adapter注册，禁止重复"
+  },
+
+  "runtimeHost": {
+    "path": "backend/internal/runtimehost/host.go",
+    "reuse": true,
+    "relationship": "未来iOS Sandbox依赖的Runtime由RuntimeHost管理"
+  },
+
+  "runtimeOrchestrator": {
+    "path": "backend/internal/runtimeorchestrator/orchestrator.go",
+    "reuse": true,
+    "relationship": "未来iOS Runtime生命周期由Orchestrator管理"
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19",
+  "generatedAt": "2026-08-08T15:20:00+08:00",
+  "description": "Test Results",
+
+  "results": [
+    {
+      "test": "Android Adapter.Supports",
+      "description": "验证Supports正确识别RuntimeTypeAndroid_Native",
+      "result": "PASS"
+    },
+    {
+      "test": "Android Adapter.Supports reject",
+      "description": "验证Supports拒绝其他RuntimeType",
+      "result": "PASS"
+    },
+    {
+      "test": "Android Adapter.Execute unavailable",
+      "description": "无具体Provider时返回not_available",
+      "result": "PASS"
+    },
+    {
+      "test": "Android Adapter.Execute cancel propagation",
+      "description": "ctx取消时正确返回cancelled",
+      "result": "PASS"
+    },
+    {
+      "test": "Android Adapter.Execute timeout",
+      "description": "ctx deadline超时返回timed_out",
+      "result": "PASS"
+    },
+    {
+      "test": "Android Adapter.Health",
+      "description": "有Provider返回HealthReady，无Provider返回HealthUnhealthy",
+      "result": "PASS"
+    },
+    {
+      "test": "RuntimeAdapterRegistry.Resolve",
+      "description": "RuntimeTypeAndroid_Native返回正确Adapter",
+      "result": "PASS"
+    },
+    {
+      "test": "RuntimeAdapterRegistry duplicate registration",
+      "description": "重复注册覆盖不panic",
+      "result": "PASS"
+    },
+    {
+      "test": "Bridge error mapping",
+      "description": "Bridge unavailable正确映射到ErrorCodeConnectionLost",
+      "result": "PASS"
+    },
+    {
+      "test": "Provider error mapping",
+      "description": "Provider unavailable正确映射到ErrorCodeNotAvailable",
+      "result": "PASS"
+    },
+    {
+      "test": "Kernel regression",
+      "description": "现有Kernel tests不回归",
+      "result": "PASS"
+    },
+    {
+      "test": "RuntimeAdapter existing tests",
+      "description": "现有Adapter tests不回归",
+      "result": "PASS"
+    }
+  ],
+
+  "summary": {
+    "total": 12,
+    "pass": 12,
+    "fail": 0
+  }
+}

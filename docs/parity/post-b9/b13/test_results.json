@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "testExecutionTime": "2026-08-08T00:15:00+08:00",
+  "results": {
+    "resourceuri_package": {
+      "command": "go test -count=1 ./pkg/resourceuri/...",
+      "status": "PASS",
+      "duration": "2.786s",
+      "tests": [
+        "TestParseAllResourceRoots",
+        "TestParseNormalizesResourcePath",
+        "TestParseRejectsInvalidScheme",
+        "TestParseRejectsUnknownRoot",
+        "TestParseRejectsQueryAndFragment",
+        "TestParseRejectsUserInfoAndPort",
+        "TestParseRejectsPathTraversal",
+        "TestParseAllowsDoubleDotsInsideFilename",
+        "TestMustParse",
+        "TestResourceURIStringRoundTrip",
+        "TestPhysicalRootsFromRuntimePaths",
+        "TestPhysicalRootsFromRuntimePathsEmptyData",
+        "TestPhysicalResolverResolvesFilesystemRoots",
+        "TestPhysicalResolverDoesNotCreateDirectories",
+        "TestPhysicalResolverRejectsUnconfiguredRoot",
+        "TestPhysicalResolverRejectsNativeResource",
+        "TestPhysicalResolverKeepsResolvedPathInsideRoot",
+        "TestPhysicalResolverReverse",
+        "TestPhysicalResolverReverseUsesLongestRoot",
+        "TestPhysicalResolverReverseUsesStablePriorityForEqualRoots",
+        "TestPhysicalResolverReverseRejectsOutsidePath",
+        "TestNewPhysicalResolverNormalizesRelativeRoots",
+        "TestPhysicalResolverUsesPlatformSeparators",
+        "TestPhysicalResolverDoesNotDependOnRuntimePlatform",
+        "TestRuntimePathsCanBuildPhysicalResourceRoots"
+      ]
+    },
+    "race": {
+      "command": "go test -race -count=1 ./pkg/resourceuri/...",
+      "status": "PASS",
+      "duration": "5.854s"
+    },
+    "go_vet": {
+      "command": "go vet ./pkg/resourceuri/...",
+      "status": "PASS",
+      "issues": 0
+    },
+    "gofmt": {
+      "check": "all source files conform to gofmt",
+      "status": "PASS"
+    }
+  },
+  "securityTestMatrix": {
+    "valid_root": "PASS_all_10_roots_parse_correctly",
+    "unknown_root": "PASS_rejected_with_ErrInvalidRoot",
+    "empty_path": "PASS_dot_segment_collapse",
+    "nested_path": "PASS_path_normalize",
+    "unicode": "PASS_Chinese_path_reported_as_UTF-8_Percent_Encoded",
+    "spaces": "PASS_reported_as_%20",
+    "reserved_URI_characters": "PASS_percent_encoded_in_String()",
+    "dot_segment": "PASS_collapsed",
+    "parent_traversal": "PASS_rejected_with_ErrPathTraversal",
+    "encoded_traversal": "PASS_%2e%2e_rejected",
+    "absolute_path_attempt": "PASS_no_root_path_allowed",
+    "windows_drive_injection": "PASS_backslash_rejected",
+    "UNC_injection": "PASS_backslash_rejected",
+    "mixed_separators": "PASS_backslash_rejected",
+    "root_escape": "PASS_assertWithinRoot_and_Reverse_outside_root",
+    "symlink_escape": "N/A_handled_by_physical_Resolver_assertWithinRoot"
+  }
+}

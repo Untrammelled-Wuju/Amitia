@@ -1,0 +1,42 @@
+{
+  "toolDefinitionTypes": [
+    "capability.ToolDefinition (backend/internal/extension/kernel/capability/tool.go)"
+  ],
+  "inputSchemaFields": [
+    "ToolDefinition.InputSchema json.RawMessage"
+  ],
+  "outputSchemaFields": [
+    "ToolDefinition.OutputSchema json.RawMessage"
+  ],
+  "parameterTypes": [
+    "agent/tool/property.Type (string, description only — legacy representation)",
+    "ModelToolView exposes raw InputSchema to model projection"
+  ],
+  "schemaValidators": [
+    "ToolDefinition.ComputedState() — state availability, not structural schema",
+    "InputValidator (size-only)"
+  ],
+  "invocationValidators": [
+    "InvocationValidator (pipeline/invocation_validator.go)"
+  ],
+  "resultValidators": [
+    "ResultValidator (pipeline/result_validator.go)"
+  ],
+  "modelSerializationPaths": [
+    "ToolFacade.buildKernelModelTools -> schemaToParameters(def.InputMessage) -> agent/tool/Parameters",
+    "ToolExposureManager.GetModelTools -> tool.ModelToolView() (modelName + raw InputSchema)"
+  ],
+  "toolSources": [
+    "builtin",
+    "internal",
+    "mcp",
+    "plugin",
+    "workflow",
+    "javascript",
+    "task",
+    "trusted_service",
+    "wasm",
+    "legacy_tool (frozen)"
+  ],
+  "notes": "Project does NOT import any JSON-Schema validation library (no gojsonschema/santhosh/xeipuuv etc.). Input/Output schema data is preserved as canonical json.RawMessage within ToolDefinition and projected to models verbatim."
+}

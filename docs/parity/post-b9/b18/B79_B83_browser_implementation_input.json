@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B79-B83",
+  "sourceStep": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "B79-B83 Browser Provider实现输入 - 来自B14的合同基础",
+
+  "b14FrozenContracts": {
+    "providerContract": "backend/internal/browser/provider.go (BrowserProvider interface)",
+    "errorContract": "backend/internal/browser/errors.go (BrowserError 11种codes)",
+    "typeContract": "backend/internal/browser/types.go (Session/Tab/Navigation/DOM/Interaction contract types)",
+    "runtimeBinding": "RuntimeTypeBrowser = 'browser' (backend/internal/extension/kernel/capability/runtime_adapter.go)",
+    "permissionContract": "复用Kernel PermissionDefinition (TOOL_EXECUTE/RESOURCE_ACCESS)",
+    "resourceContract": "amitia:// ResourceURI (B13)",
+    "executionPipeline": "复用现有ExecutionPipeline"
+  },
+
+  "implementationGaps": [
+    {"gap": "Production Browser Provider实现", "deferredFrom": "B14 browser_provider_contract.json", "owner": "B79-B83"},
+    {"gap": "Playwright实现", "deferredFrom": "B14", "owner": "B79-B83"},
+    {"gap": "Chromium CDP实现", "deferredFrom": "B14", "owner": "B79-B83"},
+    {"gap": "Real DOM Execution", "deferredFrom": "B14", "owner": "B79-B83"},
+    {"gap": "Session Manager Production实现", "deferredFrom": "B14", "owner": "B79-B83"},
+    {"gap": "Tab Manager Production实现", "deferredFrom": "B14", "owner": "B79-B83"},
+    {"gap": "Browser Tool Registry注册", "deferredFrom": "B14 browser_tool_exposure_mapping.json", "owner": "B79-B83"}
+  ],
+
+  "deferredArtifacts": {
+    "contractTestOnly": "backend/internal/browser/contract_test.go (fakeBrowserProvider仅测试用，不可进生产)",
+    "productionFake": "0 (B14确认无生产Fake Provider)"
+  }
+}

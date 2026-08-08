@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 State Authority - 状态分层与权威定义",
+
+  "stateLayers": [
+    {
+      "layer": "Runtime Instance State",
+      "owner": "RuntimeOrchestrator + RuntimeHost",
+      "authority": "runtimeorchestrator/orchestrator.go",
+      "note": "组件状态(Registered/Starting/Ready/Stopping/Stopped/Failed/Degraded)"
+    },
+    {
+      "layer": "Sandbox Provider Availability",
+      "owner": "Sandbox Provider (通过Capability暴露)",
+      "authority": "runtimeorchestrator/provider_registry.go",
+      "note": "Provider可用性通过ProviderInstance.Capability()暴露"
+    },
+    {
+      "layer": "iSH Backend State",
+      "owner": "iSH Backend (B124)",
+      "authority": "sandbox/backend.go (future)",
+      "note": "后端状态由Provider转发到Runtime层"
+    },
+    {
+      "layer": "Rootfs Installation State",
+      "owner": "B125",
+      "authority": "deferred",
+      "note": "B125负责rootfs状态机(not installed/installing/installed/corrupt)"
+    },
+    {
+      "layer": "iOS Platform Authorization",
+      "owner": "iOS Platform (B20/B127+)",
+      "authority": "adapter_ios_native.go (B20)",
+      "note": "iOS系统权限状态由Platform Adapter处理"
+    },
+    {
+      "layer": "Tool Execution State",
+      "owner": "ExecutionPipeline",
+      "authority": "backend/internal/extension/kernel/execution/",
+      "note": "Tool执行状态继续由ExecutionPipeline持有"
+    }
+  ],
+
+  "forbiddenStateStores": [
+    {
+      "store": "IOSSandboxStateStore",
+      "status": "FORBIDDEN",
+      "reason": "不得维护第二Runtime State Store"
+    }
+  ],
+
+  "parallelSandboxStateStore": {
+    "created": false,
+    "count": 0,
+    "forbidden": true
+  },
+
+  "stateAuthorityValidation": {
+    "runtimeStateAuthorityUnique": true,
+    "sandboxStateAuthorityUnique": true,
+    "toolExecutionStateAuthorityUnique": true
+  }
+}

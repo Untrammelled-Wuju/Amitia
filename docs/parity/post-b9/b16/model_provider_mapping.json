@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B16",
+  "generatedAt": "2026-08-08T00:27:00+08:00",
+  "domain": "MODEL",
+  "description": "Model Domain Provider 映射 - 每个 Model Capability 对应的现有 Provider",
+  "providerModel": "EXISTING_PROVIDER",
+  "note": "Model 是 Provider 驱动域。每个 Capability 通过 Provider 体系支持多种服务。",
+  "mappings": [
+    {
+      "capabilityId": "builtin/model/text_generation",
+      "capabilitySemantic": "LLM 聊天/文本生成",
+      "existingProviders": "backend/internal/chat/llm_client.go (protocolForApiType 分发)",
+      "providerClassification": "REUSE_EXISTING_PROVIDER",
+      "protocols": ["openai", "ollama", "anthropic", "gemini"],
+      "providerCount": 19,
+      "factoryFunction": "protocolForApiType -> callLLMMode switch",
+      "providerRegistryLocation": "chat/repository.go:ListProviders",
+      "credentialStorage": "model_configs.api_key field (encrypted at rest)",
+      "selectionMechanism": "is_active=1 single-activation"
+    },
+    {
+      "capabilityId": "builtin/model/vision",
+      "capabilitySemantic": "视觉模型理解",
+      "existingProviders": "backend/internal/vision/service.go",
+      "providerClassification": "REUSE_EXISTING_PROVIDER",
+      "protocols": ["volcengine_responses_api"],
+      "providerCount": 6,
+      "providerRegistryLocation": "vision/repository.go",
+      "selectionMechanism": "is_active=1 single-activation"
+    },
+    {
+      "capabilityId": "builtin/model/embedding",
+      "capabilitySemantic": "文本嵌入",
+      "existingProviders": "backend/internal/embedding/embedding.go",
+      "providerClassification": "REUSE_EXISTING_PROVIDER",
+      "protocols": ["volcengine", "openai"],
+      "databaseTable": "embedding_configs"
+    },
+    {
+      "capabilityId": "builtin/model/image_generation",
+      "capabilitySemantic": "图像生成",
+      "existingProviders": "image_gen_configs 表 (未完整实现 Service)",
+      "providerClassification": "EXTEND_EXISTING_PROVIDER",
+      "note": "配置表已定义，但无完整 Service 实现"
+    },
+    {
+      "capabilityId": "builtin/model/scenario_routing",
+      "capabilitySemantic": "场景路由",
+      "existingProviders": "backend/internal/chat/repository.go (GetModelRoutes)",
+      "providerClassification": "NOT_APPLICABLE",
+      "note": "非 Provider 体系，是基于 model_scenario_routes 表的路由规则"
+    },
+    {
+      "capabilityId": "builtin/model/streaming",
+      "capabilitySemantic": "流式输出",
+      "existingProviders": "MISSING",
+      "providerClassification": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B111",
+      "note": "当前 stream:false 硬编码，需实现 SSE/WebSocket streaming 协议支持"
+    },
+    {
+      "capabilityId": "builtin/model/responses_api",
+      "capabilitySemantic": "OpenAI Responses API",
+      "existingProviders": "MISSING (仅视觉模型用 ARK /responses 端点)",
+      "providerClassification": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B111"
+    },
+    {
+      "capabilityId": "builtin/model/mnn",
+      "capabilitySemantic": "MNN 本地推理",
+      "existingProviders": "NOT_APPLICABLE (未实现)",
+      "providerClassification": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B112"
+    },
+    {
+      "capabilityId": "builtin/model/llama_cpp",
+      "capabilitySemantic": "llama.cpp 本地推理",
+      "existingProviders": "NOT_APPLICABLE (未实现)",
+      "providerClassification": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B112"
+    },
+    {
+      "capabilityId": "builtin/model/local_embedding",
+      "capabilitySemantic": "本地嵌入模型",
+      "existingProviders": "NOT_APPLICABLE",
+      "providerClassification": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B113"
+    }
+  ],
+  "summary": {
+    "REUSE_EXISTING_PROVIDER": 4,
+    "EXTEND_EXISTING_PROVIDER": 1,
+    "NEW_PROVIDER_REQUIRED": 5,
+    "NOT_APPLICABLE": 1
+  }
+}

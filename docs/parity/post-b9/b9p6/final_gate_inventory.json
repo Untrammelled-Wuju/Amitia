@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "finalGate": {
+    "path": "backend/internal/extension/kernel/final_gate.go",
+    "sha256Verified": true,
+    "metricCount": 31,
+    "metricCategories": {
+      "duplicate": ["duplicate_mcp_tool_registrations", "duplicate_contribution_registrations", "duplicate_schedule_runs"],
+      "orphan": ["orphan_candidate_contributions", "orphan_runtime_instances", "orphan_ui_sessions", "orphan_sandbox_sessions", "orphan_staging_directories", "orphan_installed_directories", "orphan_artifacts", "orphan_installation_generations"],
+      "cleanup": ["failed_cleanup_resources", "artifact_hash_mismatch", "corrupted_artifacts", "installation_without_files", "files_without_installation"],
+      "recovery": ["incomplete_package_operations", "requires_recovery_operations", "ambiguous_recovery_operations", "unresolved_package_operations", "failed_uninstall_restores"],
+      "legacy": ["legacy_package_read_calls", "legacy_package_write_calls", "legacy_tool_execute_calls", "legacy_mcp_execute_calls", "new_package_legacy_read_calls"],
+      "audit": ["audit_incomplete_operations", "installation_read_model_mismatches"],
+      "lifecycle": ["lifecycle_requires_recovery", "active_contribution_for_disabled_installation"],
+      "security": ["unsigned_production_packages", "untrusted_installed_packages"]
+    },
+    "extensionCandidates": [
+      "production_tool_bypass_count",
+      "duplicate_global_tool_registry_count",
+      "duplicate_permission_broker_count",
+      "production_fake_provider_count",
+      "new_legacy_tool_registration_count"
+    ]
+  },
+  "historicalEvidence": {
+    "releaseReadyReport": "docs/extension-kernel/reports/release-readiness-report.md",
+    "stage7Cutover": "PASS",
+    "archSingleChain": "PASS",
+    "legacyFallbackTotal": 0
+  }
+}

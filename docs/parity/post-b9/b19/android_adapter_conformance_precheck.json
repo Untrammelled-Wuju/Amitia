@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19",
+  "generatedAt": "2026-08-08T15:14:00+08:00",
+  "description": "Android Adapter Conformance Precheck - B22要求的预先满足检查",
+
+  "binding": {
+    "canResolveAndroidNative": true,
+    "rejectsUnsupportedBinding": true,
+    "runtimeAdapterRegistryReturnsCorrectAdapter": true
+  },
+  "request": {
+    "validatesBeforeExecution": true,
+    "propagatesBindingMetadata": true,
+    "usesProviderIdentity": true
+  },
+  "context": {
+    "propagatesCancellation": true,
+    "propagatesTraceID": true,
+    "propagatesInvocationID": true,
+    "propagatesPermissionSnapshotID": true
+  },
+  "cancellation": {
+    "adapterListensCtxDone": true,
+    "pendingRequestCleanup": true
+  },
+  "timeout": {
+    "respectsDeadline": true,
+    "returnsTimedOut": true
+  },
+  "result": {
+    "normalizesToUnifiedToolResult": true,
+    "includesInvocationID": true,
+    "successStatusCorrect": true,
+    "failedStatusCorrect": true
+  },
+  "error": {
+    "mapsBridgeErrorsCorrectly": true,
+    "mapsProviderErrorsCorrectly": true,
+    "preservesDomainCode": true,
+    "doesNotSwallowErrors": true
+  },
+  "availability": {
+    "returnsUnavailableWhenNoProvider": true,
+    "healthReportsCorrectly": true
+  },
+  "registration": {
+    "exactlyOneAndroidAdapter": true,
+    "registeredAtCanonicalLocation": true
+  },
+  "legacy": {
+    "noLegacyAdapterBinding": true,
+    "doesNotRouteThroughLegacyRuntimeAdapter": true
+  },
+
+  "conclusion": "Android Adapter满足B22 Conformance全部预检要求"
+}

@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P4",
+  "runtimeAuthority": false,
+  "canonicalProviderSystems": "backend/internal各Provider实现",
+  "providers": [
+    {
+      "providerSemantic": "FILE_PROVIDER",
+      "description": "文件系统读写",
+      "existingImplementation": "直接使用OS/内核IO",
+      "status": "NO_PROVIDER_REQUIRED",
+      "relevantPermissions": ["files.read", "files.write", "files.delete"]
+    },
+    {
+      "providerSemantic": "PROCESS_PROVIDER",
+      "description": "进程/Shell执行",
+      "existingImplementation": "直接使用OS exec",
+      "status": "NO_PROVIDER_REQUIRED",
+      "relevantPermissions": ["process.spawn"]
+    },
+    {
+      "providerSemantic": "NETWORK_PROVIDER",
+      "description": "网络请求",
+      "existingImplementation": "直接使用OS HTTP client",
+      "status": "NO_PROVIDER_REQUIRED",
+      "relevantPermissions": ["network.request"]
+    },
+    {
+      "providerSemantic": "BUILTIN_TOOL_PROVIDER",
+      "description": "内置Tool执行引擎",
+      "existingImplementation": "backend/internal/extension/kernel/capability/adapter_builtin.go",
+      "status": "EXISTING",
+      "relevantPermissions": ["service.tool.execute"]
+    },
+    {
+      "providerSemantic": "MEMORY_SEARCH_PROVIDER",
+      "description": "记忆检索(向量/关键词/混合)",
+      "existingImplementation": "backend/internal/memory.Service",
+      "status": "EXISTING",
+      "relevantPermissions": ["memory.read", "memory.write", "memory.delete"]
+    },
+    {
+      "providerSemantic": "VECTOR_STORE_PROVIDER",
+      "description": "向量存储",
+      "existingImplementation": "runtimeorchestrator/builtin/qdrant-provider",
+      "status": "EXISTING",
+      "relevantPermissions": []
+    },
+    {
+      "providerSemantic": "GRAPH_STORE_PROVIDER",
+      "description": "图数据库存储",
+      "existingImplementation": "runtimeorchestrator/builtin/surrealdb-provider",
+      "status": "EXISTING",
+      "relevantPermissions": []
+    },
+    {
+      "providerSemantic": "CHARACTER_PROVIDER",
+      "description": "角色管理",
+      "existingImplementation": "backend/internal/character.Service",
+      "status": "EXISTING",
+      "relevantPermissions": ["character.read", "character.write"]
+    },
+    {
+      "providerSemantic": "CONVERSATION_PROVIDER",
+      "description": "对话管理",
+      "existingImplementation": "backend/internal/conversation",
+      "status": "EXISTING",
+      "relevantPermissions": ["conversation.read", "conversation.write"]
+    },
+    {
+      "providerSemantic": "MIND_RUNTIME_PROVIDER",
+      "description": "心智状态(Psyche心理模型)",
+      "existingImplementation": "backend/internal/mindruntime (74个文件)",
+      "status": "EXISTING",
+      "relevantPermissions": []
+    },
+    {
+      "providerSemantic": "MODEL_PROVIDER",
+      "description": "LLM调用/文本嵌入/语音模型",
+      "existingImplementation": "backend/internal/chat/model_service",
+      "status": "EXISTING",
+      "relevantPermissions": ["provider.use", "provider.configure"]
+    },
+    {
+      "providerSemantic": "IMAGE_GENERATION_PROVIDER",
+      "description": "AI图片生成",
+      "existingImplementation": "backend/internal/imageprovider",
+      "status": "EXISTING",
+      "relevantPermissions": ["provider.use"]
+    },
+    {
+      "providerSemantic": "TTS_PROVIDER",
+      "description": "语音合成(多协议: volcengine/openai/azure/edge/elevenlabs/minimax/aliyun/cosyvoice)",
+      "existingImplementation": "backend/internal/tts",
+      "status": "EXISTING",
+      "relevantPermissions": ["provider.use"]
+    },
+    {
+      "providerSemantic": "ASR_PROVIDER",
+      "description": "语音识别(多协议: volcengine/openai/azure/aliyun)",
+      "existingImplementation": "backend/internal/asr",
+      "status": "EXISTING",
+      "relevantPermissions": ["provider.use"]
+    },
+    {
+      "providerSemantic": "EMBEDDING_PROVIDER",
+      "description": "文本嵌入",
+      "existingImplementation": "backend/internal/embedding",
+      "status": "EXISTING",
+      "relevantPermissions": ["provider.use"]
+    },
+    {
+      "providerSemantic": "AUDIO_PROVIDER",
+      "description": "音频播放",
+      "existingImplementation": "backend/internal/tts",
+      "status": "EXISTING",
+      "relevantPermissions": []
+    },
+    {
+      "providerSemantic": "WORKFLOW_PROVIDER",
+      "description": "工作流引擎",
+      "existingImplementation": "backend/internal/extension/kernel/workflow",
+      "status": "EXISTING",
+      "relevantPermissions": ["workflow.execute"]
+    },
+    {
+      "providerSemantic": "TASK_RUNTIME_PROVIDER",
+      "description": "Task Runtime(长期任务计划)",
+      "existingImplementation": "backend/internal/extension/kernel/task (adapter_task.go)",
+      "status": "EXISTING",
+      "relevantPermissions": ["scheduler.create"]
+    },
+    {
+      "providerSemantic": "SCHEDULER_PROVIDER",
+      "description": "调度器/提醒",
+      "existingImplementation": "backend/internal/extension/kernel/scheduler",
+      "status": "EXISTING",
+      "relevantPermissions": ["scheduler.create"]
+    },
+    {
+      "providerSemantic": "MCP_PROVIDER",
+      "description": "MCP协议(Tool/Server管理)",
+      "existingImplementation": "backend/internal/mcp",
+      "status": "EXISTING",
+      "relevantPermissions": ["mcp.server.connect", "mcp.tools.invoke"]
+    },
+    {
+      "providerSemantic": "EXTENSION_PROVIDER",
+      "description": "扩展/Skill/MCP/ToolPkg等执行",
+      "existingImplementation": "backend/internal/extension/kernel",
+      "status": "EXISTING",
+      "relevantPermissions": ["extensions.install", "extensions.enable", "extensions.invoke"]
+    },
+    {
+      "providerSemantic": "SKILL_PROVIDER",
+      "description": "技能系统",
+      "existingImplementation": "backend/internal/extension/kernel/agent_skill",
+      "status": "EXISTING",
+      "relevantPermissions": ["extensions.invoke"]
+    },
+    {
+      "providerSemantic": "JAVASCRIPT_RUNTIME_PROVIDER",
+      "description": "JavaScript执行引擎",
+      "existingImplementation": "backend/internal/extension/kernel (adapter_javascript)",
+      "status": "EXISTING",
+      "relevantPermissions": ["service.tool.execute"]
+    },
+    {
+      "providerSemantic": "TRUSTED_SERVICE_PROVIDER",
+      "description": "可信服务",
+      "existingImplementation": "backend/internal/extension/kernel/capability/adapter_trusted_service.go",
+      "status": "EXISTING",
+      "relevantPermissions": ["service.tool.execute"]
+    },
+    {
+      "providerSemantic": "AGENT_ENGINE_PROVIDER",
+      "description": "Agent引擎(子Agent/工程化执行)",
+      "existingImplementation": "backend/internal/agent",
+      "status": "EXISTING",
+      "relevantPermissions": ["service.tool.execute"]
+    },
+    {
+      "providerSemantic": "GENERAL_TOOL_PROVIDER",
+      "description": "通用Tool操作(Android Intent/Clipboard/广播等)",
+      "existingImplementation": "backend/internal/extension/kernel",
+      "status": "EXISTING",
+      "relevantPermissions": ["service.tool.execute"]
+    },
+    {
+      "providerSemantic": "BLUETOOTH_PROVIDER",
+      "description": "蓝牙设备管理",
+      "existingImplementation": "backend/internal/device/bluetooth (partial)",
+      "status": "EXISTING",
+      "relevantPermissions": []
+    },
+    {
+      "providerSemantic": "LICENSE_PROVIDER",
+      "description": "许可证/授权管理",
+      "existingImplementation": "backend/internal/license (partial)",
+      "status": "EXISTING",
+      "relevantPermissions": []
+    },
+    {
+      "providerSemantic": "RUNTIMEORCHESTRATOR",
+      "description": "运行时编排器(qdrant-provider/surrealdb-provider/script-runtime/vector-store/graph-store)",
+      "existingImplementation": "backend/internal/runtimeorchestrator",
+      "status": "EXISTING",
+      "relevantPermissions": []
+    },
+    {
+      "providerSemantic": "BROWSER_PROVIDER",
+      "description": "浏览器自动化(Playwright/CDP)",
+      "existingImplementation": null,
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B79-B83: Browser Runtime",
+      "relevantPermissions": ["browser.automation(GAP)"],
+      "platforms": ["DESKTOP"]
+    },
+    {
+      "providerSemantic": "SEARCH_PROVIDER",
+      "description": "网络搜索(搜索引擎API集成)",
+      "existingImplementation": null,
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B84-B86: Search Provider",
+      "platforms": ["DESKTOP", "ANDROID", "IOS"]
+    },
+    {
+      "providerSemantic": "CALENDAR_PROVIDER",
+      "description": "日历管理",
+      "existingImplementation": null,
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Calendar Platform Adapter",
+      "platforms": ["ANDROID", "IOS"]
+    },
+    {
+      "providerSemantic": "NOTIFICATION_PROVIDER",
+      "description": "通知管理(发送/读取系统通知)",
+      "existingImplementation": "partial (desktop.notification存在但Android缺失)",
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Notification Platform Adapter",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "providerSemantic": "MICROPHONE_PROVIDER",
+      "description": "麦克风录音",
+      "existingImplementation": null,
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Microphone Platform Adapter",
+      "platforms": ["ANDROID", "IOS"]
+    },
+    {
+      "providerSemantic": "CAMERA_PROVIDER",
+      "description": "摄像头拍照",
+      "existingImplementation": null,
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Camera Platform Adapter",
+      "platforms": ["ANDROID", "IOS"]
+    },
+    {
+      "providerSemantic": "LOCATION_PROVIDER",
+      "description": "位置获取",
+      "existingImplementation": null,
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Location Platform Adapter",
+      "platforms": ["ANDROID", "IOS"]
+    },
+    {
+      "providerSemantic": "NFC_PROVIDER",
+      "description": "NFC读写",
+      "existingImplementation": null,
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: NFC Platform Adapter",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "providerSemantic": "SYSTEM_SETTINGS_PROVIDER",
+      "description": "系统设置读写",
+      "existingImplementation": null,
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: System Settings Platform Adapter",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "providerSemantic": "ANDROID_DEVICE_PROVIDER",
+      "description": "Android设备功能(Setting/Clipboard/Screenshot/Root)",
+      "existingImplementation": "partial (mobile_app/android)",
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B55+: Android Device Provider",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "providerSemantic": "ANDROID_TOOL_PROVIDER",
+      "description": "Android特殊Tool(广播/Intent/Clipboard/联系人等)",
+      "existingImplementation": "partial (existing tool implementations)",
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B55+: Android Tool Provider Extension",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "providerSemantic": "PERMISSION_PROVIDER",
+      "description": "运行时权限申请(Android权限系统)",
+      "existingImplementation": null,
+      "status": "PLATFORM_ADAPTER_REQUIRED",
+      "futureStep": "B11: Runtime Permission Provider",
+      "platforms": ["ANDROID"]
+    },
+    {
+      "providerSemantic": "SYSTEM_PROVIDER",
+      "description": "系统操作(安装/卸载/Root/APK更新)",
+      "existingImplementation": "partial (现有update tools)",
+      "status": "EXTEND_EXISTING",
+      "futureStep": "B62-B68: Android System Provider Extension",
+      "platforms": ["ANDROID", "DESKTOP"]
+    }
+  ]
+}

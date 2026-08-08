@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "id": "B9P4_KERNEL_INPUT",
+  "source": "B9P6 ExtensionKernel唯一生产入口收口审计",
+  "exportedAt": "2026-08-07T18:30:00+08:00",
+  "canonicalSystems": [
+    {
+      "id": "MODEL_TOOL_FACADE",
+      "path": "backend/internal/extension/kernel/tool_facade.go",
+      "role": "Model Tool Entry"
+    },
+    {
+      "id": "AGENT_TOOL_REGISTRY",
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "role": "Tool Registry"
+    },
+    {
+      "id": "EXECUTION_PIPELINE",
+      "path": "backend/internal/extension/kernel/execution/pipeline.go",
+      "role": "Tool Executor"
+    },
+    {
+      "id": "PERMISSION_BROKER",
+      "path": "backend/internal/extension/kernel/permission/broker.go",
+      "role": "Permission Decision"
+    },
+    {
+      "id": "RUNTIME_ADAPTER_REGISTRY",
+      "path": "backend/internal/extension/kernel/capability/",
+      "role": "Runtime Dispatch"
+    },
+    {
+      "id": "CONTAINER_BUILDER",
+      "path": "backend/internal/extension/kernel/container_builder.go",
+      "role": "Kernel Assembly"
+    }
+  ],
+  "canonicalToolRegistry": {
+    "path": "backend/internal/extension/kernel/capability/registry.go",
+    "type": "capability.ToolRegistry",
+    "createdBy": "kernel.NewToolRegistry()",
+    "usedBy": ["ToolFacade", "ExecutionKernel.ToolResolver"]
+  },
+  "canonicalExecutionPipeline": {
+    "path": "backend/internal/extension/kernel/execution/pipeline.go",
+    "type": "execution.ExecutionPipeline",
+    "gates": 16,
+    "dispatcher": "RuntimeDispatcher -> RuntimeAdapterRegistry"
+  },
+  "canonicalPermissionBroker": {
+    "path": "backend/internal/extension/kernel/permission/broker.go",
+    "type": "permission.DefaultPermissionBroker",
+    "usedBy": ["ExecutionPipeline.PermissionGate", "Schedule", "HostAPI", "Workflow"]
+  },
+  "canonicalRuntimeAdapterRegistry": {
+    "path": "backend/internal/extension/kernel/capability/",
+    "adapters": ["mcp", "workflow", "task", "plugin", "trusted_service", "legacy(temporary)"]
+  },
+  "productionToolEntry": {
+    "path": "backend/cmd/server/tool_facade_wiring.go",
+    "type": "chatToolRuntimeAdapter",
+    "binds": "chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))"
+  },
+  "legacySystems": [
+    {"path": "backend/internal/extension/runtime.go", "classification": "LEGACY_FROZEN_RUNTIME"},
+    {"path": "backend/internal/agent/tool/registry.go", "classification": "LEGACY_MIGRATION_SOURCE"}
+  ],
+  "migrationOnlySystems": [
+    {"path": "backend/internal/extension/kernel/tool_migration/", "source": "legacy", "target": "ToolRegistry"},
+    {"path": "backend/internal/extension/kernel/skill_migration/", "source": "legacy", "target": "AgentSkillCatalog"},
+    {"path": "backend/internal/extension/kernel/mcp_migration/", "source": "legacy", "target": "MCPAdapter"},
+    {"path": "backend/internal/extension/kernel/workflow_migration/", "source": "legacy", "target": "WorkflowEngine"},
+    {"path": "backend/internal/extension/kernel/capability/adapter_legacy.go", "source": "legacy", "target": "FormalAdapters"}
+  ],
+  "forbiddenDuplicateRules": [
+    "NO_SECOND_GLOBAL_TOOL_REGISTRY",
+    "NO_SECOND_TOOL_EXECUTION_PIPELINE",
+    "NO_SECOND_PERMISSION_BROKER",
+    "NO_PARALLEL_AGENT_TOOL_RUNTIME"
+  ],
+  "productionBypasses": [],
+  "fakeProviderFindings": {"productionFakeCount": 0},
+  "drift": {
+    "servicesGo": "Post-B9P1 desktop pet P0 fixes modified services.go - Extension Kernel wiring unchanged"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Canonical System Counts - 需要唯一的Canonical系统实际数量（全部为1）",
+
+  "globalToolRegistry": 1,
+  "executionPipeline": 1,
+  "permissionDefinitionRegistry": 1,
+  "permissionBroker": 1,
+  "runtimeBinding": 1,
+  "runtimeAdapterRegistry": 1,
+  "runtimeHost": 1,
+  "runtimeOrchestrator": 1,
+  "officialResourceUriScheme": 1,
+  "manifestSystem": 1,
+  "lifecycleSystem": 1,
+  "globalStateStore": 0,
+  "globalErrorRegistry": 0,
+
+  "details": {
+    "globalToolRegistry": {"path": "backend/internal/extension/kernel/capability/registry.go", "type": "ToolRegistry"},
+    "executionPipeline": {"path": "backend/internal/extension/kernel/execution/pipeline.go", "type": "ExecutionPipeline"},
+    "permissionDefinitionRegistry": {"path": "backend/internal/extension/kernel/permission/definition.go", "type": "PermissionDefinition (+ host_api/permission_mapping.go)"},
+    "permissionBroker": {"path": "backend/internal/extension/kernel/permission/broker.go", "type": "DefaultPermissionBroker"},
+    "runtimeBinding": {"path": "backend/internal/extension/kernel/capability/runtime_adapter.go", "type": "RuntimeBinding + RuntimeType"},
+    "runtimeAdapterRegistry": {"path": "backend/internal/extension/kernel/capability/executor.go", "type": "RuntimeAdapterRegistry"},
+    "runtimeHost": {"path": "backend/internal/runtimehost/host.go", "type": "RuntimeHost"},
+    "runtimeOrchestrator": {"path": "backend/internal/runtimeorchestrator/orchestrator.go", "type": "RuntimeOrchestrator"},
+    "officialResourceUriScheme": {"scheme": "amitia", "path": "backend/pkg/resourceuri/", "note": "唯一官方跨平台资源Scheme"},
+    "manifestSystem": {"path": "backend/internal/extension/kernel/manifest_v2/", "version": "v2"},
+    "lifecycleSystem": {"path": "Extension Kernel Saga", "components": ["package_install_saga", "package_update_saga", "package_rollback_uninstall_saga"]},
+    "globalStateStore": {"count": 0, "note": "Domain各自持有状态，无Global State Store"},
+    "globalErrorRegistry": {"count": 0, "note": "Domain各自持有错误语义，无Global Error Registry"}
+  },
+
+  "verification": {
+    "allRequiredUniquesAreOne": true,
+    "noGlobalStateStore": true,
+    "noGlobalErrorRegistry": true,
+    "result": "PASS"
+  }
+}

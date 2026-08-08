@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop执行域分类矩阵",
+
+  "domains": [
+    {
+      "capability": "Backend Filesystem",
+      "executionDomain": "HOST_INTERNAL",
+      "authority": "RuntimeHost / Go Backend",
+      "runtimeBinding": "builtin/internal"
+    },
+    {
+      "capability": "Backend HTTP Client",
+      "executionDomain": "HOST_INTERNAL",
+      "authority": "RuntimeHost / Go Backend",
+      "runtimeBinding": "builtin/internal"
+    },
+    {
+      "capability": "Process Management",
+      "executionDomain": "EXTERNAL_PROCESS",
+      "authority": "ProcessManager",
+      "runtimeBinding": "host_internal"
+    },
+    {
+      "capability": "Desktop Menu Actions",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "DesktopHost + DesktopActionBridge",
+      "runtimeBinding": "desktop_extension"
+    },
+    {
+      "capability": "Desktop Tray Actions",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "DesktopHost + DesktopActionBridge",
+      "runtimeBinding": "desktop_extension"
+    },
+    {
+      "capability": "Desktop Shortcuts",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "DesktopHost",
+      "runtimeBinding": "desktop_extension"
+    },
+    {
+      "capability": "Desktop Navigation",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "DesktopActionBridge -> ExecutionPipeline",
+      "runtimeBinding": "desktop_extension"
+    },
+    {
+      "capability": "Desktop Dialog",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "DesktopActionBridge -> ExecutionPipeline",
+      "runtimeBinding": "desktop_extension"
+    },
+    {
+      "capability": "Desktop Contributions",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "DesktopHost",
+      "runtimeBinding": "desktop_extension"
+    },
+    {
+      "capability": "Desktop Snapshot",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "DesktopHost",
+      "runtimeBinding": "desktop_extension"
+    },
+    {
+      "capability": "Extension Tool Invoke",
+      "executionDomain": "HOST_INTERNAL",
+      "authority": "ExecutionPipeline",
+      "runtimeBinding": "javascript/wasm/etc"
+    },
+    {
+      "capability": "Electron UI Operations",
+      "executionDomain": "DESKTOP_NATIVE",
+      "authority": "Electron Main Process",
+      "runtimeBinding": "NOT_APPLICABLE"
+    }
+  ]
+}

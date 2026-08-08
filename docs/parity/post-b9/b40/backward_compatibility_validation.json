@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B40",
+  "existingToolDefinitionsStillValid": true,
+  "existingModelToolsCompatible": true,
+  "existingBuiltinToolsCompatible": true,
+  "existingMCPToolsCompatible": true,
+  "existingWorkflowToolsCompatible": true,
+  "existingInternalToolsCompatible": true,
+  "note": "PASS_NO_CODE_CHANGE guarantees full backward compatibility by construction."
+}

@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:10:00+08:00",
+  "description": "iOS Bridge合同 - 请求/响应的传播语义",
+
+  "transport": {
+    "type": "MethodChannel (Flutter/Dart <-> Swift)",
+    "channel": "com.amitia.amitia_app/runtime (Android/iOS共享现有通道)",
+    "reuse": true,
+    "newChannelCreated": false,
+    "note": "复用A/B线已冻结的IPC桥，通过消息语义区分平台请求"
+  },
+
+  "request": {
+    "dto": "IOSBridgeRequest",
+    "fields": {
+      "protocolVersion": "int - 协议版本，当前=1",
+      "requestId": "string - 请求ID，支持并发和错误关联",
+      "operation": "string - 操作名(对应binding.HandlerName)",
+      "payload": "map[string]any - 业务参数"
+    },
+    "identity": "每个请求必须有唯一requestId"
+  },
+
+  "response": {
+    "dto": "IOSBridgeResponse",
+    "fields": {
+      "protocolVersion": "int - 协议版本",
+      "requestId": "string - 对应请求ID",
+      "status": "string - 执行状态 (success/failed/cancelled/timeout)",
+      "result": "map[string]any - 业务结果(含text/resourceUri等标准字段)",
+      "error": "IOSError - 失败时的结构化错误"
+    }
+  },
+
+  "cancellation": {
+    "propagation": "Kernel ctx cancellation → RuntimeAdapter → iOS Provider → Bridge",
+    "responseStatus": "cancelled",
+    "pendingCleanup": "请求完成后清理"
+  },
+
+  "deadline": {
+    "kernelDeadline": "Kernel deadline必须传播到Provider执行层",
+    "adapterMustNotReset": "Adapter不得将deadline重置为无限时长",
+    "responseStatus": "timeout"
+  },
+
+  "context": {
+    "traceId": "如果现有Invocation有TraceID必须继续传递",
+    "invocationId": "作为Bridge requestId",
+    "scope": "保留在Kernel层，不暴露给Bridge payload",
+    "workspace": "保留在Kernel层，不暴露给Bridge payload"
+  },
+
+  "error": {
+    "bridgeErrorCodes": [
+      "BRIDGE_DISCONNECTED - 传输层断连",
+      "BRIDGE_TIMEOUT - 传输超时",
+      "BRIDGE_INVALID_RESPONSE - 响应解析失败"
+    ],
+    "domainErrorCodes": [
+      "PROVIDER_UNAVAILABLE - Provider不可用",
+      "AUTHORIZATION_DENIED - 授权被拒绝",
+      "USER_ACTION_REQUIRED - 需用户操作(系统设置等)",
+      "PLATFORM_NOT_SUPPORTED - 平台不支持"
+    ],
+    "mapping": "所有Bridge/Provider错误映射到统一ToolError"
+  },
+
+  "version": 1
+}

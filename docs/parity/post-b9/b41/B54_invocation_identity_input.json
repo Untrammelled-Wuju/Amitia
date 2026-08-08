@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "nextOwner": "B54 idempotency step",
+  "logicalInvocationIdentity": "ToolInvocationContext.InvocationID",
+  "attemptIdentity": "NOT_APPLICABLE (no attempt context yet)",
+  "parentChildIdentity": "ToolInvocationContext.ParentID",
+  "resultCorrelation": "UnifiedToolResult.InvocationID",
+  "note": "B41 preserves logical invocation identity for idempotency-step consumption."
+}

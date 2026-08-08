@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "Platform Duplicate System Rollup - 汇总验证三平台之间不存在重复Canonical系统",
+
+  "rollupScope": ["B19 Android PlatformAdapter", "B20 iOS PlatformAdapter", "B21 Desktop PlatformAdapter"],
+
+  "duplicateChecks": [
+    {
+      "system": "RuntimeAdapterRegistry",
+      "android": "shared (1 registry for all adapters)",
+      "ios": "shared (1 registry for all adapters)",
+      "desktop": "shared (1 registry for all adapters)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "PermissionBroker",
+      "android": "shared (1 broker for kernel permission)",
+      "ios": "shared (1 broker for kernel permission)",
+      "desktop": "shared (1 broker for kernel permission)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "ExecutionPipeline",
+      "android": "shared (1 pipeline for execution)",
+      "ios": "shared (1 pipeline for execution)",
+      "desktop": "shared (1 pipeline for execution)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "RuntimeHost",
+      "android": "shared (1 runtime host)",
+      "ios": "shared (1 runtime host)",
+      "desktop": "shared (1 runtime host)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "RuntimeOrchestrator",
+      "android": "shared (1 orchestrator)",
+      "ios": "shared (1 orchestrator)",
+      "desktop": "shared (1 orchestrator)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "RuntimeBindingAuthority",
+      "android": "shared (1 binding semantics)",
+      "ios": "shared (1 binding semantics)",
+      "desktop": "shared (1 binding semantics)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "ToolRegistry",
+      "android": "shared (1 tool registry)",
+      "ios": "shared (1 tool registry)",
+      "desktop": "shared (1 tool registry)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "StateStore",
+      "android": "shared (1 invocation state store)",
+      "ios": "shared (1 invocation state store)",
+      "desktop": "shared (1 invocation state store)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    },
+    {
+      "system": "ResourceURISystem",
+      "android": "shared (1 amiti:// schema)",
+      "ios": "shared (1 amiti:// schema)",
+      "desktop": "shared (1 amiti:// schema)",
+      "expectedCount": 1,
+      "actualCount": 1,
+      "status": "PASS"
+    }
+  ],
+
+  "summary": {
+    "totalChecks": 9,
+    "passCount": 9,
+    "failCount": 0,
+    "duplicateCount": 0
+  },
+
+  "noNewPlatformToolRegistry": true,
+  "noNewPlatformPermissionSystem": true,
+  "noNewPlatformExecutionPipeline": true,
+  "noNewRuntimeAdapterRegistry": true,
+  "noNewRuntimeHost": true,
+  "noNewRuntimeOrchestrator": true,
+  "noNewPlatformStateStore": true,
+  "noNewResourceUriSystem": true,
+
+  "statement": "验证三个平台之间不存在任何重复Canonical系统。所有核心系统均为唯一实例，被三个Platform Adapter共享。总体重复系统数量为0。"
+}

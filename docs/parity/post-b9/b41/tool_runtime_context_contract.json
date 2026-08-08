@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "staticRuntimeBinding": "ToolDefinition.Runtime (RuntimeBinding)",
+  "dynamicRuntimeTarget": "NOT_APPLICABLE (single RuntimeBinding per definition; platform selection is done at the host side)",
+  "runtimeAdapter": "RuntimeAdapterRegistry.Resolve(tool.Runtime) from capability/executor.go",
+  "providerProjection": "Every adapter Execute receives ToolInvocationContext; no adapter maintains its own global context authority",
+  "providerDoesNotReadGlobalAgentState": true
+}

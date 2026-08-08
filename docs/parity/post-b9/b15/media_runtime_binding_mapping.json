@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "note": "Runtime Binding从B9P8 final_runtime_manifest读取。无新增Binding。",
+  "mappings": {
+    "imageGeneration": {
+      "runtimeBinding": "INTERNAL_DOMAIN_CALL",
+      "note": "Image generation invoked by Chat Pipeline or Agent Tool"
+    },
+    "vision": {
+      "runtimeBinding": "INTERNAL_DOMAIN_CALL",
+      "note": "Vision invoked via Chat Completions API"
+    },
+    "asr": {
+      "runtimeBinding": "INTERNAL_DOMAIN_CALL",
+      "note": "ASR invoked via Realtime session"
+    },
+    "tts": {
+      "runtimeBinding": "INTERNAL_DOMAIN_CALL",
+      "note": "TTS invoked by Chat Pipeline or Agent Tool"
+    },
+    "realtime": {
+      "runtimeBinding": "SESSION_BASED",
+      "note": "WebSocket session managed by Realtime domain"
+    },
+    "browser": {
+      "runtimeBinding": "RuntimeTypeBrowser (B14 added)",
+      "note": "Browser contract created in B14"
+    }
+  },
+  "newBindingCreated": false
+}

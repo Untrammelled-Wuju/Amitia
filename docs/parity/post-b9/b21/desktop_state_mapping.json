@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop状态映射",
+
+  "stateLayers": {
+    "toolExecutionState": {
+      "owner": "ExecutionPipeline",
+      "path": "backend/internal/extension/kernel/execution/",
+      "note": "Tool执行状态由ExecutionPipeline管理"
+    },
+    "runtimeHostState": {
+      "owner": "RuntimeHost",
+      "path": "backend/internal/runtimehost/",
+      "note": "RuntimeHost状态管理"
+    },
+    "processState": {
+      "owner": "ProcessManager",
+      "path": "backend/internal/platform/process/",
+      "note": "外部进程状态由ProcessManager管理"
+    },
+    "adapterAvailability": {
+      "owner": "DesktopRuntimeAdapter.Health()",
+      "path": "backend/internal/extension/kernel/capability/adapter_desktop.go",
+      "note": "Adapter健康状态基于DesktopHostProvider"
+    },
+    "providerHealth": {
+      "owner": "DesktopHostProvider.Health()",
+      "path": "backend/internal/extension/kernel/desktop/desktop_provider.go",
+      "note": "Provider健康状态基于DesktopHost状态"
+    },
+    "osAuthorization": {
+      "owner": "platform/provider",
+      "note": "OS授权状态由平台Provider查询，Adapter不保存"
+    },
+    "desktopHostState": {
+      "owner": "DesktopHost",
+      "path": "backend/internal/extension/kernel/desktop/host.go",
+      "note": "Desktop贡献、快照、冲突等桌面状态"
+    }
+  },
+
+  "globalDesktopStateStore": 0,
+  "note": "不存在全局Desktop状态存储，各层状态分散在各自的权威源中"
+}

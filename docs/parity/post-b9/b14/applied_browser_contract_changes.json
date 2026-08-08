@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "generatedAt": "2026-08-08T13:30:00+08:00",
+  "changes": [
+    {
+      "changeId": "B14-CHG-001",
+      "semantic": "browser.provider.contract",
+      "applied": true,
+      "filesCreated": [
+        "backend/internal/browser/types.go",
+        "backend/internal/browser/errors.go",
+        "backend/internal/browser/provider.go",
+        "backend/internal/browser/contract_test.go"
+      ],
+      "testResult": "PASS (10 tests)"
+    },
+    {
+      "changeId": "B14-CHG-002",
+      "semantic": "browser.runtime.binding",
+      "applied": true,
+      "filesModified": [
+        "backend/internal/extension/kernel/capability/runtime_adapter.go"
+      ],
+      "modification": "Added RuntimeTypeBrowser = 'browser' constant"
+    }
+  ]
+}

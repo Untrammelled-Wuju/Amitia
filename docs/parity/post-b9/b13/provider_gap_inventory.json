@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "generatedAt": "2026-08-08T00:15:00+08:00",
+  "note": "B13不实现任何Provider。以下Gap均留待B14和B90-B92。",
+  "deferredProviders": [
+    {
+      "provider": "Android SAF",
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B90"
+    },
+    {
+      "provider": "SFTP",
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B90"
+    },
+    {
+      "provider": "SSH",
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B91"
+    },
+    {
+      "provider": "Git Workspace",
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B92"
+    },
+    {
+      "provider": "iOS File Provider",
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "later"
+    },
+    {
+      "provider": "Browser Download/Upload",
+      "status": "NEW_PROVIDER_REQUIRED",
+      "futureStep": "B14"
+    }
+  ]
+}

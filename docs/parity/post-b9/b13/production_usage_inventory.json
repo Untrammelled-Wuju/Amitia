@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "scannedDirectories": ["backend"],
+  "totalReferences": 19,
+  "usageByFile": [
+    {
+      "file": "backend/config/config.go",
+      "line": 698,
+      "usage": "resourceuri.Parse(raw)",
+      "purpose": "解析配置中的"
+    },
+    {
+      "file": "backend/internal/scriptruntime/sidecar/resolver.go",
+      "usage": "PhysicalRootsFromRuntimePaths, NewPhysicalResolver, Parse",
+      "purpose": "Sidecar脚本运行时的资源解析"
+    },
+    {
+      "file": "backend/internal/scriptruntime/nodeenv/resolver.go",
+      "usage": "PhysicalRootsFromRuntimePaths, NewPhysicalResolver, Parse(2处)",
+      "purpose": "Node.js环境候选与资源解析"
+    },
+    {
+      "file": "backend/internal/vectorstore/qdrantlayout/resolver.go",
+      "usage": "PhysicalRootsFromRuntimePaths, NewPhysicalResolver, MustParse(2处)",
+      "purpose": "Qdrant配置/数据路径解析"
+    },
+    {
+      "file": "backend/internal/vectorstore/qdrantenv/resolver.go",
+      "usage": "Parse, PhysicalRootsFromRuntimePaths, NewPhysicalResolver(2处)",
+      "purpose": "Qdrant环境资源解析"
+    },
+    {
+      "file": "backend/internal/vectorstore/qdrantenv/candidates.go",
+      "usage": "Parse",
+      "purpose": "Qdrant候选URI解析"
+    },
+    {
+      "file": "backend/internal/extension/kernel/script_host/resolver.go",
+      "usage": "PhysicalRootsFromRuntimePaths, NewPhysicalResolver, Parse (2处)",
+      "purpose": "Extension脚本宿主资源解析"
+    }
+  ],
+  "keyObservations": [
+    "PhysicalRootsFromRuntimePaths + NewPhysicalResolver 是生产标准初始化模式，已在5个独立调用方复用",
+    "MustParse 用于程序内部已知安全URI；Parse 用于外部输入URI",
+    "amitia://runtime/ 和 amitia://config/providers/qdrant 等已由生产调用方明确使用",
+    "Reverse 已在测试中验证被 sidecar/nodeenv resolver 内部间接使用（通过ResourceResolver接口）"
+  ]
+}

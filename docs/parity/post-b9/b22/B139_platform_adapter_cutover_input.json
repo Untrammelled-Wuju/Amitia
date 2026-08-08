@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B139 Platform Adapter Cutover输入",
+
+  "android": {
+    "canonicalAdapter": "androidRuntimeAdapter",
+    "path": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+    "runtimeType": "RuntimeTypeAndroid_Native",
+    "runtimeBinding": "android_native",
+    "registrationPath": "backend/internal/extension/kernel/adapter_registration.go"
+  },
+
+  "ios": {
+    "canonicalAdapter": "iosRuntimeAdapter",
+    "path": "backend/internal/extension/kernel/capability/adapter_ios_native.go",
+    "runtimeType": "RuntimeTypeIOS_Native",
+    "runtimeBinding": "ios_native",
+    "registrationPath": "backend/internal/extension/kernel/adapter_registration.go"
+  },
+
+  "desktop": {
+    "canonicalAdapter": "desktopRuntimeAdapter",
+    "path": "backend/internal/extension/kernel/capability/adapter_desktop.go",
+    "runtimeType": "RuntimeTypeDesktop_Extension",
+    "runtimeBinding": "desktop_extension",
+    "registrationPath": "backend/internal/extension/kernel/adapter_registration.go"
+  },
+
+  "productionEntryConditions": [
+    "所有三个Adapter已通过B22 Conformance验证",
+    "RuntimeAdapterRegistry唯一性已确认",
+    "PermissionBroker/ExecutionPipeline/ToolRegistry唯一性已确认",
+    "无Production Fake注册",
+    "无Legacy Runtime Binding",
+    "Backward Compatibility验证通过"
+  ],
+
+  "testOnlyFakeList": [],
+
+  "legacyBindingList": [],
+
+  "cutoverPrerequisites": {
+    "conformanceAccepted": true,
+    "contractConflict": false,
+    "duplicateSystem": 0,
+    "bypassCount": 0,
+    "productionFake": 0,
+    "legacyBinding": 0
+  }
+}

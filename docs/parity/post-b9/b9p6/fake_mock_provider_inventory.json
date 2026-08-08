@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "scanResults": [
+    {
+      "id": "BEHAVIOR_ADAPTERS",
+      "path": "backend/internal/desktoppet/behavior/adapters/",
+      "classification": "DOMAIN_ADAPTER",
+      "description": "Desktop Pet behavior adapters (voice, tool, playback, etc) - NOT Fake/Mock",
+      "productionUsage": true,
+      "category": "DOMAIN_COMPONENT"
+    },
+    {
+      "id": "NOOP_PUBLISHER",
+      "path": "backend/cmd/server/services.go:1150",
+      "classification": "PRODUCTION_INFRASTRUCTURE",
+      "description": "NoopPublisher for non-critical event types - accepted infrastructure pattern"
+    },
+    {
+      "id": "NOOP_PROVIDERS_FOR_TESTING",
+      "path": "**/*_test.go",
+      "classification": "TEST_ONLY",
+      "description": "Test doubles and fakes in test files"
+    },
+    {
+      "id": "CONTEXT_LOADER_REGISTRY",
+      "path": "backend/internal/interaction/context_loader.go",
+      "classification": "DOMAIN_REGISTRY",
+      "description": "Runtime context loaders (profile, channel, conversation, etc) - not Fake"
+    },
+    {
+      "id": "PROVIDER_REGISTRY",
+      "path": "backend/internal/runtimeorchestrator/provider_registry.go",
+      "classification": "DOMAIN_REGISTRY",
+      "description": "Runtime component providers - not Fake"
+    },
+    {
+      "id": "CIRCUIT_BREAKER_REGISTRY",
+      "path": "backend/internal/mindruntime/circuit_breaker.go",
+      "classification": "INFRASTRUCTURE",
+      "description": "Circuit breaker registry for resilience - not Fake"
+    }
+  ],
+  "summary": {
+    "TEST_ONLY": 1,
+    "DEV_ONLY": 0,
+    "MIGRATION_ONLY": 0,
+    "PRODUCTION_FALLBACK": 0,
+    "PRODUCTION_REQUIRED": 1,
+    "PRODUCTION_FAKE_NO_FALLBACK": 0,
+    "UNKNOWN": 0
+  },
+  "productionFakeCount": 0
+}

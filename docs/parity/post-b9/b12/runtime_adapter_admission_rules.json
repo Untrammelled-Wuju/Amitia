@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime Adapter Admission Rules - 后续Provider接入的唯一准入规则",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "admissionRules": [
+    {
+      "ruleId": "ADM-001",
+      "name": "new provider must use canonical runtime binding",
+      "description": "所有新Platform Provider必须通过RuntimeBinding声明运行时类型",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-002",
+      "name": "new provider must not use legacy runtime adapter",
+      "description": "新Android/iOS/Desktop/Browser/Workspace Provider不得绑定RuntimeTypeLegacy",
+      "enforcement": "HARD_BLOCK",
+      "note": "B9P6已冻结Legacy Runtime Adapter迁移边界"
+    },
+    {
+      "ruleId": "ADM-003",
+      "name": "new provider must not bypass permission",
+      "description": "Adapter/Provider执行前必须经过PermissionBroker.Evaluate()",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-004",
+      "name": "new provider must not bypass execution pipeline",
+      "description": "所有Tool执行必须经过ExecutionPipeline (包括PermissionGate/ScopeGate/AvailabilityGate等)",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-005",
+      "name": "new provider must normalize result",
+      "description": "Provider返回结果必须通过Adapter归一为UnifiedToolResult",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-006",
+      "name": "new provider must propagate cancellation",
+      "description": "Provider必须支持ctx cancellation传播",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-007",
+      "name": "new provider must propagate deadline",
+      "description": "Provider必须遵守context deadline",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-008",
+      "name": "no raw secret in binding metadata",
+      "description": "RuntimeBinding.Metadata禁止包含token/password/private key/API key",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-009",
+      "name": "no second runtime adapter registry",
+      "description": "必须注册到现有RuntimeAdapterRegistry，禁止新建PlatformAdapterRegistry2",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-010",
+      "name": "no direct agent-to-provider call",
+      "description": "Agent/Chat/Tool/Workflow/Schedule不得绕过Kernel直接调用Platform Provider.Execute",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-011",
+      "name": "no second platform tool registry",
+      "description": "Platform Provider不得拥有独立全局Tool Registry",
+      "enforcement": "HARD_BLOCK"
+    },
+    {
+      "ruleId": "ADM-012",
+      "name": "no second permission center",
+      "description": "Platform Provider不得拥有独立Permission Store / Broker",
+      "enforcement": "HARD_BLOCK"
+    }
+  ]
+}

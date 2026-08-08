@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "generatedAt": "2026-08-08T00:15:00+08:00",
+  "b9p8Status": "PASS",
+  "b9p8ManifestId": "AMITIA-POST-B9-RESOLVED-V1",
+  "reuseMatrixEntry": {
+    "stepId": "B13",
+    "name": "Workspace合同",
+    "primaryMode": "EXTEND",
+    "canonicalSystems": ["RESOURCE_URI (backend/pkg/resourceuri/)"],
+    "allowedNewComponents": [],
+    "mustReuse": ["ResourceURI", "ResourceScheme"],
+    "mustExtend": ["amitia:// plan补全"],
+    "forbiddenDuplicates": ["ResourceResolver2", "WorkspaceURI2", "ResourceScheme2"]
+  },
+  "inputFiles": [
+    "docs/parity/post-b9/b9p8/b9p8_status.json",
+    "docs/parity/post-b9/b9p8/final_step_reuse_matrix.json",
+    "docs/parity/post-b9/b9p8/final_capability_manifest.json",
+    "docs/parity/post-b9/b9p8/final_provider_manifest.json",
+    "docs/parity/post-b9/b9p8/final_runtime_manifest.json",
+    "docs/parity/post-b9/b9p8/final_permission_manifest.json",
+    "docs/parity/post-b9/b9p8/final_canonical_system_manifest.json",
+    "docs/parity/post-b9/b9p8/final_execution_guard.json",
+    "docs/parity/post-b9/b9p8/resolved_post_b9_manifest.json"
+  ],
+  "sourceFilesAudited": [
+    "backend/pkg/resourceuri/resource_uri.go",
+    "backend/pkg/resourceuri/resource_root.go",
+    "backend/pkg/resourceuri/resolver.go",
+    "backend/pkg/resourceuri/physical_resolver.go",
+    "backend/pkg/resourceuri/errors.go",
+    "backend/pkg/resourceuri/resource_uri_test.go",
+    "backend/pkg/resourceuri/physical_resolver_test.go"
+  ]
+}

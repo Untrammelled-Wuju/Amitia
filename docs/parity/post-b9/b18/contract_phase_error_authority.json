@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Error Authority - 确认Domain Error由各自Domain持有，无Global Error Registry",
+
+  "domains": {
+    "toolExecution": {
+      "owner": "ToolError (capability/result.go) - 14种ErrorCode常量",
+      "protocolProjection": "B9P5 Protocol Error Mapping"
+    },
+    "browser": {
+      "owner": "BrowserError (B14 backend/internal/browser/errors.go) - 11种errorCodes",
+      "protocolProjection": "B9P5 protocol error mapping"
+    },
+    "mediaImage": {
+      "owner": "ProviderError (errors.go)",
+      "protocolProjection": "IMAGE_* error codes"
+    },
+    "mediaVision": {
+      "owner": "HTTP status codes + Chat Model errors",
+      "protocolProjection": "N/A (no dedicated Vision error domain)"
+    },
+    "mediaAsr": {
+      "owner": "ASR provider errors propagated via Realtime",
+      "protocolProjection": "N/A"
+    },
+    "mediaTts": {
+      "owner": "fmt.Errorf wrapping of provider errors",
+      "protocolProjection": "N/A"
+    },
+    "mediaRealtime": {
+      "owner": "WebSocket/protocol errors",
+      "protocolProjection": "interaction_voice error class"
+    },
+    "model": {
+      "owner": "TextModelCallError (model_error.go)",
+      "protocolProjection": "chat_model error class"
+    },
+    "voice": {
+      "owner": "Voice errors (voice_entry.go: ErrVoiceSessionNotFound/ErrVoiceTurnCancelled/ErrVoiceBusy)",
+      "protocolProjection": "interaction_voice"
+    },
+    "workflow": {
+      "owner": "Workflow errors (workflow/errors.go: 9 types)",
+      "protocolProjection": "capability"
+    },
+    "task": {
+      "owner": "TaskErrorCode (task_runtime/errors.go: 10 codes)",
+      "protocolProjection": "capability"
+    },
+    "event": {
+      "owner": "Event errors (event/errors.go)",
+      "protocolProjection": "capability"
+    },
+    "hook": {
+      "owner": "HookErrorCode (hook/errors.go: 9 codes)",
+      "protocolProjection": "capability"
+    },
+    "schedule": {
+      "owner": "Schedule errors (schedule/errors.go)",
+      "protocolProjection": "capability"
+    }
+  },
+
+  "domainErrorSemanticLoss": 0,
+  "globalErrorRegistryCreated": 0,
+  "result": "PASS - 所有Domain Error由各自Domain持有，Protocol仅做Projection，无Global Error Registry"
+}

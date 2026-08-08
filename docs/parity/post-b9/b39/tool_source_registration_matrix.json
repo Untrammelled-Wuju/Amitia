@@ -1,0 +1,63 @@
+[
+  {
+    "source": "builtin",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "internal",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "mcp",
+    "canonicalEntry": "ToolFacade.SyncMCPTools -> ToolRegistry.Replace",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "plugin",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "workflow",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "javascript",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "task",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "trusted_service",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "wasm",
+    "canonicalEntry": "ToolFacade.Replace via container wiring",
+    "legacyEntry": "",
+    "productionCanonicalOnly": true
+  },
+  {
+    "source": "legacy_tool",
+    "canonicalEntry": "",
+    "legacyEntry": "backend/internal/agent/tool/registry.go (frozen, no-op SyncLegacyTools)",
+    "productionCanonicalOnly": false,
+    "note": "FrozenLegacy. FinalCutover=B140/B141. No new registration allowed."
+  }
+]

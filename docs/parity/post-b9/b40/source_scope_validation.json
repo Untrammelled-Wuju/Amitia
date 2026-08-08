@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B40",
+  "modifiedFiles": [],
+  "allowedFiles": [],
+  "unexpectedFiles": [],
+  "goModChanged": false,
+  "goSumChanged": false,
+  "databaseChanged": false,
+  "note": "PASS_NO_CODE_CHANGE."
+}

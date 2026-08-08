@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39-B54",
+  "sourceStep": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "B39-B54 Execution Kernel Gap输入 - 来自B10/B12的Deferred Gap",
+
+  "executionKernelGaps": [
+    {"gap": "Retry Engine实现", "source": "B10 DEF-B39-B54-001", "policy": "ToolExecutionPolicy.RetryPolicy (声明已有)"},
+    {"gap": "Timeout Controller实现", "source": "B10 DEF-B39-B54-002", "policy": "ToolExecutionPolicy.Timeout (声明已有)"},
+    {"gap": "Rate Limiter实现", "source": "B10 DEF-B39-B54-003", "policy": "未声明MaxRate字段"},
+    {"gap": "Circuit Breaker实现", "source": "B10 DEF-B39-B54-004", "policy": "RuntimeOrchestrator已有Health/Circuit"},
+    {"gap": "Concurrency Controller实现", "source": "B10 DEF-B39-B54-005", "policy": "ToolExecutionPolicy.MaxConcurrency (声明已有)"},
+    {"gap": "Idempotency Store实现", "source": "B10 DEF-B39-B54-006", "policy": "ToolDefinition.Idempotent/IdempotencyKey (声明已有)"},
+    {"gap": "Resource Limits Accounting", "source": "B10 DEF-B39-B54-007", "policy": "ResourceLimits (MaxMemoryBytes/MaxCPUPercent)"},
+    {"gap": "Streaming执行支持", "source": "B10 DEF-B39-B54-008", "policy": "ToolContent.Stream (声明已有)"},
+    {"gap": "Cancellation Controller实现", "source": "B10 DEF-B39-B54-009", "policy": "ToolResultStatusCancelled (状态声明已有)"},
+    {"gap": "Execution Audit Pipeline", "source": "B10 DEF-B39-B54-010", "policy": "未声明Audit字段"}
+  ],
+
+  "frozenContracts": {
+    "executionPipelineInterface": "ExecutionPipeline 13种Gate不可破坏性修改",
+    "permissionBroker": "PermissionBroker.Evaluate()签名不可修改",
+    "toolResultType": "UnifiedToolResult结构不可修改"
+  }
+}

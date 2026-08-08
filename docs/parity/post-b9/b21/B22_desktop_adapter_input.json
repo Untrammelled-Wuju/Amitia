@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "B22 Desktop Adapter Conformance输入",
+
+  "inputManifest": {
+    "canonicalAdapter": {
+      "name": "desktopRuntimeAdapter",
+      "path": "backend/internal/extension/kernel/capability/adapter_desktop.go",
+      "runtimeType": "RuntimeTypeDesktop_Extension"
+    },
+    "runtimeBinding": {
+      "type": "RuntimeTypeDesktop_Extension",
+      "resolution": "RuntimeAdapterRegistry.Resolve(binding)"
+    },
+    "registration": {
+      "path": "backend/internal/extension/kernel/adapter_registration.go",
+      "registrationCall": "registry.Register(capability.RuntimeTypeDesktop_Extension, desktopAdapter)",
+      "uniqueness": "single registration"
+    },
+    "requestContract": {
+      "type": "DesktopBridgeRequest",
+      "fields": ["protocolVersion", "requestId", "operation", "payload"]
+    },
+    "resultContract": {
+      "type": "DesktopBridgeResponse",
+      "statuses": ["success", "error", "cancelled", "timeout"],
+      "fields": ["protocolVersion", "requestId", "status", "result", "error"]
+    },
+    "errorContract": {
+      "mapping": "DesktopError -> ToolError",
+      "codes": ["PROVIDER_UNAVAILABLE", "AUTHORIZATION_DENIED", "PLATFORM_NOT_SUPPORTED", "CONFLICT", "NOT_FOUND"]
+    },
+    "cancellation": {
+      "supported": true,
+      "mechanism": "select ctx.Done() -> ToolResultStatusCancelled"
+    },
+    "availability": {
+      "providerNil": "returns ErrorCodeNotAvailable",
+      "healthCheck": "Health() method implemented"
+    },
+    "platformSelection": {
+      "strategy": "single adapter for all desktop platforms",
+      "windows": "SUPPORTED",
+      "macos": "SUPPORTED",
+      "linux": "SUPPORTED"
+    }
+  }
+}

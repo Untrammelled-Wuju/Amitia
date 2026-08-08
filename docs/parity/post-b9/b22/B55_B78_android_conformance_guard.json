@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B22",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B55-B78 Android Provider Conformance Guard",
+
+  "guard": {
+    "B55_B61_android_linux": {
+      "executionDomain": "Embedded Linux Runtime",
+      "canonicalRuntime": "Reuse A-line RuntimeHost / RuntimeOrchestrator",
+      "authority": "backend/internal/runtimehost/host.go",
+      "statement": "B55-B61的Linux能力（终端、文件系统、shell等）必须复用A线已有的RuntimeHost/RuntimeOrchestrator基础设施，不得通过Android Platform Adapter复制。"
+    },
+    "B62_B78_android_native": {
+      "executionDomain": "Android Native",
+      "canonicalRuntime": "Android Platform RuntimeAdapter + Native Provider",
+      "authority": "backend/internal/extension/kernel/capability/adapter_android_native.go",
+      "statement": "B62-B78的Android平台特有能力（通知、剪贴板、窗口管理等）通过Android Platform Adapter的Native Provider执行，复用RuntimeAdapterRegistry注册。"
+    }
+  },
+
+  "boundary": {
+    "androidEmbeddedLinux": {
+      "owner": "A-line RuntimeHost/RuntimeOrchestrator",
+      "adapter": "Indirect (not Android Platform Adapter)",
+      "examples": ["terminal", "filesystem", "shell commands"]
+    },
+    "androidNative": {
+      "owner": "Android Platform Adapter",
+      "adapter": "androidRuntimeAdapter",
+      "runtimeType": "android_native",
+      "examples": ["notifications", "clipboard", "window management", "media"]
+    }
+  },
+
+  "conformanceRules": [
+    "B55-B61不得通过android_native RuntimeBinding路由Linux能力",
+    "B62-B78不得绕过Android Platform Adapter直接调用RuntimeHost",
+    "所有Android Provider的RuntimeAdapter必须注册到同一个RuntimeAdapterRegistry",
+    "所有Android Provider的结果必须归一化为UnifiedToolResult",
+    "所有Android Provider的错误必须映射为ToolError"
+  ]
+}

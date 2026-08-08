@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B43",
+  "layers": {
+    "Caller": "PASS (context cancellation enters via request scope)",
+    "ToolFacade": "PASS (forwards ctx to ExecutionPipeline)",
+    "ExecutionPipeline": "PASS (CancellationController.Wrap + ctx-wide select)",
+    "ToolStream": "NOT_PRESENT (B42 无 Tool Stream)",
+    "RuntimeDispatcher": "PASS (DefaultToolExecutor 透传 ctx)",
+    "RuntimeAdapter": "PASS (all adapters select ctx.Done())",
+    "Provider": "PASS (platform adapters + JS ctx passthrough)",
+    "FinalResult": "PASS (UnifiedToolResult.Status = Cancelled)"
+  }
+}

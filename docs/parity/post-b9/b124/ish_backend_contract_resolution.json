@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T17:30:00+08:00",
+  "description": "B124 Backend合约解决(BLOCKED - 预期)",
+
+  "status": "BLOCKED",
+  "reason": "iSH源码未引入",
+
+  "contractResolutionOnceUnblocked": {
+    "authorityBoundaryFile": "backend/internal/extension/kernel/sandbox/",
+    "backendAuthority": {
+      "ownership": "execution + filesystem + terminal state (iSH domain only)",
+      "NOT": [
+        "Amitia lifecycle",
+        "Amitia permission",
+        "Amitia resource",
+        "Amitia state"
+      ]
+    },
+    "errorMappingFile": "sandbox/errors.go (expected creation)",
+    "lifecycle": "仅转调RuntimeHost - 不自行管理"
+  }
+}

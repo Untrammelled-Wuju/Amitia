@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop Adapter差距分析矩阵",
+
+  "gaps": [
+    {
+      "semantic": "RuntimeTypeDesktop_Extension常量",
+      "b18Requirement": "Desktop Adapter需要在RuntimeAdapterRegistry中注册",
+      "existingSupport": [],
+      "status": "MISSING",
+      "action": "在runtime_adapter.go中添加RuntimeTypeDesktop_Extension常量",
+      "targetPath": "backend/internal/extension/kernel/capability/runtime_adapter.go"
+    },
+    {
+      "semantic": "Desktop RuntimeAdapter实现",
+      "b18Requirement": "Desktop必须实现RuntimeAdapter接口(Supports/Execute/Health)",
+      "existingSupport": [
+        "DesktopActionBridge已实现ExecuteAction但未接入RuntimeAdapterRegistry",
+        "DesktopHost已实现InvokeAction但未标准化为UnifiedToolResult"
+      ],
+      "status": "MISSING",
+      "action": "创建adapter_desktop.go实现RuntimeAdapter接口",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_desktop.go"
+    },
+    {
+      "semantic": "Desktop Adapter注册",
+      "b18Requirement": "Desktop Adapter必须在adapter_registration.go中注册到RuntimeAdapterRegistry",
+      "existingSupport": ["adapter_registration.go已有RegisterProductionAdapters函数"],
+      "status": "MISSING",
+      "action": "在RegisterProductionAdapters中添加Desktop Adapter注册",
+      "targetPath": "backend/internal/extension/kernel/adapter_registration.go"
+    },
+    {
+      "semantic": "Context/Cancellation传播",
+      "b18Requirement": "RuntimeAdapter必须支持ctx cancellation传播",
+      "existingSupport": ["DesktopActionBridge已接收ctx参数"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "确保新Adapter使用select等待ctx.Done()",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_desktop.go"
+    },
+    {
+      "semantic": "Deadline传播",
+      "b18Requirement": "RuntimeAdapter必须传播ctx deadline",
+      "existingSupport": ["Go context天然支持deadline传播"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "Adapter执行时使用select监听ctx.Done()并在超时时返回TimedOut",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_desktop.go"
+    },
+    {
+      "semantic": "Error标准化",
+      "b18Requirement": "Desktop错误必须映射为ToolError",
+      "existingSupport": ["ToolError定义完整，包含所有错误码"],
+      "status": "MISSING",
+      "action": "在Desktop Adapter中实现mapDesktopError函数",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_desktop.go"
+    },
+    {
+      "semantic": "Health检查",
+      "b18Requirement": "RuntimeAdapter必须实现Health方法",
+      "existingSupport": ["DesktopHost可通过检查permChecker和executor状态判断健康"],
+      "status": "PARTIALLY_SUPPORTED",
+      "action": "Adapter.Health检查DesktopHost是否可用",
+      "targetPath": "backend/internal/extension/kernel/capability/adapter_desktop.go"
+    },
+    {
+      "semantic": "Permission边界保持",
+      "b18Requirement": "Adapter不得保存或决定Permission Grant",
+      "existingSupport": ["DesktopActionBridge已通过PermissionBroker.Check检查权限"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "继续复用PermissionBroker，Adapter不创建新权限存储",
+      "targetPath": "N/A"
+    },
+    {
+      "semantic": "Platform Detection",
+      "b18Requirement": "Desktop Adapter必须正确识别Windows/macOS/Linux",
+      "existingSupport": ["pkg/platform已有各平台Detect()实现"],
+      "status": "ALREADY_SUPPORTED",
+      "action": "使用runtime.GOOS或平台抽象判断",
+      "targetPath": "N/A"
+    },
+    {
+      "semantic": "iOS Adapter实现",
+      "b18Requirement": "B20 iOS Adapter需要RuntimeType",
+      "existingSupport": ["RuntimeTypeAndroid_Native已定义"],
+      "status": "OUTSIDE_B21_SCOPE",
+      "action": "由B20负责",
+      "targetPath": "N/A"
+    },
+    {
+      "semantic": "Clipboard Provider",
+      "b18Requirement": "未来Desktop剪贴板能力",
+      "existingSupport": [],
+      "status": "OUTSIDE_B21_SCOPE",
+      "action": "标记为FUTURE_PROVIDER_GAP，由后续Provider步骤实现",
+      "targetPath": "N/A"
+    },
+    {
+      "semantic": "Notification Provider",
+      "b18Requirement": "未来Desktop通知能力",
+      "existingSupport": [],
+      "status": "OUTSIDE_B21_SCOPE",
+      "action": "标记为FUTURE_PROVIDER_GAP，由后续Provider步骤实现",
+      "targetPath": "N/A"
+    },
+    {
+      "semantic": "Screenshot Provider",
+      "b18Requirement": "未来桌面截图能力",
+      "existingSupport": [],
+      "status": "OUTSIDE_B21_SCOPE",
+      "action": "标记为FUTURE_PROVIDER_GAP，由后续Provider步骤实现",
+      "targetPath": "N/A"
+    }
+  ],
+
+  "summary": {
+    "ALREADY_SUPPORTED": 4,
+    "PARTIALLY_SUPPORTED": 1,
+    "MISSING": 4,
+    "OUTSIDE_B21_SCOPE": 4,
+    "UNKNOWN": 0
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "DESIGN_FROZEN",
+
+  "installation": {
+    "source": "BUNDLED_ROOTFS (Alpine Mini Rootfs x86_64)",
+    "version": "3.20.3 (planned)",
+    "architecture": "x86_64",
+    "digest": "PENDING_BUNDLE_RELEASE",
+    "downloadImport": "IMPLEMENTED_BUNDLED (remote download deferred to B126)",
+    "temporaryStaging": "IMPLEMENTED (RootfsResolver.stagingDirectory)",
+    "integrityVerify": "IMPLEMENTED (SHA-256)",
+    "safeExtract": "IMPLEMENTED (traversal blocked, symlink escape blocked)",
+    "layoutValidation": "IMPLEMENTED (RootfsDescriptor.verifyLayoutPresent)",
+    "activation": "IMPLEMENTED (atomic install marker write)",
+    "completionMarker": "IMPLEMENTED (installed.manifest JSON)",
+    "smokeTest": "DEFERRED_B126"
+  },
+
+  "designNote": "Complete pipeline implemented as iOS ObjC. Real bundling of Alpine tarball and smoke testing requires macOS/Xcode environment."
+}

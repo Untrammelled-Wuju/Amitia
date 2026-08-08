@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "合同阶段安全验证 - 关键安全指标全部为0",
+
+  "directAgentProviderBypass": {
+    "count": 0,
+    "evidence": "B12 runtime_bypass_inventory确认productionCapabilityBypass=0；B14确认Browser访问走完整Kernel链"
+  },
+  "permissionBypass": {
+    "count": 0,
+    "evidence": "B11确认directPermissionBypass=0；B12确认ExecutionPipeline.PermissionGate正确调用PermissionBroker"
+  },
+  "executionBypass": {
+    "count": 0,
+    "evidence": "B12确认所有Tool执行走ExecutionPipeline，无Agent→Provider direct路径"
+  },
+  "runtimeBypass": {
+    "count": 0,
+    "evidence": "B12确认无Agent→RuntimeAdapter/Host direct路径"
+  },
+  "rawSecretInManifest": {
+    "count": 0,
+    "evidence": "B17确认Manifest不存储Secret，凭证通过Encrypted Secret Store"
+  },
+  "rawSecretInRuntimeBinding": {
+    "count": 0,
+    "evidence": "B12确认RuntimeBinding.Metadata不含Secret"
+  },
+  "rawPhysicalPathInPortableContract": {
+    "count": 0,
+    "evidence": "B13 ResourceURI使用逻辑路径(amitia://)，B14 Browser使用ResourceURI而非physicalPath，B15 Media使用ResourceURI"
+  },
+  "unknownPermission": {
+    "count": 0,
+    "evidence": "B11确认undefinedPermission=0，B17确认unknownPermissionReferences=0"
+  },
+  "unknownRuntimeBinding": {
+    "count": 0,
+    "evidence": "B12确认所有RuntimeBinding引用已定义，B17 futureAdapters有明确Step Owner"
+  },
+  "unknownCapability": {
+    "count": 0,
+    "evidence": "B10确认16项Capability语义全部已支持，B17确认Manifest引用已知Capability"
+  },
+  "productionFake": {
+    "count": 0,
+    "evidence": "B14确认productionFakeProvider=0，B15确认所有Provider为真实Provider"
+  },
+
+  "result": "PASS - 全部11项安全指标为0"
+}

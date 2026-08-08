@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "domain": "Provider",
+  "historicalB9States": ["UNREGISTERED", "REGISTERED", "INITIALIZING", "READY", "DEGRADED", "UNAVAILABLE", "FAILED", "DISABLED"],
+  "canonicalDomain": "无统一Provider状态源",
+  "canonicalStates": "各Provider自行维护health/availability",
+  "mappings": [
+    {"b9State": "UNREGISTERED", "canonical": "各Provider registry", "type": "CONTEXTUAL", "lossy": true},
+    {"b9State": "REGISTERED", "canonical": "各Provider.health=true", "type": "CONTEXTUAL", "lossy": true},
+    {"b9State": "INITIALIZING", "canonical": "Provider初始化中", "type": "CONTEXTUAL", "lossy": false},
+    {"b9State": "READY", "canonical": "Provider健康检查通过", "type": "CONTEXTUAL", "lossy": false},
+    {"b9State": "DEGRADED", "canonical": "Provider健康检查降级", "type": "CONTEXTUAL", "lossy": false},
+    {"b9State": "UNAVAILABLE", "canonical": "Provider健康检查失败", "type": "CONTEXTUAL", "lossy": true},
+    {"b9State": "FAILED", "canonical": "Provider出现错误", "type": "CONTEXTUAL", "lossy": true},
+    {"b9State": "DISABLED", "canonical": "Provider配置禁用", "type": "CONTEXTUAL", "lossy": false}
+  ],
+  "status": "PROTOCOL_ONLY",
+  "notes": "当前没有统一的Provider状态Store。各Provider自行维护注册、健康、可用性。B9 ProviderStatus仅作为跨端Protocol投影使用。",
+  "gap": "如果后续需要统一Provider状态视图，应该基于各Provider已有的health/availability数据计算得出，而非新建独立Store。",
+  "summary": {
+    "totalB9States": 8,
+    "mapped": 8,
+    "lossyMappings": 4,
+    "canonicalSource": "无(需cross-provider聚合计算)"
+  }
+}

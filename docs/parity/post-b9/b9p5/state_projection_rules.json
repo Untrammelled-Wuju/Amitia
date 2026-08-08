@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:37:00+08:00",
+  "projectionRules": [
+    {
+      "projectionId": "PROJ_CAP_AVAIL",
+      "domain": "capability",
+      "sourceType": "DERIVED_STATE",
+      "sourceState": "ToolState (Installed+ModuleEnabled+CapabilityEnabled+ScopeAllowed+PermissionGranted+RuntimeReady+DependencyReady+Health=ready)",
+      "protocolState": "AVAILABLE",
+      "projectionType": "CONTEXTUAL",
+      "lossy": false,
+      "reverseWritable": false,
+      "notes": "通过多个字段计算得出可用性"
+    },
+    {
+      "projectionId": "PROJ_CAP_UNAVAIL",
+      "domain": "capability",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "HealthStatus=unhealthy or shutdown",
+      "protocolState": "UNAVAILABLE",
+      "projectionType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "notes": "丢失unhealthy vs shutdown的区分"
+    },
+    {
+      "projectionId": "PROJ_TOOL_EXEC_QUEUED",
+      "domain": "tool_execution",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "ExecutionStatus=queued",
+      "protocolState": "PENDING",
+      "projectionType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "notes": "语义等价"
+    },
+    {
+      "projectionId": "PROJ_TOOL_EXEC_RUNNING",
+      "domain": "tool_execution",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "ExecutionStatus=running",
+      "protocolState": "RUNNING",
+      "projectionType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "notes": "语义等价"
+    },
+    {
+      "projectionId": "PROJ_TOOL_EXEC_SUCCEEDED",
+      "domain": "tool_execution",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "ExecutionStatus=succeeded or partially_succeeded",
+      "protocolState": "SUCCEEDED",
+      "projectionType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "notes": "丢失partially_succeeded的区分"
+    },
+    {
+      "projectionId": "PROJ_TOOL_EXEC_FAILED",
+      "domain": "tool_execution",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "ExecutionStatus=failed",
+      "protocolState": "FAILED",
+      "projectionType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "notes": "语义等价"
+    },
+    {
+      "projectionId": "PROJ_TASK_RUNNING",
+      "domain": "task_runtime",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "TaskRunStatus=running or checkpointing or pausing or resuming",
+      "protocolState": "RUNNING",
+      "projectionType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "notes": "丢失中间态的细节"
+    },
+    {
+      "projectionId": "PROJ_TASK_SUCCEEDED",
+      "domain": "task_runtime",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "TaskRunStatus=succeeded",
+      "protocolState": "SUCCEEDED",
+      "projectionType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "notes": "语义等价"
+    },
+    {
+      "projectionId": "PROJ_RUNTIME_EXTENSION",
+      "domain": "extension_runtime",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "ActualState",
+      "protocolState": "B9 RuntimeStatus",
+      "projectionType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "notes": "Extension Runtime有draining/quarantined等B9没有的状态"
+    },
+    {
+      "projectionId": "PROJ_RUNTIME_ANDROID",
+      "domain": "android_runtime",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "RuntimeState",
+      "protocolState": "B9 RuntimeStatus",
+      "projectionType": "CONTEXTUAL",
+      "lossy": true,
+      "reverseWritable": false,
+      "notes": "REPAIRING映射到B9 RECOVERING是lossy"
+    },
+    {
+      "projectionId": "PROJ_PERM_GRANTED",
+      "domain": "permission",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "PermissionDecision=allow/allow_once/allow_session/allow_persistent",
+      "protocolState": "GRANTED",
+      "projectionType": "MANY_TO_ONE",
+      "lossy": true,
+      "reverseWritable": false,
+      "notes": "丢失allow_once/session/persistent的区分"
+    },
+    {
+      "projectionId": "PROJ_PERM_DENIED",
+      "domain": "permission",
+      "sourceType": "CANONICAL_DOMAIN_STATE",
+      "sourceState": "PermissionDecision=deny",
+      "protocolState": "DENIED",
+      "projectionType": "ONE_TO_ONE",
+      "lossy": false,
+      "reverseWritable": false,
+      "notes": "语义等价"
+    }
+  ],
+  "summary": {
+    "totalRules": 12,
+    "oneToOne": 7,
+    "manyToOne": 4,
+    "contextual": 1,
+    "lossyCount": 5,
+    "reverseWritable": 0
+  }
+}

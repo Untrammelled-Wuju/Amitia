@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 Error Authority - Provider层错误与现有Runtime/Tool错误模型映射",
+
+  "providerLevelErrors": [
+    {
+      "code": "sandbox_unavailable",
+      "domain": "Sandbox Provider",
+      "mapping": "ErrorCodeNotAvailable",
+      "retryable": false,
+      "userVisible": true
+    },
+    {
+      "code": "backend_unavailable",
+      "domain": "Sandbox Provider",
+      "mapping": "ErrorCodeNotAvailable",
+      "retryable": false,
+      "userVisible": true
+    },
+    {
+      "code": "unsupported_platform",
+      "domain": "Runtime Adapter",
+      "mapping": "ErrorCodeNotAvailable",
+      "retryable": false,
+      "userVisible": true
+    },
+    {
+      "code": "invalid_runtime_binding",
+      "domain": "Runtime Adapter",
+      "mapping": "ErrorCodeRuntimeUnavailable",
+      "retryable": false,
+      "userVisible": false
+    },
+    {
+      "code": "runtime_host_unavailable",
+      "domain": "Runtime Host",
+      "mapping": "ErrorCodeRuntimeUnavailable",
+      "retryable": false,
+      "userVisible": false
+    }
+  ],
+
+  "deferredErrors": {
+    "ish_boot_failed": "属于B124 - iSH具体错误",
+    "ish_syscall_error": "属于B124 - iSH具体错误",
+    "rootfs_install_failed": "属于B125 - rootfs具体错误",
+    "rootfs_corrupted": "属于B125 - rootfs具体错误",
+    "apk_install_failed": "属于B125 - 包管理错误"
+  },
+
+  "errorAuthorityValidation": {
+    "newIOSSandboxErrorRegistry": 0,
+    "allErrorsMappedToExistingModel": true,
+    "iosBridgeErrorMapping": "adapter_ios_native.go已实现(mapIOSError方法)",
+    "ioSErrorCodes": [
+      "PROVIDER_UNAVAILABLE",
+      "AUTHORIZATION_DENIED",
+      "USER_ACTION_REQUIRED",
+      "PLATFORM_NOT_SUPPORTED",
+      "BRIDGE_DISCONNECTED",
+      "BRIDGE_TIMEOUT",
+      "BRIDGE_INVALID_RESPONSE"
+    ]
+  }
+}

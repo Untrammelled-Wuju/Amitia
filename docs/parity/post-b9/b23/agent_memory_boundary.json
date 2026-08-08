@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Agent与Memory边界",
+
+  "boundary": {
+    "memoryDomainOwns": {
+      "description": "Memory域负责存储/索引/检索",
+      "items": [
+        "Memory storage",
+        "Memory indexing",
+        "Memory retrieval",
+        "Memory consolidation",
+        "Episodic memory management",
+        "World book management"
+      ]
+    },
+    "agentOwns": {
+      "description": "Agent消费记忆上下文",
+      "items": [
+        "Read memory for context",
+        "Query relevant memories",
+        "Generate memory updates (via existing APIs)"
+      ]
+    }
+  },
+
+  "integrationPoint": {
+    "description": "Agent通过Memory服务读取记忆，不直接管理存储",
+    "agentToMemory": "Agent -> memory.Service (read/query)",
+    "memoryToAgent": "Memory context -> Agent ContextSnapshot"
+  },
+
+  "canonicalMemoryDomain": {
+    "owner": "backend/internal/memory",
+    "sourcePath": "backend/internal/memory/",
+    "status": "EXISTING"
+  }
+}

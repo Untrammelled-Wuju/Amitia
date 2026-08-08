@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "源码范围验证",
+
+  "modifiedFiles": [
+    "backend/internal/extension/kernel/capability/runtime_adapter.go",
+    "backend/internal/extension/kernel/capability/adapter_desktop.go",
+    "backend/internal/extension/kernel/adapter_registration.go",
+    "backend/internal/extension/kernel/desktop/desktop_provider.go"
+  ],
+
+  "allowedFiles": [
+    "backend/internal/extension/kernel/capability/runtime_adapter.go",
+    "backend/internal/extension/kernel/capability/adapter_desktop.go",
+    "backend/internal/extension/kernel/adapter_registration.go",
+    "backend/internal/extension/kernel/desktop/desktop_provider.go"
+  ],
+
+  "unexpectedFiles": [],
+  "goModChanged": false,
+  "goSumChanged": false,
+  "packageJsonChanged": false,
+  "lockfileChanged": false,
+  "databaseChanged": false,
+
+  "note": "B21仅修改了4个Go源码文件，所有修改集中在Desktop Adapter实现和注册"
+}

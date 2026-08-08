@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B44-CircuitCancellation",
+  "intendedFor": "B44",
+  "description": "熔断器状态下的取消语义输入",
+  "circuitStates": {
+    "open": {
+      "cancel_behavior": "熔断器快速失败路径也遵循取消检查；取消优先于熔断拒绝",
+      "failure_counting": "取消不计入导致熔断打开的失败计数",
+      "authority": "execution.CancellationController"
+    },
+    "half_open": {
+      "cancel_behavior": "半开放试探调用中取消→将试探标记为失败但不触发重新熔断（策略可配置）",
+      "failure_counting": "试探取消是否计入失败由 half_open_cancel_counts_as_failure 配置决定",
+      "authority": "execution.CancellationController"
+    },
+    "closed": {
+      "cancel_behavior": "正常取消语义，与 B43 完全一致",
+      "failure_counting": "取消不计入失败计数",
+      "authority": "execution.CancellationController"
+    }
+  },
+  "invariant": "熔断器不持有独立的取消通道；取消信号通过既有 context tree 传递到调用层",
+  "late_result_guard": "熔断快速失败路径返回的取消结果不得混杂半开试探完成后的迟到成功结果"
+}

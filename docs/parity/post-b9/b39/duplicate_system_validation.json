@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "newGlobalToolRegistry": 0,
+  "newCapabilityRegistry": 0,
+  "newToolRuntime": 0,
+  "newExecutionPipeline": 0,
+  "newPermissionBroker": 0,
+  "newToolResultSystem": 0,
+  "newToolStateStore": 0,
+  "newProviderToolRegistry": 0,
+  "newAgentToolRegistry": 0,
+  "note": "No second/sub duplicate systems introduced by B39."
+}

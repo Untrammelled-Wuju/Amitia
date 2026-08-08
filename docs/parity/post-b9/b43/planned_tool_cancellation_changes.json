@@ -1,0 +1,7 @@
+[
+  {
+    "changeId": "B43-CHG-001",
+    "semantic": "PASS_NO_CODE_CHANGE — Amitia 生产链路的取消传播已完整：CancellationController 注入、所有 RuntimeAdapter 已 select ctx.Done、StatusCancelled/ErrorCodeCancelled 已定义、context.Background 仅见于测试文件、无第二套 CancellationManager。",
+    "changeType": "NO_CODE_CHANGE"
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "BLOCKED - NO_CHANGE",
+
+  "duplicates": {
+    "newRootfsRuntimeManager": 0,
+    "newAlpineRuntimeManager": 0,
+    "newIOSSandboxRootfsManager2": 0,
+    "newRootfsLifecycle": 0,
+    "newRootfsSupervisor": 0,
+    "newRootfsStateStore": 0,
+    "newRootfsErrorRegistry": 0,
+    "newRootfsRegistry": 0,
+    "newFilesystemRegistry2": 0,
+    "newRuntimeHost": 0,
+    "newRuntimeOrchestrator": 0,
+    "newRuntimeAdapterRegistry": 0,
+    "newWorkspaceSystem": 0,
+    "newResourceUriSystem": 0,
+    "newAlpineToolRegistry": 0,
+    "newAlpinePermissionSystem": 0,
+    "newAlpineExecutionPipeline": 0,
+    "newPackageManagerRuntime": 0,
+    "newAPKManager2": 0
+  }
+}

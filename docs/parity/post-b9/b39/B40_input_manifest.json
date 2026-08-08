@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "nextStep": "B40",
+  "canonicalToolDefinitionType": "capability.ToolDefinition (backend/internal/extension/kernel/capability/tool.go)",
+  "inputSchemaField": "InputSchema json.RawMessage",
+  "outputSchemaField": "OutputSchema json.RawMessage",
+  "toolSources": [
+    "builtin",
+    "plugin",
+    "mcp",
+    "workflow",
+    "internal",
+    "javascript",
+    "task",
+    "trusted_service",
+    "wasm",
+    "legacy_tool"
+  ],
+  "agentCallableTools": 253,
+  "internalTools": "filtered out of ModelTools by ToolExposureManager and ToolFacade",
+  "toolDefinitionValidationEntry": "Register / Replace / BatchRegister / BatchReplace (registry.go)",
+  "observation": "B39 confirmed the registry identity contract is sound. B40 should focus on input/output JSON schema validation hardening that is currently out of scope for B39."
+}

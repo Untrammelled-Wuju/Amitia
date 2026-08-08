@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Tool Exposure汇总 - 确认无Unexpected Tool Exposure和Provider直接暴露",
+
+  "b10AgentTools": {
+    "totalAgentTools": 253,
+    "exposurePolicy": "ToolExposureManager.GetModelTools (B9P4 frozen)",
+    "unexpectedExposure": 0
+  },
+
+  "b14BrowserTools": {
+    "registeredTools": 0,
+    "note": "B14明确不注册Browser Tool到生产ToolRegistry，全部Deferred到B79-B83",
+    "unexpectedExposure": 0
+  },
+
+  "b15MediaTools": {
+    "registeredTools": "voice_reply (existing, via tool_migration)",
+    "note": "Image/Vision/ASR/TTS无新建Agent Tool，internal call via Chat Pipeline",
+    "unexpectedExposure": 0
+  },
+
+  "b16ModelVoiceAutomationTools": {
+    "existingModelTools": "无新Model Tool (通过protocolForApiType dispatch)",
+    "existingVoiceTools": "voice_reply Tool (已存在)",
+    "existingAutomationTools": "execute_workflow, schedule (已存在)",
+    "newToolExposure": 0
+  },
+
+  "b17ManifestExposure": {
+    "manifestDoesNotAutoExpose": true,
+    "note": "Extension声明Capability ≠ VisibleToModel，必须遵循Tool Exposure Policy"
+  },
+
+  "providerDirectModelToolExposure": 0,
+  "unexpectedAgentToolExposure": 0,
+  "result": "PASS - 无Unexpected Tool Exposure，无Provider直接暴露Model Tool"
+}

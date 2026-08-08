@@ -1,0 +1,2298 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "actionRules": {
+    "REUSE": "步骤全部REUSE现有系统",
+    "EXTEND": "主系统EXTEND、相关系统REUSE",
+    "ADAPTER_ONLY": "主系统ADAPTER",
+    "NEW_PROVIDER": "主系统=新建Provider+REUSE现有Kernel",
+    "MIGRATION_ONLY": "主系统=MIGRATION"
+  },
+  "steps": [
+    {
+      "stepId": "B10",
+      "canonicalTargets": [
+        {
+          "system": "ToolRegistry",
+          "path": "backend/internal/extension/kernel/capability/registry.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolExecution",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B11",
+      "canonicalTargets": [
+        {
+          "system": "PermissionDefinitionRegistry",
+          "path": "backend/internal/extension/kernel/permission/definition_registry.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "EXTEND"
+        }
+      ]
+    },
+    {
+      "stepId": "B12",
+      "canonicalTargets": [
+        {
+          "system": "ToolContract",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "EventSystem",
+          "path": "backend/internal/extension/kernel/event/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "HookSystem",
+          "path": "backend/internal/extension/kernel/hook/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B13",
+      "canonicalTargets": [
+        {
+          "system": "CapabilityDefinition",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "HookSystem",
+          "path": "backend/internal/extension/kernel/hook/",
+          "action": "EXTEND"
+        }
+      ]
+    },
+    {
+      "stepId": "B14",
+      "canonicalTargets": [
+        {
+          "system": "BrowserProvider",
+          "path": "backend/internal/extensions/providers/browser/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "BrowserSessionProvider",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B15",
+      "canonicalTargets": [
+        {
+          "system": "FFmpegMediaProvider",
+          "path": "backend/internal/extensions/providers/media/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ImageGeneration",
+          "path": "backend/internal/imageprovider/",
+          "action": "REUSE"
+        },
+        {
+          "system": "TTS",
+          "path": "backend/internal/tts/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ASR",
+          "path": "backend/internal/asr/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B16",
+      "canonicalTargets": [
+        {
+          "system": "ResourceURI",
+          "path": "backend/pkg/resourceuri/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "EXTEND"
+        }
+      ]
+    },
+    {
+      "stepId": "B17",
+      "canonicalTargets": [
+        {
+          "system": "Schedule",
+          "path": "backend/internal/extension/kernel/schedule/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "CapabilityDefinition",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B18",
+      "canonicalTargets": [
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolRegistry",
+          "path": "backend/internal/extension/kernel/capability/registry.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "CapabilityDefinition",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B19",
+      "canonicalTargets": [
+        {
+          "system": "AndroidCapabilityAdapter",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "ADAPTER_ONLY"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B20",
+      "canonicalTargets": [
+        {
+          "system": "iOSNativeOffloadAdapter",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "ADAPTER_ONLY"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B21",
+      "canonicalTargets": [
+        {
+          "system": "DesktopProcessAdapter",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "ADAPTER_ONLY"
+        },
+        {
+          "system": "ProcessSupervisor",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B22",
+      "canonicalTargets": [
+        {
+          "system": "AdapterUnifiedInterface",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B23",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B24",
+      "canonicalTargets": [
+        {
+          "system": "MindRuntime",
+          "path": "backend/internal/mindruntime/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B25",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B26",
+      "canonicalTargets": [
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B27",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "MultiAgent",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B28",
+      "canonicalTargets": [
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B29",
+      "canonicalTargets": [
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B30",
+      "canonicalTargets": [
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B31",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B32",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B33",
+      "canonicalTargets": [
+        {
+          "system": "MindRuntime",
+          "path": "backend/internal/mindruntime/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B34",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "MultiAgent",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B35",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "MIGRATION_ONLY"
+        }
+      ]
+    },
+    {
+      "stepId": "B36",
+      "canonicalTargets": [
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "MindRuntime",
+          "path": "backend/internal/mindruntime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B37",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B38",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "MIGRATION_ONLY"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B39",
+      "canonicalTargets": [
+        {
+          "system": "ExecutionPipeline",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolRegistry",
+          "path": "backend/internal/extension/kernel/capability/registry.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B40",
+      "canonicalTargets": [
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "PermissionDefinitionRegistry",
+          "path": "backend/internal/extension/kernel/permission/definition_registry.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B41",
+      "canonicalTargets": [
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolRegistry",
+          "path": "backend/internal/extension/kernel/capability/registry.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B42",
+      "canonicalTargets": [
+        {
+          "system": "RuntimeAdapterRegistry",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B43",
+      "canonicalTargets": [
+        {
+          "system": "ToolRegistry",
+          "path": "backend/internal/extension/kernel/capability/registry.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "CapabilityDefinition",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B44",
+      "canonicalTargets": [
+        {
+          "system": "ExecutionPipeline",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "EventSystem",
+          "path": "backend/internal/extension/kernel/event/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B45",
+      "canonicalTargets": [
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Schedule",
+          "path": "backend/internal/extension/kernel/schedule/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B46",
+      "canonicalTargets": [
+        {
+          "system": "ResourceURI",
+          "path": "backend/pkg/resourceuri/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B47",
+      "canonicalTargets": [
+        {
+          "system": "HookSystem",
+          "path": "backend/internal/extension/kernel/hook/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B48",
+      "canonicalTargets": [
+        {
+          "system": "Schedule",
+          "path": "backend/internal/extension/kernel/schedule/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ExecutionPipeline",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B49",
+      "canonicalTargets": [
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B50",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B51",
+      "canonicalTargets": [
+        {
+          "system": "MindRuntime",
+          "path": "backend/internal/mindruntime/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B52",
+      "canonicalTargets": [
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Validation",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B53",
+      "canonicalTargets": [
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ExecutionPipeline",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B54",
+      "canonicalTargets": [
+        {
+          "system": "ResourceURI",
+          "path": "backend/pkg/resourceuri/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B55",
+      "canonicalTargets": [
+        {
+          "system": "LinuxShellProvider",
+          "path": "backend/internal/extensions/providers/linux/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B56",
+      "canonicalTargets": [
+        {
+          "system": "AndroidProcessProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B57",
+      "canonicalTargets": [
+        {
+          "system": "AndroidFileSystemProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B58",
+      "canonicalTargets": [
+        {
+          "system": "AndroidNetworkProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B59",
+      "canonicalTargets": [
+        {
+          "system": "AndroidStorageProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B60",
+      "canonicalTargets": [
+        {
+          "system": "AndroidCameraProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B61",
+      "canonicalTargets": [
+        {
+          "system": "AndroidSensorProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B62",
+      "canonicalTargets": [
+        {
+          "system": "AndroidAccessibilityProvider",
+          "path": "android-native-provider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B63",
+      "canonicalTargets": [
+        {
+          "system": "AndroidLocationProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B64",
+      "canonicalTargets": [
+        {
+          "system": "AndroidNotificationProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B65",
+      "canonicalTargets": [
+        {
+          "system": "AndroidMediaSessionProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B66",
+      "canonicalTargets": [
+        {
+          "system": "AndroidTelephonyProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B67",
+      "canonicalTargets": [
+        {
+          "system": "AndroidPermissionProvider",
+          "path": "backend/internal/extensions/providers/android/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B68",
+      "canonicalTargets": [
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B69",
+      "canonicalTargets": [
+        {
+          "system": "ImageGenerationProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ImageProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B70",
+      "canonicalTargets": [
+        {
+          "system": "ImageRecognitionProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ImageProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B71",
+      "canonicalTargets": [
+        {
+          "system": "TTSProvider",
+          "path": "backend/internal/tts/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B72",
+      "canonicalTargets": [
+        {
+          "system": "ASRProvider",
+          "path": "backend/internal/asr/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B73",
+      "canonicalTargets": [
+        {
+          "system": "VideoProcessingProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ImageProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B74",
+      "canonicalTargets": [
+        {
+          "system": "AudioProcessingProvider",
+          "path": "backend/internal/tts|asr/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "TTS",
+          "path": "backend/internal/tts/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ASR",
+          "path": "backend/internal/asr/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B75",
+      "canonicalTargets": [
+        {
+          "system": "ScreenCaptureProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ImageProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B76",
+      "canonicalTargets": [
+        {
+          "system": "WebcamProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ImageProvider",
+          "path": "backend/internal/imageprovider/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B77",
+      "canonicalTargets": [
+        {
+          "system": "AudioStreamProvider",
+          "path": "backend/internal/tts|asr/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "TTS",
+          "path": "backend/internal/tts/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ASR",
+          "path": "backend/internal/asr/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B78",
+      "canonicalTargets": [
+        {
+          "system": "MediaProviderRegistry",
+          "path": "backend/internal/imageprovider/tts|asr/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B79",
+      "canonicalTargets": [
+        {
+          "system": "BrowserRuntimeProvider",
+          "path": "browser-provider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "BrowserSessionProvider",
+          "path": "browser-runtime/",
+          "action": "REUSE"
+        },
+        {
+          "system": "BrowserRuntimeBinding",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B80",
+      "canonicalTargets": [
+        {
+          "system": "BrowserRuntimeProvider",
+          "path": "browser-provider/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "BrowserSessionProvider",
+          "path": "browser-runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B81",
+      "canonicalTargets": [
+        {
+          "system": "BrowserRuntimeProvider",
+          "path": "browser-provider/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "BrowserSessionProvider",
+          "path": "browser-runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B82",
+      "canonicalTargets": [
+        {
+          "system": "BrowserRuntimeProvider",
+          "path": "browser-provider/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "BrowserSessionProvider",
+          "path": "browser-runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B83",
+      "canonicalTargets": [
+        {
+          "system": "BrowserRuntimeProvider",
+          "path": "browser-provider/",
+          "action": "REUSE"
+        },
+        {
+          "system": "BrowserSessionProvider",
+          "path": "browser-runtime/",
+          "action": "REUSE"
+        },
+        {
+          "system": "BrowserRuntimeBinding",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B84",
+      "canonicalTargets": [
+        {
+          "system": "SearchEngineProvider",
+          "path": "backend/internal/search/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B85",
+      "canonicalTargets": [
+        {
+          "system": "SearchEngineProvider",
+          "path": "backend/internal/search/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B86",
+      "canonicalTargets": [
+        {
+          "system": "SearchEngineProvider",
+          "path": "backend/internal/search/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B87",
+      "canonicalTargets": [
+        {
+          "system": "MediaProvider",
+          "path": "backend/internal/imageprovider/tts|asr/",
+          "action": "REUSE"
+        },
+        {
+          "system": "WorkspaceProvider",
+          "path": "backend/internal/workspace/",
+          "action": "EXTEND"
+        }
+      ]
+    },
+    {
+      "stepId": "B88",
+      "canonicalTargets": [
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "REUSE"
+        },
+        {
+          "system": "WorkspaceProvider",
+          "path": "backend/internal/workspace/",
+          "action": "EXTEND"
+        }
+      ]
+    },
+    {
+      "stepId": "B89",
+      "canonicalTargets": [
+        {
+          "system": "WorkspaceProvider",
+          "path": "backend/internal/workspace/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B90",
+      "canonicalTargets": [
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "MediaProvider",
+          "path": "backend/internal/imageprovider/tts|asr/",
+          "action": "REUSE"
+        },
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B91",
+      "canonicalTargets": [
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "MediaProvider",
+          "path": "backend/internal/imageprovider/tts|asr/",
+          "action": "REUSE"
+        },
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B92",
+      "canonicalTargets": [
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "CapabilityDefinition",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B93",
+      "canonicalTargets": [
+        {
+          "system": "MCPToolRegistry",
+          "path": "backend/internal/mcp/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B94",
+      "canonicalTargets": [
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ToolRegistry",
+          "path": "backend/internal/extension/kernel/capability/registry.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B95",
+      "canonicalTargets": [
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "CapabilityDefinition",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B96",
+      "canonicalTargets": [
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Session",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B97",
+      "canonicalTargets": [
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B98",
+      "canonicalTargets": [
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "PermissionDefinitionRegistry",
+          "path": "backend/internal/extension/kernel/permission/definition_registry.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B99",
+      "canonicalTargets": [
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B100",
+      "canonicalTargets": [
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B101",
+      "canonicalTargets": [
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B102",
+      "canonicalTargets": [
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B103",
+      "canonicalTargets": [
+        {
+          "system": "WorkflowEngine",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        },
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B104",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Schedule",
+          "path": "backend/internal/extension/kernel/schedule/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B105",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ExecutionPipeline",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B106",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ExecutionPipeline",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "HookSystem",
+          "path": "backend/internal/extension/kernel/hook/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B107",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B108",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "HookSystem",
+          "path": "backend/internal/extension/kernel/hook/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B109",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "EventSystem",
+          "path": "backend/internal/extension/kernel/event/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B110",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        },
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "REUSE"
+        },
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B111",
+      "canonicalTargets": [
+        {
+          "system": "ResponsesAPIAdapter",
+          "path": "backend/internal/chat/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "MNNLocalProvider",
+          "path": "backend/internal/embeddings/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ModelService",
+          "path": "backend/internal/chat/model_service/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B112",
+      "canonicalTargets": [
+        {
+          "system": "ModelService",
+          "path": "backend/internal/chat/model_service/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Embedding",
+          "path": "backend/internal/embedding/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B113",
+      "canonicalTargets": [
+        {
+          "system": "LocalModelProvider",
+          "path": "backend/internal/chat/model_service/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "ModelService",
+          "path": "backend/internal/chat/model_service/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B114",
+      "canonicalTargets": [
+        {
+          "system": "ModelService",
+          "path": "backend/internal/chat/model_service/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "ResponsesAPIAdapter",
+          "path": "backend/internal/chat/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B115",
+      "canonicalTargets": [
+        {
+          "system": "VoiceProvider",
+          "path": "backend/internal/tts|character/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "Character",
+          "path": "backend/internal/character/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B116",
+      "canonicalTargets": [
+        {
+          "system": "Character",
+          "path": "backend/internal/character/",
+          "action": "EXTEND"
+        }
+      ]
+    },
+    {
+      "stepId": "B117",
+      "canonicalTargets": [
+        {
+          "system": "Character",
+          "path": "backend/internal/character/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Schedule",
+          "path": "backend/internal/extension/kernel/schedule/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B118",
+      "canonicalTargets": [
+        {
+          "system": "MemoryStore",
+          "path": "backend/internal/memory/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "MemoryGraph",
+          "path": "backend/internal/memory/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "VectorStore",
+          "path": "backend/internal/memory/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B119",
+      "canonicalTargets": [
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "EXTEND"
+        }
+      ]
+    },
+    {
+      "stepId": "B120",
+      "canonicalTargets": [
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Persistence",
+          "path": "backend/internal/memory/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B121",
+      "canonicalTargets": [
+        {
+          "system": "CharacterStore",
+          "path": "backend/internal/character/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "CharacterService",
+          "path": "backend/internal/character/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B122",
+      "canonicalTargets": [
+        {
+          "system": "ModelService",
+          "path": "backend/internal/chat/model_service/",
+          "action": "REUSE"
+        },
+        {
+          "system": "VoiceProvider",
+          "path": "backend/internal/tts|character/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Character",
+          "path": "backend/internal/character/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B123",
+      "canonicalTargets": [
+        {
+          "system": "IOSAlchemyProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B124",
+      "canonicalTargets": [
+        {
+          "system": "IOSAlchemyProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B125",
+      "canonicalTargets": [
+        {
+          "system": "IOSAlchemyProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B126",
+      "canonicalTargets": [
+        {
+          "system": "IOSAlchemyProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B127",
+      "canonicalTargets": [
+        {
+          "system": "HealthKitProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B128",
+      "canonicalTargets": [
+        {
+          "system": "HomeKitProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B129",
+      "canonicalTargets": [
+        {
+          "system": "CoreMLProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B130",
+      "canonicalTargets": [
+        {
+          "system": "CallKitProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B131",
+      "canonicalTargets": [
+        {
+          "system": "NFCProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B132",
+      "canonicalTargets": [
+        {
+          "system": "ARKitProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B133",
+      "canonicalTargets": [
+        {
+          "system": "PassKitProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B134",
+      "canonicalTargets": [
+        {
+          "system": "CarPlayProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B135",
+      "canonicalTargets": [
+        {
+          "system": "WatchConnectivityProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B136",
+      "canonicalTargets": [
+        {
+          "system": "IntentsProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "NEW_PROVIDER"
+        }
+      ]
+    },
+    {
+      "stepId": "B137",
+      "canonicalTargets": [
+        {
+          "system": "IOSAlchemyProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "REUSE"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B138",
+      "canonicalTargets": [
+        {
+          "system": "IOSAlchemyProvider",
+          "path": "ios-sandbox-provider/",
+          "action": "REUSE"
+        },
+        {
+          "system": "CapabilityDefinition",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B139",
+      "canonicalTargets": [
+        {
+          "system": "UnifiedCapabilityAdapter",
+          "path": "runtimeorchestrator/",
+          "action": "ADAPTER_ONLY"
+        },
+        {
+          "system": "RuntimeHost",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B140",
+      "canonicalTargets": [
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        },
+        {
+          "system": "LegacyToolSystem",
+          "path": "whole-codebase-migration/",
+          "action": "MIGRATION_ONLY"
+        }
+      ]
+    },
+    {
+      "stepId": "B141",
+      "canonicalTargets": [
+        {
+          "system": "ExecutionPipeline",
+          "path": "backend/internal/extension/kernel/execution/pipeline.go",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        },
+        {
+          "system": "AlternativeExecutionChain",
+          "path": "whole-codebase-migration/",
+          "action": "MIGRATION_ONLY"
+        }
+      ]
+    },
+    {
+      "stepId": "B142",
+      "canonicalTargets": [
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "ProviderRegistry",
+          "path": "backend/internal/extension/kernel/capability/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B143",
+      "canonicalTargets": [
+        {
+          "system": "AgentSkill",
+          "path": "backend/internal/extension/kernel/agent_skill/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B144",
+      "canonicalTargets": [
+        {
+          "system": "Workflow",
+          "path": "backend/internal/extension/kernel/workflow/",
+          "action": "REUSE"
+        },
+        {
+          "system": "TaskRuntime",
+          "path": "backend/internal/extension/kernel/task_runtime/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B145",
+      "canonicalTargets": [
+        {
+          "system": "Adapter",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B146",
+      "canonicalTargets": [
+        {
+          "system": "PermissionBroker",
+          "path": "backend/internal/extension/kernel/permission/broker.go",
+          "action": "REUSE"
+        },
+        {
+          "system": "PermissionDefinitionRegistry",
+          "path": "backend/internal/extension/kernel/permission/definition_registry.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B147",
+      "canonicalTargets": [
+        {
+          "system": "MCP",
+          "path": "backend/internal/mcp/",
+          "action": "REUSE"
+        },
+        {
+          "system": "ToolFacade",
+          "path": "backend/internal/extension/kernel/tool_facade.go",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B148",
+      "canonicalTargets": [
+        {
+          "system": "ModelService",
+          "path": "backend/internal/chat/model_service/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Character",
+          "path": "backend/internal/character/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Memory",
+          "path": "backend/internal/memory/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B149",
+      "canonicalTargets": [
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B150",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        },
+        {
+          "system": "RuntimeOrchestrator",
+          "path": "backend/internal/runtimeorchestrator/",
+          "action": "REUSE"
+        },
+        {
+          "system": "AllProviders",
+          "path": "backend/internal/extensions/providers/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B151",
+      "canonicalTargets": [
+        {
+          "system": "LegacyAudit",
+          "path": "whole-codebase-migration/",
+          "action": "EXTEND"
+        },
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        },
+        {
+          "system": "LegacySystem",
+          "path": "legacy-audit/",
+          "action": "MIGRATION_ONLY"
+        }
+      ]
+    },
+    {
+      "stepId": "B152",
+      "canonicalTargets": [
+        {
+          "system": "Extension Kernel",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        },
+        {
+          "system": "AllProviders",
+          "path": "backend/internal/extensions/providers/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B153",
+      "canonicalTargets": [
+        {
+          "system": "ExitConditions",
+          "path": "backend/internal/extension/kernel/",
+          "action": "REUSE"
+        }
+      ]
+    },
+    {
+      "stepId": "B154",
+      "canonicalTargets": [
+        {
+          "system": "GoLiveVerification",
+          "path": "whole-codebase-migration/",
+          "action": "REUSE"
+        }
+      ]
+    }
+  ]
+}

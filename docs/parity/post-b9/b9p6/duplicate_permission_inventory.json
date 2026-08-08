@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "permissionSystems": [
+    {
+      "id": "KERNEL_PERMISSION_BROKER",
+      "path": "backend/internal/extension/kernel/permission/broker.go",
+      "classification": "CANONICAL_EXTENSION_PERMISSION_SYSTEM",
+      "role": "Extension/Tool permission decisions",
+      "consumers": ["ExecutionPipeline.PermissionGate", "Schedule Service", "HostAPI Gateway", "Workflow StepGuard", "Hook Service"]
+    },
+    {
+      "id": "LEGACY_EXTENSION_PERMISSION",
+      "path": "backend/internal/extension/permission.go",
+      "classification": "LEGACY_FROZEN",
+      "productionDecisionMaking": false
+    },
+    {
+      "id": "PLATFORM_OS_PERMISSIONS",
+      "path": "Android/iOS platform code",
+      "classification": "PLATFORM_PERMISSION_PROVIDER",
+      "description": "OS-level permissions (CAMERA, HealthKit, etc) - not duplicate of Extension permissions",
+      "futureWork": "Will be mapped into unified Capability Permission contract"
+    }
+  ],
+  "duplicatePermissionSystemCount": 0
+}

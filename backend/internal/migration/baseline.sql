@@ -5496,7 +5496,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_local_sessions (
     created_at TEXT NOT NULL DEFAULT '',
     expires_at TEXT NOT NULL DEFAULT '',
     last_used_at TEXT NOT NULL DEFAULT '',
-    revoked_at TEXT NOT NULL DEFAULT ''
+    revoked_at TEXT DEFAULT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_dpls_token ON desktop_pet_local_sessions(token_hash, status);
 CREATE INDEX IF NOT EXISTS idx_dpls_user ON desktop_pet_local_sessions(user_id, status);

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P7",
+  "outputFor": "B9P8",
+  "files": [
+    "docs/parity/post-b9/b9p7/step_reuse_matrix.json",
+    "docs/parity/post-b9/b9p7/step_reuse_matrix.md",
+    "docs/parity/post-b9/b9p7/step_responsibility_corrections.json",
+    "docs/parity/post-b9/b9p7/step_dependency_corrections.json",
+    "docs/parity/post-b9/b9p7/step_forbidden_actions.json",
+    "docs/parity/post-b9/b9p7/step_canonical_targets.json",
+    "docs/parity/post-b9/b9p7/parallel_execution_matrix.json",
+    "docs/parity/post-b9/b9p7/future_prompt_guard.json",
+    "docs/parity/post-b9/b9p7/b10_b154_execution_guard.json",
+    "docs/parity/post-b9/b9p7/rewritten_batch_plan.md"
+  ],
+  "goal": "B9P8只负责总验收+冻结最终Resolved Manifest+确认B10可以启动"
+}

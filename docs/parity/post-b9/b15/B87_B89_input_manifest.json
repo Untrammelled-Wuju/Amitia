@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15_input_for_B87_B89",
+  "target": "Video/FFmpeg Provider (B87-B89)",
+  "futureMediaProviderContract": {
+    "note": "B87-B89应按需实现。",
+    "videoProvider": "REQUIRED/NOT_REQUIRED based on actual needs",
+    "mediaProbe": "REQUIRED/NOT_REQUIRED based on actual needs",
+    "formatConversion": "REQUIRED/NOT_REQUIRED based on actual needs",
+    "frameExtraction": "REQUIRED/NOT_REQUIRED based on actual needs"
+  },
+  "inputOutput": "ResourceURI in/out (B13)",
+  "permission": "files.read/files.write",
+  "runtimeBinding": "TaskRuntime-compatible for long operations",
+  "stateErrorProjection": "Domain-owned per B9P8"
+}

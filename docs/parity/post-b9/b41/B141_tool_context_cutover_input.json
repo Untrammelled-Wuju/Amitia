@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "nextOwner": "B141",
+  "canonicalInvocation": "capability.ToolInvocationContext (backend/internal/extension/kernel/capability/invocation.go)",
+  "legacyContextRepresentations": "capability.ToolInvocation {ToolID, Input, IdempotencyKey, TraceID} (thin legacy struct, no authority)",
+  "runtimeProjection": "All adapter Execute(ToolInvocationContext) signatures",
+  "productionCallers": "chat/agent/task/workflow services -> ToolFacade -> ExecutionPipeline",
+  "remainingLegacyBridges": "ToolInvocation struct in tool.go still exists for caller ergonomics; ToolFacade utilities use it."
+}

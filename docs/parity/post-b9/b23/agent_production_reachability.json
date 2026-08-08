@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "Agent组件生产可达性清单",
+
+  "components": [
+    {
+      "symbol": "interaction.UnifiedEntry",
+      "sourcePath": "backend/internal/interaction/unified_entry.go",
+      "productionReachable": true,
+      "entryPath": "Chat/Webhook/Companion/Voice -> UnifiedEntry.Handle()",
+      "callers": [
+        "chat.Handler",
+        "agent.Handler.Webhook",
+        "companion.submitProactiveMessage",
+        "interaction.VoiceEntry"
+      ],
+      "role": "CANONICAL_AGENT_ENTRY",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "interaction.Orchestrator",
+      "sourcePath": "backend/internal/interaction/orchestrator.go",
+      "productionReachable": true,
+      "entryPath": "UnifiedEntry -> Orchestrator.Process()",
+      "callers": [
+        "interaction.UnifiedEntry.Handle"
+      ],
+      "role": "AGENT_ORCHESTRATOR",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "interaction.RuntimePipeline",
+      "sourcePath": "backend/internal/interaction/runtime_pipeline.go",
+      "productionReachable": true,
+      "entryPath": "Orchestrator -> RuntimePipeline",
+      "callers": [
+        "interaction.Orchestrator"
+      ],
+      "role": "RUNTIME_PIPELINE",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "decision.GoalRegistry",
+      "sourcePath": "backend/internal/decision/goal_registry.go",
+      "productionReachable": true,
+      "entryPath": "RuntimePipeline -> GoalRegistry",
+      "callers": [
+        "decision.CandidateGenerator",
+        "interaction.RuntimePipeline"
+      ],
+      "role": "GOAL_REGISTRY",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "decision.CandidateGenerator",
+      "sourcePath": "backend/internal/decision/candidate_generator.go",
+      "productionReachable": true,
+      "entryPath": "RuntimePipeline -> CandidateGenerator",
+      "callers": [
+        "interaction.RuntimePipeline"
+      ],
+      "role": "CANDIDATE_GENERATOR",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "decision.BehaviorPlanBuilder",
+      "sourcePath": "backend/internal/decision/behavior_plan_builder.go",
+      "productionReachable": true,
+      "entryPath": "RuntimePipeline -> BehaviorPlanBuilder",
+      "callers": [
+        "interaction.RuntimePipeline"
+      ],
+      "role": "BEHAVIOR_PLAN_BUILDER",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "decision.Arbitration",
+      "sourcePath": "backend/internal/decision/arbitration.go",
+      "productionReachable": true,
+      "entryPath": "RuntimePipeline -> Arbitration",
+      "callers": [
+        "interaction.RuntimePipeline"
+      ],
+      "role": "ARBITRATION",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "decision.Scoring",
+      "sourcePath": "backend/internal/decision/scoring.go",
+      "productionReachable": true,
+      "entryPath": "RuntimePipeline -> Scoring",
+      "callers": [
+        "decision.Arbitration"
+      ],
+      "role": "SCORING",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "mindruntime.ReflectionRun",
+      "sourcePath": "backend/internal/mindruntime/reflection_run.go",
+      "productionReachable": true,
+      "entryPath": "Chat/Orchestrator -> ReflectionRun",
+      "callers": [
+        "chat.commit_reflection",
+        "mindruntime.ReflectionSupervisor"
+      ],
+      "role": "REFLECTION",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "mindruntime.Supervisor",
+      "sourcePath": "backend/internal/mindruntime/supervisor.go",
+      "productionReachable": true,
+      "entryPath": "Reflection/Personality -> Supervisor",
+      "callers": [
+        "mindruntime.ReflectionSupervisor",
+        "mindruntime.PersonalityGrowth"
+      ],
+      "role": "SUPERVISOR",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "mindruntime.Reconciliation",
+      "sourcePath": "backend/internal/mindruntime/reconciliation.go",
+      "productionReachable": true,
+      "entryPath": "Reflection -> Reconciliation",
+      "callers": [
+        "mindruntime.ReflectionRun"
+      ],
+      "role": "RECONCILIATION",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "mindruntime.Snapshot",
+      "sourcePath": "backend/internal/mindruntime/snapshot.go",
+      "productionReachable": true,
+      "entryPath": "Reconciliation -> Snapshot",
+      "callers": [
+        "mindruntime.Reconciliation"
+      ],
+      "role": "SNAPSHOT",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "mindruntime.Replay",
+      "sourcePath": "backend/internal/mindruntime/replay.go",
+      "productionReachable": true,
+      "entryPath": "Snapshot -> Replay",
+      "callers": [
+        "mindruntime.Snapshot"
+      ],
+      "role": "REPLAY",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "pipelinecheckpoint.Manager",
+      "sourcePath": "backend/internal/pipelinecheckpoint/manager.go",
+      "productionReachable": true,
+      "entryPath": "Chat/Orchestrator -> PipelineCheckpoint",
+      "callers": [
+        "chat.Handler",
+        "interaction.Orchestrator"
+      ],
+      "role": "CHECKPOINT",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "queue.PriorityQueue",
+      "sourcePath": "backend/internal/queue/priority.go",
+      "productionReachable": true,
+      "entryPath": "Interaction/Chat -> PriorityQueue",
+      "callers": [
+        "interaction.Orchestrator",
+        "chat.Handler"
+      ],
+      "role": "QUEUE",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "interaction.ScopeResolver",
+      "sourcePath": "backend/internal/interaction/scope_resolver.go",
+      "productionReachable": true,
+      "entryPath": "UnifiedEntry -> ScopeResolver",
+      "callers": [
+        "interaction.UnifiedEntry.Handle"
+      ],
+      "role": "SCOPE_RESOLVER",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "interaction.InteractionTracker",
+      "sourcePath": "backend/internal/interaction/tracker.go",
+      "productionReachable": true,
+      "entryPath": "Orchestrator -> InteractionTracker",
+      "callers": [
+        "interaction.Orchestrator"
+      ],
+      "role": "INTERACTION_TRACKER",
+      "legacy": false,
+      "testOnly": false
+    },
+    {
+      "symbol": "interaction.CancellationRegistry",
+      "sourcePath": "backend/internal/interaction/cancellation_registry.go",
+      "productionReachable": true,
+      "entryPath": "Orchestrator -> CancellationRegistry",
+      "callers": [
+        "interaction.Orchestrator"
+      ],
+      "role": "CANCELLATION_REGISTRY",
+      "legacy": false,
+      "testOnly": false
+    }
+  ],
+
+  "summary": {
+    "totalComponents": 19,
+    "productionReachable": 19,
+    "testOnly": 0,
+    "legacy": 0
+  }
+}

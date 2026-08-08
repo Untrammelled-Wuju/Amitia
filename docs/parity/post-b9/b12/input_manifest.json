@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "B12 Input Manifest - 汇总B9P8/B10/B11的全部输入",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "b9p8Inputs": {
+    "final_runtime_manifest": "docs/parity/post-b9/b9p8/final_runtime_manifest.json",
+    "resolved_post_b9_manifest": "docs/parity/post-b9/b9p8/resolved_post_b9_manifest.json",
+    "final_step_reuse_matrix": "docs/parity/post-b9/b9p8/final_step_reuse_matrix.json",
+    "final_architecture_guard": "docs/parity/post-b9/b9p8/final_architecture_guard.json",
+    "final_execution_guard": "docs/parity/post-b9/b9p8/final_execution_guard.json"
+  },
+
+  "b10Inputs": {
+    "b10_status": "docs/parity/post-b9/b10/b10_status.json",
+    "applied_contract_changes": "docs/parity/post-b9/b10/applied_contract_changes.json",
+    "deferred_gap_inventory": "docs/parity/post-b9/b10/deferred_gap_inventory.json",
+    "b12_input_manifest": "docs/parity/post-b9/b10/B12_input_manifest.json"
+  },
+
+  "b11Inputs": {
+    "b11_status": "docs/parity/post-b9/b11/b11_status.json",
+    "capability_permission_resolution": "docs/parity/post-b9/b11/capability_permission_resolution.json",
+    "tool_permission_resolution": "docs/parity/post-b9/b11/tool_permission_resolution.json",
+    "platform_authorization_mapping": "docs/parity/post-b9/b11/platform_authorization_mapping.json",
+    "permission_scope_contract": "docs/parity/post-b9/b11/permission_scope_contract.json",
+    "permission_approval_contract": "docs/parity/post-b9/b11/permission_approval_contract.json",
+    "b12_input_manifest": "docs/parity/post-b9/b11/B12_input_manifest.json"
+  },
+
+  "preconditionCheck": {
+    "b9p8Pass": true,
+    "b10Pass": true,
+    "b10Status": "PASS_NO_CODE_CHANGE",
+    "b11Pass": true,
+    "b11Status": "PASS_NO_CODE_CHANGE"
+  }
+}

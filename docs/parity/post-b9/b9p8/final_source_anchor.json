@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P8",
+  "anchorId": "AMT-POST-B9-RESOLVED-f8c3a2e1b901",
+  "previousAnchorId": "AMT-POST-B9-a3a84ec86812",
+  "createdAt": "2026-08-07T19:30:00+08:00",
+  "repository": {
+    "branch": "develop",
+    "headCommit": "409f1737db0913afe30bbe3fe792a56e0db4632f",
+    "shortCommit": "409f173"
+  },
+  "previousSnapshot": {
+    "sourceFileCount": 4111,
+    "sourceManifestSha256": "a3a84ec8681294f834f2647f047e2ac6c240a1d6aa555afc77fb8e54dc77c525"
+  },
+  "aLineProgressDetected": true,
+  "aLineProgressNotes": "Post-B9P1 detected services.go changes from commit d42ddf7 (desktop pet P0 fixes). Extension Kernel wiring paths unchanged; ToolFacade/ToolRegistry/ExecutionPipeline unaffected.",
+  "canonicalArchitectureStillValid": true,
+  "parityHistoryModified": false,
+  "postB9PatchesModified": false,
+  "driftAnalysis": {
+    "files": [
+      {
+        "file": "backend/cmd/server/services.go",
+        "expectedSha256": "b06448ee728e26cfc7008b38e4a8b1dfe6ac8c9fe800636f9798aa2b08a6392f",
+        "actualSha256": "bc1eb20f1afdf866c4a7571b49e0c749f20de8a00678d077a26dbd3fa4c338c8",
+        "cause": "Post-B9P1 commit d42ddf7 (desktop pet P0 fixes)",
+        "impact": "Extension Kernel wiring paths unchanged; ToolFacade/ToolRegistry/ExecutionPipeline unaffected",
+        "classification": "EXPECTED_A_LINE_PROGRESS"
+      }
+    ],
+    "unexpectedParityScopeDriftCount": 0,
+    "canonicalArchitectureBreachCount": 0
+  }
+}

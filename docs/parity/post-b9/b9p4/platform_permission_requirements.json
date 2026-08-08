@@ -1,0 +1,4817 @@
+﻿{
+  "totalRequirements": 574,
+  "requirements": [
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/resolve_interaction_scope",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/update_update_full_apk",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/update_update_full_apk",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/control_close_all_virtual_displays",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/update_update_user_preferences",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/update_update_user_preferences",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/register_task_goal",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/manage_character_template",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/manage_character_config",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/manage_working_memory",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/orm",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/install_install_app",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/install_install_app",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/belief_batch_process",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/update_memory_write",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/tool_owned_resource",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/update_modify_system_setting",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/update_modify_system_setting",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/update_file_edit",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/js_package_tools",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/import_chat",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/execute_workflow",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/execute_hidden_terminal_command",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/create_create_terminal_session",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/send_permission_post_notifications",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/send_permission_post_notifications",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_memory_fuzzy_search",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/cross_session_persistence",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/install_workspace_import_export",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/install_workspace_import_export",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/install_application_install_uninstall",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/install_application_install_uninstall",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/floating_window_overlay",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/read_permission_read_phone_state",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/read_permission_read_phone_state",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/belief_system_engine",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/execute_task_plan",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/streaming_output",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/device_info",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/device_info",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/corruption_recovery",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/vision_ocr",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_query_memory_links",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/concurrent_tool_execution",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/preserve_backup_backup",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/transfer_transfer_data",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/skill_parser",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/install_toolpkg_install_zip",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/install_toolpkg_install_zip",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/creative_workshop_service",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/manage_embedding_config",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/generate_share_image",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/structured_log",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/grep_code",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_bluetooth_send_and_read",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_bluetooth_send_and_read",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/conversation/manage_conversation",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "conversation.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/conversation/channel",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "conversation.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/workshop_session_view",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/capture_capture_screenshot",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/active_message_rate_limit",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/skill_protocol_handle",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/install_mcp_plugin_install_server",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.install",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_camera_capture",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_camera_capture",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/update_update_memory",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/config_encryption",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/import_history",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/personality_trait_model",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/data_source_route",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/update_update_memory_link",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/calculator",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/compile_personality_prompt",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/music_status",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/automation_execute_browser",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/ir",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/search/vectorindexmanager",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/permission_call_phone",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/permission_call_phone",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/log_view_panel",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/control_virtualdisplayoverlay",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/log_tool_panel",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/worldbook_search_inject",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/platform_security_policy",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/emotion_visual_expression_mapping",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/manage_channel_connector",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/execute_in_terminal_session_streaming",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/auth_context",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/read_bluetooth_ble_read_characteristic",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "character.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/network/request_enable_bluetooth",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/bluetooth_accept",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/bluetooth_accept",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/management_execute_character",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "character.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/character_processor",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/decision_consistency_check",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/read_get_app_usage_time",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/read_get_app_usage_time",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/active_message_recovery",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/schema",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/store_channel_message",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/set_input_text",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/manage_message_dialog_buffer",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/personality_trait_service",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/control_screen_capture",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/build_timeline",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/agent/psyche",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/send_bluetooth_send",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/send_bluetooth_send",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/unregister_interaction",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/memory_system_service",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/manage_voice_preset",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/desktop_clipboard_bridge",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/minis_offloads",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0102",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0103",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0104",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/read_list_installed_apps",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/read_list_installed_apps",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/bluetooth_ble_discover_services",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/bluetooth_ble_discover_services",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0107",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/operitshowershellrunner",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0109",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0110",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/control_media_playback_control",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0112",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0113",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/log_sanitization",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0115",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0116",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/install_uninstall_app",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/install_uninstall_app",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/update_bluetooth_ble_write_and_read_characteristic",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "character.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+      ],
+      "capabilityId": "external/notification/read_bluetooth_ble_read_notifications",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/read_bluetooth_ble_read_notifications",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0120",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/install_data_import",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/read_voicelistfetcher",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/read_voicelistfetcher",
+      "platform": "IOS",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/read_voicelistfetcher",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0123",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0124",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/delete_delete_memory",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/tool_registry",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/install_skill_installation_import",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.install",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0128",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/schema_map_0129",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/hook_tool_lifecycle_intercept",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_get_system_setting",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_get_system_setting",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0132",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/tool_call_execution",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0134",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0135",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0136",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/session_persistence",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0138",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0139",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/debuggersystemoperationtools",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0141",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0142",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/update_clipboard_write",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/update_clipboard_write",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/fallback_retry",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0145",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0146",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0147",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/read_list_character_cards",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "character.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/delete_delete_memory_link",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0150",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0151",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/task/task",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "scheduler.create",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/make_directory",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0154",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/open_url_app",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/open_url_app",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/sshd_server_manager",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/ffmpeg_convert",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0158",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0159",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/agent/agent_status",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/read_personalwakelistener",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "character.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0162",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/capture_browser_screenshot",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/audio",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0165",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/toast",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/toast",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0167",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/install_skill_import_from_zip",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.install",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0169",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0170",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0171",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/control_music_play_queue",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/ipc",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/clipboard_access",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0175",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/control_stop_app",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/control_stop_app",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/integration_execute_mcp_server",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "mcp.server.connect",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/ftp_server_manager",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/switch_browser_select_option",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/agent/run_ui_subagent",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/create_create_memory",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/indexitem",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0183",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/stop_browser_close",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/control_music_stop",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/notification_fgs_management",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/notification_fgs_management",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/toolpkghookbridgesupport",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0188",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/package_proxy",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/tool",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0191",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0192",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/nlp_processing",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/notification_management",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/notification_management",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/ffmpeg_info",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0196",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/toolpkgsummaryhookbridge",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/update_write_file",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/send_share_intent",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "message.send",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/workflow_dag_execute",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/read_clipboard_read",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0202",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/capture_camera_image_capture",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/capture_camera_image_capture",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0204",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0205",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0206",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0207",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0208",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/photo_library_access",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0210",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0211",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/start_permission_bluetooth_connect",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/start_permission_bluetooth_connect",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/create_workflow_create",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/ffmpeg_execute",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/token",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/update_write_file_binary",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/control_cancellation_stop",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0218",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_get_device_location",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_get_device_location",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/press_key",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0221",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_bluetooth_listen",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_bluetooth_listen",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/documentchunk_entity",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/start_sshfileconnectionmanager",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0225",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/rootsystemoperationtools",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/rootsystemoperationtools",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0227",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0228",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0229",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/use_package",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0231",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_list_bluetooth_bonded_devices",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_list_bluetooth_bonded_devices",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/capture_screen_capture",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/create_create_file",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0236",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/execute_shell",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_filesystem_listing",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "capabilityId": "external/voice/capture_permission_record_audio",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/capture_permission_record_audio",
+      "platform": "IOS",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "NSMicrophoneUsageDescription"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/capture_permission_record_audio",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/system_settings_manipulation",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/system_settings_manipulation",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/model/embedding_embeddingconverter",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "provider.use",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/install_skill_install_from_github",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.install",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/schema_map_0243",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/integration_execute_platform",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_get_memory_by_title",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/music_set_volume",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/assistant_intent_activity",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0248",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0249",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/stop_bluetooth_close",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/stop_bluetooth_close",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0251",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_query_memory",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/sleep_delay",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/mcp_tool_invoke",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/manage_cookies",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_memorysearchsettingspreferences",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/interface_execute_ui",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/long_press",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0259",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/control_reasoning_thinking_display",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_read_file_full",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/send_permission_send_sms",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/send_permission_send_sms",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0263",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/read_android_contacts_read",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/toolpkgtoollifecyclebridge",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0266",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/agent/psyche_map_0267",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0268",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0269",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0270",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/execute_intent",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0272",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0273",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0274",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0275",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/control_screen_casting",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/personalwakefeatureextractor",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0278",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0279",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0280",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/send_send_broadcast",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "message.send",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/network/dev_console_api",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/send_send_notification",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/send_send_notification",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.notification",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/device_info_map_0284",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/device_info_map_0284",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/control_music_resume",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_file_read",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/management_execute_skill",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.enable",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0288",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/browser_run_code",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/install_character_card_sillytavern_import",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.install",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0291",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/tool_result_observation",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0293",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/capture_screen_recording_casting",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/model/cloudembeddingservice",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "provider.use",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0296",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/read_get_page_info",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0298",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/execution_execute_shell",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/control_music_play",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0301",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/location_tracking",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/read_screen_capture",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0304",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/update_write_health_data",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0306",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0307",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/delete_delete_file",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.delete",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/install_application_install",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/install_application_install",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0310",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/minis_uri_scheme",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/capture_microphone_recording",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.capture",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/capture_microphone_recording",
+      "platform": "IOS",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.capture",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/capture_microphone_recording",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "desktop.capture",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/persistence_execute_database",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0314",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0315",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_read_file_part",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0317",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/memory",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0319",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/permission",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/permission",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0321",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0322",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/read_permission_read_contacts",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/read_permission_read_contacts",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0324",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/start_bluetooth_connect",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/start_bluetooth_connect",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0326",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0327",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/tap",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0329",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/search/read_android_weather_query",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0331",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/update_update_patch_incremental",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/update_update_patch_incremental",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0333",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0334",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0335",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0336",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/install_permission_request_install_packages",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/install_permission_request_install_packages",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0338",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/bluetooth_device_detection",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/bluetooth_device_detection",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+      ],
+      "capabilityId": "external/notification/read_get_notifications",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/read_get_notifications",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/capture_screenshot_share",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0342",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/swipe",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0344",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0345",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/accessibilitysystemoperationtools",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/accessibilitysystemoperationtools",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/bluetooth_device_scan",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/bluetooth_device_scan",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0348",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/network/multipart_request",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0350",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/governor",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0352",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0353",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0354",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/create_workspace_create",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "scheduler.create",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+      ],
+      "capabilityId": "external/notification/read_android_notification_read",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/notification/read_android_notification_read",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/network/api_key_encryption",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/read_location_get",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/switch_tts_voice_selection",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_find_files",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0361",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0362",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0363",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0364",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0365",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/stop_android_calendar_access",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0367",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0368",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0369",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0370",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/management_execute_extension",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.enable",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0372",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0373",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0374",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0375",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0376",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/device_admin_privilege",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/device_admin_privilege",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/location_tracking_map_0378",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0379",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0380",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/microphone",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0382",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/control_music_pause",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/bluetooth_device_management",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/bluetooth_device_management",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/homekit_device_control",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/homekit_device_control",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/shortcuts_app_intents",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/shortcuts_app_intents",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/update_permission_write_contacts",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/update_permission_write_contacts",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/share_sheet",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0389",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0390",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0391",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/adminsystemoperationtools",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0393",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_memorysearchconfig_memorysearchdebuginfo",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/model/onnxsilerovad",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "provider.use",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0396",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/start_bluetooth_ble_connect",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/start_bluetooth_ble_connect",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0398",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_get_bluetooth_state",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_get_bluetooth_state",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0400",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0401",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/agent/psyche_map_0402",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/music_seek",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0404",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/update_permission_write_settings",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/update_permission_write_settings",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0406",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0407",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/floatingwindowmanager",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/management_execute_file",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/workflow",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.invoke",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/search/read_weather_query",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0412",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/start_mcp_remote_server_connect",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "mcp.server.connect",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_filesystem_search",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0415",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/voice/control_queuedttsplayback",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/scan_bluetooth_devices",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/scan_bluetooth_devices",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/model/management_execute_model",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "provider.configure",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_memory_get_retrieve",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0420",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/switch_workspace_select_switch",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0422",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/stop_browser_close_all",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/minis_attachments",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0425",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/update_file_write",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0427",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/read_shizuku_action_listener",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_read_file",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/tool_schema",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0431",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/standard_runtime_shell_execution",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0433",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/token_map_0434",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/create_calendar_event_create",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "scheduler.create",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/capture_browser_take_screenshot",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_read_file_binary",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0438",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0439",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/delete_memory_delete",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0441",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0442",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0443",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.READ_CONTACTS,android.permission.READ_SMS,android.permission.SEND_SMS,android.permission.POST_NOTIFICATIONS"
+      ],
+      "capabilityId": "external/security/read_permission_read_external_storage",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/security/read_permission_read_external_storage",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/read_android_location_get",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_nfc_tag_read",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_nfc_tag_read",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0447",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/thinking_reasoning_mode",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/stop_close_terminal_session",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0450",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/start_start_app",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/start_start_app",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/read_read_health_data",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0453",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.BLUETOOTH_CONNECT,android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION,android.permission.NFC"
+      ],
+      "capabilityId": "external/device/read_bluetooth_read",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/device/read_bluetooth_read",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/install_package_plugin_install_receiver",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "extensions.install",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/image_multimodal_input",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0457",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/update_android_clipboard_write",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/update_android_clipboard_write",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/token_map_0459",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0460",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0461",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/process/execute_in_terminal_session",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "process.spawn",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/task/create_reminder_create",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "scheduler.create",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/vision",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0465",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/javascript_execution",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/crash_global_exception_handler",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/character/update_bluetooth_ble_write_characteristic",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "character.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0469",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/read_android_clipboard_read",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/read_list_files",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0472",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0473",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0474",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/file/update_edit_file",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "files.write",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0476",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0477",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0478",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0479",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/network/http_request",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "network.request",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0481",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/input_event_injection",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/input_event_injection",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/agent/engineering_execute_prompt",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0484",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/create_alarm_create",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "scheduler.create",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0486",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0487",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0488",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0489",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0490",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0491",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0492",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0493",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/memory/update_memory_edit_update",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "memory.read",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0495",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/clipboard_fallback",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/link_memories",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/extension/start_mcp_local_server_launch",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "mcp.server.connect",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0499",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0500",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0501",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/tool/logcat_viewer",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "builtin/tool/general_map_0503",
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": "service.tool.execute",
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/browser/read_get_terminal_session_screen",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/operitapplication",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/operitapplication",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    },
+    {
+      "platformPermissions": [
+        "android.permission.WRITE_SETTINGS"
+      ],
+      "capabilityId": "external/system/install_shizuku_bundled_installer",
+      "platform": "ANDROID",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": [
+        "Root/ADB"
+      ]
+    },
+    {
+      "platformPermissions": [],
+      "capabilityId": "external/system/install_shizuku_bundled_installer",
+      "gap": true,
+      "platform": "DESKTOP",
+      "userSettingsRedirectRequired": false,
+      "kernelPermissions": null,
+      "specialAuthorization": []
+    }
+  ],
+  "schemaVersion": 1,
+  "runtimeAuthority": false,
+  "taskId": "B9P4"
+}

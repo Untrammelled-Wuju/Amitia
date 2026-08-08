@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B20",
+  "generatedAt": "2026-08-08T16:05:00+08:00",
+  "description": "iOS权柄解析 - 各Authority唯一归属",
+
+  "toolAuthority": "existing ToolRegistry (backend/internal/extension/kernel/capability/registry.go)",
+  "executionAuthority": "existing ExecutionPipeline (backend/internal/extension/kernel/execution/pipeline.go)",
+  "kernelPermissionAuthority": "existing PermissionBroker (backend/internal/extension/kernel/permission/broker.go)",
+  "runtimeBindingAuthority": "existing RuntimeBinding (backend/internal/extension/kernel/capability/runtime_adapter.go)",
+  "runtimeAdapterAuthority": "existing RuntimeAdapterRegistry (backend/internal/extension/kernel/capability/executor.go)",
+  "resourceAuthority": "existing ResourceURI (backend/pkg/resourceuri/)",
+  "sandboxRuntimeAuthority": "existing RuntimeHost + RuntimeOrchestrator (未来iOS Sandbox复用)",
+  "nativeAuthorizationAuthority": "iOS System Frameworks (HealthKit/EventKit/Contacts等) + 未来iOS Native Provider",
+
+  "boundary": {
+    "kernelPermissionOwnership": "PermissionDefinitionRegistry + PermissionBroker 唯一持有Kernel Permission授权状态",
+    "nativeAuthorizationOwnership": "iOS系统框架管理App授权状态，Adapter/PermissionBroker不代为存储",
+    "adapterStoresNeither": true
+  }
+}

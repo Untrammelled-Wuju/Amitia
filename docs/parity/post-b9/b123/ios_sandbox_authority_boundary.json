@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 Authority Boundary - 所有权威源的唯一边界定义",
+
+  "authorities": [
+    {
+      "domain": "Tool Authority",
+      "owner": "ToolRegistry",
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "b123Access": "READ_ONLY",
+      "note": "Sandbox不注册新Tool - 等待iSH实现(B124+)"
+    },
+    {
+      "domain": "Permission Authority",
+      "owner": "PermissionBroker",
+      "path": "backend/internal/extension/kernel/permission/",
+      "b123Access": "READ_ONLY",
+      "note": "Sandbox执行经过Kernel Permission检查"
+    },
+    {
+      "domain": "Execution Authority",
+      "owner": "ExecutionPipeline",
+      "path": "backend/internal/extension/kernel/execution/",
+      "b123Access": "READ_ONLY",
+      "note": "Sandbox内Tool执行经过Pipeline"
+    },
+    {
+      "domain": "Runtime Binding",
+      "owner": "existing RuntimeBinding (RuntimeType enum)",
+      "path": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "b123Access": "EXTEND (RuntimeTypeIOS_Native - B20 authority)",
+      "note": "B123不抢占B20的常量添加权"
+    },
+    {
+      "domain": "Runtime Lifecycle",
+      "owner": "RuntimeHost / RuntimeOrchestrator",
+      "path": "backend/internal/runtimeorchestrator/",
+      "b123Access": "REUSE",
+      "note": "Sandbox复用现有运行时基础设施"
+    },
+    {
+      "domain": "Sandbox Provider",
+      "owner": "IOSSandboxProvider (new contract)",
+      "path": "backend/internal/extension/kernel/sandbox/ (future)",
+      "b123Access": "CONTRACT_ONLY",
+      "note": "B123定义合约，B124实现"
+    },
+    {
+      "domain": "Resource Authority",
+      "owner": "ResourceURI (amitia://)",
+      "path": "backend/pkg/resourceuri/",
+      "b123Access": "READ_ONLY",
+      "note": "Sandbox内路径通过amitia://引用"
+    },
+    {
+      "domain": "State Authority",
+      "owner": "existing runtime/domain states",
+      "path": "runtimeorchestrator/state.go",
+      "b123Access": "READ_ONLY",
+      "note": "Sandbox通过Runtime层暴露状态"
+    },
+    {
+      "domain": "Error Authority",
+      "owner": "existing ToolError model",
+      "path": "capability/tool.go",
+      "b123Access": "READ_ONLY",
+      "note": "Sandbox错误映射到现有错误模型"
+    }
+  ],
+
+  "boundaryValidation": {
+    "allAuthoritiesHaveUniqueOwner": true,
+    "noAuthorityConflict": true,
+    "noParallelSystemCreated": true,
+    "b123ScopeRespected": true
+  }
+}

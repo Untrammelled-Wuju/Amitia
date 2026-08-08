@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "guards": [
+    {
+      "id": "PRODUCTION_ENTRY_CHAT_BOUNDARY",
+      "description": "Chat Tool执行入口必须仅绑定chatToolRuntimeAdapter(ToolFacade)",
+      "enforcement": "SetToolRuntime 只能调用一次，传入newChatToolRuntimeAdapter(toolFacade)",
+      "location": "backend/cmd/server/services.go:335"
+    },
+    {
+      "id": "PRODUCTION_ENTRY_MCP_BOUNDARY",
+      "description": "MCP Tool必须通过ToolFacade.SyncMCPTools同步",
+      "enforcement": "mcpToolFacadeSyncerAdapter -> facade.SyncMCPTools",
+      "location": "backend/cmd/server/tool_facade_wiring.go"
+    },
+    {
+      "id": "PRODUCTION_ENTRY_HOST_API_BOUNDARY",
+      "description": "Extension Host API必须经过Gateway(PermissionChecker, ScopeChecker)",
+      "enforcement": "host_api.NewDefaultGateway + BrokerPermissionChecker + ManagerScopeChecker"
+    },
+    {
+      "id": "PRODUCTION_ENTRY_WORKFLOW_BOUNDARY",
+      "description": "Workflow步骤执行若暴露为Tool，必须通过RuntimeAdapter路径",
+      "enforcement": "workflowExecutor + workflow.RuntimeAdapter -> Kernel ExecutionPipeline"
+    },
+    {
+      "id": "PRODUCTION_ENTRY_DIRECT_SERVICE_BOUNDARY",
+      "description": "非Tool类业务入口(CRUD/记忆/权限设置)不需要走ToolFacade",
+      "note": "ToolFacade仅约束统一Capability/Tool执行入口"
+    }
+  ],
+  "verifiedProductionEntryCount": 1,
+  "bindingInTests": false
+}

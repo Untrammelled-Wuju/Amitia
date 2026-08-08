@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "description": "Lifecycle Declaration 合同 - Manifest 声明与执行的边界",
+  "manifestOwns": {
+    "description": "Manifest.LifecycleMeta 声明 Lifecycle 偏好",
+    "fields": {
+      "AutoUpdate": "bool - 是否自动更新",
+      "BackgroundTasks": "bool - 运行后台任务",
+      "NetworkAccess": "bool - 需要网络访问",
+      "Isolation": "string - 隔离级别",
+      "Sandbox": "bool - 沙箱模式"
+    }
+  },
+  "lifecycleSystemOwns": {
+    "description": "Extension Kernel Lifecycle 执行实际生命周期操作",
+    "install": "package_install_saga.go",
+    "enable": "enablement.StateStore",
+    "disable": "enablement.StateStore",
+    "start": "runtime_supervisor (DesiredRuntimeState)",
+    "stop": "runtime_supervisor",
+    "update": "package_update_saga.go",
+    "uninstall": "package_rollback_uninstall_saga.go",
+    "migration": "migration/ + amitiax_migration/",
+    "rollback": "package_rollback_uninstall_saga.go",
+    "recovery": "package_operation_recovery.go"
+  },
+  "runtimeSupervisorOwns": {
+    "description": "RuntimeSupervisor 持有实际运行时状态",
+    "actualStates": ["starting", "running", "ready", "degraded", "stopped", "crashed", "quarantined"],
+    "healthChecks": "per-module runtime health"
+  },
+  "principles": [
+    "Manifest = (AutoUpdate? Network? Isolation? Sandbox?)",
+    "Lifecycle Saga = do install/enable/disable/update/uninstall",
+    "Runtime Supervisor = track actual runtime state",
+    "Manifest 不持有 running/failed/degraded 等运行时状态"
+  ],
+  "providerLifecycle": {
+    "description": "Provider (Model/Voice) 生命周期通过 Extension Lifecycle 管理",
+    "initialize": "Extension Install -> Provider Contribution 注册",
+    "health": "Runtime Adapter / Provider Health Check (NOT Manifest)",
+    "stop": "Extension Disable/Uninstall -> Provider Contribution 卸载",
+    "note": "Provider 不引入独立 Lifecycle 引擎"
+  },
+  "manifestStatePrinciple": {
+    "description": "Manifest 只有 valid/invalid 解析结果",
+    "doesNotOwn": ["extension running status", "provider health", "task progress"]
+  },
+  "status": "ALREADY_SUPPORTED - Manifest/Lifecycle/State 三层分离已实现"
+}

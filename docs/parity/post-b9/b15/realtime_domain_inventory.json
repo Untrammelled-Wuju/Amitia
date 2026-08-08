@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "domain": "REALTIME_VOICE",
+  "authority": "backend/internal/realtime/",
+  "interfaces": {
+    "VoiceSessionState": "Session lifecycle, Turn management, State versioning",
+    "Protocol": "Binary frame builder/parser for Volcano Realtime Dialogue",
+    "ChannelSwitch": "Audio channel switching",
+    "Proxy": "Realtime proxy handler"
+  },
+  "provider": "Volcano Engine Real-time Dialogue (WebSocket)",
+  "transport": "WebSocket binary protocol (custom frame format)",
+  "inputContract": {
+    "type": "Stream PCM audio frames",
+    "format": "Binary protocol with session ID, event codes"
+  },
+  "outputContract": {
+    "type": "Stream PCM audio + ASR transcription + TTS synthesis events",
+    "note": "Stream media, not stored resource"
+  },
+  "sessionState": {
+    "authority": "VoiceSessionState (in-memory sync.Map)",
+    "states": ["active", "ended"],
+    "turnStates": ["interim", "final", "cancel"]
+  },
+  "streamContract": {
+    "note": "Realtime PCM frames are stream media, NOT stored ResourceURI",
+    "boundary": "Stream vs Stored media"
+  },
+  "stateProjection": {
+    "authority": "VoiceSessionState owns state",
+    "noGlobalStateStore": true
+  },
+  "errorProjection": {
+    "authority": "Realtime protocol errors"
+  },
+  "mapping": "ALREADY_SUPPORTED"
+}

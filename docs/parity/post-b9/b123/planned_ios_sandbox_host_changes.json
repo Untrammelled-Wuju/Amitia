@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 Planned Changes - 修改前声明的所有变更",
+
+  "summary": {
+    "totalChanges": 3,
+    "codeChanges": 0,
+    "documentationChanges": 3,
+    "noCodeModificationRequired": true
+  },
+
+  "changes": [
+    {
+      "changeId": "B123-CHG-001",
+      "semantic": "确认现有RuntimeHost/RuntimeOrchestrator/RuntimeAdapterRegistry满足iOS Sandbox Host/Provider底座要求",
+      "changeType": "NO_CODE_CHANGE",
+      "targetPath": "现有基础设施(reuse)",
+      "existingCanonicalOwner": "backend/internal/runtimeorchestrator/orchestrator.go + backend/internal/runtimehost/host.go + backend/internal/extension/kernel/capability/executor.go",
+      "whyRequired": "B123目标是建立iOS Sandbox Host/Provider底座。现有Runtime基础设施已经完全通用，支持iOS Sandbox Provider注册、生命周期管理、Adapter路由",
+      "backwardCompatibility": "完全向后兼容 - 无源码修改"
+    },
+    {
+      "changeId": "B123-CHG-002",
+      "semantic": "生成iOS Sandbox Provider合约文件和SandboxBackend接口定义",
+      "changeType": "PROVIDER_CONTRACT",
+      "targetPath": "docs/parity/post-b9/b123/",
+      "existingCanonicalOwner": "N/A (新合约文件)",
+      "whyRequired": "为B124提供明确的Provider职责边界和Backend接口定义",
+      "backwardCompatibility": "文档变更，不影响现有代码"
+    },
+    {
+      "changeId": "B123-CHG-003",
+      "semantic": "生成B124/B125/B126/B148下一阶段输入文件",
+      "changeType": "PROVIDER_CONTRACT",
+      "targetPath": "docs/parity/post-b9/b123/",
+      "existingCanonicalOwner": "N/A (新输入文件)",
+      "whyRequired": "为后续步骤提供明确的接入手册和边界定义",
+      "backwardCompatibility": "文档变更，不影响现有代码"
+    }
+  ],
+
+  "noCodeChangeJustification": "B123目标为iOS Sandbox Host/Provider底座。审计结果：RuntimeHost(host.go + native_host.go + factory.go)已支持GuestPlatformIOS；RuntimeOrchestrator已支持ProviderRegistry注册；ProviderFactory模式已有SurrealDB/Qdrant参照。现有基础设施完全满足B123要求，无需创建IOSSandboxHost包装层或修改源码。"
+}

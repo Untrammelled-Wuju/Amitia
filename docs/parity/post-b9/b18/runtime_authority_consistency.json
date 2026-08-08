@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Runtime Authority引用一致性 - RuntimeBinding/Adapter/Host/Orchestrator引用一致性",
+
+  "references": {
+    "b10": {
+      "runtimeBinding": "backend/internal/extension/kernel/capability/runtime_adapter.go (RuntimeBinding)",
+      "status": "CONSISTENT"
+    },
+    "b11": {
+      "note": "B11不直接涉及Runtime，通过PermissionBroker与ExecutionPipeline集成",
+      "status": "NOT_TOUCHED (无冲突)"
+    },
+    "b12": {
+      "runtimeBinding": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+      "runtimeAdapterRegistry": "backend/internal/extension/kernel/capability/executor.go",
+      "runtimeHost": "backend/internal/runtimehost/host.go",
+      "runtimeOrchestrator": "backend/internal/runtimeorchestrator/orchestrator.go",
+      "executionChain": "唯一链：Agent→ToolFacade→ToolRegistry→ExecutionPipeline→PermissionBroker→RuntimeBinding→RuntimeAdapter→Provider→ToolResult",
+      "newAdapterBoundToLegacyAdapter": 0,
+      "runtimeBypassCount": 0,
+      "status": "CONSISTENT"
+    },
+    "b14": {
+      "runtimeBinding": "RuntimeTypeBrowser = 'browser' (B14新增1行到runtime_adapter.go)",
+      "note": "新增1个RuntimeType常量，不新建RuntimeAdapterRegistry/RuntimeHost/RuntimeOrchestrator",
+      "status": "CONSISTENT - 复用现有RuntimeAdapterRegistry"
+    },
+    "b15": {
+      "runtimeBinding": "Media Domain使用INTERNAL_DOMAIN_CALL (host_internal)",
+      "newBindingCreated": false,
+      "status": "CONSISTENT - 复用现有Binding"
+    },
+    "b16": {
+      "runtimeBinding": "Model/Voice/Automation映射到现有Runtime Binding",
+      "identifiedGap": "model binding → resolved via existing host_internal",
+      "status": "CONSISTENT"
+    },
+    "b17": {
+      "runtimeBinding": "RuntimeMeta.Type声明 (10种现有Binding)",
+      "futureAdapters": "browser_runtime, android_native, ios_native (deferred to B123+)",
+      "manifestDoesNotOwnRuntimeAuthority": true,
+      "status": "CONSISTENT - Manifest仅声明，RuntimeHost/RuntimeAdapterRegistry负责执行"
+    }
+  },
+
+  "runtimeBindingAuthorityConflictCount": 0,
+  "uniqueRuntimeBindingCount": 1,
+  "uniqueRuntimeAdapterRegistryCount": 1,
+  "uniqueRuntimeHostCount": 1,
+  "uniqueRuntimeOrchestratorCount": 1,
+  "result": "PASS - 所有Runtime Authority保持唯一且一致"
+}

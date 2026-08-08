@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B90_B92_input_from_B13",
+  "generatedAt": "2026-08-08T00:15:00+08:00",
+  "note": "B13向B90-B92提供的ResourceURI合同输入。ResourceURI合同已就绪，只待Provider实现接入。",
+  "deferredProviders": [
+    {
+      "provider": "Android SAF",
+      "futureStep": "B90",
+      "resourceContractNeeds": {
+        "logicalURI": "amitia://workspace/... 或 amitia://attachments/...",
+        "platformURI": "content:// 属于Provider内部Endpoint，不应替代amitia://",
+        "extensionPoint": "可通过 ResourceRoot 新增（如 ResourceRootSAF...",
+        "recommendation": "推荐通过existing native虚拟Root或未来新增SAF root作为Provider-backedRoot",
+        "note": "不允许把Android content://直接替代amitia://"
+      }
+    },
+    {
+      "provider": "SFTP",
+      "futureStep": "B90",
+      "resourceContractNeeds": {
+        "logicalURI": "amitia://workspace/... (IF modeled as workspace provider)",
+        "providerEndpoint": "sftp://host/path 属于Provider内部Endpoint，不应替代amitia://",
+        "resourceDescriptor": "需要ResourceDescriptor + ProviderBinding (uri + provider=SFTP + workspace=project)",
+        "extensionPoint": "可复用ResourceResolver接口作为Provider合同。ResourceKind保持。"
+      }
+    },
+    {
+      "provider": "SSH Workspace",
+      "futureStep": "B91",
+      "resourceContractNeeds": {
+        "logicalURI": "amitia://workspace/... 或专用Root",
+        "extensionPoint": "可复用ResourceResolver接口作为Provider合同"
+      }
+    },
+    {
+      "provider": "Git Workspace",
+      "futureStep": "B92",
+      "resourceContractNeeds": {
+        "logicalURI": "amitia://workspace/... 或其他Root",
+        "extensionPoint": "建议在现有ResourceResolver合同上扩展"
+      }
+    }
+  ],
+  "contractReadiness": {
+    "ResourceResolver": "AVAILABLE — backend/pkg/resourceuri/resolver.go",
+    "ResourceKind": "AVAILABLE — Filesystem / Virtual",
+    "ResourceRoot": "AVAILABLE — 10个Root, 可扩展",
+    "ResourceURI_Parser": "AVAILABLE — Parse/MustParse",
+    "PhysicalResolver": "AVAILABLE — 用于Local; 未来Provider实现同一接口"
+  }
+}

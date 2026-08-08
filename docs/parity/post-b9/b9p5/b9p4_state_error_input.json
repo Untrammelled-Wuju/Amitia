@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5-B9P4-Input",
+  "generatedAt": "2026-08-07T18:32:00+08:00",
+  "purpose": "供B9P4整合B9P3 Capability、B9P5 State/Error、B9P6 Canonical Kernel后统一冻结Post-B9 Resolving Layer",
+  "canonicalStateDomains": [
+    {
+      "domainId": "CAPABILITY",
+      "canonicalType": "DERIVED_STATE",
+      "source": "backend/internal/extension/kernel/capability/state.go",
+      "protocolProjection": "B9 AvailabilityStatus",
+      "mappingStatus": "MOSTLY_MAPPED",
+      "gaps": []
+    },
+    {
+      "domainId": "TOOL_EXECUTION",
+      "canonicalType": "OBSERVABILITY_PROJECTION",
+      "source": "backend/internal/extension/kernel/observability/status.go",
+      "protocolProjection": "B9 ToolExecutionStatus",
+      "mappingStatus": "MOSTLY_MAPPED",
+      "gaps": ["VALIDATING", "READY", "PAUSED", "CANCELLING"]
+    },
+    {
+      "domainId": "TOOL_RESULT",
+      "canonicalType": "CANONICAL_DOMAIN_OUTCOME",
+      "source": "backend/internal/extension/kernel/capability/result.go",
+      "protocolProjection": "无直接对应",
+      "mappingStatus": "NO_PROTOCOL_MAPPING_REQUIRED"
+    },
+    {
+      "domainId": "TASK_RUNTIME",
+      "canonicalType": "CANONICAL_DOMAIN_STATE",
+      "source": "backend/internal/extension/kernel/task_runtime/models.go",
+      "protocolProjection": "B9 TaskStatus",
+      "mappingStatus": "REQUIRES_DOMAIN_SPLIT",
+      "gaps": ["PLANNING", "WAITING_TOOL", "WAITING_USER属于Agent域"]
+    },
+    {
+      "domainId": "EXTENSION_RUNTIME",
+      "canonicalType": "CANONICAL_DOMAIN_STATE",
+      "source": "backend/internal/extension/kernel/runtime_supervisor/types.go",
+      "protocolProjection": "B9 RuntimeStatus",
+      "mappingStatus": "MOSTLY_MAPPED",
+      "gaps": []
+    },
+    {
+      "domainId": "ANDROID_RUNTIME",
+      "canonicalType": "CANONICAL_DOMAIN_STATE",
+      "source": "mobile_app/android/amitia-runtime/RuntimeState.kt",
+      "protocolProjection": "B9 RuntimeStatus",
+      "mappingStatus": "MOSTLY_MAPPED",
+      "gaps": ["REPAIRING映射到RECOVERING为lossy"]
+    },
+    {
+      "domainId": "PERMISSION",
+      "canonicalType": "CANONICAL_DOMAIN_STATE",
+      "source": "backend/internal/extension/kernel/permission/grant.go",
+      "protocolProjection": "B9 PermissionStatus",
+      "mappingStatus": "SEMANTIC_DIFFERENT",
+      "gaps": ["需要明确Domain vs Platform两层语义"]
+    }
+  ],
+  "stateMappings": {
+    "totalMappings": 91,
+    "oneToOne": 20,
+    "manyToOne": 7,
+    "contextual": 25,
+    "noMapping": 39,
+    "lossyCount": 11
+  },
+  "stateConflicts": [
+    {
+      "conflictId": "TASK_PLANNING",
+      "description": "B9 TaskStatus.PLANNING属于Agent域，不应强行映射到TaskRunStatus",
+      "resolution": "REQUIRES_DOMAIN_SPLIT"
+    },
+    {
+      "conflictId": "PERMISSION_SEMANTIC",
+      "description": "B9 PermissionStatus混合了策略决策和OS授权两层语义",
+      "resolution": "明确区分PERMISSION_POLICY_DECISION和PLATFORM_AUTHORIZATION_STATE"
+    },
+    {
+      "conflictId": "RUNTIME_PLATFORM_DIFFERENT",
+      "description": "Android Runtime和Extension Runtime同名状态在不同平台有不同语义",
+      "resolution": "DISTINCT_DOMAIN，跨端投影保留各自真实状态"
+    }
+  ],
+  "protocolStateCorrections": [
+    {
+      "correctionId": "PROTOCOL_STATE_EXTENSION_001",
+      "domain": "ToolExecution",
+      "currentState": "PAUSED",
+      "issue": "ToolExecution当前不支持暂停，B9 PAUSED状态无Domain对应",
+      "suggestedAction": "在B9P4中评估是否需要为ToolExecution添加PAUSED能力，或标记PAUSED为DEPRECATED"
+    }
+  ],
+  "canonicalErrorDomains": [
+    "capability", "task_runtime", "extension_runtime", "android_runtime", "extension_package", "mcp_protocol", "image_provider", "chat_model", "desktoppet_runtime", "vectorstore_qdrant", "observability", "workflow", "hook", "schedule", "desktop_update", "desktop_extension", "event", "extension_resource", "permission", "desktoppet_behavior", "desktoppet_runtime"
+  ],
+  "errorTaxonomyMapping": {
+    "totalProtocolErrors": 21,
+    "exactMapping": 3,
+    "familyMapping": 14,
+    "noProtocolMapping": 3,
+    "protocolErrorGap": 1
+  },
+  "retryabilityOwnership": {
+    "task_runtime": "task_runtime.IsRetryableErrorCode()",
+    "capability/ToolError": "各adapter硬编码(code==timeout为Retryable=true)",
+    "extension_package": "PackageError.Retryable字段",
+    "image_provider": "ProviderError.RetryClass字段",
+    "extension_runtime": "RuntimeError隐含",
+    "android_runtime": "RuntimeError.recoverable字段",
+    "protocolDefault": "不可覆盖Domain决定"
+  },
+  "httpOwnership": {
+    "task_runtime": "task_runtime.HTTPStatusForErrorCode()",
+    "extension_package": "PackageError.HTTPStatus字段",
+    "image_provider": "ProviderError.HTTPStatus字段",
+    "capability": "无统一HTTP映射(建议后续统一)",
+    "mcp": "JSON-RPC标准"
+  },
+  "serializationContract": {
+    "protocolCode": "string - 稳定大类如ERR_TASK_EXECUTION_FAILED_4002",
+    "domain": "string - 如task_runtime",
+    "domainCode": "string - 如task_checkpoint_invalid",
+    "message": "string - 用户可读描述",
+    "retryable": "bool",
+    "userVisible": "bool",
+    "userActionRequired": "bool",
+    "details": "object - 额外上下文",
+    "traceId": "string",
+    "timestamp": "ISO8601"
+  },
+  "duplicateSystemBlockers": [
+    "禁止创建UnifiedStatus.go",
+    "禁止创建GlobalRuntimeStatus.go",
+    "禁止创建ParityStateStore.go",
+    "禁止创建UnifiedErrorRegistry.go",
+    "禁止创建ErrorCenter.go"
+  ]
+}

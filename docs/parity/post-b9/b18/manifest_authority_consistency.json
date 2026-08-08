@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Manifest Authority引用一致性 - Manifest v2作为唯一Extension Package声明合同",
+
+  "manifestAuthority": "backend/internal/extension/kernel/manifest_v2/",
+  "manifestVersion": "v2",
+  "lifecycleAuthority": "Extension Kernel Saga (package_install_saga, package_update_saga, package_rollback_uninstall_saga)",
+  "contributionAuthority": "TypedContributionInstaller (contribution_installer.go)",
+
+  "references": {
+    "b10_b11_b12_b13": {
+      "note": "B10-B13不涉及Manifest体系，无引用冲突",
+      "status": "NOT_TOUCHED (无冲突)"
+    },
+    "b14": {
+      "manifestUsage": "Future Browser Provider通过Manifest v2 Contribution声明",
+      "newManifestSystem": 0,
+      "status": "CONSISTENT"
+    },
+    "b15": {
+      "manifestUsage": "Media Provider通过ContributionKind=provider + ModuleType=service声明",
+      "newManifestSystem": 0,
+      "status": "CONSISTENT"
+    },
+    "b16": {
+      "manifestUsage": "Model/Voice/Automation Provider映射到Manifest v2 Contribution",
+      "newManifestSystem": 0,
+      "status": "CONSISTENT"
+    },
+    "b17": {
+      "manifestAuthority": "backend/internal/extension/kernel/manifest_v2.Manifest (CANONICAL)",
+      "manifestRole": "Extension Package声明层 (what extension provides/requires)",
+      "doesNotOwn": ["Capability semantic source", "Permission grant state", "Runtime instance state", "Extension runtime state"],
+      "manifestV3": 0,
+      "providerManifestSystem": 0,
+      "secondLifecycleSystemCount": 0,
+      "status": "CONSISTENT - Manifest唯一Authority，仅声明不执行"
+    }
+  },
+
+  "secondManifestSystemCount": 0,
+  "secondLifecycleSystemCount": 0,
+  "result": "PASS - Manifest v2保持唯一，所有Provider通过同一Contribution体系声明"
+}

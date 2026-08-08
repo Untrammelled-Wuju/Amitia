@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+  "description": "B123 Legacy Validation - 验证未使用Legacy路径",
+
+  "validations": [
+    {
+      "check": "New Legacy Runtime Binding",
+      "description": "未通过LegacyRuntimeAdapter注册新iOS Sandbox Provider",
+      "status": "PASS",
+      "count": 0
+    },
+    {
+      "check": "New Legacy Tool Registration",
+      "description": "未通过Legacy路径注册Sandbox Tool",
+      "status": "PASS",
+      "count": 0
+    },
+    {
+      "check": "New Legacy Runtime Execution",
+      "description": "未通过Legacy执行路径调用Sandbox",
+      "status": "PASS",
+      "count": 0
+    }
+  ],
+
+  "adapterReference": {
+    "legacyAdapterLocation": "backend/internal/extension/kernel/capability/adapter_legacy.go",
+    "b123Interaction": "NONE",
+    "note": "B123完全避免使用Legacy Adapter路径"
+  },
+
+  "summary": {
+    "newLegacyRuntimeBinding": 0,
+    "newLegacyToolRegistration": 0,
+    "newLegacyRuntimeExecution": 0,
+    "passCount": 3,
+    "failCount": 0
+  }
+}

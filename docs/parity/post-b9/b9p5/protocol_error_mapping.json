@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P5",
+  "generatedAt": "2026-08-07T18:30:00+08:00",
+  "errorMappings": [
+    {
+      "protocolCode": "ERR_AGENT_INITIALIZATION_FAILED_1001",
+      "domainCodes": ["task_definition_invalid", "task_runtime_start_failed"],
+      "domain": "task_runtime",
+      "mappingType": "FAMILY",
+      "notes": "Agent初始化可能由多种任务运行时错误引起"
+    },
+    {
+      "protocolCode": "ERR_AGENT_CAPABILITY_NOT_FOUND_1002",
+      "domainCodes": ["not_available", "ErrCodeHostCommandNotFound"],
+      "domain": "capability",
+      "mappingType": "EXACT",
+      "notes": "能力/工具未找到"
+    },
+    {
+      "protocolCode": "ERR_MODEL_CONNECTION_FAILED_2001",
+      "domainCodes": ["model_call_failed"],
+      "domain": "chat_model",
+      "mappingType": "EXACT",
+      "notes": "模型连接失败"
+    },
+    {
+      "protocolCode": "ERR_MODEL_TIMEOUT_2002",
+      "domainCodes": ["timeout", "connection_lost"],
+      "domain": "capability",
+      "mappingType": "FAMILY",
+      "notes": "模型超时可以映射到多种超时错误"
+    },
+    {
+      "protocolCode": "ERR_TOOL_INVALID_ARGUMENT_3001",
+      "domainCodes": ["invalid_input", "task_input_invalid"],
+      "domain": "capability/task",
+      "mappingType": "EXACT",
+      "notes": "参数无效"
+    },
+    {
+      "protocolCode": "ERR_TOOL_EXECUTION_FAILED_3002",
+      "domainCodes": ["execution_failed", "internal_error", "runtime_unavailable", "dependency_missing", "connection_lost", "invalid_result"],
+      "domain": "capability",
+      "mappingType": "FAMILY",
+      "notes": "工具执行失败的大类，包含多种具体原因"
+    },
+    {
+      "protocolCode": "ERR_TASK_PLANNING_FAILED_4001",
+      "domainCodes": ["无直接Domain对应 - 属于Agent域"],
+      "domain": "agent",
+      "mappingType": "NO_PROTOCOL_MAPPING",
+      "notes": "PLANNING属于Agent Task域，不在TaskRuntime域中。PROTOCOL_ERROR_GAP"
+    },
+    {
+      "protocolCode": "ERR_TASK_EXECUTION_FAILED_4002",
+      "domainCodes": ["task_runtime_crashed", "task_runtime_start_failed", "task_cancelled", "task_timed_out", "task_artifact_failed", "task_state_transition_invalid", "task_non_idempotent_unknown", "task_manual_intervention"],
+      "domain": "task_runtime",
+      "mappingType": "FAMILY",
+      "notes": "任务执行失败的广泛大类"
+    },
+    {
+      "protocolCode": "ERR_RUNTIME_NOT_READY_5001",
+      "domainCodes": ["RUNTIME_START_FAILED", "RUNTIME_HEALTH_FAILED", "RUNTIME_RECONCILE_FAILED", "RUNTIME_STOP_FAILED", "RUNTIME_DRAIN_TIMEOUT", "START_FAILED", "STOP_FAILED", "INSTALL_FAILED", "VERIFY_FAILED", "REPAIR_FAILED"],
+      "domain": "extension_runtime / android_runtime",
+      "mappingType": "FAMILY",
+      "notes": "Runtime未就绪的具体原因在各自领域"
+    },
+    {
+      "protocolCode": "ERR_PERMISSION_DENIED_6001",
+      "domainCodes": ["permission_denied", "scope_denied", "task_permission_denied", "task_scope_denied", "PERMISSION_DENIED", "ErrCodeRuntimeUnauthorized", "ErrPermissionDenied"],
+      "domain": "permission / task_runtime / android_runtime / desktop_extension",
+      "mappingType": "FAMILY",
+      "notes": "权限拒绝包含多个层次(策略/OS/Scope)，不能简单合并"
+    },
+    {
+      "protocolCode": "ERR_FILE_NOT_FOUND_7001",
+      "domainCodes": ["ErrResourceNotFound", "PACKAGE_NOT_FOUND", "ROOTFS_MISSING"],
+      "domain": "extension_kernel / android_runtime",
+      "mappingType": "FAMILY",
+      "notes": "文件/资源未找到"
+    },
+    {
+      "protocolCode": "ERR_NETWORK_CONNECTION_8001",
+      "domainCodes": ["connection_lost", "ErrTransportClosed", "ErrRuntimeDisconnected", "ErrRuntimeOffline"],
+      "domain": "capability / mcp / desktoppet_runtime",
+      "mappingType": "FAMILY",
+      "notes": "网络连接失败"
+    },
+    {
+      "protocolCode": "ERR_BROWSER_AUTOMATION_9001",
+      "domainCodes": ["无对应Domain源"],
+      "domain": "browser",
+      "mappingType": "NO_PROTOCOL_MAPPING",
+      "notes": "Browser自动化错误尚未建立Domain错误源"
+    },
+    {
+      "protocolCode": "ERR_MCP_SERVER_ERROR_10001",
+      "domainCodes": ["ErrorInternal", "ErrMessageTooLarge", "ErrTransportClosed", "ErrRequestTimeout", "ErrUnsupportedVersion"],
+      "domain": "mcp",
+      "mappingType": "FAMILY",
+      "notes": "MCP服务器错误"
+    },
+    {
+      "protocolCode": "ERR_SKILL_LOAD_FAILED_11001",
+      "domainCodes": ["ErrPointNotFound（Hook）", "ErrRecursion"],
+      "domain": "hook",
+      "mappingType": "FAMILY",
+      "notes": "技能/Hook加载失败"
+    },
+    {
+      "protocolCode": "ERR_EXTENSION_INSTALL_12001",
+      "domainCodes": ["ErrPackageAlreadyInstalled", "ErrPackageMigrationFailed", "ErrInvalidArchive", "ErrPathTraversal", "ErrSignatureInvalid", "ErrPublisherBlocked", "ErrPackageLeaseAcquireFailed"],
+      "domain": "extension_package",
+      "mappingType": "FAMILY",
+      "notes": "扩展安装失败包含多种原因"
+    },
+    {
+      "protocolCode": "ERR_VOICE_SYNTHESIS_13001",
+      "domainCodes": ["无对应Domain错误源"],
+      "domain": "tts",
+      "mappingType": "NO_PROTOCOL_MAPPING",
+      "notes": "TTS合成错误尚未建立Domain错误源"
+    },
+    {
+      "protocolCode": "ERR_MEMORY_STORAGE_14001",
+      "domainCodes": ["ErrStorageUnavailable", "STORAGE_UNAVAILABLE", "ErrAuditWriteRequired"],
+      "domain": "observability / android_runtime",
+      "mappingType": "FAMILY",
+      "notes": "存储相关错误"
+    },
+    {
+      "protocolCode": "ERR_CHANNEL_CONNECTION_15001",
+      "domainCodes": ["ErrUnknownSidecarKind", "ErrSidecarBundleIncomplete", "ErrRuntimeProtocolMismatch"],
+      "domain": "sidecar / desktoppet_runtime",
+      "mappingType": "FAMILY",
+      "notes": "通道/侧车连接错误"
+    },
+    {
+      "protocolCode": "ERR_DATABASE_QUERY_16001",
+      "domainCodes": ["ErrInvalidDocument", "ErrRenderFailed"],
+      "domain": "qdrant_config",
+      "mappingType": "FAMILY",
+      "notes": "数据库查询错误"
+    },
+    {
+      "protocolCode": "ERR_SECURITY_AUTH_17001",
+      "domainCodes": ["ErrInvalidToken", "ErrTokenExpired", "ErrUnsafePath", "ErrPathEscape", "ErrAuthFailOpen", "ErrCodeImageGenerationAuthFailed"],
+      "domain": "security / desktoppet",
+      "mappingType": "FAMILY",
+      "notes": "安全认证错误"
+    },
+    {
+      "protocolCode": "ERR_INTERNAL_UNKNOWN_99001",
+      "domainCodes": ["internal_error", "INTERNAL_ERROR", "ErrCodeHostCommandPermissionDenied", "ErrCodeRuntimeForbiddenOrigin", "ErrCodeExecutionOwnershipLost"],
+      "domain": "多个",
+      "mappingType": "FAMILY",
+      "notes": "通用内部错误大类"
+    }
+  ],
+  "summary": {
+    "totalProtocolErrors": 21,
+    "exactMapping": 3,
+    "familyMapping": 14,
+    "noProtocolMapping": 3,
+    "protocolErrorGap": 1
+  }
+}

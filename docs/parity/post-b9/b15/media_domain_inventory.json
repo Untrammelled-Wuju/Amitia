@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "note": "Amitia当前Media领域清单。各Domain独立运行，无统一Media Runtime或Provider Registry。",
+  "domains": {
+    "imageGeneration": {
+      "path": "backend/internal/imagegen/, backend/internal/imageprovider/",
+      "authority": "ImageGenerationProvider interface + Registry",
+      "configTable": "image_gen_configs",
+      "providers": ["seedream", "stability", "tongyi"],
+      "status": "REUSE"
+    },
+    "vision": {
+      "path": "backend/internal/vision/",
+      "authority": "VisionService + VisionConfig",
+      "configTable": "vision_configs",
+      "providers": ["volcengine", "gemini", "openai-compatible"],
+      "status": "REUSE"
+    },
+    "asr": {
+      "path": "backend/internal/asr/",
+      "authority": "AsrService + AsrConfig",
+      "configTable": "asr_configs",
+      "providers": ["volcengine"],
+      "status": "REUSE"
+    },
+    "tts": {
+      "path": "backend/internal/tts/",
+      "authority": "TtsService + Engine + VoiceClone",
+      "configTable": "tts_configs",
+      "providers": ["volcengine", "openai", "azure", "edge", "elevenlabs", "minimax", "aliyun", "cosyvoice"],
+      "status": "REUSE"
+    },
+    "realtime": {
+      "path": "backend/internal/realtime/",
+      "authority": "VoiceSessionState + Protocol",
+      "provider": "volcano dialogue",
+      "status": "REUSE"
+    },
+    "browser": {
+      "path": "backend/internal/browser/",
+      "authority": "Browser Types/Contracts (B14)",
+      "status": "REUSE"
+    }
+  },
+  "unifiedMediaPackage": {
+    "exists": false,
+    "path": null,
+    "required": false,
+    "reason": "各Domain已稳定运行，B15不强制统一内部结构"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "generatedAt": "2026-08-08T13:30:00+08:00",
+  "result": "PASS",
+  "validation": {
+    "secondBrowserPermissionCenter": 0,
+    "directPhysicalUploadPathContract": 0,
+    "directPhysicalDownloadPathContract": 0,
+    "secretInResourceUri": 0,
+    "providerDirectToolExposure": 0,
+    "agentDirectProviderBypass": 0,
+    "productionFakeProvider": 0,
+    "unsafeGlobalCurrentSession": 0,
+    "unsafeGlobalCurrentTab": 0
+  },
+  "evidence": {
+    "noPermissionCenter": "Browser uses Kernel PermissionDefinitionRegistry + PermissionBrowser",
+    "noPhysicalUploadPath": "BrowserUploadRequest requires ResourceURI (string), not physicalPath",
+    "noPhysicalDownloadPath": "BrowserDownloadResult returns ResourceURI, not physical path",
+    "noSecretInURI": "B13 ResourceURI contract enforced — no userinfo/port/fragment/query in URI",
+    "noProviderDirectToolExposure": "BrowserProvider contract does not register tools",
+    "noAgentBypass": "Browser access goes through Agent → ToolRegistry → ExecutionPipeline → PermissionBroker → RuntimeBinding → BrowserProvider",
+    "noProductionFakeProvider": "fakeBrowserProvider only exists in contract_test.go",
+    "noGlobalCurrentSession": "BrowserSessionManager interface uses SessionID parameter, no global state",
+    "noGlobalCurrentTab": "All Tab operations require SessionID + TabID"
+  }
+}

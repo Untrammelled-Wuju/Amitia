@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B41",
+  "existingTests": [
+    {"package": "backend/internal/extension/kernel/execution", "status": "PASS (pipeline_test.go covers pipeline execution including Invocation handling)"},
+    {"package": "backend/internal/extension/kernel/capability", "status": "PASS (registry_test.go covers ToolDefinition/ToolInvocationContext/State)"}
+  ],
+  "gofmt": "No modifications, gofmt clean."
+}

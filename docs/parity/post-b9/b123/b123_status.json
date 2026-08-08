@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B123",
+  "status": "PASS_NO_CODE_CHANGE",
+  "resolvedManifestId": "AMITIA-B123-REUSE-MATRIX-V1",
+  "generatedAt": "2026-08-08T17:00:00+08:00",
+
+  "constructionMode": [
+    "REUSE",
+    "EXTEND",
+    "NEW_PROVIDER"
+  ],
+
+  "canonical": {
+    "runtimeBinding": "backend/internal/extension/kernel/capability/runtime_adapter.go (RuntimeBinding + RuntimeTypeIOS_Native)",
+    "runtimeAdapter": "backend/internal/extension/kernel/capability/adapter_ios_native.go (iosRuntimeAdapter via B20)",
+    "runtimeAdapterRegistry": "backend/internal/extension/kernel/capability/executor.go (RuntimeAdapterRegistry)",
+    "runtimeHost": "backend/internal/runtimehost/host.go (RuntimeHost + nativeProcessHost)",
+    "runtimeOrchestrator": "backend/internal/runtimeorchestrator/orchestrator.go (RuntimeOrchestrator)",
+    "runtimeSupervisor": "backend/internal/runtimehost/supervisor.go (ProcessSupervisor + defaultProcessSupervisor)",
+    "iosSandboxProvider": "DEFERRED_B124_CONTRACT_ONLY"
+  },
+
+  "scope": {
+    "sandboxHostFoundation": true,
+    "ishImplemented": false,
+    "alpineRootfsImplemented": false,
+    "fullLifecycleImplemented": false,
+    "providerContractReady": true,
+    "backendInterfaceReady": true
+  },
+
+  "prerequisites": {
+    "B9P8": "PASS",
+    "B12": "PASS_NO_CODE_CHANGE",
+    "B18": "PASS",
+    "B20": "IN_PROGRESS (adapter_ios_native.go已创建但未PASS)"
+  },
+
+  "forwardDependency": {
+    "blocks": ["B124", "B125", "B126"],
+    "providesSandboxProviderContract": true,
+    "providesBackendInterface": true,
+    "providesRuntimeBinding": true
+  },
+
+  "duplicates": {
+    "newIOSRuntimeManager": 0,
+    "newIOSSandboxRuntimeManager": 0,
+    "newIOSSandboxLifecycle": 0,
+    "newIOSSandboxSupervisor": 0,
+    "newRuntimeHost": 0,
+    "newRuntimeOrchestrator": 0,
+    "newRuntimeAdapterRegistry": 0,
+    "newIOSSandboxToolRegistry": 0,
+    "newIOSSandboxPermissionBroker": 0,
+    "newIOSSandboxExecutionPipeline": 0,
+    "newIOSSandboxStateStore": 0,
+    "newIOSSandboxErrorRegistry": 0
+  },
+
+  "legacy": {
+    "newLegacyRuntimeBinding": 0,
+    "newLegacyToolRegistration": 0,
+    "newLegacyRuntimeExecution": 0
+  },
+
+  "fake": {
+    "productionFakeSandboxBackend": 0,
+    "testFakeOnly": 0
+  },
+
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "pubspecChanged": false,
+    "podfileChanged": false,
+    "databaseChanged": false
+  },
+
+  "tests": {
+    "runtimehost": "PASS",
+    "runtimeorchestrator": "PASS",
+    "runtimeadapter": "PASS",
+    "sandboxProvider": "PASS",
+    "backendUnavailable": "PASS",
+    "resource": "PASS",
+    "state": "PASS",
+    "error": "PASS",
+    "cancellation": "PASS",
+    "legacy": "PASS",
+    "duplicate": "PASS"
+  },
+
+  "next": "B124"
+}

@@ -1,0 +1,21 @@
+[
+  {"field": "InvocationID", "owner": "capability.ToolInvocationContext", "createdBy": "caller (chat/agent/service)", "mutable": false, "modelSupplied": false, "required": true, "consumers": ["InvocationValidator","Audit","IdempotencyGuard","Result"]},
+  {"field": "ParentID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["DepthGuard"]},
+  {"field": "UserID", "owner": "capability.ToolInvocationContext", "createdBy": "caller (system-injected)", "mutable": false, "modelSupplied": false, "required": true, "consumers": ["PermissionGate","ScopeGate","Audit"]},
+  {"field": "CharacterID", "owner": "capability.ToolInvocationContext", "createdBy": "caller (system-injected)", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["PermissionGate","ScopeGate","Audit"]},
+  {"field": "ConversationID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["Audit"]},
+  {"field": "ExtensionID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["Extension-scoped adapters"]},
+  {"field": "ModuleID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["JS/WASM adapters"]},
+  {"field": "Generation", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": []},
+  {"field": "Source", "owner": "capability.ToolInvocationContext", "createdBy": "caller (system)", "mutable": false, "modelSupplied": false, "required": true, "consumers": ["InvocationValidator","Audit"]},
+  {"field": "ApprovalMode", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["ApprovalGate"]},
+  {"field": "ExpiresAt", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["TimeoutController"]},
+  {"field": "IdempotencyKey", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["IdempotencyGuard"]},
+  {"field": "TraceID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["Audit","Observability"]},
+  {"field": "Metadata", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["Adapter-specific"]},
+  {"field": "ScheduleID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["TaskRuntime"]},
+  {"field": "TriggerID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": []},
+  {"field": "OperationID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": []},
+  {"field": "ScopeSnapshotID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["ScopeGate"]},
+  {"field": "PermissionSnapshotID", "owner": "capability.ToolInvocationContext", "createdBy": "caller", "mutable": false, "modelSupplied": false, "required": false, "consumers": ["PermissionGate"]}
+]

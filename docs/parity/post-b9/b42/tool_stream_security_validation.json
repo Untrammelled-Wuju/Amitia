@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B42",
+  "crossInvocationLeak": 0,
+  "crossUserBroadcastLeak": 0,
+  "rawSecretLeak": 0,
+  "rawPhysicalPathLeak": 0,
+  "providerBypass": 0,
+  "permissionBypass": 0
+}

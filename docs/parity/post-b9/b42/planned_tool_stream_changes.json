@@ -1,0 +1,10 @@
+[
+  {
+    "changeId": "B42-CHG-001",
+    "semantic": "PASS_NO_CODE_CHANGE — Extension Kernel 层当前无任何 Tool Execution Streaming 实现；B42 在明确禁止新增 ToolStreamingRuntime2 / ToolStreamExecutionPipeline / GlobalToolStreamBus / ToolResult2 等约束下，确认现有 InvocationContext + ToolResult 已满足 Invocation-Identity / Final-Result / Terminal-State / Cancel-Propagation 合同级保证；增量 Streaming Transport 留待后续。",
+    "changeType": "NO_CODE_CHANGE",
+    "targetPath": "",
+    "whyRequired": "B42 scope + 禁止规则导致无合规模块可实施",
+    "backwardCompatibility": "N/A"
+  }
+]

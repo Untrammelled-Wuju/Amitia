@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B9P6-SKILL-WIRING",
+  "verified": true,
+  "chatSkillPrompt": {
+    "path": "backend/cmd/server/tool_facade_wiring.go (via chatToolRuntimeAdapter.PrepareAgentSkillPrompt)",
+    "facadeMethod": "ToolFacade.PrepareAgentSkillPrompt",
+    "catalog": "backend/internal/extension/kernel/agent_skill.AgentSkillCatalog",
+    "usesActivationService": true,
+    "output": "Agent Skill prompt sections + activated skills list + tool mappings"
+  },
+  "skillToolRegistration": {
+    "source": "backend/internal/extension/kernel/skill_migration/",
+    "target": "ToolRegistry via migration",
+    "notIndependentRegistry": true
+  },
+  "executionPath": "Chat tool calling -> facade -> registry -> executionKernel -> RuntimeDispatcher -> adapter",
+  "secondSkillRuntime": false,
+  "canonicalSkillCatalog": "backend/internal/extension/kernel/agent_skill/catalog.go"
+}

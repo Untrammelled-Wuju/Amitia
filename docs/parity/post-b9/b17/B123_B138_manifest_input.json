@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B17",
+  "generatedAt": "2026-08-08T01:03:00+08:00",
+  "targetStep": "B123-B138",
+  "description": "B17 为 B123-B138 (iOS Sandbox/Native Provider) 准备的 Manifest 输入",
+  "futureProviders": {
+    "browser": {
+      "manifestRepresentation": "ContributionKind=provider + RuntimeMeta.Type=javascript or new",
+      "platform": "Compatibility.Platforms 包含 desktop platforms",
+      "note": "Manifest 可通过现有 static + new RuntimeMeta.Type 表达"
+    },
+    "search": {
+      "manifestRepresentation": "ContributionKind=provider + RuntimeMeta.Type=javascript",
+      "note": "同 browser"
+    },
+    "androidNative": {
+      "manifestRepresentation": "ContributionKind=provider + Platform=android",
+      "requiresFutureAdapter": "adapter_android_native (B124+)",
+      "note": "Manifest 已声明 platform 兼容性，Adapter 实现归未来步骤"
+    },
+    "iosNative": {
+      "manifestRepresentation": "ContributionKind=provider + Platform=ios",
+      "requiresFutureAdapter": "adapter_ios_native (B124+)",
+      "note": "同 android"
+    }
+  },
+  "note": "B123-B138 未来 Provider 可通过现有 Manifest 表达，仅 Adapter 实现为未来工作",
+  "requiredManifestChanges": "NO - 所有未来需求可通过现有 Contract 表达"
+}

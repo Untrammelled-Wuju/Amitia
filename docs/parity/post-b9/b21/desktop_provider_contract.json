@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop Provider合同",
+
+  "providerInterface": {
+    "name": "DesktopProvider",
+    "path": "backend/internal/extension/kernel/capability/adapter_desktop.go",
+    "methods": [
+      "Execute(ctx context.Context, request DesktopBridgeRequest) DesktopBridgeResponse",
+      "Health(ctx context.Context) HealthStatus"
+    ]
+  },
+
+  "contract": {
+    "providerImplements": "platform behavior only",
+    "requestContract": {
+      "protocolVersion": "int - 协议版本",
+      "requestId": "string - 请求ID(透传InvocationID)",
+      "operation": "string - 操作名(对应HandlerName)",
+      "payload": "map[string]any - 操作参数"
+    },
+    "responseContract": {
+      "protocolVersion": "int - 协议版本",
+      "requestId": "string - 响应ID",
+      "status": "string - success/error/cancelled/timeout",
+      "result": "map[string]any - 结果数据",
+      "error": "*DesktopError - 错误信息"
+    }
+  },
+
+  "mustNot": [
+    "own Tool registry",
+    "own Permission authority",
+    "own Execution pipeline",
+    "own Agent runtime",
+    "own Task runtime",
+    "own global state",
+    "save credentials",
+    "create permission IDs",
+    "bypass PermissionBroker"
+  ],
+
+  "productionProvider": {
+    "name": "DesktopHostProvider",
+    "path": "backend/internal/extension/kernel/desktop/desktop_provider.go",
+    "complies": true
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B14",
+  "status": "PASS",
+  "constructionMode": [
+    "NEW_PROVIDER",
+    "EXTEND"
+  ],
+  "browser": {
+    "existingCanonicalDomainFound": false,
+    "newContractPackageCreated": true,
+    "newContractPackagePath": "backend/internal/browser/",
+    "productionProviderImplemented": false,
+    "requiredCapabilityCount": 4,
+    "resolvedCapabilityCount": 4,
+    "unresolvedCapabilityCount": 0
+  },
+  "contracts": {
+    "provider": "RESOLVED",
+    "session": "RESOLVED",
+    "tab": "RESOLVED",
+    "navigation": "RESOLVED",
+    "dom": "RESOLVED",
+    "interaction": "RESOLVED",
+    "resourceTransfer": "RESOLVED",
+    "runtimeBinding": "RESOLVED"
+  },
+  "integration": {
+    "toolRegistry": "EXISTING",
+    "permissionBroker": "EXISTING",
+    "executionPipeline": "EXISTING",
+    "resourceUri": "EXISTING",
+    "runtimeBinding": "EXTENDED (RuntimeTypeBrowser added)"
+  },
+  "duplicates": {
+    "browserToolRegistry": 0,
+    "browserPermissionCenter": 0,
+    "browserExecutionPipeline": 0,
+    "workspaceSystem": 0,
+    "resourceUriSystem": 0
+  },
+  "security": {
+    "providerDirectToolExposure": 0,
+    "agentProviderBypass": 0,
+    "productionFakeProvider": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "futureImplementation": "B79-B83",
+  "next": "B15"
+}

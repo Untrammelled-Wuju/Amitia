@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B124",
+  "generatedAt": "2026-08-08T18:15:00+08:00",
+  "description": "B124 iSH上游来源记录 - 已引入",
+
+  "status": "VENDORED",
+
+  "upstream": {
+    "name": "iSH - iOS Linux Shell",
+    "repository": "https://github.com/ish-app/ish",
+    "license": "GPL-2.0",
+    "primaryLanguage": "C, Objective-C, Assembly",
+    "description": "Runs a Linux environment on iOS using a usermode x86 emulator and syscall translation",
+    "keyDirectories": [
+      "app/ - iOS UI层",
+      "kernel/ - Linux syscall翻译",
+      "emu/ - x86 emulator (seakel)",
+      "fs/ - 文件系统层",
+      "platform/ - darwin/linux平台抽象"
+    ],
+    "vendoredAt": "third_party/ish/",
+    "cloneDate": "2026-08-08",
+    "cloneMethod": "git shallow clone"
+  },
+
+  "licenseCompatibility": {
+    "ishLicense": "GPL-2.0",
+    "amitiaDistribution": "App Store分发",
+    "decision": "ACCEPTED - 用户已评估并接受GPLv2约束",
+    "notes": "反tivoization条款对App Store影响需持续评估",
+    "lastChecked": "2026-08-08",
+    "blocked": false
+  },
+
+  "integrationForm": {
+    "method": "SOURCE_REFERENCE",
+    "description": "iSH源码作为third_party参考副本引入，生产编译需单独配置",
+    "jitEntitlement": "ACCEPTED - com.apple.security.cs.allow-jit及其他所需entitlement风险已接受"
+  }
+}

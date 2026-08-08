@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B11",
+  "status": "PASS_NO_CODE_CHANGE",
+  "generatedAt": "2026-08-08T00:30:00+08:00",
+
+  "constructionMode": ["REUSE", "EXTEND"],
+
+  "canonical": {
+    "definitionRegistry": "backend/internal/extension/kernel/permission/definition.go (PermissionDefinitionRegistry)",
+    "permissionBroker": "backend/internal/extension/kernel/permission/broker.go (DefaultPermissionBroker)",
+    "grantStore": "backend/internal/extension/kernel/permission/storage.go (PermissionStorage) + sqlite_storage.go (SQLitePermissionStorage)",
+    "scopeOwner": "backend/internal/extension/kernel/permission/scope.go (PermissionScope + ScopeType)",
+    "approvalOwner": "backend/internal/extension/kernel/permission/grant.go (PermissionDecision) + definition.go (ApprovalMode)"
+  },
+
+  "permissions": {
+    "requiredSemanticCount": 53,
+    "alreadySupportedCount": 53,
+    "semanticAliasCount": 13,
+    "newDefinitionCount": 0,
+    "platformAuthorizationOnlyCount": 0,
+    "notPermissionCount": 0,
+    "unresolvedCount": 0
+  },
+
+  "references": {
+    "undefinedProductionReferences": 0,
+    "orphanDefinitions": 0,
+    "duplicateSemanticDefinitions": 0
+  },
+
+  "security": {
+    "directPermissionBypassCount": 0,
+    "platformAuthorizationMixedIntoKernelState": false
+  },
+
+  "duplicates": {
+    "newPermissionDefinitionRegistry": 0,
+    "newPermissionBroker": 0,
+    "newGrantStore": 0,
+    "newScopeSystem": 0,
+    "newApprovalSystem": 0,
+    "newPermissionStateStore": 0
+  },
+
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+
+  "tests": {
+    "permissionPackage": "PASS (40 tests)",
+    "capabilityPackage": "PASS",
+    "executionIntegration": "PASS",
+    "race": "PASS"
+  },
+
+  "next": "B12"
+}

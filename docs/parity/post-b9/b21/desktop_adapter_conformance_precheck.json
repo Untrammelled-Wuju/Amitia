@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B21",
+  "generatedAt": "2026-08-08T15:00:00+08:00",
+  "description": "Desktop Adapter Conformance预检(B22准备)",
+
+  "conformanceChecks": {
+    "bindingResolution": {
+      "status": "PASS",
+      "note": "Supports()正确识别RuntimeTypeDesktop_Extension"
+    },
+    "registrationUniqueness": {
+      "status": "PASS",
+      "note": "仅一处注册，无重复"
+    },
+    "requestValidation": {
+      "status": "PASS",
+      "note": "DesktopBridgeRequest包含protocolVersion/requestId/operation/payload"
+    },
+    "contextPropagation": {
+      "status": "PASS",
+      "note": "select监听ctx.Done()，支持cancellation和deadline"
+    },
+    "cancellation": {
+      "status": "PASS",
+      "note": "ctx取消时返回Cancelled状态"
+    },
+    "deadline": {
+      "status": "PASS",
+      "note": "ctx deadline时返回TimedOut状态"
+    },
+    "resultNormalization": {
+      "status": "PASS",
+      "note": "DesktopBridgeResponse归一化为UnifiedToolResult"
+    },
+    "errorNormalization": {
+      "status": "PASS",
+      "note": "DesktopError映射为ToolError"
+    },
+    "availability": {
+      "status": "PASS",
+      "note": "provider为nil时返回ErrorCodeNotAvailable"
+    },
+    "platformSelection": {
+      "status": "PASS",
+      "note": "Desktop Adapter统一服务Windows/macOS/Linux，无需运行时选择"
+    }
+  },
+
+  "overallStatus": "DESKTOP_PRECHECK_PASS"
+}

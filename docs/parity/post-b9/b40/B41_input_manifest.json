@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B40",
+  "nextStep": "B41",
+  "canonicalToolDefinition": "capability.ToolDefinition",
+  "canonicalInvocationType": "capability.ToolInvocation (backend/internal/extension/kernel/capability/tool.go)",
+  "schemaValidationStage": "execution.InputValidator + execution.ResultValidator (current granularity: status/size/empty-content)",
+  "toolIdentity": "ToolDefinition.ID / ModelName / ExtensionID / ModuleID / Source",
+  "capabilityIdentity": "ToolDefinition.ToCapabilityDefinition maps ID -> CapabilityID",
+  "runtimeBinding": "ToolDefinition.Runtime (RuntimeBinding)",
+  "permissionRequirements": "ToolDefinition.Permissions ([]PermissionRequirement)",
+  "currentContextFields": "ToolInvocationContext in invocation.go (InvocationID, UserID, CharacterID, ConversationID, ExtensionID, ModuleID, Source, IdempotencyKey, TraceID, ...)",
+  "missingContextSemantic": "Future context-related hardening stays in B41 scope"
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B19",
+  "generatedAt": "2026-08-08T15:09:00+08:00",
+  "description": "Android Resource边界 - 资源引用的分层规范",
+
+  "canonicalResource": {
+    "scheme": "amitia://",
+    "authority": "B13 ResourceURI / backend/pkg/resourceuri/",
+    "usage": "所有跨Kernel边界统一资源引用必须使用amitia://"
+  },
+
+  "androidContentScheme": {
+    "scheme": "content://",
+    "authority": "SAF / MediaStore (Android Provider内部)",
+    "usage": "Android Provider内部处理content://，不作为Kernel公共合同",
+    "constraint": "content://不跨Kernel边界，Provider返回前必须转为amitia://"
+  },
+
+  "androidPhysicalPath": {
+    "format": "/data/... / /storage/emulated/0/...",
+    "authority": "Android Provider内部",
+    "constraint": "不成为跨Kernel公共合同，必须封装为amitia://"
+  },
+
+  "embeddedLinuxPhysicalPath": {
+    "format": "/home/user/... (proot内)",
+    "authority": "RuntimeHost嵌入式Linux内部",
+    "constraint": "不跨Kernel边界暴露"
+  },
+
+  "boundary": {
+    "logicalResource": "amitia:// - Kernel/B55-B78通用",
+    "nativePhysicalURI": "content:// / file:// - Android Provider内部",
+    "embeddedLinuxPhysicalPath": "proot路径 - RuntimeHost内部"
+  }
+}

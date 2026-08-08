@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B13",
+  "generatedAt": "2026-08-08T00:15:00+08:00",
+  "sourceB9P8ManifestIds": [
+    "AMITIA-POST-B9-RESOLVED-V1"
+  ],
+  "extractionBlueprint": "从final_capability_manifest.json / final_provider_manifest.json / final_runtime_manifest.json中与ResourceURI、File、Directory、Attachment、Workspace、Sandbox、Remote、Platform file相关的语义需求抽取",
+  "requiredSemantics": [
+    {
+      "id": "uri.parse",
+      "description": "Parse URI from string",
+      "sourceManifest": "final_canonical_system_manifest.json (RESOURCE_URI)"
+    },
+    {
+      "id": "uri.normalize",
+      "description": "Canonical URI normalization",
+      "sourceManifest": "final_canonical_system_manifest.json (RESOURCE_URI)"
+    },
+    {
+      "id": "uri.serialize",
+      "description": "Round-trip safe serialization",
+      "sourceManifest": "final_canonical_system_manifest.json (RESOURCE_URI)"
+    },
+    {
+      "id": "uri.root-validation",
+      "description": "Allowed-roots validation",
+      "sourceManifest": "final_canonical_system_manifest.json (RESOURCE_URI)"
+    },
+    {
+      "id": "root.workspace",
+      "description": "Workspace Logical Root",
+      "sourceManifest": "B9P4 Frozen Workspace Semantic"
+    },
+    {
+      "id": "root.attachments",
+      "description": "Attachments Logical Root",
+      "sourceManifest": "final_provider_manifest.json / legacy production"
+    },
+    {
+      "id": "root.data-cache-runtime-config-extensions-logs-temp",
+      "description": "其他持久化/临时/运行时/配置 Root",
+      "sourceManifest": "RESOURCE_URI Canonical System"
+    },
+    {
+      "id": "resolver.resolve",
+      "description": "Logical URI -> backend location",
+      "sourceManifest": "ResourceResolver interface"
+    },
+    {
+      "id": "resolver.reverse",
+      "description": "Backend location -> logical URI",
+      "sourceManifest": "Reverse methods"
+    },
+    {
+      "id": "resolver.traversal-protection",
+      "description": "Path traversal detection and denial",
+      "sourceManifest": "final_capability_manifest.json builtin/resource/*"
+    },
+    {
+      "id": "resolver.root-escape-protection",
+      "description": "Physical result must remain inside the configured root",
+      "sourceManifest": "final_permission_manifest.json RESOURCE_ACCESS"
+    },
+    {
+      "id": "resource.kind.filesystem-vs-virtual",
+      "description": "Filesystem vs virtual resource discrimination",
+      "sourceManifest": "resolved_post_b9_manifest.json"
+    },
+    {
+      "id": "resource.handle-non-filesystem",
+      "description": "Native/virtual backing resource can be addressed without filesystem mapping",
+      "sourceManifest": "final_canonical_system_manifest.json"
+    },
+    {
+      "id": "uri.no-secret",
+      "description": "Secret/credentials must not be embedded in URI",
+      "sourceManifest": "final_permission_manifest.json"
+    },
+    {
+      "id": "uri.unicode-path",
+      "description": "Unicode (e.g. Chinese) filename support",
+      "sourceManifest": "final_canonical_system_manifest.json"
+    },
+    {
+      "id": "cross-platform-path",
+      "description": "Logical URI uses slash; Physical Resolver handles platform separator conversion",
+      "sourceManifest": "RESOURCE_URI package contract"
+    },
+    {
+      "id": "uri.query-fragment-rejection",
+      "description": "Query/fragment/userinfo/port not allowed; prevents credential/path injection",
+      "sourceManifest": "final_permission_manifest.json RESOURCE_ACCESS"
+    },
+    {
+      "id": "provider-virtual-root",
+      "description": "B14+ may need provider-backed virtual roots (e.g., SAF content, SFTP file) addressable under amitia://native/ or equivalent",
+      "sourceManifest": "final_capability_manifest.json builtin/resource/*"
+    }
+  ]
+}

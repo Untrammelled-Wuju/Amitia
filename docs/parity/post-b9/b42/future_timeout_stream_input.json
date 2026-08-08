@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B42",
+  "nextOwner": "B44 timeout step",
+  "canonicalDeadlineSource": "ToolInvocationContext.ExpiresAt",
+  "openStream": "NOT_PRESENT",
+  "providerTimeoutBoundary": "ToolDefinition.Runtime / RuntimeAdapter 自身实现",
+  "note": "当前没有 Tool Stream 需要 timeout 终止；Timeout 步骤作用于 Execution 整体超时。"
+}

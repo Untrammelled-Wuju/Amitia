@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B11",
+  "description": "Final Capability到Permission的映射决议",
+  "generatedAt": "2026-08-08T00:30:00+08:00",
+
+  "totalCapabilities": 502,
+  "resolvedByExistingPermissions": 502,
+  "platformAuthorizationOnly": 0,
+  "unresolved": 0,
+
+  "resolutionSummary": "全部502个Final Capability权限语义均由现有Permission体系完全承载。现有52个permission ID覆盖20个领域（character/conversation/message/memory/files/network/desktop/extensions/mcp/workflow/provider/service/storage/secret/resource/event/schedule/tool/ui/clipboard/runtime/migration）。",
+
+  "representativeMappings": [
+    {"capabilityId": "kernel/character/read", "kernelPermissions": ["character.read"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/character/update", "kernelPermissions": ["character.write"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/conversation/read", "kernelPermissions": ["conversation.read"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/conversation/write", "kernelPermissions": ["conversation.write"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/file/read", "kernelPermissions": ["files.read"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/file/write", "kernelPermissions": ["files.write"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/file/delete", "kernelPermissions": ["files.delete"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/network/request", "kernelPermissions": ["network.request"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/desktop/capture", "kernelPermissions": ["desktop.capture"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/workflow/execute", "kernelPermissions": ["workflow.execute"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/mcp/tool_invoke", "kernelPermissions": ["mcp.tools.invoke"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/provider/use", "kernelPermissions": ["provider.use"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/notification/show", "kernelPermissions": ["desktop.notification"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/extension/invoke", "kernelPermissions": ["extensions.invoke"], "platformAuthorizationRequired": false},
+    {"capabilityId": "kernel/memory/read", "kernelPermissions": ["memory.read"], "platformAuthorizationRequired": false}
+  ],
+
+  "scopeRequirements": "全部使用现有10种Scope（Global/Character/Conversation/Extension/Module/Tool/Resource/Target/Invocation/Session）",
+  "approvalRequirements": "全部使用现有4种ApprovalMode和6种PermissionDecision",
+  "status": "ALL_RESOLVED"
+}

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B15",
+  "domain": "IMAGE_GENERATION",
+  "authority": "backend/internal/imageprovider/",
+  "interfaces": {
+    "ImageGenerationProvider": "Submit/Query/Cancel/ValidateConfig/Capabilities",
+    "ExtendedProvider": "ImageGenerationProvider + ExtendedCapabilities",
+    "Registry": "Provider registration and alias resolution"
+  },
+  "requestTypes": {
+    "ImageGenerationRequest": "Prompt, ReferenceImages, Width, Height, Seed, OutputCount",
+    "ImageInput": "Path, Bytes, MimeType"
+  },
+  "resultTypes": {
+    "ImageGenerationResult": "Images, Provider, Model, Status, Usage, ErrorCode",
+    "GenerationResult": "SubmissionState, OperationID, Candidates, Provider, Model",
+    "CandidateImage": "Index, Bytes, MimeType, Width, Height, RemoteURL, Metadata"
+  },
+  "stateProjection": {
+    "authority": "SubmissionState (accepted/processing/succeeded/failed/unknown)",
+    "noGlobalStateStore": true
+  },
+  "errorProjection": {
+    "authority": "ProviderError domain type",
+    "errorCodes": [
+      "IMAGE_PROVIDER_CONFIG_MISSING",
+      "IMAGE_PROVIDER_NOT_REGISTERED",
+      "IMAGE_MODEL_NOT_SUPPORTED",
+      "IMAGE_REFERENCE_IMAGE_NOT_SUPPORTED",
+      "IMAGE_DIMENSION_NOT_SUPPORTED",
+      "IMAGE_PROMPT_TOO_LONG",
+      "IMAGE_GENERATION_AUTH_FAILED",
+      "IMAGE_GENERATION_INSUFFICIENT_BALANCE",
+      "IMAGE_GENERATION_RATE_LIMITED",
+      "IMAGE_GENERATION_CONTENT_POLICY_REJECTED",
+      "IMAGE_GENERATION_REQUEST_INVALID",
+      "IMAGE_GENERATION_SERVICE_ERROR",
+      "IMAGE_GENERATION_NETWORK_TIMEOUT",
+      "IMAGE_GENERATION_STATUS_UNKNOWN",
+      "IMAGE_GENERATION_ASYNC_QUERY_FAILED",
+      "IMAGE_GENERATION_CANCELLATION_NOT_SUPPORTED",
+      "IMAGE_GENERATION_EMPTY_RESULT",
+      "IMAGE_RESULT_DOWNLOAD_FAILED",
+      "IMAGE_RESULT_INVALID_FORMAT",
+      "IMAGE_RESULT_PIXEL_LIMIT_EXCEEDED",
+      "IMAGE_RESULT_SAVE_FAILED",
+      "IMAGE_OUTPUT_COUNT_EXCEEDED",
+      "IMAGE_REFERENCE_IMAGE_EXCEEDED"
+    ],
+    "retryClass": "never/same_call/query_first/user_action/after_delay"
+  },
+  "resourceContract": {
+    "input": "ImageInput supports Path/Bytes/MimeType",
+    "output": "CandidateImage supports Bytes/RemoteURL/RemoteReceipt"
+  },
+  "mapping": "ALREADY_SUPPORTED"
+}

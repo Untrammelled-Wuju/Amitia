@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "fromTask": "B43",
+  "toTask": "B44",
+  "handoffTimestamp": "2026-08-08",
+  "b43_result": {
+    "status": "PASS_NO_CODE_CHANGE",
+    "summary": "工具调用取消全链路合同已硬化，生产代码满足所有取消传播/迟到结果隔离/安全约束要求"
+  },
+  "retryCancellationInputs": {
+    "future_input_path": "docs/parity/post-b9/b43/future_retry_cancellation_input.json",
+    "description": "重试语义下的取消边界：可中断重试、不可中断重试(NON_INTERRUPTIBLE)的取消传播差异"
+  },
+  "circuitCancellationInputs": {
+    "future_input_path": "docs/parity/post-b9/b43/future_circuit_cancellation_input.json",
+    "description": "熔断器打开/半开状态下的取消语义：取消是否计入失败计数、恢复尝试中的取消处理"
+  },
+  "auditCancellationInputs": {
+    "future_input_path": "docs/parity/post-b9/b43/future_audit_cancellation_input.json",
+    "description": "取消操作的审计追踪：取消发起方、取消原因、取消时间戳记录"
+  },
+  "deferredToB54": {
+    "future_input_path": "docs/parity/post-b9/b43/B54_cancellation_idempotency_input.json",
+    "description": "取消幂等保证：重复取消调用的安全性、取消状态查询的一致性"
+  },
+  "deferredToB141": {
+    "future_input_path": "docs/parity/post-b9/b43/B141_tool_cancellation_cutover_input.json",
+    "description": "取消链路切换：当旧取消机制与本规范共存时的迁移策略与切割验证"
+  },
+  "cancellationAuthorityForNext": "execution.CancellationController — B44 不得引入第二套取消权威",
+  "lateResultGuardForNext": "B43 已建立的迟到结果隔离约束在重试/熔断场景仍适用",
+  "note": "B44 在执行重试、熔断、审计相关取消扩展时必须复用 B43 已建立的 CancellationController 和取消传播链路"
+}

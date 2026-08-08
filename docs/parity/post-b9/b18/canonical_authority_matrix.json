@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Canonical Authority Matrix - 全部12项核心Authority唯一性确认",
+
+  "toolDefinition": {
+    "owner": "backend/internal/extension/kernel/capability/",
+    "path": "backend/internal/extension/kernel/capability/tool.go, definition.go, id.go, source.go, owner.go",
+    "type": "Canonical Capability/Tool Definition types (CapabilityDefinition, ToolDefinition, CapabilityID, CapabilityType, CapabilitySource, ResourceOwner)",
+    "sourceStep": "B9P3 (frozen), B10 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B10验证16项合同语义全部ALREADY_SUPPORTED，无新建Definition体系"
+  },
+
+  "toolRegistry": {
+    "owner": "backend/internal/extension/kernel/capability/registry.go",
+    "path": "backend/internal/extension/kernel/capability/registry.go",
+    "type": "ToolRegistry (唯一Global Agent Tool Registry)",
+    "sourceStep": "B9P6 (frozen), B10 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B10/B11/B12/B14/B15/B16/B17全部引用同一ToolRegistry，无新建Global Tool Registry"
+  },
+
+  "execution": {
+    "owner": "backend/internal/extension/kernel/execution/pipeline.go",
+    "path": "backend/internal/extension/kernel/execution/pipeline.go",
+    "type": "ExecutionPipeline (唯一Global Tool执行链)",
+    "sourceStep": "B9P5 (frozen), B12 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B12 runtime_execution_chain.json确认唯一链：Agent→ToolFacade→ToolRegistry→ExecutionPipeline→PermissionBroker→RuntimeBinding→RuntimeAdapter→Provider→ToolResult"
+  },
+
+  "permission": {
+    "owner": "backend/internal/extension/kernel/permission/",
+    "path": "backend/internal/extension/kernel/permission/definition.go, broker.go, scope.go, grant.go, storage.go",
+    "type": "PermissionDefinitionRegistry + PermissionBroker (唯一Kernel权限体系)",
+    "sourceStep": "B11 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B11确认52/53 Permission全部由现有体系承载，B14/B15/B16/B17全部复用PermissionBroker"
+  },
+
+  "runtimeBinding": {
+    "owner": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+    "path": "backend/internal/extension/kernel/capability/runtime_adapter.go",
+    "type": "RuntimeBinding + RuntimeType (12种枚举)",
+    "sourceStep": "B9P8 (frozen), B12 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B12 runtime_authority_resolution.json确认Binding唯一，B17 Manifest通过RuntimeMeta.Type声明但不拥有Authority"
+  },
+
+  "runtimeAdapterRegistry": {
+    "owner": "backend/internal/extension/kernel/capability/executor.go",
+    "path": "backend/internal/extension/kernel/capability/executor.go",
+    "type": "RuntimeAdapterRegistry (唯一Adapter注册表)",
+    "sourceStep": "B12 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B12 duplicate_system_validation确认0新建RuntimeAdapterRegistry"
+  },
+
+  "runtimeHost": {
+    "owner": "backend/internal/runtimehost/host.go",
+    "path": "backend/internal/runtimehost/host.go",
+    "type": "RuntimeHost interface + nativeProcessHost implementation",
+    "sourceStep": "B12 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B12确认唯一RuntimeHost，负责Runtime lifecycle management和process supervision"
+  },
+
+  "runtimeOrchestrator": {
+    "owner": "backend/internal/runtimeorchestrator/orchestrator.go",
+    "path": "backend/internal/runtimeorchestrator/orchestrator.go",
+    "type": "RuntimeOrchestrator (ComponentState + OrchestratorState)",
+    "sourceStep": "B12 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B12确认唯一RuntimeOrchestrator，与RuntimeHost职责不重叠"
+  },
+
+  "resourceUri": {
+    "owner": "backend/pkg/resourceuri/",
+    "path": "backend/pkg/resourceuri/resource_uri.go, resource_root.go, resolver.go, physical_resolver.go",
+    "type": "ResourceURI (唯一跨平台逻辑资源合同，官方Scheme=amitia://)",
+    "sourceStep": "B13 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B13确认amitia://唯一官方Scheme，B14 Browser合同复用ResourceURI，B15 Media资源映射复用amitia://"
+  },
+
+  "manifest": {
+    "owner": "backend/internal/extension/kernel/manifest_v2/",
+    "path": "backend/internal/extension/kernel/manifest_v2/",
+    "type": "Manifest v2 (唯一Extension Package声明合同)",
+    "sourceStep": "B17 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B17确认Manifest唯一Authority，仅负责声明层，不拥有Capability/Permission/State Authority"
+  },
+
+  "extensionLifecycle": {
+    "owner": "Extension Kernel Saga (package_install_saga, package_update_saga, package_rollback_uninstall_saga)",
+    "path": "backend/internal/extension/kernel/saga/",
+    "type": "Extension Lifecycle (唯一Extension生命周期执行层)",
+    "sourceStep": "B17 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B17确认Lifecycle唯一Authority，Manifest.LifecycleMeta仅声明偏好但不执行逻辑"
+  },
+
+  "state": {
+    "owner": "Domain-specific State Stores",
+    "path": "各Domain内 (SubmissionState, VoiceSessionState, WorkflowRun, TaskRunStatus, etc.)",
+    "type": "Domain State (各Domain持有自身状态，无Global State Store)",
+    "sourceStep": "B14/B15/B16 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B14 BrowserState, B115 MediaState, B16 Model/Voice/Automation State均保持Domain所有，无Global State Store新建"
+  },
+
+  "error": {
+    "owner": "Domain-specific Error Semantics",
+    "path": "各Domain内 (ProviderError, BrowserError, TextModelCallError, etc.)",
+    "type": "Domain Error (各Domain持有自身错误语义，无Global Error Registry)",
+    "sourceStep": "B14/B15/B16 (validated)",
+    "duplicateAllowed": false,
+    "duplicateFound": 0,
+    "evidence": "B14 BrowserError, B115 Media各Domain Error, B16 Model/Voice/Automation Error均保持Domain所有，Protocol仅做Projection"
+  }
+}

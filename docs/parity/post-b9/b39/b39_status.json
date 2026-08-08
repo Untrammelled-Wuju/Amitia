@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B39",
+  "status": "PASS_NO_CODE_CHANGE",
+  "constructionMode": [
+    "REUSE",
+    "EXTEND",
+    "VALIDATION"
+  ],
+  "canonical": {
+    "toolRegistry": "backend/internal/extension/kernel/capability.ToolRegistry",
+    "toolDefinition": "backend/internal/extension/kernel/capability.ToolDefinition",
+    "toolIdBuilder": "backend/internal/extension/kernel/capability.BuildToolID",
+    "modelExposureEntry": "backend/internal/extension/kernel/tool_facade.go (ToolFacade.ModelTools)",
+    "executionEntry": "backend/internal/extension/kernel/container_builder.go (ExecutionPipeline.ToolResolver)"
+  },
+  "registration": {
+    "productionRegistrationPathCount": 1,
+    "unknownRegistrationPathCount": 0,
+    "duplicateToolIdCount": 0,
+    "duplicateModelNameCount": 0,
+    "permanentDualRegistrationCount": 0,
+    "newLegacyRegistrationCount": 0,
+    "productionFakeRegistrationCount": 0
+  },
+  "exposure": {
+    "unexpectedModelToolExposureCount": 0,
+    "visibleButUnresolvableToolCount": 0
+  },
+  "duplicates": {
+    "newToolRegistry": 0,
+    "newCapabilityRegistry": 0,
+    "newToolRuntime": 0,
+    "newExecutionPipeline": 0,
+    "newPermissionBroker": 0,
+    "newToolResultSystem": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B40"
+}

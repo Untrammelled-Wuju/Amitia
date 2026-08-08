@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B125",
+  "status": "BLOCKED",
+
+  "boundaries": {
+    "rootfsIsWorkspace": false,
+    "wholeAppContainerMounted": false,
+    "credentialDirectoryMounted": false,
+    "databaseDirectoryMounted": false,
+    "logsDirectoryMounted": false,
+    "workspaceUsesResourceURI": true,
+    "rawHostPathNotPortableContract": true
+  },
+
+  "blocker": "B124未PASS"
+}

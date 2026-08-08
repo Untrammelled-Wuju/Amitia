@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B23",
+  "generatedAt": "2026-08-08T18:00:00+08:00",
+  "description": "B24-B38每一步的Canonical Target和Forbidden Duplicate Guard",
+
+  "steps": [
+    {
+      "step": "B24",
+      "canonicalTargets": ["backend/internal/agent/", "backend/internal/interaction/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["AgentRuntime2", "AgentCore2", "AgentOrchestrator2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B25",
+      "canonicalTargets": ["backend/internal/decision/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["DecisionEngine2", "GoalManager2", "BehaviorPlanner2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B26",
+      "canonicalTargets": ["backend/internal/mindruntime/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["ReflectionRuntime2", "MindSupervisor2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B27",
+      "canonicalTargets": ["backend/internal/pipelinecheckpoint/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["AgentCheckpointStore2", "Checkpoint2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B28",
+      "canonicalTargets": ["backend/internal/queue/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["AgentQueue2", "AgentScheduler2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B29",
+      "canonicalTargets": ["backend/internal/interaction/", "backend/internal/chat/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["ChatRuntime2", "MessagePipeline2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B30",
+      "canonicalTargets": ["backend/internal/companion/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["ProactiveTriggerScheduler2", "ActiveMessageRuntime2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B31",
+      "canonicalTargets": ["backend/internal/decision/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["Arbitration2", "Scoring2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B32",
+      "canonicalTargets": ["backend/internal/mindruntime/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["Reconciliation2", "Snapshot2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B33",
+      "canonicalTargets": ["backend/internal/agent/", "backend/internal/interaction/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["AgentEntry2", "UnifiedEntry2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B34",
+      "canonicalTargets": ["backend/internal/decision/", "backend/internal/mindruntime/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["Intention2", "BeliefResolver2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B35",
+      "canonicalTargets": ["backend/internal/interaction/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["InteractionTracker2", "ContextLoader2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B36",
+      "canonicalTargets": ["backend/internal/mindruntime/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["PersonalityGrowth2", "DayConsolidation2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B37",
+      "canonicalTargets": ["backend/internal/queue/", "backend/internal/interaction/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["Backpressure2", "Supersede2"],
+      "mustSearchBeforeCreate": true
+    },
+    {
+      "step": "B38",
+      "canonicalTargets": ["backend/internal/agent/", "backend/internal/decision/", "backend/internal/mindruntime/"],
+      "allowedMode": ["REUSE", "EXTEND"],
+      "forbiddenDuplicates": ["AgentIntegration2", "AgentOrchestrator2"],
+      "mustSearchBeforeCreate": true
+    }
+  ]
+}

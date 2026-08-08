@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B12",
+  "description": "Runtime State Mapping - 基于B9P8 final_state_projection_manifest",
+  "generatedAt": "2026-08-08T01:50:00+08:00",
+
+  "stateDomains": {
+    "extensionRuntime": {
+      "authority": "backend/internal/extension/kernel/runtime_supervisor",
+      "states": {
+        "desired": ["DesiredRunning", "DesiredStopped", "DesiredPaused", "DesiredConnected", "DesiredDisconnected"],
+        "actual": ["ActualReady", "ActualStopped", "ActualFailed", "ActualCrashed", "ActualDegraded", "ActualDraining", "ActualQuarantined"],
+        "health": ["HealthHealthy", "HealthUnhealthy", "HealthDegraded", "HealthUnknown"],
+        "circuit": ["CircuitOpen", "CircuitClosed", "CircuitHalfOpen"]
+      }
+    },
+    "componentRuntime": {
+      "authority": "backend/internal/runtimeorchestrator/state.go",
+      "states": ["created", "starting", "ready", "degraded", "blocked", "stopping", "stopped", "disabled", "registered"],
+      "orchestratorLevel": true
+    },
+    "processRuntime": {
+      "authority": "backend/internal/runtimehost/process_state.go",
+      "states": ["registered", "starting", "running", "ready", "stopping", "stopped", "failed"]
+    },
+    "toolRuntimeState": {
+      "authority": "backend/internal/extension/kernel/capability/state.go",
+      "states": ["ToolState + HealthStatus"]
+    },
+    "androidEmbeddedRuntimeState": {
+      "note": "A线已有的Android嵌入运行时状态机 (NOT_INSTALLED, INSTALLED, STARTING, READY...)",
+      "authority": "A线专有 (不属于B12 Kernel Runtime)",
+      "rule": "B12 不重复实现此状态机"
+    }
+  },
+
+  "rules": {
+    "rule1": "不建立统一RuntimeStatus2",
+    "rule2": "Provider health属于Domain Provider Health，由Adapter/Provider内部管理",
+    "rule3": "不同Platform Provider状态 (Android ready, iOS unavailable) 属于Domain Provider Health",
+    "rule4": "Runtime lifecycle继续挂接现有Supervisor/Host体系",
+    "rule5": "Adapter无独立状态事实源 (最多health/ready，由Provider派生)"
+  }
+}

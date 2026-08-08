@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B18",
+  "generatedAt": "2026-08-08T14:30:00+08:00",
+  "description": "Tool Registry引用一致性 - 所有步骤引用的ToolRegistry是否指向同一Canonical实例",
+
+  "canonicalAuthority": "backend/internal/extension/kernel/capability/registry.go (ToolRegistry)",
+
+  "references": {
+    "b10": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "referenceType": "Canonical ToolRegistry定义",
+      "method": "Register/Replace/BatchRegister/Get/List/Count等18个方法",
+      "status": "CONSISTENT"
+    },
+    "b11": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "referenceType": "ToolDefinition.Permissions字段通过Registry暴露",
+      "method": "ToolPermissionResolution验证253个Tool全部映射到Permission",
+      "status": "CONSISTENT"
+    },
+    "b12": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "referenceType": "ExecutionPipeline通过ToolRegistry解析ToolDefinition.Runtime",
+      "method": "RuntimeBinding解析链",
+      "status": "CONSISTENT"
+    },
+    "b14": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "referenceType": "BrowserTool注册Deferred到B79-B83，当前无生产注册",
+      "method": "B14 tool_mappings为空数组，无Browser Tool注册",
+      "status": "CONSISTENT"
+    },
+    "b15": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "referenceType": "Media工具(voice_reply)通过tool_migration注册",
+      "method": "通过Registry.Replace()注册",
+      "status": "CONSISTENT"
+    },
+    "b16": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "referenceType": "Model/Voice/Automation工具映射到现有Registry",
+      "method": "Domain Tool Exposure Mapping验证",
+      "status": "CONSISTENT"
+    },
+    "b17": {
+      "path": "backend/internal/extension/kernel/capability/registry.go",
+      "referenceType": "ContributionKind=tool分发到Toolbox Registry",
+      "method": "TypedContributionInstaller → ToolRegistry.Replace()",
+      "status": "CONSISTENT"
+    }
+  },
+
+  "uniqueAuthorityCount": 1,
+  "conflictCount": 0,
+  "result": "PASS - 所有步骤引用同一ToolRegistry Canonical实例"
+}
