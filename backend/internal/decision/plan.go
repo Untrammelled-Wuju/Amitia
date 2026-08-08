@@ -55,6 +55,7 @@ type CompiledPersonalityRef struct {
 
 type BehaviorCandidate struct {
 	ID                string               `json:"id"`
+	ActionType        CandidateActionType  `json:"actionType"`
 	Tag               BehaviorTag          `json:"tag"`
 	Channel           BehaviorChannel      `json:"channel"`
 	BaseScore         float64              `json:"baseScore"`

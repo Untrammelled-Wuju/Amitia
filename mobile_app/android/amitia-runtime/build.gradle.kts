@@ -56,5 +56,11 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("org.apache.commons:commons-compress:1.27.0")
+    implementation("org.tukaani:xz:1.10")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
 }

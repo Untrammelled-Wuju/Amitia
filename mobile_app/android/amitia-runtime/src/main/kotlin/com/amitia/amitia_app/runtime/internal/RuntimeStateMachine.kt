@@ -94,4 +94,20 @@ internal object RuntimeStateMachine {
             throw IllegalRuntimeTransitionException(from, to)
         }
     }
+
+    fun unexpectedTerminationTarget(current: RuntimeState): RuntimeState? = when (current) {
+        RuntimeState.INSTALLING -> RuntimeState.FAILED
+        RuntimeState.STARTING -> RuntimeState.FAILED
+        RuntimeState.READY -> RuntimeState.FAILED
+        RuntimeState.STOPPING -> RuntimeState.STOPPED
+        RuntimeState.STOPPED -> null
+        RuntimeState.FAILED -> null
+        else -> null
+    }
+
+    fun expectedStopTarget(current: RuntimeState): RuntimeState? = when (current) {
+        RuntimeState.STOPPING -> RuntimeState.STOPPED
+        RuntimeState.STOPPED -> null
+        else -> null
+    }
 }

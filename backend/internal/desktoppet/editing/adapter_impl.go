@@ -14,7 +14,7 @@ type generationAdapter struct {
 	ctx *app.AppContext
 }
 
-func NewGenerationAdapter(ctx *app.AppContext) GenerationAdapter {
+func newRawGenerationAdapter(ctx *app.AppContext) GenerationAdapter {
 	return &generationAdapter{ctx: ctx}
 }
 
@@ -158,7 +158,7 @@ type processingAdapter struct {
 	ctx *app.AppContext
 }
 
-func NewProcessingAdapter(ctx *app.AppContext) ProcessingAdapter {
+func newRawProcessingAdapter(ctx *app.AppContext) ProcessingAdapter {
 	return &processingAdapter{ctx: ctx}
 }
 
@@ -291,7 +291,7 @@ type qualityAdapter struct {
 	ctx *app.AppContext
 }
 
-func NewQualityAdapter(ctx *app.AppContext) QualityAdapter {
+func newRawQualityAdapter(ctx *app.AppContext) QualityAdapter {
 	return &qualityAdapter{ctx: ctx}
 }
 

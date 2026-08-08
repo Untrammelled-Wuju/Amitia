@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 func makeTestExecutable(t *testing.T, dir string) (path, hash string) {
@@ -341,5 +343,12 @@ func TestServiceStateTerminal(t *testing.T) {
 		if s.IsTerminal() {
 			t.Fatalf("expected %s to NOT be terminal", s)
 		}
+	}
+}
+
+func TestTrustedServiceFactoryTypeReturnsService(t *testing.T) {
+	f := &TrustedServiceFactory{}
+	if f.Type() != domain.RuntimeTypeService {
+		t.Fatalf("expected RuntimeTypeService, got %s", f.Type())
 	}
 }

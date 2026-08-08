@@ -10,6 +10,14 @@ import (
 	"github.com/u-ai/backend/log"
 )
 
+func StartSurreal() error { return fmt.Errorf("surrealdb: StartSurreal stub") }
+
+func StopSurreal() error { return fmt.Errorf("surrealdb: StopSurreal stub") }
+
+func StartSurrealMonitor() {}
+
+func StopSurrealMonitor() {}
+
 func SetSurrealShuttingDown() {}
 
 func IsSurrealShuttingDown() bool { return false }

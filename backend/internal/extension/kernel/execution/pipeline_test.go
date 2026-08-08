@@ -300,7 +300,7 @@ func TestPipelineIdempotencyGuard(t *testing.T) {
 
 	req := ToolExecutionRequest{
 		ToolID:     "test/tool",
-		Input:      json.RawMessage(`{}}`),
+		Input:      json.RawMessage(`{}`),
 		Invocation: inv,
 	}
 

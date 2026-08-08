@@ -231,9 +231,9 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScop
 		if def.ModelName == "" {
 			continue
 		}
-		params, err := schemaToParameters(def.InputSchema)
+		params, err := tool.ParseParametersSchema(def.InputSchema)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("tool %s input schema: %w", def.ID, err)
 		}
 		tools = append(tools, tool.Tool{
 			Type: "function",
@@ -299,17 +299,6 @@ func unifiedResultToLegacy(result capability.UnifiedToolResult, invocationID str
 		}
 	}
 	return legacy
-}
-
-func schemaToParameters(raw json.RawMessage) (tool.Parameters, error) {
-	var params tool.Parameters
-	if len(raw) == 0 {
-		return params, fmt.Errorf("empty schema")
-	}
-	if err := json.Unmarshal(raw, &params); err != nil {
-		return params, err
-	}
-	return params, nil
 }
 
 func boolPtr(v bool) *bool {

@@ -68,6 +68,12 @@ func NewService(ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry) Ser
 	return &service{db: ctx.DB, unifiedEntry: unifiedEntry}
 }
 
+// Test is a diagnostic character-preview path.
+//
+// It intentionally bypasses the production interaction pipeline because it
+// must not create conversation, interaction, memory, outbox, or agent state.
+// Production chat, channel, voice, proactive, and agent execution must use
+// interaction.UnifiedEntry.
 func (s *service) Test(characterID, message string) (map[string]interface{}, error) {
 	var charID, charName, identity, systemPrompt string
 	if characterID == "" {

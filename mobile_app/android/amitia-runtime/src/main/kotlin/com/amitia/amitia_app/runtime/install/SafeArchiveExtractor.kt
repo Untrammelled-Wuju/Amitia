@@ -1,6 +1,12 @@
 package com.amitia.amitia_app.runtime.install
 
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.tukaani.xz.XZCompressorInputStream
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.IOException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
@@ -150,65 +156,68 @@ internal class DefaultSafeArchiveExtractor(
         targetDir: File,
         rootBoundary: String?,
     ): SafeExtractResult {
-        targetDir.mkdirs()
+        if (!tarXzFile.isFile) {
+            return SafeExtractResult.Failure(
+                RuntimeInstallErrorCode.PACKAGE_NOT_FOUND,
+                "tar.xz file not found: ${tarXzFile.absolutePath}"
+            )
+        }
+        if (!targetDir.exists() && !targetDir.mkdirs()) {
+            return SafeExtractResult.Failure(
+                RuntimeInstallErrorCode.RUNTIME_EXTRACT_FAILED,
+                "cannot create target directory: ${targetDir.absolutePath}"
+            )
+        }
+
         var totalExtracted = 0
         var totalBytes = 0L
 
         try {
-            val processBuilder = ProcessBuilder(
-                "tar",
-                "-xJf",
-                tarXzFile.absolutePath,
-                "-C",
-                targetDir.absolutePath,
-                "--no-same-owner",
-                "--no-same-permissions",
-            )
-            processBuilder.redirectErrorStream(true)
-            val process = processBuilder.start()
+            FileInputStream(tarXzFile).use { fis ->
+                XZCompressorInputStream(fis).use { xzIn ->
+                    TarArchiveInputStream(xzIn).use { tarIn ->
+                        var entry: TarArchiveEntry? = tarIn.nextEntry
+                        while (entry != null) {
+                            val entryName = entry.name
 
-            val exitCode = try {
-                process.waitFor()
-            } catch (e: InterruptedException) {
-                process.destroy()
-                return SafeExtractResult.Failure(
-                    RuntimeInstallErrorCode.RUNTIME_EXTRACT_FAILED,
-                    "extraction interrupted"
-                )
-            }
+                            if (++totalExtracted > maxEntries) {
+                                return SafeExtractResult.Failure(
+                                    RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
+                                    "too many entries in archive"
+                                )
+                            }
 
-            if (exitCode != 0) {
-                return SafeExtractResult.Failure(
-                    RuntimeInstallErrorCode.RUNTIME_EXTRACT_FAILED,
-                    "tar extraction failed with exit code: $exitCode"
-                )
-            }
+                            val entrySize = entry.size
+                            if (entrySize > maxSingleFileSize) {
+                                return SafeExtractResult.Failure(
+                                    RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
+                                    "single entry too large: $entryName"
+                                )
+                            }
 
-            val entries = targetDir.walkTopDown().filter { it.isFile }.toList()
-            totalExtracted = entries.size
-            totalBytes = entries.sumOf { it.length() }
+                            totalBytes += entrySize
+                            if (totalBytes > maxTotalSize) {
+                                return SafeExtractResult.Failure(
+                                    RuntimeInstallErrorCode.ARCHIVE_TOO_LARGE,
+                                    "total extraction size exceeds limit"
+                                )
+                            }
 
-            if (rootBoundary != null) {
-                val boundary = File(rootBoundary)
-                for (entry in entries) {
-                    if (!entry.absolutePath.startsWith(boundary.absolutePath)) {
-                        return SafeExtractResult.Failure(
-                            RuntimeInstallErrorCode.ARCHIVE_PATH_INVALID,
-                            "entry outside root boundary: ${entry.absolutePath}"
-                        )
-                    }
-                }
-            }
+                            validateAndExtractEntry(tarIn, entry, targetDir)
 
-            for (entry in entries) {
-                if (entry.absolutePath != entry.canonicalPath) {
-                    val resolvedCanonical = entry.canonicalFile.parentFile ?: continue
-                    val targetCanonical = targetDir.canonicalFile
-                    if (!resolvedCanonical.absolutePath.startsWith(targetCanonical.absolutePath)) {
-                        return SafeExtractResult.Failure(
-                            RuntimeInstallErrorCode.ARCHIVE_PATH_INVALID,
-                            "symlink escapes root boundary"
-                        )
+                            if (rootBoundary != null) {
+                                val extractedFile = File(targetDir, entryName).canonicalFile
+                                val boundary = File(rootBoundary).canonicalFile
+                                if (!extractedFile.canonicalPath.startsWith(boundary.canonicalPath)) {
+                                    return SafeExtractResult.Failure(
+                                        RuntimeInstallErrorCode.ARCHIVE_PATH_INVALID,
+                                        "entry outside root boundary: $entryName"
+                                    )
+                                }
+                            }
+
+                            entry = tarIn.nextEntry
+                        }
                     }
                 }
             }
@@ -222,6 +231,74 @@ internal class DefaultSafeArchiveExtractor(
                 "tar extraction error: ${e.message}"
             )
         }
+    }
+
+    private fun validateAndExtractEntry(
+        tarIn: TarArchiveInputStream,
+        entry: TarArchiveEntry,
+        targetDir: File
+    ) {
+        val entryName = entry.name
+
+        if (entryName.contains("..") || entryName.startsWith("/")) {
+            throw IOException("path traversal detected: $entryName")
+        }
+
+        val targetFile = File(targetDir, entryName).canonicalFile
+        if (!targetFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
+            throw IOException("entry escapes target directory: $entryName")
+        }
+
+        when {
+            entry.isDirectory -> {
+                if (!targetFile.exists()) {
+                    check(targetFile.mkdirs()) { "cannot create directory: $targetFile" }
+                }
+            }
+            entry.isSymbolicLink -> {
+                val linkName = entry.linkName
+                if (linkName.contains("..") || linkName.startsWith("/")) {
+                    throw IOException("symlink target invalid: $linkName")
+                }
+                createSymlink(targetFile, linkName)
+            }
+            entry.isFile -> {
+                val parentDir = targetFile.parentFile
+                if (parentDir != null && !parentDir.exists()) {
+                    check(parentDir.mkdirs()) { "cannot create parent directory for: $targetFile" }
+                }
+                FileOutputStream(targetFile).use { fos ->
+                    tarIn.copyTo(fos)
+                }
+                applyFilePermissions(targetFile, entry.mode)
+            }
+            else -> {
+                throw IOException("unsupported entry type: $entryName")
+            }
+        }
+    }
+
+    private fun createSymlink(targetFile: File, linkName: String) {
+        val targetPath = if (linkName.startsWith("./")) {
+            linkName.substring(2)
+        } else {
+            linkName
+        }
+        targetFile.parentFile?.mkdirs()
+        java.nio.file.Files.createSymbolicLink(
+            targetFile.toPath(),
+            java.nio.file.Paths.get(targetPath)
+        )
+    }
+
+    private fun applyFilePermissions(file: File, mode: Int) {
+        val readable = (mode and 292) != 0
+        val writable = (mode and 146) != 0
+        val executable = (mode and 73) != 0
+
+        file.setReadable(readable, false)
+        file.setWritable(writable, false)
+        file.setExecutable(executable, false)
     }
 
     private fun isPathSafe(path: String): Boolean {

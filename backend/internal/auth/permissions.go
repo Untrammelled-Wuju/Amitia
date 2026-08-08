@@ -3,20 +3,25 @@
 package auth
 
 const (
-	PermDesktopPetRead           = "desktop_pet.read"
-	PermDesktopPetWrite          = "desktop_pet.write"
-	PermDesktopPetGenerate       = "desktop_pet.generate"
-	PermDesktopPetImport         = "desktop_pet.import"
-	PermDesktopPetInstall        = "desktop_pet.install"
-	PermDesktopPetRuntimeControl = "desktop_pet.runtime.control"
-	PermDesktopPetBehaviorManage = "desktop_pet.behavior.manage"
-	PermDesktopPetBehaviorAdmin  = "desktop_pet.behavior.admin"
-	PermDesktopPetMigrate        = "desktop_pet.migrate"
-	PermDesktopPetRepair         = "desktop_pet.repair"
-	PermSecurityAuditRead        = "security.audit.read"
-	PermDoctorRun                = "doctor.run"
-	PermDoctorRepair             = "doctor.repair"
-	SystemShutdown               = "system.shutdown"
+	PermDesktopPetRead            = "desktop_pet.read"
+	PermDesktopPetWrite           = "desktop_pet.write"
+	PermDesktopPetGenerate        = "desktop_pet.generate"
+	PermDesktopPetImport          = "desktop_pet.import"
+	PermDesktopPetInstall         = "desktop_pet.install"
+	PermDesktopPetRuntimeControl  = "desktop_pet.runtime.control"
+	PermDesktopPetBehaviorManage  = "desktop_pet.behavior.manage"
+	PermDesktopPetBehaviorAdmin   = "desktop_pet.behavior.admin"
+	PermDesktopPetMigrate         = "desktop_pet.migrate"
+	PermDesktopPetRepair          = "desktop_pet.repair"
+	PermMaintenanceRead           = "desktop_pet.maintenance.read"
+	PermBackupCreate              = "desktop_pet.backup.create"
+	PermExportCreate              = "desktop_pet.export.create"
+	PermMigrationRun              = "desktop_pet.migration.run"
+	PermCutoverExecute            = "desktop_pet.cutover.execute"
+	PermSecurityAuditRead         = "security.audit.read"
+	PermDoctorRun                 = "doctor.run"
+	PermDoctorRepair              = "doctor.repair"
+	SystemShutdown                = "system.shutdown"
 )
 
 func DefaultUserPermissions() []string {
@@ -36,6 +41,11 @@ func AdminPermissions() []string {
 		PermDesktopPetBehaviorAdmin,
 		PermDesktopPetMigrate,
 		PermDesktopPetRepair,
+		PermMaintenanceRead,
+		PermBackupCreate,
+		PermExportCreate,
+		PermMigrationRun,
+		PermCutoverExecute,
 		PermSecurityAuditRead,
 		PermDoctorRun,
 		PermDoctorRepair,

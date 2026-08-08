@@ -337,6 +337,7 @@ func (m Manifest) Validate() ValidationReport {
 	}
 	runtimeTypes := map[string]bool{
 		"javascript": true, "mcp": true, "workflow": true, "static": true, "wasm": true,
+		"service": true,
 	}
 	contributionKinds := map[string]bool{
 		"tool": true, "agent_skill": true, "workflow": true,
@@ -345,6 +346,7 @@ func (m Manifest) Validate() ValidationReport {
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
 		"ui_context_action": true, "ui_desktop": true, "resource": true,
+		"game_plugin": true,
 	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
@@ -683,7 +685,7 @@ const manifestV2Schema = `{
             "type": "object",
             "required": ["type"],
             "properties": {
-              "type": {"type": "string", "enum": ["javascript", "mcp", "workflow", "static", "wasm"]},
+              "type": {"type": "string", "enum": ["javascript", "mcp", "workflow", "static", "wasm", "service"]},
               "entryPoint": {"type": "string"},
               "workerCount": {"type": "integer"},
               "timeout": {"type": "string"},
@@ -700,7 +702,7 @@ const manifestV2Schema = `{
               "required": ["id", "kind", "name"],
               "properties": {
                 "id": {"type": "string", "minLength": 1},
-                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "resource"]},
+                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "resource", "game_plugin"]},
                 "name": {
                   "type": "object",
                   "required": ["default"],

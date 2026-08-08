@@ -43,14 +43,21 @@ type Intention struct {
 }
 
 func DeriveIntention(goal Goal, commitment CommitmentStrength, deadline time.Time) Intention {
-	now := time.Now().UTC()
+	return DeriveIntentionAt(goal, commitment, deadline, time.Now().UTC())
+}
+
+func DeriveIntentionAt(goal Goal, commitment CommitmentStrength, deadline time.Time, now time.Time) Intention {
 	strength := commitment
 	if strength == "" {
 		strength = deriveCommitmentFromPriority(goal.Priority)
 	}
 	dl := deadline
 	if dl.IsZero() {
-		dl = now.Add(24 * time.Hour)
+		if !goal.ExpiresAt.IsZero() {
+			dl = goal.ExpiresAt
+		} else {
+			dl = now.Add(24 * time.Hour)
+		}
 	}
 	return Intention{
 		ID:          "intention-" + goal.ID,

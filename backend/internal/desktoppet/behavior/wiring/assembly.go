@@ -9,7 +9,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/persistence"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
-	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/log"
 
@@ -17,13 +16,14 @@ import (
 )
 
 type AssemblyDeps struct {
-	DB             *gorm.DB
-	RuntimeService *runtime.Service
-	InstallRepo    installation.Repository
-	PsycheStore    psyche.PsycheStore
-	DataDir        string
-	ShadowMode     bool
-	RuntimeCmdOn   bool
+	DB                *gorm.DB
+	ActivePetPort     behavior.ActivePetPort
+	RuntimeActionPort  behavior.RuntimeActionPort
+	InstallRepo       installation.Repository
+	PsycheStore       psyche.PsycheStore
+	DataDir           string
+	ShadowMode        bool
+	RuntimeCmdOn      bool
 }
 
 type AssembledBehavior struct {
@@ -48,11 +48,15 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 	var activePetPort behavior.ActivePetPort
 	var runtimeActionPort behavior.RuntimeActionPort
 
-	if deps.RuntimeService != nil && deps.InstallRepo != nil {
-		activePetPort = NewActivePetAdapter(deps.InstallRepo, deps.RuntimeService.Registry(), deps.DataDir)
-		runtimeActionPort = NewRuntimeActionAdapter(deps.RuntimeService)
+	if deps.ActivePetPort != nil {
+		activePetPort = deps.ActivePetPort
 	} else {
 		activePetPort = &NoopActivePetPort{}
+	}
+
+	if deps.RuntimeActionPort != nil {
+		runtimeActionPort = deps.RuntimeActionPort
+	} else {
 		runtimeActionPort = &NoopRuntimeActionPort{}
 	}
 	affectPort := NewAffectAdapter(deps.PsycheStore)

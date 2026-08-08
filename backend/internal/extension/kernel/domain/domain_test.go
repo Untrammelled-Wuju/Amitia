@@ -252,3 +252,45 @@ func TestVersionIsCompatible(t *testing.T) {
 		t.Errorf("1.0.0 should be compatible with itself")
 	}
 }
+
+func TestNormalizeRuntimeTypeService(t *testing.T) {
+	got := NormalizeRuntimeType(RuntimeTypeService)
+	if got != RuntimeTypeService {
+		t.Errorf("expected service, got %s", got)
+	}
+}
+
+func TestNormalizeRuntimeTypeTrusted(t *testing.T) {
+	got := NormalizeRuntimeType(legacyRuntimeTypeTrustedService)
+	if got != RuntimeTypeService {
+		t.Errorf("expected service, got %s", got)
+	}
+}
+
+func TestNormalizeRuntimeTypePlugin(t *testing.T) {
+	got := NormalizeRuntimeType(legacyRuntimeTypePluginService)
+	if got != RuntimeTypeService {
+		t.Errorf("expected service, got %s", got)
+	}
+}
+
+func TestNormalizeRuntimeTypeUnknown(t *testing.T) {
+	got := NormalizeRuntimeType("foobar")
+	if got != "foobar" {
+		t.Errorf("expected foobar unchanged, got %s", got)
+	}
+}
+
+func TestNormalizeRuntimeTypeBuiltin(t *testing.T) {
+	got := NormalizeRuntimeType(RuntimeTypeBuiltin)
+	if got != RuntimeTypeBuiltin {
+		t.Errorf("expected builtin unchanged, got %s", got)
+	}
+}
+
+func TestNormalizeRuntimeTypeJavaScript(t *testing.T) {
+	got := NormalizeRuntimeType(RuntimeTypeJavaScript)
+	if got != RuntimeTypeJavaScript {
+		t.Errorf("expected javascript unchanged, got %s", got)
+	}
+}

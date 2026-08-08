@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/runtimeorchestrator/builtin"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
 	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -21,14 +22,15 @@ import (
 )
 
 type runtimeBootstrap struct {
-	host              runtimehost.RuntimeHost
-	orchestrator      *runtimeorchestrator.RuntimeOrchestrator
-	resources         *util.RuntimePaths
-	graphMu           sync.RWMutex
-	graphSvc          graph.Service
-	stopOnce          sync.Once
-	runError          error
-	nodeEnvironment   nodeenv.Resolver
+	host             runtimehost.RuntimeHost
+	orchestrator     *runtimeorchestrator.RuntimeOrchestrator
+	providerRegistry *runtimeorchestrator.ProviderRegistry
+	resources        *util.RuntimePaths
+	graphMu          sync.RWMutex
+	graphSvc         graph.Service
+	stopOnce         sync.Once
+	runError         error
+	nodeEnvironment  nodeenv.Resolver
 	artifactResolver sidecar.ArtifactResolver
 }
 
@@ -43,6 +45,8 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 	}
 
 	orch := runtimeorchestrator.New(descriptor)
+
+	providerRegistry := runtimeorchestrator.NewProviderRegistry()
 
 	nodeResolver, err := nodeenv.NewResolver(nodeenv.ResolveContext{
 		Config: config.AppCfg,
@@ -59,13 +63,20 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 		return nil, fmt.Errorf("create sidecar artifact resolver: %w", err)
 	}
 
-	return &runtimeBootstrap{
-		host:              host,
-		orchestrator:      orch,
-		resources:         paths,
-		nodeEnvironment:   nodeResolver,
+	bootstrap := &runtimeBootstrap{
+		host:             host,
+		orchestrator:     orch,
+		providerRegistry: providerRegistry,
+		resources:        paths,
+		nodeEnvironment:  nodeResolver,
 		artifactResolver: artifactResolver,
-	}, nil
+	}
+
+	if err := bootstrap.registerIOSSandboxProviderFactory(); err != nil {
+		return nil, err
+	}
+
+	return bootstrap, nil
 }
 
 func (b *runtimeBootstrap) RuntimeHost() runtimehost.RuntimeHost {
@@ -74,6 +85,32 @@ func (b *runtimeBootstrap) RuntimeHost() runtimehost.RuntimeHost {
 
 func (b *runtimeBootstrap) ProcessSupervisor() runtimehost.ProcessSupervisor {
 	return b.host.Processes()
+}
+
+func (b *runtimeBootstrap) registerIOSSandboxProviderFactory() error {
+	if b == nil ||
+		b.providerRegistry == nil ||
+		b.host == nil {
+		return nil
+	}
+
+	if b.host.Descriptor().Host != platform.HostPlatformIOS {
+		return nil
+	}
+
+	factory := builtin.NewIOSSandboxProviderFactory(
+		builtin.IOSSandboxProviderConfig{
+			Enabled: false,
+		},
+	)
+
+	if err := b.providerRegistry.Register(factory); err != nil {
+		return fmt.Errorf(
+			"register ios sandbox provider factory: %w", err,
+		)
+	}
+
+	return nil
 }
 
 func (b *runtimeBootstrap) RegisterInfrastructure(sqlDB *sql.DB, graphSvc graph.Service) error {

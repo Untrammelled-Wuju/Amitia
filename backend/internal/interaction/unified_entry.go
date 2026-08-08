@@ -267,6 +267,10 @@ func (e *UnifiedEntry) CancelByPeer(channel, peerID string) int {
 	return count
 }
 
+func (e *UnifiedEntry) CancelByScope(scope InteractionScope) int {
+	return e.orchestrator.CancelByScope(scope)
+}
+
 func normalizeBackpressureConfig(cfg BackpressureConfig) BackpressureConfig {
 	defaults := DefaultBackpressureConfig()
 	if cfg.MaxQueueDepth <= 0 {

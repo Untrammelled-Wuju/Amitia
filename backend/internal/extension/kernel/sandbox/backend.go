@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	SlotIOSSandbox       = "ios-sandbox"
 	ProviderIDIOSSandbox = "ios.ish-sandbox"
 )
 
@@ -75,50 +74,37 @@ type SandboxHealth struct {
 }
 
 type ishBackend struct {
-	state BackendAvailability
+	bridge NativeBridge
 }
 
 func newISHBackend() (SandboxBackend, error) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "ios" {
-		return &unavailableBackend{reason: "iSH backend requires iOS/darwin platform"}, nil
-	}
-	return &ishBackend{state: BackendUnavailable}, nil
+	return &ishBackend{
+		bridge: NewNativeBridge(),
+	}, nil
 }
 
 func NewIOSSandboxBackend() (SandboxBackend, error) {
 	return newISHBackend()
 }
 
-func (b *ishBackend) Availability(_ context.Context) BackendAvailability {
-	return b.state
+func (b *ishBackend) Availability(ctx context.Context) BackendAvailability {
+	return b.bridge.Availability(ctx)
 }
 
-func (b *ishBackend) Start(_ context.Context, _ SandboxConfig) error {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "ios" {
-		return fmt.Errorf("iSH backend not available on %s", runtime.GOOS)
-	}
-	b.state = BackendStarting
-	return nil
+func (b *ishBackend) Start(ctx context.Context, cfg SandboxConfig) error {
+	return b.bridge.Start(ctx, cfg)
 }
 
-func (b *ishBackend) Stop(_ context.Context) error {
-	b.state = BackendUnavailable
-	return nil
+func (b *ishBackend) Stop(ctx context.Context) error {
+	return b.bridge.Stop(ctx)
 }
 
-func (b *ishBackend) Execute(_ context.Context, cmd SandboxCommand) (SandboxResult, error) {
-	return SandboxResult{
-		Error: fmt.Sprintf("iSH native bridge not yet connected; command not executed: %v", cmd.Command),
-	}, fmt.Errorf("iSH native bridge not connected")
+func (b *ishBackend) Execute(ctx context.Context, cmd SandboxCommand) (SandboxResult, error) {
+	return b.bridge.Execute(ctx, cmd)
 }
 
-func (b *ishBackend) Health(_ context.Context) SandboxHealth {
-	return SandboxHealth{
-		Healthy:         b.state == BackendRunning,
-		Message:         b.state.String(),
-		ISHInitialized:  b.state == BackendRunning,
-		RootfsInstalled: false,
-	}
+func (b *ishBackend) Health(ctx context.Context) SandboxHealth {
+	return b.bridge.Health(ctx)
 }
 
 type unavailableBackend struct {
@@ -148,4 +134,11 @@ func (b *unavailableBackend) Health(_ context.Context) SandboxHealth {
 		Healthy: false,
 		Message: fmt.Sprintf("unavailable: %s", b.reason),
 	}
+}
+
+func minPlatformBackend() (SandboxBackend, error) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "ios" {
+		return &unavailableBackend{reason: "iSH backend requires iOS/darwin platform"}, nil
+	}
+	return newISHBackend()
 }

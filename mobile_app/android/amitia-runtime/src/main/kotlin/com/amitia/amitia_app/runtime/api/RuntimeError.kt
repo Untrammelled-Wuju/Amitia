@@ -25,7 +25,8 @@ enum class RuntimeErrorCode {
     REPAIR_FAILED,
     TIMEOUT,
     PERMISSION_DENIED,
-    INTERNAL_ERROR
+    INTERNAL_ERROR,
+    RUNTIME_EXECUTION_NOT_AVAILABLE
 }
 
 class RuntimeError(

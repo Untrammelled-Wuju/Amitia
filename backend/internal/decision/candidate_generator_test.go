@@ -10,12 +10,13 @@ func TestGenerateCandidatesProducesAllActions(t *testing.T) {
 	ctx := CandidateGenerationContext{
 		UserID:      "user-1",
 		CharacterID: "char-1",
+		Trigger:     GoalTrigger{Kind: GoalTriggerInternal},
 		Now:         time.Now().UTC(),
 	}
 
 	candidates := GenerateCandidates(ctx, registry)
-	if len(candidates) != len(registry.All()) {
-		t.Fatalf("候选数量应与注册表一致: expected %d, got %d", len(registry.All()), len(candidates))
+	if len(candidates) == 0 {
+		t.Fatal("应生成至少一些候选")
 	}
 	for _, c := range candidates {
 		if c.ID == "" {
@@ -24,7 +25,7 @@ func TestGenerateCandidatesProducesAllActions(t *testing.T) {
 	}
 }
 
-func TestGenerateCandidatesWithContextEnrichment(t *testing.T) {
+func TestGenerateCandidatesDoesNotScoreCandidates(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
 		UserID:      "user-1",
@@ -38,18 +39,35 @@ func TestGenerateCandidatesWithContextEnrichment(t *testing.T) {
 			},
 		},
 		Psyche: PsycheSignalSet{
-			Stress: ScalarSignal{Value: 0.3},
+			Stress: ScalarSignal{Value: 0.95},
 		},
-		Now: time.Now().UTC(),
+		Trigger: GoalTrigger{Kind: GoalTriggerInternal},
+		Now:     time.Now().UTC(),
 	}
 
 	candidates := GenerateCandidates(ctx, registry)
-	chatCandidate := findCandidate(candidates, "chat_reply")
-	if chatCandidate == nil {
-		t.Fatal("chat_reply 候选丢失")
-	}
-	if chatCandidate.NeedScore <= 0 {
-		t.Fatal("Connection 目标应为 chat_reply 增加 NeedScore")
+	for _, c := range candidates {
+		if c.NeedScore != 0 {
+			t.Fatalf("Generator 不应写 NeedScore, 实际 %f", c.NeedScore)
+		}
+		if c.PersonalityScore != 0 {
+			t.Fatalf("Generator 不应写 PersonalityScore, 实际 %f", c.PersonalityScore)
+		}
+		if c.RelationshipScore != 0 {
+			t.Fatalf("Generator 不应写 RelationshipScore, 实际 %f", c.RelationshipScore)
+		}
+		if c.AffectScore != 0 {
+			t.Fatalf("Generator 不应写 AffectScore, 实际 %f", c.AffectScore)
+		}
+		if c.RiskScore != 0 {
+			t.Fatalf("Generator 不应写 RiskScore, 实际 %f", c.RiskScore)
+		}
+		if c.FinalScore != 0 {
+			t.Fatalf("Generator 不应写 FinalScore, 实际 %f", c.FinalScore)
+		}
+		if c.Reasons != nil {
+			t.Fatal("Generator 不应写 Reasons")
+		}
 	}
 }
 
@@ -58,6 +76,7 @@ func TestGenerateCandidatesWithExcludes(t *testing.T) {
 	ctx := CandidateGenerationContext{
 		UserID:      "user-1",
 		CharacterID: "char-1",
+		Trigger:     GoalTrigger{Kind: GoalTriggerInternal},
 		Now:         time.Now().UTC(),
 	}
 
@@ -69,69 +88,243 @@ func TestGenerateCandidatesWithExcludes(t *testing.T) {
 	}
 }
 
-func TestHighStressAffectsProactive(t *testing.T) {
+func TestGenerateCandidatesExcludesDuplicateAndUnknown(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		Now: time.Now().UTC(),
-		Psyche: PsycheSignalSet{
-			Stress: ScalarSignal{Value: 0.85},
-		},
+		UserID:      "user-1",
+		CharacterID: "char-1",
+		Trigger:     GoalTrigger{Kind: GoalTriggerInternal},
+		Now:         time.Now().UTC(),
 	}
 
-	candidates := GenerateCandidates(ctx, registry)
-	proactive := findCandidate(candidates, "proactive_greet")
-	if proactive == nil {
-		t.Fatal("proactive_greet 候选丢失")
+	candidates := GenerateCandidatesWithExcludes(ctx, registry, []string{"chat_reply", "chat_reply", "not-exist"})
+	if len(candidates) == 0 {
+		t.Fatal("排除重复/未知 ID 后仍应有候选")
 	}
-	if proactive.RiskScore <= 0 {
-		t.Fatal("高压状态下 proactive 应有风险分")
-	}
-}
-
-func TestBusyLifeBlocksProactive(t *testing.T) {
-	registry := DefaultCandidateRegistry()
-	ctx := CandidateGenerationContext{
-		Now:  time.Now().UTC(),
-		Life: LifeSnapshot{Busy: 0.95, Energy: 0.5},
-	}
-
-	candidates := GenerateCandidates(ctx, registry)
-	proactive := findCandidate(candidates, "proactive_greet")
-	if proactive == nil {
-		t.Fatal("proactive_greet 候选丢失")
-	}
-	hasBusyBlock := false
-	for _, c := range proactive.Constraints {
-		if c.Kind == "busy_block" && c.Hard {
-			hasBusyBlock = true
+	for _, c := range candidates {
+		if c.ID == "chat_reply" {
+			t.Fatal("被排除的候选不应出现")
 		}
 	}
-	if !hasBusyBlock {
-		t.Fatal("高忙状态应为 proactive 添加 hard 约束")
+}
+
+func TestGenerateCandidatesNilRegistry(t *testing.T) {
+	ctx := CandidateGenerationContext{
+		Trigger: GoalTrigger{Kind: GoalTriggerInternal},
+		Now:     time.Now().UTC(),
+	}
+	candidates := GenerateCandidates(ctx, nil)
+	if candidates != nil {
+		t.Fatal("nil Registry 应返回 nil")
 	}
 }
 
-func TestIntentionBoostsGoalRelatedCandidate(t *testing.T) {
+func TestGenerateCandidatesTriggerUserMessage(t *testing.T) {
 	registry := DefaultCandidateRegistry()
 	ctx := CandidateGenerationContext{
-		Now: time.Now().UTC(),
-		Intentions: []Intention{
-			{
-				GoalID:     "goal-conn",
-				GoalType:   GoalTypeConnection,
-				Commitment: CommitmentStrong,
-				Status:     IntentionStatusExecuting,
-			},
-		},
+		Trigger: GoalTrigger{Kind: GoalTriggerUserMessage},
+		Now:     time.Now().UTC(),
 	}
 
 	candidates := GenerateCandidates(ctx, registry)
-	chatReply := findCandidate(candidates, "chat_reply")
-	if chatReply == nil {
-		t.Fatal("chat_reply 候选丢失")
+	hasChatReply := false
+	hasProactiveGreet := false
+	for _, c := range candidates {
+		if c.ID == "chat_reply" {
+			hasChatReply = true
+		}
+		if c.ID == "proactive_greet" {
+			hasProactiveGreet = true
+		}
 	}
-	if chatReply.NeedScore <= 0 {
-		t.Fatal("Connection 意图应为 chat_reply 增加 NeedScore")
+	if !hasChatReply {
+		t.Fatal("user_message 应包含 chat_reply")
+	}
+	if hasProactiveGreet {
+		t.Fatal("user_message 不应包含 proactive_greet")
+	}
+}
+
+func TestGenerateCandidatesTriggerProactive(t *testing.T) {
+	registry := DefaultCandidateRegistry()
+	ctx := CandidateGenerationContext{
+		Trigger: GoalTrigger{Kind: GoalTriggerProactive},
+		Now:     time.Now().UTC(),
+	}
+
+	candidates := GenerateCandidates(ctx, registry)
+	hasProactiveGreet := false
+	for _, c := range candidates {
+		if c.ID == "proactive_greet" {
+			hasProactiveGreet = true
+		}
+	}
+	if !hasProactiveGreet {
+		t.Fatal("proactive 应包含 proactive_greet")
+	}
+}
+
+func TestGenerateCandidatesTriggerVoice(t *testing.T) {
+	registry := DefaultCandidateRegistry()
+	ctx := CandidateGenerationContext{
+		Trigger: GoalTrigger{Kind: GoalTriggerVoice},
+		Now:     time.Now().UTC(),
+	}
+
+	candidates := GenerateCandidates(ctx, registry)
+	hasChatReply := false
+	hasAskClarify := false
+	hasOfferSupport := false
+	for _, c := range candidates {
+		if c.ID == "chat_reply" {
+			hasChatReply = true
+		}
+		if c.ID == "ask_clarify" {
+			hasAskClarify = true
+		}
+		if c.ID == "offer_support" {
+			hasOfferSupport = true
+		}
+	}
+	if !hasChatReply || !hasAskClarify || !hasOfferSupport {
+		t.Fatal("voice 应包含 chat_reply, ask_clarify, offer_support")
+	}
+}
+
+func TestGenerateCandidatesPreconditionBoundaryCrossed(t *testing.T) {
+	registry := DefaultCandidateRegistry()
+
+	ctxNoAutonomy := CandidateGenerationContext{
+		Goals:   []Goal{{ID: "g1", Type: GoalTypeConnection, Status: GoalStatusActive}},
+		Trigger: GoalTrigger{Kind: GoalTriggerUserMessage},
+		Now:     time.Now().UTC(),
+	}
+	candidates := GenerateCandidates(ctxNoAutonomy, registry)
+	for _, c := range candidates {
+		if c.ID == "set_boundary" {
+			t.Fatal("无 Autonomy Goal 时不应出现 set_boundary")
+		}
+	}
+
+	ctxWithAutonomy := CandidateGenerationContext{
+		Goals:   []Goal{{ID: "g1", Type: GoalTypeAutonomy, Status: GoalStatusActive}},
+		Trigger: GoalTrigger{Kind: GoalTriggerUserMessage},
+		Now:     time.Now().UTC(),
+	}
+	candidates = GenerateCandidates(ctxWithAutonomy, registry)
+	hasBoundary := false
+	for _, c := range candidates {
+		if c.ID == "set_boundary" {
+			hasBoundary = true
+		}
+	}
+	if !hasBoundary {
+		t.Fatal("有 Autonomy Goal 时应出现 set_boundary")
+	}
+}
+
+func TestGenerateCandidatesPreconditionInformationGoal(t *testing.T) {
+	registry := DefaultCandidateRegistry()
+
+	ctxNoInfo := CandidateGenerationContext{
+		Goals:   []Goal{{ID: "g1", Type: GoalTypeConnection, Status: GoalStatusActive}},
+		Trigger: GoalTrigger{Kind: GoalTriggerUserMessage},
+		Now:     time.Now().UTC(),
+	}
+	candidates := GenerateCandidates(ctxNoInfo, registry)
+	for _, c := range candidates {
+		if c.ID == "tool_search" {
+			t.Fatal("无 Information Goal 时不应出现 tool_search")
+		}
+	}
+
+	ctxWithInfo := CandidateGenerationContext{
+		Goals:   []Goal{{ID: "g1", Type: GoalTypeInformation, Status: GoalStatusActive}},
+		Trigger: GoalTrigger{Kind: GoalTriggerUserMessage},
+		Now:     time.Now().UTC(),
+	}
+	candidates = GenerateCandidates(ctxWithInfo, registry)
+	hasToolSearch := false
+	for _, c := range candidates {
+		if c.ID == "tool_search" {
+			hasToolSearch = true
+		}
+	}
+	if !hasToolSearch {
+		t.Fatal("有 Information Goal 时应出现 tool_search")
+	}
+}
+
+func TestGenerateCandidatesStableOrder(t *testing.T) {
+	registry := DefaultCandidateRegistry()
+	ctx := CandidateGenerationContext{
+		Trigger: GoalTrigger{Kind: GoalTriggerInternal},
+		Now:     time.Now().UTC(),
+	}
+
+	var firstOrder []string
+	for i := 0; i < 100; i++ {
+		candidates := GenerateCandidates(ctx, registry)
+		ids := make([]string, len(candidates))
+		for j, c := range candidates {
+			ids[j] = c.ID
+		}
+		if i == 0 {
+			firstOrder = ids
+		} else {
+			for j := range ids {
+				if ids[j] != firstOrder[j] {
+					t.Fatalf("第 %d 次执行顺序不一致: 位置 %d 期望 %s 实际 %s", i, j, firstOrder[j], ids[j])
+				}
+			}
+		}
+	}
+}
+
+func TestGenerateCandidatesActionTypeAndChannel(t *testing.T) {
+	registry := DefaultCandidateRegistry()
+	ctx := CandidateGenerationContext{
+		Trigger: GoalTrigger{Kind: GoalTriggerInternal},
+		Now:     time.Now().UTC(),
+	}
+
+	candidates := GenerateCandidates(ctx, registry)
+	for _, c := range candidates {
+		if c.ActionType == "" {
+			t.Fatalf("候选 %s 的 ActionType 不应为空", c.ID)
+		}
+		if c.Channel == "" {
+			t.Fatalf("候选 %s 的 Channel 不应为空", c.ID)
+		}
+	}
+
+	tests := []struct {
+		id         string
+		actionType CandidateActionType
+		channel    BehaviorChannel
+	}{
+		{"chat_reply", CandidateActionChat, BehaviorChannelChat},
+		{"proactive_greet", CandidateActionProactive, BehaviorChannelProactive},
+		{"wait_observe", CandidateActionWait, BehaviorChannelSystem},
+		{"tool_search", CandidateActionToolCall, BehaviorChannelChat},
+	}
+
+	candidateMap := make(map[string]BehaviorCandidate)
+	for _, c := range candidates {
+		candidateMap[c.ID] = c
+	}
+
+	for _, tt := range tests {
+		c, ok := candidateMap[tt.id]
+		if !ok {
+			continue
+		}
+		if c.ActionType != tt.actionType {
+			t.Fatalf("%s ActionType 期望 %s, 实际 %s", tt.id, tt.actionType, c.ActionType)
+		}
+		if c.Channel != tt.channel {
+			t.Fatalf("%s Channel 期望 %s, 实际 %s", tt.id, tt.channel, c.Channel)
+		}
 	}
 }
 

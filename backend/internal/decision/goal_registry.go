@@ -4,6 +4,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type GoalType string
@@ -38,19 +40,72 @@ const (
 	GoalStatusWish      GoalStatus = "wish"
 )
 
+type GoalTriggerKind string
+
+const (
+	GoalTriggerUserMessage GoalTriggerKind = "user_message"
+	GoalTriggerVoice       GoalTriggerKind = "voice"
+	GoalTriggerProactive   GoalTriggerKind = "proactive"
+	GoalTriggerInternal    GoalTriggerKind = "internal"
+	GoalTriggerRecovery    GoalTriggerKind = "recovery"
+)
+
+type GoalTrigger struct {
+	Kind          GoalTriggerKind `json:"kind"`
+	Source        string          `json:"source,omitempty"`
+	RequestID     string          `json:"requestId,omitempty"`
+	InteractionID string          `json:"interactionId,omitempty"`
+	SessionID     string          `json:"sessionId,omitempty"`
+}
+
 type Goal struct {
-	ID          string         `json:"id"`
-	UserID      string         `json:"userId,omitempty"`
-	CharacterID string         `json:"characterId,omitempty"`
-	Type        GoalType       `json:"type"`
-	Priority    GoalPriority   `json:"priority"`
-	Status      GoalStatus     `json:"status"`
-	Progress    float64        `json:"progress"`
-	Description string         `json:"description,omitempty"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
-	ExpiresAt   time.Time      `json:"expiresAt,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
+	ID             string         `json:"id"`
+	UserID         string         `json:"userId,omitempty"`
+	CharacterID    string         `json:"characterId,omitempty"`
+	ConversationID string         `json:"conversationId,omitempty"`
+	Type           GoalType       `json:"type"`
+	Priority       GoalPriority   `json:"priority"`
+	Status         GoalStatus     `json:"status"`
+	Progress       float64        `json:"progress"`
+	Description    string         `json:"description,omitempty"`
+	Revision       int64          `json:"revision"`
+	Trigger        GoalTrigger    `json:"trigger"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	ExpiresAt      time.Time      `json:"expiresAt,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
+type GoalCreateRequest struct {
+	UserID         string
+	CharacterID    string
+	ConversationID string
+	Type           GoalType
+	Priority       GoalPriority
+	Description    string
+	Trigger        GoalTrigger
+	ExpiresAt      time.Time
+	Metadata       map[string]any
+}
+
+func NewGoal(request GoalCreateRequest, now time.Time) Goal {
+	return Goal{
+		ID:             uuid.NewString(),
+		UserID:         request.UserID,
+		CharacterID:    request.CharacterID,
+		ConversationID: request.ConversationID,
+		Type:           request.Type,
+		Priority:       request.Priority,
+		Status:         GoalStatusActive,
+		Progress:       0,
+		Description:    request.Description,
+		Revision:       1,
+		Trigger:        request.Trigger,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		ExpiresAt:      request.ExpiresAt,
+		Metadata:       request.Metadata,
+	}
 }
 
 type Wish struct {
@@ -70,10 +125,11 @@ func NewGoalRegistry() *GoalRegistry {
 	}
 }
 
-func (r *GoalRegistry) Register(goal Goal) {
+func (r *GoalRegistry) Register(goal Goal) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.goals[goal.ID] = goal
+	return nil
 }
 
 func (r *GoalRegistry) Get(id string) (Goal, bool) {
@@ -84,17 +140,25 @@ func (r *GoalRegistry) Get(id string) (Goal, bool) {
 }
 
 func (r *GoalRegistry) UpdateStatus(id string, status GoalStatus, progress float64) bool {
+	return r.UpdateStatusAt(id, status, progress, time.Now().UTC())
+}
+
+func (r *GoalRegistry) UpdateStatusAt(id string, status GoalStatus, progress float64, now time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	goal, ok := r.goals[id]
 	if !ok {
 		return false
 	}
+	if !canTransitionGoalStatus(goal.Status, status) {
+		return false
+	}
 	goal.Status = status
 	if progress >= 0 && progress <= 1 {
 		goal.Progress = progress
 	}
-	goal.UpdatedAt = time.Now().UTC()
+	goal.Revision++
+	goal.UpdatedAt = now
 	r.goals[id] = goal
 	return true
 }
@@ -118,9 +182,7 @@ func (r *GoalRegistry) ByUser(userID string) []Goal {
 			result = append(result, g)
 		}
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return priorityOrder(result[i].Priority) < priorityOrder(result[j].Priority)
-	})
+	sortGoalsStable(result)
 	return result
 }
 
@@ -133,9 +195,30 @@ func (r *GoalRegistry) Active() []Goal {
 			result = append(result, g)
 		}
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return priorityOrder(result[i].Priority) < priorityOrder(result[j].Priority)
-	})
+	sortGoalsStable(result)
+	return result
+}
+
+func (r *GoalRegistry) ActiveForScope(userID string, characterID string, conversationID string) []Goal {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]Goal, 0)
+	for _, g := range r.goals {
+		if g.UserID != userID {
+			continue
+		}
+		if characterID != "" && g.CharacterID != "" && g.CharacterID != characterID {
+			continue
+		}
+		if g.Status != GoalStatusActive && g.Status != GoalStatusPending && g.Status != GoalStatusWish {
+			continue
+		}
+		if conversationID != "" && g.ConversationID != "" && g.ConversationID != conversationID {
+			continue
+		}
+		result = append(result, g)
+	}
+	sortGoalsStable(result)
 	return result
 }
 
@@ -188,6 +271,20 @@ func (r *GoalRegistry) PromoteToWish(goalID string, now time.Time) bool {
 	return true
 }
 
+func sortGoalsStable(goals []Goal) {
+	sort.SliceStable(goals, func(i, j int) bool {
+		pi := priorityOrder(goals[i].Priority)
+		pj := priorityOrder(goals[j].Priority)
+		if pi != pj {
+			return pi < pj
+		}
+		if !goals[i].CreatedAt.Equal(goals[j].CreatedAt) {
+			return goals[i].CreatedAt.Before(goals[j].CreatedAt)
+		}
+		return goals[i].ID < goals[j].ID
+	})
+}
+
 func priorityOrder(p GoalPriority) int {
 	switch p {
 	case GoalPriorityCritical:
@@ -201,4 +298,18 @@ func priorityOrder(p GoalPriority) int {
 	default:
 		return 4
 	}
+}
+
+func isTerminalGoalStatus(status GoalStatus) bool {
+	return status == GoalStatusAchieved || status == GoalStatusAbandoned
+}
+
+func canTransitionGoalStatus(from GoalStatus, to GoalStatus) bool {
+	if from == GoalStatusAchieved {
+		return false
+	}
+	if from == GoalStatusAbandoned {
+		return false
+	}
+	return true
 }

@@ -43,6 +43,7 @@ type RuntimeAssembly struct {
 	Appraisal      *AppraisalResult                 `json:"appraisal,omitempty"`
 	BehaviorPlan   *decision.BehaviorPlan           `json:"behaviorPlan,omitempty"`
 	ExpressionPlan *decision.ExpressionPlan         `json:"expressionPlan,omitempty"`
+	Goals          RuntimeGoalContext               `json:"goals"`
 }
 
 type RuntimePipeline struct {
@@ -58,6 +59,7 @@ type RuntimePipeline struct {
 	budgetController    *budget.BudgetController
 	candidateRegistry   *decision.CandidateRegistry
 	arbitrationLayer    decision.ArbitrationLayer
+	goalRegistry        *decision.GoalRegistry
 }
 
 func NewRuntimePipeline(registry *ContextLoaderRegistry, classifier *PathClassifier, budgetManager *TokenBudgetManager) *RuntimePipeline {
@@ -103,10 +105,14 @@ func (p *RuntimePipeline) SetBudgetController(controller *budget.BudgetControlle
 
 func (p *RuntimePipeline) SetDecisionLayer(registry *decision.CandidateRegistry, layer decision.ArbitrationLayer) {
 	if registry == nil {
-		registry = decision.DefaultCandidateRegistry()
+		panic("interaction: candidate registry is required")
 	}
 	p.candidateRegistry = registry
 	p.arbitrationLayer = layer
+}
+
+func (p *RuntimePipeline) SetGoalRegistry(registry *decision.GoalRegistry) {
+	p.goalRegistry = registry
 }
 
 func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, req *ProcessRequest) RuntimeAssembly {
@@ -160,12 +166,15 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 		compiledPersonality = &cp
 	}
 
+	now := time.Now().UTC()
+	goalContext := p.buildGoalContext(scope, req, appraisalResult, now)
+
 	safetyDecision := p.buildSafetyDecision(snapshot, scope)
 
 	var behaviorPlan *decision.BehaviorPlan
 	var expressionPlan *decision.ExpressionPlan
 	if p.candidateRegistry != nil {
-		bp, ep := p.runDecision(ctx, scope, snapshot, appraisalResult, compiledPersonality)
+		bp, ep := p.runDecision(ctx, scope, snapshot, appraisalResult, compiledPersonality, goalContext, now)
 		behaviorPlan = bp
 		expressionPlan = ep
 	}
@@ -178,10 +187,11 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 		Safety:         safetyDecision,
 		Delivery:       runtimeDelivery(scope, req),
 		Transaction:    p.transaction,
-		AssembledAt:    time.Now(),
+		AssembledAt:    now,
 		Personality:    compiledPersonality,
 		Appraisal:      appraisalResult,
 		BehaviorPlan:   behaviorPlan,
 		ExpressionPlan: expressionPlan,
+		Goals:          goalContext,
 	}
 }

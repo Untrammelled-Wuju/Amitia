@@ -32,6 +32,10 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
+	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/internal/desktoppet/maintenance"
+	"github.com/u-ai/backend/internal/desktoppet/migration"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/application"
 	processingcommit "github.com/u-ai/backend/internal/desktoppet/processing/commit"
@@ -62,6 +66,7 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
@@ -88,9 +93,8 @@ import (
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
-	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/safety"
-	"github.com/u-ai/backend/internal/extension/kernel/script_host"
+	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/worldbook"
@@ -100,66 +104,69 @@ import (
 )
 
 type AppServices struct {
-	DeliveryStore         *delivery.SQLiteDeliveryStore
-	ChatDeliveryAdapter   chat.DeliveryStore
-	DeliveryWorker        *delivery.Worker
-	Graph                 graph.Service
-	Memory                memory.Service
-	Profile               profile.Service
-	Episodic              episodic.Service
-	WorldBook             worldbook.Service
-	Vision                vision.Service
-	Companion             companion.Service
-	Chat                  chat.Service
-	UnifiedEntry          *interaction.UnifiedEntry
-	DataLifecycle         *mindruntime.DataLifecycleCoordinator
-	RuntimeQueue          *queue.SQLiteRuntimeQueueStore
-	NewOutbox             *newoutbox.SQLiteOutboxStore
-	OutboxWorker          *newoutbox.Worker
-	DesktopPetWorker      *worker.Worker
-	ProcessingWorker      *processingworker.Worker
-	QualityService        quality.QualityService
-	QualityWorker         *qualityworker.Worker
-	InstallationService   installation.Service
-	NewReleaseService     release.ReleaseService
-	ReleaseRecoveryWorker *release.ReleaseRecoveryWorker
-	ReleaseBuildWorker    *releaseworker.ReleaseBuildWorker
-	ReleaseEventPublisher *release.ReleaseEventPublisher
-	DesktopPetRuntime          *runtime.Service
-	DesktopPetRuntimeV2        *runtimev2.RuntimeFacade
-	EditingService             editing.Service
-	RegenerationWorker    *editing.RegenerationWorker
-	BridgeRecoveryWorker  *revisioncommit.RecoveryWorker
-	BehaviorService       *behavior.BehaviorService
-	AdapterManager        *adapters.AdapterManager
-	Reconciliation        *mindruntime.ReconciliationEngine
-	CircuitBreakers       *mindruntime.CircuitBreakerRegistry
-	VoiceEntry            *interaction.VoiceEntry
-	Extension             *extension.Runtime
-	KernelContainer       *kernel.Container
-	Emote                 *emote.Service
-	Temporal              *temporal.Service
-	RelTimeCoordinator    *temporal.RelationshipTimeCoordinator
-	OwnershipGuard        desktoppetsecurity.OwnershipGuard
-	PathRegistry          *desktoppetsecurity.PathRootRegistry
-	ImportStagingRepo     desktoppetsecurity.ImportStagingRepository
-	PackageImporter       *importer.PackageImporter
-	Readiness             *readiness.ReadinessService
-	SafeMode              *readiness.SafeModeController
-	MCPRepository         *mcp.Repository
-	MCPConnections        *mcpmanager.Manager
-	MCPAuth               *mcpauth.Manager
-	MCPDiscovery          *mcpdiscovery.Service
-	MCPSkills             *mcpskill.Runtime
-	MCPSecrets            mcpauth.SecretStore
-	MCPFeatures           *mcpfeatures.Service
-	MCPHost               *mcphost.Service
-	MCPInteractions       *mcphost.Broker
-	MCPDependencies       *mcpdependency.Service
-	DesktopInstanceStore  *security.DesktopInstanceStore
-	DeviceRepository      *device.Repository
-	RuntimeOrchestrator   RuntimeOrchestrator
-	RuntimeDomainEventConsumer *runtimev2.OutboxConsumer
+	DeliveryStore                *delivery.SQLiteDeliveryStore
+	ChatDeliveryAdapter          chat.DeliveryStore
+	DeliveryWorker               *delivery.Worker
+	Graph                        graph.Service
+	Memory                       memory.Service
+	Profile                      profile.Service
+	Episodic                     episodic.Service
+	WorldBook                    worldbook.Service
+	Vision                       vision.Service
+	Companion                    companion.Service
+	Chat                         chat.Service
+	UnifiedEntry                 *interaction.UnifiedEntry
+	DataLifecycle                *mindruntime.DataLifecycleCoordinator
+	RuntimeQueue                 *queue.SQLiteRuntimeQueueStore
+	NewOutbox                    *newoutbox.SQLiteOutboxStore
+	OutboxWorker                 *newoutbox.Worker
+	DesktopPetWorker             *worker.Worker
+	ProcessingWorker             *processingworker.Worker
+	QualityService               quality.QualityService
+	QualityWorker                *qualityworker.Worker
+	InstallationCoordinator      coordinator.InstallationCoordinator
+	InstallationRepo             installation.Repository
+	NewReleaseService            release.ReleaseService
+	ReleaseRecoveryWorker        *release.ReleaseRecoveryWorker
+	ReleaseBuildWorker           *releaseworker.ReleaseBuildWorker
+	ReleaseEventPublisher        *release.ReleaseEventPublisher
+	DesktopPetRuntimeV2          *runtimev2.RuntimeFacade
+	EditingService               editing.Service
+	RegenerationWorker           *editing.RegenerationWorker
+	BridgeRecoveryWorker         *revisioncommit.RecoveryWorker
+	BehaviorService              *behavior.BehaviorService
+	AdapterManager               *adapters.AdapterManager
+	Reconciliation               *mindruntime.ReconciliationEngine
+	CircuitBreakers              *mindruntime.CircuitBreakerRegistry
+	VoiceEntry                   *interaction.VoiceEntry
+	Extension                    *extension.Runtime
+	KernelContainer              *kernel.Container
+	Emote                        *emote.Service
+	Temporal                     *temporal.Service
+	RelTimeCoordinator           *temporal.RelationshipTimeCoordinator
+	OwnershipGuard               desktoppetsecurity.OwnershipGuard
+	PathRegistry                 *desktoppetsecurity.PathRootRegistry
+	ImportStagingRepo            desktoppetsecurity.ImportStagingRepository
+	PackageImporter              *importer.PackageImporter
+	Readiness                    *readiness.ReadinessService
+	SafeMode                     *readiness.SafeModeController
+	MCPRepository                *mcp.Repository
+	MCPConnections               *mcpmanager.Manager
+	MCPAuth                      *mcpauth.Manager
+	MCPDiscovery                 *mcpdiscovery.Service
+	MCPSkills                    *mcpskill.Runtime
+	MCPSecrets                   mcpauth.SecretStore
+	MCPFeatures                  *mcpfeatures.Service
+	MCPHost                      *mcphost.Service
+	MCPInteractions              *mcphost.Broker
+	MCPDependencies              *mcpdependency.Service
+	DesktopInstanceStore         *security.DesktopInstanceStore
+	DeviceRepository             *device.Repository
+	RuntimeOrchestrator          RuntimeOrchestrator
+	RuntimeDomainEventConsumer   *runtimev2.OutboxConsumer
+	DesktopPetMigrationRunner    *migration.Runner
+	DesktopPetMaintenanceHandler *maintenance.Handler
+	MigrationLock                *migration.MigrationLock
 }
 
 type RuntimeOrchestrator interface {
@@ -398,6 +405,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimePipeline.SetBeliefResolver(belief.ResolveBelief)
 	runtimePipeline.SetAppraisalEngine(appraisal.NewEngine(appraisal.DefaultAppraisalConfig()))
 	runtimePipeline.SetBudgetController(budget.NewBudgetController(0.5))
+	goalRegistry := decision.NewGoalRegistry()
+	runtimePipeline.SetGoalRegistry(goalRegistry)
 	runtimePipeline.SetDecisionLayer(decision.DefaultCandidateRegistry(), decision.DefaultArbitrationLayer())
 	orch.SetRuntimePipeline(runtimePipeline)
 	deadlineCfg := mindruntime.DefaultDeadlineConfig
@@ -450,7 +459,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
 	cbRegistry.Register("surrealdb", mindruntime.DefaultCircuitBreakerConfig())
 	cbRegistry.Register("model_api", mindruntime.DefaultCircuitBreakerConfig())
-	voiceEntry := interaction.NewVoiceEntryWithUnifiedEntry(orch, entry)
+	voiceEntry := interaction.NewVoiceEntry(entry)
 	if err := deliveryStore.InitSchema(); err != nil {
 		log.Error("failed to init delivery store schema:", err)
 		panic("failed to init delivery store schema")
@@ -568,8 +577,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
-	installationInstaller := installation.NewInstaller(installationRepo, processingRepo, charRepo, processingDataDir)
-	installationUninstaller := installation.NewUninstaller(installationRepo, processingDataDir)
+	installationCoordinator := coordinator.NewCoordinator(newCoordinatorRepoAdapter(installationRepo), nil, nil, nil, nil)
 
 	runtimeConfig := runtime.DefaultRuntimeConfig()
 	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
@@ -585,12 +593,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
 	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
 
-	runtimeCmdStore := runtime.NewCommandStore(ctx.DB)
-	runtimeStateStore := runtime.NewStateStore(ctx.DB)
-	runtimeSnapshotBuilder := runtime.NewSnapshotBuilder(installationRepo, config.AppCfg.Storage.DataDir)
-	runtimeSinkHolder := &runtimeEventSinkHolder{}
-	desktopPetRuntime := runtime.NewService(runtimeConfig, runtimeCmdStore, runtimeStateStore, runtimeSnapshotBuilder, runtimeSinkHolder)
-
 	runtimeV2Facade := runtimev2.NewRuntimeFacade(ctx.DB, &runtimev2.FacadeConfig{
 		Enabled:            runtimeConfig.Enabled,
 		Path:               runtimeConfig.Path,
@@ -602,20 +604,20 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
 	})
 
+	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	runtimeOutboxSink := runtime.NewOutboxRuntimeEventSink(
 		runtime.NewV2ActualStateEventOutbox(runtimeV2Facade.StateService().AppendDomainEvent),
 	)
 	runtimeSinkHolder.Set(runtimeOutboxSink)
 
 	v2Notifier := runtimev2.NewV2RuntimeNotifier(runtimeV2Facade.StateService(), runtimeV2Facade.Events())
-
-	installationService := installation.NewService(installationRepo, installationInstaller, installationUninstaller, processingRepo, charRepo, processingDataDir, installation.WithRuntimeNotifier(v2Notifier))
+	_ = v2Notifier
 
 	editingRepo := editing.NewRepository(ctx.DB)
 	editingAssetStore := editing.NewAssetStore(processingDataDir, editingRepo)
-	editingGenAdapter := editing.NewGenerationAdapter(ctx)
-	editingProcAdapter := editing.NewProcessingAdapter(ctx)
-	editingQualAdapter := editing.NewQualityAdapter(ctx)
+	editingGenAdapter := newEditingGenerationPort(ctx)
+	editingProcAdapter := newEditingProcessingPort(ctx)
+	editingQualAdapter := newEditingQualityPort(ctx)
 	editingSvc := editing.NewService(editingRepo, editingAssetStore, editingGenAdapter, editingProcAdapter, editingQualAdapter, ctx.DB, processingDataDir)
 	if err := editingSvc.RecoverPendingJournals(context.Background()); err != nil {
 		log.Warn("editing journal recovery warning: ", err)
@@ -666,17 +668,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	ownershipGuard := desktoppetsecurity.NewSQLiteOwnershipGuard(ctx.DB)
 
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
-	if desktopPetRuntime != nil {
-		desktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
-	}
+
+	v2BehaviorRuntimePort := wiring.NewV2RuntimeActionAdapter(runtimeV2Facade)
+	v2ActivePetPort := wiring.NewV2ActivePetAdapter(installationRepo, runtimeV2Facade, processingDataDir)
+
 	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
-		DB:             ctx.DB,
-		RuntimeService: desktopPetRuntime,
-		InstallRepo:    installationRepo,
-		PsycheStore:    psycheStore,
-		DataDir:        processingDataDir,
-		ShadowMode:     false,
-		RuntimeCmdOn:   true,
+		DB:                ctx.DB,
+		ActivePetPort:     v2ActivePetPort,
+		RuntimeActionPort: v2BehaviorRuntimePort,
+		InstallRepo:       installationRepo,
+		PsycheStore:       psycheStore,
+		DataDir:           processingDataDir,
+		ShadowMode:        false,
+		RuntimeCmdOn:      true,
 	})
 	var behaviorSvc *behavior.BehaviorService
 	if assembleErr != nil {
@@ -700,7 +704,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	safeModeCtrl := readiness.NewSafeModeController()
 	var readinessSvc *readiness.ReadinessService
-	if desktopPetRuntime != nil {
+	if runtimeV2Facade != nil {
 		readinessSvc, err = readiness.NewFullStartupReadinessService(readiness.StartupReadinessDeps{
 			DB:        ctx.DB,
 			Extension: extensionRuntime,
@@ -721,8 +725,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				return bootstrapTicketRepo.ReadinessCheck(context.Background())
 			},
 			RuntimeGatewayReady: func() error {
-				if desktopPetRuntime == nil {
-					return fmt.Errorf("runtime service is nil")
+				if runtimeV2Facade == nil {
+					return fmt.Errorf("runtime v2 facade is nil")
 				}
 				return nil
 			},
@@ -751,8 +755,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				return nil
 			},
 			InstallationWorkerReady: func() error {
-				if installationService == nil {
-					return fmt.Errorf("installation service is nil")
+				if installationCoordinator == nil {
+					return fmt.Errorf("installation coordinator is nil")
 				}
 				return nil
 			},
@@ -797,65 +801,78 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
+	migrationRepo := migration.NewDBRepository(ctx.DB)
+	migrationRunner := migration.NewRunner(migrationRepo)
+	migrationLock := migration.NewMigrationLock()
+	migrationRunner.SetLock(migrationLock)
+	backupDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_backups")
+	migrationRunner.SetBackupDir(backupDir)
+	migrationRunner.SetLock(migrationLock)
+
+	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
+
 	return &AppServices{
-		Graph:                 graphSvc,
-		ChatDeliveryAdapter:   deliveryAdapter,
-		Memory:                memSvc,
-		Profile:               profSvc,
-		Episodic:              epiSvc,
-		WorldBook:             wbSvc,
-		Vision:                visionSvc,
-		Companion:             compSvc,
-		Chat:                  chatSvc,
-		UnifiedEntry:          entry,
-		DataLifecycle:         dataLifecycle,
-		RuntimeQueue:          runtimeQueue,
-		NewOutbox:             newOutboxStore,
-		DeliveryStore:         deliveryStore,
-		DeliveryWorker:        deliveryWorker,
-		OutboxWorker:          newOutboxWorker,
-		DesktopPetWorker:      desktopPetWorker,
-		ProcessingWorker:      processingWorker,
-		QualityService:        qualitySvc,
-		QualityWorker:         qualityWorker,
-		InstallationService:   installationService,
-		NewReleaseService:     newReleaseService,
-		ReleaseRecoveryWorker: releaseRecoveryWorker,
-		ReleaseEventPublisher: releaseEventPublisher,
-		DesktopPetRuntime:     desktopPetRuntime,
-		DesktopPetRuntimeV2:   runtimeV2Facade,
-		EditingService:        editingSvc,
-		RegenerationWorker:    regenerationWorker,
-		BridgeRecoveryWorker:  bridgeRecoveryWorker,
-		BehaviorService:       behaviorSvc,
-		AdapterManager:        adapterManager,
-		Reconciliation:        reconciliationEngine,
-		CircuitBreakers:       cbRegistry,
-		VoiceEntry:            voiceEntry,
-		Extension:             extensionRuntime,
-		KernelContainer:       kernelContainer,
-		Emote:                 emoteSvc,
-		Temporal:              temporalSvc,
-		RelTimeCoordinator:    relTimeCoordinator,
-		OwnershipGuard:        ownershipGuard,
-		PathRegistry:          pathRegistry,
-		ImportStagingRepo:     importStagingRepo,
-		PackageImporter:       importer.NewPackageImporterWithJournal(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo, releasebuild.NewPublishJournalManager(releaseRepo)),
-		Readiness:             readinessSvc,
-		SafeMode:              safeModeCtrl,
-		MCPRepository:         mcpRepository,
-		MCPConnections:        connectionManager,
-		MCPAuth:               oauthManager,
-		MCPDiscovery:          discoveryService,
-		MCPSkills:             skillRuntime,
-		MCPSecrets:            secretStore,
-		MCPFeatures:           featureService,
-		MCPHost:               hostService,
-		MCPInteractions:       interactionBroker,
-		MCPDependencies:       dependencyService,
-		DesktopInstanceStore:  desktopInstanceStore,
-		DeviceRepository:      deviceRepo,
-		RuntimeDomainEventConsumer: runtimeDomainEventConsumer,
+		Graph:                        graphSvc,
+		ChatDeliveryAdapter:          deliveryAdapter,
+		Memory:                       memSvc,
+		Profile:                      profSvc,
+		Episodic:                     epiSvc,
+		WorldBook:                    wbSvc,
+		Vision:                       visionSvc,
+		Companion:                    compSvc,
+		Chat:                         chatSvc,
+		UnifiedEntry:                 entry,
+		DataLifecycle:                dataLifecycle,
+		RuntimeQueue:                 runtimeQueue,
+		NewOutbox:                    newOutboxStore,
+		DeliveryStore:                deliveryStore,
+		DeliveryWorker:               deliveryWorker,
+		OutboxWorker:                 newOutboxWorker,
+		DesktopPetWorker:             desktopPetWorker,
+		ProcessingWorker:             processingWorker,
+		QualityService:               qualitySvc,
+		QualityWorker:                qualityWorker,
+		InstallationCoordinator:      installationCoordinator,
+		InstallationRepo:             installationRepo,
+		NewReleaseService:            newReleaseService,
+		ReleaseRecoveryWorker:        releaseRecoveryWorker,
+		ReleaseEventPublisher:        releaseEventPublisher,
+		DesktopPetRuntimeV2:          runtimeV2Facade,
+		EditingService:               editingSvc,
+		RegenerationWorker:           regenerationWorker,
+		BridgeRecoveryWorker:         bridgeRecoveryWorker,
+		BehaviorService:              behaviorSvc,
+		AdapterManager:               adapterManager,
+		Reconciliation:               reconciliationEngine,
+		CircuitBreakers:              cbRegistry,
+		VoiceEntry:                   voiceEntry,
+		Extension:                    extensionRuntime,
+		KernelContainer:              kernelContainer,
+		Emote:                        emoteSvc,
+		Temporal:                     temporalSvc,
+		RelTimeCoordinator:           relTimeCoordinator,
+		OwnershipGuard:               ownershipGuard,
+		PathRegistry:                 pathRegistry,
+		ImportStagingRepo:            importStagingRepo,
+		PackageImporter:              importer.NewPackageImporterWithJournal(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo, releasebuild.NewPublishJournalManager(releaseRepo)),
+		Readiness:                    readinessSvc,
+		SafeMode:                     safeModeCtrl,
+		MCPRepository:                mcpRepository,
+		MCPConnections:               connectionManager,
+		MCPAuth:                      oauthManager,
+		MCPDiscovery:                 discoveryService,
+		MCPSkills:                    skillRuntime,
+		MCPSecrets:                   secretStore,
+		MCPFeatures:                  featureService,
+		MCPHost:                      hostService,
+		MCPInteractions:              interactionBroker,
+		MCPDependencies:              dependencyService,
+		DesktopInstanceStore:         desktopInstanceStore,
+		DeviceRepository:             deviceRepo,
+		RuntimeDomainEventConsumer:   runtimeDomainEventConsumer,
+		DesktopPetMigrationRunner:    migrationRunner,
+		DesktopPetMaintenanceHandler: maintenanceHandler,
+		MigrationLock:                migrationLock,
 	}, nil
 }
 
@@ -889,6 +906,25 @@ func checkMigrationState(db *gorm.DB) error {
 		return fmt.Errorf("found %d failed migrations", count)
 	}
 	return nil
+}
+
+type coordinatorRepoAdapter struct {
+	installRepo installation.Repository
+}
+
+func newCoordinatorRepoAdapter(installRepo installation.Repository) *coordinatorRepoAdapter {
+	return &coordinatorRepoAdapter{installRepo: installRepo}
+}
+
+func (a *coordinatorRepoAdapter) CreateOperation(ctx context.Context, op *operation.InstallationOperation) error {
+	if op == nil {
+		return fmt.Errorf("coordinator: nil operation")
+	}
+	db := a.installRepo.DB()
+	if db == nil {
+		return fmt.Errorf("coordinator: database not available")
+	}
+	return db.WithContext(ctx).Create(op).Error
 }
 
 type characterOwnerPort struct {

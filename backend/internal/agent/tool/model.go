@@ -3,7 +3,10 @@
 package tool
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -22,6 +25,8 @@ type Parameters struct {
 	Type       string              `json:"type"`
 	Properties map[string]Property `json:"properties"`
 	Required   []string            `json:"required"`
+
+	rawSchema json.RawMessage `json:"-"`
 }
 
 type Property struct {
@@ -106,4 +111,38 @@ func requireScopedWrite(execCtx ToolExecutionContext) (ToolExecutionContext, *To
 		return execCtx, &result
 	}
 	return execCtx, nil
+}
+
+func ParseParametersSchema(raw json.RawMessage) (Parameters, error) {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return Parameters{}, fmt.Errorf("empty parameters schema")
+	}
+
+	type plain Parameters
+
+	var decoded plain
+
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return Parameters{}, err
+	}
+
+	result := Parameters(decoded)
+
+	result.rawSchema = append(json.RawMessage(nil), raw...)
+
+	return result, nil
+}
+
+func (p Parameters) MarshalJSON() ([]byte, error) {
+	if len(p.rawSchema) > 0 {
+		if !json.Valid(p.rawSchema) {
+			return nil, fmt.Errorf("invalid raw parameter schema")
+		}
+
+		return append([]byte(nil), p.rawSchema...), nil
+	}
+
+	type plain Parameters
+
+	return json.Marshal(plain(p))
 }

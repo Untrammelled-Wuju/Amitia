@@ -2,11 +2,12 @@ package installation
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
-func RegisterRoutes(r *gin.RouterGroup, svc Service, guard security.OwnershipGuard) {
-	handler := NewHandler(svc, guard)
+func RegisterRoutes(r *gin.RouterGroup, coord coordinator.InstallationCoordinator, repo Repository, guard security.OwnershipGuard) {
+	handler := NewCoordinatorHandler(coord, repo, guard)
 	g := r.Group("/desktop-pets")
 	{
 		g.POST("/packages/:packageId/install", handler.InstallPackage)

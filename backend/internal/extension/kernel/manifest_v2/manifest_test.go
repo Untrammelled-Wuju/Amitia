@@ -224,3 +224,153 @@ func TestParseRejectsDuplicateJSONKeys(t *testing.T) {
 		t.Fatalf("expected duplicate key rejection, got %v", err)
 	}
 }
+
+const serviceManifest = `{
+  "manifestVersion": 2,
+  "extension": {
+    "id": "com.example/service-test",
+    "name": {"default": "Service Test"},
+    "version": "1.0.0"
+  },
+  "publisher": {
+    "id": "com.example",
+    "displayName": "Example"
+  },
+  "modules": [
+    {
+      "id": "service-main",
+      "name": {"default": "Service Main"},
+      "type": "service",
+      "runtime": {
+        "type": "service",
+        "entryPoint": "bin/service"
+      }
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": "test"
+  }
+}`
+
+func TestValidateServiceRuntime(t *testing.T) {
+	m, err := Parse([]byte(serviceManifest))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	report := m.Validate()
+	if report.HasErrors() {
+		t.Errorf("expected no errors for service runtime, got: %v", report.Errors)
+	}
+}
+
+func TestValidateWithSchemaServiceRuntime(t *testing.T) {
+	m, err := Parse([]byte(serviceManifest))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	report := m.ValidateWithSchema()
+	if report.HasErrors() {
+		t.Errorf("expected no errors for service runtime schema validation, got: %v", report.Errors)
+	}
+}
+
+func TestValidateUnknownRuntimeStillRejected(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"modules": [{"id": "m", "name": {"default": "M"}, "type": "javascript", "runtime": {"type": "unknown_runtime"}}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.Validate()
+	found := false
+	for _, e := range report.Errors {
+		if e.Code == "unsupported_runtime" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected unsupported_runtime error, got: %v", report.Errors)
+	}
+}
+
+func TestValidateTrustedServiceManifestRejected(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"modules": [{"id": "m", "name": {"default": "M"}, "type": "service", "runtime": {"type": "trusted_service"}}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.Validate()
+	if !report.HasErrors() {
+		t.Errorf("expected trusted_service to be rejected by manifest, got no errors")
+	}
+}
+
+func TestValidatePluginServiceManifestRejected(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"modules": [{"id": "m", "name": {"default": "M"}, "type": "service", "runtime": {"type": "plugin_service"}}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.Validate()
+	if !report.HasErrors() {
+		t.Errorf("expected plugin_service to be rejected by manifest, got no errors")
+	}
+}
+
+func TestValidateTrustedServiceSchemaRejected(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"modules": [{"id": "m", "name": {"default": "M"}, "type": "service", "runtime": {"type": "trusted_service"}}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.ValidateWithSchema()
+	if !report.HasErrors() {
+		t.Errorf("expected trusted_service to be rejected by schema, got no errors")
+	}
+}
+
+func TestValidatePluginServiceSchemaRejected(t *testing.T) {
+	m, _ := Parse([]byte(`{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/test", "name": {"default": "x"}, "version": "1.0.0"},
+		"publisher": {"id": "p", "displayName": "P"},
+		"modules": [{"id": "m", "name": {"default": "M"}, "type": "service", "runtime": {"type": "plugin_service"}}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "x"}
+	}`))
+	report := m.ValidateWithSchema()
+	if !report.HasErrors() {
+		t.Errorf("expected plugin_service to be rejected by schema, got no errors")
+	}
+}
+
+func TestToExtensionDefinitionServiceRuntime(t *testing.T) {
+	m, err := Parse([]byte(serviceManifest))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	def, err := m.ToExtensionDefinition()
+	if err != nil {
+		t.Fatalf("ToExtensionDefinition: %v", err)
+	}
+	if len(def.Modules) != 1 {
+		t.Fatalf("expected 1 module, got %d", len(def.Modules))
+	}
+	if def.Modules[0].Runtime == nil {
+		t.Fatalf("expected runtime to be non-nil")
+	}
+	if string(def.Modules[0].Runtime.Type) != "service" {
+		t.Errorf("expected runtime type service, got %s", def.Modules[0].Runtime.Type)
+	}
+	if def.Modules[0].Type != "service" {
+		t.Errorf("expected module type service, got %s", def.Modules[0].Type)
+	}
+}

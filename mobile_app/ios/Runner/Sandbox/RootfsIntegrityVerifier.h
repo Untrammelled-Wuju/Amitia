@@ -8,7 +8,8 @@ typedef NS_ENUM(NSInteger, RootfsIntegrityResult) {
     RootfsIntegrityResultMismatch,
     RootfsIntegrityResultFileMissing,
     RootfsIntegrityResultAlgorithmUnavailable,
-    RootfsIntegrityResultIOError
+    RootfsIntegrityResultIOError,
+    RootfsIntegrityResultDigestMalformed
 };
 
 @interface RootfsIntegrityVerifier : NSObject
@@ -23,6 +24,10 @@ typedef NS_ENUM(NSInteger, RootfsIntegrityResult) {
 + (NSString *_Nullable)computeSHA256OfFileAtURL:(NSURL *)fileURL
                                           error:(NSError *_Nullable *_Nullable)error;
 
++ (BOOL)isValidSHA256Digest:(NSString *)digest;
+
 @end
+
+extern NSErrorDomain const RootfsIntegrityErrorDomain;
 
 NS_ASSUME_NONNULL_END

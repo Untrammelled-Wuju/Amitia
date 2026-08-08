@@ -36,11 +36,11 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
-	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -53,12 +53,12 @@ import (
 )
 
 type ContainerBuilder struct {
-	dbPath                 string
-	extRoot                string
-	db                     *sql.DB
-	characterReader        CharacterReader
-	conversationReader     ConversationReader
-	memoryQueryService     MemoryQueryService
+	dbPath                  string
+	extRoot                 string
+	db                      *sql.DB
+	characterReader         CharacterReader
+	conversationReader      ConversationReader
+	memoryQueryService      MemoryQueryService
 	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
 	hostArtifactResolver    script_host.ArtifactResolver
 }
@@ -888,4 +888,3 @@ func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error
 	}
 	return store, nil
 }
-

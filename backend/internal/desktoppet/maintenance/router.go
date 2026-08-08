@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	PermMaintenanceRead   = "desktop_pet.maintenance.read"
-	PermBackupCreate      = "desktop_pet.backup.create"
-	PermExportCreate      = "desktop_pet.export.create"
-	PermMigrationRun      = "desktop_pet.migration.run"
-	PermCutoverExecute    = "desktop_pet.cutover.execute"
+	PermMaintenanceRead = "desktop_pet.maintenance.read"
+	PermBackupCreate    = "desktop_pet.backup.create"
+	PermExportCreate    = "desktop_pet.export.create"
+	PermMigrationRun    = "desktop_pet.migration.run"
+	PermCutoverExecute  = "desktop_pet.cutover.execute"
 )
 
 func RegisterMaintenanceRouter(r *gin.RouterGroup, handler *Handler) {

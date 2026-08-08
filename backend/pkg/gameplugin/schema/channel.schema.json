@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://amitia.untrammelled.top/schemas/gamehost/channel.schema.json",
+  "title": "Game Host Channel Descriptor",
+  "description": "Schema for amitia-game-host/1 Channel Descriptor. Public protocol for third-party game plugin implementations.",
+  "type": "object",
+  "required": ["id", "kind"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique channel identifier within the plugin.",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\x00-\\x1f]+$",
+      "examples": ["player-events", "state-stream", "log-output"]
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["event", "state", "log", "metric", "binary", "custom"],
+      "description": "Channel data type classification."
+    },
+    "schemaId": {
+      "type": "string",
+      "description": "Optional URI identifying the payload schema. Host does not interpret custom schema IDs.",
+      "maxLength": 1024,
+      "examples": ["minecraft.world-state/v1", "vendor.world-map/v2"]
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["plugin_to_host", "host_to_plugin", "bidirectional"],
+      "description": "Channel communication direction. Defaults to bidirectional if omitted."
+    },
+    "frequencyHint": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "realtime"],
+      "description": "Hint for expected data frequency. Informational only, not enforced rate limiting."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Extension metadata. Core logic must not depend on undefined fields.",
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -10,6 +10,8 @@ typedef NS_ENUM(NSInteger, ISHAvailability) {
     ISHAvailabilityError
 };
 
+@class AmitiaISHRuntime;
+
 @interface ISHBridgeConfig : NSObject
 @property (nonatomic, copy, nullable) NSString *runtimeID;
 @property (nonatomic, copy, nullable) NSString *workspaceURI;
@@ -39,6 +41,8 @@ typedef NS_ENUM(NSInteger, ISHAvailability) {
 @end
 
 @interface IOSSandboxBridge : NSObject
+
+@property (nonatomic, strong) AmitiaISHRuntime *runtime;
 
 + (instancetype)shared;
 

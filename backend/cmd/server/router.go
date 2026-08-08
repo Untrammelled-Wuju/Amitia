@@ -6,10 +6,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -28,12 +26,13 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/doctor"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
+	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/quality"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
-	"github.com/u-ai/backend/internal/desktoppet/runtime"
+	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
@@ -47,7 +46,6 @@ import (
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
@@ -63,8 +61,6 @@ import (
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
-	"github.com/u-ai/backend/pkg/util"
-	"gorm.io/gorm"
 )
 
 func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error) {
@@ -140,9 +136,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	if err := sessionSvc.RecoverRotationJournals(context.Background()); err != nil {
 		return nil, fmt.Errorf("recover local token rotation: %w", err)
 	}
-
-	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
-	services.DesktopPetRuntime.SetBootstrapTicketRepo(bootstrapTicketRepo)
 
 	if services.DesktopInstanceStore == nil && config.AppCfg.Security.Mode == "local_single_user" {
 		return nil, fmt.Errorf("desktop instance store is required in local_single_user mode")
@@ -434,20 +427,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		processing.RegisterProcessingRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
 		editing.RegisterEditingRouterWithService(desktopPetWriteGroup, services.EditingService, services.OwnershipGuard, services.PathRegistry)
 		quality.RegisterQualityRouter(desktopPetWriteGroup, services.QualityService, services.OwnershipGuard)
-		installation.RegisterRoutes(desktopPetWriteGroup, services.InstallationService, services.OwnershipGuard)
+		installation.RegisterRoutes(desktopPetWriteGroup, services.InstallationCoordinator, services.InstallationRepo, services.OwnershipGuard)
 		release.RegisterRoutes(desktopPetWriteGroup, services.NewReleaseService, services.OwnershipGuard)
 		registerImportStagingRoutes(desktopPetWriteGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
 		behavior.RegisterRoutes(desktopPetWriteGroup, services.BehaviorService)
 	}
-	runtime.RegisterInternalRoutes(
+	runtimev2.RegisterInternalRoutes(
 		r,
-		services.DesktopPetRuntime,
+		services.DesktopPetRuntimeV2,
 		services.SafeMode,
 	)
-	runtime.RegisterUserRoutes(apiGroup, services.DesktopPetRuntime)
+	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
 
-	maintenance := r.Group("/api/maintenance")
-	maintenance.Use(security.AuthenticationMiddleware(security.AuthConfig{
+	maintenanceAuthGroup := r.Group("/api")
+	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:             "maintenance",
 		JWTSecret:        config.AppCfg.JWT.Secret,
 		LocalCredentials: localCredentialStore,
@@ -455,158 +448,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		ListenAddress:    config.AppCfg.Server.Host,
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 	}))
-	{
-		maintenance.GET("/doctor", func(c *gin.Context) {
-			report := buildDoctorReport(ctx.DB, services)
-			util.SuccessResponse(c, report)
-		})
-		maintenance.GET("/readiness", func(c *gin.Context) {
-			if services.Readiness == nil {
-				c.JSON(503, gin.H{"code": 503, "msg": "readiness service unavailable"})
-				return
-			}
-			snapshot := services.Readiness.Snapshot()
-			util.SuccessResponse(c, snapshot)
-		})
-		maintenance.GET("/migrations", func(c *gin.Context) {
-			migrations, err := queryMigrationStatus(ctx.DB)
-			if err != nil {
-				c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
-				return
-			}
-			util.SuccessResponse(c, migrations)
-		})
-		maintenance.POST("/backup", func(c *gin.Context) {
-			report, err := runMaintenanceBackup(ctx.DB, services)
-			if err != nil {
-				c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
-				return
-			}
-			util.SuccessResponse(c, report)
-		})
-		maintenance.POST("/export", func(c *gin.Context) {
-			report, err := runMaintenanceExport(ctx.DB, services)
-			if err != nil {
-				c.JSON(500, gin.H{"code": 500, "msg": err.Error()})
-				return
-			}
-			util.SuccessResponse(c, report)
-		})
-	}
+	desktoppetmaintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
 	return r, nil
-}
-
-func buildDoctorReport(db *gorm.DB, services *AppServices) map[string]interface{} {
-	sqlDB, _ := db.DB()
-	dbOk := sqlDB != nil && sqlDB.Ping() == nil
-	var failedMigrations int64
-	db.Model(&migration.Record{}).Where("status = ?", "failed").Count(&failedMigrations)
-	var appliedMigrations int64
-	db.Model(&migration.Record{}).Where("status = ?", "applied").Count(&appliedMigrations)
-	runtimeStatus := "unknown"
-	if services.RuntimeOrchestrator != nil {
-		snap := services.RuntimeOrchestrator.Snapshot()
-		runtimeStatus = string(snap.State)
-	}
-	safeMode := false
-	safeModeReason := ""
-	if services.SafeMode != nil {
-		safeMode, safeModeReason, _ = services.SafeMode.IsInSafeMode()
-	}
-	readiness := "unknown"
-	if services.Readiness != nil {
-		s := services.Readiness.Snapshot()
-		readiness = string(s.OverallStatus)
-	}
-	return map[string]interface{}{
-		"status": map[string]bool{
-			"database":          dbOk,
-			"safeMode":          safeMode,
-			"orchestratorReady": services.RuntimeOrchestrator != nil,
-			"readinessReady":    services.Readiness != nil,
-		},
-		"details": map[string]interface{}{
-			"safeModeReason":    safeModeReason,
-			"runtimeStatus":     runtimeStatus,
-			"readinessStatus":   readiness,
-			"failedMigrations":  failedMigrations,
-			"appliedMigrations": appliedMigrations,
-		},
-		"checkedAt": time.Now().UTC().Format(time.RFC3339),
-	}
-}
-
-func queryMigrationStatus(db *gorm.DB) (map[string]interface{}, error) {
-	var records []migration.Record
-	if err := db.Order("version asc").Find(&records).Error; err != nil {
-		return nil, fmt.Errorf("query migrations: %w", err)
-	}
-	summary := map[string]int64{"applied": 0, "failed": 0, "pending": 0}
-	for _, r := range records {
-		summary[r.Status]++
-	}
-	return map[string]interface{}{
-		"total":    len(records),
-		"summary":  summary,
-		"versions": records,
-	}, nil
-}
-
-func runMaintenanceBackup(db *gorm.DB, services *AppServices) (map[string]interface{}, error) {
-	backupDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_backups")
-	if err := os.MkdirAll(backupDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create backup dir: %w", err)
-	}
-	runner := migration.Runner{DB: db, BackupDir: backupDir}
-	if err := runner.CreatePreMigrationBackup(); err != nil {
-		return nil, fmt.Errorf("create backup: %w", err)
-	}
-	var latest struct {
-		ID         string
-		BackupPath string
-		BackupSize int64
-		Status     string
-		FinishedAt string
-	}
-	db.Raw("SELECT id, backup_path, backup_size, status, finished_at FROM backup_records WHERE status = 'completed' ORDER BY finished_at DESC LIMIT 1").Scan(&latest)
-	return map[string]interface{}{
-		"backupId":    latest.ID,
-		"backupPath":  latest.BackupPath,
-		"size":        latest.BackupSize,
-		"status":      latest.Status,
-		"completedAt": latest.FinishedAt,
-	}, nil
-}
-
-func runMaintenanceExport(db *gorm.DB, services *AppServices) (map[string]interface{}, error) {
-	var migrationRecords []migration.Record
-	db.Order("version asc").Find(&migrationRecords)
-	doctor := buildDoctorReport(db, services)
-	report := map[string]interface{}{
-		"doctor":     doctor,
-		"migrations": migrationRecords,
-		"exportedAt": time.Now().UTC().Format(time.RFC3339),
-	}
-	data, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal report: %w", err)
-	}
-	name := fmt.Sprintf("diagnostic_%s.json", time.Now().UTC().Format("20060102_150405"))
-	exportPath := filepath.Join(config.AppCfg.Storage.DataDir, "exports")
-	if err := os.MkdirAll(exportPath, 0o700); err != nil {
-		return nil, fmt.Errorf("create export dir: %w", err)
-	}
-	fullPath := filepath.Join(exportPath, name)
-	if err := os.WriteFile(fullPath, data, 0o600); err != nil {
-		return nil, fmt.Errorf("write export: %w", err)
-	}
-	return map[string]interface{}{
-		"exported":   true,
-		"file":       name,
-		"size":       len(data),
-		"exportedAt": report["exportedAt"],
-	}, nil
 }
 
 type packageImportAdapter struct {
@@ -614,11 +458,16 @@ type packageImportAdapter struct {
 }
 
 func (a *packageImportAdapter) ImportPackage(ctx context.Context, req map[string]string) (string, string, string, error) {
+	expectedRevision := int64(0)
+	if revStr := req["expectedStagingRevision"]; revStr != "" {
+		fmt.Sscanf(revStr, "%d", &expectedRevision)
+	}
 	result, err := a.imp.ImportPackage(ctx, &importer.ImportPackageRequest{
-		UserID:          req["userId"],
-		ImportStagingID: req["importStagingId"],
-		SourceFilePath:  req["sourceFilePath"],
-		IdempotencyKey:  req["idempotencyKey"],
+		UserID:                  req["userId"],
+		ImportStagingID:         req["importStagingId"],
+		SourceFilePath:          req["sourceFilePath"],
+		IdempotencyKey:          req["idempotencyKey"],
+		ExpectedStagingRevision: expectedRevision,
 	})
 	if err != nil {
 		return "", "", "", err

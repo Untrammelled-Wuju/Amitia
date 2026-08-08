@@ -2,9 +2,10 @@ package interaction
 
 import (
 	"context"
-	"github.com/u-ai/backend/internal/temporal"
 	"testing"
 	"time"
+
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing.T) {
@@ -12,7 +13,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 	tracker := NewInMemoryTracker()
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
-	entry := NewVoiceEntryWithUnifiedEntry(orch, NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
+	unifiedEntry := NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
 			ID:             "bind-voice",
 			UserID:         "user-bound",
@@ -23,7 +24,8 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 			Source:         "voice-binding",
 			State:          ScopeBindingStateActive,
 		},
-	}}), temporal.SystemClock{}))
+	}}), temporal.SystemClock{})
+	entry := NewVoiceEntry(unifiedEntry)
 	plan := &ExpressionPlan{
 		Version:   ExpressionPlanVersionV1,
 		ID:        "expr-voice",
@@ -79,32 +81,12 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 	}
 }
 
-func TestVoiceEntryWithNilUnifiedEntryFallsBackToDefault(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
-	orch.SetReady(true)
-	entry := NewVoiceEntryWithUnifiedEntry(orch, nil)
-
-	result, err := entry.HandleTurn(context.Background(), &VoiceTurnRequest{
-		SessionID:      "session-fallback",
-		TurnID:         "turn-fallback",
-		Text:           "fallback voice",
-		IsFinal:        true,
-		Channel:        "voice",
-		CharacterID:    "char-fallback",
-		ConversationID: "conv-fallback",
-		VoiceMessage:   true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == nil || result.Outcome != OutcomeCompleted {
-		t.Fatalf("unexpected result: %#v", result)
-	}
-	if processor.req == nil {
-		t.Fatal("processor was not called")
-	}
-	if processor.req.Source != "voice" || !processor.req.VoiceMessage {
-		t.Fatalf("fallback unified entry did not preserve voice request: %#v", processor.req)
-	}
+func TestVoiceEntryRequiresCanonicalUnifiedEntry(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic when unifiedEntry is nil, but NewVoiceEntry did not panic")
+		}
+	}()
+	NewVoiceEntry(nil)
 }

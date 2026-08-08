@@ -439,3 +439,38 @@ func TestSnapshotByExtensionQuarantined(t *testing.T) {
 		t.Errorf("expected unhealthy, got %s", snapshots[0].Health)
 	}
 }
+
+func TestServiceRuntimeResolver(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	if err := s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeService, rt)); err != nil {
+		t.Fatalf("RegisterFactory: %v", err)
+	}
+	spec := makeSpec(domain.RuntimeTypeService, 1)
+	result := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1",
+		Desired:      DesiredRunning,
+		Spec:         spec,
+	})
+	if result.Error != nil {
+		t.Fatalf("Reconcile with service runtime type should find factory, got error: %v", result.Error)
+	}
+	if result.InstanceID == "" {
+		t.Errorf("expected instance id for service runtime")
+	}
+}
+
+func TestUnknownRuntimeTypeNotFound(t *testing.T) {
+	s := NewDefaultSupervisor()
+	rt := NewFakeRuntime()
+	_ = s.RegisterFactory(NewFakeFactory(domain.RuntimeTypeService, rt))
+	spec := makeSpec("foobar", 1)
+	result := s.Reconcile(context.Background(), ReconcileRequest{
+		DefinitionID: "rt-def-1",
+		Desired:      DesiredRunning,
+		Spec:         spec,
+	})
+	if result.Error == nil {
+		t.Errorf("expected error for unknown runtime type")
+	}
+}

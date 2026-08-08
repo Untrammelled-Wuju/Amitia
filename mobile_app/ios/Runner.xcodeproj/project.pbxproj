@@ -51,6 +51,9 @@
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60001 /* libish.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libish.a; sourceTree = "<group>"; };
+		A1B2C3D4E5F60002 /* libish_emu.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libish_emu.a; sourceTree = "<group>"; };
+		A1B2C3D4E5F60003 /* libfakefs.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libfakefs.a; sourceTree = "<group>"; };
 		97C146FB1CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -62,6 +65,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F60001 /* libish.a in Frameworks */,
+				A1B2C3D4E5F60002 /* libish_emu.a in Frameworks */,
+				A1B2C3D4E5F60003 /* libfakefs.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -117,6 +123,9 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				A1B2C3D4E5F60001 /* libish.a */,
+				A1B2C3D4E5F60002 /* libish_emu.a */,
+				A1B2C3D4E5F60003 /* libfakefs.a */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -490,6 +499,14 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"../ThirdParty/iSH/include",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"../ThirdParty/iSH/lib",
+				);
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
@@ -542,10 +559,18 @@
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"../ThirdParty/iSH/include",
+				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"../ThirdParty/iSH/lib",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";

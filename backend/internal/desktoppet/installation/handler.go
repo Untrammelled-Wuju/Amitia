@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/device"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -363,4 +365,309 @@ func mapInstallationErrorCode(code string) int {
 	default:
 		return response.InternalError
 	}
+}
+
+type CoordinatorHandler struct {
+	coordinator coordinator.InstallationCoordinator
+	repo        Repository
+	guard       security.OwnershipGuard
+}
+
+func NewCoordinatorHandler(coord coordinator.InstallationCoordinator, repo Repository, guard security.OwnershipGuard) *CoordinatorHandler {
+	return &CoordinatorHandler{coordinator: coord, repo: repo, guard: guard}
+}
+
+func (h *CoordinatorHandler) buildDeviceCtx(c *gin.Context, actorID string) device.DeviceContext {
+	deviceID := strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
+	return device.DeviceContext{
+		UserID:   actorID,
+		DeviceID: deviceID,
+	}
+}
+
+func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
+	c.Header("Deprecation", "true")
+	c.Header("Sunset", "2026-12-31")
+	c.Header("Link", `</api/desktop-pets/releases>; rel="successor-version"`)
+	packageID := c.Param("packageId")
+	if packageID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "资源包 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	var payload installPackagePayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	if payload.CharacterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "角色 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceCtx := h.buildDeviceCtx(c, actorID)
+	result, err := h.coordinator.Install(c.Request.Context(), coordinator.InstallRequest{
+		DeviceCtx:       deviceCtx,
+		TargetReleaseID: packageID,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	util.SuccessMsgResponse(c, "安装成功", gin.H{"operationId": result.OperationID, "status": result.Status})
+}
+
+func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	userID := actorID
+	items, err := h.repo.ListInstallations(userID)
+	if err != nil {
+		writeInstallationError(c, err)
+		return
+	}
+	if items == nil {
+		items = []*Installation{}
+	}
+	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
+}
+
+func (h *CoordinatorHandler) GetInstallation(c *gin.Context) {
+	installationID := c.Param("installationId")
+	if installationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	inst, err := h.repo.GetInstallation(installationID)
+	if err != nil {
+		writeInstallationError(c, err)
+		return
+	}
+	util.SuccessResponse(c, inst)
+}
+
+func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
+	installationID := c.Param("installationId")
+	if installationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Enable(c.Request.Context(), coordinator.EnableDisableRequest{
+		DeviceCtx: device.DeviceContext{
+			UserID:   actor.UserID,
+			DeviceID: deviceID,
+		},
+		InstallationID: installationID,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	util.SuccessMsgResponse(c, "桌宠已启用", gin.H{"operationId": result.OperationID, "status": result.Status})
+}
+
+func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
+	installationID := c.Param("installationId")
+	if installationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Disable(c.Request.Context(), coordinator.EnableDisableRequest{
+		DeviceCtx: device.DeviceContext{
+			UserID:   actor.UserID,
+			DeviceID: deviceID,
+		},
+		InstallationID: installationID,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	util.SuccessMsgResponse(c, "桌宠已停用", gin.H{"operationId": result.OperationID, "status": result.Status})
+}
+
+func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
+	installationID := c.Param("installationId")
+	if installationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	var payload updateDefaultActionPayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	if payload.ActionKey == "" {
+		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
+		return
+	}
+	result, err := h.coordinator.ChangeDefaultAction(c.Request.Context(), coordinator.DefaultActionRequest{
+		DeviceCtx: device.DeviceContext{
+			UserID:   actor.UserID,
+			DeviceID: deviceID,
+		},
+		InstallationID:   installationID,
+		DesiredActionKey: payload.ActionKey,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	util.SuccessMsgResponse(c, "默认动作已更新", gin.H{"operationId": result.OperationID, "status": result.Status})
+}
+
+func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
+	installationID := c.Param("installationId")
+	if installationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	var payload UpdateRuntimeSettingsRequest
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.UpdateSettings(c.Request.Context(), coordinator.SettingsRequest{
+		DeviceCtx: device.DeviceContext{
+			UserID:   actor.UserID,
+			DeviceID: deviceID,
+		},
+		InstallationID: installationID,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	util.SuccessMsgResponse(c, "运行配置已更新", gin.H{"operationId": result.OperationID, "status": result.Status})
+}
+
+func (h *CoordinatorHandler) Recenter(c *gin.Context) {
+	installationID := c.Param("installationId")
+	if installationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Recenter(c.Request.Context(), coordinator.RecenterRequest{
+		DeviceCtx: device.DeviceContext{
+			UserID:   actor.UserID,
+			DeviceID: deviceID,
+		},
+		InstallationID: installationID,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	util.SuccessMsgResponse(c, "桌宠已重置位置", gin.H{"operationId": result.OperationID, "status": result.Status})
+}
+
+func (h *CoordinatorHandler) PlayAction(c *gin.Context) {
+	installationID := c.Param("installationId")
+	actionKey := c.Param("actionKey")
+	if installationID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
+		return
+	}
+	if actionKey == "" {
+		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "动作已触发", gin.H{"installationId": installationID, "actionKey": actionKey})
 }

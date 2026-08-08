@@ -8,11 +8,10 @@ import (
 	"github.com/u-ai/backend/internal/personality"
 )
 
-func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality) (*decision.BehaviorPlan, *decision.ExpressionPlan) {
+func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality, goalContext RuntimeGoalContext, now time.Time) (*decision.BehaviorPlan, *decision.ExpressionPlan) {
 	if p.candidateRegistry == nil {
 		return nil, nil
 	}
-	now := time.Now()
 	var psycheSignals decision.PsycheSignalSet
 	if snapshot.Psyche.Status == LoadStatusReady {
 		psycheSignals = decision.PsycheSignalSet{Mood: decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodPressure}, Stress: decision.ScalarSignal{Value: snapshot.Psyche.Value.Stress}, CognitiveLoad: decision.ScalarSignal{Value: snapshot.Psyche.Value.Fatigue}, Valence: decision.ScalarSignal{Value: snapshot.Psyche.Value.Valence}, Arousal: decision.ScalarSignal{Value: snapshot.Psyche.Value.Arousal}, Dominance: decision.ScalarSignal{Value: snapshot.Psyche.Value.Dominance}, MoodValence: decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodValence}, MoodArousal: decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodArousal}}
@@ -33,9 +32,30 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	} else {
 		lifeSnapshot = decision.LifeSnapshot{Energy: 0.7}
 	}
-	ctx_ := decision.CandidateGenerationContext{UserID: scope.UserID, CharacterID: scope.CharacterID, Psyche: psycheSignals, Relationship: relSnapshot, Life: lifeSnapshot, PersonalityWeights: personalityWeights, Now: now}
-	candidates := decision.GenerateCandidates(ctx_, p.candidateRegistry)
-	arbitrationInput := decision.ArbitrationInput{Candidates: candidates, Relationship: relSnapshot, Psyche: psycheSignals, Life: lifeSnapshot, Filter: decision.DefaultHardConstraintFilter(), Now: now}
+	decisionCtx := decision.CandidateGenerationContext{
+		UserID:             scope.UserID,
+		CharacterID:        scope.CharacterID,
+		Goals:              goalsForDecision(goalContext),
+		Intentions:         append([]decision.Intention(nil), goalContext.Intentions...),
+		Psyche:             psycheSignals,
+		Relationship:       relSnapshot,
+		Life:               lifeSnapshot,
+		PersonalityWeights: personalityWeights,
+		Trigger:            goalContext.Current.Trigger,
+		Now:                now,
+	}
+	candidates := decision.GenerateCandidates(decisionCtx, p.candidateRegistry)
+	candidates = decision.ApplyCandidateContextSignals(candidates, decisionCtx)
+	arbitrationInput := decision.ArbitrationInput{
+		Candidates:   candidates,
+		Goals:        goalsForDecision(goalContext),
+		Intentions:   append([]decision.Intention(nil), goalContext.Intentions...),
+		Relationship: relSnapshot,
+		Psyche:       psycheSignals,
+		Life:         lifeSnapshot,
+		Filter:       decision.DefaultHardConstraintFilter(),
+		Now:          now,
+	}
 	arbitrationResult := p.arbitrationLayer.Arbitrate(arbitrationInput)
 	builder := decision.NewBehaviorPlanBuilder(now)
 	plan := builder.Build(arbitrationResult.Selected, arbitrationInput)

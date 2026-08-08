@@ -32,6 +32,7 @@ type Repository interface {
 	GetInstallationByPackageVersion(packageID, packageVersion string) (*Installation, error)
 	ListInstallationsByUser(userID string) ([]*Installation, error)
 	ListInstallationsByCharacter(characterID string) ([]*Installation, error)
+	ListInstallations(userID string) ([]*Installation, error)
 	UpdateInstallationStatus(id, status string) error
 	SetActiveInstallation(userID, installationID string) error
 	GetActiveInstallation(userID string) (*Installation, error)
@@ -135,6 +136,10 @@ func (r *repository) ListInstallationsByCharacter(characterID string) ([]*Instal
 		installations = []*Installation{}
 	}
 	return installations, err
+}
+
+func (r *repository) ListInstallations(userID string) ([]*Installation, error) {
+	return r.ListInstallationsByUser(userID)
 }
 
 func (r *repository) UpdateInstallationStatus(id, status string) error {

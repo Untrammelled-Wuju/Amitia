@@ -1,41 +1,15 @@
 package editing
 
 import (
-	"path/filepath"
-
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/desktoppet/security"
-	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterEditingRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *security.PathRootRegistry) {
-	dataDir := config.AppCfg.Storage.DataDir
-	repo := NewRepository(ctx.DB)
-	assetStore := NewAssetStore(dataDir, repo)
-	genAdapter := NewGenerationAdapter(ctx)
-	procAdapter := NewProcessingAdapter(ctx)
-	qualAdapter := NewQualityAdapter(ctx)
-	svc := NewService(repo, assetStore, genAdapter, procAdapter, qualAdapter, ctx.DB, dataDir)
-	if registry == nil {
-		registry = security.NewPathRootRegistry()
-		_ = registry.CreateAndRegister(security.RootEditingAssets, filepath.Join(dataDir, "desktop-pets", "editing-assets"))
-	}
-	responder := security.NewSafeArtifactResponder(registry)
-	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
-	registerRoutes(r, svc, responder, guard)
-}
-
 func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard security.OwnershipGuard, registry *security.PathRootRegistry) {
-	if registry == nil {
-		registry = security.NewPathRootRegistry()
-		_ = registry.CreateAndRegister(security.RootEditingAssets, filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "editing-assets"))
+	if svc == nil {
+		panic("editing router: service is required, cannot construct fallback adapters")
 	}
 	responder := security.NewSafeArtifactResponder(registry)
-	registerRoutes(r, svc, responder, guard)
-}
-
-func registerRoutes(r *gin.RouterGroup, svc Service, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) {
 	handler := NewHandler(svc, responder, guard)
 	g := r.Group("/desktop-pets")
 	{

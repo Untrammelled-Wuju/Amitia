@@ -17,6 +17,7 @@ type ImportStagingRepository interface {
 	BeginConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
 	FailConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64, failureReason string) (bool, error)
 	CompleteConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
+	CompleteConsumptionTx(tx *gorm.DB, stagingID string, userID string, expectedRevision int64, consumedAt string) error
 	UpdateQuarantinePath(ctx context.Context, stagingID string, userID string, quarantinePath string) (bool, error)
 	UpdateInventory(ctx context.Context, stagingID string, userID string, inventoryJSON string, inventoryHash string) (bool, error)
 	SetRejected(ctx context.Context, stagingID string, userID string, reason string) (bool, error)
@@ -112,6 +113,28 @@ func (r *importStagingRepository) CompleteConsumptionCAS(ctx context.Context, st
 		return false, result.Error
 	}
 	return result.RowsAffected > 0, nil
+}
+
+func (r *importStagingRepository) CompleteConsumptionTx(tx *gorm.DB, stagingID string, userID string, expectedRevision int64, consumedAt string) error {
+	if tx == nil {
+		return errors.New("complete consumption tx is nil")
+	}
+	result := tx.Model(&ImportStaging{}).
+		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ?",
+			stagingID, userID, StagingStatusConsuming, expectedRevision).
+		Updates(map[string]interface{}{
+			"status":         StagingStatusConsumed,
+			"consumed_at":    consumedAt,
+			"state_revision": gorm.Expr("state_revision + 1"),
+			"updated_at":     consumedAt,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrRevisionConflict
+	}
+	return nil
 }
 
 func (r *importStagingRepository) FailConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64, failureReason string) (bool, error) {

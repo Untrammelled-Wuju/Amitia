@@ -2,6 +2,7 @@ package capability
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -32,6 +33,10 @@ func TestToolRegistryRegister(t *testing.T) {
 		Source:    ToolSourceBuiltin,
 		Name:      "hello",
 		Enabled:   true,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {"q": {"type": "string"}}
+		}`),
 	}
 
 	if err := reg.Register(context.Background(), def); err != nil {
@@ -148,6 +153,10 @@ func TestToolRegistryReplace(t *testing.T) {
 		Source:    ToolSourceBuiltin,
 		Name:      "original",
 		Enabled:   true,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {"q": {"type": "string"}}
+		}`),
 	}
 
 	if err := reg.Register(context.Background(), def); err != nil {
@@ -417,5 +426,60 @@ func TestToolDefinitionOwner(t *testing.T) {
 	}
 	if p.Owner().ExtensionID != "com.example" {
 		t.Fatalf("expected extension id com.example, got %s", p.Owner().ExtensionID)
+	}
+}
+
+type fakeServiceAdapter struct{}
+
+func (a *fakeServiceAdapter) Supports(binding RuntimeBinding) bool {
+	return binding.RuntimeType == RuntimeTypeTrustedService || binding.RuntimeType == RuntimeTypePluginService
+}
+
+func (a *fakeServiceAdapter) Execute(ctx context.Context, binding RuntimeBinding, invocation ToolInvocationContext, input json.RawMessage) UnifiedToolResult {
+	return UnifiedToolResult{InvocationID: invocation.InvocationID, Status: ToolResultStatusSuccess}
+}
+
+func (a *fakeServiceAdapter) Health(ctx context.Context, binding RuntimeBinding) HealthStatus {
+	return HealthReady
+}
+
+func TestRuntimeAdapterRegistryResolve(t *testing.T) {
+	reg := NewRuntimeAdapterRegistry()
+	adapter := &fakeServiceAdapter{}
+	reg.Register(RuntimeTypeTrustedService, adapter)
+	reg.Register(RuntimeTypePluginService, adapter)
+
+	got, ok := reg.Resolve(RuntimeBinding{RuntimeType: RuntimeTypeTrustedService})
+	if !ok {
+		t.Fatal("expected to resolve trusted_service")
+	}
+	if got != adapter {
+		t.Fatal("expected same adapter instance")
+	}
+
+	got, ok = reg.Resolve(RuntimeBinding{RuntimeType: RuntimeTypePluginService})
+	if !ok {
+		t.Fatal("expected to resolve plugin_service")
+	}
+	if got != adapter {
+		t.Fatal("expected same adapter instance")
+	}
+}
+
+func TestTrustedServiceAdapterSupportsInternalTypes(t *testing.T) {
+	adapter := NewTrustedServiceRuntimeAdapter(nil, nil)
+	if !adapter.Supports(RuntimeBinding{RuntimeType: RuntimeTypeTrustedService}) {
+		t.Fatal("expected adapter to support trusted_service")
+	}
+	if !adapter.Supports(RuntimeBinding{RuntimeType: RuntimeTypePluginService}) {
+		t.Fatal("expected adapter to support plugin_service")
+	}
+}
+
+func TestUnknownRuntimeNotResolved(t *testing.T) {
+	reg := NewRuntimeAdapterRegistry()
+	_, ok := reg.Resolve(RuntimeBinding{RuntimeType: "unknown_type"})
+	if ok {
+		t.Fatal("expected not to resolve unknown type")
 	}
 }

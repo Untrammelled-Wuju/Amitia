@@ -3,11 +3,13 @@ package com.amitia.amitia_app.runtime.internal
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.api.RuntimeController
 import com.amitia.amitia_app.runtime.api.RuntimeModule
+import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 
 internal class DefaultRuntimeModule(
     override val controller: RuntimeController = UnsupportedRuntimeController(),
     private val stateStore: RuntimeStateStore = RuntimeStateStore(),
-    private val abiGate: RuntimeAbiGate? = null
+    private val abiGate: RuntimeAbiGate? = null,
+    private val serviceHost: RuntimeServiceHost? = null
 ) : RuntimeModule {
 
     private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -23,6 +25,8 @@ internal class DefaultRuntimeModule(
     }
 
     internal fun abiGate(): RuntimeAbiGate? = abiGate
+    internal fun serviceHost(): RuntimeServiceHost? = serviceHost
+    internal fun stateStore(): RuntimeStateStore = stateStore
 
     private object NoopProotComponent {
         fun availability(): Any = UnsupportedOperationException("not implemented")

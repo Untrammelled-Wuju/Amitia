@@ -6,8 +6,6 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"github.com/u-ai/backend/internal/temporal"
 )
 
 type VoiceInterruptPolicy string
@@ -63,25 +61,23 @@ type VoiceSession struct {
 }
 
 type VoiceEntry struct {
-	orchestrator *Orchestrator
 	unifiedEntry *UnifiedEntry
 	sessions     map[string]*VoiceSession
 	mu           sync.RWMutex
 }
 
-func NewVoiceEntry(orchestrator *Orchestrator) *VoiceEntry {
-	return NewVoiceEntryWithUnifiedEntry(orchestrator, NewUnifiedEntry(orchestrator, NewScopeResolver(nil), temporal.SystemClock{}))
-}
-
-func NewVoiceEntryWithUnifiedEntry(orchestrator *Orchestrator, unifiedEntry *UnifiedEntry) *VoiceEntry {
+func NewVoiceEntry(unifiedEntry *UnifiedEntry) *VoiceEntry {
 	if unifiedEntry == nil {
-		unifiedEntry = NewUnifiedEntry(orchestrator, NewScopeResolver(nil), temporal.SystemClock{})
+		panic("voice_entry: unifiedEntry is required")
 	}
 	return &VoiceEntry{
-		orchestrator: orchestrator,
 		unifiedEntry: unifiedEntry,
 		sessions:     make(map[string]*VoiceSession),
 	}
+}
+
+func (v *VoiceEntry) UnifiedEntry() *UnifiedEntry {
+	return v.unifiedEntry
 }
 
 func (v *VoiceEntry) CreateSession(sessionID, conversationID, characterID string) *VoiceSession {
@@ -180,7 +176,7 @@ func (v *VoiceEntry) HandleTurn(ctx context.Context, req *VoiceTurnRequest) (*Or
 }
 
 func (v *VoiceEntry) cancelCurrentProcessing(session *VoiceSession) {
-	v.orchestrator.CancelByScope(InteractionScope{
+	v.unifiedEntry.CancelByScope(InteractionScope{
 		ConversationID: session.ConversationID,
 		CharacterID:    session.CharacterID,
 	})
@@ -191,7 +187,7 @@ func (v *VoiceEntry) cancelPreviousForScope(session *VoiceSession) {
 		ConversationID: session.ConversationID,
 		CharacterID:    session.CharacterID,
 	}.Normalize()
-	count := v.orchestrator.CancelByScope(scope)
+	count := v.unifiedEntry.CancelByScope(scope)
 	if count > 0 {
 		log.Printf("[voice_entry] cancelled %d previous interactions for conversation=%s", count, session.ConversationID)
 	}

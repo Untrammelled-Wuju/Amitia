@@ -1,0 +1,4 @@
+[submodule "third_party/ish"]
+	path = third_party/ish
+	url = https://github.com/OpenMinis/ish-arm64.git
+	branch = feature-arm64

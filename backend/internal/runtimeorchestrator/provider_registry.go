@@ -13,6 +13,8 @@ const (
 	ProviderSlotScriptRuntime ProviderSlot = "script-runtime"
 	ProviderSlotVectorStore   ProviderSlot = "vector-store"
 	ProviderSlotGraphStore    ProviderSlot = "graph-store"
+
+	ProviderSlotIOSSandbox ProviderSlot = "ios-sandbox"
 )
 
 type ProviderBuildContext struct {

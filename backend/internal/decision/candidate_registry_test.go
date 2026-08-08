@@ -30,7 +30,9 @@ func TestCandidateRegistryRegisterAndGet(t *testing.T) {
 		Label:     "自定义",
 		BaseScore: 0.42,
 	}
-	r.Register(def)
+	if err := r.Register(def); err != nil {
+		t.Fatal(err)
+	}
 	got, ok := r.Get("custom_action")
 	if !ok {
 		t.Fatal("自定义候选应可获取")
@@ -42,9 +44,15 @@ func TestCandidateRegistryRegisterAndGet(t *testing.T) {
 
 func TestCandidateRegistryByType(t *testing.T) {
 	r := NewCandidateRegistry()
-	r.Register(CandidateActionDef{ID: "a1", Type: CandidateActionChat})
-	r.Register(CandidateActionDef{ID: "a2", Type: CandidateActionChat})
-	r.Register(CandidateActionDef{ID: "a3", Type: CandidateActionProactive})
+	if err := r.Register(CandidateActionDef{ID: "a1", Type: CandidateActionChat}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register(CandidateActionDef{ID: "a2", Type: CandidateActionChat}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register(CandidateActionDef{ID: "a3", Type: CandidateActionProactive}); err != nil {
+		t.Fatal(err)
+	}
 	chat := r.ByType(CandidateActionChat)
 	if len(chat) != 2 {
 		t.Fatalf("chat 类型应有 2 个, 实际 %d", len(chat))
@@ -71,5 +79,87 @@ func TestCandidateRegistryAllExcept(t *testing.T) {
 		if def.ID == "chat_reply" || def.ID == "ask_clarify" {
 			t.Fatalf("被排除的候选不应出现: %s", def.ID)
 		}
+	}
+}
+
+func TestCandidateRegistryStableOrdering(t *testing.T) {
+	r := NewCandidateRegistry()
+	if err := r.Register(CandidateActionDef{ID: "z_action", Type: CandidateActionChat}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register(CandidateActionDef{ID: "a_action", Type: CandidateActionChat}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register(CandidateActionDef{ID: "m_action", Type: CandidateActionChat}); err != nil {
+		t.Fatal(err)
+	}
+	all := r.All()
+	for i := 1; i < len(all); i++ {
+		if all[i].ID < all[i-1].ID {
+			t.Fatalf("Registry 应稳定按 ID ASC 排序, 位置 %d: %s 在 %s 之前", i, all[i].ID, all[i-1].ID)
+		}
+	}
+}
+
+func TestCandidateRegistryDefensiveCopy(t *testing.T) {
+	r := NewCandidateRegistry()
+	def := CandidateActionDef{
+		ID:       "defensive_test",
+		Type:     CandidateActionChat,
+		Preconds: []string{"boundary_crossed"},
+	}
+	if err := r.Register(def); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := r.Get("defensive_test")
+	if len(got.Preconds) != 1 {
+		t.Fatal("Preconds 应有 1 个")
+	}
+	got.Preconds[0] = "corrupted"
+	got2, _ := r.Get("defensive_test")
+	if got2.Preconds[0] != "boundary_crossed" {
+		t.Fatalf("Registry 内部数据被污染, 期望 boundary_crossed, 实际 %s", got2.Preconds[0])
+	}
+}
+
+func TestCandidateRegistryRejectsEmptyID(t *testing.T) {
+	r := NewCandidateRegistry()
+	err := r.Register(CandidateActionDef{Type: CandidateActionChat})
+	if err == nil {
+		t.Fatal("空 ID 应被拒绝")
+	}
+}
+
+func TestCandidateRegistryRejectsEmptyType(t *testing.T) {
+	r := NewCandidateRegistry()
+	err := r.Register(CandidateActionDef{ID: "no_type"})
+	if err == nil {
+		t.Fatal("空 Type 应被拒绝")
+	}
+}
+
+func TestCandidateRegistryRejectsDuplicate(t *testing.T) {
+	r := NewCandidateRegistry()
+	if err := r.Register(CandidateActionDef{ID: "dup_action", Type: CandidateActionChat}); err != nil {
+		t.Fatal(err)
+	}
+	err := r.Register(CandidateActionDef{ID: "dup_action", Type: CandidateActionChat})
+	if err == nil {
+		t.Fatal("重复注册应返回 error")
+	}
+	if r.Len() != 1 {
+		t.Fatalf("重复注册不应增加数量, 实际 %d", r.Len())
+	}
+}
+
+func TestCandidateRegistryLen(t *testing.T) {
+	r := NewCandidateRegistry()
+	if r.Len() != 0 {
+		t.Fatal("新 Registry 长度应为 0")
+	}
+	_ = r.Register(CandidateActionDef{ID: "g1", Type: CandidateActionChat})
+	_ = r.Register(CandidateActionDef{ID: "g2", Type: CandidateActionChat})
+	if r.Len() != 2 {
+		t.Fatalf("长度应为 2, 实际 %d", r.Len())
 	}
 }

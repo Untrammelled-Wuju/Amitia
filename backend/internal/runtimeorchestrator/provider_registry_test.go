@@ -17,11 +17,11 @@ type fakeProviderInstance struct {
 }
 
 func (f *fakeProviderInstance) Descriptor() ComponentDescriptor { return f.ComponentDescriptor }
-func (f *fakeProviderInstance) Start(ctx context.Context) error  { return nil }
-func (f *fakeProviderInstance) Ready(ctx context.Context) error  { return nil }
-func (f *fakeProviderInstance) Stop(ctx context.Context) error   { return nil }
-func (f *fakeProviderInstance) Slot() ProviderSlot               { return f.slot }
-func (f *fakeProviderInstance) ProviderID() string               { return f.providerID }
+func (f *fakeProviderInstance) Start(ctx context.Context) error { return nil }
+func (f *fakeProviderInstance) Ready(ctx context.Context) error { return nil }
+func (f *fakeProviderInstance) Stop(ctx context.Context) error  { return nil }
+func (f *fakeProviderInstance) Slot() ProviderSlot              { return f.slot }
+func (f *fakeProviderInstance) ProviderID() string              { return f.providerID }
 func (f *fakeProviderInstance) Capability() any                 { return f.cap }
 
 type fakeProviderFactory struct {
@@ -30,8 +30,8 @@ type fakeProviderFactory struct {
 	build func(ProviderBuildContext) (ProviderInstance, error)
 }
 
-func (f *fakeProviderFactory) ProviderID() string                        { return f.id }
-func (f *fakeProviderFactory) Slot() ProviderSlot                       { return f.slot }
+func (f *fakeProviderFactory) ProviderID() string { return f.id }
+func (f *fakeProviderFactory) Slot() ProviderSlot { return f.slot }
 func (f *fakeProviderFactory) Build(ctx ProviderBuildContext) (ProviderInstance, error) {
 	if f.build != nil {
 		return f.build(ctx)
@@ -147,5 +147,48 @@ func TestProviderRegistryDoesNotAutoSelectProvider(t *testing.T) {
 	_, ok := reg.Lookup(ProviderSlotVectorStore, "auto.selected")
 	if ok {
 		t.Fatalf("registry must not auto-select providers")
+	}
+}
+
+func TestProviderRegistryIOSSandboxSlot(t *testing.T) {
+	reg := NewProviderRegistry()
+	f := &fakeProviderFactory{
+		id:   "ios.ish-sandbox",
+		slot: ProviderSlotIOSSandbox,
+	}
+	if err := reg.Register(f); err != nil {
+		t.Fatalf("register ios sandbox factory: %v", err)
+	}
+	got, ok := reg.Lookup(ProviderSlotIOSSandbox, "ios.ish-sandbox")
+	if !ok {
+		t.Fatalf("lookup failed for ios sandbox provider")
+	}
+	if got.ProviderID() != "ios.ish-sandbox" {
+		t.Fatalf("lookup wrong provider ID")
+	}
+	if got.Slot() != ProviderSlotIOSSandbox {
+		t.Fatalf("expected slot ios-sandbox, got %s", got.Slot())
+	}
+}
+
+func TestProviderRegistryIOSSandboxBuildContext(t *testing.T) {
+	reg := NewProviderRegistry()
+	var captured ProviderBuildContext
+	f := &fakeProviderFactory{
+		id:   "ios.ish-sandbox",
+		slot: ProviderSlotIOSSandbox,
+		build: func(ctx ProviderBuildContext) (ProviderInstance, error) {
+			captured = ctx
+			return &fakeProviderInstance{slot: ProviderSlotIOSSandbox, providerID: "ios.ish-sandbox"}, nil
+		},
+	}
+	_ = reg.Register(f)
+	bc := ProviderBuildContext{Config: &config.Config{}}
+	_, err := reg.Build(ProviderSlotIOSSandbox, "ios.ish-sandbox", bc)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if captured.Config == nil {
+		t.Fatalf("iOS sandbox build context not passed through")
 	}
 }

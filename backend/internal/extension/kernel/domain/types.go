@@ -205,6 +205,7 @@ type ExtensionDefinition struct {
 	Description     LocalizedText   `json:"description"`
 	Version         SemanticVersion `json:"version"`
 	ManifestVersion int             `json:"manifestVersion"`
+	Domain          ExtensionDomain `json:"domain"`
 
 	Publisher PublisherReference `json:"publisher"`
 	Package   PackageReference   `json:"package"`
@@ -264,6 +265,10 @@ func (e *ExtensionDefinition) Validate() error {
 	}
 	if len(e.Modules) == 0 {
 		return fmt.Errorf("domain: at least one module required")
+	}
+	e.Domain = NormalizeExtensionDomain(e.Domain)
+	if !IsValidExtensionDomain(e.Domain) {
+		return fmt.Errorf("domain: invalid extension domain: %s", e.Domain)
 	}
 	moduleIDs := make(map[ModuleID]struct{})
 	for i, m := range e.Modules {
@@ -371,6 +376,7 @@ const (
 	ContributionKindUIDesktop         ContributionKind = "ui_desktop"
 	ContributionKindBackgroundService ContributionKind = "background_service"
 	ContributionKindProvider          ContributionKind = "provider"
+	ContributionKindGamePlugin        ContributionKind = "game_plugin"
 )
 
 type ContributionDefinition struct {

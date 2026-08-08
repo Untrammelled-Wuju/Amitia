@@ -1635,6 +1635,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_publish_journals (
     operation_id TEXT NOT NULL DEFAULT '',
     release_id TEXT NOT NULL DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
+    operation_kind TEXT NOT NULL DEFAULT 'build',
     stage TEXT NOT NULL DEFAULT 'snapshot_created',
     content_root_hash TEXT NOT NULL DEFAULT '',
     staging_path TEXT NOT NULL DEFAULT '',
@@ -1657,6 +1658,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_publish_journals (
 CREATE INDEX IF NOT EXISTS idx_drpj_operation ON desktop_pet_release_publish_journals(operation_id);
 CREATE INDEX IF NOT EXISTS idx_drpj_release ON desktop_pet_release_publish_journals(release_id);
 CREATE INDEX IF NOT EXISTS idx_drpj_stage ON desktop_pet_release_publish_journals(stage);
+CREATE INDEX IF NOT EXISTS idx_drpj_kind_stage ON desktop_pet_release_publish_journals(operation_kind, stage);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_mappings (
     id TEXT PRIMARY KEY,
@@ -5036,11 +5038,16 @@ CREATE TABLE IF NOT EXISTS desktop_pet_import_package_snapshots (
   user_id TEXT NOT NULL DEFAULT '',
   pet_id TEXT NOT NULL DEFAULT '',
   release_id TEXT NOT NULL DEFAULT '',
+  operation_id TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'preparing',
+  last_error TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dips_staging ON desktop_pet_import_package_snapshots(import_staging_id);
 CREATE INDEX IF NOT EXISTS idx_dips_release ON desktop_pet_import_package_snapshots(release_id);
+CREATE INDEX IF NOT EXISTS idx_dips_operation ON desktop_pet_import_package_snapshots(operation_id);
+CREATE INDEX IF NOT EXISTS idx_dips_status ON desktop_pet_import_package_snapshots(status);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_device_active_installation_bindings (
     user_id TEXT NOT NULL,

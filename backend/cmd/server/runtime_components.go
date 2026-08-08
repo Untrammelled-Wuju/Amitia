@@ -315,7 +315,6 @@ type desktopPetComponent struct {
 }
 
 type workerStartState struct {
-	runtimeOk               bool
 	releaseRecoveryWorkerOk bool
 	behaviorOk              bool
 }
@@ -357,15 +356,6 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 			svc.SafeMode.Enter("readiness blocked")
 		}
 		return fmt.Errorf("readiness blocked: %d blocking", snap.BlockingCount)
-	}
-	if svc.DesktopPetRuntime != nil {
-		if err := svc.DesktopPetRuntime.Start(ctx); err != nil {
-			if svc.SafeMode != nil {
-				svc.SafeMode.Enter("pet runtime start failed")
-			}
-			return fmt.Errorf("runtime start: %w", err)
-		}
-		c.state.runtimeOk = true
 	}
 	startWorkerAsync(ctx, svc.DesktopPetWorker, logWorkerPanic)
 	startWorkerAsync(ctx, svc.ProcessingWorker, logWorkerPanic)
@@ -422,7 +412,7 @@ func (c *desktopPetComponent) Ready(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	svc := c.services
-	if svc == nil || svc.DesktopPetRuntime == nil || svc.Readiness == nil {
+	if svc == nil || svc.DesktopPetRuntimeV2 == nil || svc.Readiness == nil {
 		return fmt.Errorf("desktop pet not ready")
 	}
 	if svc.Readiness.Snapshot().OverallStatus == readiness.StatusBlocked {
@@ -471,9 +461,6 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 	}
 	if svc.DesktopPetWorker != nil {
 		svc.DesktopPetWorker.Stop()
-	}
-	if c.state.runtimeOk && svc.DesktopPetRuntime != nil {
-		_ = svc.DesktopPetRuntime.Close(ctx)
 	}
 }
 

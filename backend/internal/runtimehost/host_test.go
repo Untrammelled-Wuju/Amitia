@@ -96,6 +96,40 @@ func TestEmbeddedIOSBuildsRestrictedHost(t *testing.T) {
 	}
 }
 
+func TestEmbeddedIOSSandboxCapabilities(t *testing.T) {
+	ctx := HostBuildContext{
+		Descriptor: platform.RuntimeDescriptor{
+			Host:  platform.HostPlatformIOS,
+			Kind:  platform.RuntimeKindEmbedded,
+			Guest: platform.GuestPlatformIOS,
+		},
+		Paths:          util.RuntimePaths{},
+		ProcessManager: process.NewDefaultProcessManager(),
+	}
+	host, err := NewRuntimeHost(ctx)
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+
+	caps := host.Capabilities()
+
+	if !caps.Supports(CapRuntimeSandboxedExec) {
+		t.Fatal("Embedded iOS must support sandboxed execution")
+	}
+
+	if caps.Support(CapRuntimeNativeOffload) < SupportLimited {
+		t.Fatal("Embedded iOS must have at least Limited native offload support")
+	}
+
+	if caps.Support(CapProcessSpawn) != SupportUnsupported {
+		t.Fatal("Embedded iOS must NOT support process spawn")
+	}
+
+	if caps.Support(CapFilesystemExecutable) != SupportUnsupported {
+		t.Fatal("Embedded iOS must NOT support filesystem executable")
+	}
+}
+
 func TestEmbeddedAndroidBuildsRestrictedHost(t *testing.T) {
 	ctx := HostBuildContext{
 		Descriptor: platform.RuntimeDescriptor{
