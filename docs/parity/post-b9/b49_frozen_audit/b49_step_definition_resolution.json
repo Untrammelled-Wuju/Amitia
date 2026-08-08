@@ -1,0 +1,25 @@
+{
+  "taskId": "B49",
+  "finalStepReuseMatrixFound": true,
+  "frozenMatrixPath": "docs/parity/post-b9/b9p7/step_reuse_matrix.json",
+  "frozenTitle": "Audit Parity Gap硬化",
+  "frozenConstructionMode": "EXTEND",
+  "frozenCanonicalTargets": [
+    {
+      "systemId": "TOOL_EXECUTION_PIPELINE",
+      "path": "backend/internal/extension/kernel/execution/pipeline.go",
+      "mode": "EXTEND"
+    }
+  ],
+  "mustReuse": ["Observability", "AuditLog"],
+  "mustExtend": ["Audit Parity Gap补全"],
+  "forbiddenDuplicates": ["AuditEngine2", "AuditCenter2", "NewAudit"],
+  "requiredCapabilityIds": ["builtin/audit/*"],
+  "requiredPermissionSemantics": ["AUDIT_ACCESS"],
+  "preconditions": {
+    "B40": "PASS_NO_CODE_CHANGE"
+  },
+  "matchesAuditOperationInvocationTrace": true,
+  "conflict": false,
+  "constructionModeApplied": ["REUSE", "EXTEND"]
+}

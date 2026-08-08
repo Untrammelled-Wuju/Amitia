@@ -144,36 +144,57 @@ func (g *IdempotencyGuard) Record(ctx context.Context, key, toolID string, resul
 	}
 }
 
-func NewRetryController() *RetryController {
-	return &RetryController{}
+func NewRetryController(opts ...RetryControllerOption) *RetryController {
+	r := &RetryController{}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 type RetryController struct {
 	OnShouldRetry func(ctx context.Context, tool capability.ToolDefinition, result capability.UnifiedToolResult) (bool, error)
+	attempt       int
+	lastDelay     time.Duration
+	capturedInv   *capability.ToolInvocationContext
 }
 
 func (r *RetryController) ShouldRetry(ctx context.Context, tool capability.ToolDefinition, result capability.UnifiedToolResult) (bool, error) {
-	if tool.ExecutionPolicy.RetryPolicy.MaxRetries == 0 {
-		return false, nil
+	var inv capability.ToolInvocationContext
+	if r.capturedInv != nil {
+		inv = *r.capturedInv
 	}
-	if result.Error == nil {
+	if result.Status == capability.ToolResultStatusSuccess {
 		return false, nil
-	}
-	if !result.Error.Retryable && !tool.Retryable {
-		return false, fmt.Errorf("not retryable")
 	}
 	if result.Status == capability.ToolResultStatusCancelled {
 		return false, fmt.Errorf("cancelled")
 	}
+	if result.Status == capability.ToolResultStatusTimedOut {
+		return false, fmt.Errorf("timed out")
+	}
+	retry, delay, reason := RetryDecision(tool, inv, result.Error, r.attempt)
+	if retry {
+		r.lastDelay = delay
+		_ = reason
+		return true, nil
+	}
 	if r.OnShouldRetry != nil {
 		return r.OnShouldRetry(ctx, tool, result)
 	}
-	return result.Error.Retryable, nil
+	return false, fmt.Errorf("not retryable: %s", reason)
 }
 
-func (r *RetryController) Backoff(attempt int) time.Duration {
-	base := 100 * time.Millisecond
-	return base * time.Duration(1<<uint(attempt-1))
+func (r *RetryController) Backoff(_ int) time.Duration {
+	return r.lastDelay
+}
+
+type RetryControllerOption func(*RetryController)
+
+func WithCapturedInvocation(inv capability.ToolInvocationContext) RetryControllerOption {
+	return func(r *RetryController) {
+		r.capturedInv = &inv
+	}
 }
 
 func NewTimeoutController() *TimeoutController {
