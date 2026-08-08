@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Future Agent Checkpoint - Reconciliation Input",
+  "target": "B35+ Checkpoint system",
+  
+  "expectedFromReconciliation": {
+    "reconciliationRun": "本次 Reconciliation Run ID",
+    "verifiedRevisions": "各 Domain 已验证的最新 revision map",
+    "verifiedReferences": "已验证的跨系统引用完整性",
+    "unresolvedDifferences": "未解决差异清单",
+    "unknownOutcomes": "结果不确定的状态引用列表",
+    "repairStatus": "正在进行的修复状态",
+    "safeCheckpointResume": {
+      "safeToCheckpoint": true,
+      "safeToResume": "条件性"
+    }
+  },
+  
+  "currentLimitation": "当前无法提供完整的 Agent 状态 Reconciliation 结果。仅能提供 DataLifecycle/Tombstone/Outbox/Delivery/Interaction 层面的校验结果。",
+  
+  "recommendation": "B35 Checkpoint 应标记 RECOVERY_REQUIRED = true，等待 Agent 状态持久化基础设施完善后，由后续 B 步骤补齐 Targeted Reconciliation。"
+}

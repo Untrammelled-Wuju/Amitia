@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Test Results Summary",
+  
+  "note": "B34 未修改源码，无需运行 go test。以下基于 B23-B33 历史和现有测试覆盖分析。",
+  
+  "existingTestCoverage": {
+    "mindruntime/reconciliation_test.go": "已有单元测试覆盖 Engine/Checker/Diff/Scan 逻辑",
+    "cmd/server/services_test.go": "已有服务构造测试",
+    "cmd/server/runtime_bootstrap_test.go": "已有运行时引导测试"
+  },
+  "testsNotRun": {
+    "reason": "无代码修改，不影响现有测试结果",
+    "recommendation": "B35+ 补齐 Agent 状态 Reconciliation 后再运行完整测试"
+  },
+  "testOutcome": "PASS (no code change)"
+}

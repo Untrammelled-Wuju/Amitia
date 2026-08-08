@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Future Agent Recovery - Reconciliation Input",
+  "target": "B143 Recovery acceptance",
+  
+  "expectedFromReconciliation": {
+    "runtimeGenerationMismatches": "Runtime generation 不匹配 (当前不支持)",
+    "orphanTasks": "孤立 TaskRun (extension_task_runs 中存在但无对应 Agent Action)",
+    "orphanWorkflows": "孤立 WorkflowRun (extension_workflow_runs 中存在但无对应 Agent Action)",
+    "pendingApprovals": "待审批的 Kernel 执行 (awaiting_approval 状态)",
+    "unknownInvocations": "结果未知的 TaskRun (无回执且超时)",
+    "staleLeases": "过期未释放的 Task Queue lease",
+    "manualInterventionRequirements": "需人工干预的状态列表"
+  },
+  
+  "currentlyAvailable": {
+    "staleLeases": "可通过 extension.kernel.task_runtime.Queue 已有机制检测",
+    "orphanTasks": "TaskRepository 可查询所有 runs"
+  },
+  
+  "blockedBy": "Task/Workflow Repository 路径 (extension/kernel) 超出 B34 Guard canonicalTargets 范围 (decision, mindruntime)。无法在 B34 内新增对应 Reconciliation Source。"
+}

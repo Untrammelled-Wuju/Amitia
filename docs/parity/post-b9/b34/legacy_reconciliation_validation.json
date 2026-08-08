@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Legacy Reconciliation Validation",
+  
+  "legacyReconciliationImplementations": [],
+  
+  "notes": "项目中不存在旧版/遗留 Reconciliation 实现。当前 mindruntime.ReconciliationEngine 为唯一实现。",
+  
+  "historicalNotes": "B32 步骤的 forbiddenDuplicates 包括 Reconciliation2/Snapshot2，均未创建。B33 确认 Reflection2 未创建。整个 Agent 主链 B23-B33 均 PASS_NO_CODE_CHANGE。"
+}

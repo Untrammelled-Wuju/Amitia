@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "description": "Reconciliation 与各 Domain 的边界契约集合",
+  
+  "boundaries": {
+    "goal": {
+      "owner": "decision.GoalRegistry",
+      "persistence": "内存 + 未来需持久化",
+      "reconciliationBehavior": "compare/reference only",
+      "repairPath": "无 - Goal 修复需通过 Goal Owner API",
+      "currentLimitation": "Goal 无持久化 revision，B34 无法有效校验"
+    },
+    "decision": {
+      "owner": "decision.ArbitrationLayer",
+      "persistence": "内存 (运行时生成)",
+      "reconciliationBehavior": "compare - 引用完整性",
+      "repairPath": "无 - Decision 为一次性过程"
+    },
+    "observation": {
+      "owner": "分散子系统",
+      "persistence": "分散",
+      "reconciliationBehavior": "compare - 属于正确的 Action",
+      "repairPath": "无统一 Observation Authority"
+    },
+    "execution": {
+      "owner": "extension.kernel.ToolFacade + task_runtime",
+      "persistence": "SQLite (extension_task_runs)",
+      "reconciliationBehavior": "compare - Kernel terminal state 为最终权威",
+      "repairPath": "Kernel 自身 Retry/Cancellation 机制"
+    },
+    "permission": {
+      "owner": "execution.PermissionGate",
+      "persistence": "配置",
+      "reconciliationBehavior": "只读 - 不发起审批/授权",
+      "repairPath": "禁止 Reconciliation 修改权限"
+    },
+    "task": {
+      "owner": "extension.kernel.task_runtime",
+      "persistence": "SQLite",
+      "reconciliationBehavior": "compare - Task exists/owner/state valid",
+      "repairPath": "TaskRuntimeService 自身状态机"
+    },
+    "workflow": {
+      "owner": "extension.kernel.workflow",
+      "persistence": "SQLite",
+      "reconciliationBehavior": "compare - Run exists/Node ref valid",
+      "repairPath": "CompensationManager"
+    },
+    "runtime": {
+      "owner": "RuntimeHost",
+      "persistence": "Process-level",
+      "reconciliationBehavior": "compare - generation refs",
+      "repairPath": "Supervisor 重启"
+    },
+    "memory": {
+      "owner": "SQLite (canonical) + Qdrant/SurrealDB (derived)",
+      "persistence": "SQLite + 向量/图索引",
+      "reconciliationBehavior": "compare - canonical vs derived",
+      "repairPath": "REBUILD / INVALIDATE"
+    },
+    "dataLifecycle": {
+      "owner": "mindruntime.DataLifecycleCoordinator",
+      "persistence": "SQLite",
+      "reconciliationBehavior": "ALREADY_SUPPORTED - tombstone/cleanup/recalc 链路校验",
+      "repairPath": "DataLifecycle Executor (已有)"
+    },
+    "outboxDelivery": {
+      "owner": "interaction 投递系统",
+      "persistence": "SQLite (outbox_records + delivery_intents)",
+      "reconciliationBehavior": "ALREADY_SUPPORTED - status consistency",
+      "repairPath": "Outbox Owner / Delivery Store 已有重试机制"
+    }
+  }
+}

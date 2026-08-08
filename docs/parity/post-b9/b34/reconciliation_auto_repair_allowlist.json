@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Auto Repair Allowlist",
+  
+  "allowedAutoRepairs": [],
+  
+  "reasonForEmpty": "当前实现中 AutoRepair = false (DefaultReconciliationConfig)。所有 RepairAction 为声明式建议，由 DataLifecycle 已有流程执行，不通过 Reconciliation 直接触发。",
+  
+  "prohibitedRepairs": [
+    "change Goal meaning",
+    "grant Permission",
+    "approve Tool",
+    "repeat side-effect Tool",
+    "change User message",
+    "modify Character relationship",
+    "invent Memory",
+    "retry unknown delivery"
+  ],
+  
+  "allowedByCurrentDesign": [
+    {
+      "action": "标记 tombstone 缺失 cleanup_item",
+      "executor": "DataLifecycle Coordinator (已有)"
+    },
+    {
+      "action": "标记 tombstone 缺失 recalculation_task",
+      "executor": "DataLifecycle Coordinator (已有)"
+    },
+    {
+      "action": "标记过期 lease",
+      "executor": "Task Runtime Queue.ReclaimExpiredLeases (已有)"
+    },
+    {
+      "action": "标记 outbox/delivery 状态不匹配",
+      "executor": "Outbox Owner / Delivery Store (已有)"
+    }
+  ]
+}

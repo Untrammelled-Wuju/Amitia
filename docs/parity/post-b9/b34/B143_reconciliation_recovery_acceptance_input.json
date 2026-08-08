@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "B143 Reconciliation Recovery Acceptance Input",
+  "target": "B143 Recovery acceptance",
+  
+  "currentReconciliationState": {
+    "reconciliationRun": "最近一次 Worker Run 的 Scan IDs",
+    "checkpointCorrelation": "当前实现未将 ReconciliationRun 与 Checkpoint 关联",
+    "taskWorkflowRefs": "TaskRun/WorkflowRun 引用 (未暴露给 Reconciliation)",
+    "runtimeGeneration": "不支持",
+    "cancelTimeoutUnknown": "终态识别由 TaskRuntime 自身状态机负责",
+    "repairVerification": "当前设计不直接执行 Repair，故无需验证",
+    "auditCorrelation": "ReconciliationDiff 记录在 Scan 中，未写入 B47 Audit"
+  },
+  
+  "acceptanceBlockers": [
+    "Agent 状态 Targeted Reconciliation 能力缺失，无法为恢复决策提供完整事实",
+    "Task/Workflow 路径超出 B34 Guard 范围",
+    "Goal 无持久化 revision 追踪"
+  ]
+}

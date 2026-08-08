@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Applied Agent Reconciliation Changes",
+  
+  "appliedChanges": [],
+  
+  "reason": "无代码修改。B34 核心工作为审计现有 Reconciliation 实现与 B34 目标之间的差距，生成结构化文档。判定为 FAIL 因为 Agent 状态 Targeted Reconciliation 能力缺失且不能在 B34 范围内安全补齐 (Goal 无持久化读接口，Kernel 路径超出 Guard)。"
+}

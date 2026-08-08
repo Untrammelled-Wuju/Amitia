@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "B140 Agent Reconciliation Cutover Input",
+  "target": "B140 Cutover acceptance",
+  
+  "currentState": {
+    "canonicalReconciliationEngine": "mindruntime.ReconciliationEngine (唯一)",
+    "productionWorker": "services.Reconciliation.RunWorker (10min interval, main.go:270)",
+    "productionSources": [
+      "TombstoneDerivedData (deletion_tombstones → cleanup/recalc)",
+      "LeaseDelivery (outbox_records vs delivery_intents)",
+      "OutboxSideEffect (outbox vs channel_receipt + external)",
+      "InteractionRunMsg (interaction_records vs messages)"
+    ],
+    "debugOnlyPaths": [
+      "mindruntime.DefaultReconciliationEngine (reconciliation_debug.go:124) 仅用于 Debug Panel"
+    ],
+    "fakeOrNoopPaths": [],
+    "legacyReconciliationImplementations": [],
+    "directRepairBypasses": [],
+    "globalDefaultInstances": [
+      "services.Reconciliation (生产)",
+      "mindruntime.DefaultReconciliationEngine (调试)"
+    ],
+    "productionReachability": true,
+    "missingAgentStateReconciliation": true,
+    "gapSummary": "DataLifecycle/Outbox/Delivery/Interaction 校验完备。Goal/Decision/Action/Observation/Reflection/Task/Workflow 的 Agent 级 Targeted Reconciliation 完全缺失。"
+  }
+}

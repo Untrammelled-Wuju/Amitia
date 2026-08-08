@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Agent Reconciliation Contract (B34)",
+  
+  "input": {
+    "canonicalGoalRef": "Goal ID + revision/version",
+    "goalRevisionState": "GoalStatus enum (pending/active/suspended/achieved/abandoned/wish)",
+    "decisionCycleRef": "BehaviorPlan ID + Arbitration result",
+    "selectedCandidateRef": "BehaviorCandidate ID",
+    "behaviorPlanRef": "BehaviorPlan ID",
+    "actionRef": "Action ID / BehaviorTag",
+    "toolInvocationRefs": "TaskRun IDs from Kernel",
+    "observationRef": "Observation entity reference",
+    "goalProgressRef": "Goal.Progress (0-1)",
+    "continuationRef": "B32 ContinuationDecision (STOP/CONTINUE/WAIT/ASK_USER/BLOCKED)",
+    "reflectionRef": "ReflectionApproval ID",
+    "taskRefs": "TaskRun IDs",
+    "workflowRefs": "WorkflowRun IDs",
+    "runtimeRefs": "RuntimeHost generation/version",
+    "knownVersions": "Generic version/generation map"
+  },
+  
+  "output": {
+    "consistencyResult": "CONSISTENT | DRIFT | PARTIAL | DEGRADED | BLOCKED",
+    "diffs": "Structured ReconciliationDiff array",
+    "severitySummary": "Counts by severity (critical/high/warning/info/low)",
+    "authority": "Which domain owner is authoritative for each diff",
+    "repairability": "Whether each diff is auto-repairable via canonical API",
+    "requiredNextAction": "Suggested per-diff action",
+    "verificationResult": "Post-repair verification status"
+  },
+  
+  "forbiddenOutputs": [
+    "New Goal",
+    "New Candidate",
+    "New Plan",
+    "New Tool Invocation",
+    "Raw Memory Mutation"
+  ],
+  
+  "purpose": "确保 B33 的 Goal/Decision/Action/Observation/Reflection/Task/Workflow/Run 状态在跨系统视角下互相一致，为 B35 Checkpoint 提供安全的事实基础。"
+}

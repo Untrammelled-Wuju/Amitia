@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Reconciliation Source Validation",
+  
+  "sources": [
+    {
+      "name": "TombstoneDerivedData",
+      "domain": "Data Lifecycle",
+      "authorityType": "AUTHORITATIVE (基于 deletion_tombstones)",
+      "productionImplementation": "TombstoneDerivedDataReconciliationChecker",
+      "availability": "依赖 deletion_tombstones / data_lifecycle_outbox_cleanup_items / data_lifecycle_recalculation_tasks 表",
+      "repairCapability": "标记 missing_cleanup_item + missing_recalculation_task",
+      "fake": false
+    },
+    {
+      "name": "LeaseDelivery",
+      "domain": "Outbox/Delivery",
+      "authorityType": "AUTHORITATIVE (基于 outbox_records / delivery_intents)",
+      "productionImplementation": "RuntimeReconciliationChecker(source=outbox_records, target=delivery_intents)",
+      "availability": "依赖 outbox_records + delivery_intents 表",
+      "repairCapability": "标记 expired_lease + status_mismatch",
+      "fake": false
+    },
+    {
+      "name": "OutboxSideEffect",
+      "domain": "Outbox/External",
+      "authorityType": "AUTHORITATIVE (SQLite) + DERIVED (External service)",
+      "productionImplementation": "RuntimeReconciliationChecker(source=outbox_records, target=externalSideEffectSource)",
+      "availability": "依赖 outbox_records 表 + ExternalReconciliationService 接口",
+      "repairCapability": "标记 external side effect missing",
+      "fake": false,
+      "externalAdapters": ["graphReconciliationAdapter", "qdrantReconciliationAdapter"]
+    },
+    {
+      "name": "InteractionRunMsg",
+      "domain": "Interaction",
+      "authorityType": "AUTHORITATIVE (基于 interaction_records / messages)",
+      "productionImplementation": "RuntimeReconciliationChecker(source=interaction_records, target=messages)",
+      "availability": "依赖 interaction_records + messages 表",
+      "repairCapability": "标记 status 不匹配",
+      "fake": false
+    }
+  ],
+  
+  "missingAgentSources": [
+    "Goal Registry Source (无持久化读接口)",
+    "Decision Cycle Source (无持久化)",
+    "Observation Source (分散无统一接口)",
+    "Reflection Version Source (接口未暴露)",
+    "TaskRun Source (路径超出 Guard)",
+    "WorkflowRun Source (路径超出 Guard)"
+  ]
+}

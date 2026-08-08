@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "CANONICAL_RECONCILIATION_ENGINE": [
+    "backend/internal/mindruntime/reconciliation_engine.go (ReconciliationEngine)"
+  ],
+  
+  "CANONICAL_RECONCILIATION_WORKER": [
+    "backend/internal/mindruntime/reconciliation_engine.go:259 (RunWorker method)",
+    "backend/cmd/server/main.go:270 (goroutine invocation)"
+  ],
+  
+  "CANONICAL_SOURCE": [
+    "GormReconciliationSource (reconciliation_sources.go) - SQLite outbox/interaction/delivery",
+    "externalSideEffectSource (reconciliation_external.go) - external service verification",
+    "TombstoneDerivedDataReconciliationChecker (reconciliation_tombstone.go) - deletion_tombstones"
+  ],
+  
+  "CANONICAL_TARGET": [
+    "deliveryIntentSource (reconciliation_external.go:190) - delivery_intents table",
+    "outboxChannelReceiptSource (reconciliation_external.go:208) - delivery_intents as receipt",
+    "interactionMessageSource (reconciliation_sources.go:119) - messages table",
+    "external qdrant/surrealdb sources (reconciliation_external.go)"
+  ],
+  
+  "CANONICAL_REPAIRER": [
+    "N/A - 当前实现仅标记RepairAction策略，未实现自动执行Repair逻辑"
+  ],
+  
+  "AUTHORITATIVE_SOURCE": [
+    "SQLite tables: deletion_tombstones, outbox_records, delivery_intents, interaction_records, messages, data_lifecycle_outbox_cleanup_items, data_lifecycle_recalculation_tasks"
+  ],
+  
+  "DERIVED_SOURCE": [
+    "Qdrant (via qdrantReconciliationAdapter)",
+    "SurrealDB (via graphReconciliationAdapter)"
+  ],
+  
+  "AGENT_STATE_SOURCE": [],
+  
+  "EXECUTION_STATE_SOURCE": [],
+  
+  "TASK_STATE_SOURCE": [],
+  
+  "WORKFLOW_STATE_SOURCE": [],
+  
+  "RUNTIME_STATE_SOURCE": [],
+  
+  "RECONCILIATION_PROJECTION": [
+    "ReconciliationScan (Status/Progress/Diffs)",
+    "ReconciliationDiff (DiffType/Severity/RepairAction)"
+  ],
+  
+  "HEALTH_PROJECTION": [
+    "ReconciliationStatus (idle/running/paused/completed/cancelled)"
+  ],
+  
+  "DEBUG_PROJECTION": [
+    "mindruntime.DefaultReconciliationEngine (reconciliation_debug.go:124)",
+    "BuildDebugPanelData() / BuildSanitizedExport() functions"
+  ],
+  
+  "LEGACY_RECONCILIATION": [],
+  
+  "TEST_ONLY": [],
+  
+  "FAKE_ONLY": [],
+  
+  "DUPLICATE_RECONCILIATION_SYSTEM": 0,
+  
+  "DUPLICATE_REPAIR_SYSTEM": 0,
+  
+  "UNKNOWN": 0,
+  
+  "notes": "当前系统完全专注于 DataLifecycle/Outbox/Delivery/InteractionRuntime 的一致性校验。缺少 B34 要求的 Agent 状态 (Goal/Decision/Action/Observation/Reflection/Task/Workflow) 相关 Source 注册。DefaultReconciliationEngine 全局变量仅用于调试面板展示，非生产接线。"
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B34",
+  "status": "FAIL_RECONCILIATION_REAL_SOURCE",
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  "constructionMode": ["REUSE", "EXTEND", "WIRE"],
+  "canonical": {
+    "mindRuntime": "backend/internal/mindruntime/reconciliation.go",
+    "reconciliationEngine": "backend/internal/mindruntime/reconciliation_engine.go",
+    "reconciliationWorker": "backend/cmd/server/main.go:270 (go services.Reconciliation.RunWorker)",
+    "sourceRegistry": "backend/internal/mindruntime/reconciliation_sources.go",
+    "repairAuthority": "策略驱动: StrategyLogicalInvalid / StrategyReleaseLease / StrategyCompensate / StrategyRetry",
+    "authorityCount": 1
+  },
+  "production": {
+    "engineConstructed": true,
+    "workerStarted": true,
+    "serverLifecycle": "backend/cmd/server/main.go 通过 appCtx 上下文控制",
+    "realSourcesRegistered": true,
+    "debugOnly": false,
+    "fakeOnly": false
+  },
+  "consistency": {
+    "reconciliationAuthorityCount": 1,
+    "productionWorkerCount": 1,
+    "duplicateSourceRegistrationCount": 0,
+    "sourceUnavailableReportedAsConsistentCount": 0,
+    "staleWriteOverwriteCount": 0
+  },
+  "repair": {
+    "repairAuthorityBypassCount": 0,
+    "repairWithoutVerificationCount": 0,
+    "blindSideEffectReplayCount": 0,
+    "infiniteRepairLoopCount": 0
+  },
+  "mutations": {
+    "candidateGeneration": 0,
+    "scoring": 0,
+    "arbitration": 0,
+    "planning": 0,
+    "agentToolExecution": 0,
+    "permissionGrant": 0,
+    "inventedMemoryWrite": 0,
+    "characterSemanticMutation": 0,
+    "reflectionExecution": 0
+  },
+  "duplicates": {
+    "newReconciliationEngine": 0,
+    "newReconciliationRuntime": 0,
+    "newReconciliationManager": 0,
+    "newReconciliationStore": 0,
+    "newConsistencyEngine": 0,
+    "newRepairManager": 0,
+    "newMindRuntime": 0,
+    "newAgentRuntime": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B35",
+  "failureReason": "现有Reconciliation系统仅覆盖DataLifecycle/Tombstone/Outbox/Delivery/InteractionRuntime等派生数据一致性校验。缺少对Agent核心状态(Goal Revision、Decision Cycle引用完整性、Action-Plan关联、Observation-Invocation对应、Reflection版本、Task/Workflow Run状态)的Targeted Reconciliation Source。Agent状态的跨系统一致性检查能力缺失。"
+}

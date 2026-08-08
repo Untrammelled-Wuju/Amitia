@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Agent Reconciliation Gap Matrix",
+  
+  "gaps": [
+    {
+      "gapId": "B34-GAP-001",
+      "domain": "Goal",
+      "currentState": "B23 Goal Reconciliation 未注册 Goal Registry 一致性 Source。Goal Registry 为纯内存结构，revision 变更无持久化追踪。",
+      "canonicalOwner": "decision.GoalRegistry",
+      "severity": "HIGH",
+      "repairability": "REQUIRES_MANUAL - Goal 为内存状态机，需扩展持久化或读取接口",
+      "B34Action": "DEFERRED - 因 Goal 缺少持久化读接口，B34 无法有效执行 Goal revision 一致性校验。需 B35+ 扩展。",
+      "deferredOwner": "B35_CHECKPOINT_OR_OWNER"
+    },
+    {
+      "gapId": "B34-GAP-002",
+      "domain": "Decision Cycle",
+      "currentState": "无 Reconciliation Source 校验 Decision → Candidate Set 引用完整性。Arbitration result 无持久化。",
+      "canonicalOwner": "decision.ArbitrationLayer",
+      "severity": "MEDIUM",
+      "repairability": "REQUIRES_MANUAL - Decision Cycle 生命周期短且无持久化",
+      "B34Action": "DEFERRED",
+      "deferredOwner": "DECISION_OWNER"
+    },
+    {
+      "gapId": "B34-GAP-003",
+      "domain": "Action / Plan",
+      "currentState": "无 Reconciliation Source 校验 Action 与 Plan 的关联关系。",
+      "canonicalOwner": "decision.BehaviorPlanBuilder",
+      "severity": "MEDIUM",
+      "repairability": "REQUIRES_MANUAL",
+      "B34Action": "DEFERRED",
+      "deferredOwner": "DECISION_OWNER"
+    },
+    {
+      "gapId": "B34-GAP-004",
+      "domain": "Observation",
+      "currentState": "Observation 概念分散在多个子系统中，无统一权威接口。B30 无持久化 Observation 结构。",
+      "canonicalOwner": "分散 (mindruntime/observability, desktoppet/quality 等)",
+      "severity": "MEDIUM",
+      "repairability": "REQUIRES_MANUAL - 需先统一 Observation Authority",
+      "B34Action": "DEFERRED",
+      "deferredOwner": "B30_OWNER_EXTENSION"
+    },
+    {
+      "gapId": "B34-GAP-005",
+      "domain": "Tool Invocation",
+      "currentState": "Extension Kernel 已有 TaskRun 持久化，但无 Reconciliation Source 暴露给 B34 mindruntime。",
+      "canonicalOwner": "extension.kernel.task_runtime.TaskStore",
+      "severity": "HIGH",
+      "repairability": "PARTIALLY_SUPPORTED - 可通过新增 GormReconciliationSource 适配 extension_task_runs",
+      "B34Action": "DEFERRED - B34 范围内仅声明缺口不实现。需新增 Source 但未在 B23-B33 Guard 允许的 wiring 目标内。",
+      "deferredOwner": "B35_PLUS_OR_KERNEL_OWNER"
+    },
+    {
+      "gapId": "B34-GAP-006",
+      "domain": "Reflection",
+      "currentState": "ReflectionSupervisor 有 VersionHistory (内存)，但无 Reconciliation Source 暴露。",
+      "canonicalOwner": "mindruntime.ReflectionSupervisor",
+      "severity": "MEDIUM",
+      "repairability": "PARTIALLY_SUPPORTED - 可新增 Source 读取 VersionHistory",
+      "B34Action": "DEFERRED - 需扩展 ReflectionSupervisor 暴露只读接口",
+      "deferredOwner": "B33_PLUS_EXTENSION"
+    },
+    {
+      "gapId": "B34-GAP-007",
+      "domain": "Task / Workflow",
+      "currentState": "Extension Kernel Task/Workflow 有 SQLite 持久化，但无 Reconciliation Source。",
+      "canonicalOwner": "extension.kernel.task_runtime / workflow",
+      "severity": "MEDIUM",
+      "repairability": "PARTIALLY_SUPPORTED - Repository 已实现，需适配",
+      "B34Action": "DEFERRED - B34 不改 Kernel 持久化",
+      "deferredOwner": "OWNER_ONLY"
+    },
+    {
+      "gapId": "B34-GAP-008",
+      "domain": "Runtime",
+      "currentState": "Runtime Host 无持久化 generation 概念，Health 接口存在但不被 Reconciliation 使用。",
+      "canonicalOwner": "RuntimeHost",
+      "severity": "LOW",
+      "repairability": "NOT_REQUIRED - Runtime 生命周期由 OS Process 管理",
+      "B34Action": "OUTSIDE_B34_SCOPE"
+    },
+    {
+      "gapId": "B34-GAP-009",
+      "domain": "Data Lifecycle Cleanup",
+      "currentState": "已有 TombstoneDerivedDataReconciliationChecker 覆盖此 domain。",
+      "canonicalOwner": "mindruntime.DataLifecycleCoordinator",
+      "severity": "NONE",
+      "repairability": "ALREADY_SUPPORTED",
+      "B34Action": "ALREADY_SUPPORTED"
+    },
+    {
+      "gapId": "B34-GAP-010",
+      "domain": "Outbox / Delivery / Interaction",
+      "currentState": "已有 RuntimeReconciliationChecker 覆盖。",
+      "canonicalOwner": "interaction.UnifiedEntry + DeliveryStore",
+      "severity": "NONE",
+      "repairability": "ALREADY_SUPPORTED",
+      "B34Action": "ALREADY_SUPPORTED"
+    }
+  ],
+  
+  "summary": {
+    "ALREADY_SUPPORTED": 2,
+    "PARTIALLY_SUPPORTED": 3,
+    "DEFERRED": 5,
+    "OUTSIDE_B34_SCOPE": 1,
+    "NOT_REQUIRED": 1,
+    "UNKNOWN": 0,
+    "MISSING_PRODUCTION_WIRING": 0,
+    "MISSING_REAL_SOURCE": 3,
+    "MISSING_AUTHORITY_MATRIX": 0,
+    "MISSING_TARGETED_RECONCILIATION": 5,
+    "MISSING_REPAIR_VERIFICATION": 1,
+    "MISSING_CONVERGENCE_GUARD": 1,
+    "MISSING_VERSION_GUARD": 0,
+    "MISSING_AUDIT": 0
+  }
+}

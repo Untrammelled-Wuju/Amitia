@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "name": "Reconciliation Convergence Guard",
+  
+  "infiniteRepairLoopCount": 0,
+  "sameDiffRepeatedWithoutEscalationCount": 0,
+  
+  "notes": "当前实现不执行 Repair，仅标记策略。不存在无限修复循环风险。若未来实现自动 Repair，需引入: 1) per-entity retry count 2) escalation threshold 3) REQUIRES_MANUAL classification。",
+  
+  "existingConvergenceMechanisms": {
+    "budgetLimit": "每次 Scan 有 BudgetLimitMS=5000 硬时限",
+    "batchSize": "每次 Scan 限制 BatchSize=50",
+    "retryCount": "RetryCount=3 (配置存在但未使用，因无自动 Repair)"
+  }
+}

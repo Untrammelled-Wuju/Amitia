@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08T23:50:00+08:00",
+  
+  "reconciliationAuthority": "mindruntime.ReconciliationEngine (唯一)",
+  "reconciliationAuthorityCount": 1,
+  
+  "workerAuthority": "services.Reconciliation.RunWorker (main.go:270)",
+  
+  "sourceRegistryAuthority": "RegisterRuntimeReconciliationCheckers (services.go:446)",
+  
+  "repairAuthority": "策略声明式 (非执行式): StrategyLogicalInvalid / StrategyReleaseLease / StrategyCompensate / StrategyRetry",
+  
+  "authoritativeStatePolicy": {
+    "description": "SQLite 为业务事实唯一权威源；Qdrant/SurrealDB 为可重建派生索引。Repair 仅通过已有 Domain Owner API 间接执行（DataLifecycle Cleanup/Recaluation），不直接写状态。",
+    "principles": [
+      "Reconciliation 不直接 UPDATE 业务表",
+      "Derived source mismatch → 失效/重派生",
+      "Source unavailable → DEGRADED status, 不得报 CONSISTENT",
+      "Terminal state 不可逆: 禁止反向修复"
+    ]
+  },
+  
+  "reflectionAuthority": {
+    "owner": "mindruntime.RunReflection (reflection_run.go)",
+    "supervisor": "mindruntime.ReflectionSupervisor",
+    "reconciliationBehavior": "只读比较: Reflection evidence refs 存在且有效, Reflection version 与 Supervisor 记录一致。不修改 Reflection 结论。"
+  },
+  
+  "goalAuthority": {
+    "owner": "decision.GoalRegistry (goal_registry.go)",
+    "reconciliationBehavior": "只读比较: Goal revision 最新, Terminal state immutable, Superseded Goal not reactivated。不修改 Goal。"
+  },
+  
+  "executionAuthority": {
+    "owner": "extension.kernel.ToolFacade + task_runtime",
+    "reconciliationBehavior": "只读比较: Invocation terminal state 以 Kernel 为准。Agent Action 状态若与 Kernel Invocation 不一致 → HIGH severity drift。"
+  }
+}
