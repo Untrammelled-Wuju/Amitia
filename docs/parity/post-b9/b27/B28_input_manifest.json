@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T18:30:00+08:00",
+  "targetStep": "B28",
+  "b23GuardReference": "backend/internal/queue/, REUSE+EXTEND, forbidden: AgentQueue2/AgentScheduler2",
+  "input": {
+    "canonicalGoal": {
+      "owner": "decision.GoalRegistry",
+      "types": ["connection", "support", "growth", "autonomy", "clarification", "conflict_repair", "information"]
+    },
+    "canonicalCandidate": {
+      "owner": "decision.BehaviorCandidate",
+      "fields": ["ID", "Tag", "BaseScore", "NeedScore", "RelationshipScore", "PersonalityScore", "FinalScore", "RiskScore", "Constraints", "Reasons"]
+    },
+    "scoredCandidates": {
+      "owner": "decision.Scoring.ScoreBehaviorCandidates",
+      "formula": "behavior-scoring-v1"
+    },
+    "pipelineCheckpoint": {
+      "owner": "pipelinecheckpoint.Manager",
+      "capabilities": ["Load", "Advance", "AcquirePendingRange", "AdvanceLeased", "PendingRange"],
+      "leaseModel": "Owner + TTL",
+      "monotonicity": "guaranteed"
+    },
+    "agentQueue": {
+      "owner": "queue.Manager (pending B28 audit)",
+      "path": "backend/internal/queue/"
+    }
+  }
+}

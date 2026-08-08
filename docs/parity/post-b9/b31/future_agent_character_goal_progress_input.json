@@ -1,0 +1,13 @@
+{
+  "description": "Goal outcome作为未来Character(Mood/Relationship)的输入",
+  "moodInput": {
+    "goalAchieved": "positive mood influence",
+    "goalFailed": "neutral/negative mood influence (context dependent)",
+    "goalBlocked": "neutral mood influence"
+  },
+  "relationshipInput": {
+    "goalCompletedTogether": "relationship strengthening signal",
+    "goalInvolvingUser": "relationship interaction record"
+  },
+  "note": "B31不修改Character/Mood/Relationship。此结构仅说明Goal outcome对这些系统的影响输入。"
+}

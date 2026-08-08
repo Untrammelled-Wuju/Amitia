@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "status": "PASS_NO_CODE_CHANGE",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "constructionMode": ["REUSE", "EXTEND"],
+  "canonical": {
+    "goal": "decision.GoalRegistry",
+    "selectedCandidate": "decision.BehaviorCandidate (from ArbitrationLayer)",
+    "planType": "decision.BehaviorPlan",
+    "planBuilder": "decision.BehaviorPlanBuilder",
+    "actionType": "decision.BehaviorTag mapped actions",
+    "workflowAuthority": "extension/kernel/workflow (existing, read-only)",
+    "taskRuntimeAuthority": "extension/kernel/task_runtime (existing, read-only)",
+    "executionAuthority": "interaction.ToolFacade (future)"
+  },
+  "plan": {
+    "authorityCount": 1,
+    "builderAuthorityCount": 1,
+    "candidateOverrideCount": 0,
+    "planForSupersededGoalCount": 0,
+    "doublePlanCommitCount": 0,
+    "sideEffectCount": 0
+  },
+  "isolation": {
+    "crossGoalLeakCount": 0,
+    "crossCharacterLeakCount": 0,
+    "crossConversationLeakCount": 0
+  },
+  "duplicates": {
+    "newPlanner": 0,
+    "newBehaviorPlanner": 0,
+    "newPlanRuntime": 0,
+    "newPlanManager": 0,
+    "newPlanRegistry": 0,
+    "newPlanStore": 0,
+    "newTaskGraph": 0,
+    "newActionRuntime": 0,
+    "newAgentRuntime": 0,
+    "newTaskRuntime": 0,
+    "newWorkflowEngine": 0,
+    "newCheckpointStore": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B29"
+}

@@ -1,0 +1,43 @@
+{
+  "classification": {
+    "CANONICAL_OBSERVATION": {
+      "count": 10,
+      "locations": [
+        "mindruntime/reflection_run",
+        "mindruntime/observability",
+        "mindruntime/reconciliation",
+        "mindruntime/pattern_recognition",
+        "mindruntime/snapshot",
+        "mindruntime/trace_export",
+        "mindruntime/trace_query",
+        "mindruntime/supervisor",
+        "mindruntime/reflection_supervisor",
+        "mindruntime/reflection_trigger"
+      ]
+    },
+    "DUPLICATE_OBSERVATION_SYSTEM": {
+      "count": 0,
+      "locations": []
+    },
+    "UNKNOWN": {
+      "count": 0,
+      "locations": []
+    },
+    "AGENT_RESULT_HANDLER": {
+      "count": 2,
+      "locations": [
+        "agent/handler.go",
+        "agent/service.go"
+      ]
+    },
+    "AGENT_TOOL_PROCESSOR": {
+      "count": 3,
+      "locations": [
+        "agent/tool/memory",
+        "agent/tool/model",
+        "agent/tool/voice_reply"
+      ]
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

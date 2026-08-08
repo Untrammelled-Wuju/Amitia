@@ -1,0 +1,8 @@
+{
+  "supersededGoalMutationCount": 0,
+  "terminalGoalMutationCount": 0,
+  "staleObservationMutationCount": 0,
+  "crossGoalMutationCount": 0,
+  "lostUpdateCount": 0,
+  "detail": "已由GoalRegistry.RWMutex保证。Terminal/Abandoned Goal不接受状态变更。被Superseded Goal已转abandoned终态。迟到Observation通过Goal ID验证发现Goal已终态后跳过。"
+}

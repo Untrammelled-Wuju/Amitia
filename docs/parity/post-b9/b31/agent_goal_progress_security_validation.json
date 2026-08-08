@@ -1,0 +1,9 @@
+{
+  "modelCanForgeGoalIdentity": false,
+  "modelCanMutateOtherGoal": false,
+  "providerCanMutateGoal": false,
+  "toolResultCanMutateGoalDirectly": false,
+  "observationCanBypassGoalAuthority": false,
+  "rawSecretLeak": false,
+  "detail": "Goal state transitions require explicit structured reason codes. LLM outputs are validated before Goal state application. Tool results flow through B30 Observation then through B31 evaluation - no direct path. Observational data cannot bypass GoalRegistry. No raw secrets stored in Goal metadata."
+}

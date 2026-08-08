@@ -1,0 +1,7 @@
+{
+  "role": "Live diagnostic cache (bounded projection)",
+  "source": "In-memory DiagnosticRepository with maxItems cap",
+  "persistentAfterRestart": false,
+  "independentTruthStore": false,
+  "canonicalTruth": "observability.StorageBackend (Developer Console does NOT own truth)"
+}

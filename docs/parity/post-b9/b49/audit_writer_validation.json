@@ -1,0 +1,14 @@
+{
+  "writerAuthorityCount": 1,
+  "writerType": "DefaultRecordWriter (observability/writer.go)",
+  "queueBounded": true,
+  "maxQueueSize": 10000,
+  "flushLoopActive": false,
+  "flushLoopNote": "No background flush loop; Flush() called externally",
+  "gracefulDrainVerified": false,
+  "closeIdempotent": true,
+  "highRiskSyncWrite": true,
+  "auditFailureRecursionCount": 0,
+  "backpressureStrategy": "select/default: enqueue or direct write if queue full (no silent drop)",
+  "gap": "DefaultRecordWriter exists with correct bounds but ExecutionPipeline does not use it"
+}

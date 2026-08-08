@@ -1,0 +1,86 @@
+{
+  "classification": [
+    {
+      "component": "mindruntime.reflection_run.RunReflection",
+      "category": "CANONICAL_REFLECTION",
+      "note": "核心Reflection Runner"
+    },
+    {
+      "component": "mindruntime.reflection_run.MinEvidenceForAdjustment",
+      "category": "CANONICAL_REFLECTION",
+      "note": "证据下限=2"
+    },
+    {
+      "component": "mindruntime.reflection_run.MinConfidenceForAdopt",
+      "category": "CANONICAL_REFLECTION",
+      "note": "置信度下限=0.5"
+    },
+    {
+      "component": "mindruntime.reflection_run.MaxAbstractionsPerRun",
+      "category": "CANONICAL_REFLECTION",
+      "note": "上下文上界=5"
+    },
+    {
+      "component": "mindruntime.reflection_trigger.EvaluateTrigger",
+      "category": "CANONICAL_REFLECTION_TRIGGER",
+      "note": "结构化Trigger评估"
+    },
+    {
+      "component": "mindruntime.reflection_supervisor.ReflectionSupervisor",
+      "category": "CANONICAL_REFLECTION_SUPERVISOR",
+      "note": "审批、版本管理、回滚"
+    },
+    {
+      "component": "mindruntime.supervisor.ReviewCandidate",
+      "category": "CANONICAL_REFLECTION_SUPERVISOR",
+      "note": "通用审批流程"
+    },
+    {
+      "component": "mindruntime.observability",
+      "category": "OBSERVATION_INPUT",
+      "note": "B30 Observation作为Reflection Evidence来源"
+    },
+    {
+      "component": "B31 Agent Goal Progress",
+      "category": "GOAL_PROGRESS_INPUT",
+      "note": "Goal Progress作为Reflection输入"
+    },
+    {
+      "component": "B32 Continuation Decision",
+      "category": "CONTINUATION_INPUT",
+      "note": "Continuation Decision作为Reflection输入"
+    },
+    {
+      "component": "mindruntime.reconciliation",
+      "category": "RECONCILIATION_INPUT",
+      "note": "B36 Reconciliation(未来)"
+    },
+    {
+      "component": "mindruntime.pattern_recognition",
+      "category": "REFLECTION_PROJECTION",
+      "note": "模式识别(长期)"
+    }
+  ],
+  "counts": {
+    "CANONICAL_REFLECTION": 4,
+    "CANONICAL_REFLECTION_TRIGGER": 1,
+    "CANONICAL_REFLECTION_SUPERVISOR": 2,
+    "REFLECTION_INPUT": 0,
+    "REFLECTION_OUTPUT": 0,
+    "OBSERVATION_INPUT": 1,
+    "GOAL_PROGRESS_INPUT": 1,
+    "DECISION_TRACE_INPUT": 0,
+    "CONTINUATION_INPUT": 1,
+    "REFLECTION_PROJECTION": 1,
+    "RECONCILIATION_INPUT": 1,
+    "CHECKPOINT_INPUT": 0,
+    "MEMORY_CANDIDATE_INPUT": 0,
+    "CHARACTER_CANDIDATE_INPUT": 0,
+    "LEGACY_REFLECTION": 0,
+    "TEST_ONLY": 0,
+    "DUPLICATE_REFLECTION_SYSTEM": 0,
+    "DUPLICATE_REFLECTION_TRIGGER": 0,
+    "DUPLICATE_REFLECTION_STORE": 0,
+    "UNKNOWN": 0
+  }
+}

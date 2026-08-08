@@ -1,0 +1,11 @@
+{
+  "externalObservationCanRewriteGoal": false,
+  "modelCanForgeGoalIdentity": false,
+  "modelCanBypassSafetyOnReplan": false,
+  "modelCanBypassPermissionOnReplan": false,
+  "modelCanSelectProviderAuthority": false,
+  "indeterminateSideEffectAutoRetried": false,
+  "rawSecretLeak": false,
+  "noProgressInfiniteLLMLoop": false,
+  "detail": "B32的控制流基于结构化GoalStatus + Observation category。LLM不直接控制Goal ID。Safety/Permission由ExecutionPipeline保障(INPUT阶段)。Indeterminate side effect不会自动重试。"
+}

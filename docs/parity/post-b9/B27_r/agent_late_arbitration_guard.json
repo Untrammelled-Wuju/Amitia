@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "supersededGoalSelectionCount": 0,
+  "oldDecisionCycleSelectionMutationCount": 0,
+  "lateSelectionOverwriteCount": 0,
+  "guarantees": {
+    "goalSupersessionBlocksOldGoals": true,
+    "selectionCommitOnce": true,
+    "singleSelectionPerCycle": true
+  }
+}

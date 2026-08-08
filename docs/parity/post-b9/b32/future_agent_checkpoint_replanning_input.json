@@ -1,0 +1,24 @@
+{
+  "description": "供后续Checkpoint使用的Replanning输入",
+  "goalId": "string",
+  "decisionCycle": {
+    "cycleRef": "string",
+    "continuationDecision": "STOP/CONTINUE/WAIT/ASK_USER/BLOCKED"
+  },
+  "lastObservation": {
+    "observationId": "string",
+    "outcomeType": "string"
+  },
+  "goalState": {
+    "status": "GoalStatus",
+    "progress": "float64"
+  },
+  "continuationDecision": {
+    "decision": "string",
+    "reasonCode": "string"
+  },
+  "nextCycleRef": "string if CONTINUE",
+  "pendingTaskRefs": [],
+  "pendingWorkflowRefs": [],
+  "note": "B32不创建CheckpointStore2。"
+}

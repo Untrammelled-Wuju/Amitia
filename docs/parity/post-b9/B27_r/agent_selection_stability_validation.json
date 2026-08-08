@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "deterministicWithoutRandomPolicy": true,
+  "mapIterationDependent": false,
+  "hiddenRandomTieBreak": false,
+  "doubleSelectionCount": 0,
+  "lateSelectionOverwriteCount": 0,
+  "notes": "Selection is fully deterministic. Same inputs always produce same output. No random factors, no map iteration dependency."
+}

@@ -1,0 +1,14 @@
+{
+  "plannedChanges": {
+    "description": "B30计划变更列表（空，现有系统已满足要求）",
+    "changes": [],
+    "summary": {
+      "totalPlanned": 0,
+      "codeChanges": 0,
+      "configChanges": 0,
+      "schemaChanges": 0,
+      "interfaceChanges": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

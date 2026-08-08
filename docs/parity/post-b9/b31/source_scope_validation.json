@@ -1,0 +1,25 @@
+{
+  "scopeValidation": {
+    "backendInternalDecision": {
+      "readOnly": true,
+      "note": "GoalRegistry现有代码只读审计"
+    },
+    "backendInternalAgent": {
+      "readOnly": true,
+      "note": "Agent代码只读审计"
+    },
+    "backendInternalMindruntime": {
+      "readOnly": true,
+      "note": "mindruntime/用作Observation参考，只读"
+    },
+    "backendInternalExtensionKernel": {
+      "readOnly": true,
+      "note": "Kernel只读，ToolFacade/ExecutionPipeline不修改"
+    },
+    "docsOnly": true
+  },
+  "unexpectedFiles": [],
+  "goModUnchanged": true,
+  "goSumUnchanged": true,
+  "databaseUnchanged": true
+}

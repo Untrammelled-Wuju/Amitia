@@ -1,0 +1,26 @@
+{
+  "b33_reflection_memory_boundary": {
+    "scope": "Reflection output is Memory candidate, not direct write",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "memoryAccess": {
+      "outputType": "memory_candidate",
+      "directWrite": false,
+      "requiresApproval": true,
+      "canReadMemory": true,
+      "canScore": false
+    },
+    "flow": {
+      "reflection_produces": "candidate",
+      "supervisor_approves": "candidate_to_memory",
+      "memory_service_writes": "approved_memory"
+    },
+    "violations": {
+      "directMemoryWrites": 0,
+      "unauthorizedScore": 0,
+      "skipApprovalFlow": 0
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

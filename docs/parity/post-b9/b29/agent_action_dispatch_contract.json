@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "dispatchContract": {
+    "version": "1.0",
+    "description": "Action分发契约 - 根据Action类型确定目标Handler",
+
+    "dispatchRules": [
+      {
+        "actionType": "TOOL",
+        "target": "ToolFacade.ExecuteModelTool",
+        "pipeline": "full",
+        "description": "工具调用进入ExecutionPipeline完整防护链"
+      },
+      {
+        "actionType": "TASK",
+        "target": "TaskRuntime",
+        "pipeline": "task_specific",
+        "description": "任务由TaskRuntime处理"
+      },
+      {
+        "actionType": "WORKFLOW",
+        "target": "Workflow",
+        "pipeline": "workflow_specific",
+        "description": "工作流由Workflow系统处理"
+      },
+      {
+        "actionType": "ASK_USER",
+        "target": "Message",
+        "pipeline": "none",
+        "description": "询问用户直接生成消息"
+      },
+      {
+        "actionType": "SKILL",
+        "target": "ToolFacade.ModelTools",
+        "pipeline": "skill_specific",
+        "description": "Skill工具通过Facade暴露"
+      },
+      {
+        "actionType": "MCP",
+        "target": "ToolFacade (via SyncMCPTools)",
+        "pipeline": "full",
+        "description": "MCP工具通过Facade同步注册后走完整Pipeline"
+      }
+    ]
+  },
+
+  "dispatchMap": {
+    "TOOL": "ToolFacade.ExecuteModelTool",
+    "TASK": "TaskRuntime",
+    "WORKFLOW": "Workflow",
+    "ASK_USER": "Message",
+    "SKILL": "ToolFacade.ModelTools",
+    "MCP": "ToolFacade.SyncMCPTools → ToolFacade.ExecuteModelTool"
+  },
+
+  "summary": {
+    "actionTypes": 6,
+    "dispatchTargets": 5,
+    "bypassTargets": 0
+  }
+}

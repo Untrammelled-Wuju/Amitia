@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B46",
+  "status": "BLOCKED_CANONICAL_SECRET_AUTHORITY_MISSING",
+  "blockedBy": [
+    "BLOCKED_CANONICAL_SECRET_AUTHORITY_MISSING",
+    "BLOCKED_LEGACY_SECRET_MIGRATION_SCHEMA_CHANGE_NOT_ALLOWED"
+  ],
+  "constructionMode": ["REUSE", "EXTEND"],
+  "canonical": {
+    "secretBroker": "ABSENT — 无统一 Kernel SecretBroker 收口全部运行时",
+    "secretReference": "PARTIAL — schema_ui.SecretReference (RefID/Field/LeaseID) 存在但未与运行时绑定",
+    "secretLease": "PARTIAL — trusted_service.SecretLeaseManager 仅服务于 TrustedService runtime",
+    "secretMetadataStore": "ABSENT — 无统一 Secret Metadata Store",
+    "secureBackingStore": "PARTIAL — mcp.auth.EncryptedFileStore (AES-GCM) 仅服务于 MCP",
+    "permissionBroker": "permission.DefaultPermissionBroker (permission/broker.go:28) — 单一权限权威"
+  },
+  "secret": {
+    "brokerAuthorityCount": 0,
+    "referenceAuthorityCount": 1,
+    "leaseAuthorityCount": 1,
+    "ordinaryStoragePlaintextCount": 7,
+    "plaintextFallbackCount": 0,
+    "credentialDualWriteCount": 0,
+    "longLivedLeaseCount": 0,
+    "hostApiSecretRouteWired": false,
+    "providerConfigPlaintextFields": [
+      "model_configs.api_key",
+      "asr_configs.api_key",
+      "tts_configs.api_key",
+      "embedding_configs.api_key",
+      "vision_configs.api_key",
+      "imagegen_configs.api_key",
+      "desktoppet.api_key"
+    ]
+  },
+  "security": {
+    "logLeakCount": 0,
+    "errorLeakCount": 0,
+    "auditLeakCount": 0,
+    "metricLeakCount": 0,
+    "streamLeakCount": 0,
+    "checkpointLeakCount": 0,
+    "redactionCoverage": "observability.RecordSanitizer + host_api.maskSensitiveInput + adapter_mcp.mcpSensitiveValuePattern"
+  },
+  "isolation": {
+    "crossExtensionReadCount": 0,
+    "crossInvocationLeaseUseCount": 0,
+    "crossRuntimeGenerationLeaseUseCount": 0
+  },
+  "duplicates": {
+    "newSecretBroker": 0,
+    "newSecretManager": 0,
+    "newSecretStore": 0,
+    "newCredentialManager": 0,
+    "newSecretLeaseManager": 0,
+    "newPermissionBroker": 0,
+    "newExecutionPipeline": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "existingImplementations": {
+    "mcpSecretStore": "backend/internal/mcp/auth/token_store.go — SecretStore interface + EncryptedFileStore (AES-256-GCM)",
+    "trustedServiceSecretLease": "backend/internal/extension/kernel/trusted_service/secret_lease.go — SecretLeaseManager (Issue/Consume/Revoke/TTL/MaxUses/Audit)",
+    "hostApiSecretMethod": "backend/internal/extension/kernel/host_api/types.go:22 — MethodSecretGet registered but NOT wired in setupDefaultHostAPIRoutes",
+    "schemaUiSecretRef": "backend/internal/extension/kernel/schema_ui/schema.go:662 — SecretRef/SecretInputResolver",
+    "workflowSecretRef": "backend/internal/extension/workflow_values.go:183 — $secret / secrets.X template resolution",
+    "observabilityRedaction": "backend/internal/extension/kernel/observability/sanitizer.go — RecordSanitizer with secretPatterns",
+    "hostApiRedaction": "backend/internal/extension/kernel/host_api_routes.go:38 — sensitiveKeyPatterns + maskSensitiveInput",
+    "mcpSensitiveRedaction": "backend/internal/extension/kernel/capability/adapter_mcp.go:14 — mcpSensitiveValuePattern",
+    "mcpCredentialResolve": "backend/internal/mcp/manager/manager.go:160 — resolveCredential via SecretReference"
+  },
+  "blockerDetails": {
+    "missingCanonicalBroker": "Extension Layer 无统一 SecretBroker — Provider/Runtime/Workflow 各自为政",
+    "missingHostApiRoute": "host.secret.get 在 types.go 和 permission_mapping.go 注册但 setupDefaultHostAPIRoutes 未注册实现",
+    "legacyPlaintextCredentials": "model_configs.api_key / asr_configs.api_key / tts_configs.api_key / embedding_configs.api_key / vision_configs.api_key / imagegen_configs.api_key / desktoppet.api_key — 明文存储触发 BLOCKED_LEGACY_SECRET_MIGRATION_SCHEMA_CHANGE_NOT_ALLOWED"
+  },
+  "next": "B47",
+  "note": "MCP 域内 SecretStore + EncryptedFileStore + OAuth flow 完整；TrustedService 域内 SecretLeaseManager 完整；Extension Kernel 其他 Provider/Workflow/Chat 仍走明文或直读路径"
+}

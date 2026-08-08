@@ -1,0 +1,6 @@
+{
+  "workflowOwnsBudget": true,
+  "toolNodeQuotaSeparation": "Workflow 节点执行时, tool node 仍执行 Canonical Resource Gate; Workflow 预算为另一层 accounting",
+  "noDoubleAccounting": true,
+  "compensationNotPartOfQuota": true
+}

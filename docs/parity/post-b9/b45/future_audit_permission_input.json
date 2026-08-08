@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B45-AuditPermission",
+  "intendedFor": "B47 Audit",
+  "description": "Permission 决策的审计追踪输入",
+  "auditFields": {
+    "invocationId": "ToolInvocationContext.InvocationID",
+    "subject": "PermissionSubject {Type, ID, ExtensionID, ModuleID}",
+    "toolId": "ToolDefinition.ID",
+    "permissionRequirements": "PermissionRequirement[] (from ToolDefinition.Permissions)",
+    "scope": "Effective Scope from Invocation Context",
+    "grantOrNoGrant": "MatchedGrants / Missing from Broker.Evaluate",
+    "approvalMode": "PermissionDefinition.DefaultApproval",
+    "approvalId": "If required and granted",
+    "decision": "DecisionAllow / DecisionDeny / DecisionRequireApproval",
+    "decisionReason": "PermissionReason[] (code, permission, detail)",
+    "osAuthorizationBoundary": "记录是否触发 Platform OS Auth (Android/iOS/Desktop)",
+    "runtimeDispatchResult": "Dispatch Success / Failure (after Allow)"
+  },
+  "privacyConstraints": {
+    "noSecretInAudit": "Secret Grant Reason 不写入日志",
+    "noRawInput": "Audit 不记录 Tool Input 原始载荷"
+  }
+}

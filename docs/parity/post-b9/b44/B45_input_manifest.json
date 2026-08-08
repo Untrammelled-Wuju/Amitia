@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "fromTask": "B44",
+  "toTask": "B45",
+  "handoffTimestamp": "2026-08-08",
+  "b44_result": {
+    "status": "PASS_NO_CODE_CHANGE",
+    "summary": "Tool Timeout/Deadline Enforcement 已硬化：TimeoutController 为单一 Enforcement Authority、ToolInvocationContext.ExpiresAt 为 Deadline Source、30s 默认安全阀、所有 Adapter 区分 TimedOut/Cancelled"
+  },
+  "handoffToB45": {
+    "note": "B45 正式职责需从 final_step_reuse_matrix 冻结定义读取，当前假设为 Permission Gate Ordering 与 Deadline Enforcement 的集成验证",
+    "contextForNext": [
+      "Execution Pipeline 已包含 TimeoutCtrl 和 CancellationCtrl",
+      "Timeout terminal state = timed_out (distinct from cancelled/failed)",
+      "Deadline propagation is full-chain PASS",
+      "B45 在执行 Permission 验证时应复用已有 Pipeline Context 和 Deadline"
+    ]
+  },
+  "resolvedArtifacts": {
+    "timeoutAuthority": "TimeoutController.WithTimeout (execution/controllers.go:185)",
+    "deadlineSource": "ToolInvocationContext.ExpiresAt (invocation.go:36)",
+    "defaultTimeout": "30s (controllers.go:195)",
+    "timedOutStatus": "capability.ToolResultStatusTimedOut (result.go:13)",
+    "errorCode": "ErrorCodeTimeout"
+  },
+  "warning": "B45 实际职责必须从 frozen step reuse matrix 读取；本 manifest 按 B44 spec 要求生成，如 B45 实际为其他职责，需相应调整输入内容"
+}

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29-future-observation",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "observationReferences": {
+    "description": "Observation系统对Action执行链路的引用",
+
+    "references": [
+      {
+        "component": "Observation",
+        "referencesToolExecution": false,
+        "notes": "Observation观察Agent行为但不直接调用工具"
+      },
+      {
+        "component": "Observation",
+        "observesToolResult": true,
+        "notes": "Observation通过Agent返回获取执行结果"
+      }
+    ]
+  },
+
+  "summary": {
+    "directToolReferences": 0,
+    "indirectObservations": 1
+  }
+}

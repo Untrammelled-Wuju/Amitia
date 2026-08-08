@@ -1,0 +1,11 @@
+{
+  "bridges": [
+    {"domain": "Execution", "owns": "Tool execution state machine", "auditProjects": "InvocationRecord/Attempt", "traceSource": "observability.NewTraceID", "repository": "observability.StorageBackend", "duplicate": false, "wired": false},
+    {"domain": "Permission (B45)", "owns": "Permission decisions", "auditProjects": "InvocationRecord.ApprovalMode + Status=denied", "traceSource": "observability", "repository": "observability.StorageBackend", "duplicate": false},
+    {"domain": "Secret (B46)", "owns": "Secret reference metadata", "auditProjects": "InvocationRecord (no raw secret)", "traceSource": "observability", "repository": "observability.StorageBackend", "duplicate": false},
+    {"domain": "Task", "owns": "Task lifecycle", "auditProjects": "Task events + tool invocation refs", "traceSource": "observability", "repository": "observability.StorageBackend", "duplicate": false},
+    {"domain": "Workflow", "owns": "Workflow nodes", "auditProjects": "Node events + tool invocation refs", "traceSource": "observability", "repository": "observability.StorageBackend", "duplicate": false},
+    {"domain": "MCP", "owns": "MCP connect/init/disconnect", "auditProjects": "MCP domain events + kernel invocation for MCP tool calls", "traceSource": "observability", "repository": "observability.StorageBackend", "duplicate": false},
+    {"domain": "HostAPI", "owns": "Host API calls", "auditProjects": "HostAPIAuditLog", "traceSource": "observability InvocationID", "repository": "host API audit repo (needs canonical correlation)", "duplicate": false}
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "securityValidation": {
+    "description": "Observation安全验证结果",
+    "checks": {
+      "promptInjection": {
+        "description": "检查Observation内容是否可注入System Prompt",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      },
+      "dataExfiltration": {
+        "description": "检查是否有敏感数据通过Observation泄露",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      },
+      "privilegeEscalation": {
+        "description": "检查Observation是否能升级权限",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      },
+      "schemaTampering": {
+        "description": "检查Observation schema是否可被篡改",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      },
+      "downstreamPoisoning": {
+        "description": "检查是否有毒数据污染下游消费者",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      },
+      "resultForgery": {
+        "description": "检查Observation结果是否可被伪造",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      },
+      "observationReplay": {
+        "description": "检查是否存在重放攻击风险",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      },
+      "informationDisclosure": {
+        "description": "检查是否泄露内部系统信息",
+        "vulnerable": false,
+        "riskCount": 0,
+        "status": "SAFE"
+      }
+    },
+    "summary": {
+      "totalChecks": 8,
+      "passedChecks": 8,
+      "failedChecks": 0,
+      "vulnerabilitiesFound": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

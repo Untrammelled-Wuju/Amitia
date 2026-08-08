@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B44",
+  "policy": {
+    "description": "Tool Timeout 策略合同 — 定义 Deadline 来源、计算和生效规则",
+    "canonicalDefaultDeadline": {
+      "value": "30s",
+      "source": "execution/controllers.go:195",
+      "purpose": "当 Tool Policy 和 Invocation ExpiresAt 均未完成时使用的系统默认安全阀",
+      "note": "此默认值位于 TimeoutController.WithTimeout 内，不是全局 Magic 常量"
+    },
+    "toolSpecificDeadline": {
+      "source": "ToolDefinition.TimeoutMS",
+      "location": "capability/definition.go:93",
+      "priority": "第一优先级 (在 TimeoutController.WithTimeout 中先检查)",
+      "note": "Tool 作者可在 Definition 中声明该工具的最大允许执行时间"
+    },
+    "callerDeadline": {
+      "source": "ToolInvocationContext.ExpiresAt",
+      "location": "capability/invocation.go:36",
+      "priority": "第二优先级",
+      "note": "调用方在构造 Invocation 时设定，反映 Task/Workflow 父级的剩余时间"
+    },
+    "taskWorkflowParentDeadline": {
+      "source": "TaskRuntime/Workflow 创建父 Context 时通过 context.WithTimeout 设定",
+      "location": "task_runtime/executor.go:123, workflow/executor.go:188",
+      "priority": "最高优先级 (通过 Go context 继承自动生效)",
+      "note": "父 Context 的 deadline 自动成为 Tool 的 effective deadline 上界"
+    },
+    "effectiveDeadlineCalculation": {
+      "rule": "effective = min(parentDeadline, toolTimeoutMS, invocationExpiresAt, default30s)",
+      "mechanism": "Go context.WithTimeout(ctx, duration) 自动取 parent 和新 deadline 中更早的一个",
+      "downstreamConstraint": "下游 (RuntimeAdapter/Provider) 只能使用更短的 technical timeout，不能延长",
+      "invariant": "任何层不得生成比 effective deadline 更晚的新 deadline"
+    },
+    "noGlobalDeadlineState": {
+      "invariant": "不存在全局 currentDeadline 变量",
+      "binding": "Deadline 通过 context.Context 与 Invocation 绑定，context 跟随调用链传递"
+    }
+  }
+}

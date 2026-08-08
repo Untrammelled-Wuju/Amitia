@@ -1,0 +1,10 @@
+{
+  "loopLimitAuthority": {
+    "existingLimits": "decision.scoring.RepeatPenalty + FatiguePenalty",
+    "mechanism": "Soft limit via score penalty reduction (repeat candidate fatigue)",
+    "hardLimitExists": false,
+    "note": "当前通过软惩罚机制防循环，而非硬maxIteration。每轮Decision重新计算score，重复候选因penality降低rank。fallbackCandidate(wait_observe)保证始终有安全输出。"
+  },
+  "secondMaxSteps": "none",
+  "canonicalSource": "scoring behavior_cost.go (RepeatPenalty + FatiguePenalty)"
+}

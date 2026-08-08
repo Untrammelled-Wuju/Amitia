@@ -1,0 +1,6 @@
+{
+  "recorder": "SideEffectRecorder (execution/side_effect.go)",
+  "projection": "InvocationRecord.SideEffectCount",
+  "fields": ["SideEffectCount", "ResourceRefs (URI only)"],
+  "forbidden": ["Arbitrary side-effect payload"]
+}

@@ -1,0 +1,10 @@
+{
+  "backwardCompatibility": {
+    "goalApiUnchanged": true,
+    "goalRegistryApiUnchanged": true,
+    "goalStatusEnumUnchanged": true,
+    "existingCallersUnaffected": true,
+    "noBreakingChanges": true
+  },
+  "detail": "PASS_NO_CODE_CHANGE - 未修改任何现有代码。GoalRegistry API签名与行为保持不变。所有现有调用方不受影响。"
+}

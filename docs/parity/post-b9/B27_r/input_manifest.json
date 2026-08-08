@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "b23GuardReference": "backend/internal/pipelinecheckpoint/, REUSE+EXTEND, forbidden: AgentCheckpointStore2/Checkpoint2 (conflict with user-provided B27 spec: decision/ arbitration/)",
+  "input": {
+    "b24CanonicalGoal": {
+      "owner": "decision.GoalRegistry",
+      "types": ["connection", "support", "growth", "autonomy", "clarification", "conflict_repair", "information"]
+    },
+    "b25CandidateSet": {
+      "owner": "decision.CandidateGenerator",
+      "output": "[]BehaviorCandidate"
+    },
+    "b26CandidateEvaluations": {
+      "owner": "decision.Scoring",
+      "output": "Scored + Eligibility + Safety filtered candidates"
+    }
+  }
+}

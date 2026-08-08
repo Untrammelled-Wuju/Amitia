@@ -1,0 +1,13 @@
+{
+  "taskId": "B44",
+  "finalStepReuseMatrixFound": true,
+  "frozenTitle": "Tool Timeout / Deadline Enforcement",
+  "frozenConstructionMode": ["REUSE", "EXTEND"],
+  "frozenCanonicalTargets": [
+    "backend/internal/extension/kernel/capability/",
+    "backend/internal/extension/kernel/execution/"
+  ],
+  "matchesTimeoutHardening": true,
+  "conflict": false,
+  "resolution": "B44 冻结定义为 Tool Timeout / Deadline Enforcement，与 Amitia 现有 TimeoutController + ToolInvocationContext.ExpiresAt + B43 Cancellation 链路完全匹配。无需创建第二套 Timeout 系统。"
+}

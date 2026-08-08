@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B45-CircuitPermission",
+  "intendedFor": "Circuit Breaker step (future)",
+  "description": "Permission 决策不应作为 Circuit Breaker 的失败计数来源",
+  "classification": {
+    "permissionDenied": {"isProviderFailure": false, "shouldTriggerCircuit": false},
+    "scopeDenied": {"isProviderFailure": false, "shouldTriggerCircuit": false},
+    "approvalDenied": {"isProviderFailure": false, "shouldTriggerCircuit": false},
+    "providerTimeout": {"isProviderFailure": true, "shouldTriggerCircuit": true},
+    "runtimeUnavailable": {"isProviderFailure": true, "shouldTriggerCircuit": true}
+  },
+  "note": "Permission 决策是 Authority 行为，不是 Provider 故障信号"
+}

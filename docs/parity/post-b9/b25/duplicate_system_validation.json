@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B25",
+  "generatedAt": "2026-08-08T18:05:00+08:00",
+  "newAgentRuntime": 0,
+  "newCandidateRuntime": 0,
+  "newCandidateEngine": 0,
+  "newCandidateManager": 0,
+  "newCandidateRegistry": 0,
+  "newCandidateStore": 0,
+  "newDecisionEngine": 0,
+  "newDecisionRuntime": 0,
+  "newPlanner": 0,
+  "newScoringEngine": 0,
+  "newConstraintEngine": 0,
+  "newPreferenceEngine": 0,
+  "newArbitrationEngine": 0,
+  "newTaskRuntime": 0,
+  "newWorkflowEngine": 0,
+  "newCheckpointStore": 0
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "arbitrationOwns": {
+    "selectCandidate": "Select one from candidate set",
+    "decisionOutcome": "One of selected / fallback / blocked",
+    "reason": "Why candidate was selected"
+  },
+  "planningOwns": {
+    "constructBehaviorPlan": "Build plan from selected candidate",
+    "multiStepDecomposition": "Break into Tool/Task/Workflow steps",
+    "toolTaskWorkflowActionStructure": "How to execute"
+  },
+  "handshake": "B27 Selected Candidate → B28 BehaviorPlanBuilder.Build()"
+}

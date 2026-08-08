@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "streamingBoundary": {
+    "version": "1.0",
+    "description": "流式执行边界 - Action执行流与Tool执行流的关系",
+
+    "rules": [
+      {
+        "rule": "TOOL_RESULT_IN_STREAM",
+        "description": "工具执行结果作为Agent回复流的一部分返回",
+        "enforcement": "chat层将ToolResult转换为LLM回复流",
+        "violations": 0
+      },
+      {
+        "rule": "STREAM_DOES_NOT_BYPASS_PIPELINE",
+        "description": "流式回复中的工具调用同样走完整Pipeline",
+        "enforcement": "message_llm.go中所有ExecuteModelTool都经过toolRuntime接口",
+        "violations": 0
+      },
+      {
+        "rule": "SSE_EVENT_ENVELOPE_FOR_RESULTS",
+        "description": "执行结果通过SSE事件推送时走Envelope封装",
+        "enforcement": "sse_event_envelope.go提供统一推送格式",
+        "violations": 0
+      }
+    ]
+  },
+
+  "summary": {
+    "streamingBoundaries": 3,
+    "enforced": 3,
+    "violations": 0
+  }
+}

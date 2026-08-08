@@ -1,0 +1,13 @@
+{
+  "goalTypeAuthority": "decision.GoalType (backend/internal/decision/goal_registry.go)",
+  "goalRegistryAuthority": "decision.GoalRegistry (backend/internal/decision/goal_registry.go)",
+  "goalStateAuthority": "decision.GoalStatus (backend/internal/decision/goal_registry.go)",
+  "goalProgressAuthority": "decision.GoalRegistry.UpdateStatus (backend/internal/decision/goal_registry.go)",
+  "goalCompletionAuthority": "decision.GoalRegistry.UpdateStatus with GoalStatusAchieved",
+  "observationAuthority": "mindruntime.observability (B30冻结)",
+  "taskProgressAuthority": "none (B30 Task state only as Observation input, not Goal Authority)",
+  "workflowProgressAuthority": "none (B30 Workflow state only as Observation input, not Goal Authority)",
+  "goalStateAuthorityCount": 1,
+  "authorityConflict": false,
+  "detail": "GoalRegistry是唯一的Goal注册中心、状态authority和Progress authority。所有Goal状态变更必须通过GoalRegistry.UpdateStatus完成，该方法自带RWMutex保护防止并发写冲突。"
+}

@@ -1,0 +1,11 @@
+{
+  "taskId": "B29",
+  "b23GuardFound": true,
+  "guardTitle": "backend/internal/queue/ (Agent Queue / Scheduling)",
+  "guardConstructionMode": ["REUSE", "EXTEND"],
+  "guardCanonicalTargets": ["backend/internal/queue/"],
+  "matchesActionExecutionExecutionBoundary": true,
+  "conflict": true,
+  "conflictDetails": "B23 Step Guard将B29定义为queue/(Agent Queue/Scheduling)相关，但用户B29规范描述为Action Materialization / Tool Execution Dispatch。按优先级执行用户提供的B29规范。",
+  "resolution": "执行用户B29规范：对ToolFacade及ExecutionPipeline进行只读审计，确认现有Action Execution体系已完全满足要求。"
+}

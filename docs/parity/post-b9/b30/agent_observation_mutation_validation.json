@@ -1,0 +1,63 @@
+{
+  "mutationValidation": {
+    "description": "Observation处理过程中各实体验证无非法变更",
+    "validations": {
+      "goalMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "candidateMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "planMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "actionMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "memoryMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "characterMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "toolMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "providerMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "permissionMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      },
+      "runtimeMutations": {
+        "count": 0,
+        "unauthorizedMutations": 0,
+        "status": "PASS"
+      }
+    },
+    "totals": {
+      "totalMutations": 0,
+      "totalUnauthorizedMutations": 0,
+      "validationResult": "PASS"
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

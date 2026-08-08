@@ -1,0 +1,37 @@
+{
+  "b33_reflection_failure_contract": {
+    "scope": "MindRuntime Reflection Failure Handling",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "failureModes": {
+      "circuitBreakerOpen": {
+        "action": "skipAndLog",
+        "retryAfterMs": 300000
+      },
+      "budgetExhausted": {
+        "action": "pauseAndDefer",
+        "resumeOnNextTrigger": true
+      },
+      "supervisorTimeout": {
+        "action": "revokeAndLog",
+        "fallbackOutput": "rejection"
+      },
+      "llmCallFailed": {
+        "action": "retryOnceThenSkip",
+        "maxRetries": 1
+      },
+      "evidenceGap": {
+        "action": "extendEvidenceWindow",
+        "maxExtensionHours": 24
+      }
+    },
+    "metrics": {
+      "failureCount": 0,
+      "circuitBreakerTrips": 0,
+      "budgetExhaustionEvents": 0,
+      "unhandledFailures": 0
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

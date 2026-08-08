@@ -1,0 +1,37 @@
+{
+  "characterBoundary": {
+    "description": "定义Observation与Character/Mood/Relationship之间的职责边界",
+    "ownership": {
+      "observation": {
+        "owns": "execution result data",
+        "responsibilities": [
+          "客观执行结果记录",
+          "中性事实输出"
+        ]
+      },
+      "character": {
+        "owns": "personality and mood",
+        "responsibilities": [
+          "角色性格维护",
+          "情绪状态管理",
+          "关系亲密度跟踪"
+        ]
+      }
+    },
+    "dataFlow": {
+      "observationToCharacter": "可选：mood/relationship character → 影响评估",
+      "characterToObservation": "无反向修改"
+    },
+    "policy": {
+      "b30MutatesCharacter": false,
+      "characterMutationTrigger": "deferred to B34+",
+      "boundaryRespected": true
+    },
+    "boundaryViolations": {
+      "observationMutatedMood": 0,
+      "observationMutatedRelationship": 0,
+      "characterBiasInObservation": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

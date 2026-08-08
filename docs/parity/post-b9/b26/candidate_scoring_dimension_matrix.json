@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B26",
+  "generatedAt": "2026-08-08T18:20:00+08:00",
+  "dimensions": [
+    {
+      "dimension": "BaseScore",
+      "source": "CandidateActionDef registry",
+      "owner": "decision.CandidateGenerator",
+      "normalized": true,
+      "hardConstraint": false,
+      "usedBy": "scoreBehaviorCandidate"
+    },
+    {
+      "dimension": "NeedScore (Goal Alignment)",
+      "source": "Goal alignment via enrichFromGoals",
+      "owner": "decision.CandidateGenerator",
+      "normalized": true,
+      "hardConstraint": false,
+      "usedBy": "scoreBehaviorCandidate"
+    },
+    {
+      "dimension": "RelationshipScore",
+      "source": "Relationship trust dimension",
+      "owner": "decision.CandidateGenerator",
+      "normalized": true,
+      "hardConstraint": false,
+      "usedBy": "scoreBehaviorCandidate"
+    },
+    {
+      "dimension": "PersonalityScore",
+      "source": "PersonalityWeights map[BehaviorTag]float64",
+      "owner": "decision.CandidateGenerator",
+      "normalized": true,
+      "hardConstraint": false,
+      "usedBy": "scoreBehaviorCandidate"
+    },
+    {
+      "dimension": "RiskScore",
+      "source": "Life.Busy, Psyche.Stress, Beliefs",
+      "owner": "decision.CandidateGenerator",
+      "normalized": true,
+      "hardConstraint": false,
+      "usedBy": "scoreBehaviorCandidate (as penalty)"
+    },
+    {
+      "dimension": "AffectScore",
+      "source": "AffectRegulator (PositiveEmotion, NegativeEmotion, Stress)",
+      "owner": "decision.AffectScoring",
+      "normalized": true,
+      "hardConstraint": false,
+      "usedBy": "scoreBehaviorCandidate"
+    },
+    {
+      "dimension": "HardConstraintFilter",
+      "source": "HardConstraintFilter.Evaluate",
+      "owner": "decision.HardConstraintFilter",
+      "normalized": false,
+      "hardConstraint": true,
+      "usedBy": "SelectBehaviorCandidate (filter before scoring)"
+    },
+    {
+      "dimension": "SafetyFilter",
+      "source": "Safety.Evaluate",
+      "owner": "decision.Safety",
+      "normalized": false,
+      "hardConstraint": true,
+      "usedBy": "SelectBehaviorCandidate"
+    }
+  ],
+  "summary": {
+    "totalDimensions": 8,
+    "unknownOwner": 0,
+    "hardConstraintDimensions": 2,
+    "softDimensions": 6
+  }
+}

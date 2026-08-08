@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B26",
+  "status": "PASS_NO_CODE_CHANGE",
+  "generatedAt": "2026-08-08T18:20:00+08:00",
+  "constructionMode": ["REUSE", "EXTEND"],
+  "canonical": {
+    "goal": "decision.GoalRegistry",
+    "candidate": "decision.BehaviorCandidate",
+    "candidateGenerator": "decision.CandidateGenerator",
+    "scorer": "decision.Scoring (decision/)",
+    "reflection": "mindruntime.ReflectionRun (mindruntime/)",
+    "supervisor": "mindruntime.Supervisor (mindruntime/)",
+    "reconciliation": "mindruntime.Reconciliation (mindruntime/)",
+    "constraintEvaluator": "decision.HardConstraintFilter (decision/)",
+    "preferenceEvaluator": "decision.SoftPreference (decision/)",
+    "arbitration": "decision.Arbitration (decision/)"
+  },
+  "scoring": {
+    "authorityCount": 1,
+    "unknownOwnerCount": 0,
+    "invalidScoreCount": 0,
+    "duplicateWeightCount": 0,
+    "sideEffectCount": 0
+  },
+  "isolation": {
+    "crossCharacterLeakCount": 0,
+    "crossConversationLeakCount": 0
+  },
+  "duplicates": {
+    "newScoringEngine": 0,
+    "newEvaluationRuntime": 0,
+    "newRankingRuntime": 0,
+    "newDecisionEngine": 0,
+    "newConstraintEngine": 0,
+    "newPreferenceEngine": 0,
+    "newRiskEngine": 0,
+    "newPlanner": 0,
+    "newArbitrationEngine": 0,
+    "newAgentRuntime": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B27"
+}

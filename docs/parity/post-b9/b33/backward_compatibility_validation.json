@@ -1,0 +1,10 @@
+{
+  "backwardCompatibility": {
+    "reflectionApiUnchanged": true,
+    "reflectionTriggerApiUnchanged": true,
+    "reflectionSupervisorApiUnchanged": true,
+    "existingCallersUnaffected": true,
+    "noBreakingChanges": true
+  },
+  "detail": "PASS_NO_CODE_CHANGE - 未修改任何现有代码。mindruntime Reflection API签名与行为保持不变。"
+}

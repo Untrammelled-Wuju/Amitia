@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "decisionOutcomes": [
+    {
+      "outcome": "SELECTED",
+      "description": "A candidate was successfully selected",
+      "trigger": "At least one eligible candidate exists with score >= threshold"
+    },
+    {
+      "outcome": "NO_CANDIDATE",
+      "description": "No candidates available",
+      "trigger": "CandidateSet is empty"
+    },
+    {
+      "outcome": "NO_ELIGIBLE_CANDIDATE",
+      "description": "All candidates blocked by hard constraints",
+      "trigger": "HardConstraintFilter blocks all candidates"
+    },
+    {
+      "outcome": "FALLBACK",
+      "description": "Fallback to wait_observe",
+      "trigger": "all candidates below MinScoreThreshold"
+    }
+  ],
+  "existingOutcomeMapping": {
+    "fallback": "wait_observe candidate (BehaviorTagDelay)",
+    "blocked": "Alternate return path via ArbitrationResult.Blocked",
+    "selected": "Return via ArbitrationResult.Selected"
+  },
+  "notSupported": {
+    "ASK_USER": "Not implemented - implicit via candidate ID 'ask_clarify'",
+    "WAIT": "Implemented via wait_observe fallback",
+    "NO_ACTION": "Implemented via wait_observe fallback",
+    "BLOCKED": "Implemented via ArbitrationResult.Blocked",
+    "SUPERSEDED": "Handled via GoalRegistry status changes"
+  },
+  "authority": "Outcome determination belongs to ArbitrationLayer"
+}

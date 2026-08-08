@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "shortLivedPlan": "No checkpoint needed",
+  "longRunningPlan": "Uses existing pipelinecheckpoint.Manager",
+  "workflowEscalation": "Uses workflow's own checkpoint",
+  "taskEscalation": "Uses task_runtime's own state",
+  "noPlanCheckpointStore": true
+}

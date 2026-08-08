@@ -1,0 +1,9 @@
+{
+  "sourceChanges": [],
+  "note": "无源码修改, 向后兼容. 当前行为与原有 ResourceLimits 声明 + ResultValidator enforce 一致.",
+  "maintains": [
+    "ToolExecutionPolicy.ResourceLimits 字段保留",
+    "ResultValidator MaxOutputBytes 行为保持",
+    "javascript_main 资源执行路径保持"
+  ]
+}

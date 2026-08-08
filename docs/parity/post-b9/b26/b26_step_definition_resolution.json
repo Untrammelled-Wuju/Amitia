@@ -1,0 +1,11 @@
+{
+  "taskId": "B26",
+  "b23GuardFound": true,
+  "guardTitle": "Candidate Scoring / Evaluation / Reflection",
+  "guardConstructionMode": ["REUSE", "EXTEND"],
+  "guardCanonicalTargets": ["backend/internal/mindruntime/"],
+  "matchesCandidateScoringEvaluation": true,
+  "conflict": true,
+  "conflictDetails": "B23 Step Guard定义B26 canonical targets为mindruntime/（Reflection相关），但B26文档描述的Candidate Scoring/Evaluation任务主要在decision/目录。根据B23 Step Guard优先级规则，B26核心任务（Reflection/Supervisor）仍可在mindruntime/中执行，Scoring审计仅作为只读分析生成报告。",
+  "resolution": "生成B26完整审计报告，对decision/中的Scoring系统进行只读审计，确认B26 Reflection任务在mindruntime/中的现有实现。"
+}

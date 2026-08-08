@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "unrelatedActionAddedCount": 0,
+  "higherRiskActionAddedWithoutReevaluationCount": 0,
+  "newCapabilityWithoutCandidateBasisCount": 0,
+  "newExternalSideEffectWithoutCandidateBasisCount": 0,
+  "notes": "BehaviorPlanBuilder is deterministic and only maps existing Candidate. No expansion possible."
+}

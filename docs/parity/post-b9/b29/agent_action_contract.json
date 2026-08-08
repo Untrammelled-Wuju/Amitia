@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "actionContract": {
+    "version": "1.0",
+    "canonicalToolExecutionChain": "Agent → chatToolRuntimeAdapter → ToolFacade → ToolRegistry → ExecutionPipeline → PermissionGate → Dispatcher (RuntimeAdapter) → Provider",
+    "entry": {
+      "type": "chat.ModelToolRuntime",
+      "interface": "backend/internal/chat/tool_runtime.go",
+      "symbols": [
+        "PrepareAgentSkillPrompt",
+        "BeforePrompt",
+        "ModelTools",
+        "ExecuteModelTool",
+        "AfterReply"
+      ]
+    },
+    "toolFacade": {
+      "type": "kernel.ToolFacade",
+      "interface": "backend/internal/extension/kernel/tool_facade.go",
+      "symbols": [
+        "ExecuteModelTool",
+        "ModelTools",
+        "PrepareAgentSkillPrompt",
+        "BeforePrompt",
+        "AfterReply",
+        "EndAgentSkillRound"
+      ]
+    },
+    "constraints": {
+      "noDirectToolExecutionFromAgent": true,
+      "noParallelToolDispatch": true,
+      "alwaysPassThroughPipeline": true,
+      "auditRequired": true,
+      "resultValidationRequired": true,
+      "sanitizationRequired": true
+    }
+  },
+
+  "summary": {
+    "constraintsEnforced": 6,
+    "constraintsViolated": 0
+  }
+}

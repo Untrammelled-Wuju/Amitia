@@ -1,0 +1,22 @@
+{
+  "description": "供未来B140 Cutover使用的Replanning Authority/Path记录",
+  "canonicalDecisionContinuationEntry": {
+    "owner": "interaction.UnifiedEntry + decision pipeline",
+    "note": "Replanning唯一Authority"
+  },
+  "canonicalCandidateReEntry": {
+    "owner": "decision.CandidateGenerator.GenerateCandidates / GenerateCandidatesWithExcludes",
+    "note": "重入唯一方式"
+  },
+  "legacyRetryLoops": [],
+  "legacyFallbackLoops": [],
+  "directToolRetryPaths": [],
+  "productionReachability": {
+    "backendInternalDecision": "read-only audit",
+    "backendInternalAgent": "read-only audit",
+    "backendInternalMindruntime": "read-only",
+    "backendInternalQueue": "read-only",
+    "backendInternalExtensionKernel": "read-only"
+  },
+  "note": "B32不执行B140 Cutover。当前无legacy replanning path需cutover。"
+}

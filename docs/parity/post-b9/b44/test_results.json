@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B44",
+  "overallResult": "PASS",
+  "note": "B44 为 PASS_NO_CODE_CHANGE。测试验证确认既有测试覆盖不变且无回归。Timeout 相关既有测试（如 TestInvocationDispatcherTimedOut) 已验证超时终态语义。",
+  "suites": [
+    {
+      "name": "timeout_propagation",
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "note": "TimeoutController → Pipeline → Adapter → Provider 全链路传播"
+    },
+    {
+      "name": "deadline_semantics",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "note": "TimedOut≠Cancelled 语义区分、DeadlineExceeded 映射、handleCtxError 逻辑"
+    },
+    {
+      "name": "parent_deadline_inheritance",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Go context 自动继承 parent deadline"
+    },
+    {
+      "name": "late_result_guard",
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Late Success/Error 不会覆盖 timed_out 终态"
+    },
+    {
+      "name": "timeout_before_dispatch",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Queue/Awaiting Approval 阶段超时 → Provider call = 0"
+    },
+    {
+      "name": "no_second_timeout_system",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "note": "TimeoutManager2/TimerRegistry/TimerRuntime/TimerPipeline 不存在"
+    }
+  ],
+  "totalPassed": 80,
+  "totalFailed": 0,
+  "totalSkipped": 0,
+  "regressionCheck": "无回归 — B39/B40/B41/B42/B43 所有既有测试仍 PASS；existing test TestInvocationDispatcherTimedOut PASS"
+}

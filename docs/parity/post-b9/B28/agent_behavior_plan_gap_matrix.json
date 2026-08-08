@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "gaps": [
+    {"capability": "Selected Candidate → BehaviorPlan", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Candidate Binding", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Single Tool Plan", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Ask User", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Wait", "status": "ALREADY_SUPPORTED"},
+    {"capability": "No Action", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Plan Validation", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Plan Identity", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Multi-step Plan", "status": "ALREADY_SUPPORTED"},
+    {"capability": "Workflow Escalation", "status": "NOT_REQUIRED (deferred)"},
+    {"capability": "TaskRuntime Escalation", "status": "NOT_REQUIRED (deferred)"},
+    {"capability": "Parallel Action", "status": "OUTSIDE_B28_SCOPE"},
+    {"capability": "Conditional Branch", "status": "OUTSIDE_B28_SCOPE"},
+    {"capability": "Complex DAG", "status": "OUTSIDE_B28_SCOPE"},
+    {"capability": "LLM Plan Proposal", "status": "NOT_REQUIRED (deterministic builder)"},
+    {"capability": "Plan Size Limit", "status": "NOT_REQUIRED (single action)"},
+    {"capability": "Retry Logic", "status": "OUTSIDE_B28_SCOPE"},
+    {"capability": "Timeout", "status": "OUTSIDE_B28_SCOPE"},
+    {"capability": "Cancellation", "status": "OUTSIDE_B28_SCOPE"},
+    {"capability": "Compensation", "status": "OUTSIDE_B28_SCOPE"}
+  ],
+  "summary": {
+    "ALREADY_SUPPORTED": 9,
+    "NOT_REQUIRED": 3,
+    "OUTSIDE_B28_SCOPE": 8,
+    "UNKNOWN": 0
+  }
+}

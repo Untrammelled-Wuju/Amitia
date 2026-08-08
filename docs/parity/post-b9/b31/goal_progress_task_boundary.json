@@ -1,0 +1,28 @@
+{
+  "boundary": {
+    "description": "Goal Progress与TaskRuntime的职责边界",
+    "taskRuntimeOwns": [
+      "Task state machine",
+      "Task retry logic",
+      "Task execution result"
+    ],
+    "goalProgressOwns": [
+      "Goal state machine",
+      "Goal completion evaluation",
+      "Observation interpretation for Goal"
+    ],
+    "inputFlow": {
+      "taskToGoal": "Task state passed as Observation input to Goal Evaluation",
+      "goalToTask": "none (Goal does not control Task)"
+    },
+    "forbidden": [
+      "TaskRuntime direct Goal store write",
+      "TaskRuntime UpdateStatus on Goal",
+      "Task success auto completes Goal"
+    ]
+  },
+  "counts": {
+    "taskRuntimeDirectGoalMutationCount": 0,
+    "goalEvaluatesTaskObserved": true
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "type": "SQLite via observability.StorageBackend",
+  "persistenceAuthorityCount": 1,
+  "wiredToProductionExecution": false,
+  "note": "Persistence mechanism exists and is correct but production ExecutionPipeline does not invoke it"
+}

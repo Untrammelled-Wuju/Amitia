@@ -1,0 +1,22 @@
+{
+  "b33_reflection_evidence_set_contract": {
+    "scope": "MindRuntime Reflection Evidence Set Validation",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "evidenceSetRules": {
+      "minEvidenceItems": 2,
+      "distinctSourcesRequired": true,
+      "evidenceTypes": ["event", "relation", "memory", "conversation"],
+      "confidenceCalculation": "weighted_average",
+      "thresholdForAdoption": 0.5
+    },
+    "validationChecks": {
+      "duplicateEvidence": 0,
+      "emptyEvidence": 0,
+      "orphanedEvidence": 0,
+      "conflictingEvidenceResolution": "supervisor_review"
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

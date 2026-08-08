@@ -1,0 +1,25 @@
+{
+  "boundary": {
+    "description": "B31 Goal Progress与Memory的职责边界",
+    "b31Owns": [
+      "Goal progress decision",
+      "Goal state update"
+    ],
+    "memoryOwns": [
+      "Memory storage",
+      "Memory retrieval"
+    ],
+    "inputFlow": {
+      "goalEvaluationToMemory": "Goal completion/progress facts as future Memory candidate",
+      "memoryToGoal": "Historical Goal context as Observation input"
+    },
+    "forbiddenByB31": [
+      "Memory write",
+      "Memory delete",
+      "Memory update"
+    ],
+    "counts": {
+      "goalEvaluationMemoryMutationCount": 0
+    }
+  }
+}

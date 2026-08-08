@@ -1,0 +1,84 @@
+{
+  "components": [
+    {
+      "path": "capability/definition.go:18",
+      "symbol": "ResourceLimits",
+      "classification": "CANONICAL_CAPABILITY_RESOURCE_DECLARATION"
+    },
+    {
+      "path": "capability/definition.go:47",
+      "symbol": "ToolResultPolicy.MaxOutputBytes",
+      "classification": "CANONICAL_TOOL_RESOURCE_DECLARATION"
+    },
+    {
+      "path": "execution/result_validator.go",
+      "symbol": "ResultValidator",
+      "classification": "CANONICAL_EXECUTION_RESOURCE_GATE"
+    },
+    {
+      "path": "javascript_main/host.go, javascript_main/supervisor_adapter.go",
+      "symbol": "ResourceLimits -> JS Supervisor",
+      "classification": "CANONICAL_RUNTIME_RESOURCE_PROJECTION"
+    },
+    {
+      "path": "execution/definition (controllers.go)",
+      "symbol": "RateLimiter struct",
+      "classification": "RATE_LIMIT_POLICY"
+    },
+    {
+      "path": "execution/controllers.go",
+      "symbol": "ConcurrencyController",
+      "classification": "CONCURRENCY_POLICY"
+    },
+    {
+      "path": "execution/controllers.go",
+      "symbol": "TimeoutController",
+      "classification": "TIMEOUT_POLICY"
+    },
+    {
+      "path": "capability/definition.go:25",
+      "symbol": "ToolExecutionPolicy.MaxConcurrency",
+      "classification": "CONCURRENCY_POLICY"
+    },
+    {
+      "path": "migration/types.go:68",
+      "symbol": "TaskResourceLimits",
+      "classification": "TASK_RESOURCE_POLICY"
+    },
+    {
+      "path": "extension_slots/registry.go:63",
+      "symbol": "PerformanceBudget",
+      "classification": "PROVIDER_NATIVE_LIMIT"
+    },
+    {
+      "path": "candidate_runner.go:426",
+      "symbol": "runtime_supervisor.ResourceLimits",
+      "classification": "PLATFORM_NATIVE_LIMIT"
+    },
+    {
+      "path": "host_api/types.go:63",
+      "symbol": "ResourceReference",
+      "classification": "METADATA_ONLY"
+    },
+    {
+      "path": "manifest_v2/manifest.go:139",
+      "symbol": "ResourceMeta",
+      "classification": "METADATA_ONLY"
+    },
+    {
+      "path": "agent_skill/definition.go:53",
+      "symbol": "SkillResourceDescriptor",
+      "classification": "METADATA_ONLY"
+    }
+  ],
+  "counts": {
+    "CANONICAL_CAPABILITY_RESOURCE_DECLARATION": 1,
+    "CANONICAL_TOOL_RESOURCE_DECLARATION": 1,
+    "CANONICAL_EXECUTION_RESOURCE_GATE": 1,
+    "CANONICAL_RUNTIME_RESOURCE_PROJECTION": 1,
+    "CANONICAL_USAGE_OBSERVATION": 0,
+    "DUPLICATE_RESOURCE_MANAGER": 0,
+    "DUPLICATE_RESOURCE_REGISTRY": 0,
+    "UNKNOWN": 0
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "taskId": "B25",
+  "b23GuardFound": true,
+  "guardTitle": "B25_Candidate Generation / Decision Input候选生成与决策输入合同补强",
+  "guardConstructionMode": ["REUSE", "EXTEND"],
+  "guardCanonicalTargets": ["backend/internal/decision/"],
+  "matchesCandidateGenerationDecisionInput": true,
+  "conflict": false,
+  "resolution": "B25文档定义的Candidate Generation/Decision Input统一目标与B23 step guard完全一致。Canonical Targets限定为decision/目录，现有decision.CandidateGenerator已满足Authority要求。"
+}

@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B44",
+  "classificationTimestamp": "2026-08-08",
+  "components": [
+    {
+      "path": "capability/invocation.go:36",
+      "symbol": "ExpiresAt",
+      "classification": "CANONICAL_TOOL_DEADLINE",
+      "note": "B41 建立的权威 Deadline Source"
+    },
+    {
+      "path": "capability/definition.go:93",
+      "symbol": "TimeoutMS",
+      "classification": "TOOL_POLICY_TIMEOUT",
+      "note": "Tool Definition 策略层超时"
+    },
+    {
+      "path": "execution/controllers.go:179-196",
+      "symbol": "TimeoutController",
+      "classification": "EXECUTION_TIMEOUT_ENFORCEMENT",
+      "note": "单一 Deadline 强制执行权威"
+    },
+    {
+      "path": "execution/pipeline.go:115-121",
+      "symbol": "TimeoutCtrl.WithTimeout",
+      "classification": "EXECUTION_TIMEOUT_ENFORCEMENT",
+      "note": "Pipeline 内调用"
+    },
+    {
+      "path": "capability/adapter_android_native.go:121",
+      "symbol": "DeadlineExceeded→TimedOut",
+      "classification": "RUNTIME_TECHNICAL_TIMEOUT",
+      "note": "Android 适配器超时语义映射"
+    },
+    {
+      "path": "capability/adapter_ios_native.go:121",
+      "symbol": "DeadlineExceeded→TimedOut",
+      "classification": "RUNTIME_TECHNICAL_TIMEOUT",
+      "note": "iOS 适配器超时语义映射"
+    },
+    {
+      "path": "capability/adapter_desktop.go:121",
+      "symbol": "DeadlineExceeded→TimedOut",
+      "classification": "RUNTIME_TECHNICAL_TIMEOUT",
+      "note": "Desktop 适配器超时语义映射"
+    },
+    {
+      "path": "capability/adapter_javascript.go:55-75",
+      "symbol": "ErrorCodeTimeout mapping",
+      "classification": "RUNTIME_TECHNICAL_TIMEOUT",
+      "note": "JS 合作式超时"
+    },
+    {
+      "path": "capability/adapter_mcp.go:79",
+      "symbol": "ErrorCodeTimeout",
+      "classification": "PROVIDER_TECHNICAL_TIMEOUT",
+      "note": "MCP Provider 超时映射"
+    },
+    {
+      "path": "capability/adapter_mcp_tool.go:100",
+      "symbol": "TimeoutMS: 30000",
+      "classification": "PROVIDER_TECHNICAL_TIMEOUT",
+      "note": "MCP Tool 默认技术参数"
+    },
+    {
+      "path": "capability/adapter_wasmrt.go:56",
+      "symbol": "DeadlineExceeded detection",
+      "classification": "RUNTIME_TECHNICAL_TIMEOUT",
+      "note": "WASM Runtime 超时检测"
+    },
+    {
+      "path": "task_runtime/executor.go:123",
+      "symbol": "taskCtx timeout",
+      "classification": "TASK_DOMAIN_TIMEOUT",
+      "note": "Task 级 Domain Timeout"
+    },
+    {
+      "path": "task_runtime/service.go:133",
+      "symbol": "DefaultTimeout config",
+      "classification": "TASK_DOMAIN_TIMEOUT",
+      "note": "Task 默认超时配置"
+    },
+    {
+      "path": "workflow/executor.go:188",
+      "symbol": "MaxExecutionDurationMS",
+      "classification": "WORKFLOW_DOMAIN_TIMEOUT",
+      "note": "Workflow 级 Domain Timeout"
+    },
+    {
+      "path": "workflow/executor.go:580",
+      "symbol": "MaxStepDurationMS",
+      "classification": "WORKFLOW_DOMAIN_TIMEOUT",
+      "note": "Workflow Step Timeout"
+    },
+    {
+      "path": "runtimehost/supervisor.go:235",
+      "symbol": "StartupTimeout",
+      "classification": "RUNTIME_LIFECYCLE_TIMEOUT",
+      "note": "Runtime 启动生命周期超时"
+    },
+    {
+      "path": "event_bus/bus.go:285",
+      "symbol": "sub.Timeout",
+      "classification": "EVENT_DOMAIN_TIMEOUT",
+      "note": "Event Subscriber 技术超时"
+    },
+    {
+      "path": "host_api/gateway.go:204",
+      "symbol": "route.Timeout",
+      "classification": "TRANSPORT_TIMEOUT",
+      "note": "HTTP 路由传输层超时"
+    }
+  ],
+  "counter": {
+    "CANONICAL_TOOL_DEADLINE": 1,
+    "TOOL_POLICY_TIMEOUT": 1,
+    "EXECUTION_TIMEOUT_ENFORCEMENT": 2,
+    "RUNTIME_TECHNICAL_TIMEOUT": 6,
+    "PROVIDER_TECHNICAL_TIMEOUT": 2,
+    "TASK_DOMAIN_TIMEOUT": 2,
+    "WORKFLOW_DOMAIN_TIMEOUT": 2,
+    "RUNTIME_LIFECYCLE_TIMEOUT": 1,
+    "EVENT_DOMAIN_TIMEOUT": 1,
+    "TRANSPORT_TIMEOUT": 1,
+    "DUPLICATE_TOOL_TIMEOUT_SYSTEM": 0,
+    "UNKNOWN": 0
+  }
+}

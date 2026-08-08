@@ -1,0 +1,82 @@
+{
+  "continuationEntrypoints": [
+    {
+      "name": "interaction.UnifiedEntry.Handle",
+      "description": "Canonical Agent Entry，每轮次调用前可检查Goal状态",
+      "reachability": "production"
+    },
+    {
+      "name": "decision.GenerateCandidates",
+      "description": "Candidate Generation可被重新调用以开始新一轮Decision Cycle",
+      "reachability": "production"
+    },
+    {
+      "name": "decision.GenerateCandidatesWithExcludes",
+      "description": "支持排除已失败/循环的Candidate，用于Re-entry",
+      "reachability": "production"
+    }
+  ],
+  "decisionLoopEntrypoints": [
+    {
+      "name": "interaction.UnifiedEntry main loop",
+      "description": "生产Agent主循环"
+    }
+  ],
+  "replanningFunctions": [],
+  "replanningDecisionPoints": [
+    {
+      "name": "GoalStatus Evaluation",
+      "description": "GoalRegistry.Status决定CONTINUE/STOP/WAIT/BLOCKED"
+    },
+    {
+      "name": "RepeatPenalty/FatiguePenalty",
+      "description": "Scoring层防循环，避免重复Candidate/Action"
+    },
+    {
+      "name": "Arbitration Fallback (wait_observe)",
+      "description": "无合法Candidate时fallback到wait_observe"
+    }
+  ],
+  "retryPaths": [
+    {
+      "name": "ExecutionPipeline.RetryController",
+      "description": "Kernel层Tool Retry（工具级），属于ExecutionKernel"
+    }
+  ],
+  "fallbackPaths": [
+    {
+      "name": "arbitration.buildFallbackCandidate",
+      "description": "Arbitration无合法结果时返回wait_observe fallback"
+    }
+  ],
+  "loopGuards": [
+    {
+      "name": "scoring.RepeatPenalty",
+      "description": "重复Candidate导致score下降"
+    },
+    {
+      "name": "scoring.FatiguePenalty",
+      "description": "同Action疲劳度惩罚"
+    },
+    {
+      "name": "candidate_generator.GenerateCandidatesWithExcludes",
+      "description": "可排除已失败的Candidate"
+    }
+  ],
+  "goalTerminalChecks": [
+    {
+      "name": "GoalStatus == achieved/abandoned",
+      "description": "终态Goal禁止重新进入Candidate Generation"
+    }
+  ],
+  "waitPaths": [
+    {
+      "name": "wait_observe fallback",
+      "description": "Arbitration: 无有效行为时等待观察"
+    }
+  ],
+  "askUserPaths": [],
+  "productionCallers": [
+    "interaction.UnifiedEntry → decision pipeline"
+  ]
+}

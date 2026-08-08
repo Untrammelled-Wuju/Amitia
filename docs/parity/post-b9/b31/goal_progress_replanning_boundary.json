@@ -1,0 +1,29 @@
+{
+  "boundary": {
+    "description": "B31 Goal Progress与后续Replanning(B32+)的职责边界",
+    "b31Owns": [
+      "progress interpretation",
+      "goal state update"
+    ],
+    "futureReplanningOwns": [
+      "whether to regenerate candidates",
+      "whether to build new plan",
+      "whether to retry",
+      "whether to ask user"
+    ],
+    "inputFlow": {
+      "goalEvaluationToReplanning": "Goal state + progress decision + observation ref",
+      "replanningToGoal": "none in B31"
+    },
+    "forbiddenByB31": [
+      "Candidate generation",
+      "Scoring",
+      "Arbitration",
+      "Plan construction",
+      "Tool execution",
+      "Provider call",
+      "Retry",
+      "Fallback"
+    ]
+  }
+}

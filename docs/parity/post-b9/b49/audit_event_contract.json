@@ -1,0 +1,44 @@
+{
+  "events": [
+    {
+      "name": "EXECUTION_STARTED",
+      "source": "pipeline.go recordAuditStart",
+      "canonicalProjection": "observability.WriteInvocation (invocation created)"
+    },
+    {
+      "name": "EXECUTION_FINISHED",
+      "source": "pipeline.go recordAuditFinish(status, duration)",
+      "canonicalProjection": "observability.WriteInvocation with terminal status"
+    },
+    {
+      "name": "PERMISSION_DENIED",
+      "source": "pipeline.go failWithAudit(permission_denied)",
+      "canonicalProjection": "InvocationRecord.Status = denied"
+    },
+    {
+      "name": "RETRY_ATTEMPT",
+      "source": "pipeline.go AuditRec.RecordRetry(attempt)",
+      "canonicalProjection": "observability.WriteExecutionAttempt"
+    },
+    {
+      "name": "CANCEL_REQUESTED",
+      "source": "CancellationController.Wrap",
+      "canonicalProjection": "InvocationRecord.Status = cancelled"
+    },
+    {
+      "name": "TIMEOUT",
+      "source": "TimeoutController.WithTimeout",
+      "canonicalProjection": "InvocationRecord.Status = timed_out"
+    },
+    {
+      "name": "CIRCUIT_OPEN",
+      "source": "CircuitBreakercoordinator.RecordResult",
+      "canonicalProjection": "observability.WriteRuntimeEvent"
+    },
+    {
+      "name": "SIDE_EFFECT_RECORDED",
+      "source": "SideEffectRecorder.Record",
+      "canonicalProjection": "InvocationRecord.SideEffectCount incremented"
+    }
+  ]
+}

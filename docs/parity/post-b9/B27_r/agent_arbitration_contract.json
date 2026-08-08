@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "contract": {
+    "input": {
+      "goal": "Current Goal from GoalRegistry (B24)",
+      "candidateSet": "B25 Canonical Candidates (BehaviorCandidate[])",
+      "evaluationSet": "B26 Candidate Evaluations",
+      "eligibility": "HardConstraintFilter results",
+      "constraints": "HardConstraint[]",
+      "preferences": "SoftPreferenceInput",
+      "safety": "SafetyGovernor results",
+      "policyVersion": "BehaviorFormulaVersionV1 (= behavior-scoring-v1)",
+      "decisionScope": {
+        "goalID": "Current Goal ID",
+        "characterID": "Character ID",
+        "conversationID": "Conversation ID",
+        "decisionCycleID": "Implicit via interaction generation"
+      }
+    },
+    "output": {
+      "decisionOutcome": "Selected BehaviorCandidate or Fallback (wait_observe)",
+      "selectedCandidateID": "Candidate.ID",
+      "alternatives": "[]BehaviorCandidate (sorted by score)",
+      "blocked": "[]BehaviorCandidate (hard constraint violations)",
+      "reasonCodes": "[]string (diagnostics, fallback, conflict scores)"
+    }
+  },
+  "exclusions": {
+    "noExecutedToolResult": true,
+    "noRuntimeProviderInstance": true,
+    "noPermissionGrant": true
+  }
+}

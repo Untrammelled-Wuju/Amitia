@@ -25,7 +25,7 @@ const router = createRouter({
   routes: [
     { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue")},
     { path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
-    { path: "/", redirect: "/chat" },
+    { path: "/", redirect: "/chat", meta: { requiresAuth: true } },
     { path: "/dashboard", redirect: "/dashboard/data" },
       { path: "/dashboard/run", name: "dashboardRun", component: () => import("@/views/dashboard/RunView.vue"), meta: { requiresAuth: true } },
       { path: "/dashboard/data", name: "dashboardData", component: () => import("@/views/dashboard/DataView.vue"), meta: { requiresAuth: true } },
@@ -141,6 +141,7 @@ router.beforeEach(async (to, _from, next) => {
   const token = getToken()
   const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
   const isPublic = PUBLIC_PATHS.includes(to.path)
+  console.log(`[GUARD-RUN] path=${to.path} isPublic=${isPublic} token=${token ? "Y" : "N"}`)
 
   if (isPublic) {
     if (token && to.path === "/login") {
@@ -158,19 +159,27 @@ router.beforeEach(async (to, _from, next) => {
     return next()
   }
 
+  if (to.meta?.requiresAuth) {
+    console.log(`[GUARD] checking onboarding for ${to.path}`)
+    try {
+      const res = await apiClient.get("/api/public/onboarding/status")
+      const onboardingData = res.data?.data || res.data
+      console.log(`[GUARD] onboarding completed=${onboardingData?.completed}`)
+      if (!onboardingData?.completed) {
+        console.log(`[GUARD] redirecting ${to.path} -> /onboarding`)
+        return next("/onboarding")
+      }
+      console.log(`[GUARD] allowing ${to.path}, onboarding done`)
+    } catch (e) {
+      console.log("[GUARD] onboarding check error:", e)
+    }
+  }
+
   if (!to.meta?.requiresAuth) {
     return next()
   }
 
   if (!token) {
-    try {
-      const res = await apiClient.get("/api/public/onboarding/status")
-      const onboardingData = res.data?.data || res.data
-      if (!onboardingData?.completed) {
-        return next("/onboarding")
-      }
-    } catch {}
-
     return next("/login")
   }
 

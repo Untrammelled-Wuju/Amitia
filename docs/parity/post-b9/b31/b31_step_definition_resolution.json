@@ -1,0 +1,11 @@
+{
+  "taskId": "B31",
+  "b23GuardFound": true,
+  "guardTitle": "B31 Goal Progress / Completion Evaluation",
+  "guardConstructionMode": "REUSE + EXTEND",
+  "guardCanonicalTargets": ["backend/internal/decision/"],
+  "guardForbiddenDuplicates": ["Arbitration2", "Scoring2"],
+  "matchesGoalProgressCompletionEvaluation": true,
+  "conflict": false,
+  "resolutionDetail": "B23 Guard将B31分配给backend/internal/decision/，与用户规范完全一致。现有GoalRegistry已包含GoalStatus(pending/active/suspended/achieved/abandoned/wish)和Goal.Progress字段，满足Goal Progress Completion Evaluation职责。无需创建GoalProgressEngine2等新系统。"
+}

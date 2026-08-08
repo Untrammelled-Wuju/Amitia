@@ -1,0 +1,33 @@
+{
+  "b31InputManifest": {
+    "description": "B31步骤输入清单",
+    "targetStep": "B31",
+    "forbiddenDirectories": [
+      "backend/internal/decision/controllers/arbitration2",
+      "backend/internal/decision/controllers/scoring2",
+      "Arbitration2",
+      "Scoring2"
+    ],
+    "forbiddenCapabilities": [
+      "arbitration2",
+      "scoring2"
+    ],
+    "expectedInputs": {
+      "decisionEngine": {
+        "path": "backend/internal/decision/",
+        "note": "排除Arbitration2和Scoring2"
+      }
+    },
+    "b30Deliverables": {
+      "observationAuthority": "mindruntime.observability/reflection/reconciliation",
+      "observationContract": "已通过B30验证",
+      "normalizedOutcome": "已完成语义归一",
+      "errorProjection": "已完成错误映射",
+      "boundaryDefinitions": "已定义所有边界"
+    },
+    "timestamps": {
+      "generatedAt": "2025-01-01T00:00:00Z"
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

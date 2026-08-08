@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "status": "PASS_NO_CODE_CHANGE",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "constructionMode": ["REUSE", "EXTEND"],
+  "canonical": {
+    "goal": "decision.GoalRegistry",
+    "candidate": "decision.BehaviorCandidate",
+    "candidateGenerator": "decision.CandidateGenerator",
+    "scorer": "decision.Scoring",
+    "arbitrator": "decision.ArbitrationLayer",
+    "candidateSelectionAuthority": "decision.ArbitrationLayer.Arbitrate",
+    "safetyAuthority": "decision.SafetyGovernor",
+    "planner": "decision.BehaviorPlanBuilder"
+  },
+  "selection": {
+    "authorityCount": 1,
+    "doubleSelectionCount": 0,
+    "ineligibleSelectedCount": 0,
+    "unsafeSelectedCount": 0,
+    "staleCandidateSelectedCount": 0,
+    "supersededGoalSelectionCount": 0
+  },
+  "isolation": {
+    "crossGoalSelectionCount": 0,
+    "crossCharacterSelectionCount": 0,
+    "crossConversationSelectionCount": 0
+  },
+  "sideEffects": {
+    "toolExecutions": 0,
+    "providerCalls": 0,
+    "runtimeMutations": 0,
+    "permissionMutations": 0,
+    "externalSideEffects": 0
+  },
+  "duplicates": {
+    "newArbitrationEngine": 0,
+    "newCandidateSelectionEngine": 0,
+    "newCandidateSelector": 0,
+    "newDecisionEngine": 0,
+    "newDecisionRuntime": 0,
+    "newSafetyGovernor": 0,
+    "newPlanner": 0,
+    "newAgentRuntime": 0
+  },
+  "modifications": {
+    "goModChanged": false,
+    "goSumChanged": false,
+    "databaseChanged": false
+  },
+  "next": "B28"
+}

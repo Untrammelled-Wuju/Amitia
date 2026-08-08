@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "plan": "decision.BehaviorPlan (declarative)",
+  "action": "B29 output (structured action intent)",
+  "executionChain": "Plan → Action → ToolFacade → ToolRegistry → ExecutionPipeline → PermissionBroker → RuntimeAdapter",
+  "planDoesNotCallRuntimeAdapter": true,
+  "planDoesNotStartProvider": true
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B47",
+  "status": "BLOCKED_B47_STEP_DEFINITION_CONFLICT",
+  "blockedBy": [
+    "BLOCKED_B47_STEP_DEFINITION_CONFLICT"
+  ],
+  "constructionMode": [],
+  "canonical": {
+    "operation": "NOT_EXECUTED",
+    "invocation": "NOT_EXECUTED",
+    "attempt": "NOT_EXECUTED",
+    "trace": "NOT_EXECUTED",
+    "auditRecorder": "NOT_EXECUTED",
+    "recordWriter": "NOT_EXECUTED",
+    "persistentRepository": "NOT_EXECUTED"
+  },
+  "audit": {
+    "persistenceAuthorityCount": 0,
+    "operationAuthorityCount": 0,
+    "invocationAuthorityCount": 0,
+    "traceAuthorityCount": 0,
+    "productionMemoryAuditTruthCount": 0,
+    "canonicalAuditDualWriteCount": 0,
+    "invocationWithoutAuditCorrelationCount": 0,
+    "duplicateTerminalAuditCount": 0
+  },
+  "security": {
+    "rawSecretLeakCount": 0,
+    "credentialLeakCount": 0,
+    "fullPromptLeakCount": 0,
+    "hiddenReasoningLeakCount": 0,
+    "physicalPathLeakCount": 0
+  },
+  "writer": {
+    "bounded": false,
+    "flushVerified": false,
+    "drainVerified": false,
+    "failureRecursionCount": 0
+  },
+  "duplicates": {
+    "newAuditSystem": 0,
+    "newAuditManager": 0,
+    "newAuditStore": 0,
+    "newAuditRepository": 0,
+    "newAuditWriter": 0,
+    "newTraceSystem": 0,
+    "newOperationRepository": 0,
+    "newInvocationRepository": 0
+  },
+  "conflict": {
+    "specClaimedB47": "Operation / Invocation / Audit / Trace 统一审计收口",
+    "frozenMatrixB47": "Circuit Breaker Parity Gap硬化",
+    "frozenMatrixB47Path": "backend/internal/extension/kernel/execution/pipeline.go",
+    "frozenMatrixB47Mode": "EXTEND",
+    "frozenMatrixAuditStep": "B49",
+    "frozenMatrixAuditName": "Audit Parity Gap硬化",
+    "frozenMatrixAuditPreconditions": "B40 PASS",
+    "frozenMatrixAuditCapabilityIds": "builtin/audit/*",
+    "matchesAuditOperationInvocationTrace": false
+  },
+  "next": "B48_NOT_REACHED",
+  "note": "Step Definition Gate阻断: frozen B47 = Circuit Breaker, 非 Audit. 用户spec要求执行Audit/Trace, 但B47在冻结矩阵中不匹配. Audit实际位于frozen B49."
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B46",
+  "finalStepReuseMatrixFound": true,
+  "frozenTitle": "B46 Secret / Credential Boundary",
+  "frozenConstructionMode": "REUSE + EXTEND",
+  "frozenCanonicalTargets": [
+    "SecretBroker (if exists)",
+    "SecretReference",
+    "SecretLease",
+    "SecretRecord",
+    "Secret metadata",
+    "Secret backing store / secure store adapter",
+    "Secret permission integration",
+    "Secret lifecycle integration",
+    "Host API secret access",
+    "MCP secret integration",
+    "Runtime secret injection",
+    "Provider credential integration"
+  ],
+  "matchesSecretCredentialBoundary": true,
+  "conflict": false,
+  "resolution": {
+    "status": "BLOCKED",
+    "blockers": [
+      "BLOCKED_CANONICAL_SECRET_AUTHORITY_MISSING",
+      "BLOCKED_LEGACY_SECRET_MIGRATION_SCHEMA_CHANGE_NOT_ALLOWED"
+    ],
+    "evidence": "当前仓库不存在统一 Kernel SecretBroker 收口所有运行时凭据；MCP Auth 域内实现完整；Provider(chat/asr/tts/embedding/vision/imagegen/desktoppet) Config 字段存储 APIKey 明文；Host API MethodSecretGet 已声明但未接线"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "description": "Goal state transition信息供未来Checkpoint消费",
+  "goalId": "string",
+  "goalRevision": {
+    "revisionField": "UpdatedAt (time.Time)",
+    "note": "GoalRegistry无显式version字段。UpdatedAt作为隐式revision，late observation可通过时间比较判断stale"
+  },
+  "previousState": {
+    "status": "GoalStatus",
+    "progress": "float64"
+  },
+  "newState": {
+    "status": "GoalStatus",
+    "progress": "float64"
+  },
+  "observationRef": {
+    "observationId": "string",
+    "sourceType": "string",
+    "sourceId": "string"
+  },
+  "reason": {
+    "reasonCode": "string",
+    "detail": "string"
+  },
+  "transitionTimestamp": "time.Time",
+  "note": "B31不创建CheckpointStore2。此结构仅说明哪些信息未来可供Checkpoint记录。"
+}

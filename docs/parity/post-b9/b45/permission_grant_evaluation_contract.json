@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B45",
+  "contract": {
+    "name": "Permission Grant Evaluation Contract",
+    "description": "定义 Grant 评估的决策逻辑",
+    "evaluationSteps": [
+      {"step": "subject_match", "description": "Grant.Subject == Evaluation.Subject", "permission/broker.go:139-144 (filter by Subject)"},
+      {"step": "permission_match", "description": "Grant.PermissionID == Required.PermissionID", "permission/broker.go:139"},
+      {"step": "scope_match", "description": "Grant.Scope.Contains(EffectiveScope)", "permission/broker.go:338"},
+      {"step": "condition_match", "description": "Grant.IsValid() checks expiry + revocation", "permission/broker.go:335"},
+      {"step": "expiry", "description": "Grant.ExpiresAt > now (or = nil)", "permission/broker.go:335 via IsValid()"},
+      {"step": "revocation", "description": "Grant.RevokedAt = nil", "permission/broker.go:335 via IsValid()"},
+      {"step": "decision", "description": "matched → grant_matched; no matched → missing_grant", "permission/broker.go:151-163"}
+    ],
+    "grantModel": {
+      "GrantID": "Unique identifier",
+      "Subject": "Who (user/character/extension/module)",
+      "PermissionID": "What permission",
+      "Scope": "Where (global/character/conversation/extension/module/resource)",
+      "Decision": "allow/allow_once/allow_session/allow_persistent/deny/require_approval",
+      "InputBinding": "InputHash for approved invocation inputs",
+      "TargetBinding": "Specific resource target binding",
+      "IssuedAt": "When issued",
+      "ExpiresAt": "When expires (nullable)",
+      "IssuedBy": "Issuer identity",
+      "Reason": "Why granted",
+      "RevokedAt": "When revoked (nullable)"
+    }
+  }
+}

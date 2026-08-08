@@ -1,0 +1,65 @@
+{
+  "projectionMatrix": {
+    "description": "定义各域结果类型到Observation的投影映射",
+    "matrix": {
+      "Tool": {
+        "toolResult": {
+          "mapsTo": "observation.facts.toolExecution",
+          "semanticCategory": "ACTION_OUTCOME",
+          "transformation": "direct"
+        },
+        "toolError": {
+          "mapsTo": "observation.errors",
+          "semanticCategory": "ACTION_FAILURE",
+          "transformation": "error_projection"
+        }
+      },
+      "Task": {
+        "taskResult": {
+          "mapsTo": "observation.facts.taskProgress",
+          "semanticCategory": "PROGRESS_UPDATE",
+          "transformation": "status_mapping"
+        },
+        "taskFailure": {
+          "mapsTo": "observation.errors",
+          "semanticCategory": "EXECUTION_FAILURE",
+          "transformation": "error_projection"
+        }
+      },
+      "Workflow": {
+        "workflowResult": {
+          "mapsTo": "observation.facts.workflowOutcome",
+          "semanticCategory": "FLOW_RESULT",
+          "transformation": "status_mapping"
+        }
+      },
+      "AskUser": {
+        "userResponse": {
+          "mapsTo": "observation.facts.userInput",
+          "semanticCategory": "HUMAN_INPUT",
+          "transformation": "direct"
+        }
+      },
+      "Wait": {
+        "waitExpiry": {
+          "mapsTo": "observation.facts.waitStatus",
+          "semanticCategory": "TIMING_EVENT",
+          "transformation": "direct"
+        }
+      },
+      "NoAction": {
+        "noopResult": {
+          "mapsTo": "observation.facts.noop",
+          "semanticCategory": "NO_CHANGE",
+          "transformation": "direct"
+        }
+      }
+    },
+    "errors": {
+      "unmappedResultTypes": 0,
+      "transformationFailures": 0,
+      "projectionConflicts": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

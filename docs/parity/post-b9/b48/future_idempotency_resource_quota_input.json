@@ -1,0 +1,9 @@
+{
+  "identities": {
+    "invocationID": "B41 Canonical Invocation ID",
+    "idempotencyKeyDigest": "HashInput(idempotency) — not raw key",
+    "resourceUsage": "per-invocation measured/estimated"
+  },
+  "separation": "Usage identity, Invocation identity, Idempotency identity are distinct",
+  "dedupeDecision": "Deduplicated invocations reuse original Invocation ID; resource accounting applies to original invocation only (not double-counted on deduped replay)"
+}

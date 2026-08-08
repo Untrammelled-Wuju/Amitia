@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B49",
+  "status": "PARTIAL",
+  "constructionMode": ["REUSE", "EXTEND"],
+  "canonical": {
+    "operation": "observability.OperationRecord",
+    "invocation": "observability.InvocationRecord",
+    "attempt": "observability.ExecutionAttempt",
+    "trace": "observability.Trace",
+    "auditRecorder": "execution.AuditRecorder (MEMORY — NOT persisted)",
+    "recordWriter": "observability.DefaultRecordWriter",
+    "persistentRepository": "observability.StorageBackend"
+  },
+  "audit": {
+    "persistenceAuthorityCount": 1,
+    "operationAuthorityCount": 1,
+    "invocationAuthorityCount": 1,
+    "traceAuthorityCount": 1,
+    "productionMemoryAuditTruthCount": 1,
+    "productionMemoryAuditPath": "execution/audit.go",
+    "canonicalAuditDualWriteCount": 0,
+    "invocationWithoutAuditCorrelationCount": 0,
+    "duplicateTerminalAuditCount": 0
+  },
+  "findings": {
+    "productionExecutionNotPersisted": true,
+    "gap": "ExecutionPipeline.Execute writes to memory AuditRecorder, not to observability canonical writer",
+    "importance": "CRITICAL"
+  },
+  "writer": {
+    "type": "DefaultRecordWriter (bounded queue)",
+    "queueBounded": true,
+    "maxQueueSize": 10000,
+    "flushLoopActive": false,
+    "gracefulDrainVerified": false,
+    "highRiskSyncWrite": true,
+    "failureRecursionCount": 0
+  },
+  "duplicates": {
+    "newAuditSystem": 0,
+    "newAuditManager": 0,
+    "newAuditStore": 0,
+    "newAuditRepository": 0,
+    "newAuditWriter": 0,
+    "newTraceSystem": 0,
+    "newOperationRepository": 0,
+    "newInvocationRepository": 0
+  },
+  "regressions": {
+    "B39": "PASS",
+    "B40": "PASS_NO_CODE_CHANGE",
+    "B41": "PASS-class",
+    "B42": "PASS-class",
+    "B43": "PASS-class",
+    "B44": "PASS-class",
+    "B45": "PASS-class",
+    "B46": "BLOCKED_CUSTOM",
+    "B47": "STEP_DEFINITION_CONFLICT (custom)"
+  },
+  "next": "B50"
+}

@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-08",
+  "note": "用户自定义B线编号(frozen B39-B47 sequence)到frozen step_reuse_matrix的映射与差异记录",
+  "mapping": [
+    {
+      "customId": "B39",
+      "customName": "ToolRegistry (用户spec)",
+      "frozenId": "B39",
+      "frozenName": "ToolRegistry Parity Gap硬化",
+      "alignment": "PARTIAL",
+      "note": "名称相同但frozen定义为Parity Gap审计而非schema合同审计; 用户custom spec已PASS"
+    },
+    {
+      "customId": "B40",
+      "customName": "Schema (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISSING",
+      "note": "对应frozen B40 ExecutionPipeline / B41 PermissionBroker均未按frozen执行; custom schema审计已PASS"
+    },
+    {
+      "customId": "B41",
+      "customName": "Invocation Context (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISSING",
+      "note": "frozen B41 = PermissionBroker Parity Gap; custom invocation审计已PASS"
+    },
+    {
+      "customId": "B42",
+      "customName": "Streaming (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISSING",
+      "note": "frozen B42 = Retry Parity Gap; custom streaming审计已PASS"
+    },
+    {
+      "customId": "B43",
+      "customName": "Cancellation (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISALIGNED",
+      "note": "frozen B43 = Timeout, B44 = Cancellation (顺序互换); custom cancellation审计已PASS"
+    },
+    {
+      "customId": "B44",
+      "customName": "Timeout (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISALIGNED",
+      "note": "frozen B44 = Cancellation, B43 = Timeout (顺序互换); custom timeout审计已PASS"
+    },
+    {
+      "customId": "B45",
+      "customName": "Permission/Scope/Approval (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISSING",
+      "note": "frozen B45 = RateLimit Parity Gap; custom PASS-class但非frozen定义"
+    },
+    {
+      "customId": "B46",
+      "customName": "Secret/Credential (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISSING",
+      "note": "frozen B46 = Concurrency Parity Gap; custom BLOCKED但非frozen定义"
+    },
+    {
+      "customId": "B47",
+      "customName": "Audit/Operation/Invocation Trace (用户spec)",
+      "frozenId": null,
+      "frozenName": null,
+      "alignment": "MISALIGNED",
+      "note": "frozen B47 = Circuit Breaker; frozen Audit = B49"
+    }
+  ],
+  "frozenStepsNotExecuted": [
+    {
+      "frozenId": "B40",
+      "frozenName": "ExecutionPipeline Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B10 PASS", "B9P8 PASS"],
+      "dependsOn": []
+    },
+    {
+      "frozenId": "B41",
+      "frozenName": "PermissionBroker Parity Gap硬化",
+      "canonicalSystem": "TOOL_PERMISSION_BROKER",
+      "preconditions": ["B11 PASS", "B9P8 PASS"],
+      "dependsOn": []
+    },
+    {
+      "frozenId": "B42",
+      "frozenName": "Retry Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "dependsOn": ["B40"]
+    },
+    {
+      "frozenId": "B43",
+      "frozenName": "Timeout Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "dependsOn": ["B40"]
+    },
+    {
+      "frozenId": "B44",
+      "frozenName": "Cancellation Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "dependsOn": ["B40"]
+    },
+    {
+      "frozenId": "B45",
+      "frozenName": "RateLimit Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "dependsOn": ["B40"]
+    },
+    {
+      "frozenId": "B46",
+      "frozenName": "Concurrency Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "dependsOn": ["B40"]
+    },
+    {
+      "frozenId": "B47",
+      "frozenName": "Circuit Breaker Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "dependsOn": ["B40"]
+    },
+    {
+      "frozenId": "B48",
+      "frozenName": "Idempotency Parity Gap硬化",
+      "canonicalSystem": ["TOOL_EXECUTION_PIPELINE", "AGENT_TOOL_REGISTRY"],
+      "preconditions": ["B39 PASS", "B40 PASS"],
+      "dependsOn": ["B39", "B40"]
+    },
+    {
+      "frozenId": "B49",
+      "frozenName": "Audit Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "mustReuse": ["Observability", "AuditLog"],
+      "dependsOn": ["B40"],
+      "note": "用户custom B47 spec的真实对应项"
+    },
+    {
+      "frozenId": "B50",
+      "frozenName": "Resource Limits Parity Gap硬化",
+      "canonicalSystem": "TOOL_EXECUTION_PIPELINE",
+      "preconditions": ["B40 PASS"],
+      "dependsOn": ["B40"]
+    }
+  ],
+  "recommendedPath": {
+    "description": "两条修复路径任选其一",
+    "pathA_realignToFrozen": {
+      "label": "路径A: 按frozen矩阵重新对齐",
+      "steps": [
+        "执行 B40 ExecutionPipeline (frozen root, B42-B50的前置)",
+        "并行: B41 PermissionBroker",
+        "串行 B42-B50 (Retry→Timeout→Cancellation→RateLimit→Concurrency→CircuitBreaker→Idempotency→Audit→ResourceLimits)",
+        "最终到达 B49 Audit (收口审计)"
+      ],
+      "pros": "严格符合冻结矩阵, Step Definition Gate不再触发阻断",
+      "cons": "工作量大, 需重做10+步骤"
+    },
+    "pathB_renameCustom": {
+      "label": "路径B: 保留自定义编号,为Audit创建别名spec",
+      "steps": [
+        "保留用户custom B39-B47 spec全部PASS结果不变",
+        "为本次Audit创建 ad-hoc spec(不通过step gate)",
+        "命名: ADHOC_B47_AUDIT (不声称frozen B47)"
+      ],
+      "pros": "不动历史产出",
+      "cons": "再次触发潜在冲突; 未来再次对齐frozen矩阵时成本高"
+    }
+  },
+  "immediateFix": "建议执行路径A: 先修B40 ExecutionPipeline (已存在的pipeline.go), 再按frozen顺序推进到B49 Audit"
+}

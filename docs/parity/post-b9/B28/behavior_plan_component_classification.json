@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "components": [
+    {
+      "name": "BehaviorPlan",
+      "classification": "CANONICAL_BEHAVIOR_PLAN",
+      "path": "plan.go"
+    },
+    {
+      "name": "BehaviorPlanBuilder",
+      "classification": "CANONICAL_PLAN_BUILDER",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "BehaviorCandidate",
+      "classification": "PLAN_INPUT",
+      "path": "plan.go"
+    },
+    {
+      "name": "ArbitrationInput",
+      "classification": "PLAN_INPUT",
+      "path": "arbitration.go"
+    },
+    {
+      "name": "BehaviorPriority",
+      "classification": "PLAN_INPUT",
+      "path": "plan.go"
+    },
+    {
+      "name": "BehaviorSafetyLevel",
+      "classification": "PLAN_INPUT",
+      "path": "plan.go"
+    },
+    {
+      "name": "derivePlanPriority",
+      "classification": "PLAN_BUILDER",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "derivePlanSafety",
+      "classification": "PLAN_BUILDER",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "derivePlanIntent",
+      "classification": "PLAN_ACTION",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "derivePlanStrategy",
+      "classification": "PLAN_ACTION",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "derivePlanAllowedTopics",
+      "classification": "PLAN_ACTION",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "derivePlanForbiddenTopics",
+      "classification": "PLAN_ACTION",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "derivePlanResponseGoal",
+      "classification": "PLAN_ACTION",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "derivePlanToneHint",
+      "classification": "PLAN_ACTION",
+      "path": "behavior_plan_builder.go"
+    },
+    {
+      "name": "ask_clarify (BehaviorTag)",
+      "classification": "ASK_USER_ACTION",
+      "path": "plan.go"
+    },
+    {
+      "name": "delay (BehaviorTag)",
+      "classification": "WAIT_ACTION / NO_ACTION",
+      "path": "plan.go"
+    }
+  ],
+  "summary": {
+    "CANONICAL_BEHAVIOR_PLAN": 1,
+    "CANONICAL_PLAN_BUILDER": 1,
+    "PLAN_INPUT": 4,
+    "PLAN_BUILDER": 2,
+    "PLAN_ACTION": 6,
+    "ASK_USER_ACTION": 1,
+    "WAIT_ACTION": 1,
+    "DUPLICATE_PLANNER": 0,
+    "DUPLICATE_PLAN_SYSTEM": 0,
+    "DUPLICATE_TASK_GRAPH": 0,
+    "UNKNOWN": 0
+  }
+}

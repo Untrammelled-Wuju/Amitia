@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "supersessionModel": {
+    "goalSupersession": "GoalRegistry updates Goal.Status to 'abandoned' when superseded",
+    "impactOnArbitration": "Superseded goals will have status != active, so they won't produce candidates"
+  },
+  "guarantees": {
+    "supersededGoalSelectionCount": 0,
+    "lateSelectionOverwrite": 0,
+    "oldDecisionCycleSelectionMutation": 0,
+    "selectionCommitted": "Only when Arbitrate() returns successfully"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "resourceGateAuthorityCount": 1,
+  "resourceDeclarationAuthorityCount": 1,
+  "duplicateResourceManagerCount": 0,
+  "failOpenCount": 0,
+  "providerDispatchBeforeGateCount": 0,
+  "usageCrossInvocationLeakCount": 0,
+  "duplicateTerminalCount": 0
+}

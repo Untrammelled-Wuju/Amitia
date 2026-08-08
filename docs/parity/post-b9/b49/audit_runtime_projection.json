@@ -1,0 +1,4 @@
+{
+  "fields": ["RuntimeType", "RuntimeID", "RuntimeGeneration", "Runtime health state (safe)"],
+  "forbidden": ["Runtime pointer", "Process handle", "DB connection", "Raw internal object"]
+}

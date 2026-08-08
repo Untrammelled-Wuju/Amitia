@@ -1,0 +1,47 @@
+{
+  "enforcements": [
+    {
+      "dimension": "outputBytes",
+      "runtime": "all (post-execution)",
+      "method": "ResultValidator.Validate",
+      "enforcementType": "HARD",
+      "productionReachable": true,
+      "fake": false,
+      "result": "PASS"
+    },
+    {
+      "dimension": "memory",
+      "runtime": "javascript",
+      "method": "JS Supervisor sandbox (MaxMemoryMB)",
+      "enforcementType": "SOFT (runtime)",
+      "productionReachable": true,
+      "fake": false,
+      "result": "partial - not central"
+    },
+    {
+      "dimension": "cpu",
+      "runtime": "none (kernel)",
+      "method": "declaration only",
+      "enforcementType": "ADVISORY",
+      "productionReachable": false,
+      "fake": false,
+      "result": "unsupported"
+    },
+    {
+      "dimension": "disk",
+      "runtime": "none",
+      "method": "declaration only",
+      "enforcementType": "UNSUPPORTED",
+      "productionReachable": false,
+      "result": "unsupported"
+    },
+    {
+      "dimension": "network",
+      "runtime": "none",
+      "method": "no",
+      "enforcementType": "UNSUPPORTED",
+      "productionReachable": false,
+      "result": "unsupported"
+    }
+  ]
+}

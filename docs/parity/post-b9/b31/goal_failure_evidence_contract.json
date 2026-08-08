@@ -1,0 +1,33 @@
+{
+  "failureEvidenceContract": {
+    "goalAbandoned": {
+      "requiresObservation": true,
+      "requiresFailureCondition": true,
+      "forbiddenShortcuts": [
+        "singleToolFailure",
+        "toolTimeout",
+        "toolCancelled",
+        "permissionDenied",
+        "scopeDenied",
+        "runtimeUnavailable"
+      ]
+    },
+    "evidenceFields": {
+      "goalId": "string - required",
+      "observationId": "string - required",
+      "failureCondition": "string - required",
+      "failureCategory": "enum: NON_RECOVERABLE | USER_CANCELLED | GOAL_INVALID | NO_VIABLE_PATH | IRRECOVERABLE_ERROR",
+      "failedAt": "timestamp - required",
+      "lastRelevantObservation": "ref - required",
+      "previousProgress": "float64"
+    },
+    "minimumEvidence": {
+      "detail": "Goal failure MUST be supported by explicit failure condition evidence. Single action failure is NOT sufficient to mark goal permanently failed.",
+      "toolFailureEqualsGoalFailure": false,
+      "automaticFailureOnToolFailure": false,
+      "automaticFailureOnTimeout": false,
+      "automaticFailureOnCancel": false,
+      "automaticFailureOnPermissionDenied": false
+    }
+  }
+}

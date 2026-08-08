@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "outputContract": {
+    "version": "1.0",
+    "description": "Action输出契约 - 定义执行结果的标准化输出",
+
+    "outputTypes": [
+      {
+        "outputType": "UnifiedToolResult",
+        "owner": "execution.ExecutionPipeline",
+        "fields": [
+          "InvocationID",
+          "Status",
+          "Content",
+          "Structured",
+          "Error",
+          "SideEffects"
+        ],
+        "description": "Pipeline执行后输出的统一工具结果"
+      },
+      {
+        "outputType": "LegacyToolResult",
+        "owner": "kernel.ToolFacade",
+        "fields": [
+          "RunID",
+          "Status",
+          "Output",
+          "DurationMS",
+          "VisibleText",
+          "Error",
+          "ForceVoice"
+        ],
+        "description": "Facade转换为遗留兼容格式"
+      },
+      {
+        "outputType": "chat.ToolResult",
+        "owner": "chatToolRuntimeAdapter",
+        "fields": [
+          "RunID",
+          "Status",
+          "Output",
+          "DurationMS",
+          "VisibleText",
+          "Error",
+          "ForceVoice"
+        ],
+        "description": "适配器转换为chat层格式"
+      }
+    ],
+
+    "conversionChain": "UnifiedToolResult (Pipeline) → LegacyToolResult (ToolFacade) → chat.ToolResult (chatToolRuntimeAdapter)",
+
+    "constraints": {
+      "errorMustHaveCode": true,
+      "errorMustBeUserVisible": true,
+      "outputMustBeValidated": true,
+      "outputMustBeSanitized": true
+    }
+  },
+
+  "summary": {
+    "outputFormats": 3,
+    "canonicalFormat": "capability.UnifiedToolResult",
+    "conversions": 2,
+    "validationStages": 2
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "securityValidation": {
+    "version": "1.0",
+
+    "checks": [
+      {
+        "check": "AgentDirectToolExecution",
+        "description": "Agent是否可以直接执行工具（应为false）",
+        "result": false,
+        "notes": "Agent通过chat.ModelToolRuntime间接调用"
+      },
+      {
+        "check": "AgentDirectProviderAccess",
+        "description": "Agent是否直接访问Provider层（应为false）",
+        "result": false,
+        "notes": "Provider通过RuntimeAdapterRegistry接入"
+      },
+      {
+        "check": "ScopeBypassPossible",
+        "description": "是否存在Scope检查绕过（应为false）",
+        "result": false,
+        "notes": "ScopeGate强制验证"
+      },
+      {
+        "check": "PermissionBypassPossible",
+        "description": "是否存在Permission检查绕过（应为false）",
+        "result": false,
+        "notes": "PermissionGate强制验证"
+      },
+      {
+        "check": "InputValidationBypassPossible",
+        "description": "是否存在输入验证绕过（应为false）",
+        "result": false,
+        "notes": "InputValidator强制验证"
+      },
+      {
+        "check": "ResultSanitizationBypassPossible",
+        "description": "是否存在结果清洗绕过（应为false）",
+        "result": false,
+        "notes": "Sanitizer强制处理"
+      },
+      {
+        "check": "LegacyToolDispatchActive",
+        "description": "是否仍存在旧版工具分发路径（应为false）",
+        "result": false,
+        "notes": "baseline验证测试确认已清除"
+      },
+      {
+        "check": "ActionExecutor2Exists",
+        "description": "是否存在ActionExecutor2（应为false）",
+        "result": false,
+        "notes": "代码中不存在"
+      },
+      {
+        "check": "ToolExecutor2Exists",
+        "description": "是否存在ToolExecutor2（应为false）",
+        "result": false,
+        "notes": "代码中不存在"
+      },
+      {
+        "check": "ParallelDispatchBypass",
+        "description": "是否存在并行分发绕过（应为false）",
+        "result": false,
+        "notes": "唯一入口ToolFacade"
+      }
+    ]
+  },
+
+  "summary": {
+    "totalChecks": 10,
+    "passed": 10,
+    "failed": 0
+  }
+}

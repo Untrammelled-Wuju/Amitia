@@ -1,0 +1,14 @@
+{
+  "taskId": "B45",
+  "finalStepReuseMatrixFound": true,
+  "frozenTitle": "Permission / Scope / Approval Execution Boundary",
+  "frozenConstructionMode": ["REUSE", "EXTEND"],
+  "frozenCanonicalTargets": [
+    "backend/internal/extension/kernel/permission/",
+    "backend/internal/extension/kernel/execution/",
+    "backend/internal/extension/kernel/capability/"
+  ],
+  "matchesPermissionExecutionHardening": true,
+  "conflict": false,
+  "resolution": "B45 冻结定义为 Permission / Scope / Approval Execution Boundary Hardening，与 Amitia 现有 PermissionDefinitionRegistry + PermissionBroker + ScopeManager + ExecutionPipeline Gate Chain 完全匹配。无需创建第二套权限系统。"
+}

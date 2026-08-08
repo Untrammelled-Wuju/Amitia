@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B31",
+  "generatedAt": "2026-08-08T21:00:00+08:00",
+  "description": "B31步骤输入清单",
+  "expectedInputs": {
+    "b30ObservationAuthority": "mindruntime.observability (B30冻结)",
+    "b30ObservationContract": "agent_observation_contract.json",
+    "b30ObservationIdentityContract": "agent_observation_identity_contract.json",
+    "b30ObservationErrorProjection": "agent_observation_error_projection.json",
+    "b30ObservationSideEffectProjection": "agent_observation_side_effect_projection.json",
+    "b30ObservationGoalProgressBoundary": "observation_goal_progress_boundary.json",
+    "b24GoalAuthority": "decision.GoalRegistry",
+    "b24GoalLifecycle": "pending/active/suspended/achieved/abandoned/wish"
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

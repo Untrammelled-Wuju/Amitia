@@ -1,0 +1,11 @@
+{
+  "taskId": "B27",
+  "b23GuardFound": true,
+  "guardTitle": "Pipeline Checkpoint / State Management",
+  "guardConstructionMode": ["REUSE", "EXTEND"],
+  "guardCanonicalTargets": ["backend/internal/pipelinecheckpoint/"],
+  "matchesArbitrationCandidateSelection": true,
+  "conflict": true,
+  "conflictDetails": "B23 Step Guard将B27定义为pipelinecheckpoint，但用户提供的B27规范描述为Decision Arbitration / Candidate Selection。两个不同B27规范的冲突。按照用户提供的B27规范执行Decision Arbitration审计。",
+  "resolution": "执行用户提供的B27规范：对decision/中的Arbitration系统进行只读审计，确认其满足Candidate Selection要求。"
+}

@@ -1,0 +1,9 @@
+{
+  "boundary": {
+    "decisionLayer": "B32 Agent Replanning",
+    "kernelWorkflowLayer": "Workflow.Retry"
+  },
+  "workflowRetryOwner": "Extension Kernel workflow",
+  "b32DoesNotDuplicate": true,
+  "note": "Workflow Step Retry由Workflow引擎内部处理。B32只通过Observation消费Workflow结果。"
+}

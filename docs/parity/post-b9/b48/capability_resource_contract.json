@@ -1,0 +1,19 @@
+{
+  "contract": {
+    "declarationSource": "ToolExecutionPolicy.ResourceLimits + ToolExecutionPolicy.ToolResultPolicy",
+    "fields": {
+      "MaxMemoryBytes": "optional (zero = unspecified, NOT unlimited)",
+      "MaxCPUPercent": "optional (0 = unspecified)",
+      "MaxOutputBytes": "optional (0 = unspecified)"
+    },
+    "unit": {
+      "memory": "bytes (int64)",
+      "cpu": "percent (int)",
+      "output": "bytes (int)"
+    }
+  },
+  "prohibitedInDeclaration": ["runtimeHandle", "providerPointer", "permissionGranted", "actualUsage"],
+  "truth": "declaration only; actual enforcement routed by runtime adapter",
+  "fakeEnforcementProduction": false,
+  "overclaim": "部分维度 (memory/cpu) 声明但 enforceability 仅为 runtime-specific"
+}

@@ -1,0 +1,25 @@
+{
+  "legacyPaths": [
+    {
+      "path": "capability/definition.go:18 ResourceLimits",
+      "type": "CANONICAL_DECLARATION",
+      "action": "REUSE"
+    },
+    {
+      "path": "execution/result_validator.go ResultValidator",
+      "type": "CANONICAL_GATE",
+      "action": "REUSE"
+    },
+    {
+      "path": "javascript_main ResourceLimits",
+      "type": "CANONICAL_RUNTIME_PROJECTION",
+      "action": "REUSE"
+    },
+    {
+      "path": "migration/types.go:68 TaskResourceLimits",
+      "type": "TASK_RESOURCE_POLICY",
+      "action": "READ_ONLY"
+    }
+  ],
+  "unknown": 0
+}

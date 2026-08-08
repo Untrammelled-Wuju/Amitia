@@ -1,0 +1,13 @@
+{
+  "taskId": "B33",
+  "b23GuardFound": true,
+  "guardTitle": "B33 MindRuntime Reflection 证据约束反思、触发策略与Agent反馈闭环硬化",
+  "guardConstructionMode": "REUSE + EXTEND",
+  "guardCanonicalTargets": ["backend/internal/agent/", "backend/internal/interaction/"],
+  "guardForbiddenDuplicates": ["AgentEntry2", "UnifiedEntry2"],
+  "canonicalTargetsOverride": ["backend/internal/mindruntime/"],
+  "overrideReason": "与B27/B28/B29/B30/B31/B32相同，用户规范明确将B33核心分配给mindruntime/。B33职责为'现有MindRuntime Reflection证据约束反思'，直接对应mindruntime目录下的reflection_run/reflection_trigger/reflection_supervisor实现。",
+  "matchesReflection": true,
+  "conflict": false,
+  "resolutionDetail": "B33唯一目标是复用现有MindRuntime Reflection能力。现有实现完全满足要求：(1)reflection_run.go: RunReflection核心逻辑，MinEvidenceForAdjustment=2, MinConfidenceForAdopt=0.5, MaxAbstractionsPerRun=5；(2)reflection_trigger.go: 4种TriggerKind(time/event_count/relation_change/anomaly) + EvaluateTrigger结构化评估；(3)reflection_supervisor.go: ReflectionSupervisor负责审批、版本管理、回滚。所有证据约束、触发策略、反馈闭环机制已完整。无ReflectionRuntime2/ReflectionEngine2等重复系统。"
+}

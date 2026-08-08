@@ -1,0 +1,12 @@
+{
+  "inheritance": {
+    "hierarchy": "Manifest/Registry defaults -> ToolDefinition.ExecutionPolicy -> InvocationContext",
+    "direction": "parent -> child",
+    "childQuotaExceedsParentCount": "must be 0 (declaration at child should not auto-expand parent cap)"
+  },
+  "example": {
+    "extensionPolicy": "MaxOutputBytes = 1MB (default)",
+    "toolA.toolResultPolicy.MaxOutputBytes": "512KB (tool can shrink default)",
+    "invocationB": "effective 512KB (most restrictive)"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B45",
+  "contract": {
+    "name": "Tool Scope Resolution Contract",
+    "description": "定义 Scope 如何从 Invocation Context 解析",
+    "resolutionMechanism": {
+      "withScopeManager": {
+        "path": "scope_gate.go:20-34",
+        "logic": "ScopeManager.Evaluate with SubjectType=SubjectTool, SubjectID=tool.ID, CharacterID/ConversationID/ExtensionID from Invocation Context"
+      },
+      "withoutScopeManager": {
+        "path": "scope_gate.go:37-52",
+        "logic": "Fallback: tool.Scope.Type check → global=pass, character=match ID, conversation=match ID, internal=pass, else scope_denied"
+      }
+    },
+    "failClosed": "ScopeGate returns error → pipeline.failWithAudit(ErrorCodeScopeDenied)",
+    "scopeTypes": ["global", "character", "conversation", "extension", "module", "resource"],
+    "note": "ScopeManager evaluates via ScopeEvaluator + relationChecker; model cannot forge scope"
+  }
+}

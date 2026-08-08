@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "targetStep": "B141",
+  "cutover": {
+    "canonicalDeclaration": ["ToolExecutionPolicy.ResourceLimits", "ToolResultPolicy.MaxOutputBytes", "TaskResourceLimits (migration域)", "PerformanceBudget (slot域)"],
+    "canonicalGate": ["ResultValidator (post-execution MaxOutputBytes)", "Future: pre-dispatch ResourceGap"],
+    "runtimeProjections": ["javascript_main ResourceLimits -> JS Supervisor", "Future: WASM/TrustedService/MCP resource limits"],
+    "legacyResourceLimitPaths": [],
+    "noopFakeEnforcementPaths": ["none known — MaxOutputBytes enforced by ResultValidator is real"],
+    "productionReachability": "MCP tool invocations -> ResultValidator enforce works; main gap is pre-dispatch gate"
+  },
+  "unsupportedDimensions": ["cpu", "disk", "network"],
+  "deferredToB141": ["ResourceGate 前移", "Runtime Resource Projection (非 JS)", "Resource Usage 采集", "B47 Audit quota decision 投影"]
+}

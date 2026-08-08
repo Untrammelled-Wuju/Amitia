@@ -1,0 +1,40 @@
+{
+  "mapping": [
+    {
+      "failure": "invalidDeclaration",
+      "condition": "negative limit, overflow, unsupported unit, unknown field",
+      "errorCode": "RESOURCE_POLICY_INVALID"
+    },
+    {
+      "failure": "unsupportedResourceDimension",
+      "condition": "hard-required dimension not supported by runtime",
+      "errorCode": "RESOURCE_UNAVAILABLE"
+    },
+    {
+      "failure": "preDispatchQuotaExceeded",
+      "condition": "declared input size or requested output cap pre-checked",
+      "errorCode": "RESOURCE_LIMIT_EXCEEDED"
+    },
+    {
+      "failure": "runtimeQuotaExceeded",
+      "condition": "actual usage exceeded runtime hard limit",
+      "errorCode": "RESOURCE_LIMIT_EXCEEDED"
+    },
+    {
+      "failure": "usageMeasurementFailed",
+      "condition": "hard safety depends on measurement but meter offline",
+      "errorCode": "RESOURCE_MEASUREMENT_UNAVAILABLE"
+    },
+    {
+      "failure": "quotaControllerUnavailable",
+      "condition": "resource gate execution failure (panic recovery)",
+      "errorCode": "RESOURCE_POLICY_INVALID"
+    }
+  ],
+  "boundary": {
+    "deniedByPermission": "B45 —— 与资源拒绝明确分离",
+    "rateLimited": "B46 —— 与资源从维度分离",
+    "timedOut": "B44 —— 与资源从名分离"
+  },
+  "failOpen": 0
+}

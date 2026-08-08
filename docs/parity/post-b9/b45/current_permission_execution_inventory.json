@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B45",
+  "inventoryTimestamp": "2026-08-08",
+  "permissionDefinitions": [
+    {"path": "permission/definition.go:90-135", "symbol": "PermissionDefinitionRegistry.registerBuiltin", "count": 34, "description": "34 个内置 Permission Definition"}
+  ],
+  "permissionRequirements": [
+    {"path": "capability/definition.go:61", "symbol": "ToolDefinition.Permissions", "description": "Tool 级 Permission Requirement"},
+    {"path": "capability/definition.go:83", "symbol": "CapabilityDefinition.Permissions", "description": "Capability 级 Permission Requirement"},
+    {"path": "permission/requirement.go:5", "symbol": "PermissionRequirement", "fields": ["PermissionID", "Scope", "Conditions", "Optional"]}
+  ],
+  "permissionBrokers": [
+    {"path": "permission/broker.go:13", "symbol": "PermissionBroker interface", "description": "权限判定唯一接口"},
+    {"path": "permission/broker.go:28", "symbol": "DefaultPermissionBroker", "description": "权限判定权威实现"}
+  ],
+  "permissionGates": [
+    {"path": "execution/permission_gate.go:21", "symbol": "PermissionGate", "inject": "container_builder.go:279 (PermissionGate.Broker = permBroker)"}
+  ],
+  "scopeGates": [
+    {"path": "execution/scope_gate.go:11", "symbol": "ScopeGate", "inject": "container_builder.go:278 (ScopeGate.ScopeManager = scopeManager)"}
+  ],
+  "grantStores": [
+    {"path": "permission/broker.go:30", "symbol": "PermissionStorage", "description": "Grant 持久化 (SQLite)"},
+    {"path": "permission/broker.go:31", "symbol": "PermissionCache", "description": "决策缓存 (5min TTL, grant/invalidate 自动失效)"}
+  ],
+  "approvalComponents": [
+    {"path": "execution/approval_gate.go:10", "symbol": "ApprovalGate", "description": "执行前审批判定"},
+    {"path": "permission/broker.go:273", "symbol": "DefaultPermissionBroker.Explain", "description": "生成 RequiredAction (manual_approval/none/revoked_or_blocked)"},
+    {"path": "execution/kernel.go:14", "symbol": "StatusAwaitingApproval", "description": "等待审批执行状态"}
+  ],
+  "executionEntries": [
+    {"path": "execution/pipeline.go:36", "symbol": "ExecutionPipeline.Execute", "description": "所有 Tool 执行的统一入口"},
+    {"path": "capability/tool.go:39", "symbol": "PermissionRequirement", "description": "Extension 声明权限需求"}
+  ],
+  "runtimeDispatchEntries": [
+    {"path": "execution/pipeline.go:132", "symbol": "Dispatcher.Dispatch", "description": "Runtime 调度入口 (在 Permission/Scope/Approval Gate 之后)"}
+  ],
+  "sharedAuthorities": [
+    {"path": "container_builder.go:190-218", "symbol": "workflow.SecurityGuard", "description": "Workflow 复用同一 permBroker + scopeManager"},
+    {"path": "container_builder.go:305-306", "symbol": "ScheduleService", "description": "Schedule 复用同一 permBroker + scopeManager"},
+    {"path": "container_builder.go:322-329", "symbol": "HookService", "description": "Hook 复用同一 permBroker + scopeManager"}
+  ]
+}

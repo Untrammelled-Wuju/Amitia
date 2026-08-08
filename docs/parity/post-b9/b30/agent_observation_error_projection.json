@@ -1,0 +1,58 @@
+{
+  "errorProjection": {
+    "description": "定义各类错误到Observation状态的映射规则",
+    "mappings": {
+      "permission_denied": {
+        "observationStatus": "FAILURE_CONFIRMED",
+        "semanticCategory": "AUTHORIZATION_FAILURE",
+        "retryable": false,
+        "actionNotify": true
+      },
+      "scope_denied": {
+        "observationStatus": "FAILURE_CONFIRMED",
+        "semanticCategory": "SCOPE_VIOLATION",
+        "retryable": false,
+        "actionNotify": true
+      },
+      "timeout": {
+        "observationStatus": "INDETERMINATE",
+        "semanticCategory": "TEMPORARY_FAILURE",
+        "retryable": true,
+        "actionNotify": true
+      },
+      "cancelled": {
+        "observationStatus": "FAILURE_CONFIRMED",
+        "semanticCategory": "CANCELLED",
+        "retryable": false,
+        "actionNotify": false
+      },
+      "rate_limited": {
+        "observationStatus": "INDETERMINATE",
+        "semanticCategory": "THROTTLED",
+        "retryable": true,
+        "actionNotify": true
+      },
+      "resource_not_found": {
+        "observationStatus": "FAILURE_CONFIRMED",
+        "semanticCategory": "RESOURCE_MISSING",
+        "retryable": false,
+        "actionNotify": true
+      },
+      "invalid_input": {
+        "observationStatus": "FAILURE_CONFIRMED",
+        "semanticCategory": "INPUT_ERROR",
+        "retryable": false,
+        "actionNotify": true
+      },
+      "dependency_failure": {
+        "observationStatus": "INDETERMINATE",
+        "semanticCategory": "DEPENDENCY_ERROR",
+        "retryable": true,
+        "actionNotify": true
+      }
+    },
+    "mappingErrors": 0,
+    "unmappedErrors": 0
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

@@ -1,0 +1,24 @@
+{
+  "b33_reflection_replanning_boundary": {
+    "scope": "Reflection does not trigger Continuation/Replanning",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "replanningAuthority": {
+      "canInitiateContinuation": false,
+      "canModifyContinuation": false,
+      "canTriggerReplan": false,
+      "canAbortPlan": false
+    },
+    "observability": {
+      "canObserveRepoHistory": true,
+      "canReferenceInReflection": true
+    },
+    "violations": {
+      "unauthorizedContinuationStart": 0,
+      "unauthorizedPlanModification": 0,
+      "replanningInterference": 0
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

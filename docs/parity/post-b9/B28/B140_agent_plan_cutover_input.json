@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "canonicalPlanBuilder": {
+    "owner": "decision.BehaviorPlanBuilder"
+  },
+  "planConsumers": ["B29 Action Layer"],
+  "legacyPlanners": [],
+  "legacyDirectToolPlanners": [],
+  "productionReachability": "100% through BehaviorPlanBuilder",
+  "notes": "No legacy planners. B140 cutover is a no-op."
+}

@@ -1,0 +1,10 @@
+{
+  "sameCandidateSameFailureLoopCount": 0,
+  "sameActionNoProgressLoopCount": 0,
+  "terminalGoalReplanCount": 0,
+  "supersededGoalReplanCount": 0,
+  "duplicatePendingTaskCount": 0,
+  "duplicatePendingWorkflowCount": 0,
+  "loopGuardMechanism": "scoring.RepeatPenalty + FatiguePenalty 软惩罚，避免无限重复。wait_observe fallback保证安全退出。",
+  "noProgressGuard": "通过GoalProgressDecision(Observation未导致progress) + Candidate排除机制防循环。"
+}

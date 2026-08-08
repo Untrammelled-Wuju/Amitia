@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "deferredGaps": [
+    {
+      "capability": "Tool Execution",
+      "deferredTo": "B29"
+    },
+    {
+      "capability": "TaskRuntime Escalation",
+      "deferredTo": "B29+"
+    },
+    {
+      "capability": "Workflow Escalation",
+      "deferredTo": "B29+"
+    },
+    {
+      "capability": "Observation Integration",
+      "deferredTo": "B29+"
+    },
+    {
+      "capability": "Reflection Integration",
+      "deferredTo": "B29+"
+    },
+    {
+      "capability": "LLM-based Plan Generation",
+      "deferredTo": "NOT_REQUIRED"
+    }
+  ]
+}

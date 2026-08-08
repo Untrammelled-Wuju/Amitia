@@ -1,0 +1,44 @@
+{
+  "identityContract": {
+    "description": "Goal/Candidate/Plan/Action/Task IDs关联关系，无混用",
+    "entities": {
+      "Goal": {
+        "idField": "goalId",
+        "source": "decision engine",
+        "observationLink": "observation.goalRef",
+        "isolated": true
+      },
+      "Candidate": {
+        "idField": "candidateId",
+        "source": "decision engine",
+        "observationLink": "observation.candidateRef",
+        "isolated": true
+      },
+      "Plan": {
+        "idField": "planId",
+        "source": "decision engine",
+        "observationLink": "observation.planRef",
+        "isolated": true
+      },
+      "Action": {
+        "idField": "actionId",
+        "source": "task runtime",
+        "observationLink": "observation.actionRef",
+        "isolated": true
+      },
+      "Task": {
+        "idField": "taskId",
+        "source": "task runtime",
+        "observationLink": "observation.taskRef",
+        "isolated": true
+      }
+    },
+    "isolation": {
+      "goalCandidateMixCount": 0,
+      "planActionMixCount": 0,
+      "taskObservationMixCount": 0,
+      "crossEntityReferenceErrors": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "toolExecutionAuthority": {
+    "canonical": "extension.kernel.ToolFacade (backend/internal/extension/kernel/tool_facade.go)",
+    "wiredBy": "cmd/server/tool_facade_wiring.go (chatToolRuntimeAdapter)",
+    "calledBy": "chat/message_llm.go (s.toolRuntime.ExecuteModelTool)",
+    "reachability": "interaction.UnifiedEntry → chat.Compute → chat.MessageLLM → chatToolRuntimeAdapter → ToolFacade"
+  },
+
+  "authorities": [
+    {
+      "domain": "ToolExecution",
+      "canonical": "ToolFacade",
+      "backup": null,
+      "directExecutionAllowed": false,
+      "notes": "禁止Agent直接执行工具，必须通过ToolFacade"
+    },
+    {
+      "domain": "ToolRegistration",
+      "canonical": "capability.ToolRegistry",
+      "backup": null,
+      "directExecutionAllowed": false,
+      "notes": "工具注册统一由ToolRegistry管理"
+    },
+    {
+      "domain": "ExecutionPipeline",
+      "canonical": "execution.ExecutionPipeline",
+      "backup": null,
+      "directExecutionAllowed": false,
+      "notes": "所有工具执行经过21阶段Pipeline"
+    },
+    {
+      "domain": "PermissionCheck",
+      "canonical": "execution.PermissionGate",
+      "backup": "execution.ApprovalGate",
+      "directExecutionAllowed": false,
+      "notes": "权限核验统一走PermissionGate"
+    },
+    {
+      "domain": "ResultValidation",
+      "canonical": "execution.ResultValidator + execution.Sanitizer",
+      "backup": null,
+      "directExecutionAllowed": false,
+      "notes": "结果验证与清洗统一处理"
+    }
+  ],
+
+  "summary": {
+    "toolExecutionAuthority": "ToolFacade",
+    "duplicateAuthorities": 0
+  }
+}

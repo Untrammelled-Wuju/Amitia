@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "existingBehaviorPreserved": true,
+  "apiContractUnchanged": true,
+  "notes": "ArbitrationLayer.Arbitrate() signature and behavior unchanged. All existing callers unaffected."
+}

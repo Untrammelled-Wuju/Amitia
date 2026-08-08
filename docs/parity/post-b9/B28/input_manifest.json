@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "b23GuardReference": "backend/internal/queue/, REUSE+EXTEND, forbidden: AgentQueue2/AgentScheduler2 (conflict: user spec = decision/ BehaviorPlan)",
+  "input": {
+    "b24CanonicalGoal": {
+      "owner": "decision.GoalRegistry"
+    },
+    "b27SelectedCandidate": {
+      "owner": "decision.ArbitrationLayer.Arbitrate",
+      "output": "BehaviorCandidate"
+    },
+    "b26CandidateEvaluations": {
+      "owner": "decision.Scoring"
+    },
+    "b27DecisionOutcome": {
+      "values": ["SELECTED", "FALLBACK"]
+    }
+  }
+}

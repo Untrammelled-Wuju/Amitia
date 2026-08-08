@@ -1,0 +1,28 @@
+{
+  "b33_reflection_supervisor_boundary": {
+    "scope": "MindRuntime Reflection Supervisor Boundary",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "supervisorAuthority": {
+      "goalAuthority": "none",
+      "toolAuthority": "none",
+      "memoryAuthority": "approve_only",
+      "characterAuthority": "none",
+      "reflectionControlAuthority": "full"
+    },
+    "decisionRules": {
+      "minEvidenceForApproval": 3,
+      "minConfidenceForApproval": 0.5,
+      "autoApproveThreshold": 0.8,
+      "rejectionOnLowConfidence": true
+    },
+    "boundaryViolations": {
+      "unauthorizedGoalAccess": false,
+      "unauthorizedToolExecution": false,
+      "unauthorizedMemoryWrite": false,
+      "unauthorizedMutation": false
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

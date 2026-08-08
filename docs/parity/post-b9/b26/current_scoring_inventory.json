@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B26",
+  "generatedAt": "2026-08-08T18:20:00+08:00",
+  "scoringSystem": {
+    "package": "backend/internal/decision/",
+    "description": "完整的候选评分系统，包含评分、约束过滤、偏好、风险、仲裁"
+  },
+  "scorers": [
+    {
+      "name": "Scoring.scoreBehaviorCandidate",
+      "path": "backend/internal/decision/scoring.go",
+      "type": "CANONICAL_CANDIDATE_SCORER",
+      "input": "BehaviorCandidate + BehaviorScoringOptions",
+      "output": "float64 (FinalScore)",
+      "formula": "BaseScore*Weight + PersonalityScore*Weight + NeedScore*Weight + RelationshipScore*Weight + AffectScore - RiskPenalty"
+    },
+    {
+      "name": "Scoring.ScoreBehaviorCandidates",
+      "path": "backend/internal/decision/scoring.go",
+      "type": "Batch scoring + sort",
+      "note": "Sort stable by FinalScore descending"
+    },
+    {
+      "name": "Scoring.SelectBehaviorCandidate",
+      "path": "backend/internal/decision/scoring.go",
+      "type": "Scoring + Arbitration combined",
+      "note": "Filters hard constraints, scores remaining, selects top-1"
+    },
+    {
+      "name": "AffectScoring",
+      "path": "backend/internal/decision/affect_scoring.go",
+      "type": "Affect dimension scorer"
+    },
+    {
+      "name": "UtilityScoring",
+      "path": "backend/internal/decision/utility_scoring.go",
+      "type": "Utility dimension scorer"
+    }
+  ],
+  "scoreTypes": [
+    {
+      "name": "FinalScore",
+      "type": "float64",
+      "range": "[-inf, inf] typically [0, 10]",
+      "formula": "weighted sum of components minus risk penalty"
+    },
+    {
+      "name": "BaseScore",
+      "type": "float64",
+      "description": "Candidate base score from registry"
+    },
+    {
+      "name": "NeedScore",
+      "type": "float64",
+      "description": "Score from Goal alignment (enrichFromGoals)"
+    },
+    {
+      "name": "RelationshipScore",
+      "type": "float64",
+      "description": "Score from relationship trust"
+    },
+    {
+      "name": "PersonalityScore",
+      "type": "float64",
+      "description": "Score from personality weights"
+    },
+    {
+      "name": "RiskScore",
+      "type": "float64",
+      "description": "Score from risk factors (Life.Busy, Psyche.Stress, etc.)"
+    }
+  ],
+  "weightConfigs": [
+    {
+      "name": "DefaultBehaviorScoringOptions",
+      "path": "backend/internal/decision/scoring.go",
+      "weights": {
+        "BaseWeight": 1,
+        "PersonalityWeight": 1,
+        "NeedWeight": 1,
+        "RelationshipWeight": 1,
+        "AffectWeight": 1,
+        "RiskWeight": 1
+      },
+      "owner": "decision.Scoring"
+    }
+  ],
+  "constraintInputs": [
+    {
+      "name": "HardConstraintFilter",
+      "path": "backend/internal/decision/hard_constraint_filter.go",
+      "type": "Structural validation + hard reject"
+    },
+    {
+      "name": "Safety",
+      "path": "backend/internal/decision/safety.go",
+      "type": "Safety constraint evaluation"
+    }
+  ],
+  "preferenceInputs": [
+    {
+      "name": "SoftPreference",
+      "path": "backend/internal/decision/soft_preference.go",
+      "type": "Soft score adjustment"
+    }
+  ],
+  "riskInputs": [
+    {
+      "name": "RiskScore",
+      "source": "CandidateGenerationContext (Life.Busy, Psyche.Stress, Beliefs)",
+      "note": "Risk computed during candidate generation"
+    }
+  ],
+  "costInputs": [
+    {
+      "note": "No explicit Cost dimension in current system",
+      "status": "NOT_REQUIRED"
+    }
+  ],
+  "priorityInputs": [
+    {
+      "name": "GoalPriority",
+      "source": "B24.canonicalGoal.Priority",
+      "values": ["low", "normal", "high", "critical"],
+      "note": "Priority is Goal attribute, affects decision weighting"
+    }
+  ],
+  "rankingConsumers": [
+    {
+      "name": "Arbitration",
+      "path": "backend/internal/decision/arbitration.go",
+      "note": "Consumes scored candidates for final selection"
+    }
+  ],
+  "productionCallers": [
+    {
+      "caller": "interaction.RuntimePipeline",
+      "path": "backend/internal/interaction/runtime_pipeline.go",
+      "note": "Calls Scoring via decision package"
+    }
+  ],
+  "mindruntimeReflection": {
+    "package": "backend/internal/mindruntime/",
+    "description": "Reflection system as defined in B23 Step Guard for B26",
+    "components": [
+      {
+        "name": "ReflectionRun",
+        "path": "mindruntime/reflection_run.go"
+      },
+      {
+        "name": "ReflectionSupervisor",
+        "path": "mindruntime/reflection_supervisor.go"
+      },
+      {
+        "name": "ReflectionTrigger",
+        "path": "mindruntime/reflection_trigger.go"
+      },
+      {
+        "name": "Supervisor",
+        "path": "mindruntime/supervisor.go"
+      },
+      {
+        "name": "Reconciliation",
+        "path": "mindruntime/reconciliation.go"
+      }
+    ]
+  }
+}

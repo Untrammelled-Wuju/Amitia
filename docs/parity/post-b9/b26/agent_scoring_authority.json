@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B26",
+  "generatedAt": "2026-08-08T18:20:00+08:00",
+  "candidateScoreAuthority": {
+    "owner": "decision.Scoring.scoreBehaviorCandidate",
+    "path": "backend/internal/decision/scoring.go",
+    "note": "Main scoring function for BehaviorCandidate"
+  },
+  "evaluationAuthority": {
+    "owner": "decision.Scoring.ScoreBehaviorCandidates",
+    "path": "backend/internal/decision/scoring.go",
+    "note": "Batch scoring with sort"
+  },
+  "constraintAuthority": {
+    "owner": "decision.HardConstraintFilter",
+    "path": "backend/internal/decision/hard_constraint_filter.go"
+  },
+  "preferenceAuthority": {
+    "owner": "decision.SoftPreference",
+    "path": "backend/internal/decision/soft_preference.go"
+  },
+  "riskAuthority": {
+    "owner": "decision.Scoring (RiskScore component)",
+    "note": "Risk evaluated via BehaviorCandidate.RiskScore and affect scoring"
+  },
+  "rankingAuthority": {
+    "owner": "decision.Scoring (sort by FinalScore)",
+    "note": "Sort stable by FinalScore descending"
+  },
+  "arbitrationAuthority": {
+    "owner": "decision.ArbitrationLayer",
+    "path": "backend/internal/decision/arbitration.go"
+  },
+  "reflectionAuthority": {
+    "owner": "mindruntime.ReflectionRun",
+    "path": "backend/internal/mindruntime/reflection_run.go",
+    "note": "Canonical Reflection belongs to mindruntime/ per B23 step guard"
+  },
+  "supervisorAuthority": {
+    "owner": "mindruntime.Supervisor",
+    "path": "backend/internal/mindruntime/supervisor.go",
+    "note": "Canonical Supervisor belongs to mindruntime/ per B23 step guard"
+  }
+}

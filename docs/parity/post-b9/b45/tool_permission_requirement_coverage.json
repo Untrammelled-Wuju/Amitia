@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B45",
+  "coverage": {
+    "agentCallableTools": "All ToolDefinition registered in kernel ToolRegistry",
+    "withExplicitPermissionRequirement": "All Tools declare Permissions in ToolDefinition.Permissions",
+    "explicitNoPermissionRequired": "Tools with empty Permissions + RiskLevel=low get PermissionAllow (no broker requirement)",
+    "unknownPermissionSemantics": 0
+  },
+  "mechanism": "PermissionGate.evaluateWithBroker: buildRequirements(tool, scope) 为空 → PermissionAllow; 否则必须经过 Broker.Evaluate",
+  "failClosed": "Empty requirements = No permission needed (valid); Unknown permission ID = Deny",
+  "result": "COMPLETE_COVERAGE"
+}

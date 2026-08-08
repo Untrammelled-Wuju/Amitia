@@ -1,0 +1,36 @@
+{
+  "b33_reflection_trigger_contract": {
+    "scope": "MindRuntime Reflection Trigger Policy",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "triggerKinds": {
+      "Time": {
+        "enabled": true,
+        "thresholdHours": 24,
+        "description": "定期时间窗口触发，每24小时至少一次反思"
+      },
+      "EventCount": {
+        "enabled": true,
+        "threshold": 50,
+        "description": "累计事件数达到50时触发反思"
+      },
+      "RelationChange": {
+        "enabled": true,
+        "threshold": 3,
+        "description": "关系图谱变更达3次时触发反思"
+      },
+      "Anomaly": {
+        "enabled": true,
+        "threshold": 0.7,
+        "description": "异常分数超过0.7时触发反思"
+      }
+    },
+    "deduplication": {
+      "triggerWindowMs": 60000,
+      "maxTriggersPerGoalPerHour": 5,
+      "crossGoalDedup": true
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

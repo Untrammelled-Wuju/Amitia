@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B44-CircuitTimeout",
+  "intendedFor": "Circuit Breaker step (future)",
+  "description": "熔断器视角下的 Timeout 信号分类输入",
+  "failureSignals": {
+    "toolTimedOut": {
+      "type": "timeout",
+      "errorCode": "ErrorCodeTimeout",
+      "isFailure": true,
+      "note": "Tool 整体 Deadline 到期"
+    },
+    "providerTechnicalTimeout": {
+      "type": "dependency_timeout",
+      "isFailure": "depends on whether it causes overall tool timeout",
+      "note": "单次 Provider 请求超时不一定是整个 Tool 超时"
+    },
+    "networkTimeout": {
+      "type": "connection_lost",
+      "isFailure": true,
+      "note": "网络层超时"
+    },
+    "userCancellation": {
+      "type": "cancelled",
+      "isFailure": false,
+      "note": "用户主动取消不应计入 Circuit 失败"
+    },
+    "runtimeUnavailable": {
+      "type": "runtime_failure",
+      "isFailure": true,
+      "note": "Runtime 不可用"
+    }
+  },
+  "classificationNote": "Circuit Breaker 需区分 dependency_timeout (可能恢复) 与 tool_timed_out (可能持续)；用户取消绝不能计入失败计数"
+}

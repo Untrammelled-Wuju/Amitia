@@ -1,0 +1,70 @@
+{
+  "classification": [
+    {
+      "component": "interaction.UnifiedEntry.Handle",
+      "category": "CANONICAL_DECISION_CONTINUATION",
+      "note": "生产Agent入口"
+    },
+    {
+      "component": "decision.CandidateGenerator",
+      "category": "CANDIDATE_REENTRY",
+      "note": "GenerateCandidates / GenerateCandidatesWithExcludes"
+    },
+    {
+      "component": "decision.Scoring",
+      "category": "CANONICAL_REPLAN_ENTRY",
+      "note": "RepeatPenalty + FatiguePenalty = 结构化Loop Guard"
+    },
+    {
+      "component": "decision.Arbitration",
+      "category": "CANONICAL_REPLAN_ENTRY",
+      "note": "Fallback (wait_observe) 回退机制"
+    },
+    {
+      "component": "GoalRegistry.Status",
+      "category": "GOAL_TERMINAL_GUARD",
+      "note": "终态Goal禁止重新进入"
+    },
+    {
+      "component": "ExecutionPipeline.RetryController",
+      "category": "TOOL_RETRY",
+      "note": "Kernel Tool Retry（工具级）"
+    },
+    {
+      "component": "mindruntime.reconciliation",
+      "category": "CANONICAL_REPLAN_ENTRY",
+      "note": "B36职责，B32只读"
+    },
+    {
+      "component": "mindruntime.reflection",
+      "category": "OBSERVATION_INPUT",
+      "note": "B33+ Reflection"
+    },
+    {
+      "component": "mindruntime.snapshot",
+      "category": "OBSERVATION_INPUT",
+      "note": "后续Snapshot引用"
+    }
+  ],
+  "counts": {
+    "CANONICAL_DECISION_CONTINUATION": 1,
+    "CANONICAL_REPLAN_ENTRY": 3,
+    "GOAL_TERMINAL_GUARD": 1,
+    "GOAL_ACTIVE_CONTINUATION": 0,
+    "BLOCKED_CONTINUATION": 0,
+    "WAIT_CONTINUATION": 0,
+    "ASK_USER_CONTINUATION": 0,
+    "DECISION_CYCLE": 0,
+    "CANDIDATE_REENTRY": 1,
+    "TOOL_RETRY": 1,
+    "TASK_RETRY": 0,
+    "WORKFLOW_RETRY": 0,
+    "RECOVERY": 0,
+    "FALLBACK": 0,
+    "LEGACY_REPLANNER": 0,
+    "TEST_ONLY": 0,
+    "DUPLICATE_REPLANNING_SYSTEM": 0,
+    "DUPLICATE_DECISION_LOOP": 0,
+    "UNKNOWN": 0
+  }
+}

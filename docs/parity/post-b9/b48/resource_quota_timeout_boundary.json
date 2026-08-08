@@ -1,0 +1,6 @@
+{
+  "timeoutAuthority": "B44 TimeoutController",
+  "quotaIsNotTimeout": true,
+  "differentiation": "maxDuration is B44 (wall-clock deadline); Resource duration quota is total accumulated runtime wall-clock",
+  "singleSource": "TimeoutController (single authority)"
+}

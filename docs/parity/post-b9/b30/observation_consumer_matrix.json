@@ -1,0 +1,34 @@
+{
+  "consumerMatrix": {
+    "description": "定义各模块消费Observation的方式",
+    "consumers": {
+      "decision": {
+        "consumesFrom": ["observation.outcome", "observation.errors"],
+        "purpose": "确定下一步行动决策",
+        "writeAccess": false
+      },
+      "mindruntime_reflection": {
+        "consumesFrom": ["observation.facts", "observation.metadata"],
+        "purpose": "生成反思和模式识别",
+        "writeAccess": true
+      },
+      "mindruntime_reconciliation": {
+        "consumesFrom": ["observation.outcome", "observation.facts"],
+        "purpose": "结果对账和一致性校验",
+        "writeAccess": true
+      },
+      "agentLoop": {
+        "consumesFrom": ["observation.normalizedOutcome", "observation.retryable"],
+        "purpose": "控制重试流和循环终止",
+        "writeAccess": false
+      }
+    },
+    "consumerErrors": {
+      "unauthorizedWrite": 0,
+      "circularDependency": 0,
+      "staleConsumption": 0,
+      "consumerConflict": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

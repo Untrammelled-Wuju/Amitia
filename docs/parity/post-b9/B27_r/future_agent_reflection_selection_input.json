@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "candidateSet": {
+    "description": "Full candidate set from B25 Generation",
+    "usedBy": "Reflection Layer to evaluate selection quality"
+  },
+  "evaluationSummary": {
+    "description": "B26 evaluation results (scores, constraints, safety)",
+    "usedBy": "Reflection Layer to compare predicted vs actual"
+  },
+  "selectedCandidate": {
+    "description": "B27 output - which candidate was chosen",
+    "usedBy": "Reflection Layer to assess decision quality"
+  },
+  "selectionReason": {
+    "description": "Why this candidate was selected (Reasons[])",
+    "usedBy": "Reflection Layer for decision audit"
+  },
+  "actualOutcomeReference": {
+    "description": "Future observation of what actually happened",
+    "usedBy": "Reflection Layer to assess selection-to-outcome correlation"
+  }
+}

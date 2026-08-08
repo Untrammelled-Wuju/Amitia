@@ -1,0 +1,22 @@
+{
+  "guarantees": {
+    "normalExecutionAudit": {
+      "policy": "bounded_async",
+      "description": "DefaultRecordWriter uses bounded queue (10000); non-blocking select; falls back to direct write on full"
+    },
+    "highRiskAudit": {
+      "policy": "synchronous_committed",
+      "description": "WriteAuditEvent with high/critical risk → sync write (HighRiskSyncWrite=true)"
+    },
+    "diagnosticProjection": {
+      "policy": "best_effort_cache",
+      "description": "Developer Console DiagnosticRepository with maxItems cap; may drop old entries"
+    }
+  },
+  "currentGap": {
+    "flushLoopMissing": true,
+    "drainOnShutdownMissing": true,
+    "productionExecutionNotWired": true,
+    "note": "Writer exists with correct guarantees but not used by production execution path"
+  }
+}

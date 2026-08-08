@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29-future-replanning",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "replanningReferences": {
+    "description": "Replanning系统对Action执行链路的引用",
+
+    "references": [
+      {
+        "component": "Replanning",
+        "affectsToolExecution": true,
+        "notes": "Replanning可能决定重试或变更工具调用"
+      },
+      {
+        "component": "Replanning",
+        "usesToolFacade": true,
+        "notes": "重规划结果通过ToolFacade执行"
+      }
+    ]
+  },
+
+  "summary": {
+    "toolExecutionInfluencePaths": 1,
+    "usesCanonicalPath": true
+  }
+}

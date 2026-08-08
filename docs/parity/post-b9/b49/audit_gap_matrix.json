@@ -1,0 +1,55 @@
+{
+  "gapMatrix": [
+    {
+      "requirement": "Operation / Invocation / Attempt / Trace canonical models exist",
+      "status": "ALREADY_SUPPORTED",
+      "evidence": "observability/types.go OperationRecord/InvocationRecord/ExecutionAttempt/Trace"
+    },
+    {
+      "requirement": "Canonical Audit Writer with bounded queue, flush, drain",
+      "status": "ALREADY_SUPPORTED",
+      "evidence": "observability/writer.go DefaultRecordWriter (queue bounded 10000, Flush, Close)"
+    },
+    {
+      "requirement": "Persistent canonical repository (SQLite-backed)",
+      "status": "ALREADY_SUPPORTED",
+      "evidence": "observability/storage.go StorageBackend interface (presumed SQLite impl exists)"
+    },
+    {
+      "requirement": "Production ExecutionPipeline writes audit to canonical persistent store",
+      "status": "MISSING_CANONICAL_WRITER_WIRING",
+      "evidence": "execution/pipeline.go AuditRec = execution.AuditRecorder (memory map only)",
+      "importance": "CRITICAL"
+    },
+    {
+      "requirement": "Trace ID propagation from Execution to Observability",
+      "status": "MISSING_TRACE_CORRELATION",
+      "evidence": "pipeline.go does not create/propagate observability.TraceID"
+    },
+    {
+      "requirement": "Graceful shutdown drain for observability RecordWriter",
+      "status": "MISSING_DRAIN",
+      "evidence": "writer.go Close() closes queue but no startup flush loop or production shutdown drain wiring visible"
+    },
+    {
+      "requirement": "Developer Console reads canonical observability store",
+      "status": "PARTIALLY_SUPPORTED",
+      "evidence": "DiagnosticRepository is bounded in-memory cache, likely populated separately from canonical store"
+    },
+    {
+      "requirement": "Audit query API with pagination/cursor",
+      "status": "ALREADY_SUPPORTED",
+      "evidence": "observability/query.go + pagination.go (ListOperations/ListInvocations with cursor)"
+    },
+    {
+      "requirement": "Secret/reference-only audit (B46 compliance)",
+      "status": "ALREADY_SUPPORTED",
+      "evidence": "InvocationRecord has InputHash/OutputHash but no Secret/Gredential fields"
+    },
+    {
+      "requirement": "AuditEvent risk classification (high/critical sync write)",
+      "status": "ALREADY_SUPPORTED",
+      "evidence": "writer.go WriteAuditEvent high/critical risk sync Write"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "note": "For B48 (frozen = Idempotency Parity Gap).",
+  "invocation": {
+    "InvocationID": "observability.InvocationRecord.InvocationID",
+    "IdempotencyKey": "NOT stored raw — InvocationRecord.IdempotencyKeyDigest = HashInput(idempotencyKey)"
+  },
+  "dedupeDecision": {
+    "Deduplicated": "InvocationRecord.Status=succeeded with idempotency flag in Metadata",
+    "OriginalInvocationRef": "Reference to original InvocationID (not raw key)"
+  },
+  "forbidden": {
+    "rawIdempotencyMaterial": "Full/high-sensitive IdempotencyKey must not be stored in audit"
+  }
+}

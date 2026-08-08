@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B44",
+  "errorMapping": {
+    "context.DeadlineExceeded": {
+      "mappedStatus": "ToolResultStatusTimedOut",
+      "mappedErrorCode": "ErrorCodeTimeout",
+      "semantic": "Tool Timed Out",
+      "examples": ["handleCtxError in adapter_android/ios/desktop", "JS adapter detect 'timeout'/'deadline'", "WASM detect DeadlineExceeded"]
+    },
+    "context.Canceled": {
+      "mappedStatus": "ToolResultStatusCancelled",
+      "mappedErrorCode": "ErrorCodeCancelled",
+      "semantic": "Tool Cancelled (NOT timed out)",
+      "note": "B43 contract: Canceled and TimedOut are distinct"
+    },
+    "provider_technical_timeout": {
+      "mappedStatus": "ToolResultStatusTimedOut (if overall invocation timed_out) OR ToolResultStatusFailed (if only provider attempt failed)",
+      "mappingRule": "Provider single request timeout ≠ automatic Tool TimedOut ONLY if it causes overall invocation deadline exceeded",
+      "note": "Per B44 §18-19: Provider shorter timeout is allowed but may not represent whole tool timeout"
+    },
+    "network_connection_lost": {
+      "mappedStatus": "ToolResultStatusFailed",
+      "mappedErrorCode": "ErrorCodeConnectionLost",
+      "semantic": "Connection Lost (NOT timed out)"
+    },
+    "runtime_unavailable": {
+      "mappedStatus": "ToolResultStatusFailed",
+      "mappedErrorCode": "ErrorCodeRuntimeUnavailable",
+      "semantic": "Runtime Unavailable (NOT timed out)"
+    },
+    "runtime_startup_timeout": {
+      "mappedStatus": "ToolResultStatusFailed OR ToolResultStatusTimedOut",
+      "mappedErrorCode": "ErrorCodeTimeout",
+      "semantic": "Depends on whether startup timeout causes overall invocation deadline exceeded",
+      "note": "RuntimeHost.StartupTimeout is lifecycle technical timeout"
+    },
+    "execution_failed": {
+      "mappedStatus": "ToolResultStatusFailed",
+      "mappedErrorCode": "ErrorCodeInternalError",
+      "semantic": "Execution Failed (NOT timed out)"
+    },
+    "task_timeout": {
+      "mappedStatus": "ToolResultStatusTimedOut (propagated as parent cancel/deadline)",
+      "mappedErrorCode": "ErrorCodeTimeout",
+      "semantic": "Task-level timeout propagates to child Tool via parent context"
+    },
+    "workflow_timeout": {
+      "mappedStatus": "ToolResultStatusTimedOut (propagated as parent cancel/deadline)",
+      "mappedErrorCode": "ErrorCodeTimeout",
+      "semantic": "Workflow-level timeout propagates to child Tool via parent context"
+    },
+    "mcp_transport_timeout": {
+      "mappedStatus": "ToolResultStatusTimedOut OR ToolResultStatusFailed",
+      "mappingRule": "If MCP transport timeout causes overall tool deadline exceeded → TimedOut; otherwise → Failed with provider error"
+    }
+  },
+  "canonicalDistinction": {
+    "timed_out": "DeadlineExceeded from context OR explicit timeout mapping",
+    "cancelled": "context.Canceled from external/parent cancellation",
+    "failed": "Any other execution/provider failure"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B33",
+  "description": "B33步骤输入清单",
+  "expectedInputs": {
+    "b30ObservationAuthority": "mindruntime.observability",
+    "b31GoalProgressAuthority": "agent_goal_progress_authority",
+    "b32ContinuationDecision": "agent_replanning_contract"
+  },
+  "actualArtifacts": [
+    "b33_step_definition_resolution.json",
+    "current_reflection_inventory.json",
+    "reflection_component_classification.json",
+    "agent_reflection_authority.json"
+  ],
+  "status": "PASS_NO_CODE_CHANGE"
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "input": {
+    "goal": "Implicit via Candidate.GoalType/GoalID",
+    "selectedCandidate": "BehaviorCandidate (B27 output)",
+    "candidateEvaluation": "Scores embedded in BehaviorCandidate",
+    "decisionOutcome": "Implicit via Candidate validity",
+    "agentContext": {
+      "characterID": "via BehavioralPlan.CharacterID (currently empty)",
+      "userID": "via BehavioralPlan.UserID (currently empty)",
+      "conversationID": "NOT_PRESENT (handled at interaction layer)"
+    },
+    "constraints": "BehaviorCandidate.Constraints",
+    "permissionRequirements": "NOT_REQUIRED (handled in execution)",
+    "runtimeRequirements": "NOT_REQUIRED (handled in execution)",
+    "capabilityRefs": "BehaviorCandidate.Tag maps to capabilities",
+    "taskEscalationHints": "Based on BehaviorTag and LifeSnapshot",
+    "workflowEscalationHints": "Based on BehaviorTag complexity"
+  }
+}

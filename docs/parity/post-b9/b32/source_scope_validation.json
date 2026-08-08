@@ -1,0 +1,29 @@
+{
+  "scopeValidation": {
+    "backendInternalDecision": {
+      "readOnly": true,
+      "note": "CandidateGenerator, Scoring, Arbitration, BehaviorPlanBuilder只读审计"
+    },
+    "backendInternalAgent": {
+      "readOnly": true,
+      "note": "Service只读审计"
+    },
+    "backendInternalMindruntime": {
+      "readOnly": true,
+      "note": "mindruntime/reconciliation/reflection/snapshot等只读"
+    },
+    "backendInternalQueue": {
+      "readOnly": true,
+      "note": "Queue只读"
+    },
+    "backendInternalExtensionKernel": {
+      "readOnly": true,
+      "note": "Kernel/TaskRuntime/Workflow只读"
+    },
+    "docsOnly": true
+  },
+  "unexpectedFiles": [],
+  "goModUnchanged": true,
+  "goSumUnchanged": true,
+  "databaseUnchanged": true
+}

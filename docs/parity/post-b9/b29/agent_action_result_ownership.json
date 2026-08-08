@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "resultOwnership": [
+    {
+      "resultType": "UnifiedToolResult",
+      "owner": "execution.ExecutionPipeline",
+      "source": "RuntimeAdapter.Dispatch",
+      "lifecycle": "Pipeline内创建、验证、清洗后返回",
+      "retImmediate": true,
+      "notes": "Pipeline执行的全部生命周期"
+    },
+    {
+      "resultType": "LegacyToolResult",
+      "owner": "kernel.ToolFacade",
+      "source": "unifiedResultToLegacy",
+      "lifecycle": "ToolFacade内转换后返回",
+      "retImmediate": true,
+      "notes": "Facade格式转换桥接"
+    },
+    {
+      "resultType": "chat.ToolResult",
+      "owner": "chatToolRuntimeAdapter",
+      "source": "toChatResult",
+      "lifecycle": "Adapter内转换后返回给chat层",
+      "retImmediate": true,
+      "notes": "chat工具执行结果"
+    },
+    {
+      "resultType": "AuditRecord",
+      "owner": "execution.AuditRecorder",
+      "source": "Pipeline.recordAuditStart/Finish/Denied",
+      "lifecycle": "执行全程记录",
+      "retImmediate": false,
+      "notes": "审计记录"
+    },
+    {
+      "resultType": "MetricRecord",
+      "owner": "execution.MetricsRecorder",
+      "source": "Pipeline.MetricsRec.Record",
+      "lifecycle": "执行完成后记录",
+      "retImmediate": false,
+      "notes": "指标记录"
+    },
+    {
+      "resultType": "CircuitBreakerState",
+      "owner": "execution.CircuitBreakerCoordinator",
+      "source": "Pipeline.CircuitBreaker.RecordResult",
+      "lifecycle": "执行完成后更新状态",
+      "retImmediate": false,
+      "notes": "熔断器状态"
+    }
+  ],
+
+  "summary": {
+    "totalResultOwners": 6,
+    "immediateResults": 3,
+    "deferredResults": 3
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "planOwns": {
+    "structure": "BehaviorPlan describes what to do",
+    "actionRepresentation": "BehaviorTag + Intent + Strategy describe action"
+  },
+  "executionOwns": {
+    "actualSideEffect": "ToolFacade.Execute()",
+    "providerCall": "RuntimeAdapter",
+    "toolInvocation": "ToolInvocation ID"
+  },
+  "boundary": "Plan is declarative. Execution is imperative."
+}

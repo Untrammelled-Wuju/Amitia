@@ -1,0 +1,15 @@
+{
+  "appliedChanges": {
+    "description": "B30已应用变更列表（空，无需变更）",
+    "changes": [],
+    "summary": {
+      "totalApplied": 0,
+      "codeChanges": 0,
+      "configChanges": 0,
+      "schemaChanges": 0,
+      "interfaceChanges": 0,
+      "revertedChanges": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

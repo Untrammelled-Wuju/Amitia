@@ -1,0 +1,61 @@
+{
+  "inventory": {
+    "observationTypes": [
+      "reflection_run",
+      "observability",
+      "reconciliation",
+      "pattern_recognition",
+      "snapshot",
+      "trace_export",
+      "trace_query",
+      "supervisor",
+      "reflection_supervisor",
+      "reflection_trigger"
+    ],
+    "totalTypes": 10,
+    "totalInstances": 0,
+    "domains": {
+      "mindruntime": {
+        "path": "mindruntime/",
+        "components": [
+          "reflection_run",
+          "observability",
+          "reconciliation",
+          "pattern_recognition",
+          "snapshot",
+          "trace_export",
+          "trace_query",
+          "supervisor",
+          "reflection_supervisor",
+          "reflection_trigger"
+        ],
+        "componentCount": 10
+      },
+      "agent": {
+        "path": "agent/",
+        "components": [
+          "handler.go",
+          "service.go"
+        ],
+        "componentCount": 2
+      },
+      "agent_tool": {
+        "path": "agent/tool/",
+        "components": [
+          "memory",
+          "model",
+          "voice_reply"
+        ],
+        "componentCount": 3
+      }
+    },
+    "counts": {
+      "mindruntimeComponents": 10,
+      "agentComponents": 2,
+      "agentToolComponents": 3,
+      "totalComponents": 15,
+      "duplicateComponents": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

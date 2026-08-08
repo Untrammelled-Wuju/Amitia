@@ -1,0 +1,11 @@
+{
+  "boundary": {
+    "decisionLayerOwns": "Agent Replanning (B32)",
+    "kernelOwns": "Tool Retry (ExecutionPipeline.RetryController)",
+    "description": "Agent Replanning != Tool Retry."
+  },
+  "agentRetry": "B32只决定控制流(CONTINUE/WAIT/STOP/BLOCKED/ASK_USER)。不直接执行Tool Retry。",
+  "kernelRetry": "B29 ExecutionPipeline.RetryController在工具层级执行retry (如provider暂时失败)。",
+  "noDoubleRetry": true,
+  "boundaryEnforcement": "B32不调用ToolFacade.Execute(around)。Tool Retry在Pipeline内部执行。"
+}

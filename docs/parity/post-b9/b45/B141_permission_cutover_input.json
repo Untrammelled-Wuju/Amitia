@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B45-PermissionCutover",
+  "intendedFor": "B141",
+  "description": "Permission 链路切割迁移输入 — B141 迁移时复用 B45 已建立的权限边界合同",
+  "currentCanonicalPaths": {
+    "definitionRegistry": "permission.PermissionDefinitionRegistry (definition.go:51)",
+    "permissionBroker": "permission.DefaultPermissionBroker (broker.go:28)",
+    "grantStorage": "PermissionStorage (SQLite, broker.go:30)",
+    "scopeManager": "scope.ScopeManager",
+    "approvalGate": "execution.ApprovalGate + Broker.Explain",
+    "executionOrder": "ScopeGate → PermissionGate → ApprovalGate → Dispatch"
+  },
+  "legacyPaths": {
+    "note": "B45 全仓库扫描未发现独立于 PermissionBroker 之外的第二套权限系统",
+    "internalPath": "InternalRuntimeAdapter (scope_gate.go:49 bypass) — 系统内部路径，非 Agent-callable；合法"
+  },
+  "cutoverStrategy": {
+    "phase1": "B45 已验证 DefaultPermissionBroker 唯一 + ScopeManager 唯一 + ApprovalGate 唯一",
+    "phase2": "所有 Agent-callable Tool 必须通过 ExecutionPipeline",
+    "phase3": "切割后执行 B45 全部验证矩阵"
+  }
+}

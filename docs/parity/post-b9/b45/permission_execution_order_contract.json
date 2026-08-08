@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B45",
+  "contract": {
+    "name": "Permission Execution Order Contract",
+    "description": "Execution Pipeline 中各阶段的执行顺序与权限关系",
+    "order": [
+      {"order": 1, "phase": "resolveTool", "owner": "Pipeline.ToolResolver", "before": "lookup", "after": "-", "permission_relation": "Tool lookup only"},
+      {"order": 2, "phase": "Input validation", "owner": "InputValidator", "before": "permission check", "after": "tool resolved", "permission_relation": "B40 Schema validation"},
+      {"order": 3, "phase": "Availability check", "owner": "AvailabilityGate", "before": "scope check", "after": "input valid", "permission_relation": "Runtime availability"},
+      {"order": 4, "phase": "Scope Gate", "owner": "ScopeGate (ScopeManager)", "before": "permission check", "after": "available", "permission_relation": "B45: Scope must be valid before Permission"},
+      {"order": 5, "phase": "Permission Gate", "owner": "PermissionGate (PermissionBroker)", "before": "runtime dispatch", "after": "scope valid", "permission_relation": "B45: Permission decision AUTHORITY"},
+      {"order": 6, "phase": "Approval Gate", "owner": "ApprovalGate", "before": "runtime dispatch", "after": "permission = require_approval", "permission_relation": "B45: Pending approval handling"},
+      {"order": 7, "phase": "Depth Guard", "owner": "DepthGuard", "before": "runtime dispatch", "after": "approved", "permission_relation": "B45: 防止无限递归"},
+      {"order": 8, "phase": "Rate Limit", "owner": "RateLimiter", "before": "runtime dispatch", "after": "approved", "permission_relation": "Limiting"},
+      {"order": 9, "phase": "Concurrency", "owner": "ConcurrencyCtrl", "before": "runtime dispatch", "after": "rate limited", "permission_relation": "Limit"},
+      {"order": 10, "phase": "Idempotency", "owner": "IdempotencyGuard", "before": "runtime dispatch", "after": "concurrency ok", "permission_relation": "B54"},
+      {"order": 11, "phase": "Timeout", "owner": "TimeoutCtrl", "before": "runtime dispatch", "after": "idempotency checked", "permission_relation": "B44"},
+      {"order": 12, "phase": "Cancellation", "owner": "CancellationCtrl", "before": "runtime dispatch", "after": "timeout set", "permission_relation": "B43"},
+      {"order": 13, "phase": "Runtime Dispatch", "owner": "RuntimeDispatcher", "before": "-", "after": "ALL GATES PASSED", "permission_relation": "B45: 权限边界确认后的唯一入口"}
+    ],
+    "invariant": "Runtime Dispatch (step 13) 必须在 Scope + Permission + Approval (steps 4-6) 全部完成后才能执行",
+    "evidencePath": "execution/pipeline.go:55-132"
+  }
+}

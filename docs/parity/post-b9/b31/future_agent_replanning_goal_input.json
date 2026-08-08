@@ -1,0 +1,47 @@
+{
+  "description": "供后续B32+ Replanning步骤消费的Goal输入",
+  "goalState": {
+    "possibleValues": ["remains_active", "progressed", "blocked", "waiting", "achieved", "abandoned"],
+    "source": "B31 Goal Progress Decision"
+  },
+  "progressState": {
+    "currentProgress": "float64 0-1",
+    "progressDelta": "since last evaluation",
+    "source": "GoalRegistry.Get(id).Progress"
+  },
+  "lastObservation": {
+    "observationId": "string",
+    "outcomeType": "string",
+    "semanticCategory": "string",
+    "source": "B30 Canonical Observation"
+  },
+  "retryable": {
+    "value": "boolean",
+    "source": "B30 normalizedOutcome.retryable"
+  },
+  "availability": {
+    "providerAvailable": "boolean",
+    "runtimeAvailable": "boolean",
+    "source": "Derived from B30 Observation"
+  },
+  "permissionIssue": {
+    "hasIssue": "boolean",
+    "deniedPermissions": "string[]",
+    "source": "B30 error semantic projection"
+  },
+  "dependencyIssue": {
+    "hasIssue": "boolean",
+    "missingDependencies": "string[]",
+    "source": "B30 Observation"
+  },
+  "sideEffectUncertainty": {
+    "hasUncertainty": "boolean",
+    "source": "B30 side effect projection"
+  },
+  "blockingReason": {
+    "cause": "enum: permission_denied | scope_denied | runtime_unavailable | dependency_missing | connection_lost | none",
+    "detail": "string",
+    "source": "B31 observation_goal_progress_mapping"
+  },
+  "note": "B31不执行Replanning。此结构仅作为未来B32+的输入参考。"
+}

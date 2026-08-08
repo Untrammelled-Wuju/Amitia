@@ -1,0 +1,87 @@
+{
+  "classification": [
+    {
+      "component": "Goal",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "CANONICAL_GOAL",
+      "note": "Goal结构体定义"
+    },
+    {
+      "component": "GoalType",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "CANONICAL_GOAL",
+      "note": "Goal类型枚举"
+    },
+    {
+      "component": "GoalPriority",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "CANONICAL_GOAL",
+      "note": "Goal优先级枚举"
+    },
+    {
+      "component": "GoalStatus",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "CANONICAL_GOAL_STATE",
+      "note": "Goal状态枚举(pending/active/suspended/achieved/abandoned/wish)"
+    },
+    {
+      "component": "GoalRegistry",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "CANONICAL_GOAL_REGISTRY",
+      "note": "唯一Goal注册中心"
+    },
+    {
+      "component": "GoalRegistry.UpdateStatus",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "CANONICAL_GOAL_REGISTRY",
+      "note": "原子状态更新"
+    },
+    {
+      "component": "GoalRegistry.PromoteToWish",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "CANONICAL_GOAL_REGISTRY",
+      "note": "Goal Wish晋升"
+    },
+    {
+      "component": "Goal.Progress",
+      "path": "backend/internal/decision/goal_registry.go",
+      "category": "GOAL_PROGRESS_PROJECTION",
+      "note": "进度字段(0-1 float64)"
+    },
+    {
+      "component": "B30 Observation",
+      "path": "backend/internal/mindruntime/",
+      "category": "OBSERVATION_INPUT",
+      "note": "B30产生的Canonical Observation作为Goal Evaluation输入"
+    },
+    {
+      "component": "Decision.CandidateGenerator",
+      "path": "backend/internal/decision/candidate_generator.go",
+      "category": "DECISION_INPUT",
+      "note": "Candidate作为Plan上下文参考"
+    },
+    {
+      "component": "Decision.BehaviorPlanBuilder",
+      "path": "backend/internal/decision/behavior_plan_builder.go",
+      "category": "DECISION_INPUT",
+      "note": "Plan作为Goal Evaluation上下文参考"
+    }
+  ],
+  "counts": {
+    "CANONICAL_GOAL": 3,
+    "CANONICAL_GOAL_REGISTRY": 3,
+    "CANONICAL_GOAL_STATE": 1,
+    "CANONICAL_GOAL_EVALUATOR": 0,
+    "GOAL_PROGRESS_PROJECTION": 1,
+    "OBSERVATION_INPUT": 1,
+    "DECISION_INPUT": 2,
+    "TASK_PROGRESS": 0,
+    "WORKFLOW_PROGRESS": 0,
+    "LEGACY_GOAL": 0,
+    "TEST_ONLY": 0,
+    "DUPLICATE_GOAL_SYSTEM": 0,
+    "DUPLICATE_GOAL_REGISTRY": 0,
+    "DUPLICATE_GOAL_EVALUATOR": 0,
+    "UNKNOWN": 0
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "sourceScope": {
+    "description": "验证本次修改未超出B29规范范围",
+
+    "modifications": []
+  },
+
+  "scopeChecks": {
+    "modifiedToolFacade": false,
+    "modifiedExecutionPipeline": false,
+    "modifiedPermissionGate": false,
+    "modifiedToolRegistry": false,
+    "modifiedRuntimeAdapter": false,
+    "modifiedResultValidator": false,
+    "modifiedSanitizer": false,
+    "modifiedAuditRecorder": false,
+    "modifiedAgentService": false,
+    "modifiedChatCompute": false,
+    "modifiedChatMessageLLM": false
+  },
+
+  "summary": {
+    "filesModified": 0,
+    "scopeViolations": 0,
+    "status": "NO_CHANGES"
+  }
+}

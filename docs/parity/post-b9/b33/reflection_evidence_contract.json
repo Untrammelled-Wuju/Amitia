@@ -1,0 +1,32 @@
+{
+  "b33_reflection_evidence_contract": {
+    "scope": "MindRuntime Reflection Evidence Binding",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "evidenceBindings": {
+      "eventReference": {
+        "supported": true,
+        "bindingType": "event_id",
+        "traceable": true
+      },
+      "relationReference": {
+        "supported": true,
+        "bindingType": "relation_id",
+        "traceable": true
+      },
+      "memoryReference": {
+        "supported": true,
+        "bindingType": "memory_id",
+        "traceable": true
+      }
+    },
+    "evidenceRequirements": {
+      "minPerClaim": 2,
+      "mustBeNonCircular": true,
+      "forbidden": [],
+      "forgedEvidenceCount": 0
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

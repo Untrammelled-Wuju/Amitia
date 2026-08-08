@@ -1,0 +1,34 @@
+{
+  "futureCheckpointInput": {
+    "description": "未来Checkpoint模块将使用的Observation输入定义",
+    "inputs": {
+      "observationIdentity": {
+        "fields": ["observationId", "sourceType", "sourceId"],
+        "required": true,
+        "purpose": "唯一标识观察记录"
+      },
+      "domainResultReference": {
+        "fields": ["toolResultId", "taskResultId", "workflowResultId"],
+        "required": true,
+        "purpose": "引用原始域结果",
+        "note": "可通过引用追溯到原始域结果"
+      },
+      "outcomeSummary": {
+        "fields": ["mappedStatus", "semanticCategory", "keyFacts"],
+        "required": true,
+        "purpose": "总结执行结果用于恢复"
+      },
+      "contextSnapshot": {
+        "fields": ["observationTimestamp", "relatedObservations", "environmentState"],
+        "required": false,
+        "purpose": "提供恢复时的上下文信息"
+      }
+    },
+    "delivery": {
+      "to": "checkpoint/store",
+      "format": "CheckpointRecord",
+      "protocol": "sync"
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

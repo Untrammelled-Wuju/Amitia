@@ -1,0 +1,15 @@
+{
+  "quotaResult": {
+    "effective": "MaxOutputBytes + MaxMemoryBytes (most restrictive applicable trusted limit)",
+    "status": "RESOURCE_LIMIT_EXCEEDED",
+    "retryable": false,
+    "reason": "Same request deterministically exceeds the same quota again"
+  },
+  "usage": {
+    "outputBytes": "measured (post-execution)",
+    "memoryBytes": "runtime-specific (unknown unless JS)",
+    "cpu/disk/network": "UNKNOWN"
+  },
+  "deadline": "B44 Timeout already bounds wall-clock",
+  "cancellation": "B43 cancellation triggered if hard limit requires mid-execution kill"
+}

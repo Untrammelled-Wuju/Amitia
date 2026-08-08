@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "fromStep": "B31",
+  "toStep": "B32",
+  "generatedAt": "2026-08-08T21:00:00+08:00",
+  "b23GuardReference": "backend/internal/mindruntime/, REUSE+EXTEND, forbidden: Reconciliation2/Snapshot2",
+  "inputManifest": {
+    "step": "B31",
+    "status": "PASS_NO_CODE_CHANGE",
+    "artifacts": [
+      "b31_status.json",
+      "current_goal_progress_inventory.json",
+      "goal_progress_component_classification.json",
+      "agent_goal_progress_authority.json",
+      "agent_goal_progress_contract.json",
+      "goal_terminal_state_contract.json",
+      "goal_progress_transition_matrix.json",
+      "observation_goal_progress_mapping.json"
+    ],
+    "canonicalGoal": {
+      "owner": "decision.GoalRegistry",
+      "types": ["connection", "support", "growth", "autonomy", "clarification", "conflict_repair", "information"],
+      "statuses": ["pending", "active", "suspended", "achieved", "abandoned", "wish"],
+      "progressField": "Progress float64 0-1"
+    },
+    "currentGoalState": {
+      "description": "从GoalRegistry.Get获取的当前Goal状态",
+      "includes": ["Status", "Progress", "Type", "Priority", "Metadata"]
+    },
+    "goalProgressDecision": {
+      "possibleValues": ["UNCHANGED", "PROGRESSED", "SATISFIED", "BLOCKED", "FAILED", "WAITING"],
+      "note": "语义解释，实际存储使用GoalStatus"
+    },
+    "canonicalObservation": {
+      "owner": "mindruntime.observability (B30冻结)",
+      "note": "B30已归一化的Observation作为Goal Evaluation输入"
+    },
+    "errorSemantics": {
+      "owner": "B30 agent_observation_error_projection",
+      "note": "结构化错误映射"
+    },
+    "retryableSemantics": {
+      "owner": "B30 observation outputContract",
+      "note": "retryable flag"
+    },
+    "blockingCause": {
+      "possibleValues": ["permission_denied", "scope_denied", "runtime_unavailable", "dependency_missing", "connection_lost", "none"],
+      "source": "B31 observation_goal_progress_mapping"
+    },
+    "currentCandidatePlanActionRefs": {
+      "description": "当前Candidate/Plan/Action引用供Replanning参考",
+      "candidateOwner": "decision.BehaviorCandidate (B25)",
+      "planOwner": "decision.BehaviorPlan (B28)",
+      "actionOwner": "ToolFacade.ExecuteModelTool (B29)"
+    },
+    "supersessionState": {
+      "description": "Superseded Goal已进入abandoned终态，不可被重新激活"
+    },
+    "keyFindings": [
+      "所有B31要求均已满足",
+      "GoalAuthority唯一(GoalRegistry)",
+      "Tool Success != Goal Success",
+      "Tool Failure != Goal Failure",
+      "Terminal State不可逆",
+      "无重复系统",
+      "无跨Goal/跨角色/跨会话Mutation",
+      "RWMutex保护原子更新"
+    ]
+  },
+  "nextStep": "B32"
+}

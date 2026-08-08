@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B44",
+  "contract": {
+    "name": "Timeout Acceptance Contract",
+    "description": "定义 Deadline 到期时的竞争关系与终态接受规则",
+    "raceScenarios": [
+      {
+        "scenario": "Deadline reached + Execution timeout",
+        "determination": "Execution Pipeline 观察到 ctx.Err() == DeadlineExceeded",
+        "terminalStatus": "timed_out",
+        "cancellationTriggered": true
+      },
+      {
+        "scenario": "Provider Success + Timeout race",
+        "resolution": "若终态已提交（Success），后续 Timeout 不得覆盖",
+        "rule": "terminal state linearization — first commit wins"
+      },
+      {
+        "scenario": "Timeout + User Cancel race",
+        "resolution": "谁先被终态接受系统处理谁赢",
+        "rule": "finalization linearization per B43 contract"
+      },
+      {
+        "scenario": "Provider Error + Timeout race",
+        "resolution": "先提交终态者赢",
+        "rule": "same as above"
+      }
+    ],
+    "acceptancePoints": {
+      "pipeline": "TimeoutCtrl.WithTimeout 创建 context 后，runtime 在 select 中观察 Done channel",
+      "adapter": "adapter_android/ios/desktop handleCtxError 检测 DeadlineExceeded 并映射为 StatusTimedOut",
+      "result": "最终写入 UnifiedToolResult.Status = timed_out + ErrorCodeTimeout"
+    },
+    "guard": {
+      "lateSuccessOverride": 0,
+      "lateFailureOverride": 0,
+      "terminalMutation": 0,
+      "doubleFinalization": 0
+    }
+  }
+}

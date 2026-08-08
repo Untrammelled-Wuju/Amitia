@@ -4,43 +4,62 @@
   "status": "PASS_NO_CODE_CHANGE",
   "constructionMode": ["REUSE", "EXTEND"],
   "canonical": {
-    "toolDefinition": "capability.ToolDefinition (backend/internal/extension/kernel/capability/tool.go)",
-    "inputSchemaAuthority": "ToolDefinition.InputSchema json.RawMessage",
-    "outputSchemaAuthority": "ToolDefinition.OutputSchema json.RawMessage",
-    "registrationValidation": "ToolRegistry.Register/BatchRegister (identity-only)",
-    "executionInputValidation": "execution.InputValidator (size-only)",
-    "executionResultValidation": "execution.ResultValidator",
-    "modelProjection": "ToolFacade.buildKernelModelTools / ToolExposureManager.GetModelTools"
+    "executionPipeline": "backend/internal/extension/kernel/execution/pipeline.go",
+    "pipelineStructFields": 28,
+    "executeMethod": "func (p *ExecutionPipeline) Execute(ctx, request) capability.UnifiedToolResult",
+    "executionChain": [
+      "ctx.Err check",
+      "InvocationValidator",
+      "ToolResolver + resolveTool",
+      "InputValidator",
+      "AvailabilityGate",
+      "ScopeGate",
+      "PermissionGate + ApprovalGate",
+      "DepthGuard",
+      "RateLimiter",
+      "ConcurrencyController (Acquire/Release)",
+      "IdempotencyGuard (Check/Record)",
+      "TimeoutController (WithTimeout)",
+      "CancellationCtrl (Wrap)",
+      "AuditRec.RecordStart",
+      "RuntimeDispatcher.Dispatch",
+      "RetryController.Retry loop",
+      "ResultValidator",
+      "Sanitizer",
+      "IdempotencyGuard.Record",
+      "SideEffectRecorder.Record",
+      "AuditRec.RecordFinish",
+      "MetricsRecorder.Record",
+      "CircuitBreaker.RecordResult"
+    ]
   },
-  "coverage": {
-    "agentCallableToolCount": 253,
-    "validInputSchemaCount": 253,
-    "emptyInputSchemaCount": 0,
-    "structuredOutputSchemaCount": 0,
-    "unresolvedSchemaCount": 0
+  "executionStatuses": [
+    "queued", "awaiting_approval", "running", "retrying",
+    "succeeded", "failed", "cancelled", "timed_out",
+    "denied", "rate_limited", "circuit_open", "invalid"
+  ],
+  "controllers": {
+    "InvocationValidator": true,
+    "InputValidator": true,
+    "AvailabilityGate": true,
+    "ScopeGate": true,
+    "PermissionGate": true,
+    "ApprovalGate": true,
+    "DepthGuard": true,
+    "RateLimiter": true,
+    "ConcurrencyController": true,
+    "IdempotencyGuard": true,
+    "TimeoutController": true,
+    "CancellationController": true,
+    "RetryController": true,
+    "ResultValidator": true,
+    "Sanitizer": true,
+    "SideEffectRecorder": true,
+    "AuditRecorder": true,
+    "MetricsRecorder": true,
+    "CircuitBreakerCoordinator": true
   },
-  "validation": {
-    "invalidProductionSchemaCount": 0,
-    "modelExecutionSchemaDriftCount": 0,
-    "invalidInputExecutionCount": 0,
-    "invalidOutputPassThroughCount": 0
-  },
-  "security": {
-    "rawSecretsInSchema": 0,
-    "rawSecretsInValidationErrors": 0
-  },
-  "duplicates": {
-    "newToolSchemaRegistry": 0,
-    "newToolDefinitionSystem": 0,
-    "newSchemaRuntime": 0,
-    "newSchemaValidator": 0,
-    "newToolResultSystem": 0,
-    "newExecutionPipeline": 0
-  },
-  "modifications": {
-    "goModChanged": false,
-    "goSumChanged": false,
-    "databaseChanged": false
-  },
+  "canonicalSystemsWired": 18,
+  "duplicateSystemsCreated": 0,
   "next": "B41"
 }

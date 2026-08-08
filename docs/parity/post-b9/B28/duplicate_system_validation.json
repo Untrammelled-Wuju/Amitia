@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B28",
+  "generatedAt": "2026-08-08T19:30:00+08:00",
+  "newAgentRuntime": 0,
+  "newPlanner": 0,
+  "newBehaviorPlanner": 0,
+  "newBehaviorPlanEngine": 0,
+  "newPlanRuntime": 0,
+  "newPlanManager": 0,
+  "newPlanRegistry": 0,
+  "newPlanStore": 0,
+  "newTaskGraph": 0,
+  "newBehaviorGraph": 0,
+  "newActionRuntime": 0,
+  "newActionExecutor": 0,
+  "newTaskRuntime": 0,
+  "newWorkflowEngine": 0,
+  "newCheckpointStore": 0
+}

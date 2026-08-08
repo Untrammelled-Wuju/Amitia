@@ -1,0 +1,6 @@
+{
+  "api": "observability/query.go",
+  "supportedFilters": ["OperationID", "InvocationID", "TraceID", "Tool/Capability", "Extension", "Runtime", "Status", "TimeRange", "RiskLevel", "Actor", "Subject"],
+  "pagination": "Cursor-based (observability/pagination.go)",
+  "guards": "No secret search; no unbounded queries"
+}

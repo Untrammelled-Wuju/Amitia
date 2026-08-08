@@ -1,0 +1,33 @@
+{
+  "goalProgressBoundary": {
+    "description": "定义Observation与Goal Progress之间的职责边界",
+    "ownership": {
+      "observation": {
+        "owns": "what happened",
+        "responsibilities": [
+          "记录执行事实",
+          "捕获输出/错误",
+          "提供原始结果数据"
+        ]
+      },
+      "goalProgress": {
+        "owns": "what it means",
+        "responsibilities": [
+          "评估目标达成度",
+          "判断进度方向",
+          "决定目标状态转换"
+        ]
+      }
+    },
+    "dataFlow": {
+      "observationToGoalProgress": "单向：Observation向Goal Progress提供评估依据",
+      "goalProgressToObservation": "无反向数据流"
+    },
+    "boundaryViolations": {
+      "observationOverreach": 0,
+      "goalProgressOverreach": 0,
+      "bidirectionalCoupling": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

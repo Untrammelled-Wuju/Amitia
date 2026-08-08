@@ -1,0 +1,24 @@
+{
+  "b33_reflection_trigger_dedup_validation": {
+    "scope": "MindRuntime Reflection Trigger Deduplication Validation",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "deduplicationResults": {
+      "duplicateTriggerCount": 0,
+      "duplicateReflectionRunCount": 0,
+      "crossGoalTriggerCount": 0,
+      "windowCollisionCount": 0,
+      "hashCollisionCount": 0
+    },
+    "rules": {
+      "suppressWithinWindow": true,
+      "windowMs": 60000,
+      "maxPerGoalPerHour": 5,
+      "crossGoalRateLimit": true,
+      "contentBasedDedup": true
+    },
+    "validationStatus": "PASS",
+    "status": "ALREADY_SUPPORTED"
+  }
+}

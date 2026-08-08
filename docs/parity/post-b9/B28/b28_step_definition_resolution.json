@@ -1,0 +1,11 @@
+{
+  "taskId": "B28",
+  "b23GuardFound": true,
+  "guardTitle": "backend/internal/queue/ (Agent Queue / Scheduling)",
+  "guardConstructionMode": ["REUSE", "EXTEND"],
+  "guardCanonicalTargets": ["backend/internal/queue/"],
+  "matchesBehaviorPlanConstruction": true,
+  "conflict": true,
+  "conflictDetails": "B23 Step Guard将B28定义为queue/(Agent Queue/Scheduling)，但B28规范描述为BehaviorPlan / Plan Construction。按优先级执行用户提供的B28规范。",
+  "resolution": "执行用户B28规范：对decision/中的BehaviorPlan系统进行只读审计。"
+}

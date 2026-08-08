@@ -1,0 +1,1 @@
+{"schemaVersion":1,"taskId":"B46","compatChecks":{"existingProviderConfig":"PASS","existingMCPConfig":"PASS","existingTrustedService":"PASS","existingOAuth":"PASS","regressionRisk":"B141 migration will require Provider code path changes"},"verdict":"All current functionality preserved. B46 BLOCKED does not modify anything."}

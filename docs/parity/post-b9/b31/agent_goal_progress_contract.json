@@ -1,0 +1,57 @@
+{
+  "contract": {
+    "name": "Goal Progress / Completion Evaluation Contract",
+    "version": "B31",
+    "input": {
+      "canonicalGoal": {
+        "source": "decision.GoalRegistry.Get(goalId)",
+        "fields": ["GoalID", "Type", "Status", "Progress", "Description", "Metadata"]
+      },
+      "currentGoalState": {
+        "source": "decision.Goal.Status",
+        "values": ["pending", "active", "suspended", "achieved", "abandoned", "wish"]
+      },
+      "canonicalObservation": {
+        "source": "B30 mindruntime.observability",
+        "fields": ["observationId", "sourceType", "status", "outcome", "facts", "errors", "metadata", "timestamp"]
+      },
+      "actionPlanCorrelation": {
+        "source": "B28 BehaviorPlan reference",
+        "optional": true
+      },
+      "errorSemantics": {
+        "source": "B30 agent_observation_error_projection",
+        "optional": true
+      },
+      "sideEffectSemantics": {
+        "source": "B30 agent_observation_side_effect_projection",
+        "optional": true
+      }
+    },
+    "output": {
+      "goalProgressDecision": {
+        "type": "UNCHANGED | PROGRESSED | SATISFIED | BLOCKED | FAILED | WAITING",
+        "note": "语义解释，实际存储复用GoalStatus"
+      },
+      "newGoalState": {
+        "type": "GoalStatus if changed",
+        "optional": true
+      },
+      "reasonCode": {
+        "type": "string enumeration",
+        "optional": true
+      },
+      "evidenceReference": {
+        "type": "observation reference",
+        "optional": true
+      }
+    },
+    "forbiddenOutputs": [
+      "New Candidate",
+      "New Plan",
+      "Executed Tool",
+      "Memory write",
+      "Reflection result"
+    ]
+  }
+}

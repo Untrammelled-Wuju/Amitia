@@ -1,0 +1,8 @@
+{
+  "permissionBrokerAuthority": "B45 PermissionBroker (permission.DefaultPermissionBroker)",
+  "permissionBrokerCount": 1,
+  "quotaDoesNotReplacePermission": true,
+  "quotaAllowedIsNotPermissionAllow": true,
+  "permissionDeniedDoesNotConsumeQuota": true,
+  "modelCannotForgeQuota": true
+}

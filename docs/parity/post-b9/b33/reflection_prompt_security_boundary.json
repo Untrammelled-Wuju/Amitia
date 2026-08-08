@@ -1,0 +1,25 @@
+{
+  "b33_reflection_prompt_security_boundary": {
+    "scope": "External observation treated as data, never instruction",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "inputSanitization": {
+      "externalObservationsAre": "data_fields_only",
+      "instructionParsingEnabled": false,
+      "candidatePromptsAre": "confidence_scored_only"
+    },
+    "securityChecks": {
+      "promptInjection": false,
+      "instructionHiding": false,
+      "roleConfusion": false,
+      "delimiterBreach": false
+    },
+    "violations": {
+      "promptInjectionAttempts": 0,
+      "instructionExecutions": 0,
+      "dataAsInstruction": 0
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

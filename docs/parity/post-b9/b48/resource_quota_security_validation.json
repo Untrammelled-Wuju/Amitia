@@ -1,0 +1,8 @@
+{
+  "modelCanExpandQuota": false,
+  "extensionCanBypassHostMaximum": false,
+  "providerCanExpandHostQuota": false,
+  "permissionBypass": false,
+  "rawSecretLeak": false,
+  "untrustedMetadataCanOverrideQuota": false
+}

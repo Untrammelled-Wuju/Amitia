@@ -1,0 +1,26 @@
+{
+  "completionEvidenceContract": {
+    "goalAchieved": {
+      "requiresObservation": true,
+      "requiresGoalConditionMatch": true,
+      "forbiddenShortcuts": [
+        "singleToolSuccess",
+        "singleActionSuccess",
+        "noAction"
+      ]
+    },
+    "evidenceFields": {
+      "goalId": "string - required",
+      "observationId": "string - required",
+      "completionCondition": "string - required",
+      "satisfiedAt": "timestamp - required",
+      "previousProgress": "float64",
+      "finalProgress": "float64"
+    },
+    "minimumEvidence": {
+      "detail": "Goal completion MUST be supported by Canonical Observation evidence referencing goal completion condition. Tool success alone is NOT sufficient.",
+      "toolSuccessEqualsGoalCompletion": false,
+      "automaticCompletionOnToolSuccess": false
+    }
+  }
+}

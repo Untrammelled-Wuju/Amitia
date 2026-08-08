@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "deferredGaps": [
+    {
+      "capability": "Multi-Step Plan Construction",
+      "deferredTo": "B28",
+      "notes": "BehaviorPlanBuilder is the canonical planner"
+    },
+    {
+      "capability": "Tool Execution",
+      "deferredTo": "B28+",
+      "notes": "Execution phase responsibility"
+    },
+    {
+      "capability": "Observation Processing",
+      "deferredTo": "B28+",
+      "notes": "Future observation step"
+    },
+    {
+      "capability": "Reflection Integration",
+      "deferredTo": "B28+",
+      "notes": "mindruntime.Reflection"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "candidateSelectionAuthorityCount": 1,
+  "doubleSelectionCount": 0,
+  "ineligibleSelectedCount": 0,
+  "unsafeSelectedCount": 0,
+  "staleCandidateSelectedCount": 0,
+  "crossGoalSelectionCount": 0,
+  "crossCharacterSelectionCount": 0,
+  "crossConversationSelectionCount": 0,
+  "supersededGoalSelectionCount": 0
+}

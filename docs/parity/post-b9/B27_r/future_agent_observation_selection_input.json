@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "selectedCandidate": {
+    "description": "The candidate that was selected and executed",
+    "usedBy": "Future Observation Layer to correlate predicted vs actual outcome"
+  },
+  "actualAction": {
+    "description": "The actual tool/operation invoked",
+    "usedBy": "Observation Layer for outcome tracking"
+  },
+  "toolResult": {
+    "description": "Result from tool execution",
+    "usedBy": "Observation Layer for success/failure analysis"
+  },
+  "observation": {
+    "description": "Structured observation of action outcome",
+    "usedBy": "Future Reflection Layer to assess candidate selection quality"
+  },
+  "correlation": "Selected Candidate ID → Actual Action → Tool Result → Observation"
+}

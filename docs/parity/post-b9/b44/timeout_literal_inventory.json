@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B44",
+  "scanTimestamp": "2026-08-08",
+  "literals": [
+    {
+      "path": "execution/controllers.go:195",
+      "symbol": "30 * time.Second",
+      "value": "30s",
+      "purpose": "系统默认 Tool Execution Timeout 安全阀",
+      "classification": "CANONICAL_DEFAULT",
+      "authority": "TimeoutController.WithTimeout (唯一权威)"
+    },
+    {
+      "path": "execution/controllers.go:187",
+      "symbol": "time.Duration(tool.TimeoutMS) * time.Millisecond",
+      "value": "tool.TimeoutMS (配置值)",
+      "purpose": "Tool Definition 策略声明超时",
+      "classification": "TOOL_POLICY_TIMEOUT",
+      "authority": "ToolDefinition.TimeoutMS (definition.go:93)"
+    },
+    {
+      "path": "execution/controllers.go:192",
+      "symbol": "time.Until(inv.ExpiresAt)",
+      "value": "动态 (ExpiresAt - now)",
+      "purpose": "Invocation 调用方 Deadline",
+      "classification": "CANONICAL_TOOL_DEADLINE",
+      "authority": "ToolInvocationContext.ExpiresAt (invocation.go:36)"
+    },
+    {
+      "path": "capability/adapter_mcp_tool.go:100",
+      "symbol": "TimeoutMS: 30000",
+      "value": "30s",
+      "purpose": "MCP Tool 默认超时参数",
+      "classification": "PROVIDER_TECHNICAL_TIMEOUT",
+      "authority": "MCP Adapter"
+    },
+    {
+      "path": "capability/adapter_mcp_tool.go:130",
+      "symbol": "Timeout: 30000000000",
+      "value": "30s",
+      "purpose": "MCP HTTP Transport 超时",
+      "classification": "PROVIDER_TECHNICAL_TIMEOUT",
+      "authority": "MCP Transport"
+    },
+    {
+      "path": "developer_console/handler.go:49",
+      "symbol": "5 * time.Second",
+      "value": "5s",
+      "purpose": "Developer Console 接口调用超时",
+      "classification": "VALID_TECHNICAL_TIMEOUT",
+      "authority": "Developer Console HTTP Handler"
+    },
+    {
+      "path": "candidate_runner.go:384",
+      "symbol": "5 * time.Second",
+      "value": "5s",
+      "purpose": "Candidate verification call timeout",
+      "classification": "VALID_TECHNICAL_TIMEOUT",
+      "authority": "Candidate Runner internal"
+    },
+    {
+      "path": "event_bus/bus.go:285",
+      "symbol": "sub.Timeout",
+      "value": "subscriber-configured",
+      "purpose": "Event subscriber invocation timeout",
+      "classification": "VALID_TECHNICAL_TIMEOUT",
+      "authority": "Event Bus Subscription"
+    },
+    {
+      "path": "host_api/gateway.go:204",
+      "symbol": "route.Timeout",
+      "value": "route-configured",
+      "purpose": "Host API route HTTP timeout",
+      "classification": "VALID_TECHNICAL_TIMEOUT",
+      "authority": "Host API Gateway"
+    },
+    {
+      "path": "jsonrpc/tracker.go:31",
+      "symbol": "timeout",
+      "value": "parameter",
+      "purpose": "JSON-RPC request tracker timeout",
+      "classification": "VALID_TECHNICAL_TIMEOUT",
+      "authority": "JSON-RPC Tracker"
+    }
+  ],
+  "counter": {
+    "CANONICAL_DEFAULT": 1,
+    "TOOL_POLICY_TIMEOUT": 1,
+    "CANONICAL_TOOL_DEADLINE": 1,
+    "PROVIDER_TECHNICAL_TIMEOUT": 2,
+    "VALID_TECHNICAL_TIMEOUT": 6,
+    "TEST_ONLY": 0,
+    "DUPLICATE_TIMEOUT": 0,
+    "UNKNOWN": 0
+  }
+}

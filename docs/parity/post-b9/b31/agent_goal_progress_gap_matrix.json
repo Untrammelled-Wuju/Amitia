@@ -1,0 +1,156 @@
+{
+  "gapMatrix": [
+    {
+      "requirement": "Goal Progress Evaluation Contract",
+      "status": "ALREADY_SUPPORTED",
+      "note": "GoalRegistry.UpdateStatus with progress + status"
+    },
+    {
+      "requirement": "Observation to Goal Mapping",
+      "status": "ALREADY_SUPPORTED",
+      "note": "B30 Observation flows as Goal Evaluation input"
+    },
+    {
+      "requirement": "Terminal State Guard",
+      "status": "ALREADY_SUPPORTED",
+      "note": "achieved/abandoned terminal, no reverse transitions"
+    },
+    {
+      "requirement": "Completion Evidence",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Contract requires evidence"
+    },
+    {
+      "requirement": "Failure Evidence",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Contract requires evidence"
+    },
+    {
+      "requirement": "Tool Success != Goal Success",
+      "status": "ALREADY_SUPPORTED",
+      "note": "No direct mapping, requires goal condition"
+    },
+    {
+      "requirement": "Tool Failure != Goal Failure",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Recoverable failures don't auto-fail"
+    },
+    {
+      "requirement": "Permission Denied != Goal Failed",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Blocked, not auto-failed"
+    },
+    {
+      "requirement": "Timeout != Goal Timeout",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Timeout doesn't auto-fail goal"
+    },
+    {
+      "requirement": "Superseded Goal Immutable",
+      "status": "ALREADY_SUPPORTED",
+      "note": "abandoned terminal"
+    },
+    {
+      "requirement": "Cross-Goal Isolation",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Goal ID-based correlation"
+    },
+    {
+      "requirement": "Cross-Character Isolation",
+      "status": "ALREADY_SUPPORTED",
+      "note": "CharacterID stored on Goal"
+    },
+    {
+      "requirement": "Cross-Conversation Isolation",
+      "status": "ALREADY_SUPPORTED",
+      "note": "Goals are per-user/per-session"
+    },
+    {
+      "requirement": "Atomic Goal Update",
+      "status": "ALREADY_SUPPORTED",
+      "note": "RWMutex protected UpdateStatus"
+    },
+    {
+      "requirement": "Replanning Output",
+      "status": "ALREADY_SUPPORTED",
+      "note": "B32_input_manifest.json generated"
+    },
+    {
+      "requirement": "Reflection Input",
+      "status": "ALREADY_SUPPORTED",
+      "note": "future_agent_reflection_goal_progress_input.json generated"
+    },
+    {
+      "requirement": "Memory Input",
+      "status": "ALREADY_SUPPORTED",
+      "note": "future_agent_memory_goal_progress_input.json generated"
+    },
+    {
+      "requirement": "Character Input",
+      "status": "ALREADY_SUPPORTED",
+      "note": "future_agent_character_goal_progress_input.json generated"
+    },
+    {
+      "requirement": "Checkpoint Input",
+      "status": "ALREADY_SUPPORTED",
+      "note": "future_agent_checkpoint_goal_progress_input.json generated"
+    },
+    {
+      "requirement": "No Candidate Generation",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Scoring",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Arbitration",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Plan Construction",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Tool Execution",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Memory Write",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Character Mutation",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Reflection",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    },
+    {
+      "requirement": "No Second Goal System",
+      "status": "ALREADY_SUPPORTED",
+      "note": "count=0"
+    }
+  ],
+  "counts": {
+    "ALREADY_SUPPORTED": 28,
+    "PARTIALLY_SUPPORTED": 0,
+    "MISSING_GOAL_EVALUATION_CONTRACT": 0,
+    "MISSING_PROGRESS_MAPPING": 0,
+    "MISSING_TERMINAL_GUARD": 0,
+    "MISSING_CONCURRENCY_GUARD": 0,
+    "B32_PLUS": 0,
+    "OUTSIDE_B31_SCOPE": 0,
+    "NOT_REQUIRED": 0,
+    "UNKNOWN": 0
+  }
+}

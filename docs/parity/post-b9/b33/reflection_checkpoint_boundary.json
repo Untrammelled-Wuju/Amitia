@@ -1,0 +1,25 @@
+{
+  "b33_reflection_checkpoint_boundary": {
+    "scope": "Reflection checkpoint: reference-only, no inline embedding",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "checkpointAccess": {
+      "canReadCheckpoint": true,
+      "canWriteCheckpoint": false,
+      "canGenerateInlineContent": false,
+      "canGenerateReferences": true
+    },
+    "referenceFormat": {
+      "type": "checkpoint_pointer",
+      "embedAllowed": false,
+      "captureAllowed": false
+    },
+    "violations": {
+      "unauthorizedCheckpointWrites": 0,
+      "inlineContentEmbedding": 0,
+      "inlineCapture": 0
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B45",
+  "contract": {
+    "name": "Tool Approval Contract",
+    "lifecycle": {
+      "trigger": "PermissionGate returns PermissionRequireApproval (from Broker.DetermineDenyOrApproval → DecisionRequireApproval)",
+      "approvalExecution": "ApprovalGate.Evaluate → Broker.Explain (checks RequiredAction == 'manual_approval')",
+      "subject": "PermissionSubject derived from tool.ExtensionID + tool.ID (no global current user)",
+      "invocationBinding": "Approval bound to exact Invocation ID via PermissionEvaluationRequest.InvocationID",
+      "duplicateApproval": "Same Invocation ID → idempotent; Approvable once only",
+      "cancelBehavior": "B43: awaiting_approval + cancel → cancelled; Pending Approval invalidated",
+      "timeoutBehavior": "B44: awaiting_approval + timeout → timed_out; Pending Approval invalidated",
+      "lateApproval": "Invocation terminal → late Approval ignored (no resurrection)",
+      "fullControl": "ApprovalFullControl mode documented in PermissionDefinition → still passes PermissionBroker"
+    },
+    "identity": {
+      "approvalID": "Derived from Grant request",
+      "invocationID": "Exact Invocation ID",
+      "subject": "PermissionSubject",
+      "permissionRequirement": "PermissionRequirement list",
+      "scope": "PermissionScope",
+      "expiry": "Per Invocation Deadline (B44)"
+    }
+  }
+}

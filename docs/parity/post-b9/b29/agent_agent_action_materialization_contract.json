@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "materializationContract": {
+    "version": "1.0",
+    "description": "Agent Action 物化契约 - 将Agent的决策意图转化为工具执行行为",
+
+    "materializationRules": [
+      {
+        "rule": "MATERIALIZE_THROUGH_FACADE",
+        "description": "所有Action必须通过ToolFacade物化为工具执行调用",
+        "enforcement": "chat.ModelToolRuntime接口强制通过ToolFacade",
+        "violations": 0
+      },
+      {
+        "rule": "INPUT_VALIDATION_BEFORE_DISPATCH",
+        "description": "Action输入在进入Dispatcher前必须通过InputValidator验证",
+        "enforcement": "ExecutionPipeline阶段2强制验证",
+        "violations": 0
+      },
+      {
+        "rule": "PERMISSION_CHECK_BEFORE_EXECUTION",
+        "description": "Action执行前必须通过PermissionGate权限核验",
+        "enforcement": "ExecutionPipeline阶段5强制核验",
+        "violations": 0
+      },
+      {
+        "rule": "RESULT_VALIDATION_AFTER_EXECUTION",
+        "description": "Action执行结果必须通过ResultValidator和Sanitizer验证清洗",
+        "enforcement": "ExecutionPipeline末尾强制处理",
+        "violations": 0
+      },
+      {
+        "rule": "AUDIT_TRAIL_REQUIRED",
+        "description": "所有Action执行行为必须留下审计记录",
+        "enforcement": "AuditRecorder全程记录Start/Finish/Denied/Retry",
+        "violations": 0
+      },
+      {
+        "rule": "TIMEOUT_ENFORCED",
+        "description": "Action执行必须有超时约束",
+        "enforcement": "TimeoutController强制应用超时",
+        "violations": 0
+      },
+      {
+        "rule": "CANCELLATION_SUPPORTED",
+        "description": "Action执行必须支持取消",
+        "enforcement": "CancellationController全程支持取消信号",
+        "violations": 0
+      },
+      {
+        "rule": "IDEMPOTENCY_GUARANTEED",
+        "description": "Action执行在提供IdempotencyKey时必须保证幂等性",
+        "enforcement": "IdempotencyGuard检查并缓存结果",
+        "violations": 0
+      }
+    ]
+  },
+
+  "summary": {
+    "totalRules": 8,
+    "enforced": 8,
+    "violated": 0
+  }
+}

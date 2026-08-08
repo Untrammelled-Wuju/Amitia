@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B29",
+  "generatedAt": "2026-08-08T20:00:00+08:00",
+
+  "identityRelationships": [
+    {
+      "identity": "ToolInvocationContext.InvocationID",
+      "source": "ToolFacade.executeKernelTool",
+      "assignedBy": "ToolFacade",
+      "propagation": "全程传递至Audit/Metrics/CircuitBreaker",
+      "ownership": "Kernel"
+    },
+    {
+      "identity": "ToolInvocationContext.UserID",
+      "source": "LegacyScope.UserID",
+      "assignedBy": "chatToolRuntimeAdapter",
+      "propagation": "传递至PermissionGate、RateLimiter、ConcurrencyCtrl",
+      "ownership": "Agent"
+    },
+    {
+      "identity": "ToolInvocationContext.CharacterID",
+      "source": "LegacyScope.CharacterID",
+      "assignedBy": "chatToolRuntimeAdapter",
+      "propagation": "传递至Audit",
+      "ownership": "Agent"
+    },
+    {
+      "identity": "ToolInvocationContext.ConversationID",
+      "source": "LegacyScope.ConversationID",
+      "assignedBy": "chatToolRuntimeAdapter",
+      "propagation": "传递至Audit",
+      "ownership": "Agent"
+    },
+    {
+      "identity": "ToolInvocationContext.IdempotencyKey",
+      "source": "调用者传入",
+      "assignedBy": "chatToolRuntimeAdapter",
+      "propagation": "传递至IdempotencyGuard",
+      "ownership": "Agent"
+    },
+    {
+      "identity": "ToolInvocationContext.TraceID",
+      "source": "LegacyScope.TraceID",
+      "assignedBy": "chatToolRuntimeAdapter",
+      "propagation": "传递至Hook、Audit",
+      "ownership": "Tracing"
+    }
+  ],
+
+  "summary": {
+    "totalIdentities": 6,
+    "ownedByKernel": 1,
+    "ownedByAgent": 4,
+    "ownedByTracing": 1
+  }
+}

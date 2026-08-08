@@ -1,0 +1,45 @@
+{
+  "lateObservationGuard": {
+    "description": "延迟观察守护，检测并防止晚期Observation问题",
+    "guards": {
+      "lateArrivingObservations": {
+        "count": 0,
+        "maxDelay": "0s",
+        "policy": "ignore_or_dedup",
+        "violations": 0
+      },
+      "staleObservationConsumption": {
+        "count": 0,
+        "maxAge": "0s",
+        "policy": "reject_stale",
+        "violations": 0
+      },
+      "outOfOrderObservations": {
+        "count": 0,
+        "policy": "sequence_validation",
+        "violations": 0
+      },
+      "duplicateObservations": {
+        "count": 0,
+        "policy": "deduplicate",
+        "violations": 0
+      },
+      "timeoutObservations": {
+        "count": 0,
+        "policy": "mark_indeterminate",
+        "violations": 0
+      },
+      "cancelledObservations": {
+        "count": 0,
+        "policy": "release_resources",
+        "violations": 0
+      }
+    },
+    "totals": {
+      "totalGuardChecks": 6,
+      "totalViolations": 0,
+      "guardEffectiveness": "100%"
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

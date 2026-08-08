@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B45-RetryPermission",
+  "intendedFor": "Retry step (future)",
+  "description": "Retry 场景下的 Permission 语义输入",
+  "retryPermissionRules": {
+    "overallInvocation": "Retry attempt 属于同一 Invocation ID；Reuse frozen grant",
+    "grantRevocation": "Retry 期间 Grant 被 Revoke → 按 Policy (Deny or Re-evaluate)",
+    "approvalReuse": "Per-invocation approval required; 首次 Approval 不复用到新 Attempt",
+    "scopeChange": "Scope changes (Character/Conversation) → Re-evaluate",
+    "permissionDeniedNotRetryable": "Permission Denied 不是 Provider Failure；不应触发 Retry"
+  }
+}

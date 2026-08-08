@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "taskId": "B27",
+  "generatedAt": "2026-08-08T19:00:00+08:00",
+  "tieDefinition": {
+    "definition": "Two candidates have identical FinalScore after all scoring and penalty steps",
+    "detection": "sortCandidatesByScore uses stable sorting - equal scores maintain input order"
+  },
+  "primaryScore": "FinalScore (float64, rounded to 4 decimals)",
+  "secondaryComparison": "Maintain input order (stable sort)",
+  "stableFallback": "Candidate ID canonical identity (not used as tie-breaker; stable sort is sufficient)",
+  "randomnessPolicy": "No random tie-breaking. Deterministic selection.",
+  "mapIterationDependency": false,
+  "hiddenRandomTieBreak": false,
+  "explicitExplorationPolicy": "None. Arbitration is deterministic.",
+  "implementation": {
+    "sortMethod": "sort.SliceStable in ScoreBehaviorCandidates; bubble sort in sortCandidatesByScore",
+    "stability": "Stable - equal elements maintain relative order",
+    "determinism": "Deterministic for same input"
+  }
+}

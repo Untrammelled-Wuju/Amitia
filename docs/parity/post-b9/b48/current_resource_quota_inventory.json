@@ -1,0 +1,73 @@
+{
+  "capabilityResourceDefinitions": [
+    {
+      "path": "backend/internal/extension/kernel/capability/definition.go:18",
+      "struct": "ResourceLimits { MaxMemoryBytes int64, MaxCPUPercent int }",
+      "owner": "ToolExecutionPolicy.ResourceLimits",
+      "purpose": "Capability 级资源声明"
+    }
+  ],
+  "toolResourceDefinitions": [
+    {
+      "path": "capability/definition.go:23",
+      "struct": "ToolExecutionPolicy",
+      "fields": ["Timeout", "MaxConcurrency", "RetryPolicy", "MaxDepth", "ResourceLimits"],
+      "note": "组合了多类单不用 quota (Tunable), ResourceLimits 是其中一项"
+    },
+    {
+      "path": "capability/definition.go:47",
+      "struct": "ToolResultPolicy { MaxOutputBytes int }",
+      "owner": "ToolDefinition.ResultPolicy",
+      "purpose": "输出字节上限声明"
+    }
+  ],
+  "manifestResourceDefinitions": [
+    {
+      "path": "manifest_v2/manifest.go:139",
+      "struct": "ResourceMeta",
+      "fields": ["ID", "Type", "Path", "Hash", "Size"],
+      "note": "v2 manifest 的资源文件元数据, 非运行时限制"
+    }
+  ],
+  "executionResourceControllers": [
+    {
+      "path": "execution/result_validator.go:10-66",
+      "name": "ResultValidator",
+      "enforces": "MaxOutputBytes (post-execution)",
+      "type": "DECLARABLE_AND_ENFORCED post-execution"
+    }
+  ],
+  "runtimeResourceLimits": [
+    {
+      "path": "javascript_main/host.go + supervisor_adapter.go",
+      "resource": "ResourceLimits (MaxMemoryMB, SingleCallTimeout)",
+      "enforcement": "JS Supervisor 进程资源限制"
+    },
+    {
+      "path": "javascript_main/dispatcher.go:99",
+      "param": "runtime.ResourceLimits",
+      "purpose": "JS 调用调度器资源参数"
+    }
+  ],
+  "taskResourceLimits": [
+    {
+      "path": "migration/types.go:68",
+      "struct": "TaskResourceLimits { MaxMemoryMB, MaxCPUPercent, MaxDiskMB, MaxDurationSecs }",
+      "note": "任务迁移相关资源限制, 仅用于迁移过程"
+    }
+  ],
+  "workflowResourceLimits": [],
+  "providerResourceLimits": [
+    {
+      "path": "capability/adapter_mcp_tool.go:29",
+      "struct": "MCPResourceDescriptor",
+      "note": "MCP 工具资源描述符"
+    }
+  ],
+  "resourceUsageCollectors": [],
+  "productionCallers": [
+    "ExecutionPipeline.Execute -> ResultValidator.Validate (enforce MaxOutputBytes)",
+    "MCP adapter (BuildMCPToolDefinition) -> sets default ResourceLimits/MaxConcurrency/MaxOutputBytes",
+    "javascript_main host -> reads ResourceLimits from supervisor spec"
+  ]
+}

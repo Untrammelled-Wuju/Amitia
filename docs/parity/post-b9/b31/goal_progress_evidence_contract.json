@@ -1,0 +1,33 @@
+{
+  "evidenceContract": {
+    "requiredFields": [
+      "goalId",
+      "observationRef",
+      "actionRef",
+      "previousState",
+      "newState",
+      "reasonCode"
+    ],
+    "optionalFields": [
+      "domainResult",
+      "progressValue",
+      "progressDelta",
+      "confidence"
+    ],
+    "completionEvidence": {
+      "required": true,
+      "minimumFields": ["goalId", "observationRef", "previousState", "newState"],
+      "note": "Goal cannot be marked achieved without completion evidence"
+    },
+    "failureEvidence": {
+      "required": true,
+      "minimumFields": ["goalId", "observationRef", "previousState", "newState", "reasonCode"],
+      "note": "Goal cannot be marked abandoned/failed without failure evidence"
+    },
+    "progressEvidence": {
+      "required": false,
+      "minimumFields": ["goalId", "previousState", "newState"],
+      "note": "Progress updates should reference observation for traceability"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "reentryContract": {
+    "description": "CONTINUE时 re-entry 到现有 Decision 主链的方式",
+    "reentryPath": "CONTINUE → interaction.UnifiedEntry → decision.GenerateCandidates(+excludes) → scoring → arbitration → behavior_plan_builder",
+    "excludesMechanism": "candidate_generator.GenerateCandidatesWithExcludes(excludes) 接收已失败/循环的candidate IDs",
+    "forbiddenPath": "CONTINUE → Replanner2.Plan → Action",
+    "scoringReentry": "每轮重新评分，不复用旧score"
+  }
+}

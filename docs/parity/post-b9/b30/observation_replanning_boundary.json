@@ -1,0 +1,33 @@
+{
+  "replanningBoundary": {
+    "description": "定义Observation与Decision重规划之间的职责边界",
+    "ownership": {
+      "observation": {
+        "owns": "provides facts",
+        "responsibilities": [
+          "报告执行结果",
+          "提供重试可行性信息",
+          "暴露可用替代方案"
+        ]
+      },
+      "decision": {
+        "owns": "retry/alternative",
+        "responsibilities": [
+          "决定是否重试",
+          "选择替代方案",
+          "规划下一步行动"
+        ]
+      }
+    },
+    "dataFlow": {
+      "observationToDecision": "Observationfacts → Decision.retryDecision",
+      "decisionToObservation": "无直接反向流"
+    },
+    "boundaryViolations": {
+      "observationMadeDecision": 0,
+      "decisionWithoutObservation": 0,
+      "decisionIgnoredObservation": 0
+    }
+  },
+  "status": "PASS_NO_CODE_CHANGE"
+}

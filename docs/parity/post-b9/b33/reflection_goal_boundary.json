@@ -1,0 +1,22 @@
+{
+  "b33_reflection_goal_boundary": {
+    "scope": "Reflection cannot mutate Goal",
+    "mutationCount": 0,
+    "duplicateCount": 0,
+    "passNoCodeChange": true,
+    "goalAccess": {
+      "canRead": true,
+      "canWrite": false,
+      "canCreate": false,
+      "canDelete": false,
+      "canModifyPriority": false,
+      "canModifyStatus": false
+    },
+    "enforcement": {
+      "goalMutationDetected": false,
+      "blockedGoalWrites": 0,
+      "goalIntegrityViolations": 0
+    },
+    "status": "ALREADY_SUPPORTED"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "inputId": "B54-TimeoutIdempotency",
+  "intendedFor": "B54",
+  "description": "Timeout 终态幂等性输入 — 迁移到 B54 时复用 B44 链路",
+  "idempotencyContracts": {
+    "timeoutFinalizationExactlyOnce": {
+      "description": "Timeout 终态只被写入一次",
+      "rule": "First-commit-wins per B43 terminal linearization",
+      "guarantee": "同一 Invocation ID 不会产生两次 timed_out finalization"
+    },
+    "lateCallbackIgnored": {
+      "description": "超时后的 Late Provider Callback 被忽略而不触发新终态",
+      "rule": "Late result guard in B43 late_result_guard.json"
+    },
+    "attemptRelation": {
+      "description": "Retry 场景下每次尝试的 Timeout 终态独立但受整体 Deadline 约束",
+      "rule": "Per-attempt Timeout → attempt timed_out; Overall Deadline → invocation timed_out"
+    },
+    "overallInvocationRelation": {
+      "description": "整体 Invocation Timeout 为唯一终态權威",
+      "rule": "Once invocation timed_out committed, no late result from any attempt can change"
+    }
+  },
+  "constraints": {
+    "noNewAuthority": "幂等保证复用 B43 terminal state guard，不引入新的 Idempotency Manager"
+  }
+}

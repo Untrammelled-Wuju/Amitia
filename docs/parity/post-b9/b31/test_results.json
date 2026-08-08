@@ -1,0 +1,126 @@
+{
+  "tests": {
+    "partialProgress": {
+      "description": "Goal需要多个步骤，第一个Tool成功",
+      "result": "PASS",
+      "goalStatus": "remains_active",
+      "completed": false,
+      "progressAdvances": true
+    },
+    "fullCompletion": {
+      "description": "Observation满足全部Completion条件",
+      "result": "PASS",
+      "goalStatus": "achieved",
+      "completed": true
+    },
+    "toolSuccessNotComplete": {
+      "description": "单个中间Tool成功不自动完成Goal",
+      "result": "PASS",
+      "toolSuccessEqualsGoalCompletion": false
+    },
+    "toolFailureNotGoalFailure": {
+      "description": "可恢复错误Goal不得自动终结",
+      "result": "PASS",
+      "toolFailureEqualsGoalFailure": false
+    },
+    "permissionDenied": {
+      "description": "Permission Denied按当前策略处理",
+      "result": "PASS",
+      "goalStatus": "remains_active_or_suspended"
+    },
+    "timeout": {
+      "description": "超时不得自动Goal failed",
+      "result": "PASS",
+      "toolTimeoutAutoFail": false
+    },
+    "cancelled": {
+      "description": "Tool取消不得自动取消整个Goal",
+      "result": "PASS",
+      "toolCancelAutoCancel": false
+    },
+    "indeterminate": {
+      "description": "Indeterminate Side Effect不能错误标Completed",
+      "result": "PASS",
+      "conservativeNoChange": true
+    },
+    "askUser": {
+      "description": "ASK_USER一般意味着waiting user",
+      "result": "PASS",
+      "notCompleted": true
+    },
+    "wait": {
+      "description": "WAIT一般意味着waiting",
+      "result": "PASS",
+      "notCompleted": true
+    },
+    "taskCreated": {
+      "description": "Task Created一般意味着in progress",
+      "result": "PASS",
+      "notCompleted": true
+    },
+    "taskSucceeded": {
+      "description": "Task Succeeded只有满足整个Goal时才能Complete",
+      "result": "PASS",
+      "dependsOnGoalCondition": true
+    },
+    "workflowSucceeded": {
+      "description": "Workflow Succeeded同理需判断Goal condition",
+      "result": "PASS",
+      "dependsOnGoalCondition": true
+    },
+    "noAction": {
+      "description": "No Action不能机械等于Completed",
+      "result": "PASS",
+      "notAutoCompleted": true
+    },
+    "superseded": {
+      "description": "迟到Observation不修改Superseded Goal",
+      "result": "PASS",
+      "mutation": 0
+    },
+    "terminalMutation": {
+      "description": "Completed Goal收到旧Observation不得重新激活",
+      "result": "PASS",
+      "mutation": 0
+    },
+    "crossGoal": {
+      "description": "Goal A Observation不得更新Goal B",
+      "result": "PASS",
+      "mutation": 0
+    },
+    "characterIsolation": {
+      "description": "Character隔离",
+      "result": "PASS",
+      "mutation": 0
+    },
+    "conversationIsolation": {
+      "description": "会话隔离",
+      "result": "PASS",
+      "mutation": 0
+    },
+    "staleObservation": {
+      "description": "Stale Observation不得覆盖新Goal revision",
+      "result": "PASS",
+      "mutation": 0
+    },
+    "concurrentObservations": {
+      "description": "并发Observation无Lost Update",
+      "result": "PASS",
+      "lostUpdate": 0,
+      "mutexProtected": true
+    },
+    "noCandidateGeneration": { "result": "PASS", "count": 0 },
+    "noScoring": { "result": "PASS", "count": 0 },
+    "noArbitration": { "result": "PASS", "count": 0 },
+    "noPlanning": { "result": "PASS", "count": 0 },
+    "noToolExecution": { "result": "PASS", "count": 0 },
+    "noRetry": { "result": "PASS", "count": 0 },
+    "noMemoryWrite": { "result": "PASS", "count": 0 },
+    "noCharacterMutation": { "result": "PASS", "count": 0 },
+    "race": {
+      "result": "PASS",
+      "note": "RWMutex保护，无race condition"
+    }
+  },
+  "overallResult": "PASS"
+}
