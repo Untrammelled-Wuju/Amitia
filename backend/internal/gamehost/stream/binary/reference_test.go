@@ -168,7 +168,7 @@ func TestBinaryReference_MetadataTooLargeRejected(t *testing.T) {
 		Size:     100,
 		Lifetime: BinaryLifetimeMessage,
 		Metadata: map[string]json.RawMessage{
-			"key": json.RawMessage(strings.Repeated("x", maxMetadataBytes+1)),
+			"key": json.RawMessage(strings.Repeat("x", maxMetadataBytes+1)),
 		},
 	}
 	if err := ref.Validate(); err == nil {
