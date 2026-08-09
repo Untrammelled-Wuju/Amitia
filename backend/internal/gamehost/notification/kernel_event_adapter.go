@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
+
+	"github.com/u-ai/backend/internal/gamehost/stream"
 )
 
 type EventTypeProvider interface {
@@ -92,4 +95,36 @@ func jsonRaw(s string) json.RawMessage {
 
 func BuildGameHostProvider() *StaticEventTypeProvider {
 	return NewStaticEventTypeProvider("gamehost.notification", 1)
+}
+
+type streamEventPublisherBridge struct {
+	adapter *KernelEventAdapter
+}
+
+func (s *streamEventPublisherBridge) PublishEvent(ctx context.Context, ev stream.EventEnvelope, opts ...stream.PublishEventOption) error {
+	n := notificationFromEventEnvelope(ev)
+	return s.adapter.Publish(ctx, n)
+}
+
+func (a *KernelEventAdapter) AsStreamPublisher() stream.EventPublisher {
+	return &streamEventPublisherBridge{adapter: a}
+}
+
+func notificationFromEventEnvelope(ev stream.EventEnvelope) Notification {
+	var receivedAt time.Time
+	if ev.OccurredAt > 0 {
+		receivedAt = time.Unix(0, ev.OccurredAt)
+	} else {
+		receivedAt = time.Now().UTC()
+	}
+	return Notification{
+		ID:         ev.ID,
+		PluginID:   ev.PluginID,
+		RuntimeID:  ev.RuntimeID,
+		ServiceID:  ev.ServiceID,
+		Method:     ev.Method,
+		Payload:    ev.Payload,
+		Metadata:   ev.Metadata,
+		ReceivedAt: receivedAt,
+	}
 }

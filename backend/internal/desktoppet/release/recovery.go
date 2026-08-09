@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -117,6 +118,10 @@ func (w *ReleaseRecoveryWorker) RecoverStaleOperations(ctx context.Context) erro
 			continue
 		}
 		if !w.leaseManager.IsLeaseExpired(op) {
+			continue
+		}
+		journal, journalErr := w.journalManager.GetByOperation(op.ID)
+		if journalErr == nil && journal != nil && journal.OperationKind == string(JournalOperationImport) {
 			continue
 		}
 		if err := w.recoverOperation(ctx, op); err != nil {
@@ -288,61 +293,158 @@ func (w *ReleaseRecoveryWorker) RecoverImportOperations(ctx context.Context) err
 		if !w.leaseManager.IsLeaseExpired(op) {
 			continue
 		}
-		if !isImportStage(op.Stage) {
+		journal, err := w.journalManager.GetByOperation(op.ID)
+		if err != nil {
+			log.Logger.Warnf("Failed to get journal for operation %s: %v", op.ID, err)
 			continue
 		}
-		if err := w.recoverImportOperation(ctx, op); err != nil {
+		if journal == nil || journal.OperationKind != string(JournalOperationImport) {
+			continue
+		}
+		if !isImportJournalStage(journal.Stage) {
+			continue
+		}
+		if err := w.recoverImportOperation(ctx, op, journal); err != nil {
 			log.Logger.Warnf("Failed to recover import operation %s: %v", op.ID, err)
 		}
 	}
 	return nil
 }
 
-func isImportStage(stage string) bool {
+func isImportJournalStage(stage string) bool {
 	switch stage {
-	case BuildOpStageWorkspaceCreated, BuildOpStageStagingBuilt, BuildOpStageStagingMoved:
+	case ImportJournalStageCreated,
+		ImportJournalStageValidated,
+		ImportJournalStageWorkspaceBuilt,
+		ImportJournalStageDatabasePrepared,
+		ImportJournalStageFilesPublished,
+		ImportJournalStageDatabaseFinalized,
+		ImportJournalStageSnapshotCommitted,
+		ImportJournalStageCompleted,
+		ImportJournalStageFailed,
+		ImportJournalStageManualReview:
 		return true
 	default:
 		return false
 	}
 }
 
-func (w *ReleaseRecoveryWorker) recoverImportOperation(ctx context.Context, op *ReleaseBuildOperation) error {
-	log.Logger.Infof("Recovering stale import operation %s (state=%s, stage=%s)", op.ID, op.State, op.Stage)
+func (w *ReleaseRecoveryWorker) recoverImportOperation(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
+	log.Logger.Infof("Recovering stale import operation %s (state=%s, journalStage=%s)", op.ID, op.State, journal.Stage)
 
-	w.storage.RemoveWorkspaceDir(op.ID)
+	switch journal.Stage {
+	case ImportJournalStageCreated, ImportJournalStageValidated:
+		return w.recoverImportBeforePrepare(ctx, op, journal)
 
-	switch op.Stage {
-	case BuildOpStageWorkspaceCreated:
-		w.storage.RemoveStagingDir(op.ReleaseID)
-		w.markImportOperationFailed(op, "LEASE_EXPIRED_WORKSPACE", "租约在工作区创建阶段过期")
+	case ImportJournalStageDatabasePrepared, ImportJournalStageWorkspaceBuilt:
+		return w.recoverImportPrepared(ctx, op, journal)
 
-	case BuildOpStageStagingBuilt, BuildOpStageStagingMoved:
-		if w.isPublishedConsistent(op) {
-			op.State = BuildOpStateCompleted
-			op.Stage = BuildOpStageDatabaseCommitted
-			op.CompletedAt = formatRecoveryTimestamp(time.Now())
-			w.leaseManager.ReleaseLease(op)
-			w.updateOp(op)
-			log.Logger.Infof("Import operation %s recovered to completed (published consistent)", op.ID)
-		} else {
-			w.storage.RemoveStagingDir(op.ReleaseID)
-			if op.PetID != "" && op.ReleaseID != "" {
-				w.storage.RemovePublishedDir(op.PetID, op.ReleaseID)
-			}
-			if releaseRecord, err := w.repo.GetRelease(op.ReleaseID); err == nil && releaseRecord != nil {
-				releaseRecord.Lifecycle = string(ReleaseLifecycleFailed)
-				releaseRecord.IntegrityStatus = string(ReleaseIntegrityUnknown)
-				releaseRecord.UpdatedAt = formatRecoveryTimestamp(time.Now())
-				w.repo.UpdateRelease(releaseRecord)
-			}
-			w.markImportOperationFailed(op, "PUBLISH_INCOMPLETE", "发布未完成且数据不一致")
-		}
+	case ImportJournalStageFilesPublished:
+		return w.recoverImportPublished(ctx, op, journal)
+
+	case ImportJournalStageDatabaseFinalized, ImportJournalStageSnapshotCommitted:
+		return w.recoverImportFinalized(ctx, op, journal)
+
+	case ImportJournalStageCompleted:
+		return w.verifyCompletedImport(ctx, op, journal)
+
+	case ImportJournalStageFailed, ImportJournalStageManualReview:
+		return nil
 
 	default:
-		w.markImportOperationFailed(op, "UNKNOWN_IMPORT_STAGE", fmt.Sprintf("未知导入阶段: %s", op.Stage))
+		return w.markImportManualReview(op, journal, "UNKNOWN_IMPORT_STAGE")
 	}
+}
 
+func (w *ReleaseRecoveryWorker) recoverImportBeforePrepare(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
+	w.storage.RemoveWorkspaceDir(op.ID)
+	w.storage.RemoveStagingDir(op.ReleaseID)
+	w.markImportOperationFailed(op, "LEASE_EXPIRED_BEFORE_PREPARE", "租约在导入准备前过期")
+	return nil
+}
+
+func (w *ReleaseRecoveryWorker) recoverImportPrepared(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
+	w.storage.RemoveWorkspaceDir(op.ID)
+	w.storage.RemoveStagingDir(op.ReleaseID)
+	if op.PetID != "" && op.ReleaseID != "" {
+		w.storage.RemovePublishedDir(op.PetID, op.ReleaseID)
+	}
+	if releaseRecord, err := w.repo.GetRelease(op.ReleaseID); err == nil && releaseRecord != nil {
+		releaseRecord.Lifecycle = string(ReleaseLifecycleFailed)
+		releaseRecord.IntegrityStatus = string(ReleaseIntegrityUnknown)
+		releaseRecord.UpdatedAt = formatRecoveryTimestamp(time.Now())
+		w.repo.UpdateRelease(releaseRecord)
+	}
+	w.markImportOperationFailed(op, "LEASE_EXPIRED_PREPARED", "租约在导入准备后过期")
+	return nil
+}
+
+func (w *ReleaseRecoveryWorker) recoverImportPublished(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
+	if w.isPublishedConsistent(op) {
+		op.State = BuildOpStateCompleted
+		op.Stage = ImportJournalStageFilesPublished
+		op.CompletedAt = formatRecoveryTimestamp(time.Now())
+		w.leaseManager.ReleaseLease(op)
+		w.updateOp(op)
+		log.Logger.Infof("Import operation %s recovered to completed (published consistent)", op.ID)
+	} else {
+		w.storage.RemoveStagingDir(op.ReleaseID)
+		if op.PetID != "" && op.ReleaseID != "" {
+			w.storage.RemovePublishedDir(op.PetID, op.ReleaseID)
+		}
+		if releaseRecord, err := w.repo.GetRelease(op.ReleaseID); err == nil && releaseRecord != nil {
+			releaseRecord.Lifecycle = string(ReleaseLifecycleFailed)
+			releaseRecord.IntegrityStatus = string(ReleaseIntegrityUnknown)
+			releaseRecord.UpdatedAt = formatRecoveryTimestamp(time.Now())
+			w.repo.UpdateRelease(releaseRecord)
+		}
+		w.markImportOperationFailed(op, "PUBLISH_INCOMPLETE", "发布未完成且数据不一致")
+	}
+	return nil
+}
+
+func (w *ReleaseRecoveryWorker) recoverImportFinalized(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
+	if w.isPublishedConsistent(op) {
+		op.State = BuildOpStateCompleted
+		op.Stage = ImportJournalStageSnapshotCommitted
+		op.CompletedAt = formatRecoveryTimestamp(time.Now())
+		w.leaseManager.ReleaseLease(op)
+		w.updateOp(op)
+		log.Logger.Infof("Import operation %s recovered to completed", op.ID)
+	} else {
+		if releaseRecord, err := w.repo.GetRelease(op.ReleaseID); err == nil && releaseRecord != nil {
+			releaseRecord.Lifecycle = string(ReleaseLifecycleFailed)
+			releaseRecord.IntegrityStatus = string(ReleaseIntegrityUnknown)
+			releaseRecord.UpdatedAt = formatRecoveryTimestamp(time.Now())
+			w.repo.UpdateRelease(releaseRecord)
+		}
+		w.markImportOperationFailed(op, "FINALIZE_INCOMPLETE", "定稿阶段失败")
+	}
+	return nil
+}
+
+func (w *ReleaseRecoveryWorker) verifyCompletedImport(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
+	if !w.isPublishedConsistent(op) {
+		log.Logger.Warnf("Import operation %s marked completed but published data inconsistent", op.ID)
+		return w.markImportManualReview(op, journal, "COMPLETED_BUT_INCONSISTENT")
+	}
+	op.State = BuildOpStateCompleted
+	op.Stage = ImportJournalStageCompleted
+	op.CompletedAt = formatRecoveryTimestamp(time.Now())
+	w.leaseManager.ReleaseLease(op)
+	w.updateOp(op)
+	return nil
+}
+
+func (w *ReleaseRecoveryWorker) markImportManualReview(op *ReleaseBuildOperation, journal *ReleasePublishJournal, code string) error {
+	if w.journalManager != nil && journal != nil {
+		w.journalManager.UpdateStage(journal, ImportJournalStageManualReview, journal.ContentRootHash, "", "")
+	}
+	op.State = BuildOpStateFailedRetryable
+	op.ErrorCode = code
+	op.ErrorMessage = "导入进入人工审核"
+	w.leaseManager.ReleaseLease(op)
+	w.updateOp(op)
 	return nil
 }
 
@@ -376,6 +478,10 @@ func (w *ReleaseRecoveryWorker) isPublishedConsistent(op *ReleaseBuildOperation)
 }
 
 func (w *ReleaseRecoveryWorker) verifyImportConsistency(op *ReleaseBuildOperation, releaseData *ReleaseData, publishedDir string) error {
+	if releaseData == nil {
+		return errors.New("release data is nil")
+	}
+
 	files, err := w.repo.GetReleaseFiles(op.ReleaseID)
 	if err != nil {
 		return fmt.Errorf("get release files: %w", err)
@@ -383,6 +489,11 @@ func (w *ReleaseRecoveryWorker) verifyImportConsistency(op *ReleaseBuildOperatio
 	if len(files) == 0 {
 		return errors.New("no release files found")
 	}
+
+	if len(files) != releaseData.FileCount {
+		return fmt.Errorf("release file count mismatch: expected=%d actual=%d", releaseData.FileCount, len(files))
+	}
+
 	for _, item := range files {
 		fullPath, err := packageformat.SecureJoinUnderRoot(publishedDir, item.Path)
 		if err != nil {
@@ -396,6 +507,7 @@ func (w *ReleaseRecoveryWorker) verifyImportConsistency(op *ReleaseBuildOperatio
 			return fmt.Errorf("file mismatch: %s (expected %s/%d, got %s/%d)", item.Path, item.SHA256, item.Bytes, hash, size)
 		}
 	}
+
 	snapshot, err := w.repo.GetImportSnapshotByReleaseID(op.ReleaseID)
 	if err != nil {
 		return fmt.Errorf("get import snapshot: %w", err)
@@ -403,7 +515,55 @@ func (w *ReleaseRecoveryWorker) verifyImportConsistency(op *ReleaseBuildOperatio
 	if snapshot == nil || snapshot.OperationID != op.ID || snapshot.ReleaseID != releaseData.ID {
 		return errors.New("import snapshot mismatch")
 	}
+	if snapshot.PetID != releaseData.PetID {
+		return errors.New("snapshot pet_id mismatch")
+	}
+	if snapshot.Status != ImportSnapshotCompleted {
+		return errors.New("import snapshot not completed")
+	}
+
+	if releaseData.ArchiveStorageKey != "" {
+		archivePath, archiveErr := w.storage.ArchivePath(releaseData.PetID, releaseData.ID)
+		if archiveErr != nil {
+			return fmt.Errorf("resolve archive path: %w", archiveErr)
+		}
+		hash, bytes, hashErr := HashArchiveFile(archivePath)
+		if hashErr != nil {
+			return fmt.Errorf("hash archive: %w", hashErr)
+		}
+		if !strings.EqualFold(hash, releaseData.ArchiveHash) {
+			return errors.New("archive hash mismatch")
+		}
+		if bytes != releaseData.ArchiveBytes {
+			return errors.New("archive size mismatch")
+		}
+	}
+
+	var manifest packageformat.Manifest
+	if err := json.Unmarshal([]byte(releaseData.ManifestJSON), &manifest); err != nil {
+		return fmt.Errorf("unmarshal manifest: %w", err)
+	}
+	if manifest.Integrity.ManifestHash != releaseData.ManifestHash {
+		return errors.New("manifest hash mismatch")
+	}
+	if manifest.Integrity.ContentRootHash != releaseData.ContentRootHash {
+		return errors.New("content root hash mismatch")
+	}
+
+	report := packageformat.NewValidator().ValidateDirectory(publishedDir, &manifest)
+	if report == nil || report.Verdict == "invalid" {
+		return errors.New("published release validation failed")
+	}
+
 	return nil
+}
+
+func HashArchiveFile(archivePath string) (string, int64, error) {
+	hash, size, err := HashFile(archivePath)
+	if err != nil {
+		return "", 0, err
+	}
+	return hash, size, nil
 }
 
 func (w *ReleaseRecoveryWorker) markImportOperationFailed(op *ReleaseBuildOperation, code string, msg string) {

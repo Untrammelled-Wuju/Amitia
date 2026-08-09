@@ -144,6 +144,12 @@ func (g *IdempotencyGuard) Record(ctx context.Context, key, toolID string, resul
 	}
 }
 
+func (g *IdempotencyGuard) Remove(_ context.Context, key string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.store, key)
+}
+
 func NewRetryController(opts ...RetryControllerOption) *RetryController {
 	r := &RetryController{}
 	for _, opt := range opts {
@@ -214,16 +220,6 @@ func (t *TimeoutController) WithTimeout(ctx context.Context, tool capability.Too
 		}
 	}
 	return context.WithTimeout(ctx, 30*time.Second)
-}
-
-func NewCancellationController() *CancellationController {
-	return &CancellationController{}
-}
-
-type CancellationController struct{}
-
-func (c *CancellationController) Wrap(ctx context.Context, inv capability.ToolInvocationContext) context.Context {
-	return ctx
 }
 
 func NewDepthGuard() *DepthGuard {
@@ -318,4 +314,23 @@ func (d *RuntimeDispatcher) DispatchStream(ctx context.Context, tool capability.
 
 	result := streamingAdapter.ExecuteStream(ctx, tool.Runtime, inv, input, emitter)
 	return result, true
+}
+
+func (d *RuntimeDispatcher) Cancel(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, reason capability.ToolCancellationReason) (bool, error) {
+	if d.adapterRegistry == nil {
+		return false, nil
+	}
+
+	adapter, ok := d.adapterRegistry.Resolve(tool.Runtime)
+	if !ok {
+		return false, nil
+	}
+
+	cancellableAdapter, ok := adapter.(capability.CancellableRuntimeAdapter)
+	if !ok {
+		return false, capability.ErrRuntimeCancellationUnsupported{}
+	}
+
+	err := cancellableAdapter.Cancel(ctx, tool.Runtime, inv, reason)
+	return true, err
 }

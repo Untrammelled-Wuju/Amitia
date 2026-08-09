@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/log"
 )
 
 var (
@@ -153,6 +154,35 @@ func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *Command
 
 	if _, err := h.events.Append(event.EventType, event.Payload, conn.SessionID, newSeq, "runtime_command", nil); err != nil {
 		return fmt.Errorf("append event failed: %v", err)
+	}
+
+	ackCmdID := ack.CommandID
+	if ackCmdID == "" {
+		return nil
+	}
+
+	now := time.Now()
+	switch CommandStatus(ack.Status) {
+	case CommandStatusRuntimeReceived:
+		if err := h.commands.MarkRuntimeReceived(ackCmdID, conn.RuntimeID, conn.SessionID, now); err != nil {
+			log.Warn("[v2] MarkRuntimeReceived failed: ", err)
+		}
+	case CommandStatusRuntimeAccepted:
+		if err := h.commands.MarkRuntimeAccepted(ackCmdID, conn.RuntimeID, conn.SessionID, now); err != nil {
+			log.Warn("[v2] MarkRuntimeAccepted failed: ", err)
+		}
+	case CommandStatusRendererAccepted:
+		if err := h.commands.MarkRendererAccepted(ackCmdID, conn.RuntimeID, conn.SessionID, now); err != nil {
+			log.Warn("[v2] MarkRendererAccepted failed: ", err)
+		}
+	case CommandStatusCompleted:
+		if err := h.commands.MarkCompleted(ackCmdID, "", now); err != nil {
+			log.Warn("[v2] MarkCompleted failed: ", err)
+		}
+	case CommandStatusFailedTerminal:
+		if err := h.commands.MarkFailed(ackCmdID, ack.RejectErrorCode, ack.RejectReason, now); err != nil {
+			log.Warn("[v2] MarkFailed failed: ", err)
+		}
 	}
 
 	conn.LastSeq = newSeq

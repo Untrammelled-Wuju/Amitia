@@ -20,6 +20,16 @@ const (
 	ErrPluginMismatch      ErrorCode = "plugin_mismatch"
 	ErrSelfDependency      ErrorCode = "self_dependency"
 	ErrDuplicateDependency ErrorCode = "duplicate_dependency"
+
+	ErrRuntimeUnavailable     ErrorCode = "runtime_unavailable"
+	ErrServiceUnavailable     ErrorCode = "service_unavailable"
+	ErrRuntimeOperationLocked ErrorCode = "runtime_operation_locked"
+	ErrDefinitionNotResolved  ErrorCode = "definition_not_resolved"
+	ErrServiceLaunchFailed    ErrorCode = "service_launch_failed"
+	ErrRollbackFailed         ErrorCode = "rollback_failed"
+	ErrShutdownFailed         ErrorCode = "shutdown_failed"
+	ErrExecutionTimeout       ErrorCode = "execution_timeout"
+	ErrDependencyNotSatisfied ErrorCode = "dependency_not_satisfied"
 )
 
 type TopologyError struct {
@@ -40,6 +50,58 @@ func (e *TopologyError) Unwrap() error {
 	return e.Cause
 }
 
+type ExecutionError struct {
+	Code       ErrorCode
+	RuntimeID  string
+	PluginID   string
+	ServiceID  string
+	DefinitionID string
+	Message    string
+	Cause      error
+}
+
+func (e *ExecutionError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("[%s] runtime=%s plugin=%s service=%s def=%s: %s: %v",
+			e.Code, e.RuntimeID, e.PluginID, e.ServiceID, e.DefinitionID, e.Message, e.Cause)
+	}
+	return fmt.Sprintf("[%s] runtime=%s plugin=%s service=%s def=%s: %s",
+		e.Code, e.RuntimeID, e.PluginID, e.ServiceID, e.DefinitionID, e.Message)
+}
+
+func (e *ExecutionError) Unwrap() error {
+	return e.Cause
+}
+
+type RuntimeStartError struct {
+	Cause          error
+	RuntimeID      string
+	RollbackErrors []error
+}
+
+func (e *RuntimeStartError) Error() string {
+	if len(e.RollbackErrors) > 0 {
+		return fmt.Sprintf("runtime_start_failed: runtime=%s cause=%v rollback_errors=%d",
+			e.RuntimeID, e.Cause, len(e.RollbackErrors))
+	}
+	return fmt.Sprintf("runtime_start_failed: runtime=%s cause=%v", e.RuntimeID, e.Cause)
+}
+
+func (e *RuntimeStartError) Unwrap() error {
+	return e.Cause
+}
+
+type RuntimeStopError struct {
+	RuntimeID   string
+	StopErrors  []error
+	CleanupErrors []error
+}
+
+func (e *RuntimeStopError) Error() string {
+	return fmt.Sprintf("runtime_stop_failed: runtime=%s stop_errors=%d cleanup_errors=%d",
+		e.RuntimeID, len(e.StopErrors), len(e.CleanupErrors))
+}
+
 func NewTopologyError(code ErrorCode, message string) *TopologyError {
 	return &TopologyError{
 		Code:    code,
@@ -55,8 +117,39 @@ func NewTopologyErrorWithCause(code ErrorCode, message string, cause error) *Top
 	}
 }
 
+func NewExecutionError(code ErrorCode, runtimeID, pluginID, serviceID, definitionID, message string) *ExecutionError {
+	return &ExecutionError{
+		Code:         code,
+		RuntimeID:    runtimeID,
+		PluginID:     pluginID,
+		ServiceID:    serviceID,
+		DefinitionID: definitionID,
+		Message:      message,
+	}
+}
+
+func NewExecutionErrorWithCause(code ErrorCode, runtimeID, pluginID, serviceID, definitionID, message string, cause error) *ExecutionError {
+	return &ExecutionError{
+		Code:         code,
+		RuntimeID:    runtimeID,
+		PluginID:     pluginID,
+		ServiceID:    serviceID,
+		DefinitionID: definitionID,
+		Message:      message,
+		Cause:        cause,
+	}
+}
+
 func IsTopologyError(err error, code ErrorCode) bool {
 	te, ok := err.(*TopologyError)
+	if !ok {
+		return false
+	}
+	return te.Code == code
+}
+
+func IsExecutionError(err error, code ErrorCode) bool {
+	te, ok := err.(*ExecutionError)
 	if !ok {
 		return false
 	}

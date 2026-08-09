@@ -110,4 +110,25 @@ internal object RuntimeStateMachine {
         RuntimeState.STOPPED -> null
         else -> null
     }
+
+    fun startupReadyTarget(current: RuntimeState): RuntimeState? = when (current) {
+        RuntimeState.STARTING -> RuntimeState.READY
+        else -> null
+    }
+
+    fun startupFailureTarget(current: RuntimeState): RuntimeState? = when (current) {
+        RuntimeState.STARTING -> RuntimeState.FAILED
+        RuntimeState.STOPPING -> RuntimeState.FAILED
+        else -> null
+    }
+
+    fun requireTransitionTo(from: RuntimeState, to: RuntimeState): TransitionError? {
+        return if (canTransition(from, to)) {
+            null
+        } else {
+            TransitionError(from, to)
+        }
+    }
+
+    data class TransitionError(val from: RuntimeState, val to: RuntimeState)
 }

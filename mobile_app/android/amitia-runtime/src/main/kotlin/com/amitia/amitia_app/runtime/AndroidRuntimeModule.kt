@@ -26,7 +26,8 @@ object AndroidRuntimeModule {
         val serviceHost = AndroidRuntimeServiceHost(appContext)
         val controller = DefaultRuntimeController(
             stateStore = stateStore,
-            serviceHost = serviceHost
+            serviceHost = serviceHost,
+            abiGate = abiGate
         )
         return DefaultRuntimeModule(
             controller = controller,

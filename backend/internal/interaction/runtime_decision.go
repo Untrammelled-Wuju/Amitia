@@ -103,19 +103,19 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	}
 
 	buildInput := decision.BehaviorPlanBuildInput{
-		UserID:          scope.UserID,
-		CharacterID:     scope.CharacterID,
-		ConversationID:  scope.ConversationID,
-		RequestID:       scope.RequestID,
-		Arbitration:     arbitrationResult,
-		Goals:           goalsForDecision(goalContext),
-		Intentions:      append([]decision.Intention(nil), goalContext.Intentions...),
-		Psyche:          psycheSignals,
-		Relationship:    relSnapshot,
-		Life:            lifeSnapshot,
-		Personality:     personalityRef,
-		Safety:          planSafetyCtx,
-		Now:             now,
+		UserID:         scope.UserID,
+		CharacterID:    scope.CharacterID,
+		ConversationID: scope.ConversationID,
+		RequestID:      scope.RequestID,
+		Arbitration:    arbitrationResult,
+		Goals:          goalsForDecision(goalContext),
+		Intentions:     append([]decision.Intention(nil), goalContext.Intentions...),
+		Psyche:         psycheSignals,
+		Relationship:   relSnapshot,
+		Life:           lifeSnapshot,
+		Personality:    personalityRef,
+		Safety:         planSafetyCtx,
+		Now:            now,
 	}
 
 	builder := decision.NewBehaviorPlanBuilder()

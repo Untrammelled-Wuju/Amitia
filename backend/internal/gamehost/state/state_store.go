@@ -97,7 +97,7 @@ func (s *LatestStateStore) Put(ctx context.Context, update StateUpdate) (StateSn
 		serviceKeys := s.lerviceLockedLocked(update.RuntimeID, update.ServiceID)
 		runtimeKeys[key] = struct{}{}
 		serviceKeys[key] = struct{}{}
-		s.pluginIndex[update.PluginID][key] = nil
+		s.lazyPluginLocked(update.PluginID)[key] = nil
 	}
 
 	snapshot := StateSnapshot{
@@ -350,6 +350,15 @@ func (s *LatestStateStore) lazyRuntimeLocked(runtime domain.RuntimeInstanceID) m
 	}
 	m := make(map[string]struct{})
 	s.runtimeIndex[runtime] = m
+	return m
+}
+
+func (s *LatestStateStore) lazyPluginLocked(plugin domain.PluginID) map[string]*struct{} {
+	if m, ok := s.pluginIndex[plugin]; ok {
+		return m
+	}
+	m := make(map[string]*struct{})
+	s.pluginIndex[plugin] = m
 	return m
 }
 

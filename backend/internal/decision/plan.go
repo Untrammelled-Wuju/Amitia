@@ -25,14 +25,14 @@ const (
 type BehaviorPlanStrategy string
 
 const (
-	StrategyRespondNaturally    BehaviorPlanStrategy = "respond_naturally"
-	StrategyRequestClarification BehaviorPlanStrategy = "request_clarification"
-	StrategyProvideSupport      BehaviorPlanStrategy = "provide_support"
-	StrategySetBoundary         BehaviorPlanStrategy = "set_boundary"
-	StrategyRepairRelationship  BehaviorPlanStrategy = "repair_relationship"
-	StrategyProactiveCheck      BehaviorPlanStrategy = "proactive_check"
+	StrategyRespondNaturally       BehaviorPlanStrategy = "respond_naturally"
+	StrategyRequestClarification   BehaviorPlanStrategy = "request_clarification"
+	StrategyProvideSupport         BehaviorPlanStrategy = "provide_support"
+	StrategySetBoundary            BehaviorPlanStrategy = "set_boundary"
+	StrategyRepairRelationship     BehaviorPlanStrategy = "repair_relationship"
+	StrategyProactiveCheck         BehaviorPlanStrategy = "proactive_check"
 	StrategyObserveWithoutResponse BehaviorPlanStrategy = "observe_without_response"
-	StrategyResolveViaTool      BehaviorPlanStrategy = "resolve_via_tool"
+	StrategyResolveViaTool         BehaviorPlanStrategy = "resolve_via_tool"
 )
 
 type PlanContentPolicy struct {

@@ -12,12 +12,14 @@ import (
 
 var ErrToolStreamClosed = fmt.Errorf("tool stream session closed")
 
-func newToolStreamSession(invocationID string, sink capability.ToolStreamSink, policy capability.ToolStreamingPolicy, sanitizer *Sanitizer) *toolStreamSession {
+func newToolStreamSession(invocationID string, sink capability.ToolStreamSink, policy capability.ToolStreamingPolicy, sanitizer *Sanitizer, cancelCtrl *CancellationController) *toolStreamSession {
 	return &toolStreamSession{
 		invocationID: invocationID,
 		sink:         sink,
 		policy:       policy,
 		sanitizer:    sanitizer,
+		cancelCtrl:   cancelCtrl,
+		abortFired:   false,
 	}
 }
 
@@ -33,6 +35,8 @@ type toolStreamSession struct {
 	deliveryErr  error
 	policy       capability.ToolStreamingPolicy
 	sanitizer    *Sanitizer
+	cancelCtrl   *CancellationController
+	abortFired   bool
 }
 
 var _ capability.ToolStreamEmitter = (*toolStreamSession)(nil)
@@ -251,7 +255,19 @@ func (s *toolStreamSession) StreamEventCount() int {
 
 func (s *toolStreamSession) recordDeliveryErr(err *capability.ToolError) error {
 	s.deliveryErr = err
+	s.tryAbortStream()
 	return err
+}
+
+func (s *toolStreamSession) tryAbortStream() {
+	if s.abortFired || s.cancelCtrl == nil {
+		return
+	}
+	s.abortFired = true
+	reason := capability.ToolCancellationReason{
+		Code: capability.CancellationReasonStreamConsumerGone,
+	}
+	go s.cancelCtrl.CancelInvocation(context.Background(), s.invocationID, reason)
 }
 
 func cloneStringMap(src map[string]any) map[string]any {

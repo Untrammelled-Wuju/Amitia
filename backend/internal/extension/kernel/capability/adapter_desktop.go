@@ -33,6 +33,10 @@ type DesktopProvider interface {
 	Health(ctx context.Context) HealthStatus
 }
 
+type DesktopCancellableProvider interface {
+	Cancel(ctx context.Context, requestID string, reason string) error
+}
+
 type desktopRuntimeAdapter struct {
 	provider DesktopProvider
 }
@@ -188,6 +192,14 @@ func (a *desktopRuntimeAdapter) normalizeResponse(invocationID string, resp Desk
 		result.Error = a.mapDesktopError(resp.Error)
 		return result
 	}
+}
+
+func (a *desktopRuntimeAdapter) Cancel(ctx context.Context, binding RuntimeBinding, invocation ToolInvocationContext, reason ToolCancellationReason) error {
+	cancellable, ok := a.provider.(DesktopCancellableProvider)
+	if !ok {
+		return ErrRuntimeCancellationUnsupported{}
+	}
+	return cancellable.Cancel(ctx, invocation.InvocationID, string(reason.Code))
 }
 
 func (a *desktopRuntimeAdapter) mapDesktopError(desktopErr *DesktopError) *ToolError {

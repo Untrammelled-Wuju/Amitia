@@ -3,9 +3,9 @@ package decision
 import "fmt"
 
 type ConsistencyResult struct {
-	Consistent  bool     `json:"consistent"`
-	Violations  []string `json:"violations,omitempty"`
-	Warnings    []string `json:"warnings,omitempty"`
+	Consistent bool     `json:"consistent"`
+	Violations []string `json:"violations,omitempty"`
+	Warnings   []string `json:"warnings,omitempty"`
 }
 
 type ConsistencyChecker struct{}

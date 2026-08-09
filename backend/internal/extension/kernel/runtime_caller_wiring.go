@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
 
 func makeWorkflowCallFunc(executor *workflow.WorkflowExecutor) capability.WorkflowCallFunc {
-	return func(ctx context.Context, workflowID string, input json.RawMessage) (json.RawMessage, error) {
+	return func(ctx context.Context, workflowID string, invocation capability.ToolInvocationContext, input json.RawMessage) (json.RawMessage, error) {
 		if executor == nil {
 			return nil, fmt.Errorf("workflow executor not configured")
 		}
@@ -21,13 +20,21 @@ func makeWorkflowCallFunc(executor *workflow.WorkflowExecutor) capability.Workfl
 			inputPayload = json.RawMessage(`{}`)
 		}
 
-		invocationID := fmt.Sprintf("wf-tool-%s", uuid.NewString())
-
 		req := workflow.ExecuteRequest{
 			WorkflowID: workflowID,
 			Input:      inputPayload,
 			Context: workflow.ExecutionContext{
-				InvocationID: invocationID,
+				InvocationID:     invocation.InvocationID,
+				CharacterID:      invocation.CharacterID,
+				ConversationID:   invocation.ConversationID,
+				OperationID:      invocation.OperationID,
+				TraceID:          invocation.TraceID,
+				ExtensionID:      invocation.ExtensionID,
+				ModuleID:         invocation.ModuleID,
+				Generation:       invocation.Generation,
+				ScheduleID:       invocation.ScheduleID,
+				TriggerID:        invocation.TriggerID,
+				IdempotencyKey:   invocation.IdempotencyKey,
 			},
 		}
 
@@ -46,6 +53,16 @@ func makeWorkflowCallFunc(executor *workflow.WorkflowExecutor) capability.Workfl
 		}
 
 		return output, nil
+	}
+}
+
+func makeWorkflowCancelFunc(executor *workflow.WorkflowExecutor) capability.WorkflowCancelFunc {
+	return func(ctx context.Context, invocationID string, reason string) error {
+		if executor == nil {
+			return fmt.Errorf("workflow executor not configured")
+		}
+		executor.Cancel(invocationID)
+		return nil
 	}
 }
 

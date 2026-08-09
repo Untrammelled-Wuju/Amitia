@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
+	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
@@ -105,11 +108,6 @@ func (
 		)
 	}
 
-	warnings :=
-		collectValidationWarnings(
-			report.Findings,
-		)
-
 	selectedActions :=
 		make(
 			[]string,
@@ -132,34 +130,98 @@ func (
 		licenseDecision = "declared"
 	}
 
+	archiveValid := report.Verdict == "valid" || report.Verdict == "valid_with_warnings"
+
+	workspaceReport := v.validator.ValidateDirectory(sourcePath, manifest)
+	workspaceValid := workspaceReport.Verdict == "valid" || workspaceReport.Verdict == "valid_with_warnings"
+
+	allWarnings := collectValidationWarnings(report.Findings)
+	allWarnings = append(allWarnings, collectValidationWarnings(workspaceReport.Findings)...)
+
+	integrityVerified := archiveValid && workspaceValid && staging.SourceContentHash != ""
+
+	compatibility := checkRuntimeCompatibility(manifest.Compatibility)
+
 	return &ImportValidationResult{
-		IsValid:
-			report.Verdict == "valid" ||
-				report.Verdict ==
-					"valid_with_warnings",
-		SourcePackageHash:
-			staging.SourceContentHash,
-		SourceManifestHash:
-			manifest.Integrity.
-				ManifestHash,
-		SourceSchemaVersion:
-			manifest.SchemaVersion,
-		Warnings:
-			warnings,
-		BindingDecision:
-			manifest.Binding.Policy,
-		LicenseDecision:
-			licenseDecision,
-		RuntimeCompatibility:
-			manifest.Compatibility.
-				MinRuntimeVersion,
-		SelectedActions:
-			selectedActions,
-		Manifest:
-			manifest,
-		ValidationReport:
-			report,
+		IsValid:             archiveValid,
+		IntegrityVerified:   integrityVerified,
+		Compatibility:       compatibility,
+		SourcePackageHash:   staging.SourceContentHash,
+		SourceManifestHash:  manifest.Integrity.ManifestHash,
+		SourceSchemaVersion: manifest.SchemaVersion,
+		Warnings:            allWarnings,
+		BindingDecision:     manifest.Binding.Policy,
+		LicenseDecision:     licenseDecision,
+		RuntimeCompatibility: string(compatibility),
+		SelectedActions:     selectedActions,
+		Manifest:            manifest,
+		ValidationReport:    report,
 	}, nil
+}
+
+func checkRuntimeCompatibility(compat packageformat.ManifestCompatibility) release.ReleaseCompatibilityStatus {
+	current := parseSemVer(contracts.RuntimeContractVersion)
+	minV := parseSemVer(compat.MinRuntimeVersion)
+	if minV == nil {
+		return release.ReleaseCompatIncompatible
+	}
+	if compareSemVer(current, minV) < 0 {
+		return release.ReleaseCompatIncompatible
+	}
+	if compat.MaxRuntimeVersion != nil {
+		maxV := parseSemVer(*compat.MaxRuntimeVersion)
+		if maxV == nil {
+			return release.ReleaseCompatIncompatible
+		}
+		if compareSemVer(current, maxV) > 0 {
+			return release.ReleaseCompatIncompatible
+		}
+	}
+	return release.ReleaseCompatCompatible
+}
+
+func parseSemVer(s string) []int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) < 2 || len(parts) > 4 {
+		return nil
+	}
+	result := make([]int, len(parts))
+	for i, p := range parts {
+		n, err := strconv.Atoi(strings.TrimSpace(p))
+		if err != nil {
+			return nil
+		}
+		result[i] = n
+	}
+	return result
+}
+
+func compareSemVer(a, b []int) int {
+	maxLen := len(a)
+	if len(b) > maxLen {
+		maxLen = len(b)
+	}
+	for i := 0; i < maxLen; i++ {
+		ai := 0
+		if i < len(a) {
+			ai = a[i]
+		}
+		bi := 0
+		if i < len(b) {
+			bi = b[i]
+		}
+		if ai < bi {
+			return -1
+		}
+		if ai > bi {
+			return 1
+		}
+	}
+	return 0
 }
 
 func summarizeValidationFindings(

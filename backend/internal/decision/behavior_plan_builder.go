@@ -13,22 +13,22 @@ func NewBehaviorPlanID() string {
 }
 
 type BehaviorPlanBuildInput struct {
-	PlanID          string
-	UserID          string
-	CharacterID     string
-	ConversationID  string
-	InteractionID   string
-	RequestID       string
-	Arbitration     ArbitrationResult
-	Goals           []Goal
-	Intentions      []Intention
-	Psyche          PsycheSignalSet
-	Relationship    RelationshipSnapshot
-	Life            LifeSnapshot
-	Personality     CompiledPersonalityRef
-	Safety          PlanSafetyContext
-	ContentPolicy   PlanContentPolicy
-	Now             time.Time
+	PlanID         string
+	UserID         string
+	CharacterID    string
+	ConversationID string
+	InteractionID  string
+	RequestID      string
+	Arbitration    ArbitrationResult
+	Goals          []Goal
+	Intentions     []Intention
+	Psyche         PsycheSignalSet
+	Relationship   RelationshipSnapshot
+	Life           LifeSnapshot
+	Personality    CompiledPersonalityRef
+	Safety         PlanSafetyContext
+	ContentPolicy  PlanContentPolicy
+	Now            time.Time
 }
 
 type BehaviorPlanBuilder struct{}

@@ -1,5 +1,7 @@
 package capability
 
+import "context"
+
 type ToolCancellationReasonCode string
 
 const (

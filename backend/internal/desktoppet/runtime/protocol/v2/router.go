@@ -1,9 +1,12 @@
 package v2
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,10 +17,21 @@ import (
 	"github.com/u-ai/backend/log"
 )
 
+type BootstrapTicketConsumer func(
+	ctx context.Context,
+	rawTicket string,
+	runtimeID string,
+	deviceID string,
+) (
+	userID string,
+	err error,
+)
+
 func RegisterInternalRoutes(
 	r *gin.Engine,
 	facade *RuntimeFacade,
 	safeMode *readiness.SafeModeController,
+	consumeTicket BootstrapTicketConsumer,
 ) {
 	if facade == nil {
 		return
@@ -28,7 +42,7 @@ func RegisterInternalRoutes(
 		path = "/internal/desktop-pet/runtime/ws"
 	}
 
-	r.GET(path, internalOriginMiddleware(facade, safeMode), gin.WrapH(&v2WSHandler{facade: facade}))
+	r.GET(path, internalOriginMiddleware(facade, safeMode), gin.WrapH(&v2WSHandler{facade: facade, consumeTicket: consumeTicket}))
 }
 
 func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
@@ -152,13 +166,34 @@ func internalOriginMiddleware(facade *RuntimeFacade, safeMode *readiness.SafeMod
 }
 
 type v2WSHandler struct {
-	facade   *RuntimeFacade
-	upgrader websocket.Upgrader
+	facade        *RuntimeFacade
+	consumeTicket BootstrapTicketConsumer
+	upgrader      websocket.Upgrader
 }
 
 func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.facade == nil || !h.facade.IsStarted() {
 		http.Error(w, "runtime v2 not started", http.StatusServiceUnavailable)
+		return
+	}
+
+	rawTicket := strings.TrimSpace(r.URL.Query().Get("ticket"))
+	deviceID := strings.TrimSpace(r.URL.Query().Get("deviceId"))
+	runtimeID := strings.TrimSpace(r.URL.Query().Get("runtimeId"))
+
+	if rawTicket == "" || deviceID == "" || runtimeID == "" {
+		http.Error(w, "runtime bootstrap credentials required", http.StatusUnauthorized)
+		return
+	}
+
+	if h.consumeTicket == nil {
+		http.Error(w, "runtime ticket validator unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	userID, err := h.consumeTicket(r.Context(), rawTicket, runtimeID, deviceID)
+	if err != nil || userID == "" {
+		http.Error(w, "runtime bootstrap ticket rejected", http.StatusUnauthorized)
 		return
 	}
 
@@ -169,10 +204,6 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	v2Handler := h.facade.Handler()
-
-	userID := r.URL.Query().Get("userId")
-	deviceID := r.URL.Query().Get("deviceId")
-	runtimeID := r.URL.Query().Get("runtimeId")
 
 	conn, err := v2Handler.HandleConnect(userID, deviceID, runtimeID)
 	if err != nil {
@@ -189,6 +220,13 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go ctx.writeLoop()
+
+	dispatchCtx, dispatchCancel := context.WithCancel(r.Context())
+	defer dispatchCancel()
+
+	dispatcher := NewConnectionCommandDispatcher(h.facade.Commands(), v2Handler)
+	go dispatcher.Run(dispatchCtx, conn, ctx.SendEnvelope)
+
 	ctx.readLoop()
 }
 
@@ -204,6 +242,30 @@ type wsConnContext struct {
 
 func (ctx *wsConnContext) closeDone() {
 	ctx.once.Do(func() { close(ctx.doneCh) })
+}
+
+func (ctx *wsConnContext) SendEnvelope(env *Envelope, sentAt string) error {
+	if env == nil {
+		return nil
+	}
+	data, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+
+	select {
+	case ctx.sendCh <- data:
+		if ctx.conn != nil && sentAt != "" {
+			ctx.mu.Lock()
+			ctx.conn.LastSeq = env.Sequence
+			ctx.mu.Unlock()
+		}
+		return nil
+	case <-ctx.doneCh:
+		return ErrConnectionClosed
+	default:
+		return errors.New("runtime send queue full")
+	}
 }
 
 func (ctx *wsConnContext) readLoop() {
@@ -222,6 +284,30 @@ func (ctx *wsConnContext) readLoop() {
 		var env Envelope
 		if err := json.Unmarshal(data, &env); err != nil {
 			continue
+		}
+
+		if env.MessageType == MessageTypeHello {
+			if err := env.ValidateBase(); err != nil {
+				return
+			}
+		} else {
+			if err := env.ValidateEstablishedSession(); err != nil {
+				return
+			}
+		}
+
+		if env.UserID != ctx.conn.UserID ||
+			env.DeviceID != ctx.conn.DeviceID ||
+			env.RuntimeID != ctx.conn.RuntimeID {
+			return
+		}
+
+		if env.MessageType != MessageTypeHello && env.RuntimeSessionID != ctx.conn.SessionID {
+			return
+		}
+
+		if !env.VerifyPayloadHash() {
+			return
 		}
 
 		switch MessageType(env.MessageType) {

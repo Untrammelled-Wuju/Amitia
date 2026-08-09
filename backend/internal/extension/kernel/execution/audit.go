@@ -74,6 +74,27 @@ func (a *AuditRecorder) RecordRetry(invID string, attempt int) {
 	}
 }
 
+func (a *AuditRecorder) RecordCancelled(ctx context.Context, invID, toolID, reasonCode string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if entry, ok := a.records[invID]; ok {
+		entry.Status = "cancelled"
+		entry.ErrorCode = "cancelled"
+		entry.Cancelled = true
+		_ = reasonCode
+	} else {
+		a.records[invID] = &AuditEntry{
+			InvocationID: invID,
+			ToolID:       toolID,
+			Status:       "cancelled",
+			ErrorCode:    "cancelled",
+			Cancelled:    true,
+			StartTime:    time.Now(),
+			EndTime:      time.Now(),
+		}
+	}
+}
+
 func (a *AuditRecorder) GetEntry(invID string) *AuditEntry {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

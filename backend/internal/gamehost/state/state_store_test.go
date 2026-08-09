@@ -457,11 +457,11 @@ func TestLatestStateStore_CountByRuntime(t *testing.T) {
 
 func TestLatestStateStore_TwoPluginsSameRuntime(t *testing.T) {
 	store := NewLatestStateStore(NewOptions())
-	store.Put(context.Background(), StateUpdate{PluginID: "p1", RuntimeID: "r", ServiceID: "s", Key: "k", Payload: json.RawMessage(`{"p":"1"}`)})
-	store.Put(context.Background(), StateUpdate{PluginID: "p2", RuntimeID: "r", ServiceID: "s", Key: "k", Payload: json.RawMessage(`{"p":"2"}`)})
+	store.Put(context.Background(), StateUpdate{PluginID: "p1", RuntimeID: "r1", ServiceID: "s", Key: "k", Payload: json.RawMessage(`{"p":"1"}`)})
+	store.Put(context.Background(), StateUpdate{PluginID: "p2", RuntimeID: "r2", ServiceID: "s", Key: "k", Payload: json.RawMessage(`{"p":"2"}`)})
 
-	got1, _ := store.Get(context.Background(), kh("p1", "r", "s", "k"))
-	got2, _ := store.Get(context.Background(), kh("p2", "r", "s", "k"))
+	got1, _ := store.Get(context.Background(), kh("p1", "r1", "s", "k"))
+	got2, _ := store.Get(context.Background(), kh("p2", "r2", "s", "k"))
 
 	if string(got1.Payload) != `{"p":"1"}` {
 		t.Errorf("p1 state corrupted: %q", got1.Payload)

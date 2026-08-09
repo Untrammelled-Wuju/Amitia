@@ -99,6 +99,53 @@ func (e *Envelope) Validate() error {
 	return nil
 }
 
+func (e *Envelope) ValidateBase() error {
+	if e.EnvelopeVersion != EnvelopeVersion {
+		return fmt.Errorf("unsupported envelope version: %d", e.EnvelopeVersion)
+	}
+	if e.Protocol != ProtocolName {
+		return fmt.Errorf("unexpected protocol: %s", e.Protocol)
+	}
+	if !IsValidMessageType(string(e.MessageType)) {
+		return fmt.Errorf("invalid message type: %s", e.MessageType)
+	}
+	if e.MessageID == "" {
+		return fmt.Errorf("messageId is required")
+	}
+	if e.UserID == "" {
+		return fmt.Errorf("userId is required")
+	}
+	if e.DeviceID == "" {
+		return fmt.Errorf("deviceId is required")
+	}
+	if e.RuntimeID == "" {
+		return fmt.Errorf("runtimeId is required")
+	}
+	if e.ConnectionGeneration < 1 {
+		return fmt.Errorf("connectionGeneration must be >= 1")
+	}
+	if e.Sequence < 0 {
+		return fmt.Errorf("sequence must be >= 0")
+	}
+	if e.PayloadSchemaVersion < 1 {
+		return fmt.Errorf("payloadSchemaVersion must be >= 1")
+	}
+	if e.PayloadHash == "" {
+		return fmt.Errorf("payloadHash is required")
+	}
+	return nil
+}
+
+func (e *Envelope) ValidateEstablishedSession() error {
+	if err := e.ValidateBase(); err != nil {
+		return err
+	}
+	if e.RuntimeSessionID == "" {
+		return fmt.Errorf("runtimeSessionId required")
+	}
+	return nil
+}
+
 func ComputePayloadHash(payload []byte) string {
 	sum := sha256.Sum256([]byte(CanonicalJSON(payload)))
 	return "sha256:" + hex.EncodeToString(sum[:])

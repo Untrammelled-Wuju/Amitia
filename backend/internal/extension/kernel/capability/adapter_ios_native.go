@@ -33,6 +33,10 @@ type IOSProvider interface {
 	Health(ctx context.Context) HealthStatus
 }
 
+type IOSCancellableProvider interface {
+	Cancel(ctx context.Context, requestID string, reason string) error
+}
+
 type iosRuntimeAdapter struct {
 	provider IOSProvider
 }
@@ -188,6 +192,14 @@ func (a *iosRuntimeAdapter) normalizeResponse(invocationID string, resp IOSBridg
 		result.Error = a.mapIOSError(resp.Error)
 		return result
 	}
+}
+
+func (a *iosRuntimeAdapter) Cancel(ctx context.Context, binding RuntimeBinding, invocation ToolInvocationContext, reason ToolCancellationReason) error {
+	cancellable, ok := a.provider.(IOSCancellableProvider)
+	if !ok {
+		return ErrRuntimeCancellationUnsupported{}
+	}
+	return cancellable.Cancel(ctx, invocation.InvocationID, string(reason.Code))
 }
 
 func (a *iosRuntimeAdapter) mapIOSError(iosErr *IOSError) *ToolError {

@@ -15,17 +15,19 @@ import (
 var _ ipc.Dispatcher = (*RPCDispatcher)(nil)
 
 type RPCDispatcher struct {
-	mu           sync.RWMutex
-	controlPlane ipc.ControlPlane
-	namespaces   NamespaceRegistry
-	hostHandlers HandlerRegistry
-	idGenerator  func() string
+	mu             sync.RWMutex
+	controlPlane   ipc.ControlPlane
+	namespaces     NamespaceRegistry
+	hostHandlers   HandlerRegistry
+	idGenerator    func() string
+	lifecycle      *RequestLifecycleManager
 }
 
 type DispatcherConfig struct {
-	Namespaces   NamespaceRegistry
-	HostHandlers HandlerRegistry
-	IDGenerator  func() string
+	Namespaces     NamespaceRegistry
+	HostHandlers   HandlerRegistry
+	IDGenerator    func() string
+	Lifecycle      *RequestLifecycleManager
 }
 
 func NewRPCDispatcher(config DispatcherConfig) *RPCDispatcher {
@@ -33,10 +35,17 @@ func NewRPCDispatcher(config DispatcherConfig) *RPCDispatcher {
 	if idGen == nil {
 		idGen = defaultIDGenerator()
 	}
+
+	dm := config.Lifecycle
+	if dm == nil {
+		dm = NewLifecycleManager(LifecycleManagerConfig{IDGenerator: idGen})
+	}
+
 	return &RPCDispatcher{
 		namespaces:   config.Namespaces,
 		hostHandlers: config.HostHandlers,
 		idGenerator:  idGen,
+		lifecycle:    dm,
 	}
 }
 
@@ -44,6 +53,13 @@ func (d *RPCDispatcher) SetControlPlane(cp ipc.ControlPlane) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.controlPlane = cp
+	d.lifecycle.SetControlPlane(cp)
+}
+
+func (d *RPCDispatcher) SetLifecycleManager(lm *RequestLifecycleManager) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lifecycle = lm
 }
 
 func (d *RPCDispatcher) getControlPlane() ipc.ControlPlane {
@@ -52,17 +68,38 @@ func (d *RPCDispatcher) getControlPlane() ipc.ControlPlane {
 	return d.controlPlane
 }
 
+func (d *RPCDispatcher) getLifecycle() *RequestLifecycleManager {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.lifecycle
+}
+
 func (d *RPCDispatcher) Dispatch(ctx context.Context, peer ipc.Peer, envelope protocol.Envelope) error {
 	switch envelope.Type {
 	case protocol.MessageTypeRequest:
 		return d.dispatchRequest(ctx, peer, envelope)
 	case protocol.MessageTypeResponse, protocol.MessageTypeError:
-		return nil
+		return d.dispatchResponse(peer, envelope)
 	case protocol.MessageTypeNotification:
+		if cancelReq, ok := ParseCancelEnvelope(&envelope); ok {
+			dm := d.getLifecycle()
+			if dm != nil {
+				_ = dm.HandleCancel(peer, cancelReq)
+			}
+			return nil
+		}
 		return nil
 	default:
 		return nil
 	}
+}
+
+func (d *RPCDispatcher) dispatchResponse(peer ipc.Peer, envelope protocol.Envelope) error {
+	dm := d.getLifecycle()
+	if dm == nil {
+		return nil
+	}
+	return dm.HandleIncomingResponse(peer, envelope)
 }
 
 func (d *RPCDispatcher) dispatchRequest(ctx context.Context, sourcePeer ipc.Peer, envelope protocol.Envelope) error {

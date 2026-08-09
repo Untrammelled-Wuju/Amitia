@@ -437,6 +437,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		Supervisor:        supervisor,
 		TaskService:       taskRuntimeService,
 		WorkflowCaller:    makeWorkflowCallFunc(workflowExecutor),
+		WorkflowCancel:    makeWorkflowCancelFunc(workflowExecutor),
 		BuiltinDispatcher: builtinDispatcher,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)

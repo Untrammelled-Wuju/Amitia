@@ -5,14 +5,19 @@ import (
 	"encoding/json"
 )
 
-type WorkflowCallFunc func(ctx context.Context, workflowID string, input json.RawMessage) (json.RawMessage, error)
+type WorkflowCallFunc func(ctx context.Context, workflowID string, invocation ToolInvocationContext, input json.RawMessage) (json.RawMessage, error)
 
 type WorkflowRuntimeAdapter struct {
 	caller WorkflowCallFunc
+	cancel WorkflowCancelFunc
 }
 
-func NewWorkflowRuntimeAdapter(caller WorkflowCallFunc) *WorkflowRuntimeAdapter {
-	return &WorkflowRuntimeAdapter{caller: caller}
+func NewWorkflowRuntimeAdapter(caller WorkflowCallFunc, cancel ...WorkflowCancelFunc) *WorkflowRuntimeAdapter {
+	adapter := &WorkflowRuntimeAdapter{caller: caller}
+	if len(cancel) > 0 {
+		adapter.cancel = cancel[0]
+	}
+	return adapter
 }
 
 func (a *WorkflowRuntimeAdapter) Supports(binding RuntimeBinding) bool {
@@ -37,7 +42,7 @@ func (a *WorkflowRuntimeAdapter) Execute(
 		}
 	}
 
-	output, err := a.caller(ctx, binding.RuntimeID, input)
+	output, err := a.caller(ctx, binding.RuntimeID, invocation, input)
 	if err != nil {
 		return UnifiedToolResult{
 			InvocationID: invocation.InvocationID,
@@ -61,4 +66,11 @@ func (a *WorkflowRuntimeAdapter) Execute(
 
 func (a *WorkflowRuntimeAdapter) Health(ctx context.Context, binding RuntimeBinding) HealthStatus {
 	return HealthReady
+}
+
+func (a *WorkflowRuntimeAdapter) Cancel(ctx context.Context, binding RuntimeBinding, invocation ToolInvocationContext, reason ToolCancellationReason) error {
+	if a.cancel == nil {
+		return ErrRuntimeCancellationUnsupported{}
+	}
+	return a.cancel(ctx, invocation.InvocationID, string(reason.Code))
 }

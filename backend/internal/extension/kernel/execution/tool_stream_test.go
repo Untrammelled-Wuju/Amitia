@@ -45,7 +45,7 @@ func textOfLength(n int) string {
 func TestB20StreamSessionContentEvent(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true, MaxEventBytes: 64 * 1024, MaxEvents: 4096}
-	session := newToolStreamSession("inv-1", sink, policy, nil)
+	session := newToolStreamSession("inv-1", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type: capability.ToolStreamEventContent,
@@ -80,7 +80,7 @@ func TestB20StreamSessionContentEvent(t *testing.T) {
 func TestB20StreamSessionProgressEvent(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-2", sink, policy, nil)
+	session := newToolStreamSession("inv-2", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type: capability.ToolStreamEventProgress,
@@ -108,7 +108,7 @@ func TestB20StreamSessionProgressEvent(t *testing.T) {
 func TestB20StreamSessionRejectsTerminalFromRuntime(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-3", sink, policy, nil)
+	session := newToolStreamSession("inv-3", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type: capability.ToolStreamEventTerminal,
@@ -128,7 +128,7 @@ func TestB20StreamSessionRejectsTerminalFromRuntime(t *testing.T) {
 func TestB20StreamSessionSequenceStrictlyIncreasing(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true, MaxEventBytes: 1 << 20}
-	session := newToolStreamSession("inv-4", sink, policy, nil)
+	session := newToolStreamSession("inv-4", sink, policy, nil, nil)
 
 	for i := 0; i < 100; i++ {
 		err := session.Emit(context.Background(), capability.ToolStreamEmission{
@@ -154,7 +154,7 @@ func TestB20StreamSessionSequenceStrictlyIncreasing(t *testing.T) {
 func TestB20StreamSessionFinishSendsTerminal(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-5", sink, policy, nil)
+	session := newToolStreamSession("inv-5", sink, policy, nil, nil)
 
 	result := capability.NewToolSuccessResult("inv-5", "tool-1")
 	err := session.Finish(context.Background(), result)
@@ -180,7 +180,7 @@ func TestB20StreamSessionFinishSendsTerminal(t *testing.T) {
 func TestB20StreamSessionFinishIdempotent(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-6", sink, policy, nil)
+	session := newToolStreamSession("inv-6", sink, policy, nil, nil)
 
 	result := capability.NewToolSuccessResult("inv-6", "tool-1")
 	_ = session.Finish(context.Background(), result)
@@ -198,7 +198,7 @@ func TestB20StreamSessionFinishIdempotent(t *testing.T) {
 func TestB20StreamSessionRejectsEmitAfterFinish(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-7", sink, policy, nil)
+	session := newToolStreamSession("inv-7", sink, policy, nil, nil)
 
 	_ = session.Finish(context.Background(), capability.NewToolSuccessResult("inv-7", "tool-1"))
 
@@ -214,7 +214,7 @@ func TestB20StreamSessionRejectsEmitAfterFinish(t *testing.T) {
 func TestB20StreamSessionEventSizeLimit(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true, MaxEventBytes: 100}
-	session := newToolStreamSession("inv-8", sink, policy, nil)
+	session := newToolStreamSession("inv-8", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type:    capability.ToolStreamEventContent,
@@ -228,7 +228,7 @@ func TestB20StreamSessionEventSizeLimit(t *testing.T) {
 func TestB20StreamSessionEventCountLimit(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true, MaxEventBytes: 1 << 20, MaxEvents: 3}
-	session := newToolStreamSession("inv-9", sink, policy, nil)
+	session := newToolStreamSession("inv-9", sink, policy, nil, nil)
 
 	for i := 0; i < 3; i++ {
 		err := session.Emit(context.Background(), capability.ToolStreamEmission{
@@ -256,7 +256,7 @@ func TestB20StreamSessionEventCountLimit(t *testing.T) {
 func TestB20StreamSessionContentWithoutContent(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-10", sink, policy, nil)
+	session := newToolStreamSession("inv-10", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type: capability.ToolStreamEventContent,
@@ -269,7 +269,7 @@ func TestB20StreamSessionContentWithoutContent(t *testing.T) {
 func TestB20StreamSessionContentWithInvalidStructured(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-11", sink, policy, nil)
+	session := newToolStreamSession("inv-11", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type: capability.ToolStreamEventContent,
@@ -286,7 +286,7 @@ func TestB20StreamSessionContentWithInvalidStructured(t *testing.T) {
 func TestB20StreamSessionSinkError(t *testing.T) {
 	sink := &testStreamSink{err: context.DeadlineExceeded}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-12", sink, policy, nil)
+	session := newToolStreamSession("inv-12", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type:    capability.ToolStreamEventContent,
@@ -311,7 +311,7 @@ func TestB20StreamSessionSinkError(t *testing.T) {
 func TestB20StreamSessionConcurrentEmit(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true, MaxEventBytes: 1 << 20}
-	session := newToolStreamSession("inv-13", sink, policy, nil)
+	session := newToolStreamSession("inv-13", sink, policy, nil, nil)
 
 	var wg sync.WaitGroup
 	var errCount int32
@@ -351,7 +351,7 @@ func TestB20StreamSessionConcurrentEmit(t *testing.T) {
 func TestB20StreamSessionTotalBytesLimit(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true, MaxEventBytes: 1 << 20, MaxTotalBytes: 500}
-	session := newToolStreamSession("inv-14", sink, policy, nil)
+	session := newToolStreamSession("inv-14", sink, policy, nil, nil)
 
 	var emitted int
 	for i := 0; i < 10; i++ {
@@ -371,7 +371,7 @@ func TestB20StreamSessionTotalBytesLimit(t *testing.T) {
 func TestB20StreamSessionContentWithStreamContentType(t *testing.T) {
 	sink := &testStreamSink{}
 	policy := capability.ToolStreamingPolicy{Enabled: true}
-	session := newToolStreamSession("inv-15", sink, policy, nil)
+	session := newToolStreamSession("inv-15", sink, policy, nil, nil)
 
 	err := session.Emit(context.Background(), capability.ToolStreamEmission{
 		Type:    capability.ToolStreamEventContent,

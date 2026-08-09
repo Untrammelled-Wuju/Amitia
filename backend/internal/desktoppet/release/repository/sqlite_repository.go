@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -374,6 +375,27 @@ func (r *SQLiteRepository) GetImportSnapshotByReleaseID(releaseID string) (*rele
 
 func (r *SQLiteRepository) UpdateImportSnapshot(snapshot *release.ImportPackageSnapshot) error {
 	return r.db.Save(snapshot).Error
+}
+
+func (r *SQLiteRepository) UpdateReleaseTx(tx *gorm.DB, item *release.ReleaseData) error {
+	if tx == nil {
+		return errors.New("release update tx is nil")
+	}
+	return tx.Save(item).Error
+}
+
+func (r *SQLiteRepository) UpdateBuildOperationTx(tx *gorm.DB, item *release.ReleaseBuildOperation) error {
+	if tx == nil {
+		return errors.New("operation update tx is nil")
+	}
+	return tx.Save(item).Error
+}
+
+func (r *SQLiteRepository) UpdateImportSnapshotTx(tx *gorm.DB, item *release.ImportPackageSnapshot) error {
+	if tx == nil {
+		return errors.New("snapshot update tx is nil")
+	}
+	return tx.Save(item).Error
 }
 
 func (r *SQLiteRepository) AcquireLeaseCAS(op *release.ReleaseBuildOperation, owner, executionID string) error {

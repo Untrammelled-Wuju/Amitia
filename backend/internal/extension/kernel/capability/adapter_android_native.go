@@ -33,6 +33,10 @@ type AndroidProvider interface {
 	Health(ctx context.Context) HealthStatus
 }
 
+type AndroidCancellableProvider interface {
+	Cancel(ctx context.Context, requestID string, reason string) error
+}
+
 type androidRuntimeAdapter struct {
 	provider AndroidProvider
 }
@@ -188,6 +192,14 @@ func (a *androidRuntimeAdapter) normalizeResponse(invocationID string, resp Andr
 		result.Error = a.mapAndroidError(resp.Error)
 		return result
 	}
+}
+
+func (a *androidRuntimeAdapter) Cancel(ctx context.Context, binding RuntimeBinding, invocation ToolInvocationContext, reason ToolCancellationReason) error {
+	cancellable, ok := a.provider.(AndroidCancellableProvider)
+	if !ok {
+		return ErrRuntimeCancellationUnsupported{}
+	}
+	return cancellable.Cancel(ctx, invocation.InvocationID, string(reason.Code))
 }
 
 func (a *androidRuntimeAdapter) mapAndroidError(androidErr *AndroidError) *ToolError {

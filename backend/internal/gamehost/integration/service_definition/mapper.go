@@ -1,0 +1,151 @@
+package service_definition
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"sort"
+	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+)
+
+type DefinitionMapper struct{}
+
+func NewDefinitionMapper() *DefinitionMapper {
+	return &DefinitionMapper{}
+}
+
+func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_service.ServiceRuntimeDefinition, error) {
+	if view.ExtensionID == "" {
+		return nil, NewServiceDefinitionError(ErrDefinitionMappingFailed, "extension id must not be empty")
+	}
+	if view.ModuleID == "" {
+		return nil, NewServiceDefinitionError(ErrDefinitionMappingFailed, "module id must not be empty")
+	}
+	if !IsValidServiceRuntimeType(view.RuntimeType) {
+		return nil, NewServiceDefinitionErrorWithCause(ErrUnsupportedServiceKind,
+			"unsupported service runtime type",
+			NewServiceDefinitionError(ErrUnsupportedServiceKind, view.RuntimeType))
+	}
+	if view.EntryPoint == "" {
+		return nil, NewServiceDefinitionError(ErrDefinitionMappingFailed, "entry point must not be empty for process service")
+	}
+
+	definitionID := view.ToDefinitionID()
+
+	envCopy := make(map[string]string, len(view.Env))
+	for k, v := range view.Env {
+		envCopy[k] = v
+	}
+
+	return &trusted_service.ServiceRuntimeDefinition{
+		ServiceID:         definitionID,
+		ExtensionID:       view.ExtensionID,
+		ModuleID:          view.ModuleID,
+		Name:              view.Name,
+		Description:       view.Description,
+		TrustLevel:        "trusted",
+		Executables: []trusted_service.PlatformExecutable{
+			{
+				Platform:    trusted_service.CurrentPlatform(),
+				Entry:       view.EntryPoint,
+				EnvTemplate: envCopy,
+				Signature: trusted_service.BinarySignature{
+					Trusted: true,
+				},
+			},
+		},
+		Protocol:          "amitia-trusted-service/1",
+		InstancePolicy:    "single",
+		HealthCheck: trusted_service.ServiceHealthCheck{
+			Type:                "heartbeat",
+			Interval:            30 * time.Second,
+			Timeout:             10 * time.Second,
+			GracePeriod:         5 * time.Second,
+			MaxConsecutiveFails: 3,
+		},
+		Recovery: trusted_service.ServiceRecoveryPolicy{
+			MaxRestarts:       3,
+			RestartDelay:      1 * time.Second,
+			BackoffMultiplier: 2.0,
+			MaxRestartDelay:   30 * time.Second,
+			QuarantineOnFail:  true,
+		},
+		Shutdown: trusted_service.ServiceShutdownPolicy{
+			GracePeriod:     10 * time.Second,
+			KillTimeout:     30 * time.Second,
+			CleanupChildren: true,
+			RemoveTempDir:   false,
+		},
+		Limits: trusted_service.ServiceResourceLimits{
+			MaxMemoryMB:        512,
+			MaxCPUPercent:      50,
+			MaxFileDescriptors: 1024,
+			MaxDiskMB:          1024,
+			MaxSubprocesses:    8,
+		},
+		Network: trusted_service.ServiceNetworkPolicy{
+			AllowOutbound:  true,
+			AllowedDomains: []string{"localhost", "127.0.0.1"},
+			LoopbackOnly:   false,
+		},
+		ManifestHash:      computeManifestHash(view),
+		DefinitionVersion: 1,
+		AutoStart:         false,
+		AllowedNamespaces: []string{},
+	}, nil
+}
+
+func (m *DefinitionMapper) MapToViews(views []ServiceRuntimeView) ([]*trusted_service.ServiceRuntimeDefinition, []error) {
+	var defs []*trusted_service.ServiceRuntimeDefinition
+	var errs []error
+
+	for _, view := range views {
+		def, err := m.MapToDefinition(view)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		defs = append(defs, def)
+	}
+
+	return defs, errs
+}
+
+func computeManifestHash(view ServiceRuntimeView) string {
+	h := sha256.New()
+	h.Write([]byte(view.ExtensionID))
+	h.Write([]byte(view.ModuleID))
+	h.Write([]byte(view.RuntimeType))
+	h.Write([]byte(view.EntryPoint))
+	h.Write([]byte(view.Name))
+
+	envKeys := make([]string, 0, len(view.Env))
+	for k := range view.Env {
+		envKeys = append(envKeys, k)
+	}
+	sort.Strings(envKeys)
+	for _, k := range envKeys {
+		h.Write([]byte(k))
+		h.Write([]byte(view.Env[k]))
+	}
+
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func CanonicalizeEnv(env map[string]string) []string {
+	if env == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	result := make([]string, 0, len(keys))
+	for _, k := range keys {
+		result = append(result, fmt.Sprintf("%s=%s", k, env[k]))
+	}
+	return result
+}

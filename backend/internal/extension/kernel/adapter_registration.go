@@ -22,6 +22,7 @@ type AdapterRegistrationDeps struct {
 	MCPCaller         capability.MCPCallFunc
 	MCPHealth         capability.MCPHealthFunc
 	WorkflowCaller    capability.WorkflowCallFunc
+	WorkflowCancel    capability.WorkflowCancelFunc
 	BuiltinDispatcher capability.DispatchFunc
 	DesktopProvider   capability.DesktopProvider
 }
@@ -86,7 +87,7 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 		registry.Register(capability.RuntimeTypeMCP, mcpAdapter)
 	}
 
-	wfAdapter := capability.NewWorkflowRuntimeAdapter(deps.WorkflowCaller)
+	wfAdapter := capability.NewWorkflowRuntimeAdapter(deps.WorkflowCaller, deps.WorkflowCancel)
 	registry.Register(capability.RuntimeTypeWorkflow, wfAdapter)
 
 	if deps.DesktopProvider != nil {

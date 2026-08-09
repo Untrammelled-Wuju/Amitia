@@ -27,20 +27,20 @@ func (e *invocationCancelledError) Error() string {
 type runtimeCancelFunc func()
 
 type activeCancellation struct {
-	Invocation   capability.ToolInvocationContext
-	cancel       context.CancelCauseFunc
-	state        cancellationState
-	reason       capability.ToolCancellationReason
+	Invocation    capability.ToolInvocationContext
+	cancel        context.CancelCauseFunc
+	state         cancellationState
+	reason        capability.ToolCancellationReason
 	runtimeCancels []runtimeCancelFunc
-	attached     bool
+	attached      bool
 }
 
 func NewCancellationController() *CancellationController {
 	return &CancellationController{
-		active:    make(map[string]*activeCancellation),
-		children:  make(map[string]map[string]struct{}),
-		roots:     make(map[string]map[string]struct{}),
-		external:  make(map[string]string),
+		active:   make(map[string]*activeCancellation),
+		children: make(map[string]map[string]struct{}),
+		roots:    make(map[string]map[string]struct{}),
+		external: make(map[string]string),
 	}
 }
 
@@ -53,10 +53,10 @@ type CancellationController struct {
 }
 
 type CancellationResult struct {
-	Requested             bool
-	TargetInvocationID    string
+	Requested              bool
+	TargetInvocationID     string
 	CancelledInvocationIDs []string
-	AlreadyRequested      []string
+	AlreadyRequested       []string
 }
 
 func (c *CancellationController) Register(ctx context.Context, inv capability.ToolInvocationContext) (context.Context, func(), error) {
@@ -65,7 +65,7 @@ func (c *CancellationController) Register(ctx context.Context, inv capability.To
 
 	invID := inv.InvocationID
 	if _, exists := c.active[invID]; exists {
-		return context.Context{}, func() {}, errors.New("duplicate active invocation ID: " + invID)
+		return ctx, func() {}, errors.New("duplicate active invocation ID: " + invID)
 	}
 
 	runCtx, cancel := context.WithCancelCause(ctx)
@@ -101,13 +101,15 @@ func (c *CancellationController) Register(ctx context.Context, inv capability.To
 		}
 		extKey := scope.Key() + "|" + inv.ExternalCallID
 		if _, exists := c.external[extKey]; exists {
-			cancel()
+			cancel(&invocationCancelledError{})
 			delete(c.active, invID)
 			if inv.ParentID != "" {
 				deleteParentLink(c.children, inv.ParentID, invID)
 			}
-			delete(c.roots[inv.RootID], invID)
-			return context.Context{}, func() {}, errors.New("duplicate external call ID: " + inv.ExternalCallID)
+			if inv.RootID != "" {
+				delete(c.roots[inv.RootID], invID)
+			}
+			return ctx, func() {}, errors.New("duplicate external call ID: " + inv.ExternalCallID)
 		}
 		c.external[extKey] = invID
 	}
@@ -165,7 +167,7 @@ func deleteParentLink(children map[string]map[string]struct{}, parentID, childID
 }
 
 func (c *CancellationController) CancelInvocation(ctx context.Context, invocationID string, reason capability.ToolCancellationReason) CancellationResult {
-	if !reason.Valid() {
+	if !reason.Code.Valid() {
 		reason = capability.ToolCancellationReason{Code: capability.CancellationReasonUserRequested}
 	}
 
@@ -180,7 +182,8 @@ func (c *CancellationController) CancelInvocation(ctx context.Context, invocatio
 	idsToCancel := make([]string, 0)
 	alreadyRequested := make([]string, 0)
 
-	collectDescendants := func(rootID string, rootAc *activeCancellation) {
+	var collectDescendants func(rootID string, rootAc *activeCancellation)
+	collectDescendants = func(rootID string, rootAc *activeCancellation) {
 		if rootAc.state == cancellationStateTerminal {
 			return
 		}
@@ -251,7 +254,7 @@ func (c *CancellationController) CancelInvocation(ctx context.Context, invocatio
 }
 
 func (c *CancellationController) CancelRoot(ctx context.Context, rootID string, reason capability.ToolCancellationReason) CancellationResult {
-	if !reason.Valid() {
+	if !reason.Code.Valid() {
 		reason = capability.ToolCancellationReason{Code: capability.CancellationReasonUserRequested}
 	}
 

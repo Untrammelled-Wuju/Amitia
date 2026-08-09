@@ -17,22 +17,22 @@ func buildBehaviorPlanFromRuntime(runtime *interaction.RuntimeAssembly) string {
 	}
 	bp, lines := runtime.BehaviorPlan, []string{}
 	if bp.Intent != "" {
-		lines = append(lines, "意图: "+bp.Intent)
+		lines = append(lines, "意图: "+string(bp.Intent))
 	}
 	if bp.Strategy != "" {
-		lines = append(lines, "策略: "+bp.Strategy)
+		lines = append(lines, "策略: "+string(bp.Strategy))
 	}
 	if bp.ResponseGoal != "" {
 		lines = append(lines, "回复目标: "+bp.ResponseGoal)
 	}
 	if bp.ToneHint != "" {
-		lines = append(lines, "语气提示: "+bp.ToneHint)
+		lines = append(lines, "语气提示: "+string(bp.ToneHint))
 	}
-	if len(bp.AllowedTopics) > 0 {
-		lines = append(lines, "允许话题: "+strings.Join(bp.AllowedTopics, " / "))
+	if len(bp.PlanContentPolicy.AllowedTopics) > 0 {
+		lines = append(lines, "允许话题: "+strings.Join(bp.PlanContentPolicy.AllowedTopics, " / "))
 	}
-	if len(bp.ForbiddenTopics) > 0 {
-		lines = append(lines, "禁止话题: "+strings.Join(bp.ForbiddenTopics, " / "))
+	if len(bp.PlanContentPolicy.ForbiddenTopics) > 0 {
+		lines = append(lines, "禁止话题: "+strings.Join(bp.PlanContentPolicy.ForbiddenTopics, " / "))
 	}
 	if bp.Priority != "" {
 		lines = append(lines, "优先级: "+string(bp.Priority))

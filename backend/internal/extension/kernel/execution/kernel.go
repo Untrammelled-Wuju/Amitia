@@ -46,3 +46,22 @@ type StreamingExecutionSecurityKernel interface {
 		error,
 	)
 }
+
+type CancellableExecutionSecurityKernel interface {
+	ExecutionSecurityKernel
+
+	CancelInvocation(
+		ctx context.Context,
+		invocationID string,
+		reason capability.ToolCancellationReason,
+	) CancellationResult
+
+	CancelExternalCall(
+		ctx context.Context,
+		scope capability.CancellationExternalScope,
+		externalCallID string,
+		reason capability.ToolCancellationReason,
+	) CancellationResult
+}
+
+var _ CancellableExecutionSecurityKernel = (*ExecutionPipeline)(nil)

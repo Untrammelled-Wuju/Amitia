@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -266,10 +267,11 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 	}
 
 	petID, releaseID, operationID, err := h.importer.ImportPackage(c.Request.Context(), map[string]string{
-		"userId":          actorID,
-		"importStagingId": locked.ID,
-		"sourceFilePath":  sourcePath,
-		"idempotencyKey":  "import:" + locked.ID,
+		"userId":                  actorID,
+		"importStagingId":         locked.ID,
+		"sourceFilePath":          sourcePath,
+		"idempotencyKey":          "import:" + locked.ID,
+		"expectedStagingRevision": fmt.Sprintf("%d", locked.StateRevision),
 	})
 	if err != nil {
 		failed, failErr := h.repo.FailConsumptionCAS(c.Request.Context(), locked.ID, actorID, locked.StateRevision, err.Error())
@@ -280,16 +282,6 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 			log.Warn("import failed but staging state had changed: ", locked.ID)
 		}
 		util.ErrorResponse(c, response.BusinessError, "导入失败", gin.H{"errorCode": "IMPORT_FAILED"})
-		return
-	}
-
-	completed, err := h.repo.CompleteConsumptionCAS(c.Request.Context(), locked.ID, actorID, locked.StateRevision)
-	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "完成消费失败", gin.H{"errorCode": "INTERNAL_ERROR"})
-		return
-	}
-	if !completed {
-		util.ErrorResponse(c, response.BusinessError, "暂存状态已变化", gin.H{"errorCode": "STAGING_CONTENTION"})
 		return
 	}
 

@@ -41,6 +41,10 @@ kotlin {
     }
 }
 
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    exclude("**/bridge/**")
+}
+
 tasks.withType<Test>().configureEach {
     testLogging {
         showStandardStreams = true

@@ -262,22 +262,22 @@ func renderBehaviorPlanSummary(plan *decision.BehaviorPlan) string {
 	var lines []string
 
 	if plan.Intent != "" {
-		lines = append(lines, "- 意图: "+plan.Intent)
+		lines = append(lines, "- 意图: "+string(plan.Intent))
 	}
 	if plan.Strategy != "" {
-		lines = append(lines, "- 策略: "+plan.Strategy)
+		lines = append(lines, "- 策略: "+string(plan.Strategy))
 	}
 	if plan.ResponseGoal != "" {
 		lines = append(lines, "- 回复目标: "+plan.ResponseGoal)
 	}
 	if plan.ToneHint != "" {
-		lines = append(lines, "- 语气提示: "+plan.ToneHint)
+		lines = append(lines, "- 语气提示: "+string(plan.ToneHint))
 	}
-	if len(plan.AllowedTopics) > 0 {
-		lines = append(lines, "- 允许话题: "+strings.Join(plan.AllowedTopics, "、"))
+	if len(plan.PlanContentPolicy.AllowedTopics) > 0 {
+		lines = append(lines, "- 允许话题: "+strings.Join(plan.PlanContentPolicy.AllowedTopics, "、"))
 	}
-	if len(plan.ForbiddenTopics) > 0 {
-		lines = append(lines, "- 禁止话题: "+strings.Join(plan.ForbiddenTopics, "、"))
+	if len(plan.PlanContentPolicy.ForbiddenTopics) > 0 {
+		lines = append(lines, "- 禁止话题: "+strings.Join(plan.PlanContentPolicy.ForbiddenTopics, "、"))
 	}
 	if plan.Priority != "" {
 		lines = append(lines, "- 优先级: "+string(plan.Priority))

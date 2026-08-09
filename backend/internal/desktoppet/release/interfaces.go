@@ -239,6 +239,10 @@ type ReleaseRepository interface {
 	CreateValidationReportTx(tx *gorm.DB, report *ReleaseValidationReport) error
 	CreateOutboxTx(tx *gorm.DB, event *ReleaseEventOutbox) error
 	UpdateOperationOwned(tx *gorm.DB, op *ReleaseBuildOperation, expectedState string) error
+
+	UpdateReleaseTx(tx *gorm.DB, item *ReleaseData) error
+	UpdateBuildOperationTx(tx *gorm.DB, item *ReleaseBuildOperation) error
+	UpdateImportSnapshotTx(tx *gorm.DB, item *ImportPackageSnapshot) error
 }
 
 type PetIdentityData struct {

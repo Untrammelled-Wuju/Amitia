@@ -102,6 +102,44 @@ func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.
 	return f.buildKernelModelTools(ctx, scope)
 }
 
+type ResolvedToolReference struct {
+	ID          capability.CapabilityID
+	ModelName   string
+	ExtensionID string
+	ModuleID    string
+	Generation  int64
+}
+
+func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, error) {
+	if f.toolRegistry == nil {
+		return ResolvedToolReference{}, fmt.Errorf("tool registry not configured")
+	}
+	def, ok := f.toolRegistry.GetByModelName(context.Background(), modelName)
+	if !ok {
+		return ResolvedToolReference{}, fmt.Errorf("tool not found: %s", modelName)
+	}
+	return ResolvedToolReference{
+		ID:          capability.CapabilityID(def.ID),
+		ModelName:   def.ModelName,
+		ExtensionID: def.ExtensionID,
+		ModuleID:    def.ModuleID,
+		Generation:  0,
+	}, nil
+}
+
+func (f *ToolFacade) ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope LegacyScope, externalCallID string, idempotencyKey string) (LegacyToolResult, bool) {
+	f.counters.IncExecuteModelTool()
+	if f.toolRegistry == nil {
+		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
+	}
+	def, ok := f.toolRegistry.Get(ctx, string(toolID))
+	if !ok {
+		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", toolID), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: string(toolID)}}, false
+	}
+	f.counters.IncPipelineExecution()
+	return f.executeResolvedTool(ctx, def, input, scope, externalCallID, idempotencyKey), true
+}
+
 func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope LegacyScope, idempotencyKey string) (LegacyToolResult, bool) {
 	f.counters.IncExecuteModelTool()
 	if f.toolRegistry == nil {
@@ -109,13 +147,10 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 	}
 	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
 	if !ok {
-		def, ok = f.toolRegistry.Get(ctx, modelName)
-	}
-	if !ok {
 		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false
 	}
 	f.counters.IncPipelineExecution()
-	return f.executeKernelTool(ctx, def, input, scope, idempotencyKey), true
+	return f.executeResolvedTool(ctx, def, input, scope, scope.ToolCallID, idempotencyKey), true
 }
 
 func (f *ToolFacade) AfterReply(scope LegacyScope, reply LegacyReplyView) bool {
@@ -247,12 +282,12 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScop
 	return tools, nil
 }
 
-func (f *ToolFacade) executeKernelTool(ctx context.Context, def capability.ToolDefinition, input json.RawMessage, scope LegacyScope, idempotencyKey string) LegacyToolResult {
+func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.ToolDefinition, input json.RawMessage, scope LegacyScope, externalCallID string, idempotencyKey string) LegacyToolResult {
 	if f.executionKernel == nil {
 		return LegacyToolResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &LegacyToolError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		ExternalCallID:  scope.ToolCallID,
+		ExternalCallID:  externalCallID,
 		UserID:          scope.UserID,
 		CharacterID:     scope.CharacterID,
 		ConversationID:  scope.ConversationID,
@@ -293,7 +328,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 	var kernelInterface interface{} = f.executionKernel
 	streamingKernel, ok := kernelInterface.(execution.StreamingExecutionSecurityKernel)
 	if !ok {
-		result := f.executeKernelTool(ctx, def, input, scope, idempotencyKey)
+		result := f.executeResolvedTool(ctx, def, input, scope, scope.ToolCallID, idempotencyKey)
 		return result, false, nil
 	}
 
@@ -355,4 +390,32 @@ func unifiedResultToLegacy(result capability.UnifiedToolResult) LegacyToolResult
 
 func boolPtr(v bool) *bool {
 	return &v
+}
+
+func (f *ToolFacade) CancelInvocation(ctx context.Context, invocationID string) execution.CancellationResult {
+	reason := capability.ToolCancellationReason{
+		Code: capability.CancellationReasonUserRequested,
+	}
+	var kernelInterface interface{} = f.executionKernel
+	if cancellable, ok := kernelInterface.(execution.CancellableExecutionSecurityKernel); ok {
+		return cancellable.CancelInvocation(ctx, invocationID, reason)
+	}
+	return execution.CancellationResult{Requested: false, TargetInvocationID: invocationID}
+}
+
+func (f *ToolFacade) CancelModelTool(ctx context.Context, scope LegacyScope, toolCallID string) execution.CancellationResult {
+	reason := capability.ToolCancellationReason{
+		Code: capability.CancellationReasonUserRequested,
+	}
+	var kernelInterface interface{} = f.executionKernel
+	if cancellable, ok := kernelInterface.(execution.CancellableExecutionSecurityKernel); ok {
+		externalScope := capability.CancellationExternalScope{
+			UserID:         scope.UserID,
+			CharacterID:    scope.CharacterID,
+			ConversationID: scope.ConversationID,
+			SessionID:      scope.SessionID,
+		}
+		return cancellable.CancelExternalCall(ctx, externalScope, toolCallID, reason)
+	}
+	return execution.CancellationResult{Requested: false}
 }

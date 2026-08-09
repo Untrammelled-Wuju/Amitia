@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,7 +57,15 @@ func (p *ExecutionPipeline) ExecuteStream(ctx context.Context, request ToolExecu
 		policy = tool.ResultPolicy.Streaming
 	}
 
-	session := newToolStreamSession(inv.InvocationID, sink, policy, p.Sanitizer)
+	var cleanup func()
+	if p.CancellationCtrl != nil {
+		ctx, cleanup, _ = p.CancellationCtrl.Register(ctx, inv)
+		if cleanup != nil {
+			defer cleanup()
+		}
+	}
+
+	session := newToolStreamSession(inv.InvocationID, sink, policy, p.Sanitizer, p.CancellationCtrl)
 	result, streamErr := p.execute(ctx, request, session)
 
 	terminalErr := session.Finish(ctx, result)
@@ -68,113 +77,165 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	inv := normalizeExecutionInvocation(request.Invocation)
 	request.Invocation = inv
 
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
+	}
+
 	if err := ctx.Err(); err != nil {
 		result := capability.ResultFromContextError(inv.InvocationID, err)
-		return p.finishEarlyResult(ctx, inv, toolID, result), nil
+		return p.finalizeCancellation(ctx, inv, result), nil
 	}
 
 	if p.InvocationValidator != nil {
 		if err := p.InvocationValidator.Validate(ctx, request); err != nil {
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeInvalidInput,
 				Message: err.Error(),
-			})), nil
+			}))), nil
+		}
+	}
+
+	var cancelCleanup func()
+	if p.CancellationCtrl != nil {
+		ctx, cancelCleanup, _ = p.CancellationCtrl.Register(ctx, inv)
+		if cancelCleanup != nil {
+			defer cancelCleanup()
 		}
 	}
 
 	tool, err := p.resolveTool(ctx, toolID)
 	if err != nil {
-		return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 			Code:    capability.ErrorCodeNotAvailable,
 			Message: err.Error(),
-		})), nil
+		}))), nil
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	if p.InputValidator != nil {
 		if err := p.InputValidator.Validate(ctx, tool, request.Input); err != nil {
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeInvalidInput,
 				Message: "input validation failed",
-			})), nil
+			}))), nil
 		}
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	if p.AvailabilityGate != nil {
 		avail := p.AvailabilityGate.Evaluate(ctx, tool, inv)
 		if !avail.Executable {
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeNotAvailable,
 				Message: "tool not executable",
-			})), nil
+			}))), nil
 		}
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	if p.ScopeGate != nil {
 		if err := p.ScopeGate.Evaluate(ctx, tool, inv); err != nil {
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeScopeDenied,
 				Message: err.Error(),
-			})), nil
+			}))), nil
 		}
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	if p.PermissionGate != nil {
 		decision := p.PermissionGate.Evaluate(ctx, tool, inv)
 		switch decision {
 		case PermissionDeny:
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodePermissionDenied,
 				Message: "permission denied",
-			})), nil
+			}))), nil
 		case PermissionRequireApproval:
 			if p.ApprovalGate != nil {
 				approved, appErr := p.ApprovalGate.Evaluate(ctx, tool, inv, decision)
 				if appErr != nil || !approved {
-					return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+					return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 						Code:    capability.ErrorCodePermissionDenied,
 						Message: "approval denied",
-					})), nil
+					}))), nil
 				}
 			}
 		}
 	}
 
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
+	}
+
 	if p.DepthGuard != nil {
 		if err := p.DepthGuard.Check(ctx, inv); err != nil {
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    "max_depth_exceeded",
 				Message: err.Error(),
-			})), nil
+			}))), nil
 		}
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	if p.RateLimiter != nil {
 		if err := p.RateLimiter.Allow(ctx, tool); err != nil {
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeRateLimited,
 				Message: err.Error(),
-			})), nil
+			}))), nil
 		}
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	if p.ConcurrencyCtrl != nil {
 		slot, slotErr := p.ConcurrencyCtrl.Acquire(ctx, tool, inv)
 		if slotErr != nil {
-			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			if errors.Is(slotErr, context.Canceled) {
+				result := capability.NewToolCancelledResult(inv.InvocationID, toolID)
+				return p.finalizeCancellation(ctx, inv, result), nil
+			}
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeRateLimited,
 				Message: slotErr.Error(),
-			})), nil
+			}))), nil
 		}
 		defer p.ConcurrencyCtrl.Release(slot)
 	}
 
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
 		if cached, found := p.IdempotencyGuard.Check(ctx, inv.IdempotencyKey, toolID); found {
-			if stream != nil {
-				_ = stream.Finish(ctx, cached)
+			if cached.Status == capability.ToolResultStatusCancelled {
+				p.IdempotencyGuard.Remove(ctx, inv.IdempotencyKey)
+			} else {
+				if stream != nil {
+					_ = stream.Finish(ctx, cached)
+				}
+				return p.finalizeCancellation(ctx, inv, cached), nil
 			}
-			return cached, nil
 		}
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	if p.TimeoutCtrl != nil {
@@ -185,8 +246,10 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		ctx = timeoutCtx
 	}
 
-	if p.CancellationCtrl != nil {
-		ctx = p.CancellationCtrl.Wrap(ctx, inv)
+	p.attachRuntimeCanceller(ctx, tool, inv)
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, nil
 	}
 
 	p.recordAuditStart(ctx, inv.InvocationID, toolID)
@@ -208,6 +271,10 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		})
 	}
 
+	if result, cancelled := p.checkCancellationAfterDispatch(ctx, inv, result); cancelled {
+		return result, nil
+	}
+
 	streamRetryAllowed := stream == nil || (!stream.HasVisibleOutput() && stream.Err() == nil)
 
 	if stream != nil && stream.Err() != nil && result.Status == capability.ToolResultStatusSuccess {
@@ -218,21 +285,21 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		})
 	}
 
-	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess && streamRetryAllowed {
+	if p.AuditRec != nil {
+		if result.Status == capability.ToolResultStatusCancelled {
+			p.AuditRec.RecordCancelled(ctx, inv.InvocationID, toolID, string(getCancelReasonCode(ctx, inv)))
+		}
+	}
+
+	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess && result.Status != capability.ToolResultStatusCancelled && streamRetryAllowed {
 		if result.Error != nil {
 			switch result.Error.Code {
 			case capability.ErrorCodePermissionDenied, capability.ErrorCodeScopeDenied, capability.ErrorCodeInvalidInput:
 			default:
 				if shouldRetry, _ := p.RetryCtrl.ShouldRetry(ctx, tool, result); shouldRetry {
 					for attempt := 1; attempt <= tool.ExecutionPolicy.RetryPolicy.MaxRetries; attempt++ {
-						time.Sleep(p.RetryCtrl.Backoff(attempt))
-						if p.AuditRec != nil {
-							p.AuditRec.RecordRetry(inv.InvocationID, attempt)
-						}
-						if stream != nil && tool.ResultPolicy.Streaming.Enabled {
-							result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
-						} else {
-							result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+						if result, cancelled := p.runRetryAttempt(ctx, tool, inv, request, stream, attempt, result); cancelled {
+							return result, nil
 						}
 						if result.Status == capability.ToolResultStatusSuccess {
 							break
@@ -254,8 +321,10 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	}
 
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
-		cached := result.Clone()
-		p.IdempotencyGuard.Record(ctx, inv.IdempotencyKey, toolID, &cached)
+		if result.Status != capability.ToolResultStatusCancelled {
+			cached := result.Clone()
+			p.IdempotencyGuard.Record(ctx, inv.IdempotencyKey, toolID, &cached)
+		}
 	}
 
 	if p.SideEffectRec != nil {
@@ -272,7 +341,106 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		p.CircuitBreaker.RecordResult(ctx, tool, result)
 	}
 
-	return result, deliveryErr
+	return p.finalizeCancellation(ctx, inv, result), deliveryErr
+}
+
+func (p *ExecutionPipeline) runRetryAttempt(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, request ToolExecutionRequest, stream *toolStreamSession, attempt int, currentResult capability.UnifiedToolResult) (capability.UnifiedToolResult, bool) {
+	delay := p.RetryCtrl.Backoff(attempt)
+	if delay > 0 {
+		if !respectBackoff(ctx, delay) {
+			result := capability.NewToolCancelledResult(inv.InvocationID, string(request.ToolID))
+			return p.finalizeCancellation(ctx, inv, result), true
+		}
+	}
+
+	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+		return result, true
+	}
+
+	if p.AuditRec != nil {
+		p.AuditRec.RecordRetry(inv.InvocationID, attempt)
+	}
+
+	var result capability.UnifiedToolResult
+	if stream != nil && tool.ResultPolicy.Streaming.Enabled {
+		result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
+	} else {
+		result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+	}
+
+	if result, cancelled := p.checkCancellationAfterDispatch(ctx, inv, result); cancelled {
+		return result, true
+	}
+
+	return result, false
+}
+
+func (p *ExecutionPipeline) attachRuntimeCanceller(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) {
+	if p.Dispatcher == nil || p.CancellationCtrl == nil {
+		return
+	}
+
+	toolCopy := tool
+	invCopy := inv
+
+	_ = p.CancellationCtrl.AttachRuntimeCanceller(inv.InvocationID, func() {
+		reason := capability.ToolCancellationReason{Code: capability.CancellationReasonRuntimeRequested}
+		_, _ = p.Dispatcher.Cancel(ctx, toolCopy, invCopy, reason)
+	})
+}
+
+func (p *ExecutionPipeline) checkCancellation(ctx context.Context, inv capability.ToolInvocationContext) (capability.UnifiedToolResult, bool) {
+	if p.CancellationCtrl == nil {
+		return capability.UnifiedToolResult{}, false
+	}
+	return p.CancellationCtrl.ResolveCancellation(ctx, inv)
+}
+
+func (p *ExecutionPipeline) checkCancellationAfterDispatch(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult) (capability.UnifiedToolResult, bool) {
+	if p.CancellationCtrl == nil {
+		return capability.UnifiedToolResult{}, false
+	}
+
+	if result.Status == capability.ToolResultStatusCancelled {
+		return result, false
+	}
+
+	return p.CancellationCtrl.ResolveCancellation(ctx, inv)
+}
+
+func (p *ExecutionPipeline) finalizeCancellation(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult) capability.UnifiedToolResult {
+	if p.CancellationCtrl == nil {
+		return result
+	}
+	return p.CancellationCtrl.Finalize(ctx, inv, result)
+}
+
+func getCancelReasonCode(ctx context.Context, inv capability.ToolInvocationContext) string {
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.Canceled) {
+			causeErr := context.Cause(ctx)
+			var cancelledErr *invocationCancelledError
+			if errors.As(causeErr, &cancelledErr) {
+				return string(cancelledErr.reason.Code)
+			}
+			return string(capability.CancellationReasonCallerContext)
+		}
+	}
+	return string(capability.CancellationReasonCallerContext)
+}
+
+func respectBackoff(ctx context.Context, delay time.Duration) bool {
+	if delay <= 0 {
+		return true
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func (p *ExecutionPipeline) resolveTool(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
@@ -333,4 +501,25 @@ func firstNonNil(errs ...error) error {
 		}
 	}
 	return nil
+}
+
+func (p *ExecutionPipeline) CancelInvocation(ctx context.Context, invocationID string, reason capability.ToolCancellationReason) CancellationResult {
+	if p.CancellationCtrl == nil {
+		return CancellationResult{Requested: false, TargetInvocationID: invocationID}
+	}
+	return p.CancellationCtrl.CancelInvocation(ctx, invocationID, reason)
+}
+
+func (p *ExecutionPipeline) CancelRoot(ctx context.Context, rootID string, reason capability.ToolCancellationReason) CancellationResult {
+	if p.CancellationCtrl == nil {
+		return CancellationResult{Requested: false}
+	}
+	return p.CancellationCtrl.CancelRoot(ctx, rootID, reason)
+}
+
+func (p *ExecutionPipeline) CancelExternalCall(ctx context.Context, scope capability.CancellationExternalScope, externalCallID string, reason capability.ToolCancellationReason) CancellationResult {
+	if p.CancellationCtrl == nil {
+		return CancellationResult{Requested: false}
+	}
+	return p.CancellationCtrl.CancelExternalCall(ctx, scope, externalCallID, reason)
 }

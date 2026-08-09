@@ -1,6 +1,7 @@
 package build
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,7 +66,16 @@ func (m *PublishJournalManager) UpdateStage(journal *release.ReleasePublishJourn
 }
 
 func (m *PublishJournalManager) MarkFailed(journal *release.ReleasePublishJournal, errMsg string) error {
-	journal.Stage = release.JournalStageFailed
+	if journal == nil {
+		return errors.New("publish journal is nil")
+	}
+
+	if journal.OperationKind == string(release.JournalOperationImport) {
+		journal.Stage = release.ImportJournalStageFailed
+	} else {
+		journal.Stage = release.JournalStageFailed
+	}
+
 	journal.ErrorMessage = errMsg
 	journal.UpdatedAt = formatTimestamp(time.Now())
 	return m.repo.UpdatePublishJournal(journal)

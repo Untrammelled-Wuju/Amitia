@@ -32,6 +32,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
+	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/embedding_config"
@@ -72,6 +73,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	r.Use(security.CorsMiddleware(security.CorsConfig{
 		AllowedOrigins: config.AppCfg.Security.AllowedOrigins,
 	}))
+
+	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 
 	tokenPath := filepath.Join(config.AppCfg.Storage.DataDir, "security", "local-token")
 	localCredentialStore, err := security.NewLocalCredentialStore(tokenPath)
@@ -285,12 +288,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					"code": 200,
 					"msg":  "ok",
 					"data": gin.H{
-						"ticketId":   ticket.ID,
-						"ticket":     rawTicket,
-						"deviceId":   ticket.DeviceID,
-						"runtimeId":  ticket.RuntimeID,
-						"expiresAt":  ticket.ExpiresAt,
-						"ttlSeconds": 600,
+					"ticketId":   ticket.ID,
+					"ticket":     rawTicket,
+					"userId":     ticket.UserID,
+					"deviceId":   ticket.DeviceID,
+					"runtimeId":  ticket.RuntimeID,
+					"expiresAt":  ticket.ExpiresAt,
+					"ttlSeconds": 600,
 					},
 				})
 			})
@@ -436,6 +440,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		r,
 		services.DesktopPetRuntimeV2,
 		services.SafeMode,
+		func(ctx context.Context, rawTicket, runtimeID, deviceID string) (string, error) {
+			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, runtimeID, deviceID)
+			if err != nil {
+				return "", err
+			}
+			return ticket.UserID, nil
+		},
 	)
 	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
 
