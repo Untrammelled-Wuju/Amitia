@@ -6,7 +6,45 @@ type PlanVersion string
 
 const (
 	PlanVersionV1 PlanVersion = "behavior-plan-v1"
+	PlanVersionV2 PlanVersion = "behavior-plan-v2"
 )
+
+type BehaviorPlanIntent string
+
+const (
+	PlanIntentReply     BehaviorPlanIntent = "reply"
+	PlanIntentClarify   BehaviorPlanIntent = "clarify"
+	PlanIntentSupport   BehaviorPlanIntent = "support"
+	PlanIntentBoundary  BehaviorPlanIntent = "boundary"
+	PlanIntentRepair    BehaviorPlanIntent = "repair"
+	PlanIntentProactive BehaviorPlanIntent = "proactive"
+	PlanIntentObserve   BehaviorPlanIntent = "observe"
+	PlanIntentTool      BehaviorPlanIntent = "tool"
+)
+
+type BehaviorPlanStrategy string
+
+const (
+	StrategyRespondNaturally    BehaviorPlanStrategy = "respond_naturally"
+	StrategyRequestClarification BehaviorPlanStrategy = "request_clarification"
+	StrategyProvideSupport      BehaviorPlanStrategy = "provide_support"
+	StrategySetBoundary         BehaviorPlanStrategy = "set_boundary"
+	StrategyRepairRelationship  BehaviorPlanStrategy = "repair_relationship"
+	StrategyProactiveCheck      BehaviorPlanStrategy = "proactive_check"
+	StrategyObserveWithoutResponse BehaviorPlanStrategy = "observe_without_response"
+	StrategyResolveViaTool      BehaviorPlanStrategy = "resolve_via_tool"
+)
+
+type PlanContentPolicy struct {
+	AllowedTopics   []string `json:"allowedTopics,omitempty"`
+	ForbiddenTopics []string `json:"forbiddenTopics,omitempty"`
+}
+
+type PlanSafetyContext struct {
+	Level   BehaviorSafetyLevel
+	Blocked bool
+	Reasons []string
+}
 
 type BehaviorTag string
 
@@ -88,29 +126,34 @@ type BehaviorConstraint struct {
 }
 
 type BehaviorPlan struct {
-	Version          PlanVersion            `json:"version"`
-	ID               string                 `json:"id,omitempty"`
-	UserID           string                 `json:"userId,omitempty"`
-	CharacterID      string                 `json:"characterId,omitempty"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	Selected         BehaviorCandidate      `json:"selected"`
-	Alternatives     []BehaviorCandidate    `json:"alternatives,omitempty"`
-	Priority         BehaviorPriority       `json:"priority"`
-	SafetyLevel      BehaviorSafetyLevel    `json:"safetyLevel"`
-	DoNotSend        bool                   `json:"doNotSend"`
-	NeedsExpression  bool                   `json:"needsExpression"`
-	ExpressionPlanID string                 `json:"expressionPlanId,omitempty"`
-	Personality      CompiledPersonalityRef `json:"personality"`
-	Psyche           PsycheSignalSet        `json:"psyche"`
-	Relationship     RelationshipSnapshot   `json:"relationship"`
-	Life             LifeSnapshot           `json:"life"`
-	Audit            BehaviorAudit          `json:"audit"`
-	Intent           string                 `json:"intent"`
-	Strategy         string                 `json:"strategy"`
-	AllowedTopics    []string               `json:"allowedTopics,omitempty"`
-	ForbiddenTopics  []string               `json:"forbiddenTopics,omitempty"`
-	ResponseGoal     string                 `json:"responseGoal"`
-	ToneHint         string                 `json:"toneHint"`
+	Version              PlanVersion            `json:"version"`
+	ID                   string                 `json:"id,omitempty"`
+	UserID               string                 `json:"userId,omitempty"`
+	CharacterID          string                 `json:"characterId,omitempty"`
+	ConversationID       string                 `json:"conversationId,omitempty"`
+	InteractionID        string                 `json:"interactionId,omitempty"`
+	RequestID            string                 `json:"requestId,omitempty"`
+	CreatedAt            time.Time              `json:"createdAt"`
+	Selected             BehaviorCandidate      `json:"selected"`
+	Alternatives         []BehaviorCandidate    `json:"alternatives,omitempty"`
+	SelectionDisposition ArbitrationDisposition `json:"selectionDisposition"`
+	Priority             BehaviorPriority       `json:"priority"`
+	SafetyLevel          BehaviorSafetyLevel    `json:"safetyLevel"`
+	DoNotSend            bool                   `json:"doNotSend"`
+	NeedsExpression      bool                   `json:"needsExpression"`
+	ExpressionPlanID     string                 `json:"expressionPlanId,omitempty"`
+	Personality          CompiledPersonalityRef `json:"personality"`
+	Psyche               PsycheSignalSet        `json:"psyche"`
+	Relationship         RelationshipSnapshot   `json:"relationship"`
+	Life                 LifeSnapshot           `json:"life"`
+	Audit                BehaviorAudit          `json:"audit"`
+	Intent               BehaviorPlanIntent     `json:"intent"`
+	Strategy             BehaviorPlanStrategy   `json:"strategy"`
+	PlanContentPolicy    PlanContentPolicy      `json:"planContentPolicy,omitempty"`
+	ResponseGoal         string                 `json:"responseGoal"`
+	ToneHint             ExpressionTone         `json:"toneHint,omitempty"`
+	GoalIDs              []string               `json:"goalIds,omitempty"`
+	IntentionIDs         []string               `json:"intentionIds,omitempty"`
 }
 
 type PsycheSignalSet struct {

@@ -13,11 +13,6 @@ type DescriptorResolver interface {
 	Resolve(pluginID domain.PluginID) (domain.PluginDescriptor, bool)
 }
 
-type RuntimeSnapshotProvider interface {
-	SnapshotRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceView, bool)
-	SnapshotTopology(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeTopologySnapshot, bool)
-}
-
 type CheckpointManager struct {
 	store    CheckpointStore
 	resolver DescriptorResolver
@@ -25,7 +20,7 @@ type CheckpointManager struct {
 
 func NewCheckpointManager(store CheckpointStore, resolver DescriptorResolver) (*CheckpointManager, error) {
 	if store == nil {
-		return nil, errNilStore
+		return nil, &CheckpointError{Op: "new_manager", Kind: ErrInvalidSchema, ID: "", Cause: errorString("store must not be nil")}
 	}
 	return &CheckpointManager{
 		store:    store,
@@ -106,7 +101,6 @@ func (m *CheckpointManager) SaveRunningCheckpoint(
 	existing, err := m.store.LoadCheckpoint(ctx, runtimeID)
 	existingExists := err == nil
 
-	state := domain.RuntimeStateRunning
 	svcCopy := make([]ServiceCheckpoint, len(services))
 	copy(svcCopy, services)
 	sortServiceCheckpoints(svcCopy)
@@ -115,7 +109,7 @@ func (m *CheckpointManager) SaveRunningCheckpoint(
 		SchemaVersion:      MetadataSchemaVersion,
 		RuntimeID:          runtimeID,
 		PluginID:           pluginID,
-		RuntimeState:       state,
+		RuntimeState:       domain.RuntimeStateRunning,
 		Services:           svcCopy,
 		DescriptorRevision: descriptorRevision,
 		UpdatedAt:          now,
@@ -142,7 +136,7 @@ func (m *CheckpointManager) SaveRunningCheckpoint(
 func (m *CheckpointManager) SaveStoppedCheckpoint(
 	ctx context.Context,
 	runtimeID domain.RuntimeInstanceID,
-	pluginID domain.RuntimeIDRun,
+	pluginID domain.PluginID,
 	cleanShutdown bool,
 	reason string,
 	now time.Time,
@@ -150,10 +144,10 @@ func (m *CheckpointManager) SaveStoppedCheckpoint(
 	checkpoint, err := m.store.LoadCheckpoint(ctx, runtimeID)
 	if err != nil {
 		checkpoint = RuntimeCheckpoint{
-			RuntimeID:    runtimeID,
-			PluginID:     pluginID,
-			CreatedAt:    now,
-			Services:     []ServiceCheckpoint{},
+			RuntimeID: runtimeID,
+			PluginID:  pluginID,
+			CreatedAt: now,
+			Services:  []ServiceCheckpoint{},
 		}
 	}
 
@@ -186,10 +180,10 @@ func (m *CheckpointManager) SaveFailedCheckpoint(
 	checkpoint, err := m.store.LoadCheckpoint(ctx, runtimeID)
 	if err != nil {
 		checkpoint = RuntimeCheckpoint{
-			RuntimeID:    runtimeID,
-			PluginID:     pluginID,
-			CreatedAt:    now,
-			Services:     []ServiceCheckpoint{},
+			RuntimeID: runtimeID,
+			PluginID:  pluginID,
+			CreatedAt: now,
+			Services:  []ServiceCheckpoint{},
 		}
 	}
 
@@ -213,7 +207,7 @@ func (m *CheckpointManager) LoadCheckpoint(ctx context.Context, runtimeID domain
 	return m.store.LoadCheckpoint(ctx, runtimeID)
 }
 
-func (m *CheckpointManager) ValidateCheckpoint(
+func (m *CheckpointManager) ValidateStoredCheckpoint(
 	ctx context.Context,
 	runtimeID domain.RuntimeInstanceID,
 ) error {
@@ -248,7 +242,3 @@ func truncateReason(reason string) string {
 	}
 	return reason
 }
-
-var errNilStore = &CheckpointError{Op: "new_manager", Kind: ErrInvalidSchema, ID: "", Cause: errorString("store must not be nil")}
-
-type runtimeInstanceView = runtime.RuntimeInstanceView

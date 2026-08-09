@@ -111,10 +111,14 @@ func (p *LifecyclePlanner) BuildShutdownPlanFor(
 		if _, included := includedSet[node.ServiceID]; included {
 			filteredNode := DependencyNodeSnapshot{
 				ServiceID:    node.ServiceID,
-				Dependencies: make([]domain.ServiceID, len(node.Dependencies)),
+				Dependencies: make([]domain.ServiceID, 0),
 				Dependents:   make([]domain.ServiceID, 0),
 			}
-			copy(filteredNode.Dependencies, node.Dependencies)
+			for _, depID := range node.Dependencies {
+				if _, depIncluded := includedSet[depID]; depIncluded {
+					filteredNode.Dependencies = append(filteredNode.Dependencies, depID)
+				}
+			}
 			for _, depID := range node.Dependents {
 				if _, depIncluded := includedSet[depID]; depIncluded {
 					filteredNode.Dependents = append(filteredNode.Dependents, depID)
