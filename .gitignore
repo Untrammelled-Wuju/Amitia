@@ -218,3 +218,4 @@ backend/pkg/gameplugin/sdk/game-plugin/node_modules/
 
 # Runtime build outputs
 runtime/build/android/
+runtime/build/out/
