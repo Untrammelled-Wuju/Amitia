@@ -100,7 +100,7 @@ func (d *RPCDispatcher) dispatchReserved(ctx context.Context, sourcePeer ipc.Pee
 		)
 	}
 
-	handler, err := d.hostHandlers.Resolve(envelope.Method)
+	handler, err := d.hostHandlers.Resolve(Method(envelope.Method))
 	if err != nil {
 		return NewRPCErrorWithCause(
 			RPCErrorMethodNotFound,
@@ -116,7 +116,7 @@ func (d *RPCDispatcher) dispatchReserved(ctx context.Context, sourcePeer ipc.Pee
 		RuntimeID: domain.RuntimeInstanceID(sourcePeer.RuntimeID),
 		ServiceID: domain.ServiceID(sourcePeer.ServiceID),
 		Namespace: namespace,
-		Method:    envelope.Method,
+		Method:    Method(envelope.Method),
 		Payload:   cloneRawMessage(envelope.Payload),
 	}
 
@@ -151,7 +151,7 @@ func (d *RPCDispatcher) dispatchCustom(ctx context.Context, sourcePeer ipc.Peer,
 		)
 	}
 
-	route, err := d.namespaces.Resolve(ctx, domain.RuntimeInstanceID(sourcePeer.RuntimeID), envelope.Method)
+	route, err := d.namespaces.Resolve(ctx, domain.RuntimeInstanceID(sourcePeer.RuntimeID), Method(envelope.Method))
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (d *RPCDispatcher) dispatchCustom(ctx context.Context, sourcePeer ipc.Peer,
 	forwardEnv := envelope
 	forwardEnv.PluginID = string(route.PluginID)
 	forwardEnv.RuntimeID = string(route.RuntimeID)
-	forwayEnv.ServiceID = string(route.ServiceID)
+	forwardEnv.ServiceID = string(route.ServiceID)
 
 	targetPeer := ipc.Peer{
 		PluginID:  route.PluginID,

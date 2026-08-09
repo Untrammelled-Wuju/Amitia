@@ -63,13 +63,13 @@ func ComputeDescriptorRevision(descriptor domain.PluginDescriptor) string {
 		}
 	}
 
-	sortedChannels := make([]domain.ChannelID, len(descriptor.Channels))
-	copy(sortedChannels, descriptor.Channels)
-	sort.SliceStable(sortedChannels, func(i, j int) bool {
-		return sortedChannels[i] < sortedChannels[j]
-	})
-	for _, chID := range sortedChannels {
-		writeString(string(chID))
+	sortedChannelIDs := make([]string, len(descriptor.Channels))
+	for i, ch := range descriptor.Channels {
+		sortedChannelIDs[i] = string(ch.ID)
+	}
+	sort.Strings(sortedChannelIDs)
+	for _, chID := range sortedChannelIDs {
+		writeString(chID)
 	}
 
 	sum := h.Sum(nil)

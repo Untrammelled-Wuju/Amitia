@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/storage"
 )
 

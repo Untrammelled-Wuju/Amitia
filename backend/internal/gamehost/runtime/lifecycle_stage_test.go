@@ -212,12 +212,12 @@ func TestLifecyclePlanner_TargetShutdownMultiple(t *testing.T) {
 	topo := buildTestLifecycleTopology("rt-001", []ServiceInstanceSnapshot{
 		svcSnapshot("bridge", nil),
 		svcSnapshot("agent", []domain.ServiceID{"bridge"}),
-		svcSnapshot("vision", nil),
+		svcSnapshot("vision", []domain.ServiceID{"bridge"}),
 	})
 	graph := buildTestLifecycleGraph("rt-001", []DependencyNodeSnapshot{
-		lnode("bridge", nil, []domain.ServiceID{"agent"}),
+		lnode("bridge", nil, []domain.ServiceID{"agent", "vision"}),
 		lnode("agent", []domain.ServiceID{"bridge"}, nil),
-		lnode("vision", nil, nil),
+		lnode("vision", []domain.ServiceID{"bridge"}, nil),
 	})
 
 	planner := NewLifecyclePlanner()
@@ -227,8 +227,14 @@ func TestLifecyclePlanner_TargetShutdownMultiple(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if plan.ServiceCount() != 3 {
-		t.Errorf("expected 3 services, got %d", plan.ServiceCount())
+	if plan.ServiceCount() != 2 {
+		t.Errorf("expected 2 services (targets only), got %d", plan.ServiceCount())
+	}
+	if !plan.ContainsService("agent") {
+		t.Error("expected agent")
+	}
+	if !plan.ContainsService("vision") {
+		t.Error("expected vision")
 	}
 }
 

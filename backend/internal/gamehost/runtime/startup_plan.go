@@ -196,13 +196,17 @@ func (p *LifecyclePlanner) BuildStartupPlanFor(
 		if _, included := includedSet[node.ServiceID]; included {
 			filteredNode := DependencyNodeSnapshot{
 				ServiceID:    node.ServiceID,
-				Dependents:   make([]domain.ServiceID, len(node.Dependents)),
 				Dependencies: make([]domain.ServiceID, 0),
+				Dependents:   make([]domain.ServiceID, 0),
 			}
-			copy(filteredNode.Dependents, node.Dependents)
 			for _, depID := range node.Dependencies {
 				if _, depIncluded := includedSet[depID]; depIncluded {
 					filteredNode.Dependencies = append(filteredNode.Dependencies, depID)
+				}
+			}
+			for _, depID := range node.Dependents {
+				if _, depIncluded := includedSet[depID]; depIncluded {
+					filteredNode.Dependents = append(filteredNode.Dependents, depID)
 				}
 			}
 			filteredGraph.Nodes = append(filteredGraph.Nodes, filteredNode)
