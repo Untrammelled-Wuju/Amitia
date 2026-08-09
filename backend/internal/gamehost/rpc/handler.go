@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
 type Handler interface {
@@ -43,7 +45,7 @@ func (r *hostHandlerRegistry) Register(method Method, handler Handler) error {
 	if _, exists := r.handlers[method]; exists {
 		return NewRPCErrorWithCause(
 			RPCErrorReservedNamespace,
-			fmt_AlreadyExists(),
+			domain.ErrAlreadyExists,
 			fmt.Sprintf("handler for method %q already registered", method),
 			nil,
 		)
@@ -61,15 +63,11 @@ func (r *hostHandlerRegistry) Resolve(method Method) (Handler, error) {
 	if !exists {
 		return nil, NewRPCErrorWithCause(
 			RPCErrorMethodNotFound,
-			fmt_NotFound(),
+			domain.ErrNotFound,
 			fmt.Sprintf("handler for method %q not found", method),
 			nil,
 		)
 	}
 
 	return handler, nil
-}
-
-func fmt_AlreadyExists() domain_ErrorCode.wrapper().v {
-	return domain.AlreadyExists
 }

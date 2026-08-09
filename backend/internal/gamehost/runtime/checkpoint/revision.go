@@ -1,115 +1,77 @@
 package checkpoint
 
 import (
-	"bytes"
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/hex"
 	"sort"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
 func ComputeDescriptorRevision(descriptor domain.PluginDescriptor) string {
-	hasher := sha256.New()
+	h := sha256.New()
 
-	writeString(hasher, string(descriptor.ID))
-	writeString(hasher, descriptor.ExtensionID)
-	writeString(hasher, descriptor.Version)
-	writeString(hasher, descriptor.ProtocolVersion)
+	writeBytes := func(b []byte) {
+		h.Write(b)
+		h.Write([]byte{0})
+	}
+	writeString := func(s string) { writeBytes([]byte(s)) }
+	writeBool := func(b bool) {
+		if b {
+			h.Write([]byte{1})
+		} else {
+			h.Write([]byte{0})
+		}
+		h.Write([]byte{0})
+	}
 
-	caps := make([]string, len(descriptor.Capabilities))
+	writeString(string(descriptor.ID))
+	writeString(descriptor.ExtensionID)
+	writeString(descriptor.Version)
+	writeString(descriptor.ProtocolVersion)
+
+	caps := make([]domain.Capability, len(descriptor.Capabilities))
 	copy(caps, descriptor.Capabilities)
-	sort.Strings(caps)
+	sort.SliceStable(caps, func(i, j int) bool {
+		return caps[i] < caps[j]
+	})
 	for _, cap := range caps {
-		writeString(hasher, string(cap))
+		writeString(string(cap))
 	}
 
-	svcIDs := make([]domain.ServiceID, len(descriptor.Services))
-	for i, svc := range descriptor.Services {
-		svcIDs[i] = svc.ID
+	sortedServices := make([]int, len(descriptor.Services))
+	for i := range descriptor.Services {
+		sortedServices[i] = i
 	}
-	sort.SliceStable(svcIDs, func(i, j int) bool {
-		return svcIDs[i] < svcIDs[j]
+	sort.SliceStable(sortedServices, func(i, j int) bool {
+		return descriptor.Services[sortedServices[i]].ID < descriptor.Services[sortedServices[j]].ID
 	})
 
-	for _, svc := range descriptor.Services {
-		writeString(hasher, string(svc.ID))
-		writeString(hasher, string(svc.Kind))
-		writeBool(hasher, svc.Required)
+	for _, idx := range sortedServices {
+		svc := descriptor.Services[idx]
+		writeString(string(svc.ID))
+		writeString(string(svc.Kind))
+		writeBool(svc.Required)
+
 		deps := make([]domain.ServiceID, len(svc.DependsOn))
 		copy(deps, svc.DependsOn)
 		sort.SliceStable(deps, func(i, j int) bool {
 			return deps[i] < deps[j]
 		})
 		for _, dep := range deps {
-			writeString(hasher, string(dep))
+			writeString(string(dep))
 		}
 	}
 
-	chIDs := make([]domain.ChannelID, len(descriptor.Channels))
-	for i, ch := range descriptor.Channels {
-		chIDs[i] = ch.ID
-	}
-	sort.SliceStable(chIDs, func(i, j int) bool {
-		return chIDs[i] < chIDs[j]
+	sortedChannels := make([]domain.ChannelID, len(descriptor.Channels))
+	copy(sortedChannels, descriptor.Channels)
+	sort.SliceStable(sortedChannels, func(i, j int) bool {
+		return sortedChannels[i] < sortedChannels[j]
 	})
-
-	for _, ch := range descriptor.Channels {
-		writeString(hasher, string(ch.ID))
+	for _, chID := range sortedChannels {
+		writeString(string(chID))
 	}
 
-	_ = svcIDs
-	_ = chIDs
-
-	return "rev-" + hexHash(hasher.Sum(nil))
-}
-
-func writeString(h *sha256Digest, s string) {
-	_, _ = h.Write([]byte(s))
-	_, _ = h.Write([]byte{0})
-}
-
-func writeBool(h *sha256Digest, b bool) {
-	if b {
-		_, _ = h.Write([]byte{1})
-	} else {
-		_, _ = h.Write([]byte{0})
-	}
-}
-
-func hexHash(sum []byte) string {
-	const hexDigits = "0123456789abcdef"
-	buf := make([]byte, len(sum)*2)
-	for i, b := range sum {
-		buf[i*2] = hexDigits[b>>4]
-		buf[i*2+1] = hexDigits[b&0x0f]
-	}
-	return string(buf)
-}
-
-type sha256Digest = sha256DigestImpl
-
-type sha256DigestImpl struct {
-	buf []byte
-}
-
-func (d *sha256DigestImpl) Write(p []byte) (int, error) {
-	d.buf = append(d.buf, p...)
-	return len(p), nil
-}
-
-func (d *sha256DigestImpl) Sum(_ []byte) []byte {
-	return d.buf
-}
-
-func CanonicalJSON(v any) ([]byte, error) {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	if err := json.Indent(&buf, data, "", ""); err != nil {
-		return data, nil
-	}
-	return buf.Bytes(), nil
+	sum := h.Sum(nil)
+	return "rev-" + hex.EncodeToString(sum)
 }
