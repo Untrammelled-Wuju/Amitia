@@ -12,6 +12,8 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
+var _ ipc.Dispatcher = (*RPCDispatcher)(nil)
+
 type RPCDispatcher struct {
 	mu           sync.RWMutex
 	controlPlane ipc.ControlPlane

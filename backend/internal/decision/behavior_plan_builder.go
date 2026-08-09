@@ -44,16 +44,13 @@ func (b BehaviorPlanBuilder) Build(input BehaviorPlanBuildInput) (*BehaviorPlan,
 	if input.Now.IsZero() {
 		return nil, errors.New("plan: Now is required")
 	}
-	if err := ValidateArbitrationConfig(DefaultArbitrationConfig()); err == nil {
-		candidate := input.Arbitration.Selected
-		if candidate.ScoringVersion != "" && input.Arbitration.Audit.FormulaVersion != "" &&
-			candidate.ScoringVersion != input.Arbitration.Audit.FormulaVersion {
-			return nil, fmt.Errorf("plan: candidate ScoringVersion=%s does not match Audit.FormulaVersion=%s",
-				candidate.ScoringVersion, input.Arbitration.Audit.FormulaVersion)
-		}
-	}
 
 	candidate := input.Arbitration.Selected
+	if candidate.ScoringVersion != "" && input.Arbitration.Audit.FormulaVersion != "" &&
+		candidate.ScoringVersion != input.Arbitration.Audit.FormulaVersion {
+		return nil, fmt.Errorf("plan: candidate ScoringVersion=%s does not match Audit.FormulaVersion=%s",
+			candidate.ScoringVersion, input.Arbitration.Audit.FormulaVersion)
+	}
 	planID := input.PlanID
 	if planID == "" {
 		planID = NewBehaviorPlanID()
