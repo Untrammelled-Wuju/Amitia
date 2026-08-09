@@ -60,3 +60,20 @@ type StreamingRuntimeAdapter interface {
 		emitter ToolStreamEmitter,
 	) UnifiedToolResult
 }
+
+type CancellableRuntimeAdapter interface {
+	RuntimeAdapter
+
+	Cancel(
+		ctx context.Context,
+		binding RuntimeBinding,
+		invocation ToolInvocationContext,
+		reason ToolCancellationReason,
+	) error
+}
+
+type ErrRuntimeCancellationUnsupported struct{}
+
+func (e ErrRuntimeCancellationUnsupported) Error() string {
+	return "runtime does not support explicit cancellation"
+}

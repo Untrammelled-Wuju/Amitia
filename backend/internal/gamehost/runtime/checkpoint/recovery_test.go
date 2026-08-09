@@ -226,4 +226,18 @@ func TestRecoveryClassifier_InvalidMismatch(t *testing.T) {
 	}
 }
 
+func newTestDirectoryManager(t *testing.T) (storage.DirectoryManager, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	dataRoot := filepath.Join(tmpDir, "data")
+	if err := os.MkdirAll(dataRoot, 0o700); err != nil {
+		t.Fatalf("failed to create data root: %v", err)
+	}
+	dm, err := storage.NewDirectoryManager(dataRoot)
+	if err != nil {
+		t.Fatalf("failed to create directory manager: %v", err)
+	}
+	return dm, dataRoot
+}
+
 var _ = context.Background

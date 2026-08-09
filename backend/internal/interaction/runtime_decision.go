@@ -106,7 +106,6 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		UserID:          scope.UserID,
 		CharacterID:     scope.CharacterID,
 		ConversationID:  scope.ConversationID,
-		InteractionID:   scope.InteractionID,
 		RequestID:       scope.RequestID,
 		Arbitration:     arbitrationResult,
 		Goals:           goalsForDecision(goalContext),
