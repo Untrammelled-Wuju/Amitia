@@ -9,13 +9,13 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
-type streamKey struct {
+type streamStreamKey struct {
 	runtimeID domain.RuntimeInstanceID
 	serviceID domain.ServiceID
 	channelID domain.ChannelID
 }
 
-func (k streamKey) String() string {
+func (k streamStreamKey) String() string {
 	return string(k.runtimeID) + "/" + string(k.serviceID) + "/" + string(k.channelID)
 }
 
@@ -24,7 +24,7 @@ func newStreamGeneration() StreamGeneration {
 }
 
 type streamState struct {
-	key           streamKey
+	key           streamStreamKey
 	policy        StreamPolicy
 	generation    StreamGeneration
 	replay        *ReplayBuffer
@@ -69,7 +69,7 @@ func (sm *StreamManager) streamLookup(keyStr string) (*streamState, bool) {
 }
 
 func (sm *StreamManager) getOrCreateStream(input PolicyInput, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID) (*streamState, error) {
-	key := streamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}
+	key := streamStreamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}
 	keyStr := key.String()
 
 	ss, ok := sm.streamLookup(keyStr)
@@ -105,7 +105,7 @@ func (sm *StreamManager) GetStream(keyStr string) (*streamState, bool) {
 }
 
 func (sm *StreamManager) GetStreamByKeys(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID) (*streamState, bool) {
-	key := streamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}
+	key := streamStreamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}
 	return sm.streamLookup(key.String())
 }
 
@@ -143,11 +143,11 @@ func (sm *StreamManager) Publish(ctx context.Context, input PolicyInput, runtime
 	}
 
 	if ss.policy.Overflow == OverflowCoalesce {
-		key := runtimeID.String() + "/" + serviceID.String() + "/" + channelID.String()
+		coalesceKey := string(runtimeID) + "/" + string(serviceID) + "/" + string(channelID)
 		if ss.overflowQueue == nil {
 			ss.overflowQueue = NewBoundedQueue(ss.policy.QueueCapacity)
 		}
-		coalesced := ss.overflowQueue.Coalesce(QueueEntry{Sequence: seq, Payload: entry.Payload, Size: entry.Size, CreatedAt: entry.CreatedAt}, key)
+		coalesced := ss.overflowQueue.Coalesce(QueueEntry{Sequence: seq, Payload: entry.Payload, Size: entry.Size, CreatedAt: entry.CreatedAt}, coalesceKey)
 		if coalesced {
 			ss.stats.Coalesced.Add(1)
 		}
@@ -210,7 +210,7 @@ func (ss *streamState) computeOverflowLocked(entry QueueEntry) OverflowResult {
 }
 
 func (sm *StreamManager) GetSequence(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID) Sequence {
-	return sm.sequences.Current(streamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}.String())
+	return sm.sequences.Current(streamStreamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}.String())
 }
 
 func (sm *StreamManager) GetReplayBuffer(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID) *ReplayBuffer {
@@ -234,7 +234,7 @@ func (sm *StreamManager) GetGeneration(runtimeID domain.RuntimeInstanceID, servi
 }
 
 func (sm *StreamManager) RemoveStream(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID) bool {
-	key := streamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}
+	key := streamStreamKey{runtimeID: runtimeID, serviceID: serviceID, channelID: channelID}
 	keyStr := key.String()
 
 	sm.mu.Lock()
