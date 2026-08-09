@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -68,13 +67,13 @@ func (a *KernelEventAdapter) PublishEvent(ctx context.Context, ev EventEnvelope,
 		optsPayload["gamehost.method"] = json.RawMessage(fmt.Sprintf("%q", ev.Method))
 	}
 	if ev.PluginID != "" {
-		optsPayload["gamehost.pluginId"] = json.RawMessage(fmt.Sprintf("%q", ev.PluginID))
+		optsPayload["gamehost.pluginId"] = json.RawMessage(fmt.Sprintf("%q", string(ev.PluginID)))
 	}
 	if ev.RuntimeID != "" {
-		optsPayload["gamehost.runtimeId"] = json.RawMessage(fmt.Sprintf("%q", ev.RuntimeID))
+		optsPayload["gamehost.runtimeId"] = json.RawMessage(fmt.Sprintf("%q", string(ev.RuntimeID)))
 	}
 	if ev.ServiceID != "" {
-		optsPayload["gamehost.serviceId"] = json.RawMessage(fmt.Sprintf("%q", ev.ServiceID))
+		optsPayload["gamehost.serviceId"] = json.RawMessage(fmt.Sprintf("%q", string(ev.ServiceID)))
 	}
 	optsPayload["gamehost.eventId"] = json.RawMessage(fmt.Sprintf("%q", ev.ID))
 	if ev.OccurredAt > 0 {
@@ -90,13 +89,16 @@ func (a *KernelEventAdapter) PublishEvent(ctx context.Context, ev EventEnvelope,
 		parentDepth = cfg.parentDepth
 	}
 
+	pluginIDStr := string(ev.PluginID)
+	producerType := pickProducerType(cfg.producerType, pluginIDStr)
+
 	_, err := a.publisher.Publish(ctx, event.EventTypeID(typeID), version, ev.Payload, event.PublishOptions{
-		ProducerID:          ev.PluginID.StringNonEmpty(),
-		ProducerType:        pickProducerType(cfg.producerType, ev.PluginID),
-		ProducerExtensionID: ev.PluginID.StringNonEmpty(),
+		ProducerID:          pluginIDStr,
+		ProducerType:        producerType,
+		ProducerExtensionID: pluginIDStr,
 		TraceID:             pickTraceID(ev.TraceID, ev.ID),
 		OperationID:         ev.Method,
-		PartitionKey:        pickPartitionKey(cfg.partitionKey, ev.PluginID, ev.RuntimeID),
+		PartitionKey:        pickPartitionKey(cfg.partitionKey, pluginIDStr, string(ev.RuntimeID)),
 		AggregateType:       cfg.aggregateType,
 		AggregateID:         cfg.aggregateID,
 		ParentEventID:       parentEventID,
@@ -111,7 +113,7 @@ func (a *KernelEventAdapter) PublishEvent(ctx context.Context, ev EventEnvelope,
 }
 
 type compositeEventPublisher struct {
-	primary    EventPublisher
+	primary     EventPublisher
 	secondaries []EventPublisher
 }
 
@@ -119,9 +121,9 @@ func NewCompositeEventPublisher(primary EventPublisher, others ...EventPublisher
 	return &compositeEventPublisher{primary: primary, secondaries: others}
 }
 
-func (c *compositeEventPublisher) PublishEvent(ctx context.Context, event EventEnvelope, opts ...PublishEventOption) error {
+func (c *compositeEventPublisher) PublishEvent(ctx context.Context, ev EventEnvelope, opts ...PublishEventOption) error {
 	if c.primary != nil {
-		if err := c.primary.PublishEvent(ctx, event, opts...); err != nil {
+		if err := c.primary.PublishEvent(ctx, ev, opts...); err != nil {
 			return err
 		}
 	}
@@ -129,7 +131,7 @@ func (c *compositeEventPublisher) PublishEvent(ctx context.Context, event EventE
 		if sec == nil {
 			continue
 		}
-		_ = sec.PublishEvent(ctx, event, opts...)
+		_ = sec.PublishEvent(ctx, ev, opts...)
 	}
 	return nil
 }
@@ -150,7 +152,7 @@ func validateEventEnvelope(ev EventEnvelope) error {
 	return nil
 }
 
-func pickProducerType(cfgType string, pluginID domain.PluginID) string {
+func pickProducerType(cfgType, pluginID string) string {
 	if cfgType != "" {
 		return cfgType
 	}
@@ -167,22 +169,12 @@ func pickTraceID(traceID, eventID string) string {
 	return eventID
 }
 
-func pickPartitionKey(cfgKey string, pluginID domain.PluginID, runtimeID domain.RuntimeInstanceID) string {
+func pickPartitionKey(cfgKey, pluginID, runtimeID string) string {
 	if cfgKey != "" {
 		return cfgKey
 	}
 	if runtimeID != "" {
-		return fmt.Sprintf("%s/%s", pluginID, runtimeID)
+		return pluginID + "/" + runtimeID
 	}
-	return string(pluginID)
+	return pluginID
 }
-
-func buildMetadata(metadata map[string]json.RawMessage) json.RawMessage {
-	if len(metadata) == 0 {
-		return nil
-	}
-	b, _ := json.Marshal(metadata)
-	return b
-}
-
-var _ = time.Now
