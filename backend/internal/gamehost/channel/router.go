@@ -18,6 +18,20 @@ type GenericChannelSink interface {
 	Publish(ctx context.Context, channel RuntimeChannel, message ChannelMessage) error
 }
 
+type BinarySink interface {
+	PublishBinary(ctx context.Context, channel RuntimeChannel, message BinaryChannelMessage) error
+}
+
+type BinaryChannelMessage struct {
+	PluginID  domain.PluginID
+	RuntimeID domain.RuntimeInstanceID
+	ServiceID domain.ServiceID
+
+	ChannelID domain.ChannelID
+	Payload   json.RawMessage
+	Metadata  map[string]json.RawMessage
+}
+
 type ChannelMessage struct {
 	PluginID  domain.PluginID
 	RuntimeID domain.RuntimeInstanceID
@@ -50,6 +64,7 @@ type RouterConfig struct {
 	Events     stream.EventPublisher
 	States     state.StateStore
 	Generic    GenericChannelSink
+	Binary     BinarySink
 	Target     ChannelTargetResolver
 	NowFunc    func() time.Time
 }
@@ -59,6 +74,7 @@ type Router struct {
 	events   stream.EventPublisher
 	states   state.StateStore
 	generic  GenericChannelSink
+	binary   BinarySink
 	target   ChannelTargetResolver
 	nowFunc  func() time.Time
 }
@@ -73,6 +89,7 @@ func NewRouter(cfg RouterConfig) *Router {
 		events:   cfg.Events,
 		states:   cfg.States,
 		generic:  cfg.Generic,
+		binary:   cfg.Binary,
 		target:   cfg.Target,
 		nowFunc:  now,
 	}
@@ -110,7 +127,7 @@ func (r *Router) Route(ctx context.Context, msg IncomingChannelMessage) error {
 	case domain.ChannelKindLog, domain.ChannelKindMetric, domain.ChannelKindCustom:
 		return r.routeGeneric(ctx, channel, msg)
 	case domain.ChannelKindBinary:
-		return ErrBinaryNotSupported
+		return r.routeBinary(ctx, channel, msg)
 	default:
 		return ErrKindUnknown
 	}
@@ -158,6 +175,23 @@ func (r *Router) routeState(ctx context.Context, channel RuntimeChannel, msg Inc
 
 	_, err := r.states.Put(ctx, update)
 	return err
+}
+
+func (r *Router) routeBinary(ctx context.Context, channel RuntimeChannel, msg IncomingChannelMessage) error {
+	if r.binary == nil {
+		return ErrBinaryNotSupported
+	}
+
+	chMsg := BinaryChannelMessage{
+		PluginID:  msg.Peer.PluginID,
+		RuntimeID: msg.Peer.RuntimeID,
+		ServiceID: msg.Peer.ServiceID,
+		ChannelID: msg.ChannelID,
+		Payload:   copyRawMessage(msg.Payload),
+		Metadata:  copyMetadata(msg.Metadata),
+	}
+
+	return r.binary.PublishBinary(ctx, channel, chMsg)
 }
 
 func (r *Router) routeGeneric(ctx context.Context, channel RuntimeChannel, msg IncomingChannelMessage) error {

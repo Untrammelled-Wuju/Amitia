@@ -11,14 +11,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	migrationcore "github.com/u-ai/backend/internal/migration"
 )
 
 var ErrRunnerNotInitialized = errors.New("migration runner: no plans registered")
-
-type DomainLock interface {
-	Acquire(owner string, ttl time.Duration) error
-	Release(owner string) error
-}
 
 type BackupPort interface {
 	CreateBackup(ctx context.Context) (backupID string, err error)
@@ -26,7 +23,8 @@ type BackupPort interface {
 
 type Runner struct {
 	repo      *DBRepository
-	lock      DomainLock
+	lock      *migrationcore.PersistentLock
+	lockName  string
 	backup    BackupPort
 	plans     map[string]DomainMigrationOperationPlan
 	leaseTTL  time.Duration
@@ -38,10 +36,11 @@ func NewRunner(repo *DBRepository) *Runner {
 		repo:     repo,
 		plans:    make(map[string]DomainMigrationOperationPlan),
 		leaseTTL: 5 * time.Minute,
+		lockName: "desktop_pet_migration",
 	}
 }
 
-func (r *Runner) SetLock(lock DomainLock) {
+func (r *Runner) SetLock(lock *migrationcore.PersistentLock) {
 	r.lock = lock
 }
 
@@ -107,14 +106,6 @@ func (r *Runner) RunPlan(ctx context.Context, planID string) (string, error) {
 		return "", &RunnerError{Code: "OPERATION_CREATE_FAILED", Message: "创建迁移操作失败: " + err.Error()}
 	}
 
-	owner := fmt.Sprintf("runner-%s", op.ID)
-	if r.lock != nil {
-		if err := r.lock.Acquire(owner, r.leaseTTL); err != nil {
-			return op.ID, &RunnerError{Code: "LOCK_ACQUIRE_FAILED", Message: "获取迁移锁失败: " + err.Error()}
-		}
-		defer r.lock.Release(owner)
-	}
-
 	go r.executePlan(op.ID, &plan)
 
 	return op.ID, nil
@@ -127,6 +118,20 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 		return
 	}
 
+	if r.lock != nil {
+		lockCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if err := r.lock.Acquire(lockCtx, r.lockName, r.leaseTTL); err != nil {
+			_, _ = r.repo.UpdateOperationStageCAS(ctx, operationID, StagePreflight, StageFailedTerminal, func(o *MigrationOperation) {
+				o.Error = "获取迁移锁失败: " + err.Error()
+			})
+			cancel()
+			return
+		}
+		cancel()
+		_ = r.lock.StartHeartbeat(r.lockName, 30*time.Second, r.leaseTTL)
+		defer r.lock.Release(r.lockName)
+	}
+
 	defer func() {
 		if rec := recover(); rec != nil {
 			r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageFailedTerminal, func(o *MigrationOperation) {
@@ -135,22 +140,23 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 		}
 	}()
 
-	step_fns := []struct {
-		name MigrationStage
-		fn   func(*MigrationOperation) error
+	stages := []struct {
+		from  MigrationStage
+		to    MigrationStage
+		stage MigrationStage
+		fn    func(*MigrationOperation) error
 	}{
-		{StagePreflight, r.runPreflight},
-		{StageBackup, r.runBackup},
-		{StageSchema, r.runSchema},
-		{StageBackfill, r.runBackfill},
-		{StageVerifying, r.runVerifying},
-		{StageReadCutover, r.runReadCutover},
-		{StageWriteCutover, r.runWriteCutover},
-		{StageLegacyWriteBlocked, r.runLegacyWriteBlock},
-		{StageCompleted, nil},
+		{StagePreflight, StageBackup, StagePreflight, r.runPreflight},
+		{StageBackup, StageSchema, StageBackup, r.runBackup},
+		{StageSchema, StageBackfill, StageSchema, r.runSchema},
+		{StageBackfill, StageVerifying, StageBackfill, r.runBackfill},
+		{StageVerifying, StageReadCutover, StageVerifying, r.runVerifying},
+		{StageReadCutover, StageWriteCutover, StageReadCutover, r.runReadCutover},
+		{StageWriteCutover, StageLegacyWriteBlocked, StageWriteCutover, r.runWriteCutover},
+		{StageLegacyWriteBlocked, StageCompleted, StageLegacyWriteBlocked, r.runLegacyWriteBlock},
 	}
 
-	for i := 0; i < len(step_fns); i++ {
+	for i := 0; i < len(stages); i++ {
 		op, err = r.repo.GetOperation(ctx, operationID)
 		if err != nil || op == nil {
 			return
@@ -158,22 +164,39 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 		if op.Stage == StageFailedRetryable || op.Stage == StageFailedTerminal || op.Stage == StageManualReview {
 			return
 		}
-		step := step_fns[i]
-		if step.fn == nil {
-			r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageCompleted, nil)
-			return
+		expected := stages[i].from
+		if op.Stage != expected {
+			for j := i + 1; j < len(stages); j++ {
+				if op.Stage == stages[j].from {
+					i = j - 1
+					break
+				}
+			}
+			op.Updated()
+			r.repo.UpdateOperationCheckpoint(ctx, op)
+			continue
 		}
 		op.Updated()
 		r.repo.UpdateOperationCheckpoint(ctx, op)
-		if err := step.fn(op); err != nil {
+		stepErr := stages[i].fn(op)
+		if stepErr == nil {
+			casOk, casErr := r.repo.UpdateOperationStageCAS(ctx, operationID, expected, stages[i].to, nil)
+			if casErr != nil || !casOk {
+				stepErr = &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: fmt.Sprintf("阶段 %s 转换到 %s 失败", expected, stages[i].to)}
+				if casErr != nil {
+					stepErr = &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: casErr.Error()}
+				}
+			}
+		}
+		if stepErr != nil {
 			var me *RunnerError
-			if errors.As(err, &me) && me.Code == "MANUAL_REVIEW_REQUIRED" {
-				r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageManualReview, func(o *MigrationOperation) {
-					o.Error = err.Error()
+			if errors.As(stepErr, &me) && me.Code == "MANUAL_REVIEW_REQUIRED" {
+				r.repo.UpdateOperationStageCAS(ctx, operationID, expected, StageManualReview, func(o *MigrationOperation) {
+					o.Error = stepErr.Error()
 				})
 			} else {
-				r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageFailedRetryable, func(o *MigrationOperation) {
-					o.Error = err.Error()
+				r.repo.UpdateOperationStageCAS(ctx, operationID, expected, StageFailedRetryable, func(o *MigrationOperation) {
+					o.Error = stepErr.Error()
 				})
 			}
 			return
@@ -182,11 +205,6 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 }
 
 func (r *Runner) runPreflight(op *MigrationOperation) error {
-	ctx := context.Background()
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StagePreflight, StageBackup, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "Preflight 阶段转换失败: " + err.Error()}
-	}
-
 	plan := r.plans[op.PlanID]
 	for _, check := range plan.PreflightChecks {
 		passed, msg := check()
@@ -198,28 +216,23 @@ func (r *Runner) runPreflight(op *MigrationOperation) error {
 }
 
 func (r *Runner) runBackup(op *MigrationOperation) error {
-	ctx := context.Background()
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageBackup, StageSchema, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "Backup 阶段转换失败: " + err.Error()}
-	}
-
 	plan := r.plans[op.PlanID]
-	if plan.BackupRequired && r.backup != nil {
-		backupID, err := r.backup.CreateBackup(ctx)
-		if err != nil {
-			return &RunnerError{Code: "BACKUP_FAILED", Message: "备份失败: " + err.Error()}
-		}
-		_ = backupID
+	if !plan.BackupRequired || r.backup == nil {
+		return nil
+	}
+	backupID, err := r.backup.CreateBackup(context.Background())
+	if err != nil {
+		return &RunnerError{Code: "BACKUP_FAILED", Message: "备份失败: " + err.Error()}
+	}
+	op.BackupID = backupID
+	op.Updated()
+	if err := r.repo.UpdateOperationCheckpoint(context.Background(), op); err != nil {
+		return &RunnerError{Code: "BACKUP_ID_PERSIST_FAILED", Message: "备份 ID 持久化失败: " + err.Error()}
 	}
 	return nil
 }
 
 func (r *Runner) runSchema(op *MigrationOperation) error {
-	ctx := context.Background()
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageSchema, StageBackfill, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "Schema 阶段转换失败: " + err.Error()}
-	}
-
 	plan := r.plans[op.PlanID]
 	for _, step := range plan.SchemaSteps {
 		if err := step(); err != nil {
@@ -233,9 +246,6 @@ func (r *Runner) runBackfill(op *MigrationOperation) error {
 	ctx := context.Background()
 	plan := r.plans[op.PlanID]
 	if len(plan.BackfillSteps) == 0 {
-		if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageBackfill, StageVerifying, nil); err != nil {
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "Backfill 阶段转换失败: " + err.Error()}
-		}
 		return nil
 	}
 
@@ -269,10 +279,6 @@ func (r *Runner) runBackfill(op *MigrationOperation) error {
 			offset += batchSize
 		}
 	}
-
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageBackfill, StageVerifying, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "Backfill 阶段转换到 Verifying 失败: " + err.Error()}
-	}
 	return nil
 }
 
@@ -288,10 +294,6 @@ func ComputeCheckpoint(in input) string {
 
 func (r *Runner) runVerifying(op *MigrationOperation) error {
 	ctx := context.Background()
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageVerifying, StageReadCutover, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "Verifying 阶段转换失败: " + err.Error()}
-	}
-
 	plan := r.plans[op.PlanID]
 
 	openConflicts, err := r.repo.CountOpenConflicts(ctx, op.ID)
@@ -325,12 +327,11 @@ func (r *Runner) runVerifying(op *MigrationOperation) error {
 
 func (r *Runner) runReadCutover(op *MigrationOperation) error {
 	ctx := context.Background()
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageReadCutover, StageWriteCutover, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "ReadCutover 阶段转换失败: " + err.Error()}
-	}
-
 	if err := r.repo.RecordReadCutover(ctx, op.ID, op.PlanID); err != nil {
 		return &RunnerError{Code: "READ_CUTOVER_RECORD_FAILED", Message: "记录读切换失败: " + err.Error()}
+	}
+	if err := r.repo.MarkReadCutoverVerified(ctx, op.ID); err != nil {
+		return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切换已验证失败: " + err.Error()}
 	}
 	return nil
 }
@@ -352,22 +353,16 @@ func (r *Runner) runWriteCutover(op *MigrationOperation) error {
 		}
 	}
 
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageWriteCutover, StageLegacyWriteBlocked, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "WriteCutover 阶段转换失败: " + err.Error()}
-	}
-
 	if err := r.repo.RecordWriteCutover(ctx, op.ID, op.PlanID); err != nil {
 		return &RunnerError{Code: "WRITE_CUTOVER_RECORD_FAILED", Message: "记录写切换失败: " + err.Error()}
+	}
+	if err := r.repo.MarkWriteCutoverVerified(ctx, op.ID); err != nil {
+		return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切换已验证失败: " + err.Error()}
 	}
 	return nil
 }
 
 func (r *Runner) runLegacyWriteBlock(op *MigrationOperation) error {
-	ctx := context.Background()
-	if _, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageLegacyWriteBlocked, StageCompleted, nil); err != nil {
-		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "LegacyWriteBlock 阶段转换失败: " + err.Error()}
-	}
-
 	plan := r.plans[op.PlanID]
 	for _, step := range plan.LegacyWriteBlockSteps {
 		if err := step(); err != nil {
@@ -442,7 +437,7 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 			}
 		}
 		_, _ = r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageReadCutover, nil)
-		r.repo.RecordReadCutover(ctx, operationID, op.PlanID)
+		_ = r.repo.RecordReadCutover(ctx, operationID, op.PlanID)
 	case "write":
 		if op.Stage != StageReadCutover && op.Stage != StageWriteCutover {
 			return &RunnerError{Code: "INVALID_STAGE", Message: fmt.Sprintf("当前阶段 %s 不允许写切转", op.Stage)}
@@ -460,16 +455,9 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 			}
 		}
 		_, _ = r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageWriteCutover, nil)
-		r.repo.RecordWriteCutover(ctx, operationID, op.PlanID)
+		_ = r.repo.RecordWriteCutover(ctx, operationID, op.PlanID)
 	}
 	return nil
-}
-
-func (r *Runner) ensureBackupDir() error {
-	if r.backupDir == "" {
-		return nil
-	}
-	return os.MkdirAll(r.backupDir, 0o700)
 }
 
 func (r *Runner) SetLeaseTTL(ttl time.Duration) {

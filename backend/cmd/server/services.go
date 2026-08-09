@@ -36,6 +36,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
+	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
+	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/application"
 	processingcommit "github.com/u-ai/backend/internal/desktoppet/processing/commit"
@@ -166,7 +168,7 @@ type AppServices struct {
 	RuntimeDomainEventConsumer   *runtimev2.OutboxConsumer
 	DesktopPetMigrationRunner    *migration.Runner
 	DesktopPetMaintenanceHandler *maintenance.Handler
-	MigrationLock                *migration.MigrationLock
+	MigrationLock                *migrationcore.PersistentLock
 }
 
 type RuntimeOrchestrator interface {
@@ -577,7 +579,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
-	installationCoordinator := coordinator.NewCoordinator(newCoordinatorRepoAdapter(installationRepo), nil, nil, nil, nil)
+	var installationCoordinator coordinator.InstallationCoordinator
 
 	runtimeConfig := runtime.DefaultRuntimeConfig()
 	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
@@ -655,6 +657,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("initialize required storage roots: %w", err)
 	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
+
+	coordRepo := &coordinatorRepoAdapter{installRepo: installationRepo}
+	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
+	coordStager := &coordinatorReleaseStager{registry: pathRegistry, releases: releaseRepo}
+	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade}
+	coordProjection := &coordinatorProjectionService{installRepo: installationRepo}
+	installationCoordinator = coordinator.NewCoordinator(coordRepo, coordValidator, coordStager, coordPublisher, coordProjection)
 	deviceRepo := device.NewRepository(ctx.DB)
 
 	var desktopInstanceStore *security.DesktopInstanceStore
@@ -803,11 +812,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	migrationRepo := migration.NewDBRepository(ctx.DB)
 	migrationRunner := migration.NewRunner(migrationRepo)
-	migrationLock := migration.NewMigrationLock()
-	migrationRunner.SetLock(migrationLock)
 	backupDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_backups")
-	migrationRunner.SetBackupDir(backupDir)
+	lockDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_locks")
+	migrationLock := migrationcore.NewPersistentLock(ctx.DB, lockDir)
 	migrationRunner.SetLock(migrationLock)
+	migrationRunner.SetBackupDir(backupDir)
+	backupPort := newDomainMigrationBackupPort(ctx.DB, backupDir)
+	migrationRunner.SetBackupPort(backupPort)
+	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{DB: ctx.DB}))
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
@@ -906,25 +918,6 @@ func checkMigrationState(db *gorm.DB) error {
 		return fmt.Errorf("found %d failed migrations", count)
 	}
 	return nil
-}
-
-type coordinatorRepoAdapter struct {
-	installRepo installation.Repository
-}
-
-func newCoordinatorRepoAdapter(installRepo installation.Repository) *coordinatorRepoAdapter {
-	return &coordinatorRepoAdapter{installRepo: installRepo}
-}
-
-func (a *coordinatorRepoAdapter) CreateOperation(ctx context.Context, op *operation.InstallationOperation) error {
-	if op == nil {
-		return fmt.Errorf("coordinator: nil operation")
-	}
-	db := a.installRepo.DB()
-	if db == nil {
-		return fmt.Errorf("coordinator: database not available")
-	}
-	return db.WithContext(ctx).Create(op).Error
 }
 
 type characterOwnerPort struct {

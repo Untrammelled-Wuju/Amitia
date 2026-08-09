@@ -59,6 +59,11 @@ internal object RuntimeBridgeErrorMapper {
             RuntimeErrorCode.STARTUP_HEALTH_ENDPOINT_MISSING -> "STARTUP_HEALTH_ENDPOINT_MISSING"
             RuntimeErrorCode.STARTUP_TIMEOUT -> "STARTUP_TIMEOUT"
             RuntimeErrorCode.STARTUP_INVALID_ENDPOINT -> "STARTUP_INVALID_ENDPOINT"
+            RuntimeErrorCode.STOP_ALREADY_IN_PROGRESS -> "STOP_ALREADY_IN_PROGRESS"
+            RuntimeErrorCode.STOP_SESSION_MISSING -> "STOP_SESSION_MISSING"
+            RuntimeErrorCode.STOP_GRACEFUL_TIMEOUT -> "STOP_GRACEFUL_TIMEOUT"
+            RuntimeErrorCode.STOP_FORCE_FAILED -> "STOP_FORCE_FAILED"
+            RuntimeErrorCode.STOP_SERVICE_TEARDOWN_FAILED -> "STOP_SERVICE_TEARDOWN_FAILED"
         }
     }
 

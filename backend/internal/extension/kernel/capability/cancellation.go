@@ -12,6 +12,7 @@ const (
 	CancellationReasonWorkflowCancelled   ToolCancellationReasonCode = "workflow_cancelled"
 	CancellationReasonSystemShutdown      ToolCancellationReasonCode = "system_shutdown"
 	CancellationReasonRuntimeRequested    ToolCancellationReasonCode = "runtime_requested"
+	CancellationReasonDeadlineExceeded    ToolCancellationReasonCode = "deadline_exceeded"
 )
 
 func (code ToolCancellationReasonCode) Valid() bool {
@@ -22,7 +23,8 @@ func (code ToolCancellationReasonCode) Valid() bool {
 		CancellationReasonStreamConsumerGone,
 		CancellationReasonWorkflowCancelled,
 		CancellationReasonSystemShutdown,
-		CancellationReasonRuntimeRequested:
+		CancellationReasonRuntimeRequested,
+		CancellationReasonDeadlineExceeded:
 		return true
 	default:
 		return false

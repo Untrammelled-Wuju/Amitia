@@ -111,6 +111,16 @@ internal object RuntimeStateMachine {
         else -> null
     }
 
+    fun stoppingTarget(current: RuntimeState): RuntimeState? = when (current) {
+        RuntimeState.READY -> RuntimeState.STOPPING
+        RuntimeState.STARTING -> RuntimeState.STOPPING
+        RuntimeState.DEGRADED -> RuntimeState.STOPPING
+        RuntimeState.STOPPING -> null
+        RuntimeState.STOPPED -> null
+        RuntimeState.FAILED -> RuntimeState.STOPPING
+        else -> null
+    }
+
     fun startupReadyTarget(current: RuntimeState): RuntimeState? = when (current) {
         RuntimeState.STARTING -> RuntimeState.READY
         else -> null

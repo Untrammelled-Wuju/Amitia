@@ -186,7 +186,41 @@ func (m ActionMaterializer) materializeTool(
 		}
 	}
 	call := calls[0]
-	return m.MaterializeToolCall(plan, directive, call, scope, now)
+	action, err := m.MaterializeToolCall(plan, directive, call, scope, now)
+	if err != nil {
+		return ActionMaterializationOutcome{
+			State:   ActionMaterializationNoAction,
+			Err:     err,
+			ErrCode: mapActionError(err),
+		}
+	}
+	return ActionMaterializationOutcome{State: ActionMaterializationReady, Action: &action}
+}
+
+func mapActionError(err error) decision.ActionMaterializationErrorCode {
+	if err == nil {
+		return ""
+	}
+	var code decision.ActionMaterializationErrorCode
+	if dfsError(err, &code) {
+		return code
+	}
+	return decision.ErrActionPlanInvalid
+}
+
+func dfsError(err error, code *decision.ActionMaterializationErrorCode) bool {
+	if err == nil {
+		return false
+	}
+	if ec, ok := err.(decision.ActionMaterializationErrorCode); ok {
+		*code = ec
+		return true
+	}
+	type wrapper interface{ Unwrap() error }
+	if w, ok := err.(wrapper); ok {
+		return dfsError(w.Unwrap(), code)
+	}
+	return false
 }
 
 func (m ActionMaterializer) MaterializeToolCall(

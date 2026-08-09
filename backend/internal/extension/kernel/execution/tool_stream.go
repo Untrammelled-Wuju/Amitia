@@ -53,6 +53,10 @@ func (s *toolStreamSession) Emit(ctx context.Context, emission capability.ToolSt
 		return s.deliveryErr
 	}
 
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: context done: %s", ErrToolStreamClosed, err.Error())
+	}
+
 	if emission.Type == capability.ToolStreamEventTerminal {
 		return s.recordDeliveryErr(&capability.ToolError{
 			Code:     capability.ErrorCodeStreamProtocol,

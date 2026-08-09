@@ -264,7 +264,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		RateLimiter:         execution.NewRateLimiter(),
 		IdempotencyGuard:    execution.NewIdempotencyGuard(),
 		RetryCtrl:           execution.NewRetryController(),
-		TimeoutCtrl:         execution.NewTimeoutController(),
+		TimeoutCtrl:         execution.NewTimeoutController(30 * time.Second),
 		CancellationCtrl:    execution.NewCancellationController(),
 		DepthGuard:          execution.NewDepthGuard(),
 		Dispatcher:          execution.NewRuntimeDispatcher(adapterRegistry),

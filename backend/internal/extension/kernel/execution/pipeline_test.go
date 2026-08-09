@@ -113,7 +113,7 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 		RateLimiter:         NewRateLimiter(),
 		IdempotencyGuard:    NewIdempotencyGuard(),
 		RetryCtrl:           NewRetryController(),
-		TimeoutCtrl:         NewTimeoutController(),
+		TimeoutCtrl:         NewTimeoutController(5 * time.Second),
 		CancellationCtrl:    NewCancellationController(),
 		DepthGuard:          NewDepthGuard(),
 		Dispatcher:          NewRuntimeDispatcher(adapterRegistry),

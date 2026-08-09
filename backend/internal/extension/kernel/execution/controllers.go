@@ -203,25 +203,6 @@ func WithCapturedInvocation(inv capability.ToolInvocationContext) RetryControlle
 	}
 }
 
-func NewTimeoutController() *TimeoutController {
-	return &TimeoutController{}
-}
-
-type TimeoutController struct{}
-
-func (t *TimeoutController) WithTimeout(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) (context.Context, context.CancelFunc) {
-	if tool.TimeoutMS > 0 {
-		return context.WithTimeout(ctx, time.Duration(tool.TimeoutMS)*time.Millisecond)
-	}
-	if !inv.ExpiresAt.IsZero() {
-		deadline := time.Until(inv.ExpiresAt)
-		if deadline > 0 {
-			return context.WithTimeout(ctx, deadline)
-		}
-	}
-	return context.WithTimeout(ctx, 30*time.Second)
-}
-
 func NewDepthGuard() *DepthGuard {
 	return &DepthGuard{MaxDepth: 10}
 }

@@ -333,6 +333,24 @@ func (c *CancellationController) AttachRuntimeCanceller(invocationID string, fn 
 	return nil
 }
 
+func (c *CancellationController) RequestRuntimeAbort(ctx context.Context, invocationID string, reason capability.ToolCancellationReason) (bool, error) {
+	c.mu.Lock()
+	ac, exists := c.active[invocationID]
+	if !exists || len(ac.runtimeCancels) == 0 {
+		c.mu.Unlock()
+		return false, nil
+	}
+	runtimeCancels := make([]runtimeCancelFunc, len(ac.runtimeCancels))
+	copy(runtimeCancels, ac.runtimeCancels)
+	c.mu.Unlock()
+
+	for _, rc := range runtimeCancels {
+		rc()
+	}
+
+	return true, nil
+}
+
 func (c *CancellationController) Finalize(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult) capability.UnifiedToolResult {
 	c.mu.Lock()
 
@@ -349,16 +367,19 @@ func (c *CancellationController) Finalize(ctx context.Context, inv capability.To
 	}
 
 	if ctx.Err() != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			ac.state = cancellationStateTerminal
+			c.mu.Unlock()
+			return c.buildTimedOutResult(inv, result)
+		}
 		if errors.Is(ctx.Err(), context.Canceled) {
 			canceledErr := context.Cause(ctx)
-			var cancelReason capability.ToolCancellationReason
 			var cancelledErr *invocationCancelledError
 			if errors.As(canceledErr, &cancelledErr) {
 				ac.reason = cancelledErr.reason
 			} else {
 				ac.reason = capability.ToolCancellationReason{Code: capability.CancellationReasonCallerContext}
 			}
-			_ = cancelReason
 			ac.state = cancellationStateTerminal
 			c.mu.Unlock()
 			return c.buildCancelledResult(inv, ac.reason, result)
@@ -368,6 +389,26 @@ func (c *CancellationController) Finalize(ctx context.Context, inv capability.To
 	ac.state = cancellationStateTerminal
 	c.mu.Unlock()
 	return result
+}
+
+func (c *CancellationController) buildTimedOutResult(inv capability.ToolInvocationContext, previous capability.UnifiedToolResult) capability.UnifiedToolResult {
+	timedOutErr := &capability.ToolError{
+		Code:        capability.ErrorCodeTimeout,
+		Category:    capability.ToolErrorCategoryTimeout,
+		Message:     "tool execution timed out",
+		Retryable:   false,
+		UserVisible: false,
+	}
+
+	timedOutResult := capability.UnifiedToolResult{
+		InvocationID: inv.InvocationID,
+		Status:       capability.ToolResultStatusTimedOut,
+		Error:        timedOutErr,
+		SideEffects:  previous.SideEffects,
+		DurationMS:   previous.DurationMS,
+	}
+
+	return timedOutResult
 }
 
 func (c *CancellationController) buildCancelledResult(inv capability.ToolInvocationContext, reason capability.ToolCancellationReason, previous capability.UnifiedToolResult) capability.UnifiedToolResult {

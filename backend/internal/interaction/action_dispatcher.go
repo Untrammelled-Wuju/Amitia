@@ -1,0 +1,139 @@
+package interaction
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
+)
+
+func capabilityID(s string) capability.CapabilityID {
+	return capability.CapabilityID(s)
+}
+
+type ActionExecutionState string
+
+const (
+	ActionExecutionCompleted      ActionExecutionState = "completed"
+	ActionExecutionSkipped        ActionExecutionState = "skipped"
+	ActionExecutionFailedToDispatch ActionExecutionState = "failed_to_dispatch"
+)
+
+type ActionExecutionResult struct {
+	Action       MaterializedAction         `json:"action"`
+	State        ActionExecutionState       `json:"state"`
+	ToolResult   *kernel.LegacyToolResult   `json:"toolResult,omitempty"`
+	Err          error                      `json:"-"`
+	ErrCode      string                     `json:"errCode,omitempty"`
+	CompletedAt  time.Time                  `json:"completedAt"`
+}
+
+type ActionDispatcher struct {
+	toolFacade *kernel.ToolFacade
+}
+
+func NewActionDispatcher(toolFacade *kernel.ToolFacade) ActionDispatcher {
+	return ActionDispatcher{toolFacade: toolFacade}
+}
+
+func (d ActionDispatcher) Dispatch(
+	ctx context.Context,
+	action MaterializedAction,
+	scope ActionMaterializationScope,
+	now time.Time,
+) ActionExecutionResult {
+	if scopeVerificationLost(action, scope) {
+		return ActionExecutionResult{
+			Action:      action,
+			State:       ActionExecutionFailedToDispatch,
+			Err:         fmt.Errorf("%w: scope mismatch at dispatch", "ACTION_SCOPE_MISMATCH"),
+			ErrCode:     "ACTION_SCOPE_MISMATCH",
+			CompletedAt: now,
+		}
+	}
+
+	switch action.Kind {
+	case MaterializedActionRespond:
+		return ActionExecutionResult{
+			Action:      action,
+			State:       ActionExecutionSkipped,
+			CompletedAt: now,
+		}
+	case MaterializedActionWait:
+		return ActionExecutionResult{
+			Action:      action,
+			State:       ActionExecutionSkipped,
+			CompletedAt: now,
+		}
+	case MaterializedActionTool:
+		return d.dispatchTool(ctx, action, scope, now)
+	}
+
+	return ActionExecutionResult{
+		Action:      action,
+		State:       ActionExecutionFailedToDispatch,
+		Err:         fmt.Errorf("unknown action kind: %s", action.Kind),
+		ErrCode:     "ACTION_DISPATCH_UNAVAILABLE",
+		CompletedAt: now,
+	}
+}
+
+func (d ActionDispatcher) dispatchTool(
+	ctx context.Context,
+	action MaterializedAction,
+	scope ActionMaterializationScope,
+	now time.Time,
+) ActionExecutionResult {
+	if action.Tool == nil {
+		return ActionExecutionResult{
+			Action:      action,
+			State:       ActionExecutionFailedToDispatch,
+			Err:         fmt.Errorf("tool action has no tool binding"),
+			ErrCode:     "ACTION_DISPATCH_UNAVAILABLE",
+			CompletedAt: now,
+		}
+	}
+
+	toolScope := kernel.LegacyScope{
+		UserID:         scope.UserID,
+		CharacterID:    scope.CharacterID,
+		ConversationID: scope.ConversationID,
+		Channel:        scope.Channel,
+		SessionID:      scope.SessionID,
+		TraceID:        scope.TraceID,
+		RequestID:      scope.RequestID,
+		ToolCallID:     action.Tool.ExternalCallID,
+	}
+
+	idempotencyKey := fmt.Sprintf("agent-action:%s", action.ID)
+	result, ok := d.toolFacade.ExecuteTool(
+		ctx,
+		capabilityID(action.Tool.ToolID),
+		action.Tool.Input,
+		toolScope,
+		action.Tool.ExternalCallID,
+		idempotencyKey,
+	)
+	if !ok {
+		return ActionExecutionResult{
+			Action:      action,
+			State:       ActionExecutionFailedToDispatch,
+			Err:         fmt.Errorf("tool dispatch failed: %s", action.Tool.ToolID),
+			ErrCode:     "ACTION_DISPATCH_UNAVAILABLE",
+			CompletedAt: now,
+		}
+	}
+
+	return ActionExecutionResult{
+		Action:      action,
+		State:       ActionExecutionCompleted,
+		ToolResult:  &result,
+		CompletedAt: now,
+	}
+}
+
+func scopeVerificationLost(action MaterializedAction, scope ActionMaterializationScope) bool {
+	return action.InteractionID != scope.InteractionID
+}

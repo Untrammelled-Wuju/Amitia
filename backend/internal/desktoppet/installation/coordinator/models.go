@@ -247,6 +247,7 @@ var (
 	ErrInvalidDefaultActionRequest = errors.New("coordinator: invalid default action request")
 	ErrInvalidRecenterRequest      = errors.New("coordinator: invalid recenter request")
 	ErrCoordinatorInternal         = errors.New("coordinator: internal error")
+	ErrOwnershipMismatch           = errors.New("coordinator: ownership mismatch")
 	ErrReleaseNotInstallable       = errors.New("coordinator: release not installable")
 	ErrOperationFailedRetryable    = errors.New("coordinator: operation failed retryable")
 	ErrOperationFailedTerminal     = errors.New("coordinator: operation failed terminal")

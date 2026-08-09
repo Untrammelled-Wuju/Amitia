@@ -240,12 +240,25 @@ func (r *memoryObjectRegistry) RemoveByRuntime(ctx context.Context, runtimeID do
 		r.index[id] = record
 	}
 	delete(r.runtimeIndex, runtimeID)
-	for _, id := range ids {
+	for id := range ids {
 		record := r.index[id]
-		delete(r.serviceIndex[record.Owner.RuntimeID], record.Owner.ServiceID)
-		r.removeFromPluginIndexLocked(record.Owner, id)
+		r.removeFromServiceIndexLocked(record.Owner.RuntimeID, record.Owner.ServiceID, id)
 	}
 	return count, nil
+}
+
+func (r *memoryObjectRegistry) removeFromServiceIndexLocked(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, id BinaryObjectID) {
+	if si, ok := r.serviceIndex[runtimeID]; ok {
+		if ci, ok := si[serviceID]; ok {
+			delete(ci, id)
+			if len(ci) == 0 {
+				delete(si, serviceID)
+			}
+		}
+		if len(si) == 0 {
+			delete(r.serviceIndex, runtimeID)
+		}
+	}
 }
 
 func (r *memoryObjectRegistry) RemoveByService(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (int, error) {
@@ -312,7 +325,4 @@ func (r *memoryObjectRegistry) removeFromIndicesLocked(owner BinaryOwner, id Bin
 			delete(r.serviceIndex, owner.RuntimeID)
 		}
 	}
-}
-
-func (r *memoryObjectRegistry) removeFromPluginIndexLocked(owner BinaryOwner, id BinaryObjectID) {
 }

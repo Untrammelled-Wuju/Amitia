@@ -22,7 +22,9 @@ import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.proot.ProotComponent
+import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import com.amitia.amitia_app.runtime.proot.ProotSession
+import com.amitia.amitia_app.runtime.proot.ProotStopResult
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostEvent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
@@ -376,21 +378,130 @@ internal class DefaultRuntimeController(
         request: RuntimeStopRequest,
         callback: RuntimeOperationCallback
     ): RuntimeOperationHandle {
-        expectedStopRequested.set(true)
-        cancelStartupDetector()
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.STOP)
 
-        val current = stateStore.snapshot()
-        if (current.state == RuntimeState.STARTING) {
-            stateStore.update { it.copy(state = RuntimeState.STOPPING) }
-        }
+        try {
+            val current = stateStore.snapshot()
 
-        val stopResult = serviceHost.requestStop()
-        if (stopResult is RuntimeServiceResult.Failure) {
+            if (current.state == RuntimeState.STOPPED) {
+                callback.onCompleted(
+                    RuntimeOperationResult.Success(
+                        operationId = operationId,
+                        type = RuntimeOperationType.STOP,
+                        snapshot = stateStore.snapshot()
+                    )
+                )
+                return handle
+            }
+
+            if (current.state == RuntimeState.STOPPING) {
+                callback.onCompleted(
+                    RuntimeOperationResult.Failure(
+                        operationId = operationId,
+                        type = RuntimeOperationType.STOP,
+                        error = RuntimeError(
+                            code = RuntimeErrorCode.STOP_ALREADY_IN_PROGRESS,
+                            message = "stop is already in progress",
+                            recoverable = false
+                        ),
+                        snapshot = stateStore.snapshot()
+                    )
+                )
+                return handle
+            }
+
+            val stoppingTarget = RuntimeStateMachine.stoppingTarget(current.state)
+            if (stoppingTarget == null) {
+                callback.onCompleted(
+                    RuntimeOperationResult.Failure(
+                        operationId = operationId,
+                        type = RuntimeOperationType.STOP,
+                        error = RuntimeError(
+                            code = RuntimeErrorCode.INVALID_STATE,
+                            message = "cannot stop from state: ${current.state}",
+                            recoverable = true
+                        ),
+                        snapshot = stateStore.snapshot()
+                    )
+                )
+                return handle
+            }
+
+            expectedStopRequested.set(true)
+            cancelStartupDetector()
+
+            val proot = prootComponent
+            if (proot != null) {
+                val session = proot.currentSession()
+                if (session != null && session.isAlive()) {
+                    val sessionResult = proot.stop()
+                    if (sessionResult is ProotStopResult.Failed) {
+                        val error = when (sessionResult.errorCode) {
+                            ProotErrorCode.PROCESS_TIMEOUT -> RuntimeError(
+                                code = RuntimeErrorCode.STOP_GRACEFUL_TIMEOUT,
+                                message = "graceful stop timed out: ${sessionResult.message}",
+                                recoverable = true
+                            )
+                            else -> RuntimeError(
+                                code = RuntimeErrorCode.STOP_FORCE_FAILED,
+                                message = "failed to stop proot session: ${sessionResult.message}",
+                                recoverable = true
+                            )
+                        }
+                        val failTarget = RuntimeStateMachine.startupFailureTarget(RuntimeState.STOPPING)
+                        if (failTarget != null) {
+                            stateStore.update { it.copy(state = failTarget, lastError = error) }
+                        }
+                        callback.onCompleted(
+                            RuntimeOperationResult.Failure(
+                                operationId = operationId,
+                                type = RuntimeOperationType.STOP,
+                                error = error,
+                                snapshot = stateStore.snapshot()
+                            )
+                        )
+                        return handle
+                    }
+                }
+            }
+
+            stateStore.update { it.copy(state = RuntimeState.STOPPING) }
+
+            val stopResult = serviceHost.requestStop()
+            if (stopResult is RuntimeServiceResult.Failure) {
+                val error = RuntimeError(
+                    code = RuntimeErrorCode.STOP_SERVICE_TEARDOWN_FAILED,
+                    message = "failed to request service stop: ${stopResult.error.message}",
+                    recoverable = true
+                )
+                val failTarget = RuntimeStateMachine.startupFailureTarget(RuntimeState.STOPPING)
+                if (failTarget != null) {
+                    stateStore.update { it.copy(state = failTarget, lastError = error) }
+                }
+                callback.onCompleted(
+                    RuntimeOperationResult.Failure(
+                        operationId = operationId,
+                        type = RuntimeOperationType.STOP,
+                        error = error,
+                        snapshot = stateStore.snapshot()
+                    )
+                )
+                return handle
+            }
+
+            callback.onCompleted(
+                RuntimeOperationResult.Success(
+                    operationId = operationId,
+                    type = RuntimeOperationType.STOP,
+                    snapshot = stateStore.snapshot()
+                )
+            )
+            return handle
+        } catch (e: Exception) {
             val error = RuntimeError(
-                code = RuntimeErrorCode.STOP_FAILED,
-                message = "failed to request service stop: ${stopResult.error.message}",
+                code = RuntimeErrorCode.INTERNAL_ERROR,
+                message = "stop failed with exception: ${e.message}",
                 recoverable = true
             )
             callback.onCompleted(
@@ -403,15 +514,6 @@ internal class DefaultRuntimeController(
             )
             return handle
         }
-
-        callback.onCompleted(
-            RuntimeOperationResult.Success(
-                operationId = operationId,
-                type = RuntimeOperationType.STOP,
-                snapshot = stateStore.snapshot()
-            )
-        )
-        return handle
     }
 
     override fun repair(

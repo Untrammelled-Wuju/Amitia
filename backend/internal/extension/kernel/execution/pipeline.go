@@ -82,7 +82,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	}
 
 	if err := ctx.Err(); err != nil {
-		result := capability.ResultFromContextError(inv.InvocationID, err)
+		result := p.classifyContextError(inv, err)
 		return p.finalizeCancellation(ctx, inv, result), nil
 	}
 
@@ -103,6 +103,15 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		}
 	}
 
+	if p.TimeoutCtrl == nil {
+		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:    capability.ErrorCodeInternalError,
+			Message: "timeout controller not configured",
+		}))), nil
+	}
+
+	acceptedAt := p.TimeoutCtrl.Now()
+
 	tool, err := p.resolveTool(ctx, toolID)
 	if err != nil {
 		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
@@ -111,63 +120,89 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		}))), nil
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	budget, err := p.TimeoutCtrl.ResolveBudget(ctx, acceptedAt, inv, tool)
+	if err != nil {
+		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:    capability.ErrorCodeInternalError,
+			Message: "resolve timeout budget failed",
+		}))), nil
+	}
+
+	if budget.Expired(acceptedAt) {
+		result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+		return p.finalizeTimeout(ctx, inv, result, budget), nil
+	}
+
+	timeoutCtx, timeoutCancel, err := p.TimeoutCtrl.Wrap(ctx, budget)
+	if err != nil {
+		return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:    capability.ErrorCodeInternalError,
+			Message: "wrap timeout context failed",
+		}))), nil
+	}
+	defer timeoutCancel()
+
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
 	if p.InputValidator != nil {
-		if err := p.InputValidator.Validate(ctx, tool, request.Input); err != nil {
-			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+		if err := p.InputValidator.Validate(timeoutCtx, tool, request.Input); err != nil {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeInvalidInput,
 				Message: "input validation failed",
 			}))), nil
 		}
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
 	if p.AvailabilityGate != nil {
-		avail := p.AvailabilityGate.Evaluate(ctx, tool, inv)
+		avail := p.AvailabilityGate.Evaluate(timeoutCtx, tool, inv)
 		if !avail.Executable {
-			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeNotAvailable,
 				Message: "tool not executable",
 			}))), nil
 		}
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
 	if p.ScopeGate != nil {
-		if err := p.ScopeGate.Evaluate(ctx, tool, inv); err != nil {
-			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+		if err := p.ScopeGate.Evaluate(timeoutCtx, tool, inv); err != nil {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeScopeDenied,
 				Message: err.Error(),
 			}))), nil
 		}
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
 	if p.PermissionGate != nil {
-		decision := p.PermissionGate.Evaluate(ctx, tool, inv)
+		decision := p.PermissionGate.Evaluate(timeoutCtx, tool, inv)
 		switch decision {
 		case PermissionDeny:
-			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodePermissionDenied,
 				Message: "permission denied",
 			}))), nil
 		case PermissionRequireApproval:
 			if p.ApprovalGate != nil {
-				approved, appErr := p.ApprovalGate.Evaluate(ctx, tool, inv, decision)
+				approved, appErr := p.ApprovalGate.Evaluate(timeoutCtx, tool, inv, decision)
 				if appErr != nil || !approved {
-					return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+					if approvalTimeout(appErr) || errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+						result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+						return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+					}
+					return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 						Code:    capability.ErrorCodePermissionDenied,
 						Message: "approval denied",
 					}))), nil
@@ -176,93 +211,96 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		}
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
 	if p.DepthGuard != nil {
-		if err := p.DepthGuard.Check(ctx, inv); err != nil {
-			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+		if err := p.DepthGuard.Check(timeoutCtx, inv); err != nil {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    "max_depth_exceeded",
 				Message: err.Error(),
 			}))), nil
 		}
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
 	if p.RateLimiter != nil {
-		if err := p.RateLimiter.Allow(ctx, tool); err != nil {
-			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+		if err := p.RateLimiter.Allow(timeoutCtx, tool); err != nil {
+			if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+				result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+				return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+			}
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeRateLimited,
 				Message: err.Error(),
 			}))), nil
 		}
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
 	if p.ConcurrencyCtrl != nil {
-		slot, slotErr := p.ConcurrencyCtrl.Acquire(ctx, tool, inv)
+		slot, slotErr := p.ConcurrencyCtrl.Acquire(timeoutCtx, tool, inv)
 		if slotErr != nil {
+			if errors.Is(slotErr, context.DeadlineExceeded) {
+				result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+				return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+			}
 			if errors.Is(slotErr, context.Canceled) {
 				result := capability.NewToolCancelledResult(inv.InvocationID, toolID)
-				return p.finalizeCancellation(ctx, inv, result), nil
+				return p.finalizeCancellation(timeoutCtx, inv, result), nil
 			}
-			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
-				Code:    capability.ErrorCodeRateLimited,
-				Message: slotErr.Error(),
-			}))), nil
+			result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+			return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
 		}
 		defer p.ConcurrencyCtrl.Release(slot)
 	}
 
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
-		if cached, found := p.IdempotencyGuard.Check(ctx, inv.IdempotencyKey, toolID); found {
+		if budget.Expired(p.TimeoutCtrl.Now()) {
+			result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+			return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+		}
+		if cached, found := p.IdempotencyGuard.Check(timeoutCtx, inv.IdempotencyKey, toolID); found {
 			if cached.Status == capability.ToolResultStatusCancelled {
-				p.IdempotencyGuard.Remove(ctx, inv.IdempotencyKey)
+				p.IdempotencyGuard.Remove(timeoutCtx, inv.IdempotencyKey)
 			} else {
 				if stream != nil {
-					_ = stream.Finish(ctx, cached)
+					_ = stream.Finish(timeoutCtx, cached)
 				}
-				return p.finalizeCancellation(ctx, inv, cached), nil
+				return p.finalizeCancellation(timeoutCtx, inv, cached), nil
 			}
 		}
 	}
 
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
 	}
 
-	if p.TimeoutCtrl != nil {
-		timeoutCtx, cancel := p.TimeoutCtrl.WithTimeout(ctx, tool, inv)
-		if cancel != nil {
-			defer cancel()
-		}
-		ctx = timeoutCtx
-	}
+	p.registerDeadlineAbortHook(timeoutCtx, inv, budget)
+	p.attachRuntimeCanceller(timeoutCtx, tool, inv)
 
-	p.attachRuntimeCanceller(ctx, tool, inv)
-
-	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhaseRuntime); cancelled {
 		return result, nil
 	}
 
-	p.recordAuditStart(ctx, inv.InvocationID, toolID)
-	startTime := time.Now()
+	p.recordAuditStart(timeoutCtx, inv.InvocationID, toolID)
+	startTime := p.TimeoutCtrl.Now()
 
 	var result capability.UnifiedToolResult
 	var deliveryErr error
 
 	if p.Dispatcher != nil {
 		if stream != nil && tool.ResultPolicy.Streaming.Enabled {
-			result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
+			result, _ = p.Dispatcher.DispatchStream(timeoutCtx, tool, inv, request.Input, stream)
 		} else {
-			result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+			result = p.Dispatcher.Dispatch(timeoutCtx, tool, inv, request.Input)
 		}
 	} else {
 		result = capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
@@ -271,7 +309,9 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		})
 	}
 
-	if result, cancelled := p.checkCancellationAfterDispatch(ctx, inv, result); cancelled {
+	result = p.checkLateResult(timeoutCtx, inv, toolID, result, budget)
+
+	if result, cancelled := p.checkTimeoutAfterDispatch(timeoutCtx, inv, result, budget, TimeoutPhaseRuntime); cancelled {
 		return result, nil
 	}
 
@@ -287,21 +327,32 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 
 	if p.AuditRec != nil {
 		if result.Status == capability.ToolResultStatusCancelled {
-			p.AuditRec.RecordCancelled(ctx, inv.InvocationID, toolID, string(getCancelReasonCode(ctx, inv)))
+			p.AuditRec.RecordCancelled(timeoutCtx, inv.InvocationID, toolID, string(getCancelReasonCode(timeoutCtx, inv)))
 		}
 	}
 
-	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess && result.Status != capability.ToolResultStatusCancelled && streamRetryAllowed {
+	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess && result.Status != capability.ToolResultStatusCancelled && result.Status != capability.ToolResultStatusTimedOut && streamRetryAllowed {
 		if result.Error != nil {
 			switch result.Error.Code {
 			case capability.ErrorCodePermissionDenied, capability.ErrorCodeScopeDenied, capability.ErrorCodeInvalidInput:
 			default:
-				if shouldRetry, _ := p.RetryCtrl.ShouldRetry(ctx, tool, result); shouldRetry {
+				if shouldRetry, _ := p.RetryCtrl.ShouldRetry(timeoutCtx, tool, result); shouldRetry {
 					for attempt := 1; attempt <= tool.ExecutionPolicy.RetryPolicy.MaxRetries; attempt++ {
-						if result, cancelled := p.runRetryAttempt(ctx, tool, inv, request, stream, attempt, result); cancelled {
+						if budget.Expired(p.TimeoutCtrl.Now()) {
+							result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+							return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+						}
+						if err := timeoutCtx.Err(); err != nil {
+							result := p.classifyContextError(inv, err)
+							return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+						}
+						if result, cancelled := p.runRetryAttempt(timeoutCtx, tool, inv, request, stream, attempt, result, budget); cancelled {
 							return result, nil
 						}
 						if result.Status == capability.ToolResultStatusSuccess {
+							break
+						}
+						if result.Status == capability.ToolResultStatusTimedOut || result.Status == capability.ToolResultStatusCancelled {
 							break
 						}
 					}
@@ -311,46 +362,62 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	}
 
 	if p.ResultValidator != nil {
-		result = p.ResultValidator.Validate(ctx, tool, inv, result)
+		result = p.ResultValidator.Validate(timeoutCtx, tool, inv, result)
 	}
 
-	result.DurationMS = time.Since(startTime).Milliseconds()
+	result.DurationMS = p.TimeoutCtrl.Now().Sub(startTime).Milliseconds()
 
 	if p.Sanitizer != nil {
-		result = p.Sanitizer.Sanitize(ctx, result)
+		result = p.Sanitizer.Sanitize(timeoutCtx, result)
 	}
 
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
-		if result.Status != capability.ToolResultStatusCancelled {
+		if result.Status != capability.ToolResultStatusCancelled && result.Status != capability.ToolResultStatusTimedOut {
 			cached := result.Clone()
-			p.IdempotencyGuard.Record(ctx, inv.IdempotencyKey, toolID, &cached)
+			p.IdempotencyGuard.Record(timeoutCtx, inv.IdempotencyKey, toolID, &cached)
 		}
 	}
 
 	if p.SideEffectRec != nil {
-		p.SideEffectRec.Record(ctx, inv.InvocationID, toolID, result.SideEffects)
+		p.SideEffectRec.Record(timeoutCtx, inv.InvocationID, toolID, result.SideEffects)
 	}
 
-	p.recordAuditFinish(ctx, inv.InvocationID, toolID, string(result.Status), time.Since(startTime))
+	p.recordAuditFinish(timeoutCtx, inv.InvocationID, toolID, string(result.Status), p.TimeoutCtrl.Now().Sub(startTime))
 
 	if p.MetricsRec != nil {
-		p.MetricsRec.Record(ctx, tool, result, time.Since(startTime))
+		p.MetricsRec.Record(timeoutCtx, tool, result, p.TimeoutCtrl.Now().Sub(startTime))
 	}
 
 	if p.CircuitBreaker != nil {
-		p.CircuitBreaker.RecordResult(ctx, tool, result)
+		if wasDispatched(tool, startTime, result) {
+			p.CircuitBreaker.RecordResult(timeoutCtx, tool, result)
+		}
 	}
 
-	return p.finalizeCancellation(ctx, inv, result), deliveryErr
+	return p.finalizeCancellation(timeoutCtx, inv, result), deliveryErr
 }
 
-func (p *ExecutionPipeline) runRetryAttempt(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, request ToolExecutionRequest, stream *toolStreamSession, attempt int, currentResult capability.UnifiedToolResult) (capability.UnifiedToolResult, bool) {
+func (p *ExecutionPipeline) runRetryAttempt(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, request ToolExecutionRequest, stream *toolStreamSession, attempt int, currentResult capability.UnifiedToolResult, budget TimeoutBudget) (capability.UnifiedToolResult, bool) {
 	delay := p.RetryCtrl.Backoff(attempt)
 	if delay > 0 {
 		if !respectBackoff(ctx, delay) {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				result := capability.NewToolTimedOutResult(inv.InvocationID, string(request.ToolID))
+				return p.finalizeTimeout(ctx, inv, result, budget), true
+			}
 			result := capability.NewToolCancelledResult(inv.InvocationID, string(request.ToolID))
 			return p.finalizeCancellation(ctx, inv, result), true
 		}
+	}
+
+	if budget.Expired(p.TimeoutCtrl.Now()) {
+		result := capability.NewToolTimedOutResult(inv.InvocationID, string(request.ToolID))
+		return p.finalizeTimeout(ctx, inv, result, budget), true
+	}
+
+	if err := ctx.Err(); err != nil {
+		result := p.classifyContextError(inv, err)
+		return p.finalizeTimeout(ctx, inv, result, budget), true
 	}
 
 	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
@@ -368,11 +435,118 @@ func (p *ExecutionPipeline) runRetryAttempt(ctx context.Context, tool capability
 		result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
 	}
 
-	if result, cancelled := p.checkCancellationAfterDispatch(ctx, inv, result); cancelled {
+	result = p.checkLateResult(ctx, inv, string(request.ToolID), result, budget)
+
+	if result, cancelled := p.checkTimeoutAfterDispatch(ctx, inv, result, budget, TimeoutPhaseRetryBackoff); cancelled {
 		return result, true
 	}
 
 	return result, false
+}
+
+func (p *ExecutionPipeline) checkTimeout(ctx context.Context, inv capability.ToolInvocationContext, toolID string, budget TimeoutBudget, phase TimeoutPhase) (capability.UnifiedToolResult, bool) {
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+			return p.finalizeTimeout(ctx, inv, result, budget), true
+		}
+		if errors.Is(err, context.Canceled) {
+			result := capability.NewToolCancelledResult(inv.InvocationID, toolID)
+			return p.finalizeCancellation(ctx, inv, result), true
+		}
+	}
+	if budget.Expired(p.TimeoutCtrl.Now()) {
+		result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+		return p.finalizeTimeout(ctx, inv, result, budget), true
+	}
+	return capability.UnifiedToolResult{}, false
+}
+
+func (p *ExecutionPipeline) checkTimeoutAfterDispatch(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult, budget TimeoutBudget, phase TimeoutPhase) (capability.UnifiedToolResult, bool) {
+	if result.Status == capability.ToolResultStatusCancelled {
+		return result, false
+	}
+
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			timedOut := capability.NewToolTimedOutResult(inv.InvocationID, result.ToolID)
+			return p.finalizeTimeout(ctx, inv, timedOut, budget), true
+		}
+	}
+
+	return p.checkTimeout(ctx, inv, result.ToolID, budget, phase)
+}
+
+func (p *ExecutionPipeline) registerDeadlineAbortHook(ctx context.Context, inv capability.ToolInvocationContext, budget TimeoutBudget) {
+	if p.CancellationCtrl == nil {
+		return
+	}
+
+	context.AfterFunc(ctx, func() {
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return
+		}
+		deadlineReason := capability.ToolCancellationReason{
+			Code: capability.CancellationReasonDeadlineExceeded,
+		}
+		abortCtx, abortCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer abortCancel()
+		_, _ = p.CancellationCtrl.RequestRuntimeAbort(abortCtx, inv.InvocationID, deadlineReason)
+	})
+}
+
+func (p *ExecutionPipeline) classifyContextError(inv capability.ToolInvocationContext, err error) capability.UnifiedToolResult {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return capability.NewToolTimedOutResult(inv.InvocationID, "")
+	}
+	if errors.Is(err, context.Canceled) {
+		return capability.NewToolCancelledResult(inv.InvocationID, "")
+	}
+	return capability.NewToolFailureResult(inv.InvocationID, "", &capability.ToolError{
+		Code:    capability.ErrorCodeInternalError,
+		Message: "execution context error",
+	})
+}
+
+func (p *ExecutionPipeline) finalizeTimeout(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult, budget TimeoutBudget) capability.UnifiedToolResult {
+	if result.Status != capability.ToolResultStatusTimedOut {
+		result = capability.NewToolTimedOutResult(inv.InvocationID, result.ToolID)
+	}
+	if p.CircuitBreaker != nil && !wasDispatchedFromBudget(budget) {
+		return result
+	}
+	return p.finalizeCancellation(ctx, inv, result)
+}
+
+func (p *ExecutionPipeline) checkLateResult(ctx context.Context, inv capability.ToolInvocationContext, toolID string, result capability.UnifiedToolResult, budget TimeoutBudget) capability.UnifiedToolResult {
+	if result.Status == capability.ToolResultStatusCancelled || result.Status == capability.ToolResultStatusTimedOut {
+		return result
+	}
+	if budget.Expired(p.TimeoutCtrl.Now()) {
+		timedOut := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+		return timedOut
+	}
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			timedOut := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+			return timedOut
+		}
+	}
+	return result
+}
+
+func (p *ExecutionPipeline) checkCancellation(ctx context.Context, inv capability.ToolInvocationContext) (capability.UnifiedToolResult, bool) {
+	if p.CancellationCtrl == nil {
+		return capability.UnifiedToolResult{}, false
+	}
+	return p.CancellationCtrl.ResolveCancellation(ctx, inv)
+}
+
+func (p *ExecutionPipeline) finalizeCancellation(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult) capability.UnifiedToolResult {
+	if p.CancellationCtrl == nil {
+		return result
+	}
+	return p.CancellationCtrl.Finalize(ctx, inv, result)
 }
 
 func (p *ExecutionPipeline) attachRuntimeCanceller(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) {
@@ -389,30 +563,19 @@ func (p *ExecutionPipeline) attachRuntimeCanceller(ctx context.Context, tool cap
 	})
 }
 
-func (p *ExecutionPipeline) checkCancellation(ctx context.Context, inv capability.ToolInvocationContext) (capability.UnifiedToolResult, bool) {
-	if p.CancellationCtrl == nil {
-		return capability.UnifiedToolResult{}, false
+func approvalTimeout(err error) bool {
+	if err == nil {
+		return false
 	}
-	return p.CancellationCtrl.ResolveCancellation(ctx, inv)
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrToolDeadlineExceeded)
 }
 
-func (p *ExecutionPipeline) checkCancellationAfterDispatch(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult) (capability.UnifiedToolResult, bool) {
-	if p.CancellationCtrl == nil {
-		return capability.UnifiedToolResult{}, false
-	}
-
-	if result.Status == capability.ToolResultStatusCancelled {
-		return result, false
-	}
-
-	return p.CancellationCtrl.ResolveCancellation(ctx, inv)
+func wasDispatched(tool capability.ToolDefinition, startTime time.Time, result capability.UnifiedToolResult) bool {
+	return !startTime.IsZero() && result.Status != capability.ToolResultStatusTimedOut
 }
 
-func (p *ExecutionPipeline) finalizeCancellation(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult) capability.UnifiedToolResult {
-	if p.CancellationCtrl == nil {
-		return result
-	}
-	return p.CancellationCtrl.Finalize(ctx, inv, result)
+func wasDispatchedFromBudget(budget TimeoutBudget) bool {
+	return !budget.Deadline.IsZero() && budget.Source != ""
 }
 
 func getCancelReasonCode(ctx context.Context, inv capability.ToolInvocationContext) string {

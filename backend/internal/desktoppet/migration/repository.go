@@ -169,6 +169,8 @@ func (r *DBRepository) GetOperation(ctx context.Context, id string) (*MigrationO
 		UpdatedAt:      record.UpdatedAt,
 		CompletedAt:    record.CompletedAt,
 	}
+	op.VerifiedReadCutover, _ = r.HasVerifiedReadCutover(ctx, record.ID)
+	op.VerifiedWriteCutover, _ = r.HasVerifiedWriteCutover(ctx, record.ID)
 	if op.PlanID == "" {
 		op.PlanID = record.Kind
 	}
@@ -306,6 +308,18 @@ func (r *DBRepository) RecordWriteCutover(ctx context.Context, operationID, step
 		Verified:    0,
 	}
 	return r.db.WithContext(ctx).Create(&record).Error
+}
+
+func (r *DBRepository) MarkReadCutoverVerified(ctx context.Context, operationID string) error {
+	return r.db.WithContext(ctx).Model(&readCutoverRecord{}).
+		Where("operation_id = ?", operationID).
+		Update("verified", 1).Error
+}
+
+func (r *DBRepository) MarkWriteCutoverVerified(ctx context.Context, operationID string) error {
+	return r.db.WithContext(ctx).Model(&writeCutoverRecord{}).
+		Where("operation_id = ?", operationID).
+		Update("verified", 1).Error
 }
 
 func (r *DBRepository) HasVerifiedReadCutover(ctx context.Context, operationID string) (bool, error) {
