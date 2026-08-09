@@ -79,27 +79,100 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		return nil, nil, nil
 	}
 
-	builder := decision.NewBehaviorPlanBuilder(now)
-	plan := builder.Build(arbitrationResult.Selected, arbitrationInput)
-	plan.CharacterID, plan.UserID = scope.CharacterID, scope.UserID
-	if compiledPersonality != nil {
-		plan.Personality = decision.CompiledPersonalityRef{Version: compiledPersonality.Version, SourceCharacterID: compiledPersonality.CharacterID, BehaviorWeights: personalityWeights}
+	safetyLevel := decision.BehaviorSafetyLevelNormal
+	if safetyDecision.Blocked {
+		safetyLevel = decision.BehaviorSafetyLevelBlocked
 	}
+	planSafetyCtx := decision.PlanSafetyContext{
+		Level:   safetyLevel,
+		Blocked: safetyDecision.Blocked,
+		Reasons: safetyDecision.Reasons,
+	}
+
+	var personalityRef decision.CompiledPersonalityRef
+	if compiledPersonality != nil {
+		personalityRef = decision.CompiledPersonalityRef{
+			Version:           compiledPersonality.Version,
+			SourceCharacterID: compiledPersonality.CharacterID,
+			BehaviorWeights:   personalityWeights,
+			RawConfig:         compiledPersonality.RawConfig,
+			ExpressionPolicyKey: compiledPersonality.ExpressionPolicyKey,
+		}
+	}
+
+	buildInput := decision.BehaviorPlanBuildInput{
+		UserID:          scope.UserID,
+		CharacterID:     scope.CharacterID,
+		ConversationID:  scope.ConversationID,
+		InteractionID:   scope.InteractionID,
+		RequestID:       scope.RequestID,
+		Arbitration:     arbitrationResult,
+		Goals:           goalsForDecision(goalContext),
+		Intentions:      append([]decision.Intention(nil), goalContext.Intentions...),
+		Psyche:          psycheSignals,
+		Relationship:    relSnapshot,
+		Life:            lifeSnapshot,
+		Personality:     personalityRef,
+		Safety:          planSafetyCtx,
+		Now:             now,
+	}
+
+	builder := decision.NewBehaviorPlanBuilder()
+	plan, buildErr := builder.Build(buildInput)
+	if buildErr != nil {
+		return nil, nil, fmt.Errorf("plan build failed: %w", buildErr)
+	}
+	if plan == nil {
+		return nil, nil, nil
+	}
+
+	if !plan.NeedsExpression || plan.DoNotSend {
+		return plan, nil, nil
+	}
+
 	emotionIntensity := 0.5
 	if compiledPersonality != nil {
 		if v, ok := compiledPersonality.ExpressionStyle["emotionalExpression"]; ok {
 			emotionIntensity = v
 		}
 	}
-	exprCtrl := decision.ExpressionControlInput{EmotionIntensity: emotionIntensity, StressLevel: psycheSignals.Stress.Value, RelationshipSafety: 0.5}
+	exprCtrl := decision.ExpressionControlInput{
+		EmotionIntensity:   emotionIntensity,
+		RiskScore:          plan.Selected.RiskScore,
+		StressLevel:        psycheSignals.Stress.Value,
+		RelationshipSafety: 0.5,
+	}
 	if relSnapshot.Dimensions != nil {
 		if v, ok := relSnapshot.Dimensions[decision.RelationshipSafety]; ok {
 			exprCtrl.RelationshipSafety = v.Value
 		}
 	}
-	exprInput := decision.ExpressionPlanInput{BehaviorPlan: plan, Psyche: psycheSignals, ExpressionCtrl: exprCtrl, PersonalityExpressionStyle: personalityStyle, Now: now}
-	exprPlan := decision.GenerateExpressionPlan(exprInput)
-	return &plan, &exprPlan, nil
+
+	safetyResult := decision.SafetyCheckResult{Passed: !safetyDecision.Blocked, Blocked: safetyDecision.Blocked}
+	if safetyDecision.Blocked {
+		safetyResult.Reason = "runtime_safety_blocked"
+	}
+	for _, r := range safetyDecision.Reasons {
+		if safetyResult.Reason != "" {
+			safetyResult.Reason += "; "
+		}
+		safetyResult.Reason += r
+	}
+	safetyResult.ConfidenceScore = 0.9
+
+	exprInput := decision.ExpressionPlanInput{
+		BehaviorPlan:               *plan,
+		Psyche:                     psycheSignals,
+		ExpressionCtrl:             exprCtrl,
+		SafetyResult:               safetyResult,
+		PersonalityExpressionStyle: personalityStyle,
+		Now:                        now,
+	}
+	exprPlan, exprErr := decision.GenerateExpressionPlan(exprInput)
+	if exprErr != nil {
+		return nil, nil, fmt.Errorf("expression plan generation failed: %w", exprErr)
+	}
+	return plan, &exprPlan, nil
 }
 
 func derivePersonalityWeights(cp *personality.CompiledPersonality) map[decision.BehaviorTag]float64 {

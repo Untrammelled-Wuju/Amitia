@@ -2,6 +2,7 @@ package checkpoint
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,19 +24,19 @@ const (
 )
 
 type StoredRuntimeInfo struct {
-	RuntimeID        domain.RuntimeInstanceID
-	PluginID         domain.PluginID
-	RecoveryStatus   RecoveryStatus
-	RuntimeState     domain.RuntimeState
-	CleanShutdown    bool
-	ExtensionID      string
-	PluginVersion    string
+	RuntimeID          domain.RuntimeInstanceID
+	PluginID           domain.PluginID
+	RecoveryStatus     RecoveryStatus
+	RuntimeState       domain.RuntimeState
+	CleanShutdown      bool
+	ExtensionID        string
+	PluginVersion      string
 	DescriptorRevision string
 }
 
 type RecoveryClassifier struct {
-	dir    storage.DirectoryManager
-	store  CheckpointStore
+	dir      storage.DirectoryManager
+	store    CheckpointStore
 	resolver DescriptorResolver
 }
 
@@ -58,11 +59,10 @@ func (c *RecoveryClassifier) ListStoredRuntimeIDs(ctx context.Context) ([]domain
 		return nil, err
 	}
 
-	paths, err := c.dir.ResolveRuntimePaths("__scan__")
+	runtimesDir, err := c.runtimesDirectory()
 	if err != nil {
 		return nil, err
 	}
-	runtimesDir := filepath.Dir(paths.Root)
 
 	entries, err := os.ReadDir(runtimesDir)
 	if err != nil {
@@ -78,18 +78,11 @@ func (c *RecoveryClassifier) ListStoredRuntimeIDs(ctx context.Context) ([]domain
 			continue
 		}
 		dirName := entry.Name()
-		if !looksLikeStorageKey(dirName) {
+		if !strings.HasPrefix(dirName, "run-") {
 			continue
 		}
-		runtimeID, ok := c.deriveRuntimeIDFromStorageKey(dirName)
+		runtimeID, ok := c.resolveRuntimeIDFromDir(ctx, dirName)
 		if !ok {
-			continue
-		}
-		hasMeta, err := c.store.HasMetadata(ctx, runtimeID)
-		if err != nil {
-			continue
-		}
-		if !hasMeta {
 			continue
 		}
 		result = append(result, runtimeID)
@@ -99,6 +92,34 @@ func (c *RecoveryClassifier) ListStoredRuntimeIDs(ctx context.Context) ([]domain
 		return result[i] < result[j]
 	})
 	return result, nil
+}
+
+func (c *RecoveryClassifier) runtimesDirectory() (string, error) {
+	paths, err := c.dir.ResolveRuntimePaths("__scan__")
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(paths.Root), nil
+}
+
+func (c *RecoveryClassifier) resolveRuntimeIDFromDir(ctx context.Context, dirName string) (domain.RuntimeInstanceID, bool) {
+	dir, err := c.runtimesDirectory()
+	if err != nil {
+		return "", false
+	}
+	metaPath := filepath.Join(dir, dirName, metadataFileName)
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return "", false
+	}
+	var md RuntimeMetadata
+	if err := json.Unmarshal(data, &md); err != nil {
+		return "", false
+	}
+	if md.RuntimeID == "" {
+		return "", false
+	}
+	return md.RuntimeID, true
 }
 
 func (c *RecoveryClassifier) Classify(ctx context.Context, runtimeID domain.RuntimeInstanceID) (StoredRuntimeInfo, error) {
@@ -137,7 +158,7 @@ func (c *RecoveryClassifier) Classify(ctx context.Context, runtimeID domain.Runt
 		}
 		return info, err
 	}
-	checkpointOK := true
+
 	if checkpoint.RuntimeID != metadata.RuntimeID || checkpoint.PluginID != metadata.PluginID {
 		info.RecoveryStatus = RecoveryStatusInvalid
 		return info, errRuntimeIDMismatch("classify", string(runtimeID), errIDMismatch(string(checkpoint.RuntimeID), string(metadata.RuntimeID)))
@@ -146,6 +167,8 @@ func (c *RecoveryClassifier) Classify(ctx context.Context, runtimeID domain.Runt
 	info.RuntimeState = checkpoint.RuntimeState
 	info.CleanShutdown = checkpoint.CleanShutdown
 	info.DescriptorRevision = checkpoint.DescriptorRevision
+
+	checkpointOK := true
 
 	if checkpoint.DescriptorRevision != "" && c.resolver != nil {
 		if descriptor, ok := c.resolver.Resolve(metadata.PluginID); ok {
@@ -188,30 +211,4 @@ func (c *RecoveryClassifier) ListStoredRuntimes(ctx context.Context) ([]StoredRu
 		result = append(result, info)
 	}
 	return result, nil
-}
-
-func (c *RecoveryClassifier) deriveRuntimeIDFromStorageKey(key string) (domain.RuntimeInstanceID, bool) {
-	if !strings.HasPrefix(key, "run-") {
-		return "", false
-	}
-	id := strings.TrimPrefix(key, "run-")
-	if id == "" {
-		return "", false
-	}
-	parts := strings.SplitN(id, "-", 2)
-	if len(parts) < 2 {
-		return "", false
-	}
-	runtimeID := domain.RuntimeInstanceID(parts[0])
-	if runtimeID == "" {
-		return "", false
-	}
-	return runtimeID, true
-}
-
-func looksLikeStorageKey(name string) bool {
-	if len(name) < 8 {
-		return false
-	}
-	return strings.HasPrefix(name, "run-") || strings.HasPrefix(name, "plg-") || strings.HasPrefix(name, "svc-")
 }
