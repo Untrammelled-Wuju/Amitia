@@ -152,7 +152,7 @@ func TestBinaryReference_LongMediaTypeRejected(t *testing.T) {
 		ID:        id,
 		Kind:      BinaryStorageFile,
 		Size:      100,
-		MediaType: strings.Repeated("x", maxMediaTypeLength+1),
+		MediaType: strings.Repeat("x", maxMediaTypeLength+1),
 		Lifetime:  BinaryLifetimeMessage,
 	}
 	if err := ref.Validate(); err == nil {
