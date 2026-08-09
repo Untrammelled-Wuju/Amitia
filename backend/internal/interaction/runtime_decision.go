@@ -91,13 +91,15 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 
 	var personalityRef decision.CompiledPersonalityRef
 	if compiledPersonality != nil {
-		personalityRef = decision.CompiledPersonalityRef{
-			Version:           compiledPersonality.Version,
-			SourceCharacterID: compiledPersonality.CharacterID,
-			BehaviorWeights:   personalityWeights,
-			RawConfig:         compiledPersonality.RawConfig,
-			ExpressionPolicyKey: compiledPersonality.ExpressionPolicyKey,
+		if compiledPersonality.SourceConfig != nil {
+			personalityRef.RawConfig = make(map[string]any, len(compiledPersonality.SourceConfig))
+			for k, v := range compiledPersonality.SourceConfig {
+				personalityRef.RawConfig[k] = v
+			}
 		}
+		personalityRef.Version = compiledPersonality.Version
+		personalityRef.SourceCharacterID = compiledPersonality.CharacterID
+		personalityRef.BehaviorWeights = personalityWeights
 	}
 
 	buildInput := decision.BehaviorPlanBuildInput{
