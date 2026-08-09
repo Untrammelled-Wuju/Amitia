@@ -250,5 +250,3 @@ func getStyleValue(style map[string]float64, key string, defaultVal float64) flo
 	}
 	return defaultVal
 }
-
-var _ = fmt.Sprintf

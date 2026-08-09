@@ -114,6 +114,7 @@ func (s *FileStore) SaveCheckpoint(ctx context.Context, checkpoint RuntimeCheckp
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	sortCheckpointServices(&checkpoint)
 	if err := validateCheckpointFields(&checkpoint); err != nil {
 		return err
 	}
@@ -359,6 +360,12 @@ func safeRemove(path string) error {
 		return newError("safe_remove", ErrCorrupt, path, err)
 	}
 	return nil
+}
+
+func sortCheckpointServices(cp *RuntimeCheckpoint) {
+	sort.SliceStable(cp.Services, func(i, j int) bool {
+		return cp.Services[i].ServiceID < cp.Services[j].ServiceID
+	})
 }
 
 func isErrKind(err error, kind string) bool {
