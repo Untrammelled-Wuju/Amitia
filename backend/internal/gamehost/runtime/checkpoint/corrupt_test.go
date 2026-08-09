@@ -9,11 +9,10 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
-	"github.com/u-ai/backend/internal/gamehost/storage"
 )
 
 func TestCorrupt_Checkpoint(t *testing.T) {
-	dm, dataRoot := newTestDirectoryManager(t)
+	dm, _ := newTestDirectoryManager(t)
 	store, _ := NewFileStore(dm)
 	ctx := context.Background()
 
@@ -47,7 +46,7 @@ func TestCorrupt_Checkpoint(t *testing.T) {
 }
 
 func TestCorrupt_MetadataRejected(t *testing.T) {
-	dm, dataRoot := newTestDirectoryManager(t)
+	dm, _ := newTestDirectoryManager(t)
 	store, _ := NewFileStore(dm)
 	ctx := context.Background()
 
@@ -76,7 +75,7 @@ func TestCorrupt_MetadataRejected(t *testing.T) {
 }
 
 func TestCorrupt_UnsupportedSchemaVersion(t *testing.T) {
-	dm, dataRoot := newTestDirectoryManager(t)
+	dm, _ := newTestDirectoryManager(t)
 	store, _ := NewFileStore(dm)
 	ctx := context.Background()
 
@@ -227,4 +226,4 @@ func TestValidation_PluginIDMismatch(t *testing.T) {
 	}
 }
 
-var _ = dataRoot
+var _ = os.WriteFile

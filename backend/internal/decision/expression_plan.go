@@ -1,6 +1,10 @@
 package decision
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
 type ExpressionType string
 
@@ -60,19 +64,32 @@ type ExpressionPlanInput struct {
 	Now                        time.Time
 }
 
-func GenerateExpressionPlan(input ExpressionPlanInput) ExpressionPlan {
-	now := input.Now
-	if now.IsZero() {
-		now = time.Now().UTC()
+func GenerateExpressionPlan(input ExpressionPlanInput) (ExpressionPlan, error) {
+	if input.BehaviorPlan.ID == "" {
+		return ExpressionPlan{}, errors.New("expression plan: behavior plan ID is required")
 	}
+	if !input.BehaviorPlan.NeedsExpression {
+		return ExpressionPlan{}, errors.New("expression plan: behavior plan does not need expression")
+	}
+	if input.BehaviorPlan.DoNotSend {
+		return ExpressionPlan{}, errors.New("expression plan: behavior plan is do-not-send")
+	}
+	if input.BehaviorPlan.ExpressionPlanID == "" {
+		return ExpressionPlan{}, errors.New("expression plan: behavior plan expression_plan_id is empty")
+	}
+	if input.Now.IsZero() {
+		return ExpressionPlan{}, errors.New("expression plan: Now is required")
+	}
+
 	plan := ExpressionPlan{
-		ID:             "expr-" + input.BehaviorPlan.ID,
+		ID:             input.BehaviorPlan.ExpressionPlanID,
 		BehaviorPlanID: input.BehaviorPlan.ID,
-		CreatedAt:      now,
+		CreatedAt:      input.Now,
 		Channel:        input.BehaviorPlan.Selected.Channel,
 		CopingStrategy: input.CopingStrategy,
 		Metadata:       make(map[string]any),
 	}
+
 	ctrlConfig := DefaultExpressionControlConfig()
 	ctrlResult := ControlExpression(input.ExpressionCtrl, ctrlConfig)
 	plan.ExpressionType = mapExpressionType(input.BehaviorPlan.Selected.Tag)
@@ -81,6 +98,7 @@ func GenerateExpressionPlan(input ExpressionPlanInput) ExpressionPlan {
 	plan.EmotionIntensity = ClampEmotionIntensity(input.ExpressionCtrl.EmotionIntensity, ctrlConfig.SafetyCeiling)
 	plan.ScaleFactor = ctrlResult.ScaleFactor
 	plan.Suppressed = ctrlResult.Suppressed
+
 	if input.SafetyResult.Blocked {
 		plan.SafetyBlocked = true
 		plan.DoNotSend = true
@@ -88,7 +106,8 @@ func GenerateExpressionPlan(input ExpressionPlanInput) ExpressionPlan {
 		plan.ScaleFactor = 0
 		plan.EmotionIntensity = 0
 	}
-	return plan
+
+	return plan, nil
 }
 
 func mapExpressionType(tag BehaviorTag) ExpressionType {
@@ -231,3 +250,5 @@ func getStyleValue(style map[string]float64, key string, defaultVal float64) flo
 	}
 	return defaultVal
 }
+
+var _ = fmt.Sprintf
