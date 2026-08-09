@@ -125,7 +125,7 @@ var (
 	errInvalidServiceState = func(s runtime.ServiceRuntimeState) error {
 		return errorf("invalid service state: %s", s)
 	}
-	errIDMismatch = func(a, b domain.RuntimeInstanceID) error {
+	errIDMismatch = func(a, b string) error {
 		return errorf("id mismatch: %s vs %s", a, b)
 	}
 	errRevisionMismatch = func(a, b string) error {
