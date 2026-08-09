@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 type RecordWriter interface {
@@ -154,29 +154,29 @@ func HashOutput(data string) string {
 }
 
 func NewTraceID() string {
-	return uuid.NewString()
+	return capability.NewTraceID()
 }
 
 func NewOperationID() string {
-	return uuid.NewString()
+	return capability.NewOperationID()
 }
 
 func NewInvocationID() string {
-	return uuid.NewString()
+	return capability.NewInvocationID()
 }
 
 func NewAttemptID() string {
-	return uuid.NewString()
+	return capability.NewInvocationID()
 }
 
 func NewEventID() string {
-	return uuid.NewString()
+	return capability.NewInvocationID()
 }
 
 func NewAuditID() string {
-	return uuid.NewString()
+	return capability.NewInvocationID()
 }
 
 func NewErrorID() string {
-	return uuid.NewString()
+	return capability.NewInvocationID()
 }

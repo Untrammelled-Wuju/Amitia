@@ -4,12 +4,63 @@ func ApplyCandidateContextSignals(candidates []BehaviorCandidate, ctx CandidateG
 	result := make([]BehaviorCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		next := candidate
+		next = resetDynamicScores(next)
 		next = enrichFromGoals(next, ctx.Goals, ctx.Intentions)
 		next = enrichFromRelationship(next, ctx.Relationship)
 		next = enrichFromPsyche(next, ctx.Psyche)
 		next = enrichFromLife(next, ctx.Life)
 		next = enrichFromPersonality(next, ctx.PersonalityWeights)
 		result = append(result, next)
+	}
+	return result
+}
+
+func resetDynamicScores(candidate BehaviorCandidate) BehaviorCandidate {
+	candidate.PersonalityScore = 0
+	candidate.NeedScore = 0
+	candidate.RelationshipScore = 0
+	candidate.AffectScore = 0
+	candidate.RiskScore = 0
+	candidate.UserPreferenceScore = 0
+	candidate.RepeatPenalty = 0
+	candidate.FatiguePenalty = 0
+	candidate.FinalScore = 0
+	candidate.ScoringVersion = ""
+	candidate.Reasons = stripScoringReasons(candidate.Reasons)
+	candidate.Constraints = stripScoringConstraints(candidate.Constraints)
+	return candidate
+}
+
+func stripScoringReasons(reasons []BehaviorReason) []BehaviorReason {
+	if len(reasons) == 0 {
+		return nil
+	}
+	result := make([]BehaviorReason, 0, len(reasons))
+	for _, r := range reasons {
+		if r.Source == "scoring" {
+			continue
+		}
+		result = append(result, r)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func stripScoringConstraints(constraints []BehaviorConstraint) []BehaviorConstraint {
+	if len(constraints) == 0 {
+		return nil
+	}
+	result := make([]BehaviorConstraint, 0, len(constraints))
+	for _, c := range constraints {
+		if c.Kind == "stress_limit" || c.Kind == "busy_block" || c.Kind == "busy_interruption" {
+			continue
+		}
+		result = append(result, c)
+	}
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }
@@ -33,7 +84,7 @@ func enrichFromGoals(candidate BehaviorCandidate, goals []Goal, intentions []Int
 			}
 		}
 	}
-	candidate.NeedScore = round4(candidate.NeedScore + goalBoost + intentionBoost)
+	candidate.NeedScore = round4(goalBoost + intentionBoost)
 	return candidate
 }
 
@@ -45,14 +96,14 @@ func enrichFromRelationship(candidate BehaviorCandidate, rel RelationshipSnapsho
 	if v, ok := rel.Dimensions[RelationshipTrust]; ok {
 		trustVal = v.Value
 	}
-	candidate.RelationshipScore = round4(candidate.RelationshipScore + (trustVal-0.5)*0.2)
+	candidate.RelationshipScore = round4((trustVal - 0.5) * 0.2)
 	return candidate
 }
 
 func enrichFromPsyche(candidate BehaviorCandidate, psyche PsycheSignalSet) BehaviorCandidate {
 	stressVal := psyche.Stress.Value
 	if stressVal > 0.7 {
-		candidate.Constraints = append(candidate.Constraints, BehaviorConstraint{
+		candidate.Constraints = appendDedupConstraint(candidate.Constraints, BehaviorConstraint{
 			Kind:     "stress_limit",
 			Limit:    0.8,
 			Observed: stressVal,
@@ -63,7 +114,7 @@ func enrichFromPsyche(candidate BehaviorCandidate, psyche PsycheSignalSet) Behav
 		candidate.RiskScore = round4(candidate.RiskScore + stressVal*0.3)
 	}
 	if candidate.ID == "express_emotion" && stressVal > 0.4 {
-		candidate.BaseScore = round4(candidate.BaseScore + stressVal*0.15)
+		candidate.AffectScore = round4(candidate.AffectScore + stressVal*0.15)
 	}
 	return candidate
 }
@@ -72,7 +123,7 @@ func enrichFromLife(candidate BehaviorCandidate, life LifeSnapshot) BehaviorCand
 	if candidate.ID == "proactive_greet" && life.Busy > 0.7 {
 		candidate.RiskScore = round4(candidate.RiskScore + life.Busy*0.4)
 		if life.Busy >= 0.9 {
-			candidate.Constraints = append(candidate.Constraints, BehaviorConstraint{
+			candidate.Constraints = appendDedupConstraint(candidate.Constraints, BehaviorConstraint{
 				Kind:     "busy_block",
 				Limit:    0.9,
 				Observed: life.Busy,
@@ -95,7 +146,7 @@ func enrichFromPersonality(candidate BehaviorCandidate, weights map[BehaviorTag]
 		return candidate
 	}
 	if w, ok := weights[tag]; ok {
-		candidate.PersonalityScore = round4(candidate.PersonalityScore + w)
+		candidate.PersonalityScore = round4(w)
 		candidate.Reasons = append(candidate.Reasons, BehaviorReason{
 			Source: "personality",
 			Key:    string(tag),
@@ -103,6 +154,15 @@ func enrichFromPersonality(candidate BehaviorCandidate, weights map[BehaviorTag]
 		})
 	}
 	return candidate
+}
+
+func appendDedupConstraint(constraints []BehaviorConstraint, next BehaviorConstraint) []BehaviorConstraint {
+	for _, c := range constraints {
+		if c.Kind == next.Kind && c.Hard == next.Hard {
+			return constraints
+		}
+	}
+	return append(constraints, next)
 }
 
 func mapGoalToBoost(goalType GoalType, candidateID string) float64 {

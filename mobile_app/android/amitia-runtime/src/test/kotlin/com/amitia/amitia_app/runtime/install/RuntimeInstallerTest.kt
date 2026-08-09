@@ -169,26 +169,24 @@ class RuntimeInstallerTest {
         val baseDir = tempFolder.newFolder("paths-structure")
         val layout = DefaultRuntimeHostLayout(File(baseDir, "control"), File(baseDir, "data"))
 
-        assertTrue(layout.controlRoot.absolutePath.endsWith("amitia-runtime"))
-        assertTrue(layout.rootfsRoot.absolutePath.endsWith("rootfs"))
-        assertTrue(layout.versionsRoot.absolutePath.endsWith("versions"))
-        assertTrue(layout.stagingRoot.absolutePath.endsWith("staging"))
-        assertTrue(layout.metadataRoot.absolutePath.endsWith("metadata"))
-        assertTrue(layout.transactionsRoot.absolutePath.endsWith("transactions"))
-        assertTrue(layout.locksRoot.absolutePath.endsWith("locks"))
-        assertTrue(layout.installReceiptFile("1.0.0").absolutePath.endsWith("install-receipts/1.0.0.json"))
+        val up = { f: File -> f.absolutePath.replace('\\', '/') }
+        assertTrue(up(layout.controlRoot).endsWith("amitia-runtime"))
+        assertTrue(up(layout.rootfsRoot).endsWith("rootfs"))
+        assertTrue(up(layout.versionsRoot).endsWith("versions"))
+        assertTrue(up(layout.stagingRoot).endsWith("staging"))
+        assertTrue(up(layout.metadataRoot).endsWith("metadata"))
+        assertTrue(up(layout.transactionsRoot).endsWith("transactions"))
+        assertTrue(up(layout.locksRoot).endsWith("locks"))
+        assertTrue(up(layout.installReceiptFile("1.0.0")).endsWith("install-receipts/1.0.0.json"))
     }
 
     @Test
     fun alreadyInstalled_returnsConflict_whenVersionExistsWithDifferentContent() {
         val baseDir = tempFolder.newFolder("install-version-conflict")
-        val packageFile = File(baseDir, "invalid.zip")
+        val packageFile = File(baseDir, "dummy.zip")
         packageFile.writeText("dummy content for conflict test")
 
         val layout = DefaultRuntimeHostLayout(File(baseDir, "control"), File(baseDir, "data"))
-        val versionDir = layout.runtimeVersionRoot("1.0.0")
-        versionDir.mkdirs()
-        File(versionDir, "marker.txt").writeText("existing version")
 
         val receiptStore = DefaultInstallReceiptStore(layout)
         receiptStore.save(
@@ -204,7 +202,50 @@ class RuntimeInstallerTest {
             )
         )
 
-        val installer = createInstaller(baseDir)
+        val fakeVerifier = object : PackageVerifier {
+            override fun verify(packageFile: File, expectedRuntimeVersion: String?): PackageVerificationResult {
+                val metadataDir = File(packageFile.parentFile, ".meta-tmp").apply { mkdirs() }
+                return PackageVerificationResult.Success(
+                    VerifiedPackage(
+                        packageFile = packageFile,
+                        packageSha256 = "test-package-sha256-abcdef1234567890abcdef1234567890abcdef123456",
+                        packageIndex = PackageIndex(
+                            runtimeVersion = "1.0.0",
+                            packageId = "test-package",
+                            target = PackageTarget("android", "arm64-v8a", "proot", "linux", "arm64"),
+                            guestLayout = PayloadRef("guest.layout", "guest-layout-sha", 100),
+                            mountContract = PayloadRef("mount.contract", "mount-contract-sha", 100),
+                            rootfsPayload = PayloadRef("rootfs.tar", "rootfs-sha", 1000),
+                            runtimePayload = PayloadRef("runtime.tar", "runtime-sha", 1000),
+                            sha256sums = PayloadRef("sums.txt", "sums-sha", 50),
+                            licenses = null,
+                        ),
+                        componentLock = ComponentLock(
+                            runtimeVersion = "1.0.0",
+                            packageId = "test-package",
+                            components = emptyList(),
+                        ),
+                        guestLayout = GuestLayout("backend", emptyList()),
+                        mountContract = MountContract(emptyList()),
+                        rootfsPayloadFile = File(baseDir, "rootfs.tar").apply { writeText("rootfs") },
+                        runtimePayloadFile = File(baseDir, "runtime.tar").apply { writeText("runtime") },
+                        sha256sumsFile = File(baseDir, "sums.txt").apply { writeText("sums") },
+                        metadataDir = metadataDir,
+                    )
+                )
+            }
+        }
+
+        val installer = DefaultRuntimeInstaller(
+            layout = layout,
+            abiGate = createSupportedAbiGate(),
+            packageVerifier = fakeVerifier,
+            archiveExtractor = DefaultSafeArchiveExtractor(),
+            rootfsManager = DefaultRootfsManager(layout.controlRoot, DefaultSafeArchiveExtractor()),
+            runtimeVerifier = com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier(treeHasher = { "" }),
+            receiptStore = receiptStore,
+            activeRuntimeManager = null,
+        )
 
         val result = installer.install(
             RuntimeInstallRequest(packageFile = packageFile)

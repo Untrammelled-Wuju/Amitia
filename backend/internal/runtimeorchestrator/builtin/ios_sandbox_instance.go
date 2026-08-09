@@ -123,9 +123,15 @@ func (p *iosSandboxProviderInstance) Capability() any {
 		"runtimeId":       runtimeID,
 		"hostPlatform":    hostPlatform,
 		"availability":    p.backend.Availability(context.Background()).String(),
+		"lifecycleState":  health.LifecycleState,
+		"generation":      health.Generation,
 		"healthy":         health.Healthy,
 		"ishInitialized":  health.ISHInitialized,
 		"rootfsInstalled": health.RootfsInstalled,
+		"restartRequired": health.RestartRequired,
+		"recoveryPending": health.RecoveryPending,
+		"runningRootfsVersion": health.RunningRootfsVersion,
+		"lastErrorCode":   health.LastErrorCode,
 	}
 }
 

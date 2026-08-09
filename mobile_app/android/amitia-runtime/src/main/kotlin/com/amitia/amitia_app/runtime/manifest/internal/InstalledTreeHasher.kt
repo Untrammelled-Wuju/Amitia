@@ -38,7 +38,7 @@ internal object InstalledTreeHasher {
         }
         when {
             isSymlink -> {
-                val entryPath = if (relPath.isEmpty()) file.name else relPath
+                val entryPath = relPath.ifEmpty { file.name }
                 val target = readLinkSafe(file)
                 result.add(
                     TreeEntry(
@@ -50,7 +50,7 @@ internal object InstalledTreeHasher {
                 )
             }
             file.isFile -> {
-                val entryPath = if (relPath.isEmpty()) file.name else relPath
+                val entryPath = relPath.ifEmpty { file.name }
                 result.add(
                     TreeEntry(
                         relativePath = entryPath,
@@ -61,12 +61,12 @@ internal object InstalledTreeHasher {
                 )
             }
             file.isDirectory -> {
-                val entryPath = if (relPath.isEmpty()) file.name else relPath
                 if (relPath.isNotEmpty()) {
-                    result.add(TreeEntry(entryPath, EntryKind.DIR, 0L, ""))
+                    result.add(TreeEntry(relPath, EntryKind.DIR, 0L, ""))
                 }
                 file.listFiles()?.sortedBy { it.name }?.forEach { child ->
-                    collectRecursive(root, "$entryPath/${child.name}", child, result)
+                    val childPath = if (relPath.isEmpty()) child.name else "$relPath/${child.name}"
+                    collectRecursive(root, childPath, child, result)
                 }
             }
         }

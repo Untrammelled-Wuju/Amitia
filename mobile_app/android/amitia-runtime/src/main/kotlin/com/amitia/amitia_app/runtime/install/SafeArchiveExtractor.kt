@@ -2,7 +2,7 @@ package com.amitia.amitia_app.runtime.install
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.tukaani.xz.XZCompressorInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -115,7 +115,8 @@ internal class DefaultSafeArchiveExtractor(
                     )
                 }
 
-                val targetFile = File(targetDir, entryName)
+                val strippedName = stripContainerPrefix(entryName)
+                val targetFile = File(targetDir, strippedName)
                 if (!targetFile.absolutePath.startsWith(targetDir.absolutePath)) {
                     return SafeExtractResult.Failure(
                         RuntimeInstallErrorCode.ARCHIVE_PATH_INVALID,
@@ -308,5 +309,11 @@ internal class DefaultSafeArchiveExtractor(
         if (path.startsWith("C:", ignoreCase = true)) return false
         if (path.contains(":")) return false
         return true
+    }
+
+    private fun stripContainerPrefix(path: String): String {
+        val firstSlash = path.indexOf('/')
+        if (firstSlash < 0 || firstSlash == path.length - 1) return path
+        return path.substring(firstSlash + 1)
     }
 }

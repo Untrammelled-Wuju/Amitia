@@ -358,4 +358,38 @@ func TestIOSSandboxProviderCapabilityIncludesHostInfo(t *testing.T) {
 	}
 }
 
+func TestIOSSandboxProviderCapabilityIncludesLifecycleFields(t *testing.T) {
+	fakeBackend := newFakeIOSSandboxBackend()
+	factory := &IOSSandboxProviderFactory{
+		config:     IOSSandboxProviderConfig{Enabled: true},
+		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
+	}
+	host := newIOSTestHost()
+	bc := runtimeorchestrator.ProviderBuildContext{
+		Host: host,
+	}
+	inst, err := factory.Build(bc)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	cap := inst.Capability()
+	m, ok := cap.(map[string]any)
+	if !ok {
+		t.Fatalf("capability is not map[string]any: %T", cap)
+	}
+	required := []string{
+		"lifecycleState",
+		"generation",
+		"restartRequired",
+		"recoveryPending",
+		"runningRootfsVersion",
+		"lastErrorCode",
+	}
+	for _, key := range required {
+		if _, exists := m[key]; !exists {
+			t.Fatalf("capability missing key: %s", key)
+		}
+	}
+}
+
 var _ runtimehost.ProcessSupervisor = (*noopProcessSupervisor)(nil)

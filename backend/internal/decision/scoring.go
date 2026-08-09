@@ -1,21 +1,41 @@
 package decision
 
 import (
+	"errors"
+	"fmt"
 	"math"
 	"sort"
+	"time"
 )
 
 const (
-	BehaviorFormulaVersionV1 = "behavior-scoring-v1"
+	BehaviorFormulaVersionV1   = "behavior-scoring-v1"
+	BehaviorFormulaVersionV2   = "behavior-scoring-v2"
+	BehaviorParameterVersionV1 = "behavior-scoring-params-v1"
 )
 
 type BehaviorScoringOptions struct {
-	BaseWeight         float64
-	PersonalityWeight  float64
-	NeedWeight         float64
-	RelationshipWeight float64
-	AffectWeight       float64
-	RiskWeight         float64
+	BaseWeight           float64
+	PersonalityWeight    float64
+	NeedWeight           float64
+	RelationshipWeight   float64
+	AffectWeight         float64
+	UserPreferenceWeight float64
+	RiskWeight           float64
+	RepeatPenaltyWeight  float64
+	FatiguePenaltyWeight float64
+}
+
+type CandidateScoringContext struct {
+	Goals              []Goal
+	Intentions         []Intention
+	Psyche             PsycheSignalSet
+	Relationship       RelationshipSnapshot
+	Life               LifeSnapshot
+	PersonalityWeights map[BehaviorTag]float64
+	UserPreferences    map[string]float64
+	History            BehaviorHistory
+	Now                time.Time
 }
 
 type BehaviorSelectionResult struct {
@@ -45,40 +65,202 @@ func DefaultAffectRegulator() AffectRegulator {
 
 func DefaultBehaviorScoringOptions() BehaviorScoringOptions {
 	return BehaviorScoringOptions{
-		BaseWeight:         1,
-		PersonalityWeight:  1,
-		NeedWeight:         1,
-		RelationshipWeight: 1,
-		AffectWeight:       1,
-		RiskWeight:         1,
+		BaseWeight:           1,
+		PersonalityWeight:    1,
+		NeedWeight:           1,
+		RelationshipWeight:   1,
+		AffectWeight:         1,
+		UserPreferenceWeight: 0.1,
+		RiskWeight:           1,
+		RepeatPenaltyWeight:  1,
+		FatiguePenaltyWeight: 1,
 	}
 }
 
-func ScoreBehaviorCandidates(candidates []BehaviorCandidate, options BehaviorScoringOptions) []BehaviorCandidate {
-	options = normalizeScoringOptions(options)
-	scored := make([]BehaviorCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		next := candidate
-		next.FinalScore = scoreBehaviorCandidate(next, options)
-		next.Reasons = appendScoreReasons(next.Reasons, next, options)
-		scored = append(scored, next)
+// ValidateScoringOptions 校验评分工子权重合法性
+func ValidateScoringOptions(options BehaviorScoringOptions) error {
+	weights := map[string]float64{
+		"BaseWeight":           options.BaseWeight,
+		"PersonalityWeight":    options.PersonalityWeight,
+		"NeedWeight":           options.NeedWeight,
+		"RelationshipWeight":   options.RelationshipWeight,
+		"AffectWeight":         options.AffectWeight,
+		"UserPreferenceWeight": options.UserPreferenceWeight,
+		"RiskWeight":           options.RiskWeight,
+		"RepeatPenaltyWeight":  options.RepeatPenaltyWeight,
+		"FatiguePenaltyWeight": options.FatiguePenaltyWeight,
 	}
-	sort.SliceStable(scored, func(i, j int) bool {
-		return scored[i].FinalScore > scored[j].FinalScore
+	for name, w := range weights {
+		if math.IsNaN(w) || math.IsInf(w, 0) {
+			return fmt.Errorf("scoring: weight %s is NaN or Inf", name)
+		}
+		if w < 0 {
+			return fmt.Errorf("scoring: weight %s cannot be negative: %f", name, w)
+		}
+	}
+	return nil
+}
+
+// ScoreCandidates 是 B4 以后唯一生产 FinalScore 入口
+// 流程: ValidateOptions → ValidateNow → CloneCandidates → ResetScores → ContextSignals → UserPreferenceSignals → CostSignals → ValidateComponents → ComputeFinalScore → Reasons → SetVersion
+// 不排序, 不改变数量, 输入多少输出多少
+func ScoreCandidates(candidates []BehaviorCandidate, ctx CandidateScoringContext, options BehaviorScoringOptions) ([]BehaviorCandidate, error) {
+	if err := ValidateScoringOptions(options); err != nil {
+		return nil, err
+	}
+	if ctx.Now.IsZero() {
+		return nil, errors.New("scoring: Now is required")
+	}
+
+	result := make([]BehaviorCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		next := cloneCandidate(candidate)
+		next = ApplyCandidateContextSignalsSingle(next, ctx)
+		next.UserPreferenceScore = ComputeUserPreferenceScore(next, ctx.UserPreferences)
+		next.RepeatPenalty = ComputeRepeatPenalty(ctx.History, candidate.ID, ctx.Now, DefaultRepeatPenaltyConfig())
+		next.FatiguePenalty = ComputeFatiguePenalty(ctx.History, candidate.ID, ctx.Now, DefaultFatiguePenaltyConfig())
+
+		if err := validateCandidateScoreComponents(next); err != nil {
+			return nil, fmt.Errorf("scoring: candidate %s: %w", next.ID, err)
+		}
+
+		next.FinalScore = computeFinalScore(next, options)
+		next.Reasons = appendScoringReasons(next.Reasons, next, options)
+		next.ScoringVersion = BehaviorFormulaVersionV2
+
+		result = append(result, next)
+	}
+	return result, nil
+}
+
+func cloneCandidate(candidate BehaviorCandidate) BehaviorCandidate {
+	next := candidate
+	if candidate.Reasons != nil {
+		next.Reasons = append([]BehaviorReason{}, candidate.Reasons...)
+	}
+	if candidate.Constraints != nil {
+		next.Constraints = append([]BehaviorConstraint{}, candidate.Constraints...)
+	}
+	return next
+}
+
+func computeFinalScore(candidate BehaviorCandidate, options BehaviorScoringOptions) float64 {
+	return round4(
+		candidate.BaseScore*options.BaseWeight +
+			candidate.PersonalityScore*options.PersonalityWeight +
+			candidate.NeedScore*options.NeedWeight +
+			candidate.RelationshipScore*options.RelationshipWeight +
+			candidate.AffectScore*options.AffectWeight +
+			candidate.UserPreferenceScore*options.UserPreferenceWeight -
+			candidate.RiskScore*options.RiskWeight -
+			candidate.RepeatPenalty*options.RepeatPenaltyWeight -
+			candidate.FatiguePenalty*options.FatiguePenaltyWeight,
+	)
+}
+
+// ApplyCandidateContextSignalsSingle 对所有 Context Signals 应用于单个 Candidate
+func ApplyCandidateContextSignalsSingle(candidate BehaviorCandidate, ctx CandidateScoringContext) BehaviorCandidate {
+	candidates := ApplyCandidateContextSignals([]BehaviorCandidate{candidate}, CandidateGenerationContext{
+		Goals:              ctx.Goals,
+		Intentions:         ctx.Intentions,
+		Psyche:             ctx.Psyche,
+		Relationship:       ctx.Relationship,
+		Life:               ctx.Life,
+		PersonalityWeights: ctx.PersonalityWeights,
 	})
-	return scored
+	return candidates[0]
+}
+
+func validateCandidateScoreComponents(candidate BehaviorCandidate) error {
+	components := map[string]float64{
+		"BaseScore":           candidate.BaseScore,
+		"PersonalityScore":    candidate.PersonalityScore,
+		"NeedScore":           candidate.NeedScore,
+		"RelationshipScore":   candidate.RelationshipScore,
+		"AffectScore":         candidate.AffectScore,
+		"UserPreferenceScore": candidate.UserPreferenceScore,
+		"RiskScore":           candidate.RiskScore,
+		"RepeatPenalty":       candidate.RepeatPenalty,
+		"FatiguePenalty":      candidate.FatiguePenalty,
+	}
+	for name, v := range components {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return fmt.Errorf("component %s is NaN or Inf", name)
+		}
+	}
+	if candidate.UserPreferenceScore < -1 || candidate.UserPreferenceScore > 1 {
+		return fmt.Errorf("UserPreferenceScore %f out of range [-1, 1]", candidate.UserPreferenceScore)
+	}
+	if candidate.RiskScore < 0 || candidate.RiskScore > 1.2 {
+		return fmt.Errorf("RiskScore %f out of expected range", candidate.RiskScore)
+	}
+	if candidate.RepeatPenalty < 0 {
+		return fmt.Errorf("RepeatPenalty cannot be negative")
+	}
+	if candidate.FatiguePenalty < 0 {
+		return fmt.Errorf("FatiguePenalty cannot be negative")
+	}
+	return nil
+}
+
+func appendScoringReasons(reasons []BehaviorReason, candidate BehaviorCandidate, options BehaviorScoringOptions) []BehaviorReason {
+	next := stripSource(reasons, "scoring")
+	next = append(next,
+		BehaviorReason{Source: "scoring", Key: "base", Delta: round4(candidate.BaseScore * options.BaseWeight)},
+		BehaviorReason{Source: "scoring", Key: "personality", Delta: round4(candidate.PersonalityScore * options.PersonalityWeight)},
+		BehaviorReason{Source: "scoring", Key: "need", Delta: round4(candidate.NeedScore * options.NeedWeight)},
+		BehaviorReason{Source: "scoring", Key: "relationship", Delta: round4(candidate.RelationshipScore * options.RelationshipWeight)},
+		BehaviorReason{Source: "scoring", Key: "affect", Delta: round4(candidate.AffectScore * options.AffectWeight)},
+		BehaviorReason{Source: "scoring", Key: "user_preference", Delta: round4(candidate.UserPreferenceScore * options.UserPreferenceWeight)},
+		BehaviorReason{Source: "scoring", Key: "risk", Delta: round4(-candidate.RiskScore * options.RiskWeight)},
+		BehaviorReason{Source: "scoring", Key: "repeat_penalty", Delta: round4(-candidate.RepeatPenalty * options.RepeatPenaltyWeight)},
+		BehaviorReason{Source: "scoring", Key: "fatigue_penalty", Delta: round4(-candidate.FatiguePenalty * options.FatiguePenaltyWeight)},
+	)
+	return next
+}
+
+func stripSource(reasons []BehaviorReason, source string) []BehaviorReason {
+	if len(reasons) == 0 {
+		return nil
+	}
+	result := make([]BehaviorReason, 0, len(reasons))
+	for _, r := range reasons {
+		if r.Source == source {
+			continue
+		}
+		result = append(result, r)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// ScoreBehaviorCandidates 兼容 API:
+// 对已有 Component Scores 的候选直接使用 Canonical FinalScore Formula 计算 FinalScore, 并排序
+// 不调用 Context Signals, 不重算 Component (保持向后兼容)
+// 新生产 Agent 主链应使用 ScoreCandidates
+func ScoreBehaviorCandidates(candidates []BehaviorCandidate, options BehaviorScoringOptions) []BehaviorCandidate {
+	result := make([]BehaviorCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		next := cloneCandidate(candidate)
+		next.FinalScore = computeFinalScore(next, options)
+		next.ScoringVersion = BehaviorFormulaVersionV2
+		result = append(result, next)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].FinalScore > result[j].FinalScore
+	})
+	return result
 }
 
 func SelectBehaviorCandidate(candidates []BehaviorCandidate, options BehaviorScoringOptions) BehaviorSelectionResult {
-	options = normalizeScoringOptions(options)
 	allowed := make([]BehaviorCandidate, 0, len(candidates))
 	blocked := make([]BehaviorCandidate, 0)
 	diagnostics := []string{string(BehaviorFormulaVersionV1)}
 	for _, candidate := range candidates {
 		if blockedByHardConstraint(candidate) {
-			next := candidate
-			next.FinalScore = scoreBehaviorCandidate(next, options)
-			blocked = append(blocked, next)
+			blocked = append(blocked, candidate)
 			diagnostics = append(diagnostics, "blocked:"+candidate.ID)
 			continue
 		}
@@ -119,32 +301,11 @@ func ApplyLifeInterruptionRisk(candidates []BehaviorCandidate, life LifeSnapshot
 			riskDelta := round4(busy * 0.45)
 			next.RiskScore = round4(next.RiskScore + riskDelta)
 			next.Reasons = append(next.Reasons, BehaviorReason{Source: "life", Key: "busy_interruption_risk", Delta: -riskDelta})
-			next.Constraints = append(next.Constraints, BehaviorConstraint{Kind: "busy_interruption", Limit: 0.82, Observed: busy, Hard: busy >= 0.9})
+			next.Constraints = appendDedupConstraint(next.Constraints, BehaviorConstraint{Kind: "busy_interruption", Limit: 0.82, Observed: busy, Hard: busy >= 0.9})
 		}
 		adjusted = append(adjusted, next)
 	}
 	return adjusted
-}
-
-func ScoreWithAffectRegulation(candidates []BehaviorCandidate, options BehaviorScoringOptions, regulator AffectRegulator, affect AffectSignalInput) []BehaviorCandidate {
-	if len(candidates) == 0 {
-		return candidates
-	}
-	regulator = normalizeAffectRegulator(regulator)
-	multiplier := regulator.ComputeMultiplier(affect)
-	affectScore := round4(multiplier - 1.0)
-	scored := make([]BehaviorCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		next := candidate
-		next.AffectScore = affectScore
-		next.FinalScore = scoreBehaviorCandidate(next, options)
-		next.Reasons = appendScoreReasons(next.Reasons, next, options)
-		scored = append(scored, next)
-	}
-	sort.SliceStable(scored, func(i, j int) bool {
-		return scored[i].FinalScore > scored[j].FinalScore
-	})
-	return scored
 }
 
 func (r AffectRegulator) ComputeMultiplier(affect AffectSignalInput) float64 {
@@ -163,19 +324,6 @@ func (r AffectRegulator) ComputeMultiplier(affect AffectSignalInput) float64 {
 	return round4(raw)
 }
 
-func scoreBehaviorCandidate(candidate BehaviorCandidate, options BehaviorScoringOptions) float64 {
-	value := candidate.BaseScore*options.BaseWeight +
-		candidate.PersonalityScore*options.PersonalityWeight +
-		candidate.NeedScore*options.NeedWeight +
-		candidate.RelationshipScore*options.RelationshipWeight +
-		candidate.AffectScore*options.AffectWeight -
-		candidate.RiskScore*options.RiskWeight
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return 0
-	}
-	return value
-}
-
 func blockedByHardConstraint(candidate BehaviorCandidate) bool {
 	for _, constraint := range candidate.Constraints {
 		if constraint.Hard && constraint.Limit > 0 && constraint.Observed > constraint.Limit {
@@ -186,49 +334,6 @@ func blockedByHardConstraint(candidate BehaviorCandidate) bool {
 		}
 	}
 	return false
-}
-
-func normalizeScoringOptions(options BehaviorScoringOptions) BehaviorScoringOptions {
-	defaults := DefaultBehaviorScoringOptions()
-	if options.BaseWeight == 0 {
-		options.BaseWeight = defaults.BaseWeight
-	}
-	if options.PersonalityWeight == 0 {
-		options.PersonalityWeight = defaults.PersonalityWeight
-	}
-	if options.NeedWeight == 0 {
-		options.NeedWeight = defaults.NeedWeight
-	}
-	if options.RelationshipWeight == 0 {
-		options.RelationshipWeight = defaults.RelationshipWeight
-	}
-	if options.AffectWeight == 0 {
-		options.AffectWeight = defaults.AffectWeight
-	}
-	if options.RiskWeight == 0 {
-		options.RiskWeight = defaults.RiskWeight
-	}
-	return options
-}
-
-func normalizeAffectRegulator(r AffectRegulator) AffectRegulator {
-	defaults := DefaultAffectRegulator()
-	if r.PositiveEmotionWeight <= 0 {
-		r.PositiveEmotionWeight = defaults.PositiveEmotionWeight
-	}
-	if r.NegativeEmotionWeight <= 0 {
-		r.NegativeEmotionWeight = defaults.NegativeEmotionWeight
-	}
-	if r.StressWeight <= 0 {
-		r.StressWeight = defaults.StressWeight
-	}
-	if r.MaxMultiplier <= 0 {
-		r.MaxMultiplier = defaults.MaxMultiplier
-	}
-	if r.MinMultiplier <= 0 {
-		r.MinMultiplier = defaults.MinMultiplier
-	}
-	return r
 }
 
 func clamp01(value float64) float64 {
@@ -243,19 +348,6 @@ func clamp01(value float64) float64 {
 
 func round4(value float64) float64 {
 	return math.Round(value*10000) / 10000
-}
-
-func appendScoreReasons(reasons []BehaviorReason, candidate BehaviorCandidate, options BehaviorScoringOptions) []BehaviorReason {
-	next := append([]BehaviorReason{}, reasons...)
-	next = append(next,
-		BehaviorReason{Source: "decision", Key: "base", Delta: candidate.BaseScore * options.BaseWeight},
-		BehaviorReason{Source: "decision", Key: "personality", Delta: candidate.PersonalityScore * options.PersonalityWeight},
-		BehaviorReason{Source: "decision", Key: "need", Delta: candidate.NeedScore * options.NeedWeight},
-		BehaviorReason{Source: "decision", Key: "relationship", Delta: candidate.RelationshipScore * options.RelationshipWeight},
-		BehaviorReason{Source: "decision", Key: "affect", Delta: candidate.AffectScore * options.AffectWeight},
-		BehaviorReason{Source: "decision", Key: "risk", Delta: -candidate.RiskScore * options.RiskWeight},
-	)
-	return next
 }
 
 type FusedAffectNeedSignal struct {
@@ -313,29 +405,4 @@ func ComputeAffectNeedFusion(affect AffectSignalInput, needs []NeedScoringInput)
 		NeedRaw:    round4(needRaw),
 		FormulaID:  "affect-need-fusion-v1",
 	}
-}
-
-func ScoreWithAffectNeedFusion(candidates []BehaviorCandidate, options BehaviorScoringOptions, affect AffectSignalInput, needInputs []NeedScoringInput) []BehaviorCandidate {
-	if len(candidates) == 0 {
-		return candidates
-	}
-	options = normalizeScoringOptions(options)
-	fusion := ComputeAffectNeedFusion(affect, needInputs)
-	scored := make([]BehaviorCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		next := candidate
-		rawScore := scoreBehaviorCandidate(next, options)
-		next.FinalScore = round4(rawScore * fusion.Multiplier)
-		next.Reasons = appendScoreReasons(next.Reasons, next, options)
-		next.Reasons = append(next.Reasons, BehaviorReason{
-			Source: "decision",
-			Key:    "affect_need_fusion",
-			Delta:  fusion.Multiplier,
-		})
-		scored = append(scored, next)
-	}
-	sort.SliceStable(scored, func(i, j int) bool {
-		return scored[i].FinalScore > scored[j].FinalScore
-	})
-	return scored
 }

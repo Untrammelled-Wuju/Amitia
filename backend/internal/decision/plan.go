@@ -54,19 +54,23 @@ type CompiledPersonalityRef struct {
 }
 
 type BehaviorCandidate struct {
-	ID                string               `json:"id"`
-	ActionType        CandidateActionType  `json:"actionType"`
-	Tag               BehaviorTag          `json:"tag"`
-	Channel           BehaviorChannel      `json:"channel"`
-	BaseScore         float64              `json:"baseScore"`
-	PersonalityScore  float64              `json:"personalityScore"`
-	NeedScore         float64              `json:"needScore"`
-	RelationshipScore float64              `json:"relationshipScore"`
-	AffectScore       float64              `json:"affectScore"`
-	RiskScore         float64              `json:"riskScore"`
-	FinalScore        float64              `json:"finalScore"`
-	Reasons           []BehaviorReason     `json:"reasons,omitempty"`
-	Constraints       []BehaviorConstraint `json:"constraints,omitempty"`
+	ID                  string               `json:"id"`
+	ActionType          CandidateActionType  `json:"actionType"`
+	Tag                 BehaviorTag          `json:"tag"`
+	Channel             BehaviorChannel      `json:"channel"`
+	BaseScore           float64              `json:"baseScore"`
+	PersonalityScore    float64              `json:"personalityScore"`
+	NeedScore           float64              `json:"needScore"`
+	RelationshipScore   float64              `json:"relationshipScore"`
+	AffectScore         float64              `json:"affectScore"`
+	UserPreferenceScore float64              `json:"userPreferenceScore"`
+	RiskScore           float64              `json:"riskScore"`
+	RepeatPenalty       float64              `json:"repeatPenalty"`
+	FatiguePenalty      float64              `json:"fatiguePenalty"`
+	FinalScore          float64              `json:"finalScore"`
+	Reasons             []BehaviorReason     `json:"reasons,omitempty"`
+	Constraints         []BehaviorConstraint `json:"constraints,omitempty"`
+	ScoringVersion      string               `json:"scoringVersion,omitempty"`
 }
 
 type BehaviorReason struct {

@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -174,9 +175,13 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 	var behaviorPlan *decision.BehaviorPlan
 	var expressionPlan *decision.ExpressionPlan
 	if p.candidateRegistry != nil {
-		bp, ep := p.runDecision(ctx, scope, snapshot, appraisalResult, compiledPersonality, goalContext, now)
-		behaviorPlan = bp
-		expressionPlan = ep
+		bp, ep, err := p.runDecision(ctx, scope, snapshot, appraisalResult, compiledPersonality, goalContext, now)
+		if err != nil {
+			log.Printf("[runtime_pipeline] scoring failed, fail-closed: %v", err)
+		} else {
+			behaviorPlan = bp
+			expressionPlan = ep
+		}
 	}
 
 	return RuntimeAssembly{

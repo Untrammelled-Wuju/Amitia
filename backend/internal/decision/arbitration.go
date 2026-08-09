@@ -1,10 +1,11 @@
 package decision
 
+import "sort"
+
 import "time"
 
 type ArbitrationConfig struct {
 	MinScoreThreshold   float64
-	UseSoftPreferences  bool
 	UseConflictCheck    bool
 	UseConsistencyCheck bool
 }
@@ -12,7 +13,6 @@ type ArbitrationConfig struct {
 func DefaultArbitrationConfig() ArbitrationConfig {
 	return ArbitrationConfig{
 		MinScoreThreshold:   0.1,
-		UseSoftPreferences:  true,
 		UseConflictCheck:    true,
 		UseConsistencyCheck: true,
 	}
@@ -25,10 +25,8 @@ type ArbitrationInput struct {
 	Relationship RelationshipSnapshot
 	Psyche       PsycheSignalSet
 	Life         LifeSnapshot
-	History      BehaviorHistory
-	SoftPrefs    SoftPreferenceInput
-	Filter       HardConstraintFilter
 	Now          time.Time
+	Filter       HardConstraintFilter
 }
 
 type ArbitrationResult struct {
@@ -52,88 +50,64 @@ func DefaultArbitrationLayer() ArbitrationLayer {
 	return NewArbitrationLayer(DefaultArbitrationConfig())
 }
 
+// Arbitrate B4 只保留: HardConstraint/Conflict/Sort/Selection
+// Candidates 必须已经由 ScoreCandidates 评分完成
 func (a *ArbitrationLayer) Arbitrate(input ArbitrationInput) ArbitrationResult {
-	now := input.Now
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	allowed, blocked := input.Filter.Filter(input.Candidates, now)
+	allowed, blocked := input.Filter.Filter(input.Candidates, input.Now)
 	audit := BehaviorAudit{
-		FormulaVersion: string(BehaviorFormulaVersionV1),
+		FormulaVersion: BehaviorFormulaVersionV2,
 	}
+
 	if len(allowed) == 0 {
 		fallback := buildFallbackCandidate()
 		return ArbitrationResult{
 			Selected:     fallback,
-			Alternatives: nil,
 			Blocked:      blocked,
 			FallbackUsed: true,
 			Audit:        audit,
 		}
 	}
-	scored := ScoreBehaviorCandidates(allowed, DefaultBehaviorScoringOptions())
-	if a.Config.UseSoftPreferences {
-		scored = ApplySoftPreferencesToAll(scored, input.SoftPrefs, DefaultSoftPreferenceConfig())
-		sortCandidatesByScore(scored)
-	}
-	scored = ApplyBehaviorCostPenalties(scored, input.History, now)
-	sortCandidatesByScore(scored)
+
+	sorted := a.sortByScore(allowed)
+
 	if a.Config.UseConflictCheck {
 		conflictMatrix := DefaultConflictMatrix()
-		conflictLog := ResolveConflicts(scored, conflictMatrix)
+		conflictLog := ResolveConflicts(sorted, conflictMatrix)
 		audit.ConflictIDs = conflictLog
 	}
-	if len(scored) > 0 && scored[0].FinalScore < a.Config.MinScoreThreshold {
+
+	if len(sorted) > 0 && sorted[0].FinalScore < a.Config.MinScoreThreshold {
 		fallback := buildFallbackCandidate()
 		audit.Diagnostics = append(audit.Diagnostics, "below_threshold_fallback")
 		return ArbitrationResult{
 			Selected:     fallback,
-			Alternatives: scored,
+			Alternatives: sorted,
 			Blocked:      blocked,
 			FallbackUsed: true,
 			Audit:        audit,
 		}
 	}
-	selected := scored[0]
+
+	selected := sorted[0]
 	var alternatives []BehaviorCandidate
-	if len(scored) > 1 {
-		alternatives = scored[1:]
+	if len(sorted) > 1 {
+		alternatives = sorted[1:]
 	}
 	return ArbitrationResult{
 		Selected:     selected,
 		Alternatives: alternatives,
 		Blocked:      blocked,
-		FallbackUsed: false,
 		Audit:        audit,
 	}
 }
 
-func ApplyBehaviorCostPenalties(candidates []BehaviorCandidate, history BehaviorHistory, now time.Time) []BehaviorCandidate {
-	repeatConfig := DefaultRepeatPenaltyConfig()
-	fatigueConfig := DefaultFatiguePenaltyConfig()
-	result := make([]BehaviorCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		next := candidate
-		repeatPenalty := ComputeRepeatPenalty(history, candidate.ID, now, repeatConfig)
-		fatiguePenalty := ComputeFatiguePenalty(history, candidate.ID, now, fatigueConfig)
-		totalPenalty := repeatPenalty + fatiguePenalty
-		next.FinalScore = round4(next.FinalScore - totalPenalty)
-		if next.FinalScore < 0 {
-			next.FinalScore = 0
-		}
-		result = append(result, next)
-	}
+func (a *ArbitrationLayer) sortByScore(candidates []BehaviorCandidate) []BehaviorCandidate {
+	result := make([]BehaviorCandidate, len(candidates))
+	copy(result, candidates)
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].FinalScore > result[j].FinalScore
+	})
 	return result
-}
-
-func sortCandidatesByScore(candidates []BehaviorCandidate) {
-	for i := 0; i < len(candidates); i++ {
-		for j := i + 1; j < len(candidates); j++ {
-			if candidates[j].FinalScore > candidates[i].FinalScore {
-				candidates[i], candidates[j] = candidates[j], candidates[i]
-			}
-		}
-	}
 }
 
 func buildFallbackCandidate() BehaviorCandidate {
@@ -147,4 +121,9 @@ func buildFallbackCandidate() BehaviorCandidate {
 			{Source: "arbitration", Key: "fallback", Delta: 0},
 		},
 	}
+}
+
+// candidateHasCanonicalScore 检查候选是否经过 B4 评分
+func candidateHasCanonicalScore(candidate BehaviorCandidate) bool {
+	return candidate.ScoringVersion == BehaviorFormulaVersionV2
 }

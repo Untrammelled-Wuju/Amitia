@@ -149,6 +149,37 @@ func TestISHBackendHealthDelegates(t *testing.T) {
 	}
 }
 
+func TestISHBackendHealthIncludesLifecycleFields(t *testing.T) {
+	bridge := newFakeNativeBridge()
+	backend := &ishBackend{bridge: bridge}
+
+	h := backend.Health(context.Background())
+	if h.LifecycleState != "" {
+		t.Fatalf("expected legacy empty lifecycle_state on old fake bridge, got: %s", h.LifecycleState)
+	}
+	if h.Generation != 0 {
+		t.Fatal("expected generation=0 on initial fake bridge")
+	}
+	if h.DesiredRunning {
+		t.Fatal("expected desiredRunning=false initially")
+	}
+	if h.RestartRequired {
+		t.Fatal("expected restartRequired=false initially")
+	}
+	if h.RecoveryPending {
+		t.Fatal("expected recoveryPending=false initially")
+	}
+	if h.ActiveExecutionID != "" {
+		t.Fatal("expected empty activeExecutionID")
+	}
+	if h.RunningRootfsVersion != "" {
+		t.Fatal("expected empty runningRootfsVersion")
+	}
+	if h.RunningRootfsDigest != "" {
+		t.Fatal("expected empty runningRootfsDigest")
+	}
+}
+
 func newFakeNativeBackendHealthy() *fakeNativeBridge {
 	bridge := newFakeNativeBridge()
 	bridge.health = SandboxHealth{

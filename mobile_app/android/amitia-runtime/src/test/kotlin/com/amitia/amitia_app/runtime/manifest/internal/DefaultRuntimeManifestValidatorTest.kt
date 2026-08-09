@@ -77,7 +77,7 @@ class DefaultRuntimeManifestValidatorTest {
 
     @Test
     fun validCommit_ok() {
-        assertNull(validator.validateSourceCommit("abc1234567890abc1234567890abc1234567890"))
+        assertNull(validator.validateSourceCommit("a".repeat(40)))
     }
 
     @Test

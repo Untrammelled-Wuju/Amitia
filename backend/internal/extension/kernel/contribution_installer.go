@@ -166,6 +166,10 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return i.buildMCPServerOp(ctx, contrib, defData)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
 		return i.buildUIContributionOp(ctx, contrib, defData, generation)
+	case domain.ContributionKindGamePlugin:
+		return i.buildGamePluginOp(ctx, contrib, defData, generation)
+	case domain.ContributionKindDesktopPetPlugin:
+		return i.buildDesktopPetPluginOp(ctx, contrib, defData, generation)
 	default:
 		return installOp{}, fmt.Errorf("unsupported contribution kind: %s", contrib.Kind)
 	}
@@ -244,6 +248,81 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		},
 		doRollback: func(ctx context.Context) {
 			_ = i.container.ToolRegistry.Unregister(ctx, toolID)
+		},
+	}, nil
+}
+
+func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
+	var def struct {
+		ProtocolVersion  string `json:"protocolVersion"`
+		RuntimeModuleID  string `json:"runtimeModuleId,omitempty"`
+		DisplayName      string `json:"displayName,omitempty"`
+	}
+	if err := json.Unmarshal(defData, &def); err != nil {
+		return installOp{}, fmt.Errorf("unmarshal game plugin: %w", err)
+	}
+	if def.ProtocolVersion == "" {
+		return installOp{}, fmt.Errorf("game_plugin: protocolVersion required")
+	}
+	if contrib.ID == "" {
+		return installOp{}, fmt.Errorf("game_plugin: id required")
+	}
+	return installOp{
+		kind: domain.ContributionKindGamePlugin,
+		doInstall: func(ctx context.Context) error {
+			i.logAudit(lifecycleAuditEntry{
+				ContributionID: string(contrib.ID),
+				Kind:           string(contrib.Kind),
+				OperationID:    newOperationID("game-plugin-install"),
+				Generation:     generation,
+				StartedAt:      time.Now().UTC(),
+				FinishedAt:     time.Now().UTC(),
+				Result:         auditResultSucceeded,
+			})
+			return nil
+		},
+		doRollback: func(ctx context.Context) {
+			i.logAudit(lifecycleAuditEntry{
+				ContributionID: string(contrib.ID),
+				Kind:           string(contrib.Kind),
+				OperationID:    newOperationID("game-plugin-rollback"),
+				Generation:     generation,
+				StartedAt:      time.Now().UTC(),
+				FinishedAt:     time.Now().UTC(),
+				Result:         auditResultRollback,
+			})
+		},
+	}, nil
+}
+
+func (i *TypedContributionInstaller) buildDesktopPetPluginOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
+	if contrib.ID == "" {
+		return installOp{}, fmt.Errorf("desktop_pet_plugin: id required")
+	}
+	return installOp{
+		kind: domain.ContributionKindDesktopPetPlugin,
+		doInstall: func(ctx context.Context) error {
+			i.logAudit(lifecycleAuditEntry{
+				ContributionID: string(contrib.ID),
+				Kind:           string(contrib.Kind),
+				OperationID:    newOperationID("desktop-pet-plugin-install"),
+				Generation:     generation,
+				StartedAt:      time.Now().UTC(),
+				FinishedAt:     time.Now().UTC(),
+				Result:         auditResultSucceeded,
+			})
+			return nil
+		},
+		doRollback: func(ctx context.Context) {
+			i.logAudit(lifecycleAuditEntry{
+				ContributionID: string(contrib.ID),
+				Kind:           string(contrib.Kind),
+				OperationID:    newOperationID("desktop-pet-plugin-rollback"),
+				Generation:     generation,
+				StartedAt:      time.Now().UTC(),
+				FinishedAt:     time.Now().UTC(),
+				Result:         auditResultRollback,
+			})
 		},
 	}, nil
 }

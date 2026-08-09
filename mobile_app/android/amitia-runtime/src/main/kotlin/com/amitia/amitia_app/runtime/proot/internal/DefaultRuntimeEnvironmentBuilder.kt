@@ -45,7 +45,7 @@ internal class DefaultRuntimeEnvironmentBuilder : RuntimeEnvironmentBuilder {
         for (path in paths) {
             val ap = path.absolutePath
             if (ap.isBlank()) return false
-            if (!ap.startsWith("/")) return false
+            if (!path.isAbsolute && !ap.startsWith("/")) return false
             if (ap.contains("..")) return false
             if (ap.contains("\u0000")) return false
         }

@@ -25,17 +25,30 @@ typedef NS_ENUM(NSInteger, AmitiaISHNativeError) {
 };
 
 @interface AmitiaISHExecutionResult : NSObject
-@property (nonatomic, copy) NSString *stdout;
-@property (nonatomic, copy) NSString *stderr;
+@property (nonatomic, copy, nullable) NSString *stdout;
+@property (nonatomic, copy, nullable) NSString *stderr;
 @property (nonatomic) int exitCode;
 @property (nonatomic) AmitiaISHNativeError errorCode;
 @property (nonatomic, copy, nullable) NSString *errorMessage;
 @property (nonatomic, copy, nullable) NSString *truncated;
+@property (nonatomic, copy, nullable) NSString *executionID;
+@property (nonatomic) uint64_t generation;
+@property (nonatomic) BOOL fatal;
+@end
+
+@interface AmitiaISHRuntimeHealth : NSObject
+@property (nonatomic) BOOL kernelRunning;
+@property (nonatomic) BOOL initTaskValid;
+@property (nonatomic) BOOL fatal;
+@property (nonatomic, copy, nullable) NSString *fatalCode;
+@property (nonatomic, copy, nullable) NSString *kernelRootfsPath;
 @end
 
 @interface AmitiaISHRuntime : NSObject
 
 @property (nonatomic, readonly) AmitiaISHState state;
+@property (nonatomic, readonly) uint64_t currentGeneration;
+@property (nonatomic, copy, readonly, nullable) NSString *currentRootfsPath;
 
 + (instancetype)shared;
 
@@ -51,8 +64,12 @@ typedef NS_ENUM(NSInteger, AmitiaISHNativeError) {
                                                 error:(NSError *_Nullable *_Nullable)error;
 
 - (BOOL)cancelExecution:(NSString *)executionId error:(NSError *_Nullable *_Nullable)error;
+- (BOOL)cancelActiveExecution:(NSError *_Nullable *_Nullable)error;
+- (nullable NSString *)activeExecutionID;
 
 - (void)stop;
+
+- (nullable AmitiaISHRuntimeHealth)health;
 
 @end
 

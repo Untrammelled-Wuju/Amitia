@@ -26,7 +26,7 @@ class DefaultRuntimeManifestVerifierLightTest {
     private fun sampleManifest(): RuntimeManifest = RuntimeManifest(
         schemaVersion = RuntimeManifest.SCHEMA_VERSION,
         runtimeVersion = "1.0.0",
-        sourceCommit = "abc1234567890abc1234567890abc1234567890",
+        sourceCommit = "a".repeat(40),
         packageId = "202608070001",
         packageSha256 = "a".repeat(64),
         target = RuntimeManifestTarget("android", "arm64-v8a", "proot", "linux", "arm64", "ubuntu", "24.0.4"),
@@ -34,11 +34,11 @@ class DefaultRuntimeManifestVerifierLightTest {
         payloads = listOf(RuntimeManifestPayload("p1", "rootfs", "c".repeat(64), 1024L)),
         components = listOf(
             RuntimeManifestComponent("runtime.backend", "1.0.0", "arm64", "backend", "amitia-server", "d".repeat(64), null, "package"),
-            RuntimeManifestComponent("runtime.proot", null, null, "", null, null, null, "android-native"),
+            RuntimeManifestComponent("runtime.proot", null, null, "proot", null, null, null, "android-native"),
         ),
         paths = RuntimeManifestPaths(
-            rootfsHostPath = "",
-            runtimeRootHostPath = "",
+            rootfsHostPath = "/data/.__runtime/rootfs",
+            runtimeRootHostPath = "/data/.__runtime/1.0.0",
             configHostPath = "/data/.__runtime/config",
             dataHostPath = "/data/.__runtime/data",
             cacheHostPath = "/data/.__runtime/cache",
@@ -77,11 +77,11 @@ class DefaultRuntimeManifestVerifierLightTest {
                     architecture = "arm64",
                     root = "backend",
                     entry = "amitia-server",
-                    sha256 = "wrong_sha_early_test",
+                    sha256 = "e".repeat(64),
                     treeSha256 = null,
                     source = "package",
                 ),
-                RuntimeManifestComponent("runtime.proot", null, null, "", null, null, null, "android-native"),
+                RuntimeManifestComponent("runtime.proot", null, null, "proot", null, null, null, "android-native"),
             )
         )
     }

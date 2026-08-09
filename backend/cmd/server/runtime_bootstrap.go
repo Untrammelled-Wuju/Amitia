@@ -100,7 +100,7 @@ func (b *runtimeBootstrap) registerIOSSandboxProviderFactory() error {
 
 	factory := builtin.NewIOSSandboxProviderFactory(
 		builtin.IOSSandboxProviderConfig{
-			Enabled: false,
+			Enabled: true,
 		},
 	)
 

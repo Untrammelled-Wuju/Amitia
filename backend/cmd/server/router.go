@@ -448,7 +448,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		ListenAddress:    config.AppCfg.Server.Host,
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 	}))
-	desktoppetmaintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
+	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
 	return r, nil
 }

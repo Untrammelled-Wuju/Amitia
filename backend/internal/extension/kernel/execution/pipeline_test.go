@@ -60,6 +60,9 @@ func newTestTool(id string) capability.ToolDefinition {
 func newTestInvocation(userID string) capability.ToolInvocationContext {
 	return capability.ToolInvocationContext{
 		InvocationID:   "inv-001",
+		RootID:         "inv-001",
+		TraceID:        "trace-001",
+		OperationID:    "op-001",
 		UserID:         userID,
 		CharacterID:    "char-001",
 		ConversationID: "conv-001",
@@ -381,6 +384,7 @@ func TestPipelineDepthGuard(t *testing.T) {
 	ctx := context.Background()
 	inv := newTestInvocation("user-001")
 	inv.ParentID = "parent-inv"
+	inv.RootID = "root-inv"
 
 	req := ToolExecutionRequest{
 		ToolID:     "test/tool",
@@ -466,8 +470,11 @@ func TestPipelineCancellation(t *testing.T) {
 
 	result := p.Execute(ctx, req)
 
-	if result.Status != capability.ToolResultStatusFailed {
-		t.Fatalf("expected failed status for cancelled context, got %s", result.Status)
+	if result.Status != capability.ToolResultStatusCancelled {
+		t.Fatalf("expected cancelled status for cancelled context, got %s", result.Status)
+	}
+	if result.Error == nil || result.Error.Code != capability.ErrorCodeCancelled {
+		t.Fatalf("expected cancelled error code, got: %v", result.Error)
 	}
 }
 
@@ -854,15 +861,20 @@ func TestResultValidatorOutputSize(t *testing.T) {
 	ctx := context.Background()
 	tool := newTestTool("test/tool")
 
+	inv := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
+		UserID: "user1",
+	})
+
 	result := capability.UnifiedToolResult{
-		InvocationID: "inv-001",
+		InvocationID: inv.InvocationID,
+		ToolID:       "test/tool",
 		Status:       capability.ToolResultStatusSuccess,
 		Content: []capability.ToolContent{
 			{Type: capability.ToolContentText, Text: "this is way too long to fit"},
 		},
 	}
 
-	validated := v.Validate(ctx, tool, result)
+	validated := v.Validate(ctx, tool, inv, result)
 
 	if validated.Status != capability.ToolResultStatusFailed {
 		t.Fatalf("expected failed for oversized result, got %s", validated.Status)

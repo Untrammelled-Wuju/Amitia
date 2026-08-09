@@ -67,10 +67,19 @@ type SandboxResult struct {
 }
 
 type SandboxHealth struct {
-	Healthy         bool
-	Message         string
-	ISHInitialized  bool
-	RootfsInstalled bool
+	Healthy              bool
+	Message              string
+	ISHInitialized       bool
+	RootfsInstalled      bool
+	LifecycleState       string
+	Generation           uint64
+	DesiredRunning       bool
+	RestartRequired      bool
+	RecoveryPending      bool
+	ActiveExecutionID    string
+	RunningRootfsVersion string
+	RunningRootfsDigest  string
+	LastErrorCode        string
 }
 
 type ishBackend struct {

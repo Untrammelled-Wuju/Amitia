@@ -251,32 +251,35 @@ func (f *ToolFacade) executeKernelTool(ctx context.Context, def capability.ToolD
 	if f.executionKernel == nil {
 		return LegacyToolResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &LegacyToolError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
-	invocation := capability.ToolInvocationContext{
-		InvocationID:   fmt.Sprintf("toolfacade-%d-%d", time.Now().UnixNano(), f.counters.Snapshot()["pipeline_executions"]),
-		UserID:         scope.UserID,
-		CharacterID:    scope.CharacterID,
-		ConversationID: scope.ConversationID,
-		ExtensionID:    def.ExtensionID,
-		ModuleID:       def.ModuleID,
-		Source:         capability.InvocationSourceModel,
-		IdempotencyKey: idempotencyKey,
-		TraceID:        scope.TraceID,
-	}
+	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
+		ExternalCallID:  scope.ToolCallID,
+		UserID:          scope.UserID,
+		CharacterID:     scope.CharacterID,
+		ConversationID:  scope.ConversationID,
+		Channel:         scope.Channel,
+		SessionID:       scope.SessionID,
+		ExtensionID:     def.ExtensionID,
+		ModuleID:        def.ModuleID,
+		Source:          capability.InvocationSourceModel,
+		IdempotencyKey:  idempotencyKey,
+		TraceID:         scope.TraceID,
+		OperationID:     scope.RequestID,
+	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),
 		Input:      input,
 		Invocation: invocation,
 	}
 	result := f.executionKernel.Execute(ctx, req)
-	return unifiedResultToLegacy(result, invocation.InvocationID)
+	return unifiedResultToLegacy(result)
 }
 
-func unifiedResultToLegacy(result capability.UnifiedToolResult, invocationID string) LegacyToolResult {
+func unifiedResultToLegacy(result capability.UnifiedToolResult) LegacyToolResult {
 	legacy := LegacyToolResult{
-		RunID:      invocationID,
+		RunID:      result.InvocationID,
 		Status:     string(result.Status),
 		Output:     result.Structured,
-		DurationMS: 0,
+		DurationMS: result.DurationMS,
 	}
 	if len(result.Content) > 0 {
 		text := ""

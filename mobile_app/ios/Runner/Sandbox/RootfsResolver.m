@@ -54,7 +54,7 @@ static NSString * const kStagingSubDirectory = @"amitia/rootfs-staging";
     NSString *manifestPath = [self manifestPathForVersion:version architecture:architecture];
     NSFileManager *fm = [NSFileManager defaultManager];
     BOOL isDir = NO;
-    if ([fm fileExistsAtPath:manifestPath isDirectory:&isDir] || isDir) return nil;
+    if (![fm fileExistsAtPath:manifestPath isDirectory:&isDir] || isDir) return nil;
 
     NSError *err = nil;
     NSData *data = [NSData dataWithContentsOfURL:[NSURL fileURLWithPath:manifestPath] options:0 error:&err];

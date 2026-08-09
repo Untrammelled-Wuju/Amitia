@@ -67,7 +67,7 @@ func TestArbitrationBelowThresholdFallback(t *testing.T) {
 	}
 }
 
-func TestApplyBehaviorCostPenaltiesReducesScore(t *testing.T) {
+func TestApplyBehaviorCostSignals(t *testing.T) {
 	now := time.Now().UTC()
 	history := NewBehaviorHistory(20)
 	history.Record("chat_reply", now.Add(-5*time.Minute), 0.5)
@@ -75,9 +75,12 @@ func TestApplyBehaviorCostPenaltiesReducesScore(t *testing.T) {
 	candidates := []BehaviorCandidate{
 		{ID: "chat_reply", FinalScore: 0.8},
 	}
-	result := ApplyBehaviorCostPenalties(candidates, history, now)
-	if result[0].FinalScore >= 0.8 {
-		t.Fatalf("成本惩罚应降低分数, 实际 %f", result[0].FinalScore)
+	result := ApplyBehaviorCostSignals(candidates, history, now)
+	if result[0].RepeatPenalty == 0 && result[0].FatiguePenalty == 0 {
+		t.Fatalf("expected repeat or fatigue penalty > 0, got repeat=%f fatigue=%f", result[0].RepeatPenalty, result[0].FatiguePenalty)
+	}
+	if result[0].FinalScore != 0.8 {
+		t.Fatalf("ApplyBehaviorCostSignals should not modify FinalScore, got %f", result[0].FinalScore)
 	}
 }
 

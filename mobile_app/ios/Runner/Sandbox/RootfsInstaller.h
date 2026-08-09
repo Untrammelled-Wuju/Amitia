@@ -1,21 +1,35 @@
 #import <Foundation/Foundation.h>
 #import "RootfsDescriptor.h"
+#import "RootfsResolver.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 typedef NS_ENUM(NSInteger, RootfsInstallStep) {
     RootfsInstallStepPending = 0,
+    RootfsInstallStepValidating,
+    RootfsInstallStepResolvingSource,
     RootfsInstallStepDownloading,
     RootfsInstallStepVerifying,
+    RootfsInstallStepStaging,
     RootfsInstallStepExtracting,
-    RootfsInstallStepValidating,
-    RootfsInstallStepActivating,
+    RootfsInstallStepValidatingPackage,
+    RootfsInstallStepPreparingTarget,
+    RootfsInstallStepAtomicMove,
+    RootfsInstallStepWritingManifest,
+    RootfsInstallStepAtomicActivation,
+    RootfsInstallStepCleanup,
     RootfsInstallStepComplete,
     RootfsInstallStepFailed
 };
 
 typedef void(^RootfsInstallProgressBlock)(RootfsInstallStep step, double fraction, NSString *_Nullable message);
-typedef void(^RootfsInstallCompletionBlock)(BOOL success, RootfsDescriptor *_Nullable descriptor, NSError *_Nullable error);
+
+@interface RootfsInstallResult : NSObject
+@property (nonatomic, strong, readonly) RootfsDescriptor *descriptor;
+@property (nonatomic, readonly) BOOL activated;
+@property (nonatomic, readonly) BOOL requiresSandboxRestart;
+- (instancetype)initWithDescriptor:(RootfsDescriptor *)descriptor activated:(BOOL)activated requiresRestart:(BOOL)restart;
+@end
 
 @interface RootfsInstallRequest : NSObject
 @property (nonatomic, copy) NSString *version;
@@ -24,24 +38,30 @@ typedef void(^RootfsInstallCompletionBlock)(BOOL success, RootfsDescriptor *_Nul
 @property (nonatomic, copy, nullable) NSURL *remoteURL;
 @property (nonatomic, copy, nullable) NSURL *localBundleURL;
 @property (nonatomic) BOOL allowCellularDownload;
+@property (nonatomic) BOOL forceReplace;
+@property (nonatomic) int64_t maxArchiveBytes;
+@property (nonatomic, copy, nullable) NSString *packageFormat;
+- (instancetype)init;
 @end
 
 @interface RootfsInstaller : NSObject
 
 @property (nonatomic, strong, readonly) RootfsResolver *resolver;
 @property (nonatomic, readonly) BOOL isInstalling;
+@property (nonatomic, copy, readonly, nullable) NSString *currentInstallID;
+@property (nonatomic, readonly) BOOL needsStoragePreflight;
 
 - (instancetype)initWithResolver:(RootfsResolver *)resolver;
 
 - (void)installRootfsWithRequest:(RootfsInstallRequest *)request
                         progress:(nullable RootfsInstallProgressBlock)progress
-                      completion:(RootfsInstallCompletionBlock)completion;
+                      completion:(void(^)(BOOL success, RootfsInstallResult *_Nullable result, NSError *_Nullable error))completion;
 
 - (void)cancelInstallation;
 
 - (BOOL)verifyInstalledRootfs:(RootfsDescriptor *)descriptor error:(NSError *_Nullable *_Nullable)error;
-
 - (BOOL)deactivateRootfsVersion:(NSString *)version architecture:(NSString *)architecture error:(NSError *_Nullable *_Nullable)error;
+- (BOOL)isRootfsActive;
 
 @end
 
@@ -59,7 +79,15 @@ typedef NS_ERROR_ENUM(RootfsInstallerErrorDomain, RootfsInstallerError) {
     RootfsInstallerErrorInsufficientStorage,
     RootfsInstallerErrorActivationFailed,
     RootfsInstallerErrorCancelled,
-    RootfsInstallerErrorConcurrentInstallation
+    RootfsInstallerErrorConcurrentInstallation,
+    RootfsInstallerErrorUnsupportedFormat,
+    RootfsInstallerErrorManifestInvalid,
+    RootfsInstallerErrorVersionConflict,
+    RootfsInstallerErrorArchiveTooLarge,
+    RootfsInstallerErrorExtractedSizeExceeded,
+    RootfsInstallerErrorTooManyEntries,
+    RootfsInstallerErrorRemoteRedirectRejected,
+    RootfsInstallerErrorDigestMalformed
 };
 
 NS_ASSUME_NONNULL_END

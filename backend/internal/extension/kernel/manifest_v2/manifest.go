@@ -346,7 +346,7 @@ func (m Manifest) Validate() ValidationReport {
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
 		"ui_context_action": true, "ui_desktop": true, "resource": true,
-		"game_plugin": true,
+		"game_plugin": true, "desktop_pet_plugin": true,
 	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
@@ -393,6 +393,16 @@ func (m Manifest) Validate() ValidationReport {
 			}
 			if c.Name.Default == "" {
 				report.AddError(cpath+".name.default", "missing", "contribution name required")
+			}
+			if c.Kind == "game_plugin" {
+				if err := validateGamePluginContribution(c.Spec, cpath, moduleIDs); err != nil {
+					report.AddError(cpath+".spec", "invalid_game_plugin", err.Error())
+				}
+			}
+			if c.Kind == "desktop_pet_plugin" {
+				if err := validateDesktopPetPluginContribution(c.Spec, cpath, moduleIDs); err != nil {
+					report.AddError(cpath+".spec", "invalid_desktop_pet_plugin", err.Error())
+				}
 			}
 		}
 	}
@@ -702,7 +712,7 @@ const manifestV2Schema = `{
               "required": ["id", "kind", "name"],
               "properties": {
                 "id": {"type": "string", "minLength": 1},
-                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "resource", "game_plugin"]},
+                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "resource", "game_plugin", "desktop_pet_plugin"]},
                 "name": {
                   "type": "object",
                   "required": ["default"],
@@ -993,6 +1003,34 @@ func ValidateFile(filePath string) (*Manifest, *ValidationReport) {
 	r := m.Validate()
 	r.AttachFile(filePath)
 	return &m, &r
+}
+
+func validateGamePluginContribution(spec map[string]any, cpath string, moduleIDs map[string]bool) error {
+	if spec == nil {
+		return fmt.Errorf("game_plugin requires spec with protocolVersion")
+	}
+	protocolVersion, ok := spec["protocolVersion"].(string)
+	if !ok || protocolVersion == "" {
+		return fmt.Errorf("game_plugin requires protocolVersion")
+	}
+	if runtimeModuleID, ok := spec["runtimeModuleId"].(string); ok && runtimeModuleID != "" {
+		if !moduleIDs[runtimeModuleID] {
+			return fmt.Errorf("game_plugin references unknown module: %s", runtimeModuleID)
+		}
+	}
+	return nil
+}
+
+func validateDesktopPetPluginContribution(spec map[string]any, cpath string, moduleIDs map[string]bool) error {
+	if spec == nil {
+		return nil
+	}
+	if runtimeModuleID, ok := spec["runtimeModuleId"].(string); ok && runtimeModuleID != "" {
+		if !moduleIDs[runtimeModuleID] {
+			return fmt.Errorf("desktop_pet_plugin references unknown module: %s", runtimeModuleID)
+		}
+	}
+	return nil
 }
 
 func offsetToLineColumn(data []byte, offset int64) (int, int) {

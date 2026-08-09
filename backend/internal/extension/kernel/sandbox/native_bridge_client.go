@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package sandbox
 
 import (
@@ -6,7 +8,16 @@ import (
 )
 
 type iosNativeBridgeClient struct {
-	state BackendAvailability
+	state        BackendAvailability
+	lifecycle    string
+	generation   uint64
+	desiredRun   bool
+	restartReq   bool
+	recoveryPend bool
+	execID       string
+	rootVer      string
+	rootDigest   string
+	lastErr      string
 }
 
 func (b *iosNativeBridgeClient) Availability(_ context.Context) BackendAvailability {
@@ -17,12 +28,19 @@ func (b *iosNativeBridgeClient) Start(ctx context.Context, cfg SandboxConfig) er
 	if cfg.RootfsURI == "" {
 		return fmt.Errorf("iSH native bridge: rootfs path is required")
 	}
+	b.lifecycle = "starting"
 	b.state = BackendStarting
+	b.desiredRun = true
+	b.restartReq = false
 	return nil
 }
 
 func (b *iosNativeBridgeClient) Stop(_ context.Context) error {
 	b.state = BackendUnavailable
+	b.lifecycle = "idle"
+	b.desiredRun = false
+	b.recoveryPend = false
+	b.execID = ""
 	return nil
 }
 
@@ -38,10 +56,19 @@ func (b *iosNativeBridgeClient) Cancel(_ context.Context, _ string) error {
 
 func (b *iosNativeBridgeClient) Health(_ context.Context) SandboxHealth {
 	return SandboxHealth{
-		Healthy:         b.state == BackendRunning,
-		Message:         b.state.String(),
-		ISHInitialized:  false,
-		RootfsInstalled: false,
+		Healthy:              b.state == BackendRunning,
+		Message:              b.lifecycle,
+		ISHInitialized:       b.lifecycle == "running",
+		RootfsInstalled:      false,
+		LifecycleState:       b.lifecycle,
+		Generation:           b.generation,
+		DesiredRunning:       b.desiredRun,
+		RestartRequired:      b.restartReq,
+		RecoveryPending:      b.recoveryPend,
+		ActiveExecutionID:    b.execID,
+		RunningRootfsVersion: b.rootVer,
+		RunningRootfsDigest:  b.rootDigest,
+		LastErrorCode:        b.lastErr,
 	}
 }
 
@@ -73,7 +100,11 @@ func (b *unavailableNativeBridge) Cancel(_ context.Context, _ string) error {
 
 func (b *unavailableNativeBridge) Health(_ context.Context) SandboxHealth {
 	return SandboxHealth{
-		Healthy: false,
-		Message: fmt.Sprintf("unavailable: %s", b.reason),
+		Healthy:         false,
+		Message:         fmt.Sprintf("unavailable: %s", b.reason),
+		LifecycleState:  "idle",
+		DesiredRunning:  false,
+		RestartRequired: false,
+		RecoveryPending: false,
 	}
 }

@@ -195,3 +195,26 @@ backend/cmd/data/
 **/local-token
 data.db/
 backend/data.db/
+
+# Backend Linux build artifacts
+backend/server_linux_amd64
+backend/server_linux_arm64
+
+# Backend test build artifacts
+backend/qdrantprocess.test
+backend/qdrantprocess.test.exe
+
+# Temp files at root
+tmp_check.js
+tmp_check_db.js
+TEMPgradle_out.txt
+:TEMPgradle_out.txt
+
+# Erroneous path files
+backend/D:*
+
+# game-plugin SDK node_modules
+backend/pkg/gameplugin/sdk/game-plugin/node_modules/
+
+# Runtime build outputs
+runtime/build/android/

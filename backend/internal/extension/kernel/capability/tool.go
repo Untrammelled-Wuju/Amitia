@@ -49,22 +49,6 @@ type ScopeRule struct {
 
 type LegacyToolExecutor func(ctx context.Context, input json.RawMessage, scope map[string]string) (json.RawMessage, error)
 
-type ToolInvocation struct {
-	ToolID         string          `json:"toolId"`
-	Input          json.RawMessage `json:"input"`
-	IdempotencyKey string          `json:"idempotencyKey,omitempty"`
-	TraceID        string          `json:"traceId,omitempty"`
-}
-
-type ToolResult struct {
-	InvocationID string          `json:"invocationId"`
-	Status       string          `json:"status"`
-	Output       json.RawMessage `json:"output,omitempty"`
-	Error        string          `json:"error,omitempty"`
-	VisibleText  string          `json:"visibleText,omitempty"`
-	DurationMS   int64           `json:"durationMs"`
-}
-
 func BuildToolID(source ToolSource, namespace, name string) string {
 	return BuildCapabilityID(CapabilitySource(source), namespace, name)
 }

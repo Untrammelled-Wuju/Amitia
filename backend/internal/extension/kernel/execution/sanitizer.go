@@ -23,6 +23,8 @@ func (s *Sanitizer) RegisterSensitiveField(name string) {
 }
 
 func (s *Sanitizer) Sanitize(ctx context.Context, result capability.UnifiedToolResult) capability.UnifiedToolResult {
+	result = result.Clone()
+
 	if result.Error != nil {
 		result.Error = s.sanitizeError(result.Error)
 	}

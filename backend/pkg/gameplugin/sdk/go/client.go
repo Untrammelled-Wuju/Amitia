@@ -87,7 +87,7 @@ func (c *Client) Transport() Transport {
 
 func (c *Client) SendRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
 	if err := protocol.ValidatePluginMethod(method); err != nil {
-		return protocol.Envelope{}, NewValidationError("invalid method: %w", err)
+		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
 	}
 	if protocol.IsReservedNamespace(method) {
 		return protocol.Envelope{}, NewValidationError("method '%s' uses reserved namespace", method)
@@ -99,7 +99,7 @@ func (c *Client) SendRequest(ctx context.Context, method string, payload any, op
 	}
 
 	if err := c.transport.Send(ctx, envelope); err != nil {
-		return protocol.Envelope{}, NewTransportError("send request failed: %w", err)
+		return protocol.Envelope{}, NewTransportError("send request failed: %v", err)
 	}
 	return envelope, nil
 }
@@ -111,14 +111,14 @@ func (c *Client) SendResponse(ctx context.Context, request protocol.Envelope, pa
 	}
 
 	if err := c.transport.Send(ctx, envelope); err != nil {
-		return protocol.Envelope{}, NewTransportError("send response failed: %w", err)
+		return protocol.Envelope{}, NewTransportError("send response failed: %v", err)
 	}
 	return envelope, nil
 }
 
 func (c *Client) SendNotification(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
 	if err := protocol.ValidatePluginMethod(method); err != nil {
-		return protocol.Envelope{}, NewValidationError("invalid method: %w", err)
+		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
 	}
 	if protocol.IsReservedNamespace(method) {
 		return protocol.Envelope{}, NewValidationError("method '%s' uses reserved namespace", method)
@@ -130,7 +130,7 @@ func (c *Client) SendNotification(ctx context.Context, method string, payload an
 	}
 
 	if err := c.transport.Send(ctx, envelope); err != nil {
-		return protocol.Envelope{}, NewTransportError("send notification failed: %w", err)
+		return protocol.Envelope{}, NewTransportError("send notification failed: %v", err)
 	}
 	return envelope, nil
 }
@@ -142,7 +142,7 @@ func (c *Client) SendError(ctx context.Context, request protocol.Envelope, code 
 	}
 
 	if err := c.transport.Send(ctx, envelope); err != nil {
-		return protocol.Envelope{}, NewTransportError("send error failed: %w", err)
+		return protocol.Envelope{}, NewTransportError("send error failed: %v", err)
 	}
 	return envelope, nil
 }
@@ -152,20 +152,27 @@ func (c *Client) NewRequest(method string, payload any, opts ...MessageOption) (
 
 	var rawPayload json.RawMessage
 	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return protocol.Envelope{}, NewEncodeError("marshal payload failed: %w", err)
+		switch v := payload.(type) {
+		case json.RawMessage:
+			rawPayload = v
+		case []byte:
+			rawPayload = v
+		default:
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return protocol.Envelope{}, NewEncodeError("marshal payload failed: %v", err)
+			}
+			rawPayload = data
 		}
-		rawPayload = data
 	}
 
 	envelope := protocol.Envelope{
-		Protocol: protocol.ProtocolVersion,
-		Type:     protocol.MessageTypeRequest,
-		ID:       id,
-		Method:   method,
-		Payload:  rawPayload,
-		PluginID: c.pluginID,
+		Protocol:  protocol.ProtocolVersion,
+		Type:      protocol.MessageTypeRequest,
+		ID:        id,
+		Method:    method,
+		Payload:   rawPayload,
+		PluginID:  c.pluginID,
 		RuntimeID: c.runtimeID,
 		ServiceID: c.serviceID,
 	}
@@ -175,7 +182,7 @@ func (c *Client) NewRequest(method string, payload any, opts ...MessageOption) (
 	}
 
 	if err := envelope.Validate(); err != nil {
-		return protocol.Envelope{}, NewValidationError("envelope validation failed: %w", err)
+		return protocol.Envelope{}, NewValidationError("envelope validation failed: %v", err)
 	}
 
 	return envelope, nil
@@ -186,11 +193,18 @@ func (c *Client) NewResponse(request protocol.Envelope, payload any, opts ...Mes
 
 	var rawPayload json.RawMessage
 	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return protocol.Envelope{}, NewEncodeError("marshal payload failed: %w", err)
+		switch v := payload.(type) {
+		case json.RawMessage:
+			rawPayload = v
+		case []byte:
+			rawPayload = v
+		default:
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return protocol.Envelope{}, NewEncodeError("marshal payload failed: %v", err)
+			}
+			rawPayload = data
 		}
-		rawPayload = data
 	}
 
 	envelope := protocol.Envelope{
@@ -209,7 +223,7 @@ func (c *Client) NewResponse(request protocol.Envelope, payload any, opts ...Mes
 	}
 
 	if err := envelope.Validate(); err != nil {
-		return protocol.Envelope{}, NewValidationError("envelope validation failed: %w", err)
+		return protocol.Envelope{}, NewValidationError("envelope validation failed: %v", err)
 	}
 
 	return envelope, nil
@@ -220,20 +234,27 @@ func (c *Client) NewNotification(method string, payload any, opts ...MessageOpti
 
 	var rawPayload json.RawMessage
 	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return protocol.Envelope{}, NewEncodeError("marshal payload failed: %w", err)
+		switch v := payload.(type) {
+		case json.RawMessage:
+			rawPayload = v
+		case []byte:
+			rawPayload = v
+		default:
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return protocol.Envelope{}, NewEncodeError("marshal payload failed: %v", err)
+			}
+			rawPayload = data
 		}
-		rawPayload = data
 	}
 
 	envelope := protocol.Envelope{
-		Protocol: protocol.ProtocolVersion,
-		Type:     protocol.MessageTypeNotification,
-		ID:       id,
-		Method:   method,
-		Payload:  rawPayload,
-		PluginID: c.pluginID,
+		Protocol:  protocol.ProtocolVersion,
+		Type:      protocol.MessageTypeNotification,
+		ID:        id,
+		Method:    method,
+		Payload:   rawPayload,
+		PluginID:  c.pluginID,
 		RuntimeID: c.runtimeID,
 		ServiceID: c.serviceID,
 	}
@@ -243,7 +264,7 @@ func (c *Client) NewNotification(method string, payload any, opts ...MessageOpti
 	}
 
 	if err := envelope.Validate(); err != nil {
-		return protocol.Envelope{}, NewValidationError("envelope validation failed: %w", err)
+		return protocol.Envelope{}, NewValidationError("envelope validation failed: %v", err)
 	}
 
 	return envelope, nil
@@ -256,13 +277,13 @@ func (c *Client) NewError(request protocol.Envelope, code protocol.ErrorCode, me
 	if data != nil {
 		d, err := json.Marshal(data)
 		if err != nil {
-			return protocol.Envelope{}, NewEncodeError("marshal error data failed: %w", err)
+			return protocol.Envelope{}, NewEncodeError("marshal error data failed: %v", err)
 		}
 		rawData = d
 	}
 
 	if err := protocol.ValidateErrorCode(code); err != nil {
-		return protocol.Envelope{}, NewValidationError("invalid error code: %w", err)
+		return protocol.Envelope{}, NewValidationError("invalid error code: %v", err)
 	}
 
 	envelope := protocol.Envelope{
@@ -286,7 +307,7 @@ func (c *Client) NewError(request protocol.Envelope, code protocol.ErrorCode, me
 	}
 
 	if err := envelope.Validate(); err != nil {
-		return protocol.Envelope{}, NewValidationError("envelope validation failed: %w", err)
+		return protocol.Envelope{}, NewValidationError("envelope validation failed: %v", err)
 	}
 
 	return envelope, nil
@@ -295,7 +316,7 @@ func (c *Client) NewError(request protocol.Envelope, code protocol.ErrorCode, me
 func (c *Client) Receive(ctx context.Context) (protocol.Envelope, error) {
 	envelope, err := c.transport.Receive(ctx)
 	if err != nil {
-		return protocol.Envelope{}, NewTransportError("receive failed: %w", err)
+		return protocol.Envelope{}, NewTransportError("receive failed: %v", err)
 	}
 	return envelope, nil
 }

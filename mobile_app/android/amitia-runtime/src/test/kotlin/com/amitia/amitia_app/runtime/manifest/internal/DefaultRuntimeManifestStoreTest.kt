@@ -20,7 +20,7 @@ class DefaultRuntimeManifestStoreTest {
     private fun sampleManifest(): RuntimeManifest = RuntimeManifest(
         schemaVersion = RuntimeManifest.SCHEMA_VERSION,
         runtimeVersion = "1.0.0",
-        sourceCommit = "abc1234567890abc1234567890abc1234567890",
+        sourceCommit = "a".repeat(40),
         packageId = "202608070001",
         packageSha256 = "a".repeat(64),
         target = RuntimeManifestTarget("android", "arm64-v8a", "proot", "linux", "arm64", "ubuntu", "24.0.4"),

@@ -238,3 +238,46 @@ func TestOnlyThreeDomainsAllowed(t *testing.T) {
 		}
 	}
 }
+
+func TestDomainFromContributionKinds(t *testing.T) {
+	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindTool}); d != ExtensionDomainGeneral {
+		t.Errorf("expected general for tool contribution, got %s", d)
+	}
+	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindWorkflow}); d != ExtensionDomainGeneral {
+		t.Errorf("expected general for workflow contribution, got %s", d)
+	}
+	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindGamePlugin}); d != ExtensionDomainGame {
+		t.Errorf("expected game for game_plugin contribution, got %s", d)
+	}
+	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindTool, ContributionKindGamePlugin}); d != ExtensionDomainGame {
+		t.Errorf("expected game when game_plugin present, got %s", d)
+	}
+	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindDesktopPetPlugin}); d != ExtensionDomainDesktopPet {
+		t.Errorf("expected desktop_pet for desktop_pet_plugin contribution, got %s", d)
+	}
+	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindTool, ContributionKindDesktopPetPlugin}); d != ExtensionDomainDesktopPet {
+		t.Errorf("expected desktop_pet when desktop_pet_plugin present, got %s", d)
+	}
+}
+
+func TestDomainFromContributionKindsConflict(t *testing.T) {
+	d := DomainFromContributionKinds([]ContributionKind{ContributionKindGamePlugin, ContributionKindDesktopPetPlugin})
+	if d != ExtensionDomainGeneral {
+		t.Errorf("expected general for game+desktop_pet conflict, got %s", d)
+	}
+}
+
+func TestDomainConflict(t *testing.T) {
+	if DomainConflict([]ContributionKind{ContributionKindGamePlugin}) {
+		t.Errorf("expected no conflict for single game_plugin")
+	}
+	if DomainConflict([]ContributionKind{ContributionKindDesktopPetPlugin}) {
+		t.Errorf("expected no conflict for single desktop_pet_plugin")
+	}
+	if !DomainConflict([]ContributionKind{ContributionKindGamePlugin, ContributionKindDesktopPetPlugin}) {
+		t.Errorf("expected conflict when both game_plugin and desktop_pet_plugin present")
+	}
+	if !DomainConflict([]ContributionKind{ContributionKindGamePlugin, ContributionKindDesktopPetPlugin, ContributionKindTool}) {
+		t.Errorf("expected conflict when game_plugin and desktop_pet_plugin present with other kinds")
+	}
+}

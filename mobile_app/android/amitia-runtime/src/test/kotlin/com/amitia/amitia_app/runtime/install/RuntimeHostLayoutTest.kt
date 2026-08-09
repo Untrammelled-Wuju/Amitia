@@ -20,10 +20,12 @@ class RuntimeHostLayoutTest {
         return DefaultRuntimeHostLayout(controlBase, dataBase)
     }
 
+    private fun unixPath(file: File): String = file.absolutePath.replace('\\', '/')
+
     @Test
     fun controlRoot_pointsToNoBackupFilesDirSubdirectory() {
         val layout = createLayout()
-        assertTrue(layout.controlRoot.absolutePath.contains("amitia-runtime"))
+        assertTrue(unixPath(layout.controlRoot).contains("amitia-runtime"))
     }
 
     @Test
@@ -33,7 +35,7 @@ class RuntimeHostLayoutTest {
         for (root in controlRoots) {
             assertTrue(
                 "Control root ${root.absolutePath} must be within ${layout.controlRoot}",
-                root.absolutePath.startsWith(layout.controlRoot.absolutePath)
+                unixPath(root).startsWith(unixPath(layout.controlRoot))
             )
         }
     }
@@ -45,7 +47,7 @@ class RuntimeHostLayoutTest {
         for (root in dataRoots) {
             assertFalse(
                 "Data root ${root.absolutePath} must not be within control root",
-                root.absolutePath.startsWith(layout.controlRoot.absolutePath)
+                unixPath(root).startsWith(unixPath(layout.controlRoot))
             )
         }
     }
@@ -54,7 +56,7 @@ class RuntimeHostLayoutTest {
     fun runtimeVersionRoot_returnsVersionedPath() {
         val layout = createLayout()
         val versionRoot = layout.runtimeVersionRoot("1.0.0")
-        assertTrue(versionRoot.absolutePath.contains("versions/1.0.0"))
+        assertTrue(unixPath(versionRoot).contains("versions/1.0.0"))
     }
 
     @Test
@@ -81,73 +83,75 @@ class RuntimeHostLayoutTest {
     fun installReceiptFile_returnsCorrectPath() {
         val layout = createLayout()
         val receiptFile = layout.installReceiptFile("1.0.0")
-        assertTrue(receiptFile.absolutePath.contains("install-receipts/1.0.0.json"))
+        assertTrue(unixPath(receiptFile).contains("install-receipts/1.0.0.json"))
     }
 
     @Test
     fun activeRuntimeFile_returnsCorrectPath() {
         val layout = createLayout()
         val activeFile = layout.activeRuntimeFile
-        assertTrue(activeFile.absolutePath.contains("active-runtime.json"))
-        assertTrue(activeFile.absolutePath.startsWith(layout.metadataRoot.absolutePath))
+        assertTrue(unixPath(activeFile).contains("active-runtime.json"))
+        assertTrue(unixPath(activeFile).startsWith(unixPath(layout.metadataRoot)))
     }
 
     @Test
     fun runtimeManifestFile_returnsCorrectPath() {
         val layout = createLayout()
         val manifestFile = layout.runtimeManifestFile
-        assertTrue(manifestFile.absolutePath.contains("runtime-manifest.json"))
+        assertTrue(unixPath(manifestFile).contains("runtime-manifest.json"))
     }
 
     @Test
     fun runtimeManifestShaFile_returnsCorrectPath() {
         val layout = createLayout()
         val shaFile = layout.runtimeManifestShaFile
-        assertTrue(shaFile.absolutePath.contains("runtime-manifest.json.sha256"))
+        assertTrue(unixPath(shaFile).contains("runtime-manifest.json.sha256"))
     }
 
     @Test
     fun securityDir_returnsCorrectPath() {
         val layout = createLayout()
         val securityDir = layout.securityDir()
-        assertTrue(securityDir.absolutePath.contains("security"))
-        assertTrue(securityDir.absolutePath.startsWith(layout.dataRoot.absolutePath))
+        assertTrue(unixPath(securityDir).contains("security"))
+        assertTrue(unixPath(securityDir).startsWith(unixPath(layout.dataRoot)))
     }
 
     @Test
     fun localTokenFile_returnsCorrectPath() {
         val layout = createLayout()
         val tokenFile = layout.localTokenFile()
-        assertTrue(tokenFile.absolutePath.contains("security/local-token"))
+        assertTrue(unixPath(tokenFile).contains("security/local-token"))
     }
 
     @Test
     fun qdrantDataDir_returnsCorrectPath() {
         val layout = createLayout()
         val qdrantDir = layout.qdrantDataDir()
-        assertTrue(qdrantDir.absolutePath.contains("providers/qdrant"))
+        assertTrue(unixPath(qdrantDir).contains("providers/qdrant"))
     }
 
     @Test
     fun nodeDataDir_returnsCorrectPath() {
         val layout = createLayout()
         val nodeDir = layout.nodeDataDir()
-        assertTrue(nodeDir.absolutePath.contains("/node"))
+        assertTrue(unixPath(nodeDir).contains("/node"))
     }
 
     @Test
     fun nodeCacheDir_returnsCorrectPath() {
         val layout = createLayout()
         val nodeCacheDir = layout.nodeCacheDir()
-        assertTrue(nodeCacheDir.absolutePath.contains("cache/node"))
+        assertTrue(unixPath(nodeCacheDir).contains("cache/node"))
     }
 
     @Test
     fun paths_areStableAcrossInstances() {
-        val layout1 = createLayout()
-        val layout2 = createLayout()
-        assertEquals(layout1.controlRoot.absolutePath, layout2.controlRoot.absolutePath)
-        assertEquals(layout1.runtimeVersionRoot("1.0.0").absolutePath, layout2.runtimeVersionRoot("1.0.0").absolutePath)
+        val controlBase = tempFolder.newFolder("shared-noBackup")
+        val dataBase = tempFolder.newFolder("shared-files")
+        val layout1 = DefaultRuntimeHostLayout(controlBase, dataBase)
+        val layout2 = DefaultRuntimeHostLayout(controlBase, dataBase)
+        assertEquals(unixPath(layout1.controlRoot), unixPath(layout2.controlRoot))
+        assertEquals(unixPath(layout1.runtimeVersionRoot("1.0.0")), unixPath(layout2.runtimeVersionRoot("1.0.0")))
     }
 
     private fun fail(message: String) {

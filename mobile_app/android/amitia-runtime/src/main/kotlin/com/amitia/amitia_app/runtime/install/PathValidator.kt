@@ -14,7 +14,9 @@ internal object PathValidator {
         if (version.contains(":")) return false
         if (version.contains("/")) return false
         if (version.contains("\\")) return false
-        return VALID_VERSION_PATTERN.matches(version)
+        if (!VALID_VERSION_PATTERN.matches(version)) return false
+        if (!version.any { it.isDigit() }) return false
+        return true
     }
 
     fun isWithin(child: File, parent: File): Boolean {

@@ -31,13 +31,13 @@ func (d Descriptor) Validate() error {
 		return NewValidationError("invalid protocol version: %s", d.ProtocolVersion)
 	}
 	if err := protocol.ValidateServices(d.Services); err != nil {
-		return NewValidationError("services validation failed: %w", err)
+		return NewValidationError("services validation failed: %v", err)
 	}
 	if err := protocol.ValidateChannels(d.Channels); err != nil {
-		return NewValidationError("channels validation failed: %w", err)
+		return NewValidationError("channels validation failed: %v", err)
 	}
 	if err := protocol.ValidateCapabilities(d.Capabilities); err != nil {
-		return NewValidationError("capabilities validation failed: %w", err)
+		return NewValidationError("capabilities validation failed: %v", err)
 	}
 	return nil
 }

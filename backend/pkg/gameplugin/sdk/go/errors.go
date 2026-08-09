@@ -5,11 +5,11 @@ import "fmt"
 type SDKErrorCode string
 
 const (
-	ErrorProtocol    SDKErrorCode = "protocol_error"
-	ErrorTransport   SDKErrorCode = "transport_error"
-	ErrorEncode      SDKErrorCode = "encode_error"
-	ErrorDecode      SDKErrorCode = "decode_error"
-	ErrorValidation  SDKErrorCode = "validation_error"
+	ErrorProtocol   SDKErrorCode = "protocol_error"
+	ErrorTransport  SDKErrorCode = "transport_error"
+	ErrorEncode     SDKErrorCode = "encode_error"
+	ErrorDecode     SDKErrorCode = "decode_error"
+	ErrorValidation SDKErrorCode = "validation_error"
 )
 
 type SDKError struct {
@@ -32,34 +32,42 @@ func (e SDKError) Unwrap() error {
 func NewProtocolError(msg string, args ...interface{}) SDKError {
 	return SDKError{
 		Code:    ErrorProtocol,
-		Message: fmt.Sprintf(msg, args...),
+		Message: fmt.Sprint(fmt.Sprintf(msg, args...)),
 	}
 }
 
 func NewTransportError(msg string, args ...interface{}) SDKError {
 	return SDKError{
 		Code:    ErrorTransport,
-		Message: fmt.Sprintf(msg, args...),
+		Message: fmt.Sprint(fmt.Sprintf(msg, args...)),
 	}
 }
 
 func NewEncodeError(msg string, args ...interface{}) SDKError {
 	return SDKError{
 		Code:    ErrorEncode,
-		Message: fmt.Sprintf(msg, args...),
+		Message: fmt.Sprint(fmt.Sprintf(msg, args...)),
 	}
 }
 
 func NewDecodeError(msg string, args ...interface{}) SDKError {
 	return SDKError{
 		Code:    ErrorDecode,
-		Message: fmt.Sprintf(msg, args...),
+		Message: fmt.Sprint(fmt.Sprintf(msg, args...)),
 	}
 }
 
 func NewValidationError(msg string, args ...interface{}) SDKError {
 	return SDKError{
 		Code:    ErrorValidation,
-		Message: fmt.Sprintf(msg, args...),
+		Message: fmt.Sprint(fmt.Sprintf(msg, args...)),
+	}
+}
+
+func NewProtocolErrorWithCause(code SDKErrorCode, msg string, cause error) SDKError {
+	return SDKError{
+		Code:    code,
+		Message: msg,
+		Cause:   cause,
 	}
 }

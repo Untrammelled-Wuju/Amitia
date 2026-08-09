@@ -15,7 +15,7 @@ type IDGenerator interface {
 type UUIDGenerator struct{}
 
 func (g UUIDGenerator) NewID() string {
-	return uuid.New().string()
+	return uuid.New().String()
 }
 
 type TimestampGenerator struct {

@@ -377,6 +377,7 @@ const (
 	ContributionKindBackgroundService ContributionKind = "background_service"
 	ContributionKindProvider          ContributionKind = "provider"
 	ContributionKindGamePlugin        ContributionKind = "game_plugin"
+	ContributionKindDesktopPetPlugin  ContributionKind = "desktop_pet_plugin"
 )
 
 type ContributionDefinition struct {

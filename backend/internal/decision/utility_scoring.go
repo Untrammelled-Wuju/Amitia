@@ -1,8 +1,6 @@
 package decision
 
-import (
-	"sort"
-)
+// Package-level variables to avoid import of sort if not needed elsewhere
 
 type UtilityObjective string
 
@@ -56,7 +54,7 @@ type UtilityScoringContext struct {
 	Life         LifeSnapshot
 }
 
-func ScoreWithMultiObjective(candidates []BehaviorCandidate, ctx UtilityScoringContext, weights UtilityWeightConfig) []MultiObjectiveResult {
+func EvaluateCandidateUtilities(candidates []BehaviorCandidate, ctx UtilityScoringContext, weights UtilityWeightConfig) []MultiObjectiveResult {
 	results := make([]MultiObjectiveResult, 0, len(candidates))
 	for _, candidate := range candidates {
 		result := MultiObjectiveResult{
@@ -120,10 +118,6 @@ func ScoreWithMultiObjective(candidates []BehaviorCandidate, ctx UtilityScoringC
 
 		results = append(results, result)
 	}
-
-	sort.SliceStable(results, func(i, j int) bool {
-		return results[i].Composite > results[j].Composite
-	})
 
 	return results
 }

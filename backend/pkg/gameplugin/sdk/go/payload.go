@@ -12,7 +12,7 @@ func MarshalPayload(v any) (json.RawMessage, error) {
 	}
 	data, err := json.Marshal(v)
 	if err != nil {
-		return nil, NewEncodeError("failed to marshal payload: %w", err)
+		return nil, NewEncodeError("failed to marshal payload: %v", err)
 	}
 	return data, nil
 }
@@ -23,7 +23,7 @@ func DecodePayload[T any](message protocol.Envelope) (T, error) {
 		return result, nil
 	}
 	if err := json.Unmarshal(message.Payload, &result); err != nil {
-		return result, NewDecodeError("failed to decode payload: %w", err)
+		return result, NewDecodeError("failed to decode payload: %v", err)
 	}
 	return result, nil
 }

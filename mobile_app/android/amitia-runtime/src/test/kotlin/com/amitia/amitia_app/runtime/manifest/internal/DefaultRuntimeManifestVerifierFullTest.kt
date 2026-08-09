@@ -26,16 +26,16 @@ class DefaultRuntimeManifestVerifierFullTest {
     private fun sampleManifest(): RuntimeManifest = RuntimeManifest(
         schemaVersion = RuntimeManifest.SCHEMA_VERSION,
         runtimeVersion = "1.0.0",
-        sourceCommit = "abc1234567890abc1234567890abc1234567890",
+        sourceCommit = "a".repeat(40),
         packageId = "202608070001",
         packageSha256 = "a".repeat(64),
         target = RuntimeManifestTarget("android", "arm64-v8a", "proot", "linux", "arm64", "ubuntu", "24.0.4"),
         installation = RuntimeManifestInstallation("1.0.0", "r1", "rr1", "b".repeat(64)),
         payloads = listOf(RuntimeManifestPayload("p1", "rootfs", "c".repeat(64), 1024L)),
-        components = emptyList(),
+        components = listOf(RuntimeManifestComponent("runtime.proot", null, null, "proot", null, null, null, "android-native")),
         paths = RuntimeManifestPaths(
-            rootfsHostPath = "",
-            runtimeRootHostPath = "",
+            rootfsHostPath = "/data/.__runtime/rootfs",
+            runtimeRootHostPath = "/data/.__runtime/1.0.0",
             configHostPath = "/data/.__runtime/config",
             dataHostPath = "/data/.__runtime/data",
             cacheHostPath = "/data/.__runtime/cache",
@@ -80,7 +80,7 @@ class DefaultRuntimeManifestVerifierFullTest {
                     treeSha256 = null,
                     source = "package",
                 ),
-                RuntimeManifestComponent("runtime.proot", null, null, "", null, null, null, "android-native"),
+                RuntimeManifestComponent("runtime.proot", null, null, "proot", null, null, null, "android-native"),
             ),
         )
     }
@@ -106,7 +106,7 @@ class DefaultRuntimeManifestVerifierFullTest {
                     treeSha256 = null,
                     source = "package",
                 ),
-                RuntimeManifestComponent("runtime.proot", null, null, "", null, null, null, "android-native"),
+                RuntimeManifestComponent("runtime.proot", null, null, "proot", null, null, null, "android-native"),
             )
         )
         val result = verifier.verify(m, RuntimeManifestVerifyMode.FULL)
@@ -130,7 +130,7 @@ class DefaultRuntimeManifestVerifierFullTest {
                     treeSha256 = null,
                     source = "package",
                 ),
-                RuntimeManifestComponent("runtime.proot", null, null, "", null, null, null, "android-native"),
+                RuntimeManifestComponent("runtime.proot", null, null, "proot", null, null, null, "android-native"),
             )
         )
         val result = verifier.verify(m, RuntimeManifestVerifyMode.LIGHT)

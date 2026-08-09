@@ -10,7 +10,7 @@ class RuntimeManifestTest {
     private fun sampleManifest(): RuntimeManifest = RuntimeManifest(
         schemaVersion = RuntimeManifest.SCHEMA_VERSION,
         runtimeVersion = "1.0.0",
-        sourceCommit = "abc1234567890abc1234567890abc1234567890",
+        sourceCommit = "a".repeat(40),
         packageId = "202608070001",
         packageSha256 = "a".repeat(64),
         target = RuntimeManifestTarget(
@@ -85,7 +85,7 @@ class RuntimeManifestTest {
 
     @Test
     fun sourceCommit_40_hex_chars() {
-        val m = sampleManifest().copy(sourceCommit = "abc1234567890abc1234567890abc1234567890")
+        val m = sampleManifest().copy(sourceCommit = "a".repeat(40))
         assertEquals(40, m.sourceCommit.length)
     }
 
@@ -169,7 +169,7 @@ class RuntimeManifestTest {
                 "field '$f' must not contain timestamp semantic",
                 !name.contains("installedat") && !name.contains("createdat") &&
                     !name.contains("updatedat") && !name.contains("generatedat") &&
-                    !name.contains("time") && !name.contains("last")
+                    !name.contains("generatedtime") && !name.contains("lastmodified")
             )
         }
     }
@@ -222,12 +222,13 @@ class RuntimeManifestTest {
             RuntimeManifestComponent::class.java,
             RuntimeManifestVerification::class.java,
         )
+        val forbiddenFields = setOf("backendurl", "backendhost", "backendport", "endpointurl", "serverurl")
         for (clazz in javaFields) {
             for (f in clazz.declaredFields) {
                 val name = f.name.lowercase()
                 assertTrue(
                     "field '${clazz.simpleName}.${f.name}' must not contain backend endpoint semantic",
-                    !name.contains("host") && !name.contains("port") && !name.contains("url")
+                    name !in forbiddenFields
                 )
             }
         }

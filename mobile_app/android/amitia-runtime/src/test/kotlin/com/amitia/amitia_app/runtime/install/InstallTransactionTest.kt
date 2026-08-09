@@ -28,8 +28,8 @@ class InstallTransactionTest {
         )
 
         assertEquals(TransactionStage.CREATED, transaction.stage())
-        assertEquals("txn-1", transaction.transactionId.split("-").first())
         assertTrue(transaction.transactionId.isNotEmpty())
+        assertEquals(36, transaction.transactionId.length)
     }
 
     @Test

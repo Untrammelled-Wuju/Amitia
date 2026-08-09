@@ -1,21 +1,28 @@
 package com.amitia.amitia_app.runtime.proot
 
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
+import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeHostLayout
 import com.amitia.amitia_app.runtime.proot.internal.DefaultRuntimeEnvironmentBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.File
 
 class RuntimeEnvironmentBuilderTest {
 
-    private fun createLayout(): DefaultRuntimeHostLayout {
-        return DefaultRuntimeHostLayout.fromContext(
-            noBackupFilesDir = File("/data/user/0/com.amitia.amitia_app/no_backup"),
-            filesDir = File("/data/user/0/com.amitia.amitia_app/files"),
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
+    private fun createLayout(): RuntimeHostLayout {
+        val base = tempFolder.newFolder("proot-env")
+        return DefaultRuntimeHostLayout(
+            controlBaseDir = File(base, "control"),
+            dataBaseDir = File(base, "data"),
         )
     }
 

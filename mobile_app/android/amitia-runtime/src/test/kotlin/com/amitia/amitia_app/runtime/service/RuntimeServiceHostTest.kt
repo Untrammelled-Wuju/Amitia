@@ -7,13 +7,14 @@ import org.junit.Test
 class RuntimeServiceHostTest {
 
     @Test
-    fun runtimeServiceHost_interfaceHasThreeMethods() {
+    fun runtimeServiceHost_interfaceHasFourMethods() {
         val methods = RuntimeServiceHost::class.java.declaredMethods
         val names = methods.map { it.name }.toSet()
         assertTrue(names.contains("ensureStarted"))
         assertTrue(names.contains("requestStop"))
-        assertTrue(names.contains("isServiceRunning"))
-        assertEquals(3, methods.size)
+        assertTrue(names.contains("addListener"))
+        assertTrue(names.contains("removeListener"))
+        assertEquals(4, methods.size)
     }
 
     @Test
@@ -22,5 +23,16 @@ class RuntimeServiceHostTest {
         val names = methods.map { it.name to it.returnType }.toMap()
         assertEquals(RuntimeServiceResult::class.java, names["ensureStarted"])
         assertEquals(RuntimeServiceResult::class.java, names["requestStop"])
+    }
+
+    @Test
+    fun runtimeServiceHost_listenerMethodsAcceptHostListener() {
+        val methods = RuntimeServiceHost::class.java.declaredMethods
+        val addListener = methods.first { it.name == "addListener" }
+        val removeListener = methods.first { it.name == "removeListener" }
+        assertEquals(1, addListener.parameterTypes.size)
+        assertEquals(RuntimeServiceHostListener::class.java, addListener.parameterTypes[0])
+        assertEquals(1, removeListener.parameterTypes.size)
+        assertEquals(RuntimeServiceHostListener::class.java, removeListener.parameterTypes[0])
     }
 }

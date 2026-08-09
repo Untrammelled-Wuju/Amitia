@@ -159,6 +159,16 @@ func IsReservedNamespace(method string) bool {
 	return false
 }
 
+func ValidatePluginMethod(method string) error {
+	if err := ValidateMethod(method); err != nil {
+		return err
+	}
+	if IsReservedNamespace(method) {
+		return fmt.Errorf("method '%s' uses reserved namespace", method)
+	}
+	return nil
+}
+
 func Encode(e Envelope) ([]byte, error) {
 	data, err := json.Marshal(e)
 	if err != nil {

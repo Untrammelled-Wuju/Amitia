@@ -1,6 +1,10 @@
 package decision
 
-import "testing"
+import (
+	"math"
+	"testing"
+	"time"
+)
 
 func TestScoreBehaviorCandidatesSortsByFinalScore(t *testing.T) {
 	candidates := []BehaviorCandidate{
@@ -223,25 +227,198 @@ func TestComputeAffectNeedFusionClampBoundaries(t *testing.T) {
 	}
 }
 
-func TestScoreWithAffectNeedFusionRanksByFusedScore(t *testing.T) {
+func TestScoreCandidates_formulaAccuracy(t *testing.T) {
+	// B4 spec section 88: verify canonical formula
 	candidates := []BehaviorCandidate{
-		{ID: "high-fuse", BaseScore: 0.5, NeedScore: 0.1, PersonalityScore: 0.1, RelationshipScore: 0.1, RiskScore: 0.1},
-		{ID: "low-fuse", BaseScore: 0.2, NeedScore: 0.1, PersonalityScore: 0.1, RelationshipScore: 0.1, RiskScore: 0.1},
+		{
+			ID:                  "test_cand",
+			BaseScore:           0.6,
+			PersonalityScore:    0.1,
+			NeedScore:           0.2,
+			RelationshipScore:   0.05,
+			AffectScore:         0.03,
+			UserPreferenceScore: 0.4,
+			RiskScore:           0.1,
+			RepeatPenalty:       0.15,
+			FatiguePenalty:      0.1,
+		},
 	}
-	affect := AffectSignalInput{Positive: 0.9, Negative: 0.05, Stress: 0.05}
-	needs := []NeedScoringInput{{Kind: "connection", Deviation: 0.1}}
-	result := ScoreWithAffectNeedFusion(candidates, DefaultBehaviorScoringOptions(), affect, needs)
-	if result[0].ID != "high-fuse" || result[1].ID != "low-fuse" {
-		t.Fatalf("expected high-fuse candidate first: %#v", result)
+	options := DefaultBehaviorScoringOptions()
+
+	// Test using compat API which preserves component scores
+	result := ScoreBehaviorCandidates(candidates, options)
+
+	// 0.6 + 0.1 + 0.2 + 0.05 + 0.03 + 0.04 - 0.1 - 0.15 - 0.1 = 0.67
+	expected := 0.67
+	if result[0].FinalScore != expected {
+		t.Fatalf("expected FinalScore=%f, got %f", expected, result[0].FinalScore)
 	}
-	if len(result[0].Reasons) == 0 {
-		t.Fatal("expected reasons after fusion scoring")
+	if result[0].ScoringVersion != BehaviorFormulaVersionV2 {
+		t.Fatalf("expected ScoringVersion=%s, got %s", BehaviorFormulaVersionV2, result[0].ScoringVersion)
 	}
 }
 
-func TestScoreWithAffectNeedFusionEmptyCandidates(t *testing.T) {
-	result := ScoreWithAffectNeedFusion(nil, DefaultBehaviorScoringOptions(), AffectSignalInput{}, nil)
-	if result != nil {
-		t.Fatal("expected nil for nil candidates")
+func TestScoreCandidatesZeroWeightDisablesFactor(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []BehaviorCandidate{
+		{ID: "test_cand", BaseScore: 0.5, RiskScore: 0.8},
+	}
+	ctx := CandidateScoringContext{Now: now}
+	options := DefaultBehaviorScoringOptions()
+	options.RiskWeight = 0
+
+	result, err := ScoreCandidates(candidates, ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// With RiskWeight=0, FinalScore should equal BaseScore * BaseWeight = 0.5
+	if result[0].FinalScore != 0.5 {
+		t.Fatalf("expected FinalScore=0.5 with RiskWeight=0, got %f", result[0].FinalScore)
+	}
+}
+
+func TestScoreCandidatesNegativeWeightReturnsError(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []BehaviorCandidate{{ID: "test_cand"}}
+	ctx := CandidateScoringContext{Now: now}
+	options := DefaultBehaviorScoringOptions()
+	options.RiskWeight = -1
+
+	_, err := ScoreCandidates(candidates, ctx, options)
+	if err == nil {
+		t.Fatal("expected error for negative RiskWeight, got nil")
+	}
+}
+
+func TestScoreCandidatesNaNBaseReturnsError(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []BehaviorCandidate{{ID: "test_cand", BaseScore: math.NaN()}}
+	ctx := CandidateScoringContext{Now: now}
+
+	_, err := ScoreCandidates(candidates, ctx, DefaultBehaviorScoringOptions())
+	if err == nil {
+		t.Fatal("expected error for NaN BaseScore, got nil")
+	}
+}
+
+func TestScoreCandidatesPreservesInputOrder(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []BehaviorCandidate{
+		{ID: "cand_a", BaseScore: 0.1},
+		{ID: "cand_b", BaseScore: 0.9},
+		{ID: "cand_c", BaseScore: 0.5},
+	}
+	ctx := CandidateScoringContext{Now: now}
+
+	result, err := ScoreCandidates(candidates, ctx, DefaultBehaviorScoringOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result[0].ID != "cand_a" || result[1].ID != "cand_b" || result[2].ID != "cand_c" {
+		t.Fatalf("ScoreCandidates should preserve input order: %#v", result)
+	}
+}
+
+func TestScoreCandidatesIdempotent(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []BehaviorCandidate{
+		{ID: "test_cand", BaseScore: 0.5, PersonalityScore: 0.1, RiskScore: 0.2},
+	}
+	ctx := CandidateScoringContext{Now: now}
+	options := DefaultBehaviorScoringOptions()
+
+	first, err := ScoreCandidates(candidates, ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ScoreCandidates(first, ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].FinalScore != second[0].FinalScore {
+		t.Fatalf("ScoreCandidates not idempotent: first=%f second=%f", first[0].FinalScore, second[0].FinalScore)
+	}
+	firstReasons := 0
+	for _, r := range first[0].Reasons {
+		if r.Source == "scoring" {
+			firstReasons++
+		}
+	}
+	secondReasons := 0
+	for _, r := range second[0].Reasons {
+		if r.Source == "scoring" {
+			secondReasons++
+		}
+	}
+	if firstReasons != secondReasons {
+		t.Fatalf("ScoreCandidates reasons not idempotent: first=%d second=%d", firstReasons, secondReasons)
+	}
+}
+
+func TestScoreCandidatesNegativeFinalScore(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []BehaviorCandidate{
+		{ID: "test_cand", BaseScore: 0.0, RiskScore: 0.5, RepeatPenalty: 0.2, FatiguePenalty: 0.15},
+	}
+	ctx := CandidateScoringContext{Now: now}
+	options := DefaultBehaviorScoringOptions()
+
+	result, err := ScoreCandidates(candidates, ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 0 - 0.5 - 0.2 - 0.15 = -0.85 (should NOT be clamped to 0)
+	if result[0].FinalScore >= 0 {
+		t.Fatalf("expected negative FinalScore, got %f", result[0].FinalScore)
+	}
+}
+
+func TestScoreCandidatesScoringReasonsSum(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []BehaviorCandidate{
+		{
+			ID:                  "test_cand",
+			BaseScore:           0.5,
+			PersonalityScore:    0.1,
+			NeedScore:           0.2,
+			RelationshipScore:   0.05,
+			AffectScore:         0.05,
+			UserPreferenceScore: 0.2,
+			RiskScore:           0.1,
+			RepeatPenalty:       0.1,
+			FatiguePenalty:      0.1,
+		},
+	}
+	ctx := CandidateScoringContext{Now: now}
+	options := DefaultBehaviorScoringOptions()
+
+	result, err := ScoreCandidates(candidates, ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := 0.0
+	for _, r := range result[0].Reasons {
+		if r.Source == "scoring" {
+			sum += r.Delta
+		}
+	}
+	diff := sum - result[0].FinalScore
+	if diff < -0.0001 || diff > 0.0001 {
+		t.Fatalf("scoring reasons sum (%f) should equal FinalScore (%f)", sum, result[0].FinalScore)
+	}
+}
+
+func TestComputeAffectNeedFusionStillComputesMultiplier(t *testing.T) {
+	affect := AffectSignalInput{Positive: 0.8, Negative: 0.1, Stress: 0.2}
+	needs := []NeedScoringInput{
+		{Kind: "connection", Deviation: 0.15},
+		{Kind: "autonomy", Deviation: 0.10},
+	}
+	fusion := ComputeAffectNeedFusion(affect, needs)
+	if fusion.Multiplier < 1.0 {
+		t.Fatalf("expected positive affect + low need to boost multiplier above 1.0, got %f", fusion.Multiplier)
+	}
+	if fusion.FormulaID != "affect-need-fusion-v1" {
+		t.Fatalf("expected formula ID v1, got %s", fusion.FormulaID)
 	}
 }

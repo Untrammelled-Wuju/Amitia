@@ -6,8 +6,14 @@ class ProotLaunchRequest private constructor(val rootfsPath: String, val working
     companion object {
         private val SHELL_META_CHARS = setOf('|', '&', ';', '$', '`', '(', ')', '{', '}', '<', '>', '\\', '"', '\'')
 
+        private fun isAbsoluteStyle(path: String): Boolean {
+            if (path.startsWith("/")) return true
+            if (path.length >= 2 && path[1] == ':') return true
+            return false
+        }
+
         fun create(rootfsPath: String, workingDirectory: String, command: List<String>, bindMountsSource: List<ProotBindMount>, environmentSource: ProotEnvironment, fakeRoot: Boolean = true, killOnExit: Boolean = true): ProotLaunchRequest {
-            require(rootfsPath.startsWith("/") && workingDirectory.startsWith("/") && command.isNotEmpty()) { "invalid request" }
+            require(isAbsoluteStyle(rootfsPath) && isAbsoluteStyle(workingDirectory) && command.isNotEmpty()) { "invalid request" }
             require(!rootfsPath.contains("\u0000") && !workingDirectory.contains("\u0000")) { "nul byte in path" }
             for (arg in command) require(!arg.contains("\u0000")) { "nul byte in command" }
             val executable = command.first()

@@ -143,11 +143,12 @@ class AndroidProotComponentConcurrentTest {
     private class AliveProcessLauncher : ProotProcessLauncher {
         override fun launch(command: ProotCommand, observer: ProotObserver): ProotSession =
             object : ProotSession {
+                private var closed = false
                 override val sessionId = "alive-" + System.nanoTime()
-                override fun isAlive() = true
+                override fun isAlive() = !closed
                 override fun awaitExit(timeoutMillis: Long) = 0
                 override fun stop(graceMillis: Long) = ProotStopResult.Graceful(sessionId, 0)
-                override fun close() {}
+                override fun close() { closed = true }
             }
     }
 }

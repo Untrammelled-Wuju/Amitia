@@ -62,18 +62,54 @@ func TestComputeRelationshipStateBiasSetBoundaryHighConflict(t *testing.T) {
 	}
 }
 
-func TestComputeUserPreferenceBias(t *testing.T) {
+func TestComputeUserPreferenceScore(t *testing.T) {
 	prefs := map[string]float64{
 		"chat_reply": 0.9,
 	}
 	candidate := BehaviorCandidate{ID: "chat_reply"}
-	bias := computeUserPreferenceBias(candidate, prefs)
-	if bias != 0.9 {
-		t.Fatalf("用户偏好应匹配 0.9, 实际 %f", bias)
+	score := ComputeUserPreferenceScore(candidate, prefs)
+	if score != 0.9 {
+		t.Fatalf("用户偏好应匹配 0.9, 实际 %f", score)
 	}
 }
 
-func TestApplySoftPreferencesToAllModifiesScores(t *testing.T) {
+func TestComputeUserPreferenceScoreNilReturnsZero(t *testing.T) {
+	candidate := BehaviorCandidate{ID: "chat_reply"}
+	score := ComputeUserPreferenceScore(candidate, nil)
+	if score != 0 {
+		t.Fatalf("nil 偏好时应返回 0, 实际 %f", score)
+	}
+}
+
+func TestComputeUserPreferenceScoreNegative(t *testing.T) {
+	prefs := map[string]float64{
+		"proactive_greet": -0.8,
+	}
+	candidate := BehaviorCandidate{ID: "proactive_greet"}
+	score := ComputeUserPreferenceScore(candidate, prefs)
+	if score != -0.8 {
+		t.Fatalf("负偏好应被保留, 实际 %f", score)
+	}
+}
+
+func TestApplyUserPreferenceSignalsOnlySetsPreferenceScore(t *testing.T) {
+	candidates := []BehaviorCandidate{
+		{ID: "chat_reply", Tag: BehaviorTagReply, FinalScore: 0.5},
+		{ID: "offer_support", Tag: BehaviorTagOfferSupport, FinalScore: 0.4},
+	}
+	prefs := map[string]float64{
+		"chat_reply": 0.9,
+	}
+	result := ApplyUserPreferenceSignals(candidates, prefs)
+	if result[0].UserPreferenceScore != 0.9 {
+		t.Fatalf("UserPreferenceScore 应被设置, 实际 %f", result[0].UserPreferenceScore)
+	}
+	if result[0].FinalScore != 0.5 {
+		t.Fatalf("FinalScore 不应被修改, 实际 %f", result[0].FinalScore)
+	}
+}
+
+func TestApplySoftPreferencesToAllNowOnlySetsUserPreferenceScore(t *testing.T) {
 	candidates := []BehaviorCandidate{
 		{ID: "chat_reply", Tag: BehaviorTagReply, FinalScore: 0.5},
 		{ID: "offer_support", Tag: BehaviorTagOfferSupport, FinalScore: 0.4},
@@ -87,5 +123,9 @@ func TestApplySoftPreferencesToAllModifiesScores(t *testing.T) {
 	result := ApplySoftPreferencesToAll(candidates, input, DefaultSoftPreferenceConfig())
 	if len(result) != 2 {
 		t.Fatalf("应有 2 个候选, 实际 %d", len(result))
+	}
+	// FinalScore should NOT be modified by ApplySoftPreferencesToAll anymore
+	if result[0].FinalScore != 0.5 {
+		t.Fatalf("ApplySoftPreferencesToAll 不应修改 FinalScore, 实际 %f", result[0].FinalScore)
 	}
 }

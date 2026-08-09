@@ -135,3 +135,28 @@ func ComputeFatiguePenalty(history BehaviorHistory, candidateID string, now time
 	}
 	return penalty
 }
+
+type BehaviorCostConfig struct {
+	Repeat  RepeatPenaltyConfig
+	Fatigue FatiguePenaltyConfig
+}
+
+func DefaultBehaviorCostConfig() BehaviorCostConfig {
+	return BehaviorCostConfig{
+		Repeat:  DefaultRepeatPenaltyConfig(),
+		Fatigue: DefaultFatiguePenaltyConfig(),
+	}
+}
+
+// ApplyBehaviorCostSignals 只写入 RepeatPenalty 和 FatiguePenalty, 不修改 FinalScore
+func ApplyBehaviorCostSignals(candidates []BehaviorCandidate, history BehaviorHistory, now time.Time) []BehaviorCandidate {
+	config := DefaultBehaviorCostConfig()
+	result := make([]BehaviorCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		next := candidate
+		next.RepeatPenalty = ComputeRepeatPenalty(history, candidate.ID, now, config.Repeat)
+		next.FatiguePenalty = ComputeFatiguePenalty(history, candidate.ID, now, config.Fatigue)
+		result = append(result, next)
+	}
+	return result
+}

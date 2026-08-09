@@ -2,14 +2,27 @@
 
 class ProotBindMount private constructor(val host: String, val guest: String) {
     companion object {
+        private fun isAbsoluteStyle(path: String): Boolean {
+            if (path.startsWith("/")) return true
+            if (path.length >= 2 && path[1] == ':') return true
+            return false
+        }
+
+        private fun hasBadColon(path: String): Boolean {
+            if (path.length >= 2 && path[1] == ':') {
+                return path.indexOf(':', 2) >= 0
+            }
+            return path.contains(":")
+        }
+
         fun create(host: String, guest: String): ProotBindMount {
             require(host.isNotEmpty() && guest.isNotEmpty()) { "empty path" }
-            require(host.startsWith("/") && guest.startsWith("/")) { "must be absolute" }
+            require(isAbsoluteStyle(host) && isAbsoluteStyle(guest)) { "must be absolute" }
             require(guest != "/") { "guest cannot be root" }
             require(!host.contains("\u0000") && !guest.contains("\u0000")) { "nul byte in path" }
             require(!host.contains("..")) { "host no traversal" }
             require(!guest.contains("..")) { "guest no traversal" }
-            require(!guest.contains(":") && !host.contains(":")) { "no colon" }
+            require(!hasBadColon(host) && !hasBadColon(guest)) { "no extra colon" }
             return ProotBindMount(host, guest)
         }
     }

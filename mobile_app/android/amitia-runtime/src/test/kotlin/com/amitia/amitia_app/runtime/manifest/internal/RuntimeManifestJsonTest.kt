@@ -17,7 +17,7 @@ class RuntimeManifestJsonTest {
     private fun sampleManifest(): RuntimeManifest = RuntimeManifest(
         schemaVersion = RuntimeManifest.SCHEMA_VERSION,
         runtimeVersion = "1.0.0",
-        sourceCommit = "abc1234567890abc1234567890abc1234567890",
+        sourceCommit = "a".repeat(40),
         packageId = "202608070001",
         packageSha256 = "a".repeat(64),
         target = RuntimeManifestTarget(
@@ -54,7 +54,7 @@ class RuntimeManifestJsonTest {
                 id = "runtime.proot",
                 version = null,
                 architecture = null,
-                root = "",
+                root = "proot",
                 entry = null,
                 sha256 = null,
                 treeSha256 = null,
@@ -129,11 +129,54 @@ class RuntimeManifestJsonTest {
     @Test
     fun json_keysSorted() {
         val json = RuntimeManifestJson.serialize(sampleManifest())
-        val schemaIdx = json.indexOf("\"schemaVersion\"")
-        val runtimeIdx = json.indexOf("\"runtimeVersion\"")
-        val sourceIdx = json.indexOf("\"sourceCommit\"")
-        assertTrue(schemaIdx < runtimeIdx)
-        assertTrue(runtimeIdx < sourceIdx)
+        val result = checkSortedRecursive(json, 0).first
+        assertTrue(result)
+    }
+
+    private fun checkSortedRecursive(json: String, start: Int): Pair<Boolean, Int> {
+        var i = start + 1
+        var inString = false
+        var depth = 0
+        val directKeys = mutableListOf<String>()
+        var keyStart = -1
+        var expectValue = false
+        while (i < json.length) {
+            val c = json[i]
+            if (inString) {
+                if (c == '\\' && i + 1 < json.length) i += 2
+                else if (c == '"') {
+                    inString = false
+                    if (!expectValue && depth == 0 && keyStart >= 0) {
+                        directKeys.add(json.substring(keyStart, i))
+                    } else if (expectValue) {
+                        expectValue = false
+                    }
+                    keyStart = -1
+                    i++
+                } else i++
+            } else {
+                when (c) {
+                    '"' -> { inString = true; if (depth == 0 && !expectValue) keyStart = i + 1; i++ }
+                    ':' -> { if (depth == 0) { expectValue = true }; i++ }
+                    '{', '[' -> {
+                        if (depth == 0) {
+                            val (ok, newI) = checkSortedRecursive(json, i)
+                            if (!ok) return false to -1
+                            i = newI
+                        } else { depth++; i++ }
+                    }
+                    '}' -> {
+                        if (depth == 0) {
+                            return (directKeys == directKeys.sorted()) to (i + 1)
+                        } else { depth--; i++ }
+                    }
+                    ']' -> return (directKeys == directKeys.sorted()) to (i + 1)
+                    ',' -> { if (depth == 0) { expectValue = false }; i++ }
+                    else -> i++
+                }
+            }
+        }
+        return true to json.length
     }
 
     @Test

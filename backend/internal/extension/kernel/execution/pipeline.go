@@ -35,39 +35,56 @@ type ExecutionPipeline struct {
 
 func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRequest) capability.UnifiedToolResult {
 	toolID := string(request.ToolID)
-	inv := request.Invocation
+	inv := normalizeExecutionInvocation(request.Invocation)
+	request.Invocation = inv
 
 	if err := ctx.Err(); err != nil {
-		return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeInternalError, fmt.Sprintf("context %s", err.Error()))
+		result := capability.ResultFromContextError(inv.InvocationID, err)
+		return p.finishEarlyResult(ctx, inv, toolID, result)
 	}
 
 	if p.InvocationValidator != nil {
 		if err := p.InvocationValidator.Validate(ctx, request); err != nil {
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeInvalidInput, err.Error())
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    capability.ErrorCodeInvalidInput,
+				Message: err.Error(),
+			}))
 		}
 	}
 
 	tool, err := p.resolveTool(ctx, toolID)
 	if err != nil {
-		return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeNotAvailable, err.Error())
+		return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:    capability.ErrorCodeNotAvailable,
+			Message: err.Error(),
+		}))
 	}
 
 	if p.InputValidator != nil {
 		if err := p.InputValidator.Validate(ctx, tool, request.Input); err != nil {
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeInvalidInput, err.Error())
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    capability.ErrorCodeInvalidInput,
+				Message: "input validation failed",
+			}))
 		}
 	}
 
 	if p.AvailabilityGate != nil {
 		avail := p.AvailabilityGate.Evaluate(ctx, tool, inv)
 		if !avail.Executable {
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeNotAvailable, "tool not executable")
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    capability.ErrorCodeNotAvailable,
+				Message: "tool not executable",
+			}))
 		}
 	}
 
 	if p.ScopeGate != nil {
 		if err := p.ScopeGate.Evaluate(ctx, tool, inv); err != nil {
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeScopeDenied, err.Error())
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    capability.ErrorCodeScopeDenied,
+				Message: err.Error(),
+			}))
 		}
 	}
 
@@ -75,12 +92,18 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 		decision := p.PermissionGate.Evaluate(ctx, tool, inv)
 		switch decision {
 		case PermissionDeny:
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodePermissionDenied, "permission denied")
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    capability.ErrorCodePermissionDenied,
+				Message: "permission denied",
+			}))
 		case PermissionRequireApproval:
 			if p.ApprovalGate != nil {
 				approved, appErr := p.ApprovalGate.Evaluate(ctx, tool, inv, decision)
 				if appErr != nil || !approved {
-					return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodePermissionDenied, "approval denied")
+					return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+						Code:    capability.ErrorCodePermissionDenied,
+						Message: "approval denied",
+					}))
 				}
 			}
 		}
@@ -88,20 +111,29 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 
 	if p.DepthGuard != nil {
 		if err := p.DepthGuard.Check(ctx, inv); err != nil {
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, "max_depth_exceeded", err.Error())
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    "max_depth_exceeded",
+				Message: err.Error(),
+			}))
 		}
 	}
 
 	if p.RateLimiter != nil {
 		if err := p.RateLimiter.Allow(ctx, tool); err != nil {
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeRateLimited, err.Error())
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    capability.ErrorCodeRateLimited,
+				Message: err.Error(),
+			}))
 		}
 	}
 
 	if p.ConcurrencyCtrl != nil {
 		slot, slotErr := p.ConcurrencyCtrl.Acquire(ctx, tool, inv)
 		if slotErr != nil {
-			return p.failWithAudit(ctx, inv.InvocationID, toolID, capability.ErrorCodeRateLimited, slotErr.Error())
+			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:    capability.ErrorCodeRateLimited,
+				Message: slotErr.Error(),
+			}))
 		}
 		defer p.ConcurrencyCtrl.Release(slot)
 	}
@@ -131,47 +163,46 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 	if p.Dispatcher != nil {
 		result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
 	} else {
-		result = capability.UnifiedToolResult{
-			InvocationID: inv.InvocationID,
-			Status:       capability.ToolResultStatusFailed,
-			Error: &capability.ToolError{
-				Code:    capability.ErrorCodeInternalError,
-				Message: "no dispatcher configured",
-			},
-		}
+		result = capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:    capability.ErrorCodeInternalError,
+			Message: "no dispatcher configured",
+		})
 	}
 
 	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess {
 		if result.Error != nil {
 			switch result.Error.Code {
 			case capability.ErrorCodePermissionDenied, capability.ErrorCodeScopeDenied, capability.ErrorCodeInvalidInput:
-				return result
-			}
-		}
-		if shouldRetry, _ := p.RetryCtrl.ShouldRetry(ctx, tool, result); shouldRetry {
-			for attempt := 1; attempt <= tool.ExecutionPolicy.RetryPolicy.MaxRetries; attempt++ {
-				time.Sleep(p.RetryCtrl.Backoff(attempt))
-				if p.AuditRec != nil {
-					p.AuditRec.RecordRetry(inv.InvocationID, attempt)
-				}
-				result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
-				if result.Status == capability.ToolResultStatusSuccess {
-					break
+			default:
+				if shouldRetry, _ := p.RetryCtrl.ShouldRetry(ctx, tool, result); shouldRetry {
+					for attempt := 1; attempt <= tool.ExecutionPolicy.RetryPolicy.MaxRetries; attempt++ {
+						time.Sleep(p.RetryCtrl.Backoff(attempt))
+						if p.AuditRec != nil {
+							p.AuditRec.RecordRetry(inv.InvocationID, attempt)
+						}
+						result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+						if result.Status == capability.ToolResultStatusSuccess {
+							break
+						}
+					}
 				}
 			}
 		}
 	}
 
 	if p.ResultValidator != nil {
-		result = p.ResultValidator.Validate(ctx, tool, result)
+		result = p.ResultValidator.Validate(ctx, tool, inv, result)
 	}
+
+	result.DurationMS = time.Since(startTime).Milliseconds()
 
 	if p.Sanitizer != nil {
 		result = p.Sanitizer.Sanitize(ctx, result)
 	}
 
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
-		p.IdempotencyGuard.Record(ctx, inv.IdempotencyKey, toolID, &result)
+		cached := result.Clone()
+		p.IdempotencyGuard.Record(ctx, inv.IdempotencyKey, toolID, &cached)
 	}
 
 	if p.SideEffectRec != nil {
@@ -198,19 +229,16 @@ func (p *ExecutionPipeline) resolveTool(ctx context.Context, toolID string) (cap
 	return capability.ToolDefinition{}, fmt.Errorf("tool resolver not configured")
 }
 
-func (p *ExecutionPipeline) failWithAudit(ctx context.Context, invID, toolID, code, msg string) capability.UnifiedToolResult {
+func (p *ExecutionPipeline) failWithAudit(ctx context.Context, inv capability.ToolInvocationContext, toolID string, result capability.UnifiedToolResult) capability.UnifiedToolResult {
 	if p.AuditRec != nil {
-		p.AuditRec.RecordDenied(ctx, invID, toolID, code, msg)
+		p.AuditRec.RecordDenied(ctx, inv.InvocationID, toolID, result.Error.Code, result.Error.Message)
 	}
-	return capability.UnifiedToolResult{
-		InvocationID: invID,
-		Status:       capability.ToolResultStatusFailed,
-		Error: &capability.ToolError{
-			Code:        code,
-			Message:     msg,
-			UserVisible: true,
-		},
-	}
+	return result
+}
+
+func (p *ExecutionPipeline) finishEarlyResult(ctx context.Context, inv capability.ToolInvocationContext, toolID string, result capability.UnifiedToolResult) capability.UnifiedToolResult {
+	p.recordAuditFinish(ctx, inv.InvocationID, toolID, string(result.Status), 0)
+	return result
 }
 
 func (p *ExecutionPipeline) recordAuditStart(ctx context.Context, invID, toolID string) {
@@ -223,4 +251,24 @@ func (p *ExecutionPipeline) recordAuditFinish(ctx context.Context, invID, toolID
 	if p.AuditRec != nil {
 		p.AuditRec.RecordFinish(ctx, invID, toolID, status, duration)
 	}
+}
+
+func normalizeExecutionInvocation(inv capability.ToolInvocationContext) capability.ToolInvocationContext {
+	if inv.InvocationID == "" {
+		inv.InvocationID = capability.NewInvocationID()
+	}
+	if inv.TraceID == "" {
+		inv.TraceID = capability.NewTraceID()
+	}
+	if inv.OperationID == "" {
+		inv.OperationID = capability.NewOperationID()
+	}
+	if inv.RootID == "" {
+		if inv.ParentID != "" {
+			inv.RootID = inv.ParentID
+		} else {
+			inv.RootID = inv.InvocationID
+		}
+	}
+	return inv
 }

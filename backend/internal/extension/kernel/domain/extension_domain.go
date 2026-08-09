@@ -36,11 +36,28 @@ func (d ExtensionDomain) IsGame() bool {
 	return d == ExtensionDomainGame
 }
 
-func DomainFromContributionKinds(kinds []ContributionKind) ExtensionDomain {
+func DomainConflict(kinds []ContributionKind) bool {
+	hasGame := false
+	hasDesktopPet := false
 	for _, k := range kinds {
-		if k == ContributionKindGamePlugin {
-			return ExtensionDomainGame
+		switch k {
+		case ContributionKindGamePlugin:
+			hasGame = true
+		case ContributionKindDesktopPetPlugin:
+			hasDesktopPet = true
 		}
 	}
-	return ExtensionDomainGeneral
+	return hasGame && hasDesktopPet
+}
+
+func (d ExtensionDomain) IsDesktopPet() bool {
+	return d == ExtensionDomainDesktopPet
+}
+
+func DomainFromContributionKinds(kinds []ContributionKind) ExtensionDomain {
+	domain, err := ResolveDomainFromKinds(kinds)
+	if err != nil {
+		return ExtensionDomainGeneral
+	}
+	return domain
 }

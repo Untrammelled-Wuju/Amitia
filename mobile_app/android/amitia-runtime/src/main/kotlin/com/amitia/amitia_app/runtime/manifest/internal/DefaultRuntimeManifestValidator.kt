@@ -68,34 +68,38 @@ internal class DefaultRuntimeManifestValidator : RuntimeManifestValidator {
     }
 
     override fun validateTarget(target: RuntimeManifestTarget): RuntimeManifestError? {
-        if (target.hostPlatform.isBlank()) {
+        val validHostPlatforms = setOf("android")
+        val validGuestPlatforms = setOf("linux")
+        val validRuntimeKinds = setOf("proot")
+        val validArchitectures = setOf("arm64", "arm64-v8a", "armeabi-v7a", "x86_64")
+        if (target.hostPlatform.isBlank() || target.hostPlatform !in validHostPlatforms) {
             return RuntimeManifestError(
                 RuntimeManifestErrorCode.MANIFEST_TARGET_MISMATCH,
-                "hostPlatform must not be blank"
+                "hostPlatform must be one of: ${validHostPlatforms.joinToString()}"
             )
         }
-        if (target.hostAbi.isBlank()) {
+        if (target.hostAbi.isBlank() || target.hostAbi !in validArchitectures) {
             return RuntimeManifestError(
                 RuntimeManifestErrorCode.MANIFEST_TARGET_MISMATCH,
-                "hostAbi must not be blank"
+                "hostAbi must be one of: ${validArchitectures.joinToString()}"
             )
         }
-        if (target.runtimeKind.isBlank()) {
+        if (target.runtimeKind.isBlank() || target.runtimeKind !in validRuntimeKinds) {
             return RuntimeManifestError(
                 RuntimeManifestErrorCode.MANIFEST_TARGET_MISMATCH,
-                "runtimeKind must not be blank"
+                "runtimeKind must be one of: ${validRuntimeKinds.joinToString()}"
             )
         }
-        if (target.guestPlatform.isBlank()) {
+        if (target.guestPlatform.isBlank() || target.guestPlatform !in validGuestPlatforms) {
             return RuntimeManifestError(
                 RuntimeManifestErrorCode.MANIFEST_TARGET_MISMATCH,
-                "guestPlatform must not be blank"
+                "guestPlatform must be one of: ${validGuestPlatforms.joinToString()}"
             )
         }
-        if (target.guestArchitecture.isBlank()) {
+        if (target.guestArchitecture.isBlank() || target.guestArchitecture !in setOf("arm64", "amd64")) {
             return RuntimeManifestError(
                 RuntimeManifestErrorCode.MANIFEST_TARGET_MISMATCH,
-                "guestArchitecture must not be blank"
+                "guestArchitecture must be arm64 or amd64"
             )
         }
         if (target.distribution.isBlank()) {

@@ -19,9 +19,18 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
 @implementation AmitiaISHExecutionResult
 @end
 
+@implementation AmitiaISHRuntimeHealth
+@end
+
 @interface AmitiaISHRuntime ()
 @property (nonatomic, readwrite) AmitiaISHState state;
-@property (nonatomic, strong)dispatch_queue_t executionQueue;
+@property (nonatomic, strong) dispatch_queue_t executionQueue;
+@property (nonatomic) uint64_t generation;
+@property (nonatomic, copy, nullable) NSString *currentRootfsPath;
+@property (nonatomic, copy, nullable) NSString *activeExecutionID;
+@property (nonatomic) BOOL fatal;
+@property (nonatomic, copy, nullable) NSString *fatalCode;
+@property (nonatomic, strong, nullable) dispatch_cleanup_t executionCleanup;
 @end
 
 @implementation AmitiaISHRuntime
@@ -40,12 +49,27 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
     if (self) {
         _state = AmitiaISHStateUnavailable;
         _executionQueue = dispatch_queue_create("com.amitia.ish.runtime", DISPATCH_QUEUE_SERIAL);
+        _generation = 0;
+        _fatal = NO;
     }
     return self;
 }
 
+- (uint64_t)currentGeneration {
+    return self.generation;
+}
+
 - (AmitiaISHState)state {
     return (AmitiaISHState)amitia_ish_state();
+}
+
+- (void)setState:(AmitiaISHState)state {
+    if (state == AmitiaISHStateUnavailable) {
+        self.fatal = NO;
+        self.fatalCode = nil;
+        self.generation = 0;
+    }
+    _state = state;
 }
 
 - (BOOL)startWithRootfsPath:(NSString *)rootfsPath
@@ -65,9 +89,15 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
     __block BOOL success = NO;
 
     dispatch_sync(self.executionQueue, ^{
-        if (amitia_ish_state() == AMITIA_ISH_RUNNING) {
-            success = YES;
-            return;
+        int currentState = amitia_ish_state();
+        if (currentState == AMITIA_ISH_RUNNING) {
+            if ([self.currentRootfsPath isEqualToString:rootfsPath]) {
+                success = YES;
+                return;
+            }
+            amitia_ish_stop();
+            self.generation = 0;
+            self.currentRootfsPath = nil;
         }
 
         size_t envCount = env.count;
@@ -89,13 +119,28 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
         if (cEnv) free(cEnv);
 
         success = (result == AMITIA_ISH_OK);
+        if (success) {
+            self.generation++;
+            self.currentRootfsPath = [rootfsPath copy];
+            self.fatal = NO;
+            self.fatalCode = nil;
+            self.activeExecutionID = nil;
+        }
     });
 
     if (!success && error) {
         NSString *desc = [self descriptionForNativeError:result];
-        *error = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
-                                     code:[self runtimeErrorCodeForNativeError:result]
-                                 userInfo:@{NSLocalizedDescriptionKey: desc}];
+        NSError *err = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
+                                            code:[self runtimeErrorCodeForNativeError:result]
+                                        userInfo:@{NSLocalizedDescriptionKey: desc}];
+        if (result == AMITIA_ISH_ERR_INTERNAL) {
+            self.fatal = YES;
+            self.fatalCode = @"ISH_INTERNAL_RUNTIME_FAULT";
+            err = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
+                                      code:AmitiaISHRuntimeErrorCodeInternal
+                                  userInfo:@{NSLocalizedDescriptionKey: desc}];
+        }
+        *error = err;
     }
 
     return success;
@@ -118,7 +163,8 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
     __block AmitiaISHExecutionResult *result = nil;
 
     dispatch_sync(self.executionQueue, ^{
-        if (amitia_ish_state() != AMITIA_ISH_RUNNING) {
+        int currentState = amitia_ish_state();
+        if (currentState != AMITIA_ISH_RUNNING) {
             if (error) {
                 *error = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
                                              code:AmitiaISHRuntimeErrorCodeNotInitialized
@@ -127,8 +173,12 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
             return;
         }
 
+        uint64_t execGen = self.generation;
+        NSString *execID = [[NSUUID UUID] UUIDString];
+        self.activeExecutionID = execID;
+
         amitia_ish_command_t cmd = {0};
-        cmd.argc = argv.size;
+        cmd.argc = (int)argv.count;
         const char **cArgv = malloc(sizeof(const char *) * argv.count);
         for (NSUInteger i = 0; i < argv.count; i++) {
             cArgv[i] = [argv[i] UTF8String];
@@ -146,7 +196,35 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
 
         amitia_ish_result_t nativeResult = {0};
         int rc = amitia_ish_execute(&cmd, &nativeResult);
+
+        if (self.activeExecutionID && [self.activeExecutionID isEqualToString:execID]) {
+            self.activeExecutionID = nil;
+        }
         free(cArgv);
+
+        if (rc != AMITIA_ISH_OK) {
+            result = [[AmitiaISHExecutionResult alloc] init];
+            result.exitCode = -1;
+            result.stdout = @"";
+            result.stderr = @"";
+            result.errorCode = (AmitiaISHNativeError)rc;
+            if (nativeResult.error_message) {
+                result.errorMessage = [NSString stringWithUTF8String:nativeResult.error_message];
+            }
+            result.executionID = execID;
+            result.generation = execGen;
+            if (nativeResult.fatal) {
+                result.fatal = YES;
+                self.fatal = YES;
+                self.fatalCode = result.errorMessage ?: @"ISH_INTERNAL_RUNTIME_FAULT";
+            }
+            if (error) {
+                *error = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
+                                             code:[self runtimeErrorCodeForNativeError:rc]
+                                         userInfo:@{NSLocalizedDescriptionKey: result.errorMessage ?: [self descriptionForNativeError:rc]}];
+            }
+            return;
+        }
 
         result = [[AmitiaISHExecutionResult alloc] init];
         result.exitCode = nativeResult.exit_code;
@@ -178,35 +256,81 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
         if (nativeResult.error_message) {
             result.errorMessage = [NSString stringWithUTF8String:nativeResult.error_message];
         }
+        result.executionID = execID;
+        result.generation = execGen;
 
         amitia_ish_result_free(&nativeResult);
-
-        if (error && rc != AMITIA_ISH_OK) {
-            *error = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
-                                         code:[self runtimeErrorCodeForNativeError:rc]
-                                     userInfo:@{NSLocalizedDescriptionKey: result.errorMessage ?: [self descriptionForNativeError:rc]}];
-        }
     });
 
     return result;
 }
 
 - (BOOL)cancelExecution:(NSString *)executionId error:(NSError *_Nullable *_Nullable)error {
-    uint64_t execId = (uint64_t)executionId.longLongValue;
-    __block int result = AMITIA_ISH_OK;
+    if (!executionId || executionId.length == 0) {
+        return [self cancelActiveExecution:error];
+    }
+    BOOL stillActive = [self.activeExecutionID isEqualToString:executionId];
+    if (!stillActive) {
+        if (error) {
+            *error = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
+                                         code:AmitiaISHRuntimeErrorCodeExecFailed
+                                     userInfo:@{NSLocalizedDescriptionKey: @"execution ID not active"}];
+        }
+        return NO;
+    }
+    return [self cancelActiveExecution:error];
+}
 
+- (BOOL)cancelActiveExecution:(NSError *_Nullable *_Nullable)error {
+    __block int rc = AMITIA_ISH_OK;
     dispatch_sync(self.executionQueue, ^{
-        result = amitia_ish_cancel(execId);
+        if (self.activeExecutionID) {
+            int cancelRc = amitia_ish_cancel((uint64_t)self.activeExecutionID.longLongValue);
+            if (cancelRc != AMITIA_ISH_OK) {
+                rc = cancelRc;
+            }
+        }
+        self.activeExecutionID = nil;
     });
+    if (rc != AMITIA_ISH_OK && error) {
+        *error = [NSError errorWithDomain:kAmitiaISHRuntimeErrorDomain
+                                     code:AmitiaISHRuntimeErrorCodeExecFailed
+                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"cancel failed (%d)", rc]}];
+        return NO;
+    }
+    return YES;
+}
 
-    return result == AMITIA_ISH_OK;
+- (nullable NSString *)activeExecutionID {
+    return _activeExecutionID;
 }
 
 - (void)stop {
     dispatch_sync(self.executionQueue, ^{
+        if (self.activeExecutionID) {
+            amitia_ish_cancel((uint64_t)self.activeExecutionID.longLongValue);
+            self.activeExecutionID = nil;
+        }
         amitia_ish_stop();
+        self.generation = 0;
+        self.currentRootfsPath = nil;
+        self.fatal = NO;
+        self.fatalCode = nil;
     });
     self.state = AmitiaISHStateUnavailable;
+}
+
+- (nullable AmitiaISHRuntimeHealth)health {
+    __block AmitiaISHRuntimeHealth *h;
+    dispatch_sync(self.executionQueue, ^{
+        h = [[AmitiaISHRuntimeHealth alloc] init];
+        h.kernelRunning = (amitia_ish_state() == AMITIA_ISH_RUNNING);
+        h.initTaskValid = h.kernelRunning && (self.generation > 0);
+        h.fatal = self.fatal;
+        h.fatalCode = self.fatalCode;
+        h.kernelRootfsPath = self.currentRootfsPath;
+    });
+    return h;
 }
 
 - (NSString *)descriptionForNativeError:(int)err {

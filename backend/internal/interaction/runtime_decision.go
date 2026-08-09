@@ -2,15 +2,16 @@ package interaction
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/personality"
 )
 
-func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality, goalContext RuntimeGoalContext, now time.Time) (*decision.BehaviorPlan, *decision.ExpressionPlan) {
+func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality, goalContext RuntimeGoalContext, now time.Time) (*decision.BehaviorPlan, *decision.ExpressionPlan, error) {
 	if p.candidateRegistry == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	var psycheSignals decision.PsycheSignalSet
 	if snapshot.Psyche.Status == LoadStatusReady {
@@ -32,6 +33,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	} else {
 		lifeSnapshot = decision.LifeSnapshot{Energy: 0.7}
 	}
+
 	decisionCtx := decision.CandidateGenerationContext{
 		UserID:             scope.UserID,
 		CharacterID:        scope.CharacterID,
@@ -45,16 +47,29 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		Now:                now,
 	}
 	candidates := decision.GenerateCandidates(decisionCtx, p.candidateRegistry)
-	candidates = decision.ApplyCandidateContextSignals(candidates, decisionCtx)
+
+	scoringContext := decision.CandidateScoringContext{
+		Goals:              goalsForDecision(goalContext),
+		Intentions:         append([]decision.Intention(nil), goalContext.Intentions...),
+		Psyche:             psycheSignals,
+		Relationship:       relSnapshot,
+		Life:               lifeSnapshot,
+		PersonalityWeights: personalityWeights,
+		Now:                now,
+	}
+	scoredCandidates, err := decision.ScoreCandidates(candidates, scoringContext, decision.DefaultBehaviorScoringOptions())
+	if err != nil {
+		return nil, nil, fmt.Errorf("scoring failed: %w", err)
+	}
+
 	arbitrationInput := decision.ArbitrationInput{
-		Candidates:   candidates,
-		Goals:        goalsForDecision(goalContext),
-		Intentions:   append([]decision.Intention(nil), goalContext.Intentions...),
-		Relationship: relSnapshot,
-		Psyche:       psycheSignals,
-		Life:         lifeSnapshot,
-		Filter:       decision.DefaultHardConstraintFilter(),
-		Now:          now,
+		Candidates: scoredCandidates,
+		Goals:      goalsForDecision(goalContext),
+		Intentions: append([]decision.Intention(nil), goalContext.Intentions...),
+		Psyche:     psycheSignals,
+		Life:       lifeSnapshot,
+		Filter:     decision.DefaultHardConstraintFilter(),
+		Now:        now,
 	}
 	arbitrationResult := p.arbitrationLayer.Arbitrate(arbitrationInput)
 	builder := decision.NewBehaviorPlanBuilder(now)
@@ -77,7 +92,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	}
 	exprInput := decision.ExpressionPlanInput{BehaviorPlan: plan, Psyche: psycheSignals, ExpressionCtrl: exprCtrl, PersonalityExpressionStyle: personalityStyle, Now: now}
 	exprPlan := decision.GenerateExpressionPlan(exprInput)
-	return &plan, &exprPlan
+	return &plan, &exprPlan, nil
 }
 
 func derivePersonalityWeights(cp *personality.CompiledPersonality) map[decision.BehaviorTag]float64 {

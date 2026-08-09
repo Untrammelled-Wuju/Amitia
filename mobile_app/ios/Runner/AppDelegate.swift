@@ -23,4 +23,19 @@ import UIKit
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
+
+  override func applicationDidEnterBackground(_ application: UIApplication) {
+    IOSSandboxBridge.shared().applicationDidEnterBackground()
+    super.applicationDidEnterBackground(application)
+  }
+
+  override func applicationWillEnterForeground(_ application: UIApplication) {
+    IOSSandboxBridge.shared().applicationWillEnterForeground()
+    super.applicationWillEnterForeground(application)
+  }
+
+  override func applicationWillTerminate(_ application: UIApplication) {
+    IOSSandboxBridge.shared().applicationWillTerminate()
+    super.applicationWillTerminate(application)
+  }
 }
