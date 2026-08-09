@@ -522,7 +522,7 @@ func TestRPCDispatcher_Integration(t *testing.T) {
 	route := rpc.Route{
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
-		ServiceID: "bridge",
+		ServiceID: "service-a",
 		Namespace: "minecraft",
 	}
 	if err := nsReg.Register(ctx, route); err != nil {
@@ -532,7 +532,7 @@ func TestRPCDispatcher_Integration(t *testing.T) {
 	err := disp.Dispatch(ctx, ipc.Peer{
 		PluginID:  "plugin-1",
 		RuntimeID: "runtime-1",
-		ServiceID: "agent",
+		ServiceID: "service-a",
 	}, protocol.Envelope{
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
@@ -558,7 +558,7 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 	if err := nsReg.Register(ctx, rpc.Route{
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
-		ServiceID: "bridge",
+		ServiceID: "service-a",
 		Namespace: "minecraft",
 	}); err != nil {
 		t.Fatalf("register namespace failed: %v", err)
@@ -574,7 +574,7 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 	err := disp.Dispatch(ctx, ipc.Peer{
 		PluginID:  "plugin-1",
 		RuntimeID: "runtime-1",
-		ServiceID: "agent",
+		ServiceID: "service-a",
 	}, protocol.Envelope{
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
@@ -592,8 +592,8 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 	}
 
 	forwarded := controlPlane.sent[0]
-	if forwarded.Peer.ServiceID != "bridge" {
-		t.Errorf("forward target should be bridge, got %s", forwarded.Peer.ServiceID)
+	if forwarded.Peer.ServiceID != "service-a" {
+		t.Errorf("forward target should be service-a, got %s", forwarded.Peer.ServiceID)
 	}
 	if forwarded.Envelope.ID != "custom-req-1" {
 		t.Errorf("request ID should be preserved")

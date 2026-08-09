@@ -394,3 +394,73 @@ func clonePlanContentPolicy(policy PlanContentPolicy) PlanContentPolicy {
 	}
 	return clone
 }
+
+func cloneBehaviorCandidateV2(candidate BehaviorCandidate) BehaviorCandidate {
+	clone := cloneCandidate(candidate)
+	if candidate.Overrides != nil {
+		clone.Overrides = append([]string(nil), candidate.Overrides...)
+	}
+	return clone
+}
+
+func cloneBehaviorCandidatesV2(candidates []BehaviorCandidate) []BehaviorCandidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+	result := make([]BehaviorCandidate, len(candidates))
+	for i, c := range candidates {
+		result[i] = cloneBehaviorCandidateV2(c)
+	}
+	return result
+}
+
+func cloneCompiledPersonalityRef(ref CompiledPersonalityRef) CompiledPersonalityRef {
+	clone := CompiledPersonalityRef{
+		Version:             ref.Version,
+		SourceCharacterID:   ref.SourceCharacterID,
+		ExpressionPolicyKey: ref.ExpressionPolicyKey,
+	}
+	if ref.RawConfig != nil {
+		clone.RawConfig = make(map[string]any, len(ref.RawConfig))
+		for k, v := range ref.RawConfig {
+			clone.RawConfig[k] = v
+		}
+	}
+	if ref.BehaviorWeights != nil {
+		clone.BehaviorWeights = make(map[BehaviorTag]float64, len(ref.BehaviorWeights))
+		for k, v := range ref.BehaviorWeights {
+			clone.BehaviorWeights[k] = v
+		}
+	}
+	return clone
+}
+
+func clonePsycheSignalSet(psyche PsycheSignalSet) PsycheSignalSet {
+	clone := psyche
+	if psyche.Emotions != nil {
+		clone.Emotions = make([]EmotionSignal, len(psyche.Emotions))
+		for i, e := range psyche.Emotions {
+			clone.Emotions[i] = e
+		}
+	}
+	if psyche.Needs != nil {
+		clone.Needs = make([]NeedSignal, len(psyche.Needs))
+		copy(clone.Needs, psyche.Needs)
+	}
+	return clone
+}
+
+func cloneRelationshipSnapshot(rel RelationshipSnapshot) RelationshipSnapshot {
+	clone := rel
+	if rel.Dimensions != nil {
+		clone.Dimensions = make(map[RelationshipDimension]RelationshipDimensionValue, len(rel.Dimensions))
+		for k, v := range rel.Dimensions {
+			clone.Dimensions[k] = v
+		}
+	}
+	return clone
+}
+
+func cloneLifeSnapshot(life LifeSnapshot) LifeSnapshot {
+	return life
+}
