@@ -140,7 +140,7 @@ func (c *RecoveryClassifier) Classify(ctx context.Context, runtimeID domain.Runt
 	checkpointOK := true
 	if checkpoint.RuntimeID != metadata.RuntimeID || checkpoint.PluginID != metadata.PluginID {
 		info.RecoveryStatus = RecoveryStatusInvalid
-		return info, errRuntimeIDMismatch("classify", string(runtimeID), errIDMismatch(checkpoint.RuntimeID, metadata.RuntimeID))
+		return info, errRuntimeIDMismatch("classify", string(runtimeID), errIDMismatch(string(checkpoint.RuntimeID), string(metadata.RuntimeID)))
 	}
 
 	info.RuntimeState = checkpoint.RuntimeState

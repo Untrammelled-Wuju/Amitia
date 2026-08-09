@@ -57,11 +57,11 @@ func ValidateMetadata(metadata RuntimeMetadata, checkpoint RuntimeCheckpoint) er
 func CheckpointConsistency(metadata RuntimeMetadata, checkpoint RuntimeCheckpoint) error {
 	if metadata.RuntimeID != checkpoint.RuntimeID {
 		return errRuntimeIDMismatch("consistency", string(metadata.RuntimeID),
-			errIDMismatch(metadata.RuntimeID, checkpoint.RuntimeID))
+			errIDMismatch(string(metadata.RuntimeID), string(checkpoint.RuntimeID)))
 	}
 	if metadata.PluginID != checkpoint.PluginID {
 		return errPluginIDMismatch("consistency", string(metadata.RuntimeID),
-			errIDMismatch(metadata.PluginID, checkpoint.PluginID))
+			errIDMismatch(string(metadata.PluginID), string(checkpoint.PluginID)))
 	}
 	return nil
 }
