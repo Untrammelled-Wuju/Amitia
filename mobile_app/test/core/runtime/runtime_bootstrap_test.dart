@@ -3,12 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_snapshot.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
-import 'package:amitia_app/core/runtime/runtime_bootstrap.dart';
 import 'package:amitia_app/core/runtime/default_runtime_bootstrap.dart';
 import 'package:amitia_app/core/runtime/runtime_bootstrap_snapshot.dart';
 import 'package:amitia_app/core/runtime/runtime_bootstrap_phase.dart';
 import 'package:amitia_app/core/runtime/runtime_bootstrap_policy.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_error.dart';
+import 'package:amitia_app/core/runtime/runtime_manifest_summary.dart';
 
 class FakeRuntimeBridge implements RuntimeBridge {
   final StreamController<RuntimeBridgeSnapshot> _controller =

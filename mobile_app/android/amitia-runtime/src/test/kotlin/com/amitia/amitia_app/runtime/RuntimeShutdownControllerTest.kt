@@ -229,20 +229,18 @@ class RuntimeShutdownControllerTest {
             startupDetector = detector
         )
         val resultRef = AtomicReference<RuntimeOperationResult>()
-        val errorRef = AtomicReference<String>()
         val latch = CountDownLatch(1)
         val callback = object : RuntimeOperationCallback {
             override fun onCompleted(result: RuntimeOperationResult) {
                 resultRef.set(result)
-                errorRef.set(result.toString())
                 latch.countDown()
             }
         }
         controller.stop(RuntimeStopRequest(reason = RuntimeStopReason.USER_REQUEST, force = false), callback)
-        latch.await(5, TimeUnit.SECONDS)
+        val completed = latch.await(5, TimeUnit.SECONDS)
         val result = resultRef.get()
-        val errorInfo = errorRef.get()
-        assertTrue("Result was: $result, info: $errorInfo", result is RuntimeOperationResult.Success)
+        assertTrue("Callback completed: $completed, state: ${controller.snapshot().state}", completed)
+        assertTrue("Result: $result", result is RuntimeOperationResult.Success)
         assertTrue(detector.cancelled)
         assertEquals(1, detector.cancelCallCount)
         assertEquals(1, proot.stopCallCount)
