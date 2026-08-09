@@ -1,0 +1,9 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "notification",
+  "id": "notice-001",
+  "method": "vendor.state.changed",
+  "payload": {
+    "state": "something"
+  }
+}

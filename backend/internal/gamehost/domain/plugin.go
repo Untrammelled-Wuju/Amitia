@@ -180,3 +180,55 @@ func (p PluginDescriptor) HasCapability(capability Capability) bool {
 	}
 	return false
 }
+
+// EqualPluginDescriptor 比较两个PluginDescriptor是否等价，忽略Metadata差异
+func EqualPluginDescriptor(a, b PluginDescriptor) bool {
+	if a.ID != b.ID ||
+		a.ExtensionID != b.ExtensionID ||
+		a.Name != b.Name ||
+		a.Version != b.Version ||
+		a.ProtocolVersion != b.ProtocolVersion {
+		return false
+	}
+
+	if len(a.Capabilities) != len(b.Capabilities) {
+		return false
+	}
+	capMap := make(map[Capability]struct{}, len(a.Capabilities))
+	for _, cap := range a.Capabilities {
+		capMap[cap] = struct{}{}
+	}
+	for _, cap := range b.Capabilities {
+		if _, ok := capMap[cap]; !ok {
+			return false
+		}
+	}
+
+	if len(a.Services) != len(b.Services) {
+		return false
+	}
+	svcMap := make(map[ServiceID]struct{}, len(a.Services))
+	for _, svc := range a.Services {
+		svcMap[svc.ID] = struct{}{}
+	}
+	for _, svc := range b.Services {
+		if _, ok := svcMap[svc.ID]; !ok {
+			return false
+		}
+	}
+
+	if len(a.Channels) != len(b.Channels) {
+		return false
+	}
+	chMap := make(map[ChannelID]struct{}, len(a.Channels))
+	for _, ch := range a.Channels {
+		chMap[ch.ID] = struct{}{}
+	}
+	for _, ch := range b.Channels {
+		if _, ok := chMap[ch.ID]; !ok {
+			return false
+		}
+	}
+
+	return true
+}

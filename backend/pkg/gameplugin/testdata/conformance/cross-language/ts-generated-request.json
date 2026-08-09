@@ -1,0 +1,11 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "request",
+  "id": "ts-req-001",
+  "method": "vendor.control.execute",
+  "payload": {
+    "action": "restart",
+    "force": false
+  },
+  "pluginId": "vendor-plugin"
+}

@@ -1,0 +1,10 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "notification",
+  "id": "ts-notify-001",
+  "method": "vendor.event.happened",
+  "payload": {
+    "severity": "info",
+    "message": "operation completed"
+  }
+}

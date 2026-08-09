@@ -1,0 +1,380 @@
+package ipc
+
+import (
+	"context"
+	"errors"
+	"io"
+	"sync"
+	"time"
+
+	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol"
+)
+
+type ControlPlane interface {
+	Attach(
+		ctx context.Context,
+		peer Peer,
+		transport Transport,
+	) (*Connection, error)
+
+	Detach(
+		ctx context.Context,
+		connectionID ConnectionID,
+	) error
+
+	Send(
+		ctx context.Context,
+		peer Peer,
+		envelope protocol.Envelope,
+	) error
+
+	Shutdown(ctx context.Context) error
+}
+
+type ConnectionHandler interface {
+	OnAttach(conn *Connection)
+
+	OnDetach(conn *Connection)
+
+	OnEnvelope(conn *Connection, envelope protocol.Envelope)
+
+	OnError(conn *Connection, err error)
+}
+
+type defaultConnectionHandler struct {
+	dispatcher Dispatcher
+	handler    EventHandler
+}
+
+func newDefaultConnectionHandler(dispatcher Dispatcher, handler EventHandler) *defaultConnectionHandler {
+	return &defaultConnectionHandler{
+		dispatcher: dispatcher,
+		handler:    handler,
+	}
+}
+
+func (h *defaultConnectionHandler) OnAttach(conn *Connection) {
+	if h.handler != nil {
+		h.handler(ConnectionEvent{
+			Type:         EventConnectionAttached,
+			ConnectionID: conn.ID,
+			Peer:         conn.Peer,
+		})
+	}
+}
+
+func (h *defaultConnectionHandler) OnDetach(conn *Connection) {
+	if h.handler != nil {
+		h.handler(ConnectionEvent{
+			Type:         EventConnectionDetached,
+			ConnectionID: conn.ID,
+			Peer:         conn.Peer,
+		})
+	}
+}
+
+func (h *defaultConnectionHandler) OnEnvelope(conn *Connection, envelope protocol.Envelope) {
+	if h.dispatcher == nil {
+		return
+	}
+	ctx := context.Background()
+	_ = h.dispatcher.Dispatch(ctx, conn.Peer, envelope)
+}
+
+func (h *defaultConnectionHandler) OnError(conn *Connection, err error) {
+	if h.handler != nil {
+		h.handler(ConnectionEvent{
+			Type:         EventConnectionError,
+			ConnectionID: conn.ID,
+			Peer:         conn.Peer,
+			Error:        err,
+		})
+	}
+}
+
+type IDGenerator interface {
+	Generate() ConnectionID
+}
+
+type ControlPlaneConfig struct {
+	Resolver        RuntimePeerResolver
+	Dispatcher      Dispatcher
+	EventHandler    EventHandler
+	IDGenerator     IDGenerator
+	MaxEnvelopeSize int64
+}
+
+type controlPlane struct {
+	registry        *ConnectionRegistry
+	resolver        RuntimePeerResolver
+	dispatcher      Dispatcher
+	handler         EventHandler
+	connHandler     ConnectionHandler
+	idGenerator     IDGenerator
+	mu              sync.Mutex
+	connections     []*Connection
+	controlCtx      context.Context
+	controlCancel   context.CancelFunc
+	shuttingDown    bool
+	maxEnvelopeSize int64
+}
+
+func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
+	if config.Resolver == nil {
+		return nil, NewIPCError(IPCErrorPeerRoute, domain.ErrInternal, "runtime peer resolver is required")
+	}
+	if config.Dispatcher == nil {
+		config.Dispatcher = NewNoopDispatcher()
+	}
+	if config.IDGenerator == nil {
+		config.IDGenerator = NewUUIDIDGenerator()
+	}
+	if config.MaxEnvelopeSize <= 0 {
+		config.MaxEnvelopeSize = defaultMaxEnvelopeSize
+	}
+
+	controlCtx, controlCancel := context.WithCancel(context.Background())
+
+	cp := &controlPlane{
+		registry:        NewConnectionRegistry(),
+		resolver:        config.Resolver,
+		dispatcher:      config.Dispatcher,
+		handler:        config.EventHandler,
+		idGenerator:     config.IDGenerator,
+		controlCtx:      controlCtx,
+		controlCancel:   controlCancel,
+		maxEnvelopeSize: config.MaxEnvelopeSize,
+	}
+	cp.connHandler = newDefaultConnectionHandler(cp.dispatcher, cp.handler)
+	return cp, nil
+}
+
+func (cp *controlPlane) Attach(ctx context.Context, peer Peer, transport Transport) (*Connection, error) {
+	if err := peer.Validate(); err != nil {
+		return nil, NewIPCErrorWithCause(IPCErrorPeerRoute, domain.ErrInvalidArgument, "peer validation failed", err)
+	}
+
+	cp.mu.Lock()
+	if cp.shuttingDown {
+		cp.mu.Unlock()
+		return nil, NewIPCError(IPCErrorTransport, domain.ErrInvalidState, "control plane is shutting down")
+	}
+	cp.mu.Unlock()
+
+	pluginID, err := cp.resolver.ResolveService(ctx, peer.RuntimeID, peer.ServiceID)
+	if err != nil {
+		return nil, NewIPCErrorWithCause(IPCErrorPeerRoute, domain.ErrNotFound, "failed to resolve runtime service", err)
+	}
+
+	if pluginID != peer.PluginID {
+		return nil, NewIPCErrorWithCause(
+			IPCErrorPeerRoute,
+			domain.ErrInvalidArgument,
+			"plugin id mismatch: peer does not belong to resolved plugin",
+			nil,
+		)
+	}
+
+	if cp.registry.PeerExists(peer.Key()) {
+		return nil, NewIPCErrorWithCause(
+			IPCErrorDuplicate,
+			domain.ErrAlreadyExists,
+			"active connection already exists for peer",
+			nil,
+		)
+	}
+
+	now := time.Now().UTC()
+	connCtx, connCancel := context.WithCancel(cp.controlCtx)
+
+	id := cp.idGenerator.Generate()
+	conn := newConnection(id, peer, transport, now, connCancel)
+
+	if err := cp.registry.Register(conn); err != nil {
+		connCancel()
+		return nil, NewIPCErrorWithCause(IPCErrorDuplicate, domain.ErrAlreadyExists, "failed to register connection", err)
+	}
+
+	cp.mu.Lock()
+	cp.connections = append(cp.connections, conn)
+	cp.mu.Unlock()
+
+	cp.connHandler.OnAttach(conn)
+
+	go cp.receiveLoop(conn, connCtx)
+
+	return conn, nil
+}
+
+func (cp *controlPlane) Detach(ctx context.Context, connectionID ConnectionID) error {
+	conn, exists := cp.registry.Get(connectionID)
+	if !exists {
+		return nil
+	}
+	cp.closeConnection(conn)
+	return nil
+}
+
+func (cp *controlPlane) Send(ctx context.Context, peer Peer, envelope protocol.Envelope) error {
+	if err := envelope.Validate(); err != nil {
+		return NewIPCErrorWithCause(IPCErrorProtocol, domain.ErrInvalidArgument, "envelope validation failed", err)
+	}
+
+	if err := ValidateEnvelopePeer(envelope, peer); err != nil {
+		return err
+	}
+
+	conn, exists := cp.registry.GetByPeer(peer.Key())
+	if !exists {
+		return NewIPCErrorWithCause(
+			IPCErrorTransport,
+			domain.ErrRuntimeUnavailable,
+			"no active connection for peer",
+			nil,
+		)
+	}
+
+	if !conn.IsActive() {
+		return NewIPCErrorWithCause(
+			IPCErrorTransport,
+			domain.ErrRuntimeUnavailable,
+			"connection is not active",
+			nil,
+		)
+	}
+
+	FillRouting(&envelope, peer)
+
+	if err := conn.Transport().Send(ctx, envelope); err != nil {
+		return NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err)
+	}
+	return nil
+}
+
+func (cp *controlPlane) Shutdown(ctx context.Context) error {
+	cp.mu.Lock()
+	if cp.shuttingDown {
+		cp.mu.Unlock()
+		return nil
+	}
+	cp.shuttingDown = true
+	connections := make([]*Connection, len(cp.connections))
+	copy(connections, cp.connections)
+	cp.mu.Unlock()
+
+	cp.controlCancel()
+
+	done := make(chan struct{})
+	go func() {
+		for _, conn := range connections {
+			cp.closeConnection(conn)
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (cp *controlPlane) receiveLoop(conn *Connection, ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			cp.cleanupConnection(conn)
+			return
+		default:
+		}
+
+		envelope, err := conn.Transport().Receive(ctx)
+		if err != nil {
+			if isTerminalError(err) {
+				cp.connHandler.OnDetach(conn)
+				cp.cleanupConnection(conn)
+				return
+			}
+			cp.connHandler.OnError(conn, err)
+			cp.connHandler.OnDetach(conn)
+			cp.cleanupConnection(conn)
+			return
+		}
+
+		if err := envelope.Validate(); err != nil {
+			cp.connHandler.OnError(conn, NewIPCErrorWithCause(
+				IPCErrorProtocol,
+				domain.ErrProtocolMismatch,
+				"envelope validation failed",
+				err,
+			))
+			continue
+		}
+
+		if err := ValidateEnvelopePeer(envelope, conn.Peer); err != nil {
+			cp.connHandler.OnError(conn, err)
+			continue
+		}
+
+		cp.connHandler.OnEnvelope(conn, envelope)
+	}
+}
+
+func (cp *controlPlane) closeConnection(conn *Connection) {
+	if !conn.markClosing(time.Now().UTC()) {
+		return
+	}
+
+	conn.cancel()
+
+	transport := conn.Transport()
+	if transport != nil {
+		_ = transport.Close()
+	}
+
+	now := time.Now().UTC()
+	conn.markClosed(now)
+}
+
+func (cp *controlPlane) cleanupConnection(conn *Connection) {
+	cp.registry.Remove(conn.ID)
+	cp.removeFromConnections(conn.ID)
+}
+
+func (cp *controlPlane) removeFromConnections(id ConnectionID) {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+	for i, c := range cp.connections {
+		if c.ID == id {
+			cp.connections = append(cp.connections[:i], cp.connections[i+1:]...)
+			return
+		}
+	}
+}
+
+func isTerminalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return false
+}
+
+const defaultMaxEnvelopeSize = 16 * 1024 * 1024
+
+func GetMaxEnvelopeSize(cp ControlPlane) int64 {
+	if c, ok := cp.(*controlPlane); ok {
+		return c.maxEnvelopeSize
+	}
+	return defaultMaxEnvelopeSize
+}

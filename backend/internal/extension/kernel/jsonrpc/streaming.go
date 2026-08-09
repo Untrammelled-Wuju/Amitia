@@ -59,41 +59,42 @@ type StreamCredit struct {
 }
 
 type Stream struct {
-	ID         StreamID
-	Method     string
-	Direction  string
-	ChunkMax   int
-	Credit     int64
-	Consumed   int64
-	Produced   int64
-	State      string
-	CreatedAt  time.Time
-	ClosedAt   *time.Time
-	mu         sync.Mutex
-	ch         chan []byte
-	errCh      chan *Error
-	doneCh     chan struct{}
-	onChunk    func(chunk StreamChunk) error
-	onClose    func(reason string)
-	creditCond *sync.Cond
-	cancel     context.CancelFunc
+	ID                      StreamID
+	Method                  string
+	Direction               string
+	ChunkMax                int
+	Credit                  int64
+	Consumed                int64
+	Produced                int64
+	State                   string
+	CreatedAt               time.Time
+	ClosedAt                *time.Time
+	mu                      sync.Mutex
+	ch                      chan []byte
+	errCh                   chan *Error
+	doneCh                  chan struct{}
+	onChunk                 func(chunk StreamChunk) error
+	onClose                 func(reason string)
+	cancel                  context.CancelFunc
+	creditSignal            chan struct{}
+	nextIncomingSequence    int64
 }
 
 func NewStream(id StreamID, method, direction string, chunkMax, initialCredit int, bufferSize int) *Stream {
-	s := &Stream{
-		ID:        id,
-		Method:    method,
-		Direction: direction,
-		ChunkMax:  chunkMax,
-		Credit:    int64(initialCredit),
-		State:     StreamStateOpen,
-		CreatedAt: time.Now().UTC(),
-		ch:        make(chan []byte, bufferSize),
-		errCh:     make(chan *Error, 1),
-		doneCh:    make(chan struct{}),
+	return &Stream{
+		ID:                   id,
+		Method:               method,
+		Direction:            direction,
+		ChunkMax:             chunkMax,
+		Credit:               int64(initialCredit),
+		State:                StreamStateOpen,
+		CreatedAt:            time.Now().UTC(),
+		ch:                   make(chan []byte, bufferSize),
+		errCh:                make(chan *Error, 1),
+		doneCh:               make(chan struct{}),
+		creditSignal:         make(chan struct{}, 1),
+		nextIncomingSequence: 1,
 	}
-	s.creditCond = sync.NewCond(&s.mu)
-	return s
 }
 
 func (s *Stream) ConsumeCredit() bool {
@@ -110,10 +111,16 @@ func (s *Stream) ConsumeCredit() bool {
 }
 
 func (s *Stream) AddCredit(amount int) {
+	if amount <= 0 {
+		return
+	}
 	s.mu.Lock()
 	s.Credit += int64(amount)
-	s.creditCond.Broadcast()
 	s.mu.Unlock()
+	select {
+	case s.creditSignal <- struct{}{}:
+	default:
+	}
 }
 
 func (s *Stream) WaitCredit(ctx context.Context) error {
@@ -128,14 +135,10 @@ func (s *Stream) WaitCredit(ctx context.Context) error {
 			s.mu.Unlock()
 			return nil
 		}
-		waitCh := make(chan struct{})
-		go func() {
-			s.creditCond.Wait()
-			close(waitCh)
-		}()
 		s.mu.Unlock()
+
 		select {
-		case <-waitCh:
+		case <-s.creditSignal:
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-s.doneCh:
@@ -174,6 +177,44 @@ func (s *Stream) RecvChunk(ctx context.Context) ([]byte, error) {
 		return nil, ErrStreamClosed
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+func (s *Stream) AcceptChunk(chunk StreamChunk) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.State != StreamStateOpen {
+		return ErrStreamClosed
+	}
+	if chunk.Sequence != s.nextIncomingSequence {
+		return NewError(
+			ErrCodeProtocol,
+			fmt.Sprintf("jsonrpc: sequence mismatch: expected %d, got %d", s.nextIncomingSequence, chunk.Sequence),
+			false,
+			CategoryStream,
+		)
+	}
+	if len(chunk.Data) > s.ChunkMax {
+		return NewError(
+			ErrCodeProtocol,
+			fmt.Sprintf("jsonrpc: chunk size %d exceeds max %d", len(chunk.Data), s.ChunkMax),
+			false,
+			CategoryStream,
+		)
+	}
+
+	s.nextIncomingSequence++
+
+	select {
+	case s.ch <- chunk.Data:
+		atomic.AddInt64(&s.Produced, 1)
+		if chunk.Last {
+			s.State = StreamStateClosing
+		}
+		return nil
+	case <-s.doneCh:
+		return ErrStreamClosed
 	}
 }
 

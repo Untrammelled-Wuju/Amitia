@@ -1,0 +1,5 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "request",
+  "method": "vendor.test"
+}

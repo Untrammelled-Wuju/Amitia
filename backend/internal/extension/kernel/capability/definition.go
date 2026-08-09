@@ -44,9 +44,48 @@ type AvailabilityRule struct {
 	RequiresRoles []string `json:"requiresRoles,omitempty"`
 }
 
+type ToolStreamingPolicy struct {
+	Enabled       bool  `json:"enabled"`
+	MaxEventBytes int   `json:"maxEventBytes,omitempty"`
+	MaxEvents     int   `json:"maxEvents,omitempty"`
+	MaxTotalBytes int64 `json:"maxTotalBytes,omitempty"`
+}
+
+const (
+	DefaultMaxEventBytes = 64 * 1024
+	DefaultMaxEvents     = 4096
+	DefaultMaxTotalBytes = 8 * 1024 * 1024
+)
+
+func (p ToolStreamingPolicy) EffectiveMaxEventBytes() int {
+	if p.MaxEventBytes > 0 {
+		return p.MaxEventBytes
+	}
+	return DefaultMaxEventBytes
+}
+
+func (p ToolStreamingPolicy) EffectiveMaxEvents() int {
+	if p.MaxEvents > 0 {
+		return p.MaxEvents
+	}
+	return DefaultMaxEvents
+}
+
+func (p ToolStreamingPolicy) EffectiveMaxTotalBytes() int64 {
+	if p.MaxTotalBytes > 0 {
+		return p.MaxTotalBytes
+	}
+	return DefaultMaxTotalBytes
+}
+
+func (p ToolStreamingPolicy) LimitsEnabled() bool {
+	return p.Enabled
+}
+
 type ToolResultPolicy struct {
-	SanitizeError  bool `json:"sanitizeError"`
-	MaxOutputBytes int  `json:"maxOutputBytes,omitempty"`
+	SanitizeError  bool                `json:"sanitizeError"`
+	MaxOutputBytes int                 `json:"maxOutputBytes,omitempty"`
+	Streaming      ToolStreamingPolicy `json:"streaming,omitempty"`
 }
 
 type CapabilityDefinition struct {

@@ -3,6 +3,7 @@ package jsonrpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -217,10 +218,13 @@ func (m *CoreMethods) handleStreamChunk(ctx context.Context, params json.RawMess
 	if err != nil {
 		return nil, NewError(ErrCodeStreamClosed, err.Error(), false, CategoryStream)
 	}
-	if err := s.SendChunk(p.Data); err != nil {
-		return nil, NewError(ErrCodeStreamBackpressure, err.Error(), true, CategoryStream)
+	if err := s.AcceptChunk(p); err != nil {
+		if errors.Is(err, ErrStreamClosed) {
+			return nil, NewError(ErrCodeStreamClosed, err.Error(), false, CategoryStream)
+		}
+		return nil, err
 	}
-	return map[string]any{"seq": p.Sequence}, nil
+	return map[string]any{"seq": p.Sequence, "last": p.Last}, nil
 }
 
 func (m *CoreMethods) handleStreamClose(ctx context.Context, params json.RawMessage) (any, error) {

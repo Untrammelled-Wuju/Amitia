@@ -34,13 +34,43 @@ type ExecutionPipeline struct {
 }
 
 func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRequest) capability.UnifiedToolResult {
+	result, _ := p.execute(ctx, request, nil)
+	return result
+}
+
+func (p *ExecutionPipeline) ExecuteStream(ctx context.Context, request ToolExecutionRequest, sink capability.ToolStreamSink) (capability.UnifiedToolResult, error) {
+	if sink == nil {
+		return capability.NewToolFailureResult(request.Invocation.InvocationID, string(request.ToolID), &capability.ToolError{
+			Code:     capability.ErrorCodeStreamProtocol,
+			Category: capability.ToolErrorCategoryStream,
+			Message:  "stream sink is required",
+		}), fmt.Errorf("stream sink is nil")
+	}
+
+	toolID := string(request.ToolID)
+	inv := normalizeExecutionInvocation(request.Invocation)
+
+	policy := capability.ToolStreamingPolicy{}
+	tool, err := p.resolveTool(ctx, toolID)
+	if err == nil {
+		policy = tool.ResultPolicy.Streaming
+	}
+
+	session := newToolStreamSession(inv.InvocationID, sink, policy, p.Sanitizer)
+	result, streamErr := p.execute(ctx, request, session)
+
+	terminalErr := session.Finish(ctx, result)
+	return result, firstNonNil(streamErr, session.Err(), terminalErr)
+}
+
+func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRequest, stream *toolStreamSession) (capability.UnifiedToolResult, error) {
 	toolID := string(request.ToolID)
 	inv := normalizeExecutionInvocation(request.Invocation)
 	request.Invocation = inv
 
 	if err := ctx.Err(); err != nil {
 		result := capability.ResultFromContextError(inv.InvocationID, err)
-		return p.finishEarlyResult(ctx, inv, toolID, result)
+		return p.finishEarlyResult(ctx, inv, toolID, result), nil
 	}
 
 	if p.InvocationValidator != nil {
@@ -48,7 +78,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeInvalidInput,
 				Message: err.Error(),
-			}))
+			})), nil
 		}
 	}
 
@@ -57,7 +87,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 		return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 			Code:    capability.ErrorCodeNotAvailable,
 			Message: err.Error(),
-		}))
+		})), nil
 	}
 
 	if p.InputValidator != nil {
@@ -65,7 +95,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeInvalidInput,
 				Message: "input validation failed",
-			}))
+			})), nil
 		}
 	}
 
@@ -75,7 +105,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeNotAvailable,
 				Message: "tool not executable",
-			}))
+			})), nil
 		}
 	}
 
@@ -84,7 +114,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeScopeDenied,
 				Message: err.Error(),
-			}))
+			})), nil
 		}
 	}
 
@@ -95,7 +125,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodePermissionDenied,
 				Message: "permission denied",
-			}))
+			})), nil
 		case PermissionRequireApproval:
 			if p.ApprovalGate != nil {
 				approved, appErr := p.ApprovalGate.Evaluate(ctx, tool, inv, decision)
@@ -103,7 +133,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 					return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 						Code:    capability.ErrorCodePermissionDenied,
 						Message: "approval denied",
-					}))
+					})), nil
 				}
 			}
 		}
@@ -114,7 +144,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    "max_depth_exceeded",
 				Message: err.Error(),
-			}))
+			})), nil
 		}
 	}
 
@@ -123,7 +153,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeRateLimited,
 				Message: err.Error(),
-			}))
+			})), nil
 		}
 	}
 
@@ -133,14 +163,17 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 			return p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeRateLimited,
 				Message: slotErr.Error(),
-			}))
+			})), nil
 		}
 		defer p.ConcurrencyCtrl.Release(slot)
 	}
 
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
 		if cached, found := p.IdempotencyGuard.Check(ctx, inv.IdempotencyKey, toolID); found {
-			return cached
+			if stream != nil {
+				_ = stream.Finish(ctx, cached)
+			}
+			return cached, nil
 		}
 	}
 
@@ -160,8 +193,14 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 	startTime := time.Now()
 
 	var result capability.UnifiedToolResult
+	var deliveryErr error
+
 	if p.Dispatcher != nil {
-		result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+		if stream != nil && tool.ResultPolicy.Streaming.Enabled {
+			result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
+		} else {
+			result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+		}
 	} else {
 		result = capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 			Code:    capability.ErrorCodeInternalError,
@@ -169,7 +208,17 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 		})
 	}
 
-	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess {
+	streamRetryAllowed := stream == nil || (!stream.HasVisibleOutput() && stream.Err() == nil)
+
+	if stream != nil && stream.Err() != nil && result.Status == capability.ToolResultStatusSuccess {
+		result = capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:     capability.ErrorCodeStreamDeliveryFailed,
+			Category: capability.ToolErrorCategoryStream,
+			Message:  fmt.Sprintf("stream delivery failed: %s", stream.Err().Error()),
+		})
+	}
+
+	if p.RetryCtrl != nil && result.Status != capability.ToolResultStatusSuccess && streamRetryAllowed {
 		if result.Error != nil {
 			switch result.Error.Code {
 			case capability.ErrorCodePermissionDenied, capability.ErrorCodeScopeDenied, capability.ErrorCodeInvalidInput:
@@ -180,7 +229,11 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 						if p.AuditRec != nil {
 							p.AuditRec.RecordRetry(inv.InvocationID, attempt)
 						}
-						result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+						if stream != nil && tool.ResultPolicy.Streaming.Enabled {
+							result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
+						} else {
+							result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+						}
 						if result.Status == capability.ToolResultStatusSuccess {
 							break
 						}
@@ -219,7 +272,7 @@ func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRe
 		p.CircuitBreaker.RecordResult(ctx, tool, result)
 	}
 
-	return result
+	return result, deliveryErr
 }
 
 func (p *ExecutionPipeline) resolveTool(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
@@ -271,4 +324,13 @@ func normalizeExecutionInvocation(inv capability.ToolInvocationContext) capabili
 		}
 	}
 	return inv
+}
+
+func firstNonNil(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

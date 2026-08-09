@@ -39,12 +39,17 @@ func GenerateCandidatesWithExcludes(ctx CandidateGenerationContext, registry *Ca
 }
 
 func behaviorFromActionDef(def CandidateActionDef) BehaviorCandidate {
+	var overrides []string
+	if def.Overrides != nil {
+		overrides = append([]string(nil), def.Overrides...)
+	}
 	return BehaviorCandidate{
 		ID:         def.ID,
 		ActionType: def.Type,
 		Tag:        def.Tag,
 		Channel:    channelForActionType(def.Type),
 		BaseScore:  def.BaseScore,
+		Overrides:  overrides,
 	}
 }
 

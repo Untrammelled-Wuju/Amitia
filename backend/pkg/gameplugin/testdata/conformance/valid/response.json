@@ -1,0 +1,9 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "response",
+  "id": "res-001",
+  "requestId": "req-001",
+  "payload": {
+    "ok": true
+  }
+}

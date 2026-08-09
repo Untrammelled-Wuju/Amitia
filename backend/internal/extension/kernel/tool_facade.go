@@ -274,6 +274,55 @@ func (f *ToolFacade) executeKernelTool(ctx context.Context, def capability.ToolD
 	return unifiedResultToLegacy(result)
 }
 
+func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName string, input json.RawMessage, scope LegacyScope, idempotencyKey string, sink capability.ToolStreamSink) (LegacyToolResult, bool, error) {
+	if f.toolRegistry == nil {
+		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false, nil
+	}
+	if sink == nil {
+		return LegacyToolResult{Status: "FAILED", VisibleText: "stream sink is required", Error: &LegacyToolError{Code: "STREAM_SINK_REQUIRED"}}, false, fmt.Errorf("stream sink is nil")
+	}
+
+	def, ok := f.toolRegistry.GetByModelName(ctx, modelName)
+	if !ok {
+		def, ok = f.toolRegistry.Get(ctx, modelName)
+	}
+	if !ok {
+		return LegacyToolResult{Status: "FAILED", VisibleText: fmt.Sprintf("tool %s not found in kernel registry", modelName), Error: &LegacyToolError{Code: "TOOL_NOT_FOUND", Message: modelName}}, false, nil
+	}
+
+	var kernelInterface interface{} = f.executionKernel
+	streamingKernel, ok := kernelInterface.(execution.StreamingExecutionSecurityKernel)
+	if !ok {
+		result := f.executeKernelTool(ctx, def, input, scope, idempotencyKey)
+		return result, false, nil
+	}
+
+	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
+		ExternalCallID:  scope.ToolCallID,
+		UserID:          scope.UserID,
+		CharacterID:     scope.CharacterID,
+		ConversationID:  scope.ConversationID,
+		Channel:         scope.Channel,
+		SessionID:       scope.SessionID,
+		ExtensionID:     def.ExtensionID,
+		ModuleID:        def.ModuleID,
+		Source:          capability.InvocationSourceModel,
+		IdempotencyKey:  idempotencyKey,
+		TraceID:         scope.TraceID,
+		OperationID:     scope.RequestID,
+	})
+	req := execution.ToolExecutionRequest{
+		ToolID:     capability.CapabilityID(def.ID),
+		Input:      input,
+		Invocation: invocation,
+	}
+
+	f.counters.IncPipelineExecution()
+	result, err := streamingKernel.ExecuteStream(ctx, req, sink)
+	legacy := unifiedResultToLegacy(result)
+	return legacy, true, err
+}
+
 func unifiedResultToLegacy(result capability.UnifiedToolResult) LegacyToolResult {
 	legacy := LegacyToolResult{
 		RunID:      result.InvocationID,

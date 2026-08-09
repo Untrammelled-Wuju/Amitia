@@ -33,3 +33,16 @@ type ToolExecutionRequest struct {
 type ExecutionSecurityKernel interface {
 	Execute(ctx context.Context, request ToolExecutionRequest) capability.UnifiedToolResult
 }
+
+type StreamingExecutionSecurityKernel interface {
+	ExecutionSecurityKernel
+
+	ExecuteStream(
+		ctx context.Context,
+		request ToolExecutionRequest,
+		sink capability.ToolStreamSink,
+	) (
+		capability.UnifiedToolResult,
+		error,
+	)
+}

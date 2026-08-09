@@ -1,0 +1,6 @@
+{
+  "id": "events",
+  "kind": "event",
+  "direction": "plugin_to_host",
+  "frequencyHint": "normal"
+}

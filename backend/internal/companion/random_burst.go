@@ -309,22 +309,43 @@ func (s *service) RandomBurstTriggerContext(ctx context.Context, characterID str
 	}
 
 	burstCandidate := decision.BehaviorCandidate{
-		ID:         "random_burst",
-		Tag:        decision.BehaviorTagProactiveCheck,
-		Channel:    decision.BehaviorChannelProactive,
-		BaseScore:  finalProb,
-		FinalScore: finalProb,
+		ID:        "random_burst",
+		Tag:       decision.BehaviorTagProactiveCheck,
+		Channel:   decision.BehaviorChannelProactive,
+		BaseScore: finalProb,
 		Reasons: []decision.BehaviorReason{
 			{Source: "companion", Key: "random_burst", Delta: 0},
 		},
 	}
+
+	scoredCandidates, err := decision.ScoreCandidates(
+		[]decision.BehaviorCandidate{burstCandidate},
+		decision.CandidateScoringContext{Now: now},
+		decision.DefaultBehaviorScoringOptions(),
+	)
+	if err != nil {
+		return map[string]interface{}{"triggered": false, "reason": "scoring_failed", "error": err.Error()}
+	}
+	if len(scoredCandidates) == 0 || scoredCandidates[0].FinalScore <= 0 {
+		return map[string]interface{}{"triggered": false, "reason": "zero_score", "prob": finalProb}
+	}
+
 	arbInput := decision.ArbitrationInput{
-		Candidates: []decision.BehaviorCandidate{burstCandidate},
+		Candidates: scoredCandidates,
 		Now:        now,
 	}
 	arbLayer := decision.DefaultArbitrationLayer()
-	arbResult := arbLayer.Arbitrate(arbInput)
+	arbResult, arbErr := arbLayer.Arbitrate(arbInput)
+	if arbErr != nil {
+		return map[string]interface{}{"triggered": false, "reason": "arbitration_error", "error": arbErr.Error()}
+	}
+	if !arbResult.HasSelection {
+		return map[string]interface{}{"triggered": false, "reason": "arbitration_rejected", "prob": finalProb}
+	}
 	if arbResult.FallbackUsed {
+		return map[string]interface{}{"triggered": false, "reason": "arbitration_rejected", "prob": finalProb}
+	}
+	if arbResult.Selected.ID != "random_burst" {
 		return map[string]interface{}{"triggered": false, "reason": "arbitration_rejected", "prob": finalProb}
 	}
 

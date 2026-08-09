@@ -1,0 +1,15 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "error",
+  "id": "msg-004",
+  "requestId": "msg-001",
+  "error": {
+    "code": "resource_exhausted",
+    "message": "channel quota exceeded",
+    "retryable": true,
+    "data": {
+      "limit": 100,
+      "current": 120
+    }
+  }
+}

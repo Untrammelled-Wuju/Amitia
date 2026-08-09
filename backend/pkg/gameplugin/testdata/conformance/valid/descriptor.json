@@ -1,0 +1,21 @@
+{
+  "id": "example-plugin",
+  "name": "Example Plugin",
+  "version": "1.0.0",
+  "protocolVersion": "amitia-game-host/1",
+  "capabilities": ["custom_rpc", "state_streaming"],
+  "services": [
+    {
+      "id": "bridge",
+      "kind": "process",
+      "required": true
+    }
+  ],
+  "channels": [
+    {
+      "id": "state",
+      "kind": "state",
+      "direction": "plugin_to_host"
+    }
+  ]
+}

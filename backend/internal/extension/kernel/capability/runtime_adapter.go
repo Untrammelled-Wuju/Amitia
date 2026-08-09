@@ -48,3 +48,15 @@ type RuntimeAdapter interface {
 		binding RuntimeBinding,
 	) HealthStatus
 }
+
+type StreamingRuntimeAdapter interface {
+	RuntimeAdapter
+
+	ExecuteStream(
+		ctx context.Context,
+		binding RuntimeBinding,
+		invocation ToolInvocationContext,
+		input json.RawMessage,
+		emitter ToolStreamEmitter,
+	) UnifiedToolResult
+}

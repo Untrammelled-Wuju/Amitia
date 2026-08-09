@@ -1,0 +1,39 @@
+{
+  "id": "example.game",
+  "name": "Example Game",
+  "version": "1.0.0",
+  "protocolVersion": "amitia-game-host/1",
+  "services": [
+    {
+      "id": "agent",
+      "name": "Agent Service",
+      "kind": "process",
+      "required": true,
+      "capabilities": ["custom_rpc", "state_streaming"]
+    },
+    {
+      "id": "game-bridge",
+      "kind": "external",
+      "required": false,
+      "dependsOn": ["agent"]
+    }
+  ],
+  "channels": [
+    {
+      "id": "events",
+      "kind": "event",
+      "direction": "plugin_to_host"
+    },
+    {
+      "id": "world-state",
+      "kind": "state",
+      "schemaId": "minecraft.world-state/v1",
+      "frequencyHint": "high"
+    }
+  ],
+  "capabilities": [
+    "custom_rpc",
+    "state_streaming",
+    "minecraft.pathfinding"
+  ]
+}

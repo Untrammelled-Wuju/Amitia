@@ -1,0 +1,10 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "response",
+  "id": "msg-002",
+  "requestId": "msg-001",
+  "payload": {
+    "status": "accepted",
+    "goalId": "goal-001"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "response",
+  "id": "ts-resp-001",
+  "requestId": "ts-req-001",
+  "payload": {
+    "result": "ok",
+    "details": null
+  },
+  "pluginId": "vendor-plugin"
+}

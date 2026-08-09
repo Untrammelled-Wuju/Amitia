@@ -1,0 +1,12 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "response",
+  "id": "go-resp-001",
+  "requestId": "go-req-001",
+  "payload": {
+    "status": "accepted",
+    "taskId": "task-123"
+  },
+  "runtimeId": "runtime-abc",
+  "pluginId": "minecraft-plugin"
+}

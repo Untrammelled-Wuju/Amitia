@@ -26,7 +26,7 @@ func TestScoreBehaviorCandidatesSortsByFinalScore(t *testing.T) {
 	}
 }
 
-func TestSelectBehaviorCandidateBlocksHardConstraint(t *testing.T) {
+func TestHardConstraintBlockedByCandidate(t *testing.T) {
 	candidates := []BehaviorCandidate{
 		{
 			ID:        "boundary",
@@ -44,16 +44,21 @@ func TestSelectBehaviorCandidateBlocksHardConstraint(t *testing.T) {
 		},
 	}
 
-	result := SelectBehaviorCandidate(candidates, DefaultBehaviorScoringOptions())
+	blocked := []BehaviorCandidate{}
+	allowed := []BehaviorCandidate{}
+	for _, c := range candidates {
+		if blockedByHardConstraint(c) {
+			blocked = append(blocked, c)
+		} else {
+			allowed = append(allowed, c)
+		}
+	}
 
-	if result.Selected.ID != "reply" {
-		t.Fatalf("unexpected selected candidate: %#v", result.Selected)
+	if len(allowed) != 1 || allowed[0].ID != "reply" {
+		t.Fatalf("unexpected allowed: %#v", allowed)
 	}
-	if len(result.Blocked) != 1 || result.Blocked[0].ID != "boundary" {
-		t.Fatalf("expected blocked candidate to be retained in audit: %#v", result.Blocked)
-	}
-	if len(result.Audit.Diagnostics) < 2 {
-		t.Fatalf("expected audit diagnostics: %#v", result.Audit.Diagnostics)
+	if len(blocked) != 1 || blocked[0].ID != "boundary" {
+		t.Fatalf("boundary should be blocked: %#v", blocked)
 	}
 }
 
@@ -157,20 +162,19 @@ func TestAffectWeightCanBeTuned(t *testing.T) {
 	}
 }
 
-func TestBusyLifeCanHardBlockProactiveCandidate(t *testing.T) {
+func TestBusyLifeRaisesRiskForProactive(t *testing.T) {
 	candidates := []BehaviorCandidate{
 		{ID: "proactive", Tag: BehaviorTagProactiveCheck, Channel: BehaviorChannelProactive, BaseScore: 0.9},
 		{ID: "reply", Tag: BehaviorTagReply, Channel: BehaviorChannelChat, BaseScore: 0.4},
 	}
 
 	adjusted := ApplyLifeInterruptionRisk(candidates, LifeSnapshot{Busy: 0.95})
-	result := SelectBehaviorCandidate(adjusted, DefaultBehaviorScoringOptions())
 
-	if result.Selected.ID != "reply" {
-		t.Fatalf("expected busy state to keep proactive candidate from bypassing risk: %#v", result)
+	if !blockedByHardConstraint(adjusted[0]) {
+		t.Fatal("proactive candidate should be blocked under extreme busy state")
 	}
-	if len(result.Blocked) != 1 || result.Blocked[0].ID != "proactive" {
-		t.Fatalf("expected proactive candidate blocked under extreme busy state: %#v", result.Blocked)
+	if blockedByHardConstraint(adjusted[1]) {
+		t.Fatal("reply candidate should not be blocked")
 	}
 }
 

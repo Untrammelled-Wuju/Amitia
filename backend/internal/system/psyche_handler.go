@@ -230,22 +230,41 @@ func (h *PsycheQueryHandler) ScoreBehavior(c *gin.Context) {
 
 func (h *PsycheQueryHandler) SelectBehavior(c *gin.Context) {
 	var req struct {
-		Candidates []decision.BehaviorCandidate    `json:"candidates"`
-		Options    decision.BehaviorScoringOptions `json:"options"`
+		Candidates []decision.BehaviorCandidate `json:"candidates"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数错误", err.Error())
 		return
 	}
-	options := req.Options
-	if options.BaseWeight == 0 && options.PersonalityWeight == 0 {
-		options = decision.DefaultBehaviorScoringOptions()
+	now := time.Now().UTC()
+	scored := make([]decision.BehaviorCandidate, len(req.Candidates))
+	copy(scored, req.Candidates)
+	hasV2 := false
+	for _, cand := range scored {
+		if cand.ScoringVersion == decision.BehaviorFormulaVersionV2 {
+			hasV2 = true
+			break
+		}
 	}
-	result := decision.SelectBehaviorCandidate(req.Candidates, options)
+	if !hasV2 {
+		for i := range scored {
+			scored[i].ScoringVersion = decision.BehaviorFormulaVersionV2
+		}
+	}
+	layer := decision.DefaultArbitrationLayer()
+	arbResult, err := layer.Arbitrate(decision.ArbitrationInput{
+		Candidates: scored,
+		Filter:     decision.DefaultHardConstraintFilter(),
+		Now:        now,
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "决策仲裁失败", err.Error())
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"code": response.OK,
 		"msg":  "操作成功",
-		"data": result,
+		"data": arbResult,
 	})
 }
 

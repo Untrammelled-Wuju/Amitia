@@ -18,18 +18,29 @@ import (
 	"github.com/u-ai/backend/internal/platform/process"
 )
 
+type GameHostNotifier interface {
+	Notify(ctx context.Context, extensionID, instanceID, serviceID, method string, params json.RawMessage)
+}
+
+type NotifyFunc func(ctx context.Context, extensionID, instanceID, serviceID, method string, params json.RawMessage)
+
+func (f NotifyFunc) Notify(ctx context.Context, extensionID, instanceID, serviceID, method string, params json.RawMessage) {
+	f(ctx, extensionID, instanceID, serviceID, method, params)
+}
+
 type ProcessSupervisor struct {
-	mu         sync.Mutex
-	instances  map[string]*ServiceInstance
-	defs       map[string]*ServiceRuntimeDefinition
-	verifier   *BinaryVerifier
-	selector   *PlatformSelector
-	envBuilder *EnvBuilder
-	logger     func(level, msg string, fields map[string]any)
-	healthMon  *HealthMonitor
-	quarantine *QuarantineManager
-	rootDir    string
-	procMgr    *process.DefaultProcessManager
+	mu               sync.Mutex
+	instances        map[string]*ServiceInstance
+	defs             map[string]*ServiceRuntimeDefinition
+	verifier         *BinaryVerifier
+	selector         *PlatformSelector
+	envBuilder       *EnvBuilder
+	logger           func(level, msg string, fields map[string]any)
+	healthMon        *HealthMonitor
+	quarantine       *QuarantineManager
+	rootDir          string
+	procMgr          *process.DefaultProcessManager
+	gameHostNotifier GameHostNotifier
 }
 
 func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
@@ -67,6 +78,12 @@ func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) 
 
 func (s *ProcessSupervisor) SetLogger(l func(level, msg string, fields map[string]any)) {
 	s.logger = l
+}
+
+func (s *ProcessSupervisor) SetGameHostNotifier(n GameHostNotifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gameHostNotifier = n
 }
 
 func (s *ProcessSupervisor) QuarantineManager() *QuarantineManager {
@@ -299,6 +316,12 @@ func (s *ProcessSupervisor) startRPCService(ctx context.Context, instance *Servi
 		},
 		OnNotification: func(method string, params json.RawMessage) {
 			s.log("debug", fmt.Sprintf("rpc notification: %s", method), map[string]any{"service": instance.ServiceID})
+			s.mu.Lock()
+			notifier := s.gameHostNotifier
+			s.mu.Unlock()
+			if notifier != nil {
+				notifier.Notify(context.Background(), def.ExtensionID, instance.InstanceID, instance.ServiceID, method, params)
+			}
 		},
 	})
 	instance.rpcSession = rpcSession

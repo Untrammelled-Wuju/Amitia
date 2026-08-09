@@ -1,0 +1,11 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "notification",
+  "id": "go-notify-001",
+  "method": "plugin.runtime.state_changed",
+  "payload": {
+    "state": "running",
+    "timestamp": 1691500000
+  },
+  "runtimeId": "runtime-abc"
+}

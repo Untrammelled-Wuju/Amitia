@@ -70,6 +70,7 @@ type BehaviorCandidate struct {
 	FinalScore          float64              `json:"finalScore"`
 	Reasons             []BehaviorReason     `json:"reasons,omitempty"`
 	Constraints         []BehaviorConstraint `json:"constraints,omitempty"`
+	Overrides           []string             `json:"overrides,omitempty"`
 	ScoringVersion      string               `json:"scoringVersion,omitempty"`
 }
 

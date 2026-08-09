@@ -1,0 +1,9 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "request",
+  "id": "req-001",
+  "method": "vendor.agent.execute",
+  "payload": {
+    "value": 123
+  }
+}

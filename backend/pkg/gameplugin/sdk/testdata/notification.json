@@ -1,0 +1,11 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "notification",
+  "id": "msg-003",
+  "method": "vendor.runtime.state_changed",
+  "runtimeId": "runtime-123",
+  "payload": {
+    "state": "running",
+    "uptime": 3600
+  }
+}

@@ -286,3 +286,36 @@ func (d *RuntimeDispatcher) Dispatch(ctx context.Context, tool capability.ToolDe
 
 	return adapter.Execute(ctx, tool.Runtime, inv, input)
 }
+
+func (d *RuntimeDispatcher) DispatchStream(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, input json.RawMessage, emitter capability.ToolStreamEmitter) (capability.UnifiedToolResult, bool) {
+	if d.adapterRegistry == nil {
+		return capability.UnifiedToolResult{
+			InvocationID: inv.InvocationID,
+			Status:       capability.ToolResultStatusFailed,
+			Error: &capability.ToolError{
+				Code:    capability.ErrorCodeRuntimeUnavailable,
+				Message: "no adapter registry configured",
+			},
+		}, false
+	}
+
+	adapter, ok := d.adapterRegistry.Resolve(tool.Runtime)
+	if !ok {
+		return capability.UnifiedToolResult{
+			InvocationID: inv.InvocationID,
+			Status:       capability.ToolResultStatusFailed,
+			Error: &capability.ToolError{
+				Code:    capability.ErrorCodeRuntimeUnavailable,
+				Message: "no adapter for runtime: " + string(tool.Runtime.RuntimeType),
+			},
+		}, false
+	}
+
+	streamingAdapter, ok := adapter.(capability.StreamingRuntimeAdapter)
+	if !ok {
+		return adapter.Execute(ctx, tool.Runtime, inv, input), false
+	}
+
+	result := streamingAdapter.ExecuteStream(ctx, tool.Runtime, inv, input, emitter)
+	return result, true
+}

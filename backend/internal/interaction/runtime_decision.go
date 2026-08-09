@@ -71,7 +71,14 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		Filter:     decision.DefaultHardConstraintFilter(),
 		Now:        now,
 	}
-	arbitrationResult := p.arbitrationLayer.Arbitrate(arbitrationInput)
+	arbitrationResult, arbErr := p.arbitrationLayer.Arbitrate(arbitrationInput)
+	if arbErr != nil {
+		return nil, nil, fmt.Errorf("arbitration failed: %w", arbErr)
+	}
+	if !arbitrationResult.HasSelection {
+		return nil, nil, nil
+	}
+
 	builder := decision.NewBehaviorPlanBuilder(now)
 	plan := builder.Build(arbitrationResult.Selected, arbitrationInput)
 	plan.CharacterID, plan.UserID = scope.CharacterID, scope.UserID

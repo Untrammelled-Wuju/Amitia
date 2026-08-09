@@ -1,0 +1,8 @@
+{
+  "id": "game-bridge",
+  "name": "Game Bridge",
+  "kind": "process",
+  "required": true,
+  "dependsOn": [],
+  "capabilities": ["custom_rpc"]
+}

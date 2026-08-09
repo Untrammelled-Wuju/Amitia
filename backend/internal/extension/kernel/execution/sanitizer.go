@@ -98,3 +98,13 @@ func (s *Sanitizer) isSensitive(key string) bool {
 	lower := strings.ToLower(key)
 	return s.sensitiveFields[lower]
 }
+
+func (s *Sanitizer) sanitizeStreamContent(content *capability.ToolContent) *capability.ToolContent {
+	if content == nil {
+		return nil
+	}
+	if content.Type == capability.ToolContentStructured && len(content.Data) > 0 {
+		content.Data = s.sanitizeJSON(content.Data)
+	}
+	return content
+}

@@ -1,0 +1,31 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "request",
+  "id": "roundtrip-001",
+  "method": "minecraft.world.query",
+  "payload": {
+    "position": {
+      "x": 100.5,
+      "y": 64,
+      "z": -200.25
+    },
+    "blocks": [
+      {"name": "stone", "count": 64},
+      {"name": "dirt", "count": 32}
+    ],
+    "entities": [
+      {
+        "type": "player",
+        "name": "steve",
+        "health": 20,
+        "inventory": [
+          {"slot": 0, "item": "diamond_sword", "enchantments": ["sharpness"]}
+        ]
+      }
+    ],
+    "flags": {
+      "includeAir": false,
+      "dimension": "overworld"
+    }
+  }
+}

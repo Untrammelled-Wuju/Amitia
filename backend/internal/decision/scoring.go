@@ -38,13 +38,6 @@ type CandidateScoringContext struct {
 	Now                time.Time
 }
 
-type BehaviorSelectionResult struct {
-	Selected     BehaviorCandidate   `json:"selected"`
-	Alternatives []BehaviorCandidate `json:"alternatives,omitempty"`
-	Blocked      []BehaviorCandidate `json:"blocked,omitempty"`
-	Audit        BehaviorAudit       `json:"audit"`
-}
-
 type AffectRegulator struct {
 	PositiveEmotionWeight float64
 	NegativeEmotionWeight float64
@@ -251,38 +244,6 @@ func ScoreBehaviorCandidates(candidates []BehaviorCandidate, options BehaviorSco
 	sort.SliceStable(result, func(i, j int) bool {
 		return result[i].FinalScore > result[j].FinalScore
 	})
-	return result
-}
-
-func SelectBehaviorCandidate(candidates []BehaviorCandidate, options BehaviorScoringOptions) BehaviorSelectionResult {
-	allowed := make([]BehaviorCandidate, 0, len(candidates))
-	blocked := make([]BehaviorCandidate, 0)
-	diagnostics := []string{string(BehaviorFormulaVersionV1)}
-	for _, candidate := range candidates {
-		if blockedByHardConstraint(candidate) {
-			blocked = append(blocked, candidate)
-			diagnostics = append(diagnostics, "blocked:"+candidate.ID)
-			continue
-		}
-		allowed = append(allowed, candidate)
-	}
-	scored := ScoreBehaviorCandidates(allowed, options)
-	result := BehaviorSelectionResult{
-		Blocked: blocked,
-		Audit: BehaviorAudit{
-			FormulaVersion: string(BehaviorFormulaVersionV1),
-			Diagnostics:    diagnostics,
-		},
-	}
-	if len(scored) == 0 {
-		result.Audit.Diagnostics = append(result.Audit.Diagnostics, "no_candidate_selected")
-		return result
-	}
-	result.Selected = scored[0]
-	if len(scored) > 1 {
-		result.Alternatives = scored[1:]
-	}
-	result.Audit.Diagnostics = append(result.Audit.Diagnostics, "selected:"+result.Selected.ID)
 	return result
 }
 

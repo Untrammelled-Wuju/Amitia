@@ -1,0 +1,10 @@
+{
+  "player": {
+    "anything": [1, 2, 3]
+  },
+  "vendorExtension": {
+    "nested": {
+      "unknown": true
+    }
+  }
+}

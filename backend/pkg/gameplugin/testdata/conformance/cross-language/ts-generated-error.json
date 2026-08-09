@@ -1,0 +1,16 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "error",
+  "id": "ts-err-001",
+  "requestId": "ts-req-001",
+  "error": {
+    "code": "invalid_argument",
+    "message": "force parameter must be boolean",
+    "retryable": false,
+    "data": {
+      "parameter": "force",
+      "expected": "boolean",
+      "received": "string"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "protocol": "amitia-game-host/1",
+  "type": "error",
+  "id": "err-001",
+  "requestId": "req-001",
+  "error": {
+    "code": "runtime_unavailable",
+    "message": "runtime unavailable",
+    "retryable": true
+  }
+}

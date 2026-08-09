@@ -59,6 +59,7 @@ const (
 	ToolErrorCategoryConflict    ToolErrorCategory = "conflict"
 	ToolErrorCategoryRateLimit   ToolErrorCategory = "rate_limit"
 	ToolErrorCategoryDependency  ToolErrorCategory = "dependency"
+	ToolErrorCategoryStream      ToolErrorCategory = "stream"
 	ToolErrorCategoryInternal    ToolErrorCategory = "internal"
 )
 
@@ -98,10 +99,13 @@ const (
 	ErrorCodeConflict           = "conflict"
 	ErrorCodeRateLimited        = "rate_limited"
 	ErrorCodeDependencyMissing  = "dependency_missing"
-	ErrorCodeConnectionLost     = "connection_lost"
-	ErrorCodeExecutionFailed    = "execution_failed"
-	ErrorCodeInvalidResult      = "invalid_result"
-	ErrorCodeInternalError      = "internal_error"
+	ErrorCodeConnectionLost        = "connection_lost"
+	ErrorCodeExecutionFailed       = "execution_failed"
+	ErrorCodeInvalidResult         = "invalid_result"
+	ErrorCodeStreamProtocol        = "stream_protocol_error"
+	ErrorCodeStreamLimitExceeded   = "stream_limit_exceeded"
+	ErrorCodeStreamDeliveryFailed  = "stream_delivery_failed"
+	ErrorCodeInternalError         = "internal_error"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -128,6 +132,10 @@ func ErrorCategoryForCode(code string) ToolErrorCategory {
 		return ToolErrorCategoryRateLimit
 	case ErrorCodeDependencyMissing:
 		return ToolErrorCategoryDependency
+	case ErrorCodeStreamProtocol,
+		ErrorCodeStreamLimitExceeded,
+		ErrorCodeStreamDeliveryFailed:
+		return ToolErrorCategoryStream
 	default:
 		return ToolErrorCategoryInternal
 	}

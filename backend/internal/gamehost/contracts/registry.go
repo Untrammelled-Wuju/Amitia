@@ -25,4 +25,9 @@ type PluginRegistry interface {
 	List(
 		ctx context.Context,
 	) ([]domain.PluginDescriptor, error)
+
+	ListByExtension(
+		ctx context.Context,
+		extensionID string,
+	) ([]domain.PluginDescriptor, error)
 }
