@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
@@ -514,10 +513,13 @@ func TestRPCDispatcher_Integration(t *testing.T) {
 		t.Fatalf("register echo handler failed: %v", err)
 	}
 
+	controlPlane := &mockControlPlane{}
+
 	disp := rpc.NewRPCDispatcher(rpc.DispatcherConfig{
 		Namespaces:   nsReg,
 		HostHandlers: handlerReg,
 	})
+	disp.SetControlPlane(controlPlane)
 
 	route := rpc.Route{
 		RuntimeID: "runtime-1",
@@ -541,10 +543,20 @@ func TestRPCDispatcher_Integration(t *testing.T) {
 	})
 
 	if err != nil {
-		t.Logf("dispatch error: %v", err)
+		t.Fatalf("dispatch failed: %v", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	if len(controlPlane.sent) != 1 {
+		t.Fatalf("expected 1 host response, got %d", len(controlPlane.sent))
+	}
+
+	sent := controlPlane.sent[0]
+	if sent.Envelope.Type != protocol.MessageTypeResponse {
+		t.Errorf("expected response envelope, got %s", sent.Envelope.Type)
+	}
+	if string(sent.Envelope.Payload) != `{"result":"ok"}` {
+		t.Errorf("unexpected payload: %s", sent.Envelope.Payload)
+	}
 }
 
 func TestRPCDispatcher_CustomRouteForward(t *testing.T) {

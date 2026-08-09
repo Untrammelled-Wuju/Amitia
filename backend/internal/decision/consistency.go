@@ -1,137 +1,83 @@
 package decision
 
+import "fmt"
+
 type ConsistencyResult struct {
-	Consistent     bool
-	Score          float64
-	Violations     []string
-	FallbackAction string
+	Consistent  bool     `json:"consistent"`
+	Violations  []string `json:"violations,omitempty"`
+	Warnings    []string `json:"warnings,omitempty"`
 }
 
-type ConsistencyChecker struct {
-	MinScore float64
-}
+type ConsistencyChecker struct{}
 
 func DefaultConsistencyChecker() ConsistencyChecker {
-	return ConsistencyChecker{
-		MinScore: 0.40,
-	}
+	return ConsistencyChecker{}
 }
 
-func (c *ConsistencyChecker) Verify(plan BehaviorPlan, goals []Goal, intentions []Intention) ConsistencyResult {
+func (c *ConsistencyChecker) Verify(plan BehaviorPlan) ConsistencyResult {
 	result := ConsistencyResult{
-		Consistent:     true,
-		Score:          1.0,
-		Violations:     make([]string, 0),
-		FallbackAction: "wait_observe",
+		Consistent: true,
+		Violations: make([]string, 0),
+		Warnings:   make([]string, 0),
 	}
-	goalScore := checkGoalConsistency(plan.Selected, goals)
-	if goalScore < 0.5 {
-		result.Violations = append(result.Violations, "goal_mismatch:"+plan.Selected.ID)
+
+	if plan.Version != PlanVersionV2 {
+		result.Violations = append(result.Violations, fmt.Sprintf("invalid plan version: %s", plan.Version))
 	}
-	intentScore := checkIntentionConsistency(plan.Selected, intentions)
-	if intentScore < 0.5 {
-		result.Violations = append(result.Violations, "intention_mismatch:"+plan.Selected.ID)
+	if plan.ID == "" {
+		result.Violations = append(result.Violations, "empty plan ID")
 	}
-	safetyScore := checkSafetyConsistency(plan)
-	if safetyScore < 0.5 {
-		result.Violations = append(result.Violations, "safety_violation:"+plan.Selected.ID)
+	if plan.Selected.ID == "" {
+		result.Violations = append(result.Violations, "empty selected candidate ID")
 	}
-	result.Score = (goalScore + intentScore + safetyScore) / 3.0
-	if result.Score < c.MinScore {
+	if plan.Selected.ScoringVersion == "" {
+		result.Violations = append(result.Violations, "missing selected scoring version")
+	}
+	if plan.Audit.FormulaVersion != "" && plan.Selected.ScoringVersion != plan.Audit.FormulaVersion {
+		result.Violations = append(result.Violations,
+			fmt.Sprintf("scoring version mismatch: selected=%s audit=%s",
+				plan.Selected.ScoringVersion, plan.Audit.FormulaVersion))
+	}
+	if plan.Selected.FinalScore == 0 && plan.Selected.BaseScore > 0 {
+		result.Warnings = append(result.Warnings, "final score is zero but base score > 0")
+	}
+
+	if plan.DoNotSend && plan.NeedsExpression {
+		result.Violations = append(result.Violations, "do_not_send and needs_expression cannot both be true")
+	}
+	if plan.NeedsExpression && plan.ExpressionPlanID == "" {
+		result.Violations = append(result.Violations, "needs_expression=true requires expression_plan_id")
+	}
+	if !plan.NeedsExpression && plan.ExpressionPlanID != "" {
+		result.Violations = append(result.Violations, "needs_expression=false requires empty expression_plan_id")
+	}
+
+	if plan.SafetyLevel == BehaviorSafetyLevelBlocked {
+		if !plan.DoNotSend {
+			result.Violations = append(result.Violations, "safety_level=blocked requires do_not_send=true")
+		}
+		if plan.NeedsExpression {
+			result.Violations = append(result.Violations, "safety_level=blocked requires needs_expression=false")
+		}
+	}
+
+	if plan.Selected.Tag == BehaviorTagDelay && !plan.DoNotSend {
+		result.Violations = append(result.Violations, "delay/observe candidate requires do_not_send=true")
+	}
+	if plan.Selected.ActionType == CandidateActionToolCall && plan.NeedsExpression {
+		result.Violations = append(result.Violations, "tool_call candidate should not need expression")
+	}
+
+	if len(result.Violations) > 0 {
 		result.Consistent = false
 	}
 	return result
 }
 
-func (c *ConsistencyChecker) VerifyWithFallback(plan BehaviorPlan, goals []Goal, intentions []Intention) BehaviorPlan {
-	result := c.Verify(plan, goals, intentions)
-	if result.Consistent {
-		return plan
+func (c *ConsistencyChecker) VerifyAndReport(plan BehaviorPlan) (ConsistencyResult, error) {
+	result := c.Verify(plan)
+	if !result.Consistent {
+		return result, fmt.Errorf("plan consistency check failed: %v", result.Violations)
 	}
-	fallback := BehaviorPlan{
-		Version:         PlanVersionV1,
-		ID:              "plan-fallback-" + plan.CreatedAt.Format("20060102150405"),
-		CreatedAt:       plan.CreatedAt,
-		Selected:        buildFallbackCandidate(),
-		Priority:        BehaviorPriorityLow,
-		SafetyLevel:     BehaviorSafetyLevelConservative,
-		DoNotSend:       false,
-		Intent:          "正常回复",
-		Strategy:        "保持自然沟通",
-		AllowedTopics:   []string{"日常对话"},
-		ForbiddenTopics: []string{"不适当内容"},
-		ResponseGoal:    "完成本轮交互",
-		ToneHint:        "中性",
-		Audit: BehaviorAudit{
-			FormulaVersion: string(BehaviorFormulaVersionV1),
-			Diagnostics:    result.Violations,
-			SnapshotID:     "consistency-fallback",
-		},
-	}
-	return fallback
-}
-
-func checkGoalConsistency(candidate BehaviorCandidate, goals []Goal) float64 {
-	if len(goals) == 0 {
-		return 0.5
-	}
-	matched := 0
-	for _, goal := range goals {
-		if goal.Status == GoalStatusActive || goal.Status == GoalStatusPending {
-			boost := mapGoalToBoost(goal.Type, candidate.ID)
-			if boost > 0 {
-				matched++
-			}
-		}
-	}
-	activeGoals := 0
-	for _, goal := range goals {
-		if goal.Status == GoalStatusActive || goal.Status == GoalStatusPending {
-			activeGoals++
-		}
-	}
-	if activeGoals == 0 {
-		return 0.5
-	}
-	return float64(matched) / float64(activeGoals)
-}
-
-func checkIntentionConsistency(candidate BehaviorCandidate, intentions []Intention) float64 {
-	if len(intentions) == 0 {
-		return 0.5
-	}
-	matched := 0
-	active := 0
-	for _, intent := range intentions {
-		if intent.Status == IntentionStatusFormed || intent.Status == IntentionStatusExecuting {
-			active++
-			boost := mapIntentionToBoost(intent, candidate.ID)
-			if boost > 0 {
-				matched++
-			}
-		}
-	}
-	if active == 0 {
-		return 0.5
-	}
-	return float64(matched) / float64(active)
-}
-
-func checkSafetyConsistency(plan BehaviorPlan) float64 {
-	if plan.DoNotSend {
-		return 1.0
-	}
-	if plan.SafetyLevel == BehaviorSafetyLevelBlocked {
-		return 0.0
-	}
-	if plan.SafetyLevel == BehaviorSafetyLevelConservative && plan.Selected.RiskScore > 0.7 {
-		return 0.3
-	}
-	if plan.Selected.RiskScore > 0.9 {
-		return 0.1
-	}
-	if plan.Selected.RiskScore > 0.6 {
-		return 0.6
-	}
-	return 1.0
+	return result, nil
 }
