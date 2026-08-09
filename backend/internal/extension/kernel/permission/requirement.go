@@ -23,15 +23,17 @@ type PermissionTarget struct {
 }
 
 type PermissionEvaluationRequest struct {
-	Subject      PermissionSubject       `json:"subject"`
-	Requirements []PermissionRequirement `json:"requirements"`
-	InvocationID string                  `json:"invocationId,omitempty"`
-	Input        json.RawMessage         `json:"input,omitempty"`
-	Target       PermissionTarget        `json:"target,omitempty"`
-	RiskLevel    string                  `json:"riskLevel,omitempty"`
-	SideEffects  []ExpectedSideEffect    `json:"sideEffects,omitempty"`
-	IsBackground bool                    `json:"isBackground"`
-	ParentGrants []PermissionGrant       `json:"parentGrants,omitempty"`
+	Subject         PermissionSubject       `json:"subject"`
+	Requirements    []PermissionRequirement `json:"requirements"`
+	InvocationID    string                  `json:"invocationId,omitempty"`
+	Input           json.RawMessage         `json:"input,omitempty"`
+	Target          PermissionTarget        `json:"target,omitempty"`
+	RiskLevel       string                  `json:"riskLevel,omitempty"`
+	SideEffects     []ExpectedSideEffect    `json:"sideEffects,omitempty"`
+	IsBackground    bool                    `json:"isBackground"`
+	ParentGrants    []PermissionGrant       `json:"parentGrants,omitempty"`
+	ScopeSnapshotID string                  `json:"scopeSnapshotId,omitempty"`
+	ApprovalMode    string                  `json:"approvalMode,omitempty"`
 }
 
 type ApprovalRequest struct {

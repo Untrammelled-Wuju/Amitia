@@ -19,6 +19,8 @@ type PermissionBroker interface {
 	ListGrants(ctx context.Context, filter PermissionGrantFilter) ([]PermissionGrant, error)
 	Explain(ctx context.Context, request PermissionEvaluationRequest) PermissionExplanation
 	DetectUpgrade(ctx context.Context, oldPermissions, newPermissions []PermissionRequirement) []PermissionUpgrade
+	RecordApproval(ctx context.Context, request PermissionApprovalRecordRequest) (PermissionApprovalRecord, error)
+	ValidateSnapshot(ctx context.Context, snapshotID string, inv PermissionEvaluationRequest) error
 }
 
 type TrustLevelChecker interface {
@@ -26,12 +28,14 @@ type TrustLevelChecker interface {
 }
 
 type DefaultPermissionBroker struct {
-	registry     *PermissionDefinitionRegistry
-	storage      PermissionStorage
-	cache        *PermissionCache
-	auditRec     *PermissionAuditRecorder
-	mu           sync.RWMutex
-	trustChecker TrustLevelChecker
+	registry        *PermissionDefinitionRegistry
+	storage         PermissionStorage
+	cache           *PermissionCache
+	auditRec        *PermissionAuditRecorder
+	mu              sync.RWMutex
+	trustChecker    TrustLevelChecker
+	approvalRecords map[string]PermissionApprovalRecord
+	snapshotStore   PermissionSnapshotStore
 
 	SystemPolicy func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
 }
@@ -51,6 +55,12 @@ func (b *DefaultPermissionBroker) Close() error {
 	}
 	b.cache.Close()
 	return nil
+}
+
+func (b *DefaultPermissionBroker) SetSnapshotStore(store PermissionSnapshotStore) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.snapshotStore = store
 }
 
 func (b *DefaultPermissionBroker) SetTrustLevelChecker(checker TrustLevelChecker) {
@@ -300,6 +310,39 @@ func (b *DefaultPermissionBroker) Explain(ctx context.Context, request Permissio
 func (b *DefaultPermissionBroker) DetectUpgrade(ctx context.Context, oldPermissions, newPermissions []PermissionRequirement) []PermissionUpgrade {
 	detector := NewUpgradeDetector(b.registry)
 	return detector.Detect(ctx, oldPermissions, newPermissions)
+}
+
+func (b *DefaultPermissionBroker) ValidateSnapshot(ctx context.Context, snapshotID string, inv PermissionEvaluationRequest) error {
+	if snapshotID == "" {
+		return ErrPermissionSnapshotNotFound
+	}
+
+	if b.snapshotStore == nil {
+		return ErrPermissionSnapshotNotFound
+	}
+
+	snap, err := b.snapshotStore.GetSnapshot(ctx, snapshotID)
+	if err != nil {
+		return ErrPermissionSnapshotNotFound
+	}
+
+	if snap.RevokedAt != nil {
+		return ErrPermissionSnapshotRevoked
+	}
+
+	if snap.ExpiresAt != nil && time.Now().After(*snap.ExpiresAt) {
+		return ErrPermissionSnapshotExpired
+	}
+
+	if b.registry != nil {
+		for _, permID := range snap.GrantedPerms {
+			if _, ok := b.registry.Get(permID); !ok {
+				return ErrPermissionUnknown
+			}
+		}
+	}
+
+	return nil
 }
 
 func (b *DefaultPermissionBroker) resolveEffectiveScope(req PermissionRequirement, evalReq PermissionEvaluationRequest) PermissionScope {

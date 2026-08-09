@@ -28,17 +28,10 @@ type PermissionGate struct {
 }
 
 func (g *PermissionGate) Evaluate(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionDecision {
-	if g.Broker != nil {
-		return g.evaluateWithBroker(ctx, tool, inv)
+	if g.Broker == nil {
+		return PermissionDeny
 	}
-
-	if len(tool.Permissions) == 0 && tool.RiskLevel == capability.RiskLow {
-		return PermissionAllow
-	}
-	if g.OnEvaluate != nil {
-		return g.OnEvaluate(ctx, tool, inv)
-	}
-	return PermissionAllow
+	return g.evaluateWithBroker(ctx, tool, inv)
 }
 
 func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionDecision {
@@ -63,11 +56,13 @@ func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability
 
 	var input json.RawMessage
 	request := permission.PermissionEvaluationRequest{
-		Subject:      subject,
-		Requirements: requirements,
-		InvocationID: inv.InvocationID,
-		Input:        input,
-		RiskLevel:    string(tool.RiskLevel),
+		Subject:        subject,
+		Requirements:   requirements,
+		InvocationID:   inv.InvocationID,
+		Input:          input,
+		RiskLevel:      string(tool.RiskLevel),
+		ScopeSnapshotID: inv.ScopeSnapshotID,
+		ApprovalMode:   string(inv.ApprovalMode),
 	}
 
 	result := g.Broker.Evaluate(ctx, request)

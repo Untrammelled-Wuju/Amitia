@@ -77,6 +77,16 @@ func (r *PermissionDefinitionRegistry) List() []PermissionDefinition {
 	return result
 }
 
+func (r *PermissionDefinitionRegistry) ValidateAll(ids []string) []string {
+	unknown := make([]string, 0)
+	for _, id := range ids {
+		if _, ok := r.definitions[id]; !ok {
+			unknown = append(unknown, id)
+		}
+	}
+	return unknown
+}
+
 func (r *PermissionDefinitionRegistry) ListByCategory(cat PermissionCategory) []PermissionDefinition {
 	result := make([]PermissionDefinition, 0)
 	for _, def := range r.definitions {

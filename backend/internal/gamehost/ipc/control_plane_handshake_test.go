@@ -214,25 +214,10 @@ func TestControlPlane_HandshakeGate_ProtocolMismatchFails(t *testing.T) {
 	mgr := newTestHandshakeManager()
 	controller := handshake.NewHandshakeControllerAdapter(mgr)
 
-	var errors []*ipc.IPCError
-	var mu sync.Mutex
-
-	errorHandler := func(evt ipc.ConnectionEvent) {
-		if evt.Error == nil {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		if ipcErr, ok := evt.Error.(*ipc.IPCError); ok {
-			errors = append(errors, ipcErr)
-		}
-	}
-
 	cfg := ipc.ControlPlaneConfig{
 		Resolver:            resolver,
 		HandshakeController: controller,
 		Dispatcher:          ipc.NewNoopDispatcher(),
-		EventHandler:        errorHandler,
 	}
 
 	cp, err := ipc.NewControlPlane(cfg)
@@ -271,20 +256,19 @@ func TestControlPlane_HandshakeGate_ProtocolMismatchFails(t *testing.T) {
 		t.Fatalf("hello send failed: %v", err)
 	}
 
-	time.Sleep(300 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	var sawMismatch bool
-	for _, e := range errors {
-		if e.Code == domain.ErrInvalidArgument || e.Code == domain.ErrProtocolMismatch {
-			sawMismatch = true
-			break
+	select {
+	case resp := <-recvFromTransport(ctx, hostTransport):
+		if resp.Type != protocol.MessageTypeResponse {
+			t.Errorf("expected response message type, got %s", resp.Type)
 		}
-	}
-	if !sawMismatch {
-		t.Errorf("expected handshake error for protocol mismatch, got %+v", errors)
+		if resp.Error == nil {
+			t.Fatal("expected error in response envelope for protocol mismatch")
+		}
+		if resp.Error.Code != protocol.ErrorProtocolMismatch {
+			t.Errorf("expected error code %q, got %q", protocol.ErrorProtocolMismatch, resp.Error.Code)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for protocol mismatch response")
 	}
 }
 

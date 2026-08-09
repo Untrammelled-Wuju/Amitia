@@ -7,7 +7,12 @@ import (
 	"time"
 )
 
-var ErrPermissionSnapshotNotFound = fmt.Errorf("permission: snapshot not found")
+var (
+	ErrPermissionSnapshotNotFound = fmt.Errorf("permission: snapshot not found")
+	ErrPermissionSnapshotRevoked  = fmt.Errorf("permission: snapshot revoked")
+	ErrPermissionSnapshotExpired = fmt.Errorf("permission: snapshot expired")
+	ErrPermissionUnknown         = fmt.Errorf("permission: unknown permission")
+)
 
 type PermissionSnapshotStore interface {
 	SaveSnapshot(ctx context.Context, snapshot PermissionSnapshot) error

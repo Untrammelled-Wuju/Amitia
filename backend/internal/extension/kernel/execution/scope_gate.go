@@ -17,37 +17,22 @@ type ScopeGate struct {
 }
 
 func (g *ScopeGate) Evaluate(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) error {
-	if g.ScopeManager != nil {
-		decision := g.ScopeManager.Evaluate(ctx, scope.ScopeEvaluationRequest{
-			SubjectType:    scope.SubjectTool,
-			SubjectID:      tool.ID,
-			CharacterID:    inv.CharacterID,
-			ConversationID: inv.ConversationID,
-			ExtensionID:    inv.ExtensionID,
-			ModuleID:       inv.ModuleID,
-			InvocationID:   inv.InvocationID,
-			Generation:     inv.Generation,
-		})
-		if !decision.Allowed {
-			return fmt.Errorf("scope denied: %v", decision.Reasons)
-		}
-		return nil
+	if g.ScopeManager == nil {
+		return fmt.Errorf("scope denied: scope manager not configured")
 	}
 
-	if tool.Scope.Type == "" {
-		return nil
+	decision := g.ScopeManager.Evaluate(ctx, scope.ScopeEvaluationRequest{
+		SubjectType:    scope.SubjectTool,
+		SubjectID:      tool.ID,
+		CharacterID:    inv.CharacterID,
+		ConversationID: inv.ConversationID,
+		ExtensionID:    inv.ExtensionID,
+		ModuleID:       inv.ModuleID,
+		InvocationID:   inv.InvocationID,
+		Generation:     inv.Generation,
+	})
+	if !decision.Allowed {
+		return fmt.Errorf("scope denied: %v", decision.Reasons)
 	}
-	if tool.Scope.Type == "global" {
-		return nil
-	}
-	if tool.Scope.Type == "character" && inv.CharacterID != "" && tool.Scope.ID == inv.CharacterID {
-		return nil
-	}
-	if tool.Scope.Type == "conversation" && tool.Scope.ID == inv.ConversationID {
-		return nil
-	}
-	if tool.Internal {
-		return nil
-	}
-	return fmt.Errorf("scope denied: tool requires scope %s/%s", tool.Scope.Type, tool.Scope.ID)
+	return nil
 }

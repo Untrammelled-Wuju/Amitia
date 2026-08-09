@@ -148,6 +148,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	permStorage := permission.NewSQLitePermissionStorage(db)
 	permSnapshotStore := permission.NewSQLitePermissionSnapshotStore(db)
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
+	permBroker.SetSnapshotStore(permSnapshotStore)
 
 	scopeStore := scope.NewSQLiteScopeStore(db)
 	relationChecker := newRepositoryScopeRelationChecker(db, resourceRepo, opRepo)
