@@ -389,7 +389,7 @@ func (cp *controlPlane) sendHelloError(conn *Connection, envelope protocol.Envel
 	}
 	if perr == nil {
 		perr = &protocol.ProtocolError{
-			Code:    string(domain.ErrInvalidState),
+			Code:    protocol.ErrorCode(domain.ErrInvalidState),
 			Message: err.Error(),
 		}
 	}

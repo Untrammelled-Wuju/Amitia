@@ -79,9 +79,6 @@ func (a *HandshakeControllerAdapter) MapError(err error) *protocol.ProtocolError
 			Message: wrapped.Message,
 		}
 	}
-	if perr, ok := err.(*protocol.ProtocolError); ok {
-		return perr
-	}
 	return &protocol.ProtocolError{
 		Code:    protocol.ErrorCode(domain.ErrInternal),
 		Message: err.Error(),

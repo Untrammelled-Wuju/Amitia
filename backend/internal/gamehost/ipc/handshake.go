@@ -82,7 +82,7 @@ func (n *NoopHandshakeController) MapError(err error) *protocol.ProtocolError {
 		return nil
 	}
 	return &protocol.ProtocolError{
-		Code:    string(domain.ErrInvalidState),
+		Code:    protocol.ErrorCode(domain.ErrInvalidState),
 		Message: err.Error(),
 	}
 }
