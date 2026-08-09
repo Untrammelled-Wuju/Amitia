@@ -1,6 +1,7 @@
 package interaction
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"

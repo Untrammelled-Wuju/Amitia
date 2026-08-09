@@ -1,6 +1,7 @@
 package binary
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"time"
