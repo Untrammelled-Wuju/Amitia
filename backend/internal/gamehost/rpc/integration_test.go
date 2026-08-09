@@ -3,6 +3,7 @@ package rpc_test
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,7 +48,7 @@ func (m *MockRuntimeValidator) ValidateService(
 	serviceID domain.ServiceID,
 	expectedPluginID domain.PluginID,
 ) error {
-	key := runtimeID.String() + "/" + serviceID.String()
+	key := string(runtimeID) + "/" + string(serviceID)
 	pid, exists := m.ServiceExists[key]
 	if !exists {
 		return domain.NewHostError(domain.ErrNotFound, "service not found")

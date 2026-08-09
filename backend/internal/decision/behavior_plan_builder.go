@@ -229,8 +229,6 @@ func derivePlanIntent(candidate BehaviorCandidate) BehaviorPlanIntent {
 		return PlanIntentObserve
 	case BehaviorTagReply:
 		return PlanIntentReply
-	case "tool_call":
-		return PlanIntentTool
 	default:
 		switch candidate.ActionType {
 		case CandidateActionToolCall:
