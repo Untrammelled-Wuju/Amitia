@@ -9,7 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/personality"
 )
 
-func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality, goalContext RuntimeGoalContext, now time.Time) (*decision.BehaviorPlan, *decision.ExpressionPlan, error) {
+func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality, goalContext RuntimeGoalContext, now time.Time, safetyDecision RuntimeSafetyDecision) (*decision.BehaviorPlan, *decision.ExpressionPlan, error) {
 	if p.candidateRegistry == nil {
 		return nil, nil, nil
 	}
