@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
@@ -66,6 +67,8 @@ type Service interface {
 	SetToolRuntime(ModelToolRuntime)
 	SetHookInvoker(HookInvoker)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
+	SetActionMaterializer(m *interaction.ActionMaterializer)
+	SetActionDispatcher(d interaction.ActionDispatcher)
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -116,6 +119,10 @@ type service struct {
 	deliveryStore      DeliveryStore
 	toolRuntime        ModelToolRuntime
 	hookInvoker        HookInvoker
+	actionMaterializer *interaction.ActionMaterializer
+	actionDispatcher   interaction.ActionDispatcher
+	actionDirective    decision.ActionDirective
+	hasActionDirective bool
 	relTimeCoordinator *temporal.RelationshipTimeCoordinator
 }
 
@@ -156,6 +163,14 @@ func (s *service) SetToolRuntime(runtime ModelToolRuntime) {
 
 func (s *service) SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator) {
 	s.relTimeCoordinator = coordinator
+}
+
+func (s *service) SetActionMaterializer(m *interaction.ActionMaterializer) {
+	s.actionMaterializer = m
+}
+
+func (s *service) SetActionDispatcher(d interaction.ActionDispatcher) {
+	s.actionDispatcher = d
 }
 
 func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {

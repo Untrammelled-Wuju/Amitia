@@ -25,6 +25,13 @@ import com.amitia.amitia_app.runtime.proot.ProotComponent
 import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import com.amitia.amitia_app.runtime.recovery.DefaultRuntimeCrashRecoveryPolicy
+import com.amitia.amitia_app.runtime.recovery.ExecutorRuntimeRecoveryScheduler
+import com.amitia.amitia_app.runtime.recovery.InstalledRuntimeResult
+import com.amitia.amitia_app.runtime.recovery.RuntimeCrashRecoveryPolicy
+import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryDecision
+import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryRequest
+import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduler
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostEvent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
@@ -35,7 +42,6 @@ import com.amitia.amitia_app.runtime.startup.RuntimeStartupDetector
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupError
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupRequest
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupResult
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 internal class DefaultRuntimeController(
@@ -48,11 +54,16 @@ internal class DefaultRuntimeController(
     private val clock: RuntimeClock = SystemRuntimeClock,
     private val prootComponent: ProotComponent? = null,
     private val startupDetector: RuntimeStartupDetector? = DefaultRuntimeStartupDetector(),
-    private val backendEndpoint: BackendEndpointPolicy = embeddedAndroidBackendPolicy()
+    private val backendEndpoint: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
+    private val recoveryPolicy: RuntimeCrashRecoveryPolicy = DefaultRuntimeCrashRecoveryPolicy(
+        com.amitia.amitia_app.runtime.recovery.ActiveRuntimeBackedInstalledRuntimeSource(activeRuntime),
+    ),
+    private val recoveryScheduler: RuntimeRecoveryScheduler = ExecutorRuntimeRecoveryScheduler(),
 ) : RuntimeController {
 
-    private val expectedStopRequested = AtomicBoolean(false)
+    private val expectedStopRequested = AtomicReference(false)
     private val startupDetectors = AtomicReference<RuntimeStartupDetector?>(null)
+    private val pendingRecoveryJob = AtomicReference<com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryJob?>(null)
     private val serviceHostListener = RuntimeServiceHostListener { event ->
         onServiceHostEvent(event)
     }
@@ -61,11 +72,17 @@ internal class DefaultRuntimeController(
         serviceHost.addListener(serviceHostListener)
     }
 
+    private fun cancelPendingRecovery() {
+        pendingRecoveryJob.getAndSet(null)?.cancel()
+        recoveryPolicy.cancelPending()
+    }
+
     private fun onServiceHostEvent(event: RuntimeServiceHostEvent) {
         when (event) {
             is RuntimeServiceHostEvent.ForegroundStarted -> {
             }
             is RuntimeServiceHostEvent.ExpectedStopped -> {
+                cancelPendingRecovery()
                 val current = stateStore.snapshot()
                 val target = RuntimeStateMachine.expectedStopTarget(current.state)
                 if (target != null && target != current.state) {
@@ -74,11 +91,47 @@ internal class DefaultRuntimeController(
             }
             is RuntimeServiceHostEvent.UnexpectedTermination -> {
                 cancelStartupDetector()
+                cancelPendingRecovery()
                 val current = stateStore.snapshot()
                 val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
                 if (target != null && target != current.state) {
                     val error = mapTerminationCauseToError(event.cause)
                     stateStore.update { it.copy(state = target, lastError = error) }
+                    evaluateRecovery(error, requestedStop = false)
+                }
+            }
+        }
+    }
+
+    private fun evaluateRecovery(error: RuntimeError, requestedStop: Boolean) {
+        val current = stateStore.snapshot()
+        val request = RuntimeRecoveryRequest(
+            failedGeneration = current.generation,
+            currentState = current.state,
+            error = error,
+            requestedStop = requestedStop,
+        )
+        val decision = recoveryPolicy.evaluate(request)
+        when (decision) {
+            is RuntimeRecoveryDecision.DoNotRecover -> { /* do nothing */ }
+            is RuntimeRecoveryDecision.RecoverAfter -> {
+                val failedGen = current.generation
+                val job = recoveryScheduler.schedule(delayMillis = decision.delayMillis) {
+                    if (stateStore.snapshot().generation != failedGen) return@schedule
+                    if (pendingRecoveryJob.get()?.isCancelled != false) return@schedule
+                    start(RuntimeStartRequest(reason = com.amitia.amitia_app.runtime.api.RuntimeStartReason.RECOVERY), object : RuntimeOperationCallback {
+                        override fun onCompleted(result: RuntimeOperationResult) { }
+                    })
+                }
+                pendingRecoveryJob.set(job)
+            }
+            is RuntimeRecoveryDecision.Exhausted -> {
+                stateStore.update {
+                    it.copy(lastError = RuntimeError(
+                        code = RuntimeErrorCode.RECOVERY_EXHAUSTED,
+                        message = "recovery budget exhausted after ${decision.attempts} attempts",
+                        recoverable = false,
+                    ))
                 }
             }
         }
@@ -86,6 +139,7 @@ internal class DefaultRuntimeController(
 
     private fun cancelStartupDetector() {
         startupDetectors.getAndSet(null)?.cancel()
+        startupDetector?.cancel()
     }
 
     private fun mapTerminationCauseToError(cause: RuntimeServiceTerminationCause): RuntimeError {
@@ -175,6 +229,7 @@ internal class DefaultRuntimeController(
             return handle
         }
 
+        cancelPendingRecovery()
         stateStore.update { it.copy(state = RuntimeState.STARTING) }
 
         val startResult = serviceHost.ensureStarted()
@@ -288,9 +343,11 @@ internal class DefaultRuntimeController(
                 val target = RuntimeStateMachine.startupReadyTarget(current.state)
                 if (target != null && target != current.state) {
                     stateStore.update { it.copy(state = target) }
+                    recoveryPolicy.recordReady(current.generation)
                 }
             }
             is RuntimeStartupResult.Failed -> {
+                canceledPendingRecovery()
                 val target = RuntimeStateMachine.startupFailureTarget(current.state)
                 if (target != null && target != current.state) {
                     val error = mapStartupErrorToRuntimeError(result.error)
@@ -301,12 +358,17 @@ internal class DefaultRuntimeController(
                             state.copy(state = target, lastError = error)
                         }
                     }
+                    evaluateRecovery(error, requestedStop = false)
                 }
             }
             is RuntimeStartupResult.Cancelled -> {
             }
         }
         startupDetectors.compareAndSet(startupDetector, null)
+    }
+
+    private fun canceledPendingRecovery() {
+        pendingRecoveryJob.getAndSet(null)?.cancel()
     }
 
     private fun mapStartupErrorToRuntimeError(error: RuntimeStartupError): RuntimeError {
@@ -429,6 +491,7 @@ internal class DefaultRuntimeController(
             }
 
             expectedStopRequested.set(true)
+            cancelPendingRecovery()
             cancelStartupDetector()
 
             val proot = prootComponent

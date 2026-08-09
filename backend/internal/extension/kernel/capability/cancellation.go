@@ -5,14 +5,14 @@ import "context"
 type ToolCancellationReasonCode string
 
 const (
-	CancellationReasonUserRequested       ToolCancellationReasonCode = "user_requested"
-	CancellationReasonParentCancelled     ToolCancellationReasonCode = "parent_cancelled"
-	CancellationReasonCallerContext       ToolCancellationReasonCode = "caller_context_cancelled"
-	CancellationReasonStreamConsumerGone  ToolCancellationReasonCode = "stream_consumer_disconnected"
-	CancellationReasonWorkflowCancelled   ToolCancellationReasonCode = "workflow_cancelled"
-	CancellationReasonSystemShutdown      ToolCancellationReasonCode = "system_shutdown"
-	CancellationReasonRuntimeRequested    ToolCancellationReasonCode = "runtime_requested"
-	CancellationReasonDeadlineExceeded    ToolCancellationReasonCode = "deadline_exceeded"
+	CancellationReasonUserRequested      ToolCancellationReasonCode = "user_requested"
+	CancellationReasonParentCancelled    ToolCancellationReasonCode = "parent_cancelled"
+	CancellationReasonCallerContext      ToolCancellationReasonCode = "caller_context_cancelled"
+	CancellationReasonStreamConsumerGone ToolCancellationReasonCode = "stream_consumer_disconnected"
+	CancellationReasonWorkflowCancelled  ToolCancellationReasonCode = "workflow_cancelled"
+	CancellationReasonSystemShutdown     ToolCancellationReasonCode = "system_shutdown"
+	CancellationReasonRuntimeRequested   ToolCancellationReasonCode = "runtime_requested"
+	CancellationReasonDeadlineExceeded   ToolCancellationReasonCode = "deadline_exceeded"
 )
 
 func (code ToolCancellationReasonCode) Valid() bool {

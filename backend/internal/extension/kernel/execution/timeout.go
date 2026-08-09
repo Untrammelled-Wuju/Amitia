@@ -11,7 +11,7 @@ import (
 type TimeoutSource string
 
 const (
-	TimeoutSourceCaller       TimeoutSource = "caller_deadline"
+	TimeoutSourceCaller        TimeoutSource = "caller_deadline"
 	TimeoutSourceInvocation    TimeoutSource = "invocation_expiry"
 	TimeoutSourceToolPolicy    TimeoutSource = "tool_policy"
 	TimeoutSourceKernelDefault TimeoutSource = "kernel_default"
@@ -35,19 +35,19 @@ func (b TimeoutBudget) Expired(now time.Time) bool {
 }
 
 type AttemptBudget struct {
-	Attempt         int
-	StartedAt       time.Time
-	TotalDeadline   time.Time
+	Attempt          int
+	StartedAt        time.Time
+	TotalDeadline    time.Time
 	RemainingAtStart time.Duration
 }
 
 type TimeoutPhase string
 
 const (
-	TimeoutPhasePreDispatch TimeoutPhase = "pre_dispatch"
-	TimeoutPhaseRuntime     TimeoutPhase = "runtime"
+	TimeoutPhasePreDispatch  TimeoutPhase = "pre_dispatch"
+	TimeoutPhaseRuntime      TimeoutPhase = "runtime"
 	TimeoutPhaseRetryBackoff TimeoutPhase = "retry_backoff"
-	TimeoutPhaseStream      TimeoutPhase = "stream"
+	TimeoutPhaseStream       TimeoutPhase = "stream"
 )
 
 const canonicalTimeoutSourcePriority = 4
@@ -162,9 +162,9 @@ func (c *TimeoutController) NewAttemptBudget(budget TimeoutBudget, attempt int) 
 		remaining = 0
 	}
 	return AttemptBudget{
-		Attempt:         attempt,
-		StartedAt:       now,
-		TotalDeadline:   budget.Deadline,
+		Attempt:          attempt,
+		StartedAt:        now,
+		TotalDeadline:    budget.Deadline,
 		RemainingAtStart: remaining,
 	}
 }

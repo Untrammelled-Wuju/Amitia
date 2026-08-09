@@ -98,26 +98,28 @@ type IDGenerator interface {
 }
 
 type ControlPlaneConfig struct {
-	Resolver        RuntimePeerResolver
-	Dispatcher      Dispatcher
-	EventHandler    EventHandler
-	IDGenerator     IDGenerator
-	MaxEnvelopeSize int64
+	Resolver           RuntimePeerResolver
+	Dispatcher         Dispatcher
+	EventHandler       EventHandler
+	IDGenerator        IDGenerator
+	MaxEnvelopeSize    int64
+	HandshakeController HandshakeController
 }
 
 type controlPlane struct {
-	registry        *ConnectionRegistry
-	resolver        RuntimePeerResolver
-	dispatcher      Dispatcher
-	handler         EventHandler
-	connHandler     ConnectionHandler
-	idGenerator     IDGenerator
-	mu              sync.Mutex
-	connections     []*Connection
-	controlCtx      context.Context
-	controlCancel   context.CancelFunc
-	shuttingDown    bool
-	maxEnvelopeSize int64
+	registry            *ConnectionRegistry
+	resolver            RuntimePeerResolver
+	dispatcher          Dispatcher
+	handler             EventHandler
+	connHandler         ConnectionHandler
+	idGenerator         IDGenerator
+	mu                  sync.Mutex
+	connections         []*Connection
+	controlCtx          context.Context
+	controlCancel       context.CancelFunc
+	shuttingDown        bool
+	maxEnvelopeSize     int64
+	handshakeController HandshakeController
 }
 
 func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
@@ -133,18 +135,22 @@ func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
 	if config.MaxEnvelopeSize <= 0 {
 		config.MaxEnvelopeSize = defaultMaxEnvelopeSize
 	}
+	if config.HandshakeController == nil {
+		config.HandshakeController = NewNoopHandshakeController()
+	}
 
 	controlCtx, controlCancel := context.WithCancel(context.Background())
 
 	cp := &controlPlane{
-		registry:        NewConnectionRegistry(),
-		resolver:        config.Resolver,
-		dispatcher:      config.Dispatcher,
-		handler:        config.EventHandler,
-		idGenerator:     config.IDGenerator,
-		controlCtx:      controlCtx,
-		controlCancel:   controlCancel,
-		maxEnvelopeSize: config.MaxEnvelopeSize,
+		registry:            NewConnectionRegistry(),
+		resolver:            config.Resolver,
+		dispatcher:          config.Dispatcher,
+		handler:             config.EventHandler,
+		idGenerator:         config.IDGenerator,
+		controlCtx:          controlCtx,
+		controlCancel:       controlCancel,
+		maxEnvelopeSize:     config.MaxEnvelopeSize,
+		handshakeController: config.HandshakeController,
 	}
 	cp.connHandler = newDefaultConnectionHandler(cp.dispatcher, cp.handler)
 	return cp, nil
@@ -200,6 +206,8 @@ func (cp *controlPlane) Attach(ctx context.Context, peer Peer, transport Transpo
 	cp.connections = append(cp.connections, conn)
 	cp.mu.Unlock()
 
+	cp.handshakeController.Register(conn.ID)
+
 	cp.connHandler.OnAttach(conn)
 
 	go cp.receiveLoop(conn, connCtx)
@@ -213,6 +221,7 @@ func (cp *controlPlane) Detach(ctx context.Context, connectionID ConnectionID) e
 		return nil
 	}
 	cp.closeConnection(conn)
+	cp.handshakeController.Remove(connectionID)
 	return nil
 }
 
@@ -318,8 +327,81 @@ func (cp *controlPlane) receiveLoop(conn *Connection, ctx context.Context) {
 			continue
 		}
 
-		cp.connHandler.OnEnvelope(conn, envelope)
+		cp.processEnvelope(conn, envelope)
 	}
+}
+
+// processEnvelope applies the handshake gate and routes the envelope accordingly.
+//
+//   - HandshakeMethod: handled inline; the response is sent back over the transport
+//     without invoking the business handlers.
+//   - Other methods: blocked via OnError until CanProcess allows them; once allowed,
+//     forwarded to the business handler via OnEnvelope.
+func (cp *controlPlane) processEnvelope(conn *Connection, envelope protocol.Envelope) {
+	if envelope.Method == HandshakeMethod {
+		cp.handleHandshakeHello(conn, envelope)
+		return
+	}
+
+	if !cp.handshakeController.CanProcess(conn.ID, envelope.Method) {
+		cp.connHandler.OnError(conn, NewIPCError(
+			IPCErrorProtocol,
+			domain.ErrInvalidState,
+			"handshake required before processing method: "+envelope.Method,
+		))
+		return
+	}
+
+	cp.connHandler.OnEnvelope(conn, envelope)
+}
+
+func (cp *controlPlane) handleHandshakeHello(conn *Connection, envelope protocol.Envelope) {
+	respPayload, err := cp.handshakeController.HandleHello(
+		context.Background(),
+		conn.ID,
+		conn.Peer,
+		envelope.Payload,
+	)
+	if err != nil {
+		cp.sendHelloError(conn, envelope, err)
+		cp.connHandler.OnError(conn, err)
+		return
+	}
+
+	resp := protocol.Envelope{
+		Protocol:  protocol.ProtocolVersion,
+		Type:      protocol.MessageTypeResponse,
+		ID:        envelope.ID,
+		RequestID: envelope.ID,
+		Payload:   respPayload,
+	}
+	FillRouting(&resp, conn.Peer)
+
+	if err := conn.Transport().Send(context.Background(), resp); err != nil {
+		cp.connHandler.OnError(conn, err)
+	}
+}
+
+func (cp *controlPlane) sendHelloError(conn *Connection, envelope protocol.Envelope, err error) {
+	var perr *protocol.ProtocolError
+	if cp.handshakeController != nil {
+		perr = cp.handshakeController.MapError(err)
+	}
+	if perr == nil {
+		perr = &protocol.ProtocolError{
+			Code:    string(domain.ErrInvalidState),
+			Message: err.Error(),
+		}
+	}
+	resp := protocol.Envelope{
+		Protocol:  protocol.ProtocolVersion,
+		Type:      protocol.MessageTypeResponse,
+		ID:        envelope.ID,
+		RequestID: envelope.ID,
+		Error:     perr,
+	}
+	FillRouting(&resp, conn.Peer)
+	_ = conn.Transport().Send(context.Background(), resp)
 }
 
 func (cp *controlPlane) closeConnection(conn *Connection) {
@@ -341,6 +423,7 @@ func (cp *controlPlane) closeConnection(conn *Connection) {
 func (cp *controlPlane) cleanupConnection(conn *Connection) {
 	cp.registry.Remove(conn.ID)
 	cp.removeFromConnections(conn.ID)
+	cp.handshakeController.Remove(conn.ID)
 }
 
 func (cp *controlPlane) removeFromConnections(id ConnectionID) {

@@ -39,38 +39,38 @@ const (
 )
 
 type MaterializedToolAction struct {
-	ToolID         string `json:"toolId"`
-	ModelName      string `json:"modelName"`
-	ExternalCallID string `json:"externalCallID"`
+	ToolID         string          `json:"toolId"`
+	ModelName      string          `json:"modelName"`
+	ExternalCallID string          `json:"externalCallID"`
 	Input          json.RawMessage `json:"input"`
-	ExtensionID    string `json:"extensionId,omitempty"`
-	ModuleID       string `json:"moduleId,omitempty"`
-	Generation     int64  `json:"generation"`
-	RuntimeType    string `json:"runtimeType,omitempty"`
+	ExtensionID    string          `json:"extensionId,omitempty"`
+	ModuleID       string          `json:"moduleId,omitempty"`
+	Generation     int64           `json:"generation"`
+	RuntimeType    string          `json:"runtimeType,omitempty"`
 }
 
 type MaterializedAction struct {
-	ID             string                 `json:"id"`
-	PlanID         string                 `json:"planId"`
-	InteractionID  string                 `json:"interactionId"`
-	CandidateID    string                 `json:"candidateId"`
-	Kind           MaterializedActionKind `json:"kind"`
-	Tool           *MaterializedToolAction `json:"tool,omitempty"`
-	CreatedAt      time.Time              `json:"createdAt"`
+	ID            string                  `json:"id"`
+	PlanID        string                  `json:"planId"`
+	InteractionID string                  `json:"interactionId"`
+	CandidateID   string                  `json:"candidateId"`
+	Kind          MaterializedActionKind  `json:"kind"`
+	Tool          *MaterializedToolAction `json:"tool,omitempty"`
+	CreatedAt     time.Time               `json:"createdAt"`
 }
 
 type ActionMaterializationState string
 
 const (
-	ActionMaterializationReady          ActionMaterializationState = "ready"
-	ActionMaterializationNoAction       ActionMaterializationState = "no_action"
+	ActionMaterializationReady           ActionMaterializationState = "ready"
+	ActionMaterializationNoAction        ActionMaterializationState = "no_action"
 	ActionMaterializationToolNotProduced ActionMaterializationState = "tool_not_produced"
 )
 
 type ActionMaterializationOutcome struct {
-	State   ActionMaterializationState `json:"state"`
-	Action  *MaterializedAction        `json:"action,omitempty"`
-	Err     error                      `json:"-"`
+	State   ActionMaterializationState              `json:"state"`
+	Action  *MaterializedAction                     `json:"action,omitempty"`
+	Err     error                                   `json:"-"`
 	ErrCode decision.ActionMaterializationErrorCode `json:"errCode,omitempty"`
 }
 
@@ -138,13 +138,13 @@ func (m ActionMaterializer) materializeRespond(
 ) ActionMaterializationOutcome {
 	id := BuildActionID(plan.ID, "respond")
 	action := &MaterializedAction{
-		ID:             id,
-		PlanID:         plan.ID,
-		InteractionID:  scope.InteractionID,
-		CandidateID:    directive.CandidateID,
-		Kind:           MaterializedActionRespond,
-		Tool:           nil,
-		CreatedAt:      now,
+		ID:            id,
+		PlanID:        plan.ID,
+		InteractionID: scope.InteractionID,
+		CandidateID:   directive.CandidateID,
+		Kind:          MaterializedActionRespond,
+		Tool:          nil,
+		CreatedAt:     now,
 	}
 	return ActionMaterializationOutcome{State: ActionMaterializationReady, Action: action}
 }
@@ -157,13 +157,13 @@ func (m ActionMaterializer) materializeWait(
 ) ActionMaterializationOutcome {
 	id := BuildActionID(plan.ID, "wait")
 	action := &MaterializedAction{
-		ID:             id,
-		PlanID:         plan.ID,
-		InteractionID:  scope.InteractionID,
-		CandidateID:    directive.CandidateID,
-		Kind:           MaterializedActionWait,
-		Tool:           nil,
-		CreatedAt:      now,
+		ID:            id,
+		PlanID:        plan.ID,
+		InteractionID: scope.InteractionID,
+		CandidateID:   directive.CandidateID,
+		Kind:          MaterializedActionWait,
+		Tool:          nil,
+		CreatedAt:     now,
 	}
 	return ActionMaterializationOutcome{State: ActionMaterializationReady, Action: action}
 }
@@ -253,12 +253,12 @@ func (m ActionMaterializer) MaterializeToolCall(
 	copy(clonedInput, call.Arguments)
 
 	action := MaterializedAction{
-		ID:             id,
-		PlanID:         plan.ID,
-		InteractionID:  scope.InteractionID,
-		CandidateID:    directive.CandidateID,
-		Kind:           MaterializedActionTool,
-		CreatedAt:      now,
+		ID:            id,
+		PlanID:        plan.ID,
+		InteractionID: scope.InteractionID,
+		CandidateID:   directive.CandidateID,
+		Kind:          MaterializedActionTool,
+		CreatedAt:     now,
 		Tool: &MaterializedToolAction{
 			ToolID:         string(resolved.ID),
 			ModelName:      resolved.ModelName,

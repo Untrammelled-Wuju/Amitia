@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -16,25 +17,29 @@ func capabilityID(s string) capability.CapabilityID {
 type ActionExecutionState string
 
 const (
-	ActionExecutionCompleted      ActionExecutionState = "completed"
-	ActionExecutionSkipped        ActionExecutionState = "skipped"
+	ActionExecutionCompleted        ActionExecutionState = "completed"
+	ActionExecutionSkipped          ActionExecutionState = "skipped"
 	ActionExecutionFailedToDispatch ActionExecutionState = "failed_to_dispatch"
 )
 
 type ActionExecutionResult struct {
-	Action       MaterializedAction         `json:"action"`
-	State        ActionExecutionState       `json:"state"`
-	ToolResult   *kernel.LegacyToolResult   `json:"toolResult,omitempty"`
-	Err          error                      `json:"-"`
-	ErrCode      string                     `json:"errCode,omitempty"`
-	CompletedAt  time.Time                  `json:"completedAt"`
+	Action      MaterializedAction       `json:"action"`
+	State       ActionExecutionState     `json:"state"`
+	ToolResult  *kernel.LegacyToolResult `json:"toolResult,omitempty"`
+	Err         error                    `json:"-"`
+	ErrCode     string                   `json:"errCode,omitempty"`
+	CompletedAt time.Time                `json:"completedAt"`
+}
+
+type actionToolFacade interface {
+	ExecuteTool(ctx context.Context, toolID capability.CapabilityID, input json.RawMessage, scope kernel.LegacyScope, externalCallID string, idempotencyKey string) (kernel.LegacyToolResult, bool)
 }
 
 type ActionDispatcher struct {
-	toolFacade *kernel.ToolFacade
+	toolFacade actionToolFacade
 }
 
-func NewActionDispatcher(toolFacade *kernel.ToolFacade) ActionDispatcher {
+func NewActionDispatcher(toolFacade actionToolFacade) ActionDispatcher {
 	return ActionDispatcher{toolFacade: toolFacade}
 }
 
@@ -48,7 +53,7 @@ func (d ActionDispatcher) Dispatch(
 		return ActionExecutionResult{
 			Action:      action,
 			State:       ActionExecutionFailedToDispatch,
-			Err:         fmt.Errorf("%w: scope mismatch at dispatch", "ACTION_SCOPE_MISMATCH"),
+			Err:         fmt.Errorf("ACTION_SCOPE_MISMATCH: scope mismatch at dispatch"),
 			ErrCode:     "ACTION_SCOPE_MISMATCH",
 			CompletedAt: now,
 		}

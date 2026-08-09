@@ -27,12 +27,12 @@ func (e *invocationCancelledError) Error() string {
 type runtimeCancelFunc func()
 
 type activeCancellation struct {
-	Invocation    capability.ToolInvocationContext
-	cancel        context.CancelCauseFunc
-	state         cancellationState
-	reason        capability.ToolCancellationReason
+	Invocation     capability.ToolInvocationContext
+	cancel         context.CancelCauseFunc
+	state          cancellationState
+	reason         capability.ToolCancellationReason
 	runtimeCancels []runtimeCancelFunc
-	attached      bool
+	attached       bool
 }
 
 func NewCancellationController() *CancellationController {

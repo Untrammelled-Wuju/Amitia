@@ -107,6 +107,18 @@ func (r *Resolver) Create(
 		return WritingHandle{}, err
 	}
 
+	originalSeal := handle.Seal
+	handle.Seal = func(actualSize int64, checksum *Checksum) (BinaryReference, error) {
+		ref, err := originalSeal(actualSize, checksum)
+		if err != nil {
+			return BinaryReference{}, err
+		}
+		if err := r.registry.SealObject(ctx, ref.ID, ref.Size, ref.Checksum); err != nil {
+			return BinaryReference{}, err
+		}
+		return ref, nil
+	}
+
 	return handle, nil
 }
 

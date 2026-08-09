@@ -13,7 +13,7 @@ type NamespaceApplyResult struct {
 }
 
 type NamespaceAdapter interface {
-	Apply(ctx context.Context, runtimeID string, serviceID string, namespaces []string) (*NamespaceApplyResult, error)
+	Apply(ctx context.Context, pluginID, runtimeID, serviceID string, namespaces []string) (*NamespaceApplyResult, error)
 }
 
 type rpcNamespaceAdapter struct {
@@ -38,6 +38,7 @@ func NewNamespaceAdapter(registry rpc.NamespaceRegistry) NamespaceAdapter {
 
 func (a *rpcNamespaceAdapter) Apply(
 	ctx context.Context,
+	pluginID string,
 	runtimeID string,
 	serviceID string,
 	namespaces []string,
@@ -97,6 +98,7 @@ func (a *rpcNamespaceAdapter) Apply(
 
 	for _, ns := range namespaces {
 		err := a.registry.Register(ctx, rpc.Route{
+			PluginID:  domain.PluginID(pluginID),
 			RuntimeID: rid,
 			ServiceID: sid,
 			Namespace: rpc.Namespace(ns),

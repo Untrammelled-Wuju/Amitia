@@ -204,7 +204,7 @@ func (m *HandshakeManager) process(
 	}
 
 	if m.namespaceAdapter != nil && len(hello.RPCNamespaces) > 0 {
-		_, err := m.namespaceAdapter.Apply(ctx, string(peer.RuntimeID), string(peer.ServiceID), hello.RPCNamespaces)
+		_, err := m.namespaceAdapter.Apply(ctx, string(peer.PluginID), string(peer.RuntimeID), string(peer.ServiceID), hello.RPCNamespaces)
 		if err != nil {
 			return nil, err
 		}

@@ -230,9 +230,18 @@ func TestQuarantineImpactOnRuntime_Optional(t *testing.T) {
 }
 
 func TestQuarantineImpactOnRuntime_BlocksRequiredDependent(t *testing.T) {
-	graph := newDependencyGraph("rt-1")
-	_ = graph.AddNode("vision", "vision", false, nil)
-	_ = graph.AddNode("planner", "planner", false, []domain.ServiceID{"vision"})
+	builder := NewDependencyGraphBuilder()
+	topology := &RuntimeTopologySnapshot{
+		RuntimeID: "rt-1",
+		Services: []ServiceInstanceSnapshot{
+			{ServiceID: "vision", Dependencies: nil},
+			{ServiceID: "planner", Dependencies: []domain.ServiceID{"vision"}},
+		},
+	}
+	graph, err := builder.Build(topology)
+	if err != nil {
+		t.Fatalf("failed to build graph: %v", err)
+	}
 
 	services := []ServiceInstanceSnapshot{
 		{ServiceID: "vision", Required: false},

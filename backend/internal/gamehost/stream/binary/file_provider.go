@@ -111,19 +111,33 @@ func (p *FileProvider) seal(
 	finalName := strings.ReplaceAll(string(id), "-", "") + fileExtension
 	finalPath := filepath.Join(p.root, finalName)
 
-	if err := storage.EnsureWithinRoot(p.root, finalPath); err != nil {
+	absFinal, err := filepath.Abs(finalPath)
+	if err != nil {
+		os.Remove(tmpFile.Name())
+		return BinaryReference{}, ErrPathEscapesRoot
+	}
+	absFinal = filepath.Clean(absFinal)
+
+	absRoot, err := filepath.Abs(p.root)
+	if err != nil {
+		os.Remove(tmpFile.Name())
+		return BinaryReference{}, ErrPathEscapesRoot
+	}
+	absRoot = filepath.Clean(absRoot)
+
+	if absFinal != absRoot && !strings.HasPrefix(absFinal, absRoot+string(filepath.Separator)) {
 		os.Remove(tmpFile.Name())
 		return BinaryReference{}, ErrPathEscapesRoot
 	}
 
-	if err := os.Rename(tmpFile.Name(), finalPath); err != nil {
+	if err := os.Rename(tmpFile.Name(), absFinal); err != nil {
 		os.Remove(tmpFile.Name())
 		return BinaryReference{}, fmt.Errorf("binary: failed to publish file: %w", err)
 	}
 
 	var computedChecksum *Checksum
 	if checksum == nil && actualSize >= 0 {
-		computedChecksum = computeSHA256(finalPath)
+		computedChecksum = computeSHA256(absFinal)
 	} else if checksum != nil {
 		computedChecksum = checksum
 	}
@@ -154,11 +168,23 @@ func (p *FileProvider) Resolve(
 	finalName := strings.ReplaceAll(string(ref.ID), "-", "") + fileExtension
 	finalPath := filepath.Join(p.root, finalName)
 
-	if err := storage.EnsureWithinRoot(p.root, finalPath); err != nil {
+	absFinal, err := filepath.Abs(finalPath)
+	if err != nil {
+		return ResolvedBinary{}, ErrPathEscapesRoot
+	}
+	absFinal = filepath.Clean(absFinal)
+
+	absRoot, err := filepath.Abs(p.root)
+	if err != nil {
+		return ResolvedBinary{}, ErrPathEscapesRoot
+	}
+	absRoot = filepath.Clean(absRoot)
+
+	if absFinal != absRoot && !strings.HasPrefix(absFinal, absRoot+string(filepath.Separator)) {
 		return ResolvedBinary{}, ErrPathEscapesRoot
 	}
 
-	file, err := os.Open(finalPath)
+	file, err := os.Open(absFinal)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return ResolvedBinary{}, ErrObjectNotFound
@@ -198,11 +224,23 @@ func (p *FileProvider) Release(
 	finalName := strings.ReplaceAll(string(id), "-", "") + fileExtension
 	finalPath := filepath.Join(p.root, finalName)
 
-	if err := storage.EnsureWithinRoot(p.root, finalPath); err != nil {
+	absFinal, err := filepath.Abs(finalPath)
+	if err != nil {
+		return ErrPathEscapesRoot
+	}
+	absFinal = filepath.Clean(absFinal)
+
+	absRoot, err := filepath.Abs(p.root)
+	if err != nil {
+		return ErrPathEscapesRoot
+	}
+	absRoot = filepath.Clean(absRoot)
+
+	if absFinal != absRoot && !strings.HasPrefix(absFinal, absRoot+string(filepath.Separator)) {
 		return ErrPathEscapesRoot
 	}
 
-	if err := os.Remove(finalPath); err != nil {
+	if err := os.Remove(absFinal); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}

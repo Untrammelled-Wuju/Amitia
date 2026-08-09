@@ -64,6 +64,8 @@ internal object RuntimeBridgeErrorMapper {
             RuntimeErrorCode.STOP_GRACEFUL_TIMEOUT -> "STOP_GRACEFUL_TIMEOUT"
             RuntimeErrorCode.STOP_FORCE_FAILED -> "STOP_FORCE_FAILED"
             RuntimeErrorCode.STOP_SERVICE_TEARDOWN_FAILED -> "STOP_SERVICE_TEARDOWN_FAILED"
+            RuntimeErrorCode.NO_ACTIVE_RUNTIME -> "NO_ACTIVE_RUNTIME"
+            RuntimeErrorCode.RECOVERY_EXHAUSTED -> "RECOVERY_EXHAUSTED"
         }
     }
 

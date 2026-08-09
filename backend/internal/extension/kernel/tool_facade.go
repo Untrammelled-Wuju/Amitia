@@ -287,18 +287,18 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		return LegacyToolResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &LegacyToolError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		ExternalCallID:  externalCallID,
-		UserID:          scope.UserID,
-		CharacterID:     scope.CharacterID,
-		ConversationID:  scope.ConversationID,
-		Channel:         scope.Channel,
-		SessionID:       scope.SessionID,
-		ExtensionID:     def.ExtensionID,
-		ModuleID:        def.ModuleID,
-		Source:          capability.InvocationSourceModel,
-		IdempotencyKey:  idempotencyKey,
-		TraceID:         scope.TraceID,
-		OperationID:     scope.RequestID,
+		ExternalCallID: externalCallID,
+		UserID:         scope.UserID,
+		CharacterID:    scope.CharacterID,
+		ConversationID: scope.ConversationID,
+		Channel:        scope.Channel,
+		SessionID:      scope.SessionID,
+		ExtensionID:    def.ExtensionID,
+		ModuleID:       def.ModuleID,
+		Source:         capability.InvocationSourceModel,
+		IdempotencyKey: idempotencyKey,
+		TraceID:        scope.TraceID,
+		OperationID:    scope.RequestID,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),
@@ -333,18 +333,18 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 	}
 
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		ExternalCallID:  scope.ToolCallID,
-		UserID:          scope.UserID,
-		CharacterID:     scope.CharacterID,
-		ConversationID:  scope.ConversationID,
-		Channel:         scope.Channel,
-		SessionID:       scope.SessionID,
-		ExtensionID:     def.ExtensionID,
-		ModuleID:        def.ModuleID,
-		Source:          capability.InvocationSourceModel,
-		IdempotencyKey:  idempotencyKey,
-		TraceID:         scope.TraceID,
-		OperationID:     scope.RequestID,
+		ExternalCallID: scope.ToolCallID,
+		UserID:         scope.UserID,
+		CharacterID:    scope.CharacterID,
+		ConversationID: scope.ConversationID,
+		Channel:        scope.Channel,
+		SessionID:      scope.SessionID,
+		ExtensionID:    def.ExtensionID,
+		ModuleID:       def.ModuleID,
+		Source:         capability.InvocationSourceModel,
+		IdempotencyKey: idempotencyKey,
+		TraceID:        scope.TraceID,
+		OperationID:    scope.RequestID,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),

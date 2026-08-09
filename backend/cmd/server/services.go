@@ -37,7 +37,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
-	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/application"
 	processingcommit "github.com/u-ai/backend/internal/desktoppet/processing/commit"
@@ -85,6 +84,7 @@ import (
 	mcpskill "github.com/u-ai/backend/internal/mcp/skill"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
+	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mindruntime"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
@@ -342,6 +342,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	toolFacade.SetAgentSkillCatalog(kernelContainer.AgentSkillCatalog)
 	kernelContainer.ToolFacade = toolFacade
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
+	actionMaterializer := interaction.NewActionMaterializer(toolFacade)
+	actionDispatcher := interaction.NewActionDispatcher(toolFacade)
+	chatSvc.SetActionMaterializer(&actionMaterializer)
+	chatSvc.SetActionDispatcher(actionDispatcher)
 	if kernelContainer.DevConsoleService != nil {
 		kernelContainer.DevConsoleService.SetToolFacadeProvider(toolFacade.Counters())
 		kernelContainer.DevConsoleService.SetLegacyCallProvider(kernel.GlobalLegacyCallCounter())

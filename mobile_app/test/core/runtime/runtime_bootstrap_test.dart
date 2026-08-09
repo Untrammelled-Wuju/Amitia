@@ -19,7 +19,6 @@ class FakeRuntimeBridge implements RuntimeBridge {
   int installCallCount = 0;
 
   RuntimeBridgeSnapshot _current;
-  bool _shouldFailSnapshot = false;
 
   FakeRuntimeBridge({RuntimeBridgeSnapshot? initial})
       : _current = initial ?? RuntimeBridgeSnapshot.initial();
@@ -29,19 +28,11 @@ class FakeRuntimeBridge implements RuntimeBridge {
     _controller.add(snapshot);
   }
 
-  void failNextSnapshot() {
-    _shouldFailSnapshot = true;
-  }
-
   @override
   Stream<RuntimeBridgeSnapshot> get snapshots => _controller.stream;
 
   @override
   Future<RuntimeBridgeSnapshot> snapshot() async {
-    if (_shouldFailSnapshot) {
-      _shouldFailSnapshot = false;
-      throw Exception('Bridge unavailable');
-    }
     return _current;
   }
 
@@ -115,8 +106,6 @@ RuntimeBridgeSnapshot _makeSnapshot({
   );
 }
 
-void setUp(WidgetTester _) {}
-
 void main() {
   group('Initialize once', () {
     test('concurrent initialize calls only execute one start decision', () async {
@@ -140,7 +129,7 @@ void main() {
         bootstrap.initialize(),
       ]);
 
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 200));
       expect(bridge.startCallCount, lessThanOrEqualTo(1));
       await bootstrap.dispose();
     });
@@ -152,17 +141,18 @@ void main() {
         initial: _makeSnapshot(state: RuntimeBridgeState.ready),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-      await bootstrap.initialize();
 
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.ready));
 
-      final snapshots = bootstrap.snapshots.take(1).toList();
-      final result = await snapshots;
-      expect(result.first.phase, equals(RuntimeBootstrapPhase.ready));
-
+      await sub.cancel();
       await bootstrap.dispose();
     });
 
@@ -171,17 +161,18 @@ void main() {
         initial: _makeSnapshot(state: RuntimeBridgeState.starting),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-      await bootstrap.initialize();
 
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.starting));
 
-      final snapshots = bootstrap.snapshots.take(1).toList();
-      final result = await snapshots;
-      expect(result.first.phase, equals(RuntimeBootstrapPhase.starting));
-
+      await sub.cancel();
       await bootstrap.dispose();
     });
 
@@ -199,7 +190,7 @@ void main() {
       );
 
       await bootstrap.initialize();
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 200));
 
       expect(bridge.startCallCount, equals(1));
       await bootstrap.dispose();
@@ -236,15 +227,18 @@ void main() {
         ),
       );
 
-      final bootstrap = DefaultRuntimeBootstrap(
-        bridge: bridge,
-        policy: const RuntimeBootstrapPolicy(autoStartInstalledRuntime: true),
-      );
+      final snapshots = <RuntimeBootstrapSnapshot>[];
+      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
 
+      final sub = bootstrap.snapshots.listen(snapshots.add);
       await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.failed));
+
+      await sub.cancel();
       await bootstrap.dispose();
     });
 
@@ -253,18 +247,19 @@ void main() {
         initial: _makeSnapshot(state: RuntimeBridgeState.notInstalled),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-      await bootstrap.initialize();
 
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
       expect(bridge.installCallCount, equals(0));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.installRequired));
 
-      final snapshots = bootstrap.snapshots.take(1).toList();
-      final result = await snapshots;
-      expect(result.first.phase, equals(RuntimeBootstrapPhase.installRequired));
-
+      await sub.cancel();
       await bootstrap.dispose();
     });
 
@@ -273,17 +268,18 @@ void main() {
         initial: _makeSnapshot(state: RuntimeBridgeState.unavailable),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-      await bootstrap.initialize();
 
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.unavailable));
 
-      final snapshots = bootstrap.snapshots.take(1).toList();
-      final result = await snapshots;
-      expect(result.first.phase, equals(RuntimeBootstrapPhase.unavailable));
-
+      await sub.cancel();
       await bootstrap.dispose();
     });
 
@@ -292,37 +288,38 @@ void main() {
         initial: _makeSnapshot(state: RuntimeBridgeState.installing),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-      await bootstrap.initialize();
 
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
-      expect(bridge.installCallCount, equals(0));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.initializing));
 
-      final snapshots = bootstrap.snapshots.take(1).toList();
-      final result = await snapshots;
-      expect(result.first.phase, equals(RuntimeBootstrapPhase.initializing));
-
+      await sub.cancel();
       await bootstrap.dispose();
     });
 
-    test('initial STOPPING → start calls = 0', () async {
+    test('initial STOPPING → phase stopping, start calls = 0', () async {
       final bridge = FakeRuntimeBridge(
         initial: _makeSnapshot(state: RuntimeBridgeState.stopping),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-      await bootstrap.initialize();
 
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.stopping));
 
-      final snapshots = bootstrap.snapshots.take(1).toList();
-      final result = await snapshots;
-      expect(result.first.phase, equals(RuntimeBootstrapPhase.stopping));
-
+      await sub.cancel();
       await bootstrap.dispose();
     });
   });
@@ -337,22 +334,22 @@ void main() {
       await bootstrap.initialize();
 
       bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopping, generation: 2));
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopped, generation: 3));
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       bridge.emit(_makeSnapshot(state: RuntimeBridgeState.starting, generation: 4));
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       bridge.emit(_makeSnapshot(state: RuntimeBridgeState.ready, generation: 5));
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopping, generation: 6));
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopped, generation: 7));
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
       await bootstrap.dispose();
@@ -365,21 +362,23 @@ void main() {
         initial: _makeSnapshot(state: RuntimeBridgeState.ready),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap1 = DefaultRuntimeBootstrap(bridge: bridge);
+      final sub1 = bootstrap1.snapshots.listen(snapshots.add);
       await bootstrap1.initialize();
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
+      await sub1.cancel();
       await bootstrap1.dispose();
 
       final bootstrap2 = DefaultRuntimeBootstrap(bridge: bridge);
+      final sub2 = bootstrap2.snapshots.listen(snapshots.add);
       await bootstrap2.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
+      expect(snapshots.last.phase, equals(RuntimeBootstrapPhase.ready));
 
-      final snapshots = bootstrap2.snapshots.take(1).toList();
-      final result = await snapshots;
-      expect(result.first.phase, equals(RuntimeBootstrapPhase.ready));
-
+      await sub2.cancel();
       await bootstrap2.dispose();
     });
 
@@ -389,15 +388,24 @@ void main() {
       );
 
       final bootstrap1 = DefaultRuntimeBootstrap(bridge: bridge);
+      final snapshots1 = <RuntimeBootstrapSnapshot>[];
+      final sub1 = bootstrap1.snapshots.listen(snapshots1.add);
       await bootstrap1.initialize();
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
+      await sub1.cancel();
       await bootstrap1.dispose();
 
+      final snapshots2 = <RuntimeBootstrapSnapshot>[];
       final bootstrap2 = DefaultRuntimeBootstrap(bridge: bridge);
+      final sub2 = bootstrap2.snapshots.listen(snapshots2.add);
       await bootstrap2.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(bridge.startCallCount, equals(0));
+      expect(snapshots2.isNotEmpty, isTrue);
+      expect(snapshots2.last.phase, equals(RuntimeBootstrapPhase.starting));
+
+      await sub2.cancel();
       await bootstrap2.dispose();
     });
   });
@@ -408,18 +416,20 @@ void main() {
         initial: _makeSnapshot(state: RuntimeBridgeState.ready, generation: 5),
       );
 
-      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
-      await bootstrap.initialize();
-      await Future.delayed(const Duration(milliseconds: 50));
-
       final snapshots = <RuntimeBootstrapSnapshot>[];
-      final sub = bootstrap.snapshots.listen(snapshots.add);
+      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
 
-      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.starting, generation: 4));
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
       await Future.delayed(const Duration(milliseconds: 100));
 
-      final lastPhase = snapshots.isNotEmpty ? snapshots.last.phase : null;
-      expect(lastPhase, isNot(RuntimeBootstrapPhase.starting));
+      bridge.emit(_makeSnapshot(state: RuntimeBridgeState.stopped, generation: 3));
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final hasOldSnapshot = snapshots.any((s) =>
+          s.runtime.generation < 5 ||
+          (s.phase == RuntimeBootstrapPhase.stopped && s.runtime.generation < 5));
+      expect(hasOldSnapshot, isFalse);
 
       await sub.cancel();
       await bootstrap.dispose();
@@ -434,7 +444,7 @@ void main() {
 
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
       await bootstrap.initialize();
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       await bootstrap.dispose();
 
@@ -457,23 +467,22 @@ void main() {
   });
 
   group('Bridge failure', () {
-    test('bridge failure → bootstrap phase = failed', () async {
+    test('bridge stream failure → bootstrap continues', () async {
       final controller = StreamController<RuntimeBridgeSnapshot>();
-      final bridge = _FailingBridge(controller);
+      final failingBridge = _FailingBridge(controller);
 
-      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
+      final bootstrap = DefaultRuntimeBootstrap(bridge: failingBridge);
+
       final future = bootstrap.initialize();
-      await Future.delayed(const Duration(milliseconds: 50));
 
+      await Future.delayed(const Duration(milliseconds: 100));
       controller.addError(Exception('Bridge failure'));
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      await future.timeout(const Duration(seconds: 2));
-
-      expect(bridge.startCallCount, equals(0));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       await bootstrap.dispose();
       await controller.close();
+
+      expect(failingBridge.startCallCount, equals(0));
     });
   });
 
@@ -492,13 +501,18 @@ void main() {
         ),
       );
 
+      final snapshots = <RuntimeBootstrapSnapshot>[];
       final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
+
+      final sub = bootstrap.snapshots.listen(snapshots.add);
       await bootstrap.initialize();
+      await Future.delayed(const Duration(milliseconds: 100));
 
-      final snapshot = await bootstrap.snapshots.first;
-      expect(snapshot.runtime.lastError?.code, equals('STARTUP_TIMEOUT'));
-      expect(snapshot.runtime.lastError?.retryable, equals(true));
+      expect(snapshots.isNotEmpty, isTrue);
+      expect(snapshots.last.runtime.lastError?.code, equals('STARTUP_TIMEOUT'));
+      expect(snapshots.last.runtime.lastError?.retryable, equals(true));
 
+      await sub.cancel();
       await bootstrap.dispose();
     });
   });

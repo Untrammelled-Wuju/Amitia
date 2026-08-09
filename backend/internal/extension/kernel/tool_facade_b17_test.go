@@ -116,6 +116,158 @@ func TestB17ToolFacadeExecuteModelToolResolved(t *testing.T) {
 	}
 }
 
+func TestB17ResolveModelToolResolvesCanonicalID(t *testing.T) {
+	toolRegistry := capability.NewToolRegistry()
+	executionKernel := &execution.ExecutionPipeline{}
+	facade := NewToolFacade(toolRegistry, executionKernel)
+
+	def := capability.ToolDefinition{
+		ID:          "builtin/browser/search",
+		ModelName:   "browser_search",
+		Source:      capability.ToolSourceBuiltin,
+		Name:        "Browser Search",
+		Description: "Search the web",
+		Enabled:     true,
+		InputSchema: []byte(`{"type":"object"}`),
+	}
+	if err := toolRegistry.Register(context.Background(), def); err != nil {
+		t.Fatalf("unexpected register error: %v", err)
+	}
+
+	ref, err := facade.ResolveModelTool("browser_search")
+	if err != nil {
+		t.Fatalf("unexpected resolve error: %v", err)
+	}
+	if string(ref.ID) != "builtin/browser/search" {
+		t.Fatalf("expected canonical ID builtin/browser/search, got %s", ref.ID)
+	}
+	if ref.ModelName != "browser_search" {
+		t.Fatalf("expected model name browser_search, got %s", ref.ModelName)
+	}
+}
+
+func TestB17ResolveModelToolReturnsErrorWhenRegistryMissing(t *testing.T) {
+	toolRegistry := capability.NewToolRegistry()
+	executionKernel := &execution.ExecutionPipeline{}
+	facade := NewToolFacade(toolRegistry, executionKernel)
+
+	_, err := facade.ResolveModelTool("nonexistent_tool")
+	if err == nil {
+		t.Fatal("expected error for missing tool, got nil")
+	}
+}
+
+func TestB17ExecuteToolUsesCanonicalID(t *testing.T) {
+	toolRegistry := capability.NewToolRegistry()
+	executionKernel := &execution.ExecutionPipeline{}
+	facade := NewToolFacade(toolRegistry, executionKernel)
+
+	def := capability.ToolDefinition{
+		ID:          "builtin/browser/search",
+		ModelName:   "browser_search",
+		Source:      capability.ToolSourceBuiltin,
+		Name:        "Browser Search",
+		Description: "Search the web",
+		Enabled:     true,
+		InputSchema: []byte(`{"type":"object"}`),
+	}
+	if err := toolRegistry.Register(context.Background(), def); err != nil {
+		t.Fatalf("unexpected register error: %v", err)
+	}
+
+	input := []byte(`{"q":"hello"}`)
+	scope := LegacyScope{ToolCallID: "scope_call_id"}
+	result, ok := facade.ExecuteTool(
+		context.Background(),
+		capability.CapabilityID("builtin/browser/search"),
+		input,
+		scope,
+		"external_call_123",
+		"agent-action:action-id-001",
+	)
+	if !ok {
+		t.Fatalf("expected ok=true for existing tool, got false (status=%s)", result.Status)
+	}
+	if facade.Counters().Snapshot()["execute_model_tool"] != 1 {
+		t.Fatalf("expected IncExecuteModelTool called once, got %d", facade.Counters().Snapshot()["execute_model_tool"])
+	}
+}
+
+func TestB17ExecuteToolReturnsFalseWhenToolNotFound(t *testing.T) {
+	toolRegistry := capability.NewToolRegistry()
+	executionKernel := &execution.ExecutionPipeline{}
+	facade := NewToolFacade(toolRegistry, executionKernel)
+
+	_, ok := facade.ExecuteTool(
+		context.Background(),
+		capability.CapabilityID("nonexistent/tool"),
+		nil,
+		LegacyScope{},
+		"call_x",
+		"key",
+	)
+	if ok {
+		t.Fatal("expected ok=false for missing tool")
+	}
+	if facade.Counters().Snapshot()["pipeline_executions"] != 0 {
+		t.Fatal("expected pipeline executions counter to remain 0 when tool not found")
+	}
+}
+
+func TestB17ExecuteToolRejectsModelNameAsID(t *testing.T) {
+	toolRegistry := capability.NewToolRegistry()
+	executionKernel := &execution.ExecutionPipeline{}
+	facade := NewToolFacade(toolRegistry, executionKernel)
+
+	def := capability.ToolDefinition{
+		ID:          "builtin/calendar/create",
+		ModelName:   "create_event",
+		Source:      capability.ToolSourceBuiltin,
+		Name:        "Create Event",
+		Description: "Create a calendar event",
+		Enabled:     true,
+		InputSchema: []byte(`{"type":"object"}`),
+	}
+	if err := toolRegistry.Register(context.Background(), def); err != nil {
+		t.Fatalf("unexpected register error: %v", err)
+	}
+
+	scope := LegacyScope{ToolCallID: "scope_id"}
+	_, ok := facade.ExecuteTool(
+		context.Background(),
+		capability.CapabilityID("create_event"),
+		[]byte(`{}`),
+		scope,
+		"call_y",
+		"key-y",
+	)
+	if ok {
+		t.Fatal("ExecuteTool should not accept model name as ID; canonical ID required")
+	}
+}
+
+func TestB17ExecuteToolNilRegistry(t *testing.T) {
+	facade := NewToolFacade(nil, &execution.ExecutionPipeline{})
+
+	result, ok := facade.ExecuteTool(
+		context.Background(),
+		capability.CapabilityID("any/tool"),
+		nil,
+		LegacyScope{},
+		"call_z",
+		"key-z",
+	)
+	if ok {
+		t.Fatal("expected ok=false when registry nil")
+	}
+	if result.Status != "FAILED" {
+		t.Fatalf("expected FAILED status, got %s", result.Status)
+	}
+	if result.Error == nil || result.Error.Code != "TOOL_REGISTRY_UNAVAILABLE" {
+		t.Fatalf("expected TOOL_REGISTRY_UNAVAILABLE, got %+v", result.Error)
+	}
+}
+
 func TestB17ToolModelToolViewConsistentWithResolvedName(t *testing.T) {
 	toolA := capability.ToolDefinition{
 		ID:          "tool-a",

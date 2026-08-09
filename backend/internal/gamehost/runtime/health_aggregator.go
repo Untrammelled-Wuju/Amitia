@@ -57,18 +57,42 @@ func (a *healthAggregator) AggregateRuntimeHealth(topology RuntimeTopologySnapsh
 	}
 
 	if !hasRequired {
-		result := RuntimeHealthResult{
-			RuntimeID:     topology.RuntimeID,
-			Health:        domain.HealthHealthy,
-			AggregatedAt:  now,
-			ServiceHealths: copyServiceHealths(services),
-		}
 		if len(topology.Services) == 0 {
-			result.Reason = "zero_service_runtime"
-		} else {
-			result.Reason = "no_required_services"
+			return RuntimeHealthResult{
+				RuntimeID:      topology.RuntimeID,
+				Health:         domain.HealthHealthy,
+				AggregatedAt:   now,
+				ServiceHealths:  copyServiceHealths(services),
+				Reason:         "zero_service_runtime",
+			}
 		}
-		return result
+
+		anyOptionalIssues := false
+		for _, svc := range topology.Services {
+			health, ok := svcHealthMap[svc.ServiceID]
+			if !ok || health != domain.HealthHealthy {
+				anyOptionalIssues = true
+				break
+			}
+		}
+
+		if anyOptionalIssues {
+			return RuntimeHealthResult{
+				RuntimeID:      topology.RuntimeID,
+				Health:         domain.HealthDegraded,
+				AggregatedAt:   now,
+				ServiceHealths:  copyServiceHealths(services),
+				Reason:         "only_optional_services_impaired",
+			}
+		}
+
+		return RuntimeHealthResult{
+			RuntimeID:      topology.RuntimeID,
+			Health:         domain.HealthHealthy,
+			AggregatedAt:   now,
+			ServiceHealths:  copyServiceHealths(services),
+			Reason:         "only_optional_services_healthy",
+		}
 	}
 
 	if anyRequiredUnhealthy {

@@ -40,7 +40,7 @@ type ObjectRegistry interface {
 	Get(ctx context.Context, id BinaryObjectID) (BinaryObjectRecord, error)
 	Release(ctx context.Context, id BinaryObjectID) error
 	ListByRuntime(runtimeID domain.RuntimeInstanceID) ([]BinaryObjectRecord, error)
-	ListByService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) error
+	ListByService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (map[BinaryObjectID]BinaryObjectRecord, error)
 	CountActive() int
 	RemoveByRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) (int, error)
 	RemoveByService(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (int, error)
@@ -198,12 +198,18 @@ func (r *memoryObjectRegistry) ListByRuntime(runtimeID domain.RuntimeInstanceID)
 	return result, nil
 }
 
-func (r *memoryObjectRegistry) ListByService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) error {
+func (r *memoryObjectRegistry) ListByService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (map[BinaryObjectID]BinaryObjectRecord, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	_ = r.serviceIndex[runtimeID][serviceID]
-	return nil
+	ids := r.serviceIndex[runtimeID][serviceID]
+	result := make(map[BinaryObjectID]BinaryObjectRecord, len(ids))
+	for id := range ids {
+		if record, ok := r.index[id]; ok {
+			result[id] = record
+		}
+	}
+	return result, nil
 }
 
 func (r *memoryObjectRegistry) CountActive() int {

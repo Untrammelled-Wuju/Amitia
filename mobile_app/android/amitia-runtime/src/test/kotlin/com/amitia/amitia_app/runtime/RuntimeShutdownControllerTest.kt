@@ -239,6 +239,14 @@ class RuntimeShutdownControllerTest {
         controller.stop(RuntimeStopRequest(reason = RuntimeStopReason.USER_REQUEST, force = false), callback)
         val completed = latch.await(5, TimeUnit.SECONDS)
         val result = resultRef.get()
+        if (result is RuntimeOperationResult.Failure) {
+            System.out.println("STOP_FAILED: ${result.error.code} - ${result.error.message}")
+        } else {
+            System.out.println("STOP_RESULT: ${result?.toString() ?: "NULL"}")
+        }
+        System.out.println("STOP_STATE: ${controller.snapshot().state}")
+        System.out.println("STOP_DETECTOR_CANCELLED: ${detector.cancelled}")
+        System.out.println("STOP_PROOT_STOP_COUNT: ${proot.stopCallCount}")
         assertTrue("Callback completed: $completed, state: ${controller.snapshot().state}", completed)
         assertTrue("Result: $result", result is RuntimeOperationResult.Success)
         assertTrue(detector.cancelled)

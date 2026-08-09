@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/extension"
 	promptir "github.com/u-ai/backend/internal/prompt"
 	applog "github.com/u-ai/backend/log"
@@ -32,6 +33,11 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 		}
 		applog.TraceInfo(trace.WithStage("model_call_completed"), applog.Fields{"round": round, "tool_call_count": len(toolCalls), "reply_size": len(aiContent), "reasoning_size": len(reasoning)}, "process message model call completed")
 		if len(toolCalls) == 0 {
+			reply = aiContent
+			break
+		}
+		if s.hasActionDirective && s.actionDirective.Kind == decision.ActionDirectiveRespond {
+			applog.TraceWarn(trace.WithStage("tool_call_blocked_by_directive"), applog.Fields{"plan_id": s.actionDirective.PlanID, "tool_call_count": len(toolCalls)}, "模型返回 tool_calls 但 ActionDirective=respond，拒绝执行并仅使用文本")
 			reply = aiContent
 			break
 		}

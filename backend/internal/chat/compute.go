@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/interaction"
@@ -335,6 +336,36 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	seenTools := map[string]bool{}
 	toolExecCtx, cancelTools := context.WithTimeout(ctx, 60*time.Second)
 	defer cancelTools()
+
+	s.hasActionDirective = false
+	s.actionDirective = decision.ActionDirective{}
+	if req.Runtime != nil && req.Runtime.BehaviorPlan != nil && s.actionMaterializer != nil {
+		directive, dirErr := decision.BuildActionDirective(req.Runtime.BehaviorPlan)
+		if dirErr != nil {
+			applog.TraceWarn(trace.WithStage("action_directive_build_failed"), applog.Fields{"error": dirErr.Error()}, "行为计划 ActionDirective 构建失败，回退到无约束模式")
+		} else {
+			s.actionDirective = directive
+			s.hasActionDirective = true
+		}
+	}
+
+	if s.hasActionDirective && s.actionDirective.Kind == decision.ActionDirectiveWait {
+		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+		return &ComputeResult{
+			RequestID:            requestID,
+			ConversationID:       convID,
+			CharacterID:          charID,
+			CharacterName:        charName,
+			UserMessageID:        userMsgID,
+			UserMessageSequence:  userMsgSequence,
+			UserMessageCreatedAt: userMsgCreatedAt,
+			Reply:                "",
+			Source:               source,
+			ForceVoice:           false,
+			Channel:              channel,
+			Trace:                trace,
+		}, nil
+	}
 
 	if err := s.abortMessageCommitIfCancelled(ctx, trace, userMsgID); err != nil {
 		return nil, err
