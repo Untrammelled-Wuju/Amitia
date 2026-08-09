@@ -59,13 +59,6 @@ func (m *MockRuntimeValidator) ValidateService(
 	return nil
 }
 
-func (id domain.RuntimeInstanceID) String() string {
-	return string(id)
-}
-
-func (id domain.ServiceID) String() string {
-	return string(id)
-}
 
 func TestParseMethod_Valid(t *testing.T) {
 	tests := []struct {
