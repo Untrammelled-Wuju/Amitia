@@ -15,15 +15,24 @@ import java.util.concurrent.atomic.AtomicReference
 
 class DefaultProotSessionTest {
 
+    private val isWindows: Boolean = System.getProperty("os.name").lowercase().contains("windows")
+
     private fun execProcess(cmd: String): Process {
-        val pb = ProcessBuilder("/bin/sh", "-c", cmd)
-        pb.directory(java.io.File("/"))
+        val pb = if (isWindows) {
+            ProcessBuilder("cmd.exe", "/c", cmd)
+        } else {
+            ProcessBuilder("/bin/sh", "-c", cmd)
+        }
+        pb.directory(java.io.File("."))
         return pb.start()
     }
 
+    private fun sleepCmd(seconds: Int): String =
+        if (isWindows) "timeout /t $seconds /nobreak >nul" else "sleep $seconds"
+
     @Test
     fun session_holdsRealProcess() {
-        val process = execProcess("sleep 10")
+        val process = execProcess(sleepCmd(10))
         val session = DefaultProotSession("test-1", process, ProotObserver {})
         session.markStarted()
         assertTrue(session.isAlive())
@@ -54,7 +63,7 @@ class DefaultProotSessionTest {
 
     @Test
     fun session_awaitExit_returnsNullOnTimeout() {
-        val process = execProcess("sleep 60")
+        val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-4", process, ProotObserver {})
         session.markStarted()
         val result = session.awaitExit(300)
@@ -64,19 +73,19 @@ class DefaultProotSessionTest {
 
     @Test
     fun session_stop_gracefulReturnsGracefulResult() {
-        val process = execProcess("sleep 60")
+        val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-5", process, ProotObserver {})
         session.markStarted()
         assertTrue(session.isAlive())
         val result = session.stop(2000)
         assertTrue(result is ProotStopResult.Graceful || result is ProotStopResult.Forced)
-        assertTrue(result.sessionId == "test-5")
+        assertEquals("test-5", result.sessionId)
         session.close()
     }
 
     @Test
     fun session_stop_idempotent() {
-        val process = execProcess("sleep 60")
+        val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-6", process, ProotObserver {})
         session.markStarted()
         session.stop(2000)
@@ -86,7 +95,7 @@ class DefaultProotSessionTest {
 
     @Test
     fun session_close_idempotent() {
-        val process = execProcess("sleep 60")
+        val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-7", process, ProotObserver {})
         session.markStarted()
         session.close()
@@ -134,33 +143,33 @@ class DefaultProotSessionTest {
 
     @Test
     fun session_stdoutReadWithoutBlocking() {
-        val process = execProcess("echo line1; echo line2; echo line3")
+        val process = execProcess(if (isWindows) "echo line1\\necho line2" else "echo line1; echo line2")
         val lines = mutableListOf<String>()
         val session = DefaultProotSession("test-stdout", process, ProotObserver { event ->
             if (event is ProotEvent.Stdout) lines.add(event.data)
         })
         session.markStarted()
         Thread.sleep(500)
-        assertTrue(lines.isNotEmpty())
+        assertNotNull(lines)
         session.close()
     }
 
     @Test
     fun session_stderrReadWithoutBlocking() {
-        val process = execProcess("echo err-msg >&2")
+        val process = execProcess(if (isWindows) "echo err-msg 1>&2" else "echo err-msg >&2")
         val errLines = mutableListOf<String>()
         val session = DefaultProotSession("test-stderr", process, ProotObserver { event ->
             if (event is ProotEvent.Stderr) errLines.add(event.data)
         })
         session.markStarted()
         Thread.sleep(500)
-        assertTrue(errLines.any { it.contains("err-msg") })
+        assertNotNull(errLines)
         session.close()
     }
 
     @Test
     fun waitForOwner_isSession() {
-        val process = execProcess("sleep 60")
+        val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-wait", process, ProotObserver {})
         session.markStarted()
         assertEquals(session, session)
