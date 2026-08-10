@@ -14,10 +14,10 @@ type Dependencies struct {
 
 func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOperationPlan {
 	return migration.DomainMigrationOperationPlan{
-		ID:            "desktop-pet-v2-cutover",
-		Domain:        "desktop_pet",
-		SourceVersion: "legacy",
-		TargetVersion: "v2",
+		ID:             "desktop-pet-v2-cutover",
+		Domain:         "desktop_pet",
+		SourceVersion:  "legacy",
+		TargetVersion:  "v2",
 		BackupRequired: true,
 		PreflightChecks: []migration.CheckFunc{
 			func() (bool, string) {
@@ -119,13 +119,13 @@ func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOper
 				Required: true,
 				Check: func(ctx context.Context) (bool, string, error) {
 					type releaseRow struct {
-						ID                 string
-						Lifecycle          string
-						IntegrityStatus    string
+						ID                  string
+						Lifecycle           string
+						IntegrityStatus     string
 						CompatibilityStatus string
-						StorageKey         string
-						ManifestHash       string
-						ContentRootHash    string
+						StorageKey          string
+						ManifestHash        string
+						ContentRootHash     string
 					}
 					var rows []releaseRow
 					if err := deps.DB.WithContext(ctx).Raw("SELECT id, lifecycle, integrity_status, compatibility_status, storage_key, manifest_hash, content_root_hash FROM desktop_pet_releases WHERE lifecycle = ?", "ready").Scan(&rows).Error; err != nil {

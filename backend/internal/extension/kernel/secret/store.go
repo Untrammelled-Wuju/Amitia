@@ -6,9 +6,9 @@ import (
 )
 
 type Store interface {
-	Put(ctx context.Context, namespace string, value []byte) (SecretRef, error)
-	Get(ctx context.Context, ref SecretRef) ([]byte, error)
-	Delete(ctx context.Context, ref SecretRef) error
+	Put(ctx context.Context, namespace string, value []byte) (string, error)
+	Get(ctx context.Context, ref string) ([]byte, error)
+	Delete(ctx context.Context, ref string) error
 }
 
 func sanitizeNamespace(value string) string {

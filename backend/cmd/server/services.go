@@ -33,7 +33,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
-	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
@@ -348,6 +347,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.SetActionMaterializer(&actionMaterializer)
 	chatSvc.SetActionDispatcher(actionDispatcher)
 	chatSvc.SetObservationBuilder(observationBuilder)
+	goalRegistry := decision.NewGoalRegistry()
 	goalProgressService := interaction.NewGoalProgressService(goalRegistry)
 	chatSvc.SetGoalProgressService(goalProgressService)
 	if kernelContainer.DevConsoleService != nil {
@@ -415,7 +415,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimePipeline.SetBeliefResolver(belief.ResolveBelief)
 	runtimePipeline.SetAppraisalEngine(appraisal.NewEngine(appraisal.DefaultAppraisalConfig()))
 	runtimePipeline.SetBudgetController(budget.NewBudgetController(0.5))
-	goalRegistry := decision.NewGoalRegistry()
 	runtimePipeline.SetGoalRegistry(goalRegistry)
 	runtimePipeline.SetDecisionLayer(decision.DefaultCandidateRegistry(), decision.DefaultArbitrationLayer())
 	orch.SetRuntimePipeline(runtimePipeline)

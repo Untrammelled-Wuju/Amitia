@@ -43,14 +43,14 @@ func NewEncryptedFileStore(path, keyPath string) (*EncryptedFileStore, error) {
 	return &EncryptedFileStore{path: path, aead: aead}, nil
 }
 
-func (s *EncryptedFileStore) Put(ctx context.Context, namespace string, value []byte) (SecretRef, error) {
+func (s *EncryptedFileStore) Put(ctx context.Context, namespace string, value []byte) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	if len(value) == 0 {
 		return "", fmt.Errorf("secret must not be empty")
 	}
-	ref := SecretRef(schemeCanonical + sanitizeNamespace(namespace) + "/" + uuid.NewString())
+	ref := schemeCanonical + sanitizeNamespace(namespace) + "/" + uuid.NewString()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	records, err := s.readLocked()
@@ -62,19 +62,19 @@ func (s *EncryptedFileStore) Put(ctx context.Context, namespace string, value []
 		return "", err
 	}
 	sealed := s.aead.Seal(nil, nonce, value, []byte(ref))
-	records[string(ref)] = base64.RawStdEncoding.EncodeToString(append(nonce, sealed...))
+	records[ref] = base64.RawStdEncoding.EncodeToString(append(nonce, sealed...))
 	if err := s.writeLocked(records); err != nil {
 		return "", err
 	}
 	return ref, nil
 }
 
-func (s *EncryptedFileStore) Get(ctx context.Context, ref SecretRef) ([]byte, error) {
+func (s *EncryptedFileStore) Get(ctx context.Context, ref string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	rawRef := string(ref)
-	if ref.IsLegacy() {
+	rawRef := ref
+	if strings.HasPrefix(rawRef, schemeLegacy) {
 		rawRef = legacyPrefixReplacer.Replace(rawRef)
 	}
 	if !strings.HasPrefix(rawRef, schemeCanonical) {
@@ -101,12 +101,12 @@ func (s *EncryptedFileStore) Get(ctx context.Context, ref SecretRef) ([]byte, er
 	return plain, nil
 }
 
-func (s *EncryptedFileStore) Delete(ctx context.Context, ref SecretRef) error {
+func (s *EncryptedFileStore) Delete(ctx context.Context, ref string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	rawRef := string(ref)
-	if ref.IsLegacy() {
+	rawRef := ref
+	if strings.HasPrefix(rawRef, schemeLegacy) {
 		rawRef = legacyPrefixReplacer.Replace(rawRef)
 	}
 	s.mu.Lock()

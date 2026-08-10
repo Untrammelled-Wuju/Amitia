@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/binding"
+	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
 	"github.com/u-ai/backend/internal/desktoppet/installation/device"
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
@@ -38,9 +39,9 @@ func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, userI
 	}
 	if item.OwnerUserID != "" && item.OwnerUserID != userID {
 		return &coordinator.ReleaseValidationResult{
-			ReleaseID:    item.ID,
+			ReleaseID:     item.ID,
 			IsInstallable: false,
-			ErrorMessage: "release does not belong to user",
+			ErrorMessage:  "release does not belong to user",
 		}, nil
 	}
 	return &coordinator.ReleaseValidationResult{
@@ -238,13 +239,13 @@ func (s *coordinatorProjectionService) UpdateProjection(ctx context.Context, use
 	proj, err := getRuntimeProjectionTx(s.installRepo.DB().WithContext(ctx), userID, deviceID)
 	if err != nil {
 		proj = &projection.InstallationRuntimeProjection{
-			ID:                    uuid.New().String(),
-			UserID:                userID,
-			DeviceID:              deviceID,
+			ID:                     uuid.New().String(),
+			UserID:                 userID,
+			DeviceID:               deviceID,
 			AppliedDesiredRevision: 0,
-			RuntimeSyncState:      projection.SyncStatePending,
-			CreatedAt:             time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:             time.Now().Format("2006-01-02 15:04:05"),
+			RuntimeSyncState:       projection.SyncStatePending,
+			CreatedAt:              time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:              time.Now().Format("2006-01-02 15:04:05"),
 		}
 	}
 	grid := &coordinator.Projection{
@@ -406,28 +407,28 @@ func (a *coordinatorRepoAdapter) GetInstallation(ctx context.Context, userID, de
 	}, nil
 }
 
-func (a *coordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.Context, op *operation.InstallationOperation, inst *coordinator.InstallationRecord, desired *coordinator.DesiredStateSnapshot, stagingPathKey string) (int64, error) {
+func (a *coordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.Context, op *operation.InstallationOperation, inst *coordinator.InstallationRecord, snap *coordinator.DesiredStateSnapshot, stagingPathKey string) (int64, error) {
 	db := a.installRepo.DB()
 	var desiredRevision int64
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		instModel := &installation.Installation{
-			ID:                   inst.ID,
-			UserID:               inst.UserID,
-			DeviceID:             inst.DeviceID,
-			PetID:                inst.PetID,
-			Status:               installation.StatusInstalled,
-			IsActive:             1,
-			InstallPath:          stagingPathKey,
-			DefaultActionKey:     desired.DefaultActionKey,
-			CurrentReleaseID:     desired.ReleaseID,
-			LifecycleState:       installation.LifecycleInstalled,
-			IntegrityStatus:      installation.IntegrityVerified,
-			DesiredState:         installation.DesiredEnabled,
-			RuntimeSyncState:     installation.SyncPending,
-			InstallStorageKey:    stagingPathKey,
-			InstalledAt:          time.Now().Format("2006-01-02 15:04:05"),
-			CreatedAt:            time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:            time.Now().Format("2006-01-02 15:04:05"),
+			ID:                inst.ID,
+			UserID:            inst.UserID,
+			DeviceID:          inst.DeviceID,
+			PetID:             inst.PetID,
+			Status:            installation.StatusInstalled,
+			IsActive:          1,
+			InstallPath:       stagingPathKey,
+			DefaultActionKey:  snap.DefaultActionKey,
+			CurrentReleaseID:  snap.ReleaseID,
+			LifecycleState:    installation.LifecycleInstalled,
+			IntegrityStatus:   installation.IntegrityVerified,
+			DesiredState:      installation.DesiredEnabled,
+			RuntimeSyncState:  installation.SyncPending,
+			InstallStorageKey: stagingPathKey,
+			InstalledAt:       time.Now().Format("2006-01-02 15:04:05"),
+			CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(instModel).Error; err != nil {
 			return fmt.Errorf("create installation: %w", err)
@@ -460,21 +461,21 @@ func (a *coordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 		}
 		desiredRevision = newRev
 		desiredModel := &desired.RuntimeDesiredState{
-			ID:                  uuid.New().String(),
-			UserID:              desired.UserID,
-			DeviceID:            desired.DeviceID,
-			RuntimeID:           desired.RuntimeID,
-			InstallationID:      desired.InstallationID,
-			PetID:               desired.PetID,
-			ReleaseID:           desired.ReleaseID,
-			DesiredEnabled:      !desired.EnsureAbsent,
-			DesiredVisible:      !desired.EnsureAbsent,
-			DesiredActionKey:    desired.DefaultActionKey,
-			DesiredRevision:     desiredRevision,
-			DesiredHash:         desired.DesiredHash,
-			OperationID:         op.ID,
-			CreatedAt:           time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:           time.Now().Format("2006-01-02 15:04:05"),
+			ID:               uuid.New().String(),
+			UserID:           snap.UserID,
+			DeviceID:         snap.DeviceID,
+			RuntimeID:        snap.RuntimeID,
+			InstallationID:   snap.InstallationID,
+			PetID:            snap.PetID,
+			ReleaseID:        snap.ReleaseID,
+			DesiredEnabled:   !snap.EnsureAbsent,
+			DesiredVisible:   !snap.EnsureAbsent,
+			DesiredActionKey: snap.DefaultActionKey,
+			DesiredRevision:  desiredRevision,
+			DesiredHash:      snap.DesiredHash,
+			OperationID:      op.ID,
+			CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:        time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(desiredModel).Error; err != nil {
 			return fmt.Errorf("create desired state: %w", err)
@@ -483,7 +484,7 @@ func (a *coordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 			UserID:         inst.UserID,
 			DeviceID:       inst.DeviceID,
 			InstallationID: inst.ID,
-			ReleaseID:      desired.ReleaseID,
+			ReleaseID:      snap.ReleaseID,
 			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
 			UpdatedAt:      time.Now().Format("2006-01-02 15:04:05"),
 		}
@@ -494,7 +495,7 @@ func (a *coordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 			ID:             uuid.New().String(),
 			OperationID:    op.ID,
 			InstallationID: inst.ID,
-			Stage:          installation.JournalStateOperationCreatedAt,
+			Stage:          journal.JournalStageOperationCreated,
 			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
 			UpdatedAt:      time.Now().Format("2006-01-02 15:04:05"),
 		}
@@ -541,17 +542,17 @@ func (a *coordinatorRepoAdapter) UpdateDesiredEnabled(ctx context.Context, op *o
 		}
 		desiredRevision = newRev
 		desiredState := &desired.RuntimeDesiredState{
-			ID:                    uuid.New().String(),
-			UserID:                op.UserID,
-			DeviceID:              op.DeviceID,
-			RuntimeID:             op.RuntimeID,
-			InstallationID:        installationID,
-			DesiredEnabled:        enabled,
-			DesiredVisible:        enabled,
-			DesiredRevision:       desiredRevision,
-			OperationID:           op.ID,
-			CreatedAt:             time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:             time.Now().Format("2006-01-02 15:04:05"),
+			ID:              uuid.New().String(),
+			UserID:          op.UserID,
+			DeviceID:        op.DeviceID,
+			RuntimeID:       op.RuntimeID,
+			InstallationID:  installationID,
+			DesiredEnabled:  enabled,
+			DesiredVisible:  enabled,
+			DesiredRevision: desiredRevision,
+			OperationID:     op.ID,
+			CreatedAt:       time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:       time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(desiredState).Error; err != nil {
 			return fmt.Errorf("create desired state: %w", err)
@@ -596,37 +597,37 @@ func (a *coordinatorRepoAdapter) SwitchRelease(ctx context.Context, op *operatio
 		}
 		desiredRevision = newRev
 		desiredState := &desired.RuntimeDesiredState{
-			ID:                    uuid.New().String(),
-			UserID:                op.UserID,
-			DeviceID:              op.DeviceID,
-			RuntimeID:             op.RuntimeID,
-			InstallationID:        installationID,
-			ReleaseID:             targetReleaseID,
-			DesiredEnabled:        true,
-			DesiredVisible:        true,
-			DesiredRevision:       desiredRevision,
-			OperationID:           op.ID,
-			CreatedAt:             time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:             time.Now().Format("2006-01-02 15:04:05"),
+			ID:              uuid.New().String(),
+			UserID:          op.UserID,
+			DeviceID:        op.DeviceID,
+			RuntimeID:       op.RuntimeID,
+			InstallationID:  installationID,
+			ReleaseID:       targetReleaseID,
+			DesiredEnabled:  true,
+			DesiredVisible:  true,
+			DesiredRevision: desiredRevision,
+			OperationID:     op.ID,
+			CreatedAt:       time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:       time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(desiredState).Error; err != nil {
 			return fmt.Errorf("create desired state: %w", err)
 		}
 		if err := tx.Model(&installation.Installation{}).Where("id = ?", installationID).Updates(map[string]interface{}{
-			"current_release_id": targetReleaseID,
-			"install_path":       stagingPathKey,
+			"current_release_id":  targetReleaseID,
+			"install_path":        stagingPathKey,
 			"install_storage_key": stagingPathKey,
-			"updated_at":         time.Now().Format("2006-01-02 15:04:05"),
+			"updated_at":          time.Now().Format("2006-01-02 15:04:05"),
 		}).Error; err != nil {
 			return fmt.Errorf("update installation release: %w", err)
 		}
 		jrnl := &journal.InstallationSwitchJournal{
 			ID:             uuid.New().String(),
 			OperationID:    op.ID,
-			InstallationID: installationID,
-			SourceReleaseID: op.SourceReleaseID,
-			TargetReleaseID: targetReleaseID,
-			Stage:          "switch_initiated",
+			NewInstallationID: installationID,
+			OldReleaseID:   op.SourceReleaseID,
+			NewReleaseID:   targetReleaseID,
+			Stage:          journal.SwitchJournalCreated,
 			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
 			UpdatedAt:      time.Now().Format("2006-01-02 15:04:05"),
 		}
@@ -686,15 +687,15 @@ func (a *coordinatorRepoAdapter) UpdateSettings(ctx context.Context, op *operati
 		}
 		desiredRevision = newRev
 		desiredState := &desired.RuntimeDesiredState{
-			ID:                    uuid.New().String(),
-			UserID:                op.UserID,
-			DeviceID:              op.DeviceID,
-			RuntimeID:             op.RuntimeID,
-			InstallationID:        installationID,
-			DesiredRevision:       desiredRevision,
-			OperationID:           op.ID,
-			CreatedAt:             time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:             time.Now().Format("2006-01-02 15:04:05"),
+			ID:              uuid.New().String(),
+			UserID:          op.UserID,
+			DeviceID:        op.DeviceID,
+			RuntimeID:       op.RuntimeID,
+			InstallationID:  installationID,
+			DesiredRevision: desiredRevision,
+			OperationID:     op.ID,
+			CreatedAt:       time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:       time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(desiredState).Error; err != nil {
 			return fmt.Errorf("create desired state: %w", err)
@@ -736,18 +737,18 @@ func (a *coordinatorRepoAdapter) ChangeDefaultAction(ctx context.Context, op *op
 		}
 		desiredRevision = newRev
 		desiredState := &desired.RuntimeDesiredState{
-			ID:                    uuid.New().String(),
-			UserID:                op.UserID,
-			DeviceID:              op.DeviceID,
-			RuntimeID:             op.RuntimeID,
-			InstallationID:        installationID,
-			DesiredActionKey:      actionKey,
-			DesiredEnabled:        true,
-			DesiredVisible:        true,
-			DesiredRevision:       desiredRevision,
-			OperationID:           op.ID,
-			CreatedAt:             time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:             time.Now().Format("2006-01-02 15:04:05"),
+			ID:               uuid.New().String(),
+			UserID:           op.UserID,
+			DeviceID:         op.DeviceID,
+			RuntimeID:        op.RuntimeID,
+			InstallationID:   installationID,
+			DesiredActionKey: actionKey,
+			DesiredEnabled:   true,
+			DesiredVisible:   true,
+			DesiredRevision:  desiredRevision,
+			OperationID:      op.ID,
+			CreatedAt:        time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:        time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(desiredState).Error; err != nil {
 			return fmt.Errorf("create desired state: %w", err)
@@ -795,17 +796,17 @@ func (a *coordinatorRepoAdapter) MarkUninstallDesired(ctx context.Context, op *o
 		}
 		desiredRevision = newRev
 		desiredState := &desired.RuntimeDesiredState{
-			ID:                    uuid.New().String(),
-			UserID:                op.UserID,
-			DeviceID:              op.DeviceID,
-			RuntimeID:             op.RuntimeID,
-			InstallationID:        installationID,
-			DesiredEnabled:        false,
-			DesiredVisible:        false,
-			DesiredRevision:       desiredRevision,
-			OperationID:           op.ID,
-			CreatedAt:             time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:             time.Now().Format("2006-01-02 15:04:05"),
+			ID:              uuid.New().String(),
+			UserID:          op.UserID,
+			DeviceID:        op.DeviceID,
+			RuntimeID:       op.RuntimeID,
+			InstallationID:  installationID,
+			DesiredEnabled:  false,
+			DesiredVisible:  false,
+			DesiredRevision: desiredRevision,
+			OperationID:     op.ID,
+			CreatedAt:       time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:       time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(desiredState).Error; err != nil {
 			return fmt.Errorf("create desired state: %w", err)

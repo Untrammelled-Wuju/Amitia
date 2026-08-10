@@ -91,6 +91,10 @@ func NewHostRegistry(db *sql.DB) *HostRegistry {
 	}
 }
 
+func MigrateSessionTokens(ctx context.Context, db *sql.DB) error {
+	return (&hostRepository{db: db}).MigrateSessionTokens(ctx)
+}
+
 func (r *HostRegistry) RegisterHost(ctx context.Context, entry *HostEntry) error {
 	if entry == nil {
 		return ErrInvalidHostEntry

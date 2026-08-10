@@ -29,6 +29,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
@@ -877,7 +878,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error) {
 	if b.db != nil {
-		return sqlite.NewStoreFromDB(b.db), nil
+		store := sqlite.NewStoreFromDB(b.db)
+		if err := host_registry.MigrateSessionTokens(ctx, store.DB()); err != nil {
+			return nil, fmt.Errorf("kernel: migrate session tokens: %w", err)
+		}
+		return store, nil
 	}
 	if b.dbPath == "" {
 		return nil, fmt.Errorf("kernel: db path or *sql.DB is required")
@@ -889,6 +894,10 @@ func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error
 	if err := store.Migrate(ctx); err != nil {
 		store.Close()
 		return nil, fmt.Errorf("kernel: migrate store: %w", err)
+	}
+	if err := host_registry.MigrateSessionTokens(ctx, store.DB()); err != nil {
+		store.Close()
+		return nil, fmt.Errorf("kernel: migrate session tokens: %w", err)
 	}
 	return store, nil
 }

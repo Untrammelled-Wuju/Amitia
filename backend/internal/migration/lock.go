@@ -24,18 +24,18 @@ type heartbeatController struct {
 }
 
 type PersistentLock struct {
-	db        *gorm.DB
-	lockDir   string
-	instance  string
-	mu        sync.Mutex
+	db         *gorm.DB
+	lockDir    string
+	instance   string
+	mu         sync.Mutex
 	heartbeats map[string]*heartbeatController
 }
 
 func NewPersistentLock(db *gorm.DB, lockDir string) *PersistentLock {
 	return &PersistentLock{
-		db:        db,
-		lockDir:   lockDir,
-		instance:  uuid.New().String(),
+		db:         db,
+		lockDir:    lockDir,
+		instance:   uuid.New().String(),
 		heartbeats: make(map[string]*heartbeatController),
 	}
 }

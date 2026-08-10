@@ -2,12 +2,17 @@ package host_registry
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 )
+
+var hashedTokenRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 var (
 	ErrInvalidHostEntry = errors.New("host_registry: invalid host entry")
@@ -229,4 +234,46 @@ func scanHostEntries(rows *sql.Rows) ([]*HostEntry, error) {
 		result = append(result, entry)
 	}
 	return result, rows.Err()
+}
+
+func (r *hostRepository) MigrateSessionTokens(ctx context.Context) error {
+	if r.db == nil {
+		return nil
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT host_client_id, session_token FROM kernel_host_registry WHERE session_token != ''`)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("host_registry: query session tokens: %w", err)
+	}
+	defer rows.Close()
+
+	type migrationRow struct {
+		hostClientID string
+		token        string
+	}
+	var pending []migrationRow
+	for rows.Next() {
+		var hostClientID, token string
+		if err := rows.Scan(&hostClientID, &token); err != nil {
+			return fmt.Errorf("host_registry: scan session token: %w", err)
+		}
+		if token == "" || hashedTokenRe.MatchString(token) {
+			continue
+		}
+		pending = append(pending, migrationRow{hostClientID: hostClientID, token: token})
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("host_registry: iterate session tokens: %w", err)
+	}
+
+	for _, row := range pending {
+		tokenHash := sha256.Sum256([]byte(row.token))
+		hexHash := hex.EncodeToString(tokenHash[:])
+		if _, err := r.db.ExecContext(ctx, `UPDATE kernel_host_registry SET session_token = ? WHERE host_client_id = ?`, hexHash, row.hostClientID); err != nil {
+			return fmt.Errorf("host_registry: hash session token for %s: %w", row.hostClientID, err)
+		}
+	}
+	return nil
 }
