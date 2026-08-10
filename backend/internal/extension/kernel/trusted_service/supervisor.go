@@ -427,7 +427,6 @@ func (s *ProcessSupervisor) buildSafeEnvironment(exe *PlatformExecutable, def *S
 		SetLogLevel(logLevel).
 		SetTempDir(tempDir)
 
-	envB.Set("AMITIA_SESSION", session)
 	envB.Set("AMITIA_INSTANCE", instance)
 	envB.Set("AMITIA_GENERATION", fmt.Sprintf("%d", generation))
 	envB.Set("AMITIA_SECRET_LEASE", secretLease)
@@ -441,7 +440,7 @@ func (s *ProcessSupervisor) buildSafeEnvironment(exe *PlatformExecutable, def *S
 		}
 	}
 
-	return envB.Build()
+	return envB.BuildFiltered()
 }
 
 func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {

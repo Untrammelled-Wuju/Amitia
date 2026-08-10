@@ -2,7 +2,9 @@ package host_registry
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"sync"
 	"time"
 )
@@ -52,6 +54,15 @@ func (e *HostEntry) HasCapability(cap HostCapability) bool {
 		}
 	}
 	return false
+}
+
+func hashSessionToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
+}
+
+func (e *HostEntry) SessionTokenHash() string {
+	return hashSessionToken(e.SessionToken)
 }
 
 func (e *HostEntry) IsExpired() bool {

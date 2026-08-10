@@ -822,6 +822,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationRunner := migration.NewRunner(migrationRepo)
 	backupDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_backups")
 	lockDir := filepath.Join(config.AppCfg.Storage.DataDir, "migration_locks")
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
+		return nil, fmt.Errorf("initialize migration lock directory: %w", err)
+	}
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		return nil, fmt.Errorf("initialize migration backup directory: %w", err)
+	}
 	migrationLock := migrationcore.NewPersistentLock(ctx.DB, lockDir)
 	migrationRunner.SetLock(migrationLock)
 	migrationRunner.SetBackupDir(backupDir)

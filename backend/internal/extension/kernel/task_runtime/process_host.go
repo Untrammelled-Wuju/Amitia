@@ -257,7 +257,7 @@ func (h *TaskProcessHost) Start(ctx context.Context, input json.RawMessage, chec
 	if h.secretLeaseID != "" {
 		env.Set("AMITIA_SECRET_LEASE", h.secretLeaseID)
 	}
-	envSlice := env.BuildFiltered()
+	envSlice := env.Build()
 
 	cmd := exec.CommandContext(procCtx, h.nodePath, h.hostPath)
 	cmd.Dir = h.workDir

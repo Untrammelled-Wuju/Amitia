@@ -7,11 +7,13 @@ import type {
   StateSnapshotPayload,
   CommandStatus,
   SessionStatus,
+  RuntimeMessageType,
 } from "./protocol-v2";
 import {
   buildHelloPayload,
   buildEnvelope,
   isCommandTerminal,
+  computePayloadHash,
 } from "./protocol-v2";
 
 export type RuntimeHandlerState =
@@ -336,8 +338,36 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   private async handleCommand(envelope: RuntimeEnvelope): Promise<void> {
-    this.hooks.onCommand(envelope.payload);
-    await this.sendCommandAck(envelope.messageId, "renderer_accepted");
+    const command = envelope.payload as {
+      commandId?: string;
+      commandType?: string;
+      commandSequence?: number;
+      desiredRevision?: number;
+      settingsRevision?: number;
+      installationId?: string;
+      petId?: string;
+      releaseId?: string;
+      payload?: unknown;
+    } | undefined;
+
+    if (!command?.commandId || !command.commandType) {
+      throw new Error("invalid runtime command");
+    }
+
+    await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "runtime_received");
+
+    try {
+      this.hooks.onCommand(envelope.payload);
+      await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "renderer_accepted");
+    } catch (err) {
+      await this.sendCommandAck(
+        command.commandId,
+        command.commandSequence ?? 0,
+        "failed_terminal",
+        "RENDERER_REJECTED",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   private async handleCommandAck(ack: CommandAckPayload): Promise<void> {
@@ -367,7 +397,7 @@ export class DesktopRuntimeHandlerV2 {
       connectionGeneration: snapshot.connectionGeneration,
       sequence: this.eventSequence,
       payloadSchemaVersion: 1,
-      payloadHash: "",
+      payloadHash: computePayloadHash(snapshot),
       sentAt: new Date().toISOString(),
       payload: snapshot,
     });
@@ -379,24 +409,37 @@ export class DesktopRuntimeHandlerV2 {
     this.hooks.onError(err);
   }
 
-  private async sendCommandAck(messageId: string, status: string): Promise<void> {
+  private async sendCommandAck(
+    commandId: string,
+    commandSequence: number,
+    status: CommandStatus,
+    rejectErrorCode = "",
+    rejectReason = "",
+  ): Promise<void> {
     const payload: CommandAckPayload = {
-      commandId: messageId,
-      commandSequence: this.commandSequence,
+      commandId,
+      commandSequence,
       status,
       runtimeSessionId: this.sessionId,
       receivedAt: new Date().toISOString(),
+      rejectErrorCode: rejectErrorCode || undefined,
+      rejectReason: rejectReason || undefined,
     };
-    await this.send("command_ack", "command_ack", payload);
+    await this.sendEnvelope("command_ack", "command_ack", payload);
   }
 
   private handleClose(code: number, reason: string): void {
     void code;
     void reason;
     this.stopHeartbeat();
-    this.attemptReconnect().catch((err) => {
-      this.hooks.onError(err instanceof Error ? err : new Error(String(err)));
-    });
+    this.cleanupSocket();
+    this.setState("disconnected");
+
+    if (this.config.autoReconnect) {
+      void this.attemptReconnect().catch((err) => {
+        this.hooks.onError(err instanceof Error ? err : new Error(String(err)));
+      });
+    }
   }
 
   private async attemptReconnect(): Promise<void> {
@@ -436,8 +479,9 @@ export class DesktopRuntimeHandlerV2 {
       lastAppliedDesiredRevision: this.lastAppliedDesiredRevision,
       lastProcessedCommandSequence: this.commandSequence,
       lastEventSequence: this.eventSequence,
+      runtimeVersion: this.config.runtimeVersion,
     });
-    await this.send("hello", "hello", payload);
+    await this.sendEnvelope("hello", "hello", payload, true);
   }
 
   private runtimeCapabilitiesList(): string[] {
@@ -460,7 +504,7 @@ export class DesktopRuntimeHandlerV2 {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       if (this.isConnected()) {
-        void this.send("ping", "ping", { t: Date.now() });
+        void this.sendEnvelope("ping", "ping", { t: Date.now() }).catch(() => {});
       }
     }, this.config.heartbeatIntervalMs);
   }

@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/binding"
-	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
+	"github.com/u-ai/backend/internal/desktoppet/installation/device"
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
@@ -74,17 +74,16 @@ func (p *coordinatorReleaseStager) PrepareStagingCopy(ctx context.Context, relea
 	if err != nil {
 		return "", fmt.Errorf("resolve source: %w", err)
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("source path is a symlink")
+	}
 	stagingRoot, err := p.registry.Root(desktoppetsecurity.RootInstallations)
 	if err != nil {
 		return "", fmt.Errorf("resolve installations root: %w", err)
 	}
 	stagingKey := installationID + "_" + uuid.New().String()[:8]
 	dstPath := filepath.Join(stagingRoot, stagingKey)
-	info2, err := os.Lstat(srcPath)
-	if err != nil {
-		return "", err
-	}
-	if err := safeCopy(srcPath, dstPath, info2); err != nil {
+	if err := safeCopy(srcPath, dstPath, info); err != nil {
 		return "", fmt.Errorf("copy staging: %w", err)
 	}
 	return stagingKey, nil
@@ -144,7 +143,7 @@ func copyDir(src, dst string) error {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			continue
+			return fmt.Errorf("symlink detected during copy: %s", srcPath)
 		}
 		if err := safeCopy(srcPath, dstPath, info); err != nil {
 			return err
@@ -187,7 +186,7 @@ type coordinatorRuntimePublisher struct {
 	facade *runtimev2.RuntimeFacade
 }
 
-func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, deviceCtx coordinator.DeviceContext, snapshot *coordinator.DesiredStateSnapshot) error {
+func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, deviceCtx device.DeviceContext, snapshot *coordinator.DesiredStateSnapshot) error {
 	if p.facade == nil {
 		return fmt.Errorf("runtime v2 unavailable")
 	}

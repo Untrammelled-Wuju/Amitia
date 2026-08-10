@@ -42,34 +42,47 @@ func NewPersistentLock(db *gorm.DB, lockDir string) *PersistentLock {
 
 func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.Duration) error {
 	lockFile := filepath.Join(l.lockDir, lockName+".lock")
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339Nano)
+
+	var existingLeases []migrationLockRecord
+	if err := l.db.Where("lock_name = ?", lockName).Find(&existingLeases).Error; err == nil && len(existingLeases) > 0 {
+		for _, existing := range existingLeases {
+			expiresAt, parseErr := time.Parse(time.RFC3339Nano, existing.LeaseExpiresAt)
+			if parseErr != nil || !expiresAt.After(now) {
+				_ = l.db.Where("lock_name = ? AND owner_instance_id = ?", lockName, existing.OwnerInstanceID).Delete(&migrationLockRecord{}).Error
+				_ = os.Remove(lockFile)
+			} else if existing.OwnerInstanceID != l.instance {
+				return fmt.Errorf("migration: db lease held by %s until %s", existing.OwnerInstanceID, existing.LeaseExpiresAt)
+			}
+		}
+	}
+
+	_ = os.Remove(lockFile)
 	fh, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("migration: file lock already exists: %s", lockName)
+			return fmt.Errorf("migration: file lock already exists after lease check: %s", lockName)
 		}
 		return fmt.Errorf("migration: file lock open: %w", err)
 	}
-	defer fh.Close()
+	if _, err := fmt.Fprintf(fh, "instance=%s\ncreated=%s\n", l.instance, nowStr); err != nil {
+		fh.Close()
+		os.Remove(lockFile)
+		return fmt.Errorf("migration: write lock file: %w", err)
+	}
+	fh.Close()
 
-	expires := time.Now().UTC().Add(ttl).Format(time.RFC3339Nano)
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	expires := now.Add(ttl).Format(time.RFC3339Nano)
 
 	lease := migrationLockRecord{
 		LockName:        lockName,
 		OwnerInstanceID: l.instance,
 		LeaseExpiresAt:  expires,
-		HeartbeatAt:     now,
+		HeartbeatAt:     nowStr,
 	}
 
 	tx := l.db.Begin()
-	var existing migrationLockRecord
-	if err := tx.Where("lock_name = ?", lockName).First(&existing).Error; err == nil {
-		if existing.LeaseExpiresAt > now && existing.OwnerInstanceID != l.instance {
-			tx.Rollback()
-			os.Remove(lockFile)
-			return fmt.Errorf("migration: db lease held by %s until %s", existing.OwnerInstanceID, existing.LeaseExpiresAt)
-		}
-	}
 	if err := tx.Save(&lease).Error; err != nil {
 		tx.Rollback()
 		os.Remove(lockFile)
@@ -135,12 +148,19 @@ func (l *PersistentLock) renewLease(lockName string, ttl time.Duration) error {
 	now := time.Now().UTC()
 	expires := now.Add(ttl).Format(time.RFC3339Nano)
 	nowStr := now.Format(time.RFC3339Nano)
-	return l.db.Model(&migrationLockRecord{}).
+	result := l.db.Model(&migrationLockRecord{}).
 		Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).
 		Updates(map[string]interface{}{
 			"lease_expires_at": expires,
 			"heartbeat_at":     nowStr,
-		}).Error
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return errors.New("migration: lease ownership lost")
+	}
+	return nil
 }
 
 type migrationLockRecord struct {

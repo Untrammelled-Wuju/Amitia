@@ -22,6 +22,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/jsonrpc"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	secretpkg "github.com/u-ai/backend/internal/extension/kernel/secret"
+	"github.com/u-ai/backend/internal/platform/process"
 )
 
 type HostState string
@@ -316,27 +318,28 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 	if h.workDir != "" {
 		cmd.Dir = h.workDir
 	}
-	cmd.Env = append(os.Environ(),
-		"AMITIA_INSTANCE_ID="+h.instanceID,
-		"AMITIA_EXTENSION_ID="+h.extensionID,
-		"AMITIA_MODULE_ID="+h.moduleID,
-		"AMITIA_NONCE="+h.expectedNonce,
-		"AMITIA_HOST_API_VERSION="+h.rpcVersion,
-		"AMITIA_DEFINITION_HASH="+h.definitionHash,
-	)
+
+	env := process.NewEnvironmentBuilder().
+		SetRuntimeInstance(h.instanceID).
+		SetExtensionID(h.extensionID).
+		SetModuleID(h.moduleID).
+		Set("AMITIA_NONCE", h.expectedNonce).
+		Set("AMITIA_HOST_API_VERSION", h.rpcVersion).
+		Set("AMITIA_DEFINITION_HASH", h.definitionHash)
+
 	if h.networkDisabled {
-		cmd.Env = append(cmd.Env,
-			"AMITIA_NETWORK_DISABLED=1",
-			"HTTP_PROXY=",
-			"HTTPS_PROXY=",
-			"NO_PROXY=*",
-			"http_proxy=",
-			"https_proxy=",
-			"no_proxy=*",
-			"NODE_OPTIONS=--no-experimental-fetch --disable-network-imports",
-		)
+		env.Set("AMITIA_NETWORK_DISABLED", "1")
+		env.Set("NODE_OPTIONS", "--no-experimental-fetch --disable-network-imports")
 	}
-	cmd.Env = append(cmd.Env, h.env...)
+
+	for _, e := range h.env {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 && !secretpkg.IsSensitiveEnvKey(parts[0]) {
+			env.Set(parts[0], parts[1])
+		}
+	}
+
+	cmd.Env = env.Build()
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -453,7 +456,8 @@ func (h *PluginHost) handleNotification(n *jsonrpc.Notification) {
 			Message string `json:"message"`
 		}
 		if err := json.Unmarshal(n.Params, &p); err == nil {
-			fmt.Fprintf(os.Stderr, "[js-runtime:%s][%s] %s\n", h.instanceID, p.Level, p.Message)
+			safeMsg := redactLogLine(p.Message)
+			fmt.Fprintf(os.Stderr, "[js-runtime:%s][%s] %s\n", h.instanceID, p.Level, safeMsg)
 		}
 	}
 }
@@ -906,4 +910,8 @@ func generateNonce() string {
 	buf := make([]byte, 16)
 	_, _ = rand.Read(buf)
 	return hex.EncodeToString(buf)
+}
+
+func redactLogLine(line string) string {
+	return secretpkg.RedactLogLine(line)
 }

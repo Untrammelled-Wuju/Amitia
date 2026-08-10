@@ -99,6 +99,10 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "connection is nil")
 	}
 
+	if payload.DeviceID != conn.DeviceID {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "device_id mismatch")
+	}
+
 	if payload.RuntimeID != conn.RuntimeID {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime_id mismatch")
 	}

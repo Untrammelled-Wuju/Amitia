@@ -30,6 +30,10 @@ func (r *hostRepository) SaveHost(ctx context.Context, entry *HostEntry) error {
 	if !entry.ExpiresAt.IsZero() {
 		expiresAt = entry.ExpiresAt.Format(time.RFC3339Nano)
 	}
+	tokenHash := ""
+	if entry.SessionToken != "" {
+		tokenHash = entry.SessionTokenHash()
+	}
 	_, err = r.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_host_registry
 		(host_client_id, host_session_id, user_id, platform, device_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at)
@@ -44,7 +48,7 @@ func (r *hostRepository) SaveHost(ctx context.Context, entry *HostEntry) error {
 		entry.AuthenticatedAt.Format(time.RFC3339Nano),
 		entry.LastHeartbeat.Format(time.RFC3339Nano),
 		string(entry.ConnectionState),
-		entry.SessionToken,
+		tokenHash,
 		entry.CreatedAt.Format(time.RFC3339Nano),
 		expiresAt,
 	)
