@@ -173,7 +173,33 @@ type RuntimeConfig struct {
 	Node       NodeRuntimeConfig        `mapstructure:"node"`
 	PluginHost ProcessHostRuntimeConfig `mapstructure:"pluginHost"`
 	TaskHost   ProcessHostRuntimeConfig `mapstructure:"taskHost"`
+	IOSSandbox IOSSandboxRuntimeConfig  `mapstructure:"iosSandbox"`
 	Sidecars   SidecarRuntimeConfig     `mapstructure:"sidecars"`
+}
+
+type IOSSandboxRuntimeConfig struct {
+	Enabled      bool              `mapstructure:"enabled"`
+	WorkspaceURI string            `mapstructure:"workspaceUri"`
+	RootfsURI    string            `mapstructure:"rootfsUri"`
+	Environment  map[string]string `mapstructure:"environment"`
+}
+
+func (c IOSSandboxRuntimeConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if c.RootfsURI == "" {
+		return fmt.Errorf("ios sandbox: rootfsUri is required when enabled")
+	}
+	if _, err := resourceuri.Parse(c.RootfsURI); err != nil {
+		return fmt.Errorf("ios sandbox: invalid rootfsUri: %w", err)
+	}
+	if c.WorkspaceURI != "" {
+		if _, err := resourceuri.Parse(c.WorkspaceURI); err != nil {
+			return fmt.Errorf("ios sandbox: invalid workspaceUri: %w", err)
+		}
+	}
+	return nil
 }
 
 type NodeRuntimeConfig struct {
@@ -417,6 +443,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("components.sidecars.qq.workUri", "")
 	v.SetDefault("components.sidecars.qq.port", 19877)
 	v.SetDefault("components.sidecars.qq.healthUrl", "http://127.0.0.1:19877/api/health")
+	v.SetDefault("runtime.iosSandbox.enabled", false)
+	v.SetDefault("runtime.iosSandbox.workspaceUri", "")
+	v.SetDefault("runtime.iosSandbox.rootfsUri", "")
 }
 
 func bindEnvironment(v *viper.Viper) error {
@@ -475,6 +504,7 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "runtime.sidecars.qq.workDir", environments: []string{"AMITIA_QQ_SIDECAR_WORK_DIR"}},
 	{key: "runtime.sidecars.qq.port", environments: []string{"AMITIA_QQ_SIDECAR_PORT"}},
 	{key: "runtime.sidecars.qq.healthUrl", environments: []string{"AMITIA_QQ_SIDECAR_HEALTH_URL"}},
+	{key: "runtime.iosSandbox.enabled", environments: []string{"AMITIA_IOS_SANDBOX_ENABLED"}},
 	{key: "providers.scriptRuntime.enabled", environments: []string{"AMITIA_SCRIPT_RUNTIME_ENABLED"}},
 	{key: "providers.scriptRuntime.required", environments: []string{"AMITIA_SCRIPT_RUNTIME_REQUIRED"}},
 	{key: "providers.scriptRuntime.provider", environments: []string{"AMITIA_SCRIPT_RUNTIME_PROVIDER"}},

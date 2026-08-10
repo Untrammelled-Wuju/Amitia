@@ -33,6 +33,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
@@ -52,6 +53,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/gamehost"
+	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/pkg/sse"
 )
 
@@ -259,6 +261,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	toolRegistry := capability.NewToolRegistry()
 
 	kernelSecretBroker := buildKernelSecretBroker(b.extRoot)
+	observabilityStore := observability.NewSQLiteStorage(db)
+	observabilityWriter := observability.NewRecordWriter(observabilityStore, observability.DefaultWriterConfig())
+	observabilitySanitizer := observability.NewRecordSanitizer()
+	if kernelSecretBroker != nil {
+		observabilitySanitizer.SetRedactor(kernelSecretBroker.Redactor())
+	}
+	executionAuditHook := observability.NewExecutionHook(observabilityWriter, observabilitySanitizer)
 	executionKernel := &execution.ExecutionPipeline{
 		InvocationValidator: execution.NewInvocationValidator(),
 		InputValidator:      execution.NewInputValidator(),
@@ -276,9 +285,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		Dispatcher:          execution.NewRuntimeDispatcher(adapterRegistry),
 		ResultValidator:     execution.NewResultValidator(),
 		Sanitizer:           execution.NewSanitizer(),
-		SideEffectRec:       execution.NewSideEffectRecorder(),
-		AuditRec:            execution.NewAuditRecorder(),
-		MetricsRec:          execution.NewMetricsRecorder(),
+		SideEffectRec:  execution.NewSideEffectRecorder(),
+		AuditSink:     executionAuditHook,
+		MetricsRec:    execution.NewMetricsRecorder(),
 		CircuitBreaker:      execution.NewCircuitBreakerCoordinator(),
 		SecretBroker:        kernelSecretBroker,
 	}
@@ -286,6 +295,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	executionKernel.PermissionGate.Broker = permBroker
 	executionKernel.ScopeStore = scopeStore
 	executionKernel.PermissionSnapshotStore = permSnapshotStore
+
+	platformProcessMgr := process.NewDefaultProcessManager()
+	runtimeCapAdapter := execution.NewRuntimeCapabilityAdapter(execution.DefaultRuntimeCapabilities)
+	platformIsoAdapter := execution.NewPlatformIsolationAdapter(platformProcessMgr.IsolationReport)
+	resourceLimitResolver := execution.NewDefaultResourceLimitResolver(runtimeCapAdapter, platformIsoAdapter)
+	executionKernel.ResourceQuotaCtrl = execution.NewResourceQuotaController(resourceLimitResolver)
+
 	executionKernel.ToolResolver = func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
 		def, ok := toolRegistry.Get(ctx, toolID)
 		if !ok {
@@ -883,6 +899,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DataRoot:          b.extRoot,
 		KernelSource:      kernelSource,
 		TrustedSupervisor: trustedSupervisor,
+		HostAPIGateway:    hostAPIGateway,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)

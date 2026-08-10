@@ -1,9 +1,14 @@
 package gamehost
 
 import (
+	"context"
+
+	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
+	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/handshake"
+	"github.com/u-ai/backend/internal/gamehost/hostapi"
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
@@ -12,9 +17,12 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/runtime/checkpoint"
 	"github.com/u-ai/backend/internal/gamehost/state"
+	"github.com/u-ai/backend/internal/gamehost/startup"
 	"github.com/u-ai/backend/internal/gamehost/storage"
 	"github.com/u-ai/backend/internal/gamehost/stream"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
+	"github.com/u-ai/backend/internal/gamehost/recovery"
+	"github.com/u-ai/backend/internal/gamehost/upgrade"
 	ghTrustedService "github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 )
@@ -24,6 +32,7 @@ type GameHostComposeOptions struct {
 	KernelSource      integration.KernelContributionSource
 	TrustedSupervisor *ghTrustedService.ProcessSupervisor
 	EventService      *event.Service
+	HostAPIGateway    host_api.Gateway
 }
 
 func NewKernelContributionSource(
@@ -32,6 +41,67 @@ func NewKernelContributionSource(
 	contribRepo contributionLister,
 ) integration.KernelContributionSource {
 	return newKernelContributionSource(instRepo, defRepo, contribRepo)
+}
+
+func ComposeUpgradeCoordinator(
+	pluginReg *registry.Registry,
+	contributionSync *integration.GamePluginSyncService,
+	configResolver *config.Resolver,
+	runtimeExecutor runtime.RuntimeExecutor,
+) *upgrade.UpgradeCoordinator {
+	return upgrade.BuildUpgradeCoordinator(upgrade.UpgradeCoordinatorDeps{
+		PluginRegistry:   pluginReg,
+		RuntimeExecutor:  runtimeExecutor,
+		ContributionSync: contributionSync,
+		ConfigResolver:   configResolver,
+	})
+}
+
+func ComposeStartupRecovery() *startup.StartupRecoveryCoordinator {
+	return startup.NewStartupRecoveryCoordinator(startup.StartupRecoveryDeps{})
+}
+
+func ComposeRecoveryCoordinator(checkpointStore *checkpoint.FileStore, auditFn func(recovery.RecoveryAuditEvent)) *recovery.RecoveryCoordinator {
+	var storeReader recovery.CheckpointStoreReader
+	if checkpointStore != nil {
+		storeReader = recovery.NewCheckpointStoreAdapter(
+			checkpointStore.HasMetadata,
+			func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (recovery.RuntimeMetadataView, error) {
+				m, err := checkpointStore.LoadMetadata(ctx, runtimeID)
+				if err != nil {
+					return recovery.RuntimeMetadataView{}, err
+				}
+				return recovery.RuntimeMetadataView{
+					RuntimeID:          m.RuntimeID,
+					PluginID:           m.PluginID,
+					ExtensionID:        m.ExtensionID,
+					DescriptorRevision: m.DescriptorRevision,
+				}, nil
+			},
+			func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (recovery.RuntimeCheckpointView, error) {
+				c, err := checkpointStore.LoadCheckpoint(ctx, runtimeID)
+				if err != nil {
+					return recovery.RuntimeCheckpointView{}, err
+				}
+				return recovery.RuntimeCheckpointView{
+					RuntimeID:          c.RuntimeID,
+					PluginID:           c.PluginID,
+					RuntimeState:       c.RuntimeState,
+					CleanShutdown:      c.CleanShutdown,
+					DescriptorRevision: c.DescriptorRevision,
+				}, nil
+			},
+		)
+	}
+	checkpointClassifier := recovery.NewDefaultCheckpointClassifier(storeReader)
+	var auditSink recovery.AuditSink
+	if auditFn != nil {
+		auditSink = recovery.NewAuditSinkAdapter(auditFn)
+	}
+	return recovery.NewRecoveryCoordinator(recovery.RecoveryCoordinatorDeps{
+		CheckpointClassifier: checkpointClassifier,
+		AuditSink:           auditSink,
+	})
 }
 
 func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
@@ -91,7 +161,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		procAdapter = adapt
 	}
 
-	return &GameHostContainer{
+	container := &GameHostContainer{
 		DirectoryManager:    dirMgr,
 		CheckpointStore:     checkpointStore,
 		ConfigStore:         configStore,
@@ -109,5 +179,24 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		StreamManager:       streamMgr,
 		RuntimeExecutor:     nil,
 		procAdapter:         procAdapter,
-	}, nil
+		HostAPIGateway:      opts.HostAPIGateway,
+		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, nil),
+		RecoveryCoordinator: ComposeRecoveryCoordinator(checkpointStore, nil),
+		StartupRecovery:     ComposeStartupRecovery(),
+		StartupGate:         startup.NewStartupGate(),
+	}
+
+	if opts.HostAPIGateway != nil {
+		adapter, err := hostapi.NewProductionHostAPIAdapter(hostapi.ProductionHostAPIAdapterDeps{
+			Gateway:        opts.HostAPIGateway,
+			PluginRegistry: pluginReg,
+			ReadyGate:      readyGate,
+		})
+		if err != nil {
+			return nil, err
+		}
+		container.HostAPIAdapter = adapter
+	}
+
+	return container, nil
 }

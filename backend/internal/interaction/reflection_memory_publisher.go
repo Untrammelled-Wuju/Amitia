@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/u-ai/backend/internal/outbox"
@@ -137,10 +138,14 @@ func buildReflectionMemoryRequest(characterID, candidateID, conversationID, requ
 	if characterID == "" || topic == "" || abstract == "" {
 		return ReflectionMemoryCreateRequest{}, false
 	}
+	memoryKey := fmt.Sprintf("reflection:%s:%s", strings.TrimSpace(candidateID), topic)
+	if memoryKey == "" || memoryKey == "reflection::" {
+		return ReflectionMemoryCreateRequest{}, false
+	}
 	return ReflectionMemoryCreateRequest{
 		CharacterID:           characterID,
 		MemoryType:            "reflection",
-		Key:                   topic,
+		Key:                   memoryKey,
 		Value:                 abstract,
 		Importance:            reflectionImportance(confidence),
 		Confidence:            reflectionConfidence(confidence),

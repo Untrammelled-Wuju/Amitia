@@ -1,6 +1,6 @@
 service:
-  http_port: 19178
-  grpc_port: 19179
+    http_port: 19178
+    grpc_port: 19179
 storage:
-  storage_path: REPLACE_STORAGE_PATH
-  snapshots_path: REPLACE_SNAPSHOT_PATH
+    storage_path: REPLACE_STORAGE_PATH
+    snapshots_path: REPLACE_SNAPSHOT_PATH

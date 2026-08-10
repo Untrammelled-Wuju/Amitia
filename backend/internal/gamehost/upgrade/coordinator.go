@@ -1,0 +1,385 @@
+package upgrade
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"sort"
+	"sync"
+	"time"
+
+	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/config"
+	"github.com/u-ai/backend/internal/gamehost/integration"
+	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
+	"github.com/u-ai/backend/internal/gamehost/runtime"
+)
+
+type KernelExtensionLifecycle interface {
+	ExecuteUpdate(ctx context.Context, extensionID string, targetVersion string, operationID UpgradeOperationID) (*KernelUpdateResult, error)
+}
+
+type KernelUpdateResult struct {
+	Success    bool
+	NewVersion string
+	Reason     string
+}
+
+type PluginRegistryReader interface {
+	ListByExtension(ctx context.Context, extensionID string) ([]domain.PluginDescriptor, error)
+	Get(ctx context.Context, pluginID domain.PluginID) (domain.PluginDescriptor, error)
+	Snapshot() []domain.PluginDescriptor
+	Count() int
+}
+
+type RuntimeManagerReader interface {
+	GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
+	ListRuntimes() []*runtime.RuntimeInstanceRef
+}
+
+type DefinitionReconciler interface {
+	ReconcileExtension(extensionID string) *service_definition.ReconcileReport
+}
+
+type ContributionReconciler interface {
+	SyncExtension(ctx context.Context, extensionID string) integration.SyncResult
+}
+
+type ConfigValidator interface {
+	Resolve(ctx context.Context, pluginID, runtimeID, serviceID string) (*config.ScopedConfig, []config.ValidationError)
+}
+
+type UpgradeCoordinator struct {
+	mu                    sync.Mutex
+	gate                  *UpgradeGate
+	pluginReg             PluginRegistryReader
+	runtimeManager        RuntimeManagerReader
+	runtimeExecutor       runtime.RuntimeExecutor
+	definitionReconcile   DefinitionReconciler
+	contributionReconcile ContributionReconciler
+	configValidator       ConfigValidator
+	migrationHooks        *MigrationHookRegistry
+	kernelLifecycle       KernelExtensionLifecycle
+}
+
+func NewUpgradeCoordinator(
+	pluginReg PluginRegistryReader,
+	runtimeManager RuntimeManagerReader,
+	runtimeExecutor runtime.RuntimeExecutor,
+	definitionReconcile DefinitionReconciler,
+	contributionReconcile ContributionReconciler,
+	configValidator ConfigValidator,
+	kernelLifecycle KernelExtensionLifecycle,
+) *UpgradeCoordinator {
+	return &UpgradeCoordinator{
+		gate:                  NewUpgradeGate(),
+		pluginReg:             pluginReg,
+		runtimeManager:        runtimeManager,
+		runtimeExecutor:       runtimeExecutor,
+		definitionReconcile:   definitionReconcile,
+		contributionReconcile: contributionReconcile,
+		configValidator:       configValidator,
+		migrationHooks:        NewMigrationHookRegistry(),
+		kernelLifecycle:       kernelLifecycle,
+	}
+}
+
+func (c *UpgradeCoordinator) RegisterMigrationHook(extensionID string, hook MigrationHook) {
+	c.migrationHooks.Register(extensionID, hook)
+}
+
+func (c *UpgradeCoordinator) IsExtensionUpgrading(extensionID string) bool {
+	return c.gate.IsUpgrading(extensionID)
+}
+
+func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequest) (*UpgradeResult, error) {
+	operationID := generateUpgradeOperationID(req.ExtensionID)
+	result := &UpgradeResult{
+		OperationID: operationID,
+		ExtensionID: req.ExtensionID,
+		Stage:       UpgradeStatePreparing,
+	}
+
+	if err := c.gate.Acquire(req.ExtensionID, operationID); err != nil {
+		result.Error = err
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, err)
+		return result, err
+	}
+	defer c.gate.Release(req.ExtensionID)
+
+	affectedPlugins, err := c.findAffectedPlugins(ctx, req.ExtensionID)
+	if err != nil {
+		result.Error = fmt.Errorf("preflight: find affected plugins: %w", err)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+	result.AffectedPlugins = affectedPlugins
+
+	runtimeSnapshots, err := c.discoverRuntimes(affectedPlugins)
+	if err != nil {
+		result.Error = fmt.Errorf("preflight: discover runtimes: %w", err)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+
+	result.Stage = UpgradeStateQuiescing
+	c.logStage(operationID, req.ExtensionID, UpgradeStateQuiescing, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
+	if err := c.quiesceRuntimes(ctx, runtimeSnapshots); err != nil {
+		result.Error = fmt.Errorf("quiesce failed: %w", err)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+	for _, snap := range runtimeSnapshots {
+		result.QuiescedRuntimes = append(result.QuiescedRuntimes, snap.RuntimeID)
+	}
+
+	result.Stage = UpgradeStateUpdating
+	c.logStage(operationID, req.ExtensionID, UpgradeStateUpdating, "")
+	if c.kernelLifecycle != nil {
+		kernelResult, kerr := c.kernelLifecycle.ExecuteUpdate(ctx, req.ExtensionID, req.TargetVersion, operationID)
+		if kerr != nil || (kernelResult != nil && !kernelResult.Success) {
+			err := kerr
+			if err == nil && kernelResult != nil {
+				err = fmt.Errorf("kernel update failed: %s", kernelResult.Reason)
+			}
+			if err == nil {
+				err = fmt.Errorf("kernel update failed: unknown reason")
+			}
+			result.Error = fmt.Errorf("kernel package update failed: %w", err)
+			result.Stage = UpgradeStateFailed
+			c.recordAudit(operationID, req, result, result.Error)
+			return result, result.Error
+		}
+	}
+
+	result.Stage = UpgradeStateMigrating
+	c.logStage(operationID, req.ExtensionID, UpgradeStateMigrating, "")
+	if err := c.executeMigrationHooks(ctx, req, operationID, runtimeSnapshots); err != nil {
+		result.Error = fmt.Errorf("migration failed: %w", err)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+
+	result.Stage = UpgradeStateReconciling
+	c.logStage(operationID, req.ExtensionID, UpgradeStateReconciling, "")
+
+	defReport := c.definitionReconcile.ReconcileExtension(req.ExtensionID)
+	if len(defReport.Errors) > 0 {
+		result.Error = fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+
+	descSync := c.contributionReconcile.SyncExtension(ctx, req.ExtensionID)
+	if descSync.HasError() {
+		result.Error = fmt.Errorf("descriptor sync failed: %v", descSync.Errors)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+
+	configErrors := c.reconcileConfigs(ctx, runtimeSnapshots)
+	if len(configErrors) > 0 {
+		result.Error = fmt.Errorf("config validation failed: %v", configErrors)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+
+	result.Stage = UpgradeStateResuming
+	c.logStage(operationID, req.ExtensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
+	resumeFailures := c.resumeRuntimes(ctx, runtimeSnapshots)
+	result.ResumedRuntimes = make([]domain.RuntimeInstanceID, 0)
+	result.FailedRuntimes = make([]domain.RuntimeInstanceID, 0)
+	for _, snap := range runtimeSnapshots {
+		if snap.UserStopped {
+			continue
+		}
+		if snap.WasRunning || snap.WasSuspended {
+			if _, failed := resumeFailures[snap.RuntimeID]; failed {
+				result.FailedRuntimes = append(result.FailedRuntimes, snap.RuntimeID)
+			} else {
+				result.ResumedRuntimes = append(result.ResumedRuntimes, snap.RuntimeID)
+			}
+		}
+	}
+
+	if len(result.FailedRuntimes) > 0 {
+		result.Error = fmt.Errorf("partial resume failure: failed=%d", len(result.FailedRuntimes))
+		result.Stage = UpgradeStateFailed
+		result.Success = false
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+
+	result.Stage = UpgradeStateCompleted
+	result.Success = true
+	c.logStage(operationID, req.ExtensionID, UpgradeStateCompleted, fmt.Sprintf("resumed=%d", len(result.ResumedRuntimes)))
+	c.recordAudit(operationID, req, result, nil)
+	return result, nil
+}
+
+func (c *UpgradeCoordinator) findAffectedPlugins(ctx context.Context, extensionID string) ([]domain.PluginID, error) {
+	descriptors, err := c.pluginReg.ListByExtension(ctx, extensionID)
+	if err != nil {
+		return nil, err
+	}
+	pluginIDs := make([]domain.PluginID, 0, len(descriptors))
+	for _, desc := range descriptors {
+		pluginIDs = append(pluginIDs, desc.ID)
+	}
+	sort.Slice(pluginIDs, func(i, j int) bool {
+		return pluginIDs[i] < pluginIDs[j]
+	})
+	return pluginIDs, nil
+}
+
+func (c *UpgradeCoordinator) discoverRuntimes(pluginIDs []domain.PluginID) ([]RuntimeUpgradeSnapshot, error) {
+	affectedSet := make(map[domain.PluginID]struct{}, len(pluginIDs))
+	for _, id := range pluginIDs {
+		affectedSet[id] = struct{}{}
+	}
+
+	allRuntimes := c.runtimeManager.ListRuntimes()
+	snapshots := make([]RuntimeUpgradeSnapshot, 0, len(allRuntimes))
+	for _, rt := range allRuntimes {
+		if _, affected := affectedSet[rt.PluginID]; !affected {
+			continue
+		}
+		snap := RuntimeUpgradeSnapshot{
+			RuntimeID:    rt.ID,
+			PluginID:     rt.PluginID,
+			RuntimeState: rt.State,
+			WasRunning:   domain.IsActiveRuntimeState(rt.State),
+			WasSuspended: rt.State == domain.RuntimeStateSuspended,
+		}
+		snapshots = append(snapshots, snap)
+	}
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].RuntimeID < snapshots[j].RuntimeID
+	})
+	return snapshots, nil
+}
+
+func (c *UpgradeCoordinator) quiesceRuntimes(ctx context.Context, snapshots []RuntimeUpgradeSnapshot) error {
+	for i := range snapshots {
+		snap := &snapshots[i]
+		rtInfo, err := c.runtimeManager.GetRuntime(snap.RuntimeID)
+		if err != nil {
+			return fmt.Errorf("get runtime %s: %w", snap.RuntimeID, err)
+		}
+		if domain.IsTerminalRuntimeState(rtInfo.State) {
+			continue
+		}
+
+		if rtInfo.State == domain.RuntimeStateRunning || rtInfo.State == domain.RuntimeStateDegraded || rtInfo.State == domain.RuntimeStateSuspended {
+			if err := c.runtimeExecutor.StopRuntime(ctx, snap.RuntimeID); err != nil {
+				return fmt.Errorf("stop runtime %s: %w", snap.RuntimeID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *UpgradeCoordinator) executeMigrationHooks(ctx context.Context, req UpgradeRequest, operationID UpgradeOperationID, snapshots []RuntimeUpgradeSnapshot) error {
+	hook, exists := c.migrationHooks.Get(req.ExtensionID)
+	if !exists || hook == nil {
+		return nil
+	}
+
+	pluginIDs := make(map[domain.PluginID]struct{})
+	for _, snap := range snapshots {
+		pluginIDs[snap.PluginID] = struct{}{}
+	}
+
+	for pluginID := range pluginIDs {
+		mc := MigrationContext{
+			OperationID: operationID,
+			ExtensionID: req.ExtensionID,
+			PluginID:    pluginID,
+			FromVersion: "",
+			ToVersion:   req.TargetVersion,
+		}
+		mr, err := hook.ExecuteMigration(ctx, mc)
+		if err != nil {
+			return fmt.Errorf("migration hook for extension %s plugin %s failed: %w", req.ExtensionID, pluginID, err)
+		}
+		if mr == MigrationResultFailed {
+			return fmt.Errorf("migration hook for extension %s plugin %s returned failed", req.ExtensionID, pluginID)
+		}
+	}
+	return nil
+}
+
+func (c *UpgradeCoordinator) reconcileConfigs(ctx context.Context, snapshots []RuntimeUpgradeSnapshot) []config.ValidationError {
+	var allErrors []config.ValidationError
+	for _, snap := range snapshots {
+		if c.configValidator == nil {
+			continue
+		}
+		_, errs := c.configValidator.Resolve(ctx, string(snap.PluginID), string(snap.RuntimeID), "")
+		if len(errs) > 0 {
+			allErrors = append(allErrors, errs...)
+		}
+	}
+	return allErrors
+}
+
+func (c *UpgradeCoordinator) resumeRuntimes(ctx context.Context, snapshots []RuntimeUpgradeSnapshot) map[domain.RuntimeInstanceID]struct{} {
+	failures := make(map[domain.RuntimeInstanceID]struct{})
+	for _, snap := range snapshots {
+		if snap.UserStopped {
+			continue
+		}
+		if !snap.WasRunning && !snap.WasSuspended {
+			continue
+		}
+		if err := c.runtimeExecutor.StartRuntime(ctx, snap.RuntimeID); err != nil {
+			log.Printf("[upgrade-coordinator] failed to resume runtime %s: %v", snap.RuntimeID, err)
+			failures[snap.RuntimeID] = struct{}{}
+		}
+	}
+	return failures
+}
+
+func (c *UpgradeCoordinator) logStage(operationID UpgradeOperationID, extensionID string, stage UpgradeOperationState, extra string) {
+	log.Printf("[upgrade-coordinator] operationID=%s extensionID=%s stage=%s %s",
+		operationID, extensionID, stage, extra)
+}
+
+func (c *UpgradeCoordinator) recordAudit(operationID UpgradeOperationID, req UpgradeRequest, result *UpgradeResult, err error) {
+	auditResult := "success"
+	errMsg := ""
+	if err != nil {
+		auditResult = "failed"
+		errMsg = err.Error()
+	}
+	log.Printf("[upgrade-audit] operationID=%s extensionID=%s targetVersion=%s stage=%s result=%s plugins=%d quiesced=%d resumed=%d failed=%d error=%s",
+		operationID, req.ExtensionID, req.TargetVersion, result.Stage, auditResult,
+		len(result.AffectedPlugins), len(result.QuiescedRuntimes), len(result.ResumedRuntimes), len(result.FailedRuntimes), errMsg)
+}
+
+func generateUpgradeOperationID(extensionID string) UpgradeOperationID {
+	return UpgradeOperationID(fmt.Sprintf("upgrade-%s-%d", extensionID, time.Now().UnixNano()))
+}
+
+func runtimeDescriptorRevision(descriptor domain.PluginDescriptor) string {
+	raw, _ := json.Marshal(struct {
+		ID      string `json:"id"`
+		Version string `json:"version"`
+	}{
+		ID:      string(descriptor.ID),
+		Version: descriptor.Version,
+	})
+	sum := sha256.Sum256(raw)
+	return "drev-" + hex.EncodeToString(sum[:16])
+}

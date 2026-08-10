@@ -94,8 +94,12 @@ func EvaluateTrigger(state ReflectionTriggerState, config ReflectionTriggerConfi
 }
 
 func ResetTriggerState() ReflectionTriggerState {
+	return ResetTriggerStateAt(time.Now().UTC())
+}
+
+func ResetTriggerStateAt(now time.Time) ReflectionTriggerState {
 	return ReflectionTriggerState{
-		LastReflectionAt:    time.Now().UTC(),
+		LastReflectionAt:    now.UTC(),
 		EventCountSinceLast: 0,
 		RelationChangeCount: 0,
 		MaxAnomalyScore:     0,

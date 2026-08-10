@@ -61,7 +61,11 @@ type ReflectionApprovalResult struct {
 }
 
 func (rs *ReflectionSupervisor) ApproveReflectionCandidate(candidate ReflectionCandidate, evidenceCount int) ReflectionApprovalResult {
-	now := time.Now().UTC()
+	return rs.ApproveReflectionCandidateAt(candidate, evidenceCount, time.Now().UTC())
+}
+
+func (rs *ReflectionSupervisor) ApproveReflectionCandidateAt(candidate ReflectionCandidate, evidenceCount int, now time.Time) ReflectionApprovalResult {
+	now = now.UTC()
 	reasons := make([]string, 0)
 	approved := true
 
@@ -208,8 +212,16 @@ func (rs *ReflectionSupervisor) GetActiveReflectionVersions() []VersionRecord {
 	return rs.HistoryBellief.ActiveVersions(time.Now().UTC())
 }
 
+func (rs *ReflectionSupervisor) GetActiveReflectionVersionsAt(now time.Time) []VersionRecord {
+	return rs.HistoryBellief.ActiveVersions(now.UTC())
+}
+
 func (rs *ReflectionSupervisor) GetActiveGrowthVersions() []VersionRecord {
 	return rs.HistoryGrowth.ActiveVersions(time.Now().UTC())
+}
+
+func (rs *ReflectionSupervisor) GetActiveGrowthVersionsAt(now time.Time) []VersionRecord {
+	return rs.HistoryGrowth.ActiveVersions(now.UTC())
 }
 
 func reflectionApprovalID(candidateID string, approved bool) string {
@@ -217,7 +229,7 @@ func reflectionApprovalID(candidateID string, approved bool) string {
 	if approved {
 		status = "approved"
 	}
-	raw := fmt.Sprintf("ref-approval|%s|%s|%d", candidateID, status, time.Now().UnixNano())
+	raw := fmt.Sprintf("ref-approval|%s|%s", candidateID, status)
 	sum := sha256.Sum256([]byte(raw))
 	return "ref-approval-" + hex.EncodeToString(sum[:])[:16]
 }

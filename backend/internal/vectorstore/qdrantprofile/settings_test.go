@@ -42,8 +42,8 @@ func TestSettings_CompactValues(t *testing.T) {
 	if s.MaxIndexingThreads != 2 {
 		t.Errorf("Compact MaxIndexingThreads = %d", s.MaxIndexingThreads)
 	}
-	if s.HNSWMemory != "cold" {
-		t.Errorf("Compact HNSWMemory = %q", s.HNSWMemory)
+	if !s.HNSWOnDisk {
+		t.Errorf("Compact HNSWOnDisk should be true for memory-constrained profile")
 	}
 }
 
@@ -61,8 +61,8 @@ func TestSettings_BalancedValues(t *testing.T) {
 	if s.WALCapacityMB != 16 {
 		t.Errorf("Balanced WALCapacityMB = %d", s.WALCapacityMB)
 	}
-	if s.HNSWMemory != "cached" {
-		t.Errorf("Balanced HNSWMemory = %q", s.HNSWMemory)
+	if s.HNSWOnDisk {
+		t.Errorf("Balanced HNSWOnDisk should be false for balanced profile")
 	}
 }
 
@@ -175,21 +175,6 @@ func TestSettings_MaxIndexingThreadsTooLarge(t *testing.T) {
 	}
 }
 
-func TestSettings_HNSWMemoryPinnedRejected(t *testing.T) {
-	s := BalancedSettings()
-	s.HNSWMemory = "pinned"
-	if err := s.Validate(); err == nil {
-		t.Error("expected error for HNSW memory=pinned")
-	}
-}
-
-func TestSettings_HNSWMemoryUnknownRejected(t *testing.T) {
-	s := BalancedSettings()
-	s.HNSWMemory = "invalid"
-	if err := s.Validate(); err == nil {
-		t.Error("expected error for unknown HNSW memory")
-	}
-}
 
 func TestSettings_WALCapacityInvalid(t *testing.T) {
 	s := BalancedSettings()

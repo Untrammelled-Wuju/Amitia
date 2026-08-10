@@ -574,7 +574,7 @@ func TestExecutionHookOnInvocationCreated(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	inv := capability.ToolInvocationContext{
@@ -606,7 +606,7 @@ func TestExecutionHookEvents(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	hook.OnInvocationQueued(ctx, "inv-evt-1")
@@ -631,7 +631,7 @@ func TestExecutionHookAttempts(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	hook.OnAttemptStarted(ctx, "inv-att-1", 1, "plugin", "runtime-1")
@@ -710,7 +710,7 @@ func TestExecutionHookRecordLifecycleEvent(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	hook.RecordLifecycleEvent(ctx, OpExtensionInstall, ActorSystem, "system", SubjectExtension, "ext-1", StatusSucceeded)
@@ -744,7 +744,7 @@ func TestExecutionHookAuditForGrant(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	grant := permission.PermissionGrant{
@@ -772,7 +772,7 @@ func TestExecutionHookSideEffects(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	effects := []capability.RecordedSideEffect{
@@ -799,7 +799,7 @@ func TestExecutionHookPermissionDecision(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	result := permission.PermissionEvaluationResult{
@@ -888,11 +888,11 @@ func TestExecutionHookTimeoutAndCancel(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	hook.OnTimeoutTriggered(ctx, "inv-tc-1")
-	hook.OnCancelled(ctx, "inv-tc-1")
+	hook.OnCancelled(ctx, "inv-tc-1", "user_request")
 
 	_ = writer.Flush(ctx)
 
@@ -912,7 +912,7 @@ func TestExecutionHookCircuitEvents(t *testing.T) {
 	store := NewMemoryStore()
 	writer := NewRecordWriter(store, DefaultWriterConfig())
 	defer writer.Close()
-	hook := NewExecutionHook(writer)
+	hook := NewExecutionHook(writer, nil)
 	ctx := context.Background()
 
 	hook.OnCircuitOpen(ctx, "inv-co-1", "runtime-1")

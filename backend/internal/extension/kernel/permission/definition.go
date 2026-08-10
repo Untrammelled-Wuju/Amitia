@@ -14,6 +14,7 @@ const (
 	CategoryWorkflow   PermissionCategory = "workflow"
 	CategoryProvider   PermissionCategory = "provider"
 	CategoryService    PermissionCategory = "service"
+	CategoryGameHost   PermissionCategory = "gamehost"
 )
 
 type ApprovalMode string
@@ -138,6 +139,9 @@ func (r *PermissionDefinitionRegistry) registerBuiltin() {
 		{ID: "service.provider.register", Name: "Register Service Provider", Description: "Register capability providers from the service runtime", Category: CategoryService, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeExtension, ScopeModule, ScopeGlobal}, PersistentGrantable: false, BackgroundAllowed: false, ChildInvocation: ChildDeny, TrustedOnly: true, DefaultApproval: ApprovalManual},
 		{ID: "service.tool.execute", Name: "Execute Service Tool", Description: "Execute registered tools through the service runtime", Category: CategoryService, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeExtension, ScopeModule, ScopeGlobal}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: ChildReevaluate, TrustedOnly: true, DefaultApproval: ApprovalManual},
 		{ID: "service.background.run", Name: "Run Background Task", Description: "Run long-lived background tasks within the service runtime", Category: CategoryService, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeExtension, ScopeModule, ScopeGlobal}, PersistentGrantable: false, BackgroundAllowed: true, ChildInvocation: ChildDeny, TrustedOnly: true, DefaultApproval: ApprovalManual},
+		{ID: "gamehost.control", Name: "GameHost Control Output", Description: "Allow the plugin to participate in GameHost-managed control output flow", Category: CategoryGameHost, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule, ScopeResource}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: ChildDeny, DefaultApproval: ApprovalManual},
+		{ID: "gamehost.channel.use", Name: "GameHost Channel Use", Description: "Allow the runtime to use declared GameHost runtime channels (IPC streams)", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
+		{ID: "gamehost.host_api.invoke", Name: "GameHost Host API Invoke", Description: "Allow entering the GameHost Host API gateway; still requires route-specific permissions", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
 	}
 	for _, def := range builtins {
 		r.Register(def)

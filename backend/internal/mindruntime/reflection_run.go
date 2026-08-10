@@ -86,11 +86,6 @@ func DefaultReflectionRunConfig() ReflectionRunConfig {
 }
 
 func RunReflection(characterID string, evidence ReflectionEvidence, config ReflectionRunConfig, now time.Time) ReflectionCandidate {
-	candidate := ReflectionCandidate{
-		ID:          newReflectionCandidateID(characterID, now),
-		CharacterID: strings.TrimSpace(characterID),
-		CreatedAt:   now.UTC(),
-	}
 	candidateRefs := make([]string, 0, len(evidence.Events)+len(evidence.Relations)+len(evidence.Memories))
 	for _, e := range evidence.Events {
 		candidateRefs = append(candidateRefs, "event:"+e.ID)
@@ -100,6 +95,12 @@ func RunReflection(characterID string, evidence ReflectionEvidence, config Refle
 	}
 	for _, m := range evidence.Memories {
 		candidateRefs = append(candidateRefs, "memory:"+m.ID)
+	}
+	sort.Strings(candidateRefs)
+	candidate := ReflectionCandidate{
+		ID:          newReflectionCandidateID(characterID, candidateRefs, config),
+		CharacterID: strings.TrimSpace(characterID),
+		CreatedAt:   now.UTC(),
 	}
 	candidate.EvidenceRefs = candidateRefs
 	candidate.BeliefAdjustments = deriveBeliefAdjustments(evidence, config)
@@ -167,13 +168,22 @@ func deriveMemoryAbstractions(evidence ReflectionEvidence, config ReflectionRunC
 		}
 		byTopic[topic] = append(byTopic[topic], m)
 	}
-	for topic, mems := range byTopic {
+	topics := make([]string, 0, len(byTopic))
+	for topic := range byTopic {
+		topics = append(topics, topic)
+	}
+	sort.Strings(topics)
+	for _, topic := range topics {
+		mems := byTopic[topic]
 		if len(mems) < config.MinEvidenceForAdjustment {
 			continue
 		}
 		if len(abstractions) >= config.MaxAbstractionsPerRun {
 			break
 		}
+		sort.Slice(mems, func(i, j int) bool {
+			return mems[i].ID < mems[j].ID
+		})
 		sourceIDs := make([]string, 0, len(mems))
 		for _, m := range mems {
 			sourceIDs = append(sourceIDs, m.ID)
@@ -234,9 +244,19 @@ func MergeReflectionCandidates(candidates []ReflectionCandidate) ReflectionCandi
 	return merged
 }
 
-func newReflectionCandidateID(characterID string, now time.Time) string {
-	raw := fmt.Sprintf("reflection|%s|%d", strings.TrimSpace(characterID), now.UnixNano())
-	sum := sha256.Sum256([]byte(raw))
+func newReflectionCandidateID(characterID string, sortedRefs []string, config ReflectionRunConfig) string {
+	raw := strings.Builder{}
+	raw.WriteString("reflection|character:")
+	raw.WriteString(strings.TrimSpace(characterID))
+	raw.WriteString("|minEvidence:")
+	raw.WriteString(fmt.Sprintf("%d", config.MinEvidenceForAdjustment))
+	raw.WriteString("|minConfidence:")
+	raw.WriteString(fmt.Sprintf("%.4f", config.MinConfidenceForAdopt))
+	raw.WriteString("|maxAbstractions:")
+	raw.WriteString(fmt.Sprintf("%d", config.MaxAbstractionsPerRun))
+	raw.WriteString("|refs:")
+	raw.WriteString(strings.Join(sortedRefs, ","))
+	sum := sha256.Sum256([]byte(raw.String()))
 	return "ref-" + hex.EncodeToString(sum[:])[:16]
 }
 

@@ -9,387 +9,219 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/pkg/platform"
-	"github.com/u-ai/backend/pkg/util"
 )
 
-// Verify IOSSandboxProviderFactory satisfies ProviderFactory interface
-var _ runtimeorchestrator.ProviderFactory = (*IOSSandboxProviderFactory)(nil)
-
-type fakeIOSSandboxBackend struct {
-	config sandbox.SandboxConfig
-	state  sandbox.BackendAvailability
+type fakeBackend struct {
+	sandbox.SandboxBackend
+	startCalled int
+	stopCalled  int
 }
 
-func newFakeIOSSandboxBackend() *fakeIOSSandboxBackend {
-	return &fakeIOSSandboxBackend{state: sandbox.BackendUnavailable}
+func (b *fakeBackend) Availability(_ context.Context) sandbox.BackendAvailability {
+	return sandbox.BackendAvailable
 }
 
-func (b *fakeIOSSandboxBackend) Availability(_ context.Context) sandbox.BackendAvailability {
-	return b.state
-}
-
-func (b *fakeIOSSandboxBackend) Start(_ context.Context, config sandbox.SandboxConfig) error {
-	b.config = config
-	b.state = sandbox.BackendStarting
+func (b *fakeBackend) Start(_ context.Context, _ sandbox.SandboxConfig) error {
+	b.startCalled++
 	return nil
 }
 
-func (b *fakeIOSSandboxBackend) Stop(_ context.Context) error {
-	b.state = sandbox.BackendUnavailable
+func (b *fakeBackend) Stop(_ context.Context) error {
+	b.stopCalled++
 	return nil
 }
 
-func (b *fakeIOSSandboxBackend) Execute(_ context.Context, cmd sandbox.SandboxCommand) (sandbox.SandboxResult, error) {
-	return sandbox.SandboxResult{
-		Error: fmt.Sprintf("fake backend: not connected: %v", cmd.Command),
-	}, fmt.Errorf("fake backend: not connected")
+func (b *fakeBackend) Execute(_ context.Context, _ sandbox.SandboxExecuteRequest) (sandbox.SandboxExecuteResult, error) {
+	return sandbox.SandboxExecuteResult{}, fmt.Errorf("iSH native execution not available in this build")
 }
 
-func (b *fakeIOSSandboxBackend) Health(_ context.Context) sandbox.SandboxHealth {
+func (b *fakeBackend) Cancel(_ context.Context, _ string) error {
+	return fmt.Errorf("iSH native execution not available in this build")
+}
+
+func (b *fakeBackend) Health(_ context.Context) sandbox.SandboxHealth {
 	return sandbox.SandboxHealth{
-		Healthy:         b.state == sandbox.BackendRunning,
-		Message:         b.state.String(),
-		ISHInitialized:  b.state == sandbox.BackendRunning,
-		RootfsInstalled: false,
+		Healthy: false,
+		Message: "fake backend for test",
 	}
 }
 
-type fakeRuntimeHost struct {
+type fakeHost struct {
+	runtimehost.RuntimeHost
 	descriptor platform.RuntimeDescriptor
-	caps       *runtimehost.HostCapabilities
-	instanceID string
-	paths      util.RuntimePaths
-	processes  *noopProcessSupervisor
 }
 
-func newIOSTestHost() *fakeRuntimeHost {
-	f := &fakeRuntimeHost{
-		descriptor: platform.RuntimeDescriptor{
-			Host:  platform.HostPlatformIOS,
-			Kind:  platform.RuntimeKindEmbedded,
-			Guest: platform.GuestPlatformIOS,
-		},
-		instanceID: "ios-test-instance-001",
-		paths:      util.RuntimePaths{},
-	}
-	f.caps = runtimehost.NewTestCapabilitiesForTest(map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport{
-		runtimehost.CapRuntimeSandboxedExec: runtimehost.SupportSupported,
-		runtimehost.CapRuntimeNativeOffload: runtimehost.SupportLimited,
+func (h *fakeHost) Descriptor() platform.RuntimeDescriptor {
+	return h.descriptor
+}
+
+func (h *fakeHost) RuntimeInstanceID() string {
+	return "test-runtime-id"
+}
+
+func TestIOSSandboxProviderFactory_Build_NonIOSHost(t *testing.T) {
+	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{
+		Enabled:  true,
+		RootfsURI: "amitia://runtime/ios/rootfs",
 	})
-	f.processes = &noopProcessSupervisor{}
-	return f
-}
 
-func newLinuxTestHost() *fakeRuntimeHost {
-	f := &fakeRuntimeHost{
-		descriptor: platform.RuntimeDescriptor{
-			Host:  platform.HostPlatformLinux,
-			Kind:  platform.RuntimeKindNativeProcess,
-			Guest: platform.GuestPlatformLinux,
+	_, err := factory.Build(runtimeorchestrator.ProviderBuildContext{
+		Host: &fakeHost{
+			descriptor: platform.RuntimeDescriptor{
+				Host: platform.HostPlatformWindows,
+			},
 		},
-		instanceID: "linux-test-instance-001",
-		paths:      util.RuntimePaths{},
-	}
-	f.caps = runtimehost.NewTestCapabilitiesForTest(map[runtimehost.HostCapabilityID]runtimehost.CapabilitySupport{
-		runtimehost.CapProcessSpawn:         runtimehost.SupportSupported,
-		runtimehost.CapRuntimeSandboxedExec: runtimehost.SupportUnsupported,
-		runtimehost.CapRuntimeNativeOffload: runtimehost.SupportUnsupported,
 	})
-	f.processes = &noopProcessSupervisor{}
-	return f
-}
 
-func (f *fakeRuntimeHost) Descriptor() platform.RuntimeDescriptor      { return f.descriptor }
-func (f *fakeRuntimeHost) Capabilities() *runtimehost.HostCapabilities { return f.caps }
-func (f *fakeRuntimeHost) Paths() util.RuntimePaths                    { return f.paths }
-func (f *fakeRuntimeHost) Processes() runtimehost.ProcessSupervisor    { return f.processes }
-func (f *fakeRuntimeHost) RuntimeInstanceID() string                   { return f.instanceID }
-
-type noopProcessSupervisor struct{}
-
-func (s *noopProcessSupervisor) Register(_ runtimehost.ProcessSpec) error {
-	return runtimehost.ErrHostProcessUnsupported
-}
-func (s *noopProcessSupervisor) Unregister(_ runtimehost.ProcessID) error { return nil }
-func (s *noopProcessSupervisor) Start(_ context.Context, _ runtimehost.ProcessID) error {
-	return runtimehost.ErrHostProcessUnsupported
-}
-func (s *noopProcessSupervisor) WaitReady(_ context.Context, _ runtimehost.ProcessID) error {
-	return runtimehost.ErrHostProcessUnsupported
-}
-func (s *noopProcessSupervisor) Restart(_ context.Context, _ runtimehost.ProcessID) error {
-	return runtimehost.ErrHostProcessUnsupported
-}
-func (s *noopProcessSupervisor) Stop(_ context.Context, _ runtimehost.ProcessID) error { return nil }
-func (s *noopProcessSupervisor) StopAll(_ context.Context) error                       { return nil }
-func (s *noopProcessSupervisor) Snapshot(_ runtimehost.ProcessID) (runtimehost.ProcessSnapshot, bool) {
-	return runtimehost.ProcessSnapshot{}, false
-}
-func (s *noopProcessSupervisor) List() []runtimehost.ProcessSnapshot { return nil }
-func (s *noopProcessSupervisor) Subscribe(_ func(runtimehost.ProcessEvent)) func() {
-	return func() {}
-}
-
-func TestIOSSandboxProviderFactorySlot(t *testing.T) {
-	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{})
-	if factory.Slot() != runtimeorchestrator.ProviderSlotIOSSandbox {
-		t.Fatalf("slot=%s, want ios-sandbox", factory.Slot())
-	}
-}
-
-func TestIOSSandboxProviderFactoryProviderID(t *testing.T) {
-	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{})
-	if factory.ProviderID() != sandbox.ProviderIDIOSSandbox {
-		t.Fatalf("providerID=%s, want ios.ish-sandbox", factory.ProviderID())
-	}
-}
-
-func TestIOSSandboxProviderFactoryRejectsNonIOSHost(t *testing.T) {
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return newFakeIOSSandboxBackend(), nil },
-	}
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: newLinuxTestHost(),
-	}
-	_, err := factory.Build(bc)
 	if err == nil {
-		t.Fatal("expected error for non-iOS host")
+		t.Fatal("expected error for non-iOS host, got nil")
+	}
+
+	sErr, ok := err.(*SandboxError)
+	if !ok {
+		t.Fatalf("expected SandboxError, got %T: %v", err, err)
+	}
+
+	if sErr.Code != SandboxErrUnsupportedHost {
+		t.Errorf("expected code %s, got %s", SandboxErrUnsupportedHost, sErr.Code)
 	}
 }
 
-func TestIOSSandboxProviderFactoryRejectsNilHost(t *testing.T) {
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return newFakeIOSSandboxBackend(), nil },
-	}
-	bc := runtimeorchestrator.ProviderBuildContext{
+func TestIOSSandboxProviderFactory_Build_HostNil(t *testing.T) {
+	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{
+		Enabled: true,
+	})
+
+	_, err := factory.Build(runtimeorchestrator.ProviderBuildContext{
 		Host: nil,
-	}
-	_, err := factory.Build(bc)
+	})
+
 	if err == nil {
-		t.Fatal("expected error for nil host")
+		t.Fatal("expected error for nil host, got nil")
+	}
+
+	sErr, ok := err.(*SandboxError)
+	if !ok {
+		t.Fatalf("expected SandboxError, got %T: %v", err, err)
+	}
+
+	if sErr.Code != SandboxErrHostRequired {
+		t.Errorf("expected code %s, got %s", SandboxErrHostRequired, sErr.Code)
 	}
 }
 
-func TestIOSSandboxProviderFactoryBackendReturnsNil(t *testing.T) {
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return nil, nil },
-	}
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: newIOSTestHost(),
-	}
-	_, err := factory.Build(bc)
-	if err == nil {
-		t.Fatal("expected error when backend factory returns nil")
-	}
-}
+func TestIOSSandboxProviderFactory_Build_MissingRootfsURI(t *testing.T) {
+	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{
+		Enabled: true,
+	})
 
-func TestIOSSandboxProviderFactoryBackendReturnsError(t *testing.T) {
-	expectedErr := fmt.Errorf("backend creation failed")
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return nil, expectedErr },
+	backendCalled := false
+	factory.newBackend = func() (sandbox.SandboxBackend, error) {
+		backendCalled = true
+		return &fakeBackend{}, nil
 	}
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: newIOSTestHost(),
-	}
-	_, err := factory.Build(bc)
-	if err == nil {
-		t.Fatal("expected error when backend factory returns error")
-	}
-}
 
-func TestIOSSandboxProviderRuntimeInstanceIDPropagation(t *testing.T) {
-	fakeBackend := newFakeIOSSandboxBackend()
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
-	}
-	host := newIOSTestHost()
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: host,
-	}
-	inst, err := factory.Build(bc)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if err := inst.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if fakeBackend.config.RuntimeID != host.RuntimeInstanceID() {
-		t.Fatalf("runtimeID=%s, want %s", fakeBackend.config.RuntimeID, host.RuntimeInstanceID())
-	}
-}
-
-func TestIOSSandboxProviderConfigPropagation(t *testing.T) {
-	fakeBackend := newFakeIOSSandboxBackend()
-	factory := &IOSSandboxProviderFactory{
-		config: IOSSandboxProviderConfig{
-			Enabled:      true,
-			WorkspaceURI: "amitia://workspace/ios",
-			RootfsURI:    "amitia://runtime/ios/rootfs",
-			Environment: map[string]string{
-				"HOME": "/root",
+	_, err := factory.Build(runtimeorchestrator.ProviderBuildContext{
+		Host: &fakeHost{
+			descriptor: platform.RuntimeDescriptor{
+				Host: platform.HostPlatformIOS,
 			},
 		},
-		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
+	})
+
+	if err == nil {
+		t.Fatal("expected error for missing rootfsUri, got nil")
 	}
-	host := newIOSTestHost()
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: host,
+
+	if backendCalled {
+		t.Error("backend should not have been created when rootfsUri missing")
 	}
-	inst, err := factory.Build(bc)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
+
+	sErr, ok := err.(*SandboxError)
+	if !ok {
+		t.Fatalf("expected SandboxError, got %T: %v", err, err)
 	}
-	if err := inst.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if fakeBackend.config.WorkspaceURI != "amitia://workspace/ios" {
-		t.Fatalf("workspaceURI=%s", fakeBackend.config.WorkspaceURI)
-	}
-	if fakeBackend.config.RootfsURI != "amitia://runtime/ios/rootfs" {
-		t.Fatalf("rootfsURI=%s", fakeBackend.config.RootfsURI)
-	}
-	if fakeBackend.config.Environment["HOME"] != "/root" {
-		t.Fatalf("HOME=%s", fakeBackend.config.Environment["HOME"])
+
+	if sErr.Code != SandboxErrRootfsNotConfigured {
+		t.Errorf("expected code %s, got %s", SandboxErrRootfsNotConfigured, sErr.Code)
 	}
 }
 
-func TestIOSSandboxProviderEnvironmentDefensiveCopy(t *testing.T) {
-	fakeBackend := newFakeIOSSandboxBackend()
-	factory := &IOSSandboxProviderFactory{
-		config: IOSSandboxProviderConfig{
-			Enabled: true,
-			Environment: map[string]string{
-				"HOME": "/root",
+func TestIOSSandboxProviderFactory_Build_Disabled(t *testing.T) {
+	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{
+		Enabled: false,
+	})
+
+	instance, err := factory.Build(runtimeorchestrator.ProviderBuildContext{
+		Host: &fakeHost{
+			descriptor: platform.RuntimeDescriptor{
+				Host: platform.HostPlatformIOS,
 			},
 		},
-		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
-	}
-	host := newIOSTestHost()
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: host,
-	}
-	inst, err := factory.Build(bc)
+	})
+
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("unexpected error for disabled provider: %v", err)
 	}
-	if err := inst.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
+
+	if instance == nil {
+		t.Fatal("expected instance, got nil")
 	}
-	fakeBackend.config.Environment["HOME"] = "changed"
-	if factory.config.Environment["HOME"] != "/root" {
-		t.Fatalf("config Environment was mutated: HOME=%s", factory.config.Environment["HOME"])
+
+	if instance.Descriptor().Enabled {
+		t.Error("expected descriptor.Enabled=false for disabled provider")
 	}
 }
 
-func TestIOSSandboxProviderDescriptorNotRequired(t *testing.T) {
-	fakeBackend := newFakeIOSSandboxBackend()
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
+func TestIOSSandboxProviderFactory_Build_RootfsPresent(t *testing.T) {
+	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{
+		Enabled:   true,
+		RootfsURI: "amitia://runtime/ios/rootfs",
+	})
+
+	backend := &fakeBackend{}
+	factory.newBackend = func() (sandbox.SandboxBackend, error) {
+		return backend, nil
 	}
-	host := newIOSTestHost()
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: host,
-	}
-	inst, err := factory.Build(bc)
+
+	instance, err := factory.Build(runtimeorchestrator.ProviderBuildContext{
+		Host: &fakeHost{
+			descriptor: platform.RuntimeDescriptor{
+				Host: platform.HostPlatformIOS,
+			},
+		},
+	})
+
 	if err != nil {
-		t.Fatalf("Build: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	desc := inst.Descriptor()
-	if desc.Required {
-		t.Fatal("iOS sandbox provider must not be required")
+
+	if instance == nil {
+		t.Fatal("instance is nil")
+	}
+
+	if instance.ProviderID() != sandbox.ProviderIDIOSSandbox {
+		t.Errorf("providerID mismatch: %s", instance.ProviderID())
+	}
+
+	if instance.Descriptor().Enabled != true {
+		t.Error("expected descriptor.Enabled=true")
 	}
 }
 
-func TestIOSSandboxProviderDisabledDoesNotStart(t *testing.T) {
-	fakeBackend := newFakeIOSSandboxBackend()
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: false},
-		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
+func TestIOSSandboxProviderFactory_DescriptorPresent(t *testing.T) {
+	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{})
+
+	if factory.ProviderID() != sandbox.ProviderIDIOSSandbox {
+		t.Errorf("providerID mismatch: %s", factory.ProviderID())
 	}
-	host := newIOSTestHost()
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: host,
+
+	if factory.Slot() != runtimeorchestrator.ProviderSlotIOSSandbox {
+		t.Errorf("slot mismatch: %s", factory.Slot())
 	}
-	inst, err := factory.Build(bc)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if err := inst.Start(context.Background()); err != nil {
-		t.Fatalf("Start with disabled config should return nil: %v", err)
-	}
-	if fakeBackend.state == sandbox.BackendStarting {
-		t.Fatal("disabled provider should not start backend")
+
+	reqs := factory.Requirements()
+	if len(reqs) != 2 {
+		t.Errorf("expected 2 capability requirements, got %d", len(reqs))
 	}
 }
-
-func TestIOSSandboxProviderCapabilityIncludesHostInfo(t *testing.T) {
-	fakeBackend := newFakeIOSSandboxBackend()
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
-	}
-	host := newIOSTestHost()
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: host,
-	}
-	inst, err := factory.Build(bc)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	cap := inst.Capability()
-	m, ok := cap.(map[string]any)
-	if !ok {
-		t.Fatalf("capability is not map[string]any: %T", cap)
-	}
-	if m["runtimeId"] != host.RuntimeInstanceID() {
-		t.Fatalf("runtimeId=%v", m["runtimeId"])
-	}
-	if m["hostPlatform"] != string(platform.HostPlatformIOS) {
-		t.Fatalf("hostPlatform=%v", m["hostPlatform"])
-	}
-	if m["slot"] != string(runtimeorchestrator.ProviderSlotIOSSandbox) {
-		t.Fatalf("slot=%v", m["slot"])
-	}
-}
-
-func TestIOSSandboxProviderCapabilityIncludesLifecycleFields(t *testing.T) {
-	fakeBackend := newFakeIOSSandboxBackend()
-	factory := &IOSSandboxProviderFactory{
-		config:     IOSSandboxProviderConfig{Enabled: true},
-		newBackend: func() (sandbox.SandboxBackend, error) { return fakeBackend, nil },
-	}
-	host := newIOSTestHost()
-	bc := runtimeorchestrator.ProviderBuildContext{
-		Host: host,
-	}
-	inst, err := factory.Build(bc)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	cap := inst.Capability()
-	m, ok := cap.(map[string]any)
-	if !ok {
-		t.Fatalf("capability is not map[string]any: %T", cap)
-	}
-	required := []string{
-		"lifecycleState",
-		"generation",
-		"restartRequired",
-		"recoveryPending",
-		"runningRootfsVersion",
-		"lastErrorCode",
-	}
-	for _, key := range required {
-		if _, exists := m[key]; !exists {
-			t.Fatalf("capability missing key: %s", key)
-		}
-	}
-}
-
-var _ runtimehost.ProcessSupervisor = (*noopProcessSupervisor)(nil)

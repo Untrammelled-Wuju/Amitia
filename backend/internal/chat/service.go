@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 彭旭
+﻿// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
@@ -71,6 +71,9 @@ type Service interface {
 	SetActionDispatcher(d interaction.ActionDispatcher)
 	SetObservationBuilder(b interaction.ObservationBuilder)
 	SetGoalProgressService(s interaction.GoalProgressService)
+	SetContinuationService(svc interaction.ContinuationService)
+	SetReplanner(replanner interaction.Replanner)
+	SetReflectionProcessor(r interaction.ReflectionProcessor)
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -128,6 +131,9 @@ type service struct {
 	hasActionDirective  bool
 	relTimeCoordinator  *temporal.RelationshipTimeCoordinator
 	goalProgressService interaction.GoalProgressService
+	continuationService interaction.ContinuationService
+	replanner           interaction.Replanner
+	reflectionProcessor interaction.ReflectionProcessor
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -183,6 +189,18 @@ func (s *service) SetObservationBuilder(b interaction.ObservationBuilder) {
 
 func (s *service) SetGoalProgressService(svc interaction.GoalProgressService) {
 	s.goalProgressService = svc
+}
+
+func (s *service) SetContinuationService(svc interaction.ContinuationService) {
+	s.continuationService = svc
+}
+
+func (s *service) SetReplanner(replanner interaction.Replanner) {
+	s.replanner = replanner
+}
+
+func (s *service) SetReflectionProcessor(r interaction.ReflectionProcessor) {
+	s.reflectionProcessor = r
 }
 
 func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {

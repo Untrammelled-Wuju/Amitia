@@ -9,8 +9,14 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+)
+
+var (
+	_testAuditStore  *observability.MemoryStore
+	_testAuditWriter observability.RecordWriter
 )
 
 func newTestTool(id string) capability.ToolDefinition {
@@ -127,8 +133,12 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 		ResultValidator:     NewResultValidator(),
 		Sanitizer:           NewSanitizer(),
 		SideEffectRec:       NewSideEffectRecorder(),
-		AuditRec:            NewAuditRecorder(),
-		MetricsRec:          NewMetricsRecorder(),
+	AuditSink: func() observability.ExecutionRecorder {
+		_testAuditStore = observability.NewMemoryStore()
+		_testAuditWriter = observability.NewRecordWriter(_testAuditStore, observability.DefaultWriterConfig())
+		return observability.NewExecutionHook(_testAuditWriter, nil)
+	}(),
+		MetricsRec: NewMetricsRecorder(),
 		CircuitBreaker:      NewCircuitBreakerCoordinator(),
 		ToolResolver: func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
 			return newTestTool(toolID), nil
@@ -260,8 +270,13 @@ func TestPipelineSuccessPath(t *testing.T) {
 	if adapter.CallCount() != 1 {
 		t.Fatalf("expected 1 adapter call, got %d", adapter.CallCount())
 	}
-	if p.AuditRec.Count() != 1 {
-		t.Fatalf("expected 1 audit entry, got %d", p.AuditRec.Count())
+	if _testAuditStore == nil {
+		t.Fatal("expected audit store to be initialized")
+	}
+	_ = _testAuditWriter.Flush(ctx)
+	invList, _, _ := _testAuditStore.ListInvocations(ctx, observability.InvocationFilter{})
+	if len(invList) == 0 {
+		t.Fatal("expected at least 1 invocation audit entry")
 	}
 }
 

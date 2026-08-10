@@ -196,6 +196,7 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
 
         amitia_ish_result_t nativeResult = {0};
         int rc = amitia_ish_execute(&cmd, &nativeResult);
+        (void)0;
 
         if (self.activeExecutionID && [self.activeExecutionID isEqualToString:execID]) {
             self.activeExecutionID = nil;

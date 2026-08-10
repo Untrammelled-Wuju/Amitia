@@ -58,6 +58,7 @@ const (
 	ToolErrorCategoryCancellation ToolErrorCategory = "cancellation"
 	ToolErrorCategoryConflict    ToolErrorCategory = "conflict"
 	ToolErrorCategoryRateLimit   ToolErrorCategory = "rate_limit"
+	ToolErrorCategoryResource    ToolErrorCategory = "resource"
 	ToolErrorCategoryDependency  ToolErrorCategory = "dependency"
 	ToolErrorCategoryStream      ToolErrorCategory = "stream"
 	ToolErrorCategoryInternal    ToolErrorCategory = "internal"
@@ -106,6 +107,10 @@ const (
 	ErrorCodeStreamLimitExceeded   = "stream_limit_exceeded"
 	ErrorCodeStreamDeliveryFailed  = "stream_delivery_failed"
 	ErrorCodeInternalError         = "internal_error"
+	ErrorCodeResourceLimitInvalid   = "resource_limit_invalid"
+	ErrorCodeResourceLimitUnavailable = "resource_limit_unavailable"
+	ErrorCodeResourceLimitExceeded  = "resource_limit_exceeded"
+	ErrorCodeResourceUsageUnavailable = "resource_usage_unavailable"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -113,6 +118,11 @@ func ErrorCategoryForCode(code string) ToolErrorCategory {
 	case ErrorCodeInvalidInput,
 		ErrorCodeInvalidResult:
 		return ToolErrorCategoryValidation
+	case ErrorCodeResourceLimitInvalid,
+		ErrorCodeResourceLimitUnavailable,
+		ErrorCodeResourceLimitExceeded,
+		ErrorCodeResourceUsageUnavailable:
+		return ToolErrorCategoryResource
 	case ErrorCodePermissionDenied,
 		ErrorCodeScopeDenied:
 		return ToolErrorCategoryPermission
@@ -157,6 +167,13 @@ func NormalizeToolError(toolErr *ToolError) *ToolError {
 	return toolErr
 }
 
+func NormalizeToolErrorResult(result UnifiedToolResult) UnifiedToolResult {
+	if result.Error != nil {
+		result.Error = NormalizeToolError(result.Error)
+	}
+	return result
+}
+
 func ToolErrorFromCause(err error, fallbackCode, safeMessage string) *ToolError {
 	if err == nil {
 		return nil
@@ -191,6 +208,7 @@ type UnifiedToolResult struct {
 	Error        *ToolError           `json:"error,omitempty"`
 	SideEffects  []RecordedSideEffect `json:"sideEffects,omitempty"`
 	DurationMS   int64                `json:"durationMs,omitempty"`
+	ResourceUsage *ResourceUsage      `json:"resourceUsage,omitempty"`
 	Metadata     map[string]any       `json:"metadata,omitempty"`
 }
 
@@ -287,6 +305,14 @@ func (r UnifiedToolResult) Clone() UnifiedToolResult {
 
 	if r.Metadata != nil {
 		clone.Metadata = cloneStringAnyMap(r.Metadata)
+	}
+
+	if r.ResourceUsage != nil {
+		usageCopy := *r.ResourceUsage
+		if r.ResourceUsage.MeasuredDimensions != nil {
+			usageCopy.MeasuredDimensions = append([]ResourceDimension(nil), r.ResourceUsage.MeasuredDimensions...)
+		}
+		clone.ResourceUsage = &usageCopy
 	}
 
 	return clone

@@ -9,6 +9,7 @@ import (
 )
 
 type RecordWriter interface {
+	WriteTrace(ctx context.Context, t Trace) error
 	WriteOperation(ctx context.Context, op OperationRecord) error
 	WriteInvocation(ctx context.Context, inv InvocationRecord) error
 	WriteAttempt(ctx context.Context, att ExecutionAttempt) error
@@ -54,6 +55,10 @@ func NewRecordWriter(store StorageBackend, config WriterConfig) *DefaultRecordWr
 	}
 }
 
+func (w *DefaultRecordWriter) WriteTrace(ctx context.Context, t Trace) error {
+	return w.enqueueOrWrite(ctx, "trace", t, false)
+}
+
 func (w *DefaultRecordWriter) WriteOperation(ctx context.Context, op OperationRecord) error {
 	return w.enqueueOrWrite(ctx, "operation", op, false)
 }
@@ -95,6 +100,10 @@ func (w *DefaultRecordWriter) enqueueOrWrite(ctx context.Context, entryType stri
 
 func (w *DefaultRecordWriter) writeDirect(ctx context.Context, entryType string, data any) error {
 	switch entryType {
+	case "trace":
+		if t, ok := data.(Trace); ok {
+			return w.store.SaveTrace(ctx, t)
+		}
 	case "operation":
 		if op, ok := data.(OperationRecord); ok {
 			return w.store.SaveOperation(ctx, op)

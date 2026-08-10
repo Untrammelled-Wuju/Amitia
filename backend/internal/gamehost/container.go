@@ -3,9 +3,11 @@ package gamehost
 import (
 	"context"
 
+	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/handshake"
+	"github.com/u-ai/backend/internal/gamehost/hostapi"
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
@@ -17,11 +19,11 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/storage"
 	"github.com/u-ai/backend/internal/gamehost/stream"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
+	"github.com/u-ai/backend/internal/gamehost/recovery"
+	"github.com/u-ai/backend/internal/gamehost/startup"
+	"github.com/u-ai/backend/internal/gamehost/upgrade"
 )
 
-// GameHostContainer 是 GameHost 子系统的生产对象组合根。
-// 每个 Kernel Container 持有唯一的 GameHostContainer 实例，
-// 保证所有 GameHost 核心组件在 Server 进程内只有一个生产实例。
 type GameHostContainer struct {
 	DirectoryManager storage.DirectoryManager
 	CheckpointStore  checkpoint.CheckpointStore
@@ -43,11 +45,17 @@ type GameHostContainer struct {
 	BinaryObjectRegistry binary.ObjectRegistry
 	StreamManager        *stream.StreamManager
 
+	HostAPIGateway host_api.Gateway
+	HostAPIAdapter *hostapi.HostAPIAdapter
+
 	procAdapter runtime.ProcessSupervisorAdapter
+
+	UpgradeCoordinator  *upgrade.UpgradeCoordinator
+	RecoveryCoordinator *recovery.RecoveryCoordinator
+	StartupRecovery     *startup.StartupRecoveryCoordinator
+	StartupGate         *startup.StartupGate
 }
 
-// Shutdown 执行 GameHost 子系统的有序关闭。
-// 关闭顺序: Stream → Handshake → Channel → Connection → Runtime
 func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	if c == nil {
 		return nil

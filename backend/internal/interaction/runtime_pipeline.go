@@ -1,4 +1,4 @@
-package interaction
+﻿package interaction
 
 import (
 	"context"
@@ -31,20 +31,22 @@ type RuntimeDeliveryIntent struct {
 }
 
 type RuntimeAssembly struct {
-	Version        string                           `json:"version"`
-	ExecutorID     string                           `json:"executorId,omitempty"`
-	Context        ContextSnapshot                  `json:"context"`
-	Path           PathType                         `json:"path"`
-	Budget         []TokenBudgetPlan                `json:"budget"`
-	Safety         RuntimeSafetyDecision            `json:"safety"`
-	Delivery       RuntimeDeliveryIntent            `json:"delivery"`
-	Transaction    TransactionDefinition            `json:"transaction"`
-	AssembledAt    time.Time                        `json:"assembledAt"`
-	Personality    *personality.CompiledPersonality `json:"personality,omitempty"`
-	Appraisal      *AppraisalResult                 `json:"appraisal,omitempty"`
-	BehaviorPlan   *decision.BehaviorPlan           `json:"behaviorPlan,omitempty"`
-	ExpressionPlan *decision.ExpressionPlan         `json:"expressionPlan,omitempty"`
-	Goals          RuntimeGoalContext               `json:"goals"`
+	Version           string                           `json:"version"`
+	ExecutorID        string                           `json:"executorId,omitempty"`
+	Context           ContextSnapshot                  `json:"context"`
+	Path              PathType                         `json:"path"`
+	Budget            []TokenBudgetPlan                `json:"budget"`
+	Safety            RuntimeSafetyDecision            `json:"safety"`
+	Delivery          RuntimeDeliveryIntent            `json:"delivery"`
+	Transaction       TransactionDefinition            `json:"transaction"`
+	AssembledAt       time.Time                        `json:"assembledAt"`
+	Personality       *personality.CompiledPersonality `json:"personality,omitempty"`
+	Appraisal         *AppraisalResult                 `json:"appraisal,omitempty"`
+	BehaviorPlan      *decision.BehaviorPlan           `json:"behaviorPlan,omitempty"`
+	ExpressionPlan    *decision.ExpressionPlan         `json:"expressionPlan,omitempty"`
+	Goals             RuntimeGoalContext               `json:"goals"`
+	Continuation      *decision.ContinuationDecision   `json:"continuation,omitempty"`
+	DecisionIteration int                              `json:"decisionIteration,omitempty"`
 }
 
 type RuntimePipeline struct {
@@ -114,6 +116,9 @@ func (p *RuntimePipeline) SetDecisionLayer(registry *decision.CandidateRegistry,
 
 func (p *RuntimePipeline) SetGoalRegistry(registry *decision.GoalRegistry) {
 	p.goalRegistry = registry
+}
+
+func (p *RuntimePipeline) SetContinuationService(service *ContinuationService) {
 }
 
 func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, req *ProcessRequest) RuntimeAssembly {

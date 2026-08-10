@@ -107,6 +107,18 @@ func (s *RecordSanitizer) sanitizeErrorRecord(rec *ErrorRecord, rawError error) 
 	rec.InternalReference = fmt.Sprintf("ref:%x", h[:8])
 }
 
+func (s *RecordSanitizer) RedactErrorRecord(rec *ErrorRecord, message string) {
+	if message == "" {
+		return
+	}
+	rec.SanitizedMessage = s.redactSecrets(message)
+	if len(rec.SanitizedMessage) > 1000 {
+		rec.SanitizedMessage = rec.SanitizedMessage[:1000] + "..."
+	}
+	h := sha256.Sum256([]byte(message))
+	rec.InternalReference = fmt.Sprintf("ref:%x", h[:8])
+}
+
 func (s *RecordSanitizer) SanitizeAuditEvent(ctx context.Context, evt *AuditEvent) {
 	if evt.Metadata != nil {
 		evt.Metadata = s.SanitizeMetadata(evt.Metadata)

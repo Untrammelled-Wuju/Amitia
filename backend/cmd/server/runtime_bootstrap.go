@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/internal/extension/kernel/sandbox"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeorchestrator/builtin"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
@@ -32,6 +33,8 @@ type runtimeBootstrap struct {
 	runError         error
 	nodeEnvironment  nodeenv.Resolver
 	artifactResolver sidecar.ArtifactResolver
+
+	iosSandboxProvider runtimeorchestrator.ProviderInstance
 }
 
 func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
@@ -72,7 +75,11 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 		artifactResolver: artifactResolver,
 	}
 
-	if err := bootstrap.registerIOSSandboxProviderFactory(); err != nil {
+	if err := bootstrap.registerProviderFactories(); err != nil {
+		return nil, err
+	}
+
+	if err := bootstrap.buildPlatformProviders(); err != nil {
 		return nil, err
 	}
 
@@ -87,14 +94,8 @@ func (b *runtimeBootstrap) ProcessSupervisor() runtimehost.ProcessSupervisor {
 	return b.host.Processes()
 }
 
-func (b *runtimeBootstrap) registerIOSSandboxProviderFactory() error {
-	if b == nil ||
-		b.providerRegistry == nil ||
-		b.host == nil {
-		return nil
-	}
-
-	if b.host.Descriptor().Host != platform.HostPlatformIOS {
+func (b *runtimeBootstrap) registerProviderFactories() error {
+	if b == nil || b.providerRegistry == nil {
 		return nil
 	}
 
@@ -110,6 +111,46 @@ func (b *runtimeBootstrap) registerIOSSandboxProviderFactory() error {
 		)
 	}
 
+	return nil
+}
+
+func (b *runtimeBootstrap) buildPlatformProviders() error {
+	if b == nil {
+		return fmt.Errorf("nil runtime bootstrap")
+	}
+
+	if b.host.Descriptor().Host != platform.HostPlatformIOS {
+		return nil
+	}
+
+	iosCfg := config.AppCfg.Runtime.IOSandbox
+	if err := iosCfg.Validate(); err != nil {
+		return fmt.Errorf("ios sandbox config validation failed: %w", err)
+	}
+
+	if !iosCfg.Enabled {
+		return nil
+	}
+
+	buildCtx := runtimeorchestrator.ProviderBuildContext{
+		Config: config.AppCfg,
+		Host:   b.host,
+	}
+
+	instance, err := b.providerRegistry.Build(
+		runtimeorchestrator.ProviderSlotIOSSandbox,
+		sandbox.ProviderIDIOSSandbox,
+		buildCtx,
+	)
+	if err != nil {
+		return fmt.Errorf("build ios sandbox provider: %w", err)
+	}
+
+	if err := b.orchestrator.Register(instance); err != nil {
+		return fmt.Errorf("register ios sandbox provider to orchestrator: %w", err)
+	}
+
+	b.iosSandboxProvider = instance
 	return nil
 }
 
@@ -185,6 +226,10 @@ func (b *runtimeBootstrap) SidecarArtifactResolver() sidecar.ArtifactResolver {
 		return nil
 	}
 	return b.artifactResolver
+}
+
+func (b *runtimeBootstrap) IOSSandboxProvider() runtimeorchestrator.ProviderInstance {
+	return b.iosSandboxProvider
 }
 
 type vectorStoreProviderAdapter struct {

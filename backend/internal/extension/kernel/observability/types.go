@@ -1,6 +1,11 @@
 package observability
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
+)
 
 type Trace struct {
 	TraceID   string         `json:"traceId"`
@@ -49,7 +54,8 @@ type InvocationRecord struct {
 	UserID          string `json:"userId,omitempty"`
 	CharacterID     string `json:"characterId,omitempty"`
 	ConversationID  string `json:"conversationId,omitempty"`
-	ScopeSnapshotID string `json:"scopeSnapshotId,omitempty"`
+	ScopeSnapshotID      string `json:"scopeSnapshotId,omitempty"`
+	PermissionSnapshotID string `json:"permissionSnapshotId,omitempty"`
 
 	Status       ExecutionStatus `json:"status"`
 	RiskLevel    RiskLevel       `json:"riskLevel,omitempty"`
@@ -145,4 +151,18 @@ type ErrorRecord struct {
 	SanitizedMessage  string    `json:"sanitizedMessage"`
 	InternalReference string    `json:"internalReference,omitempty"`
 	CreatedAt         time.Time `json:"createdAt"`
+}
+
+type ExecutionRecorder interface {
+	BeginInvocation(ctx context.Context, inv capability.ToolInvocationContext, toolID string, rawInput []byte, startedAt time.Time) error
+	MarkInvocationRunning(ctx context.Context, invocationID string, startedAt time.Time) error
+	BeginAttempt(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition, attemptNumber int, startedAt time.Time) (string, error)
+	FinishAttempt(ctx context.Context, attemptID string, result capability.UnifiedToolResult, finishedAt time.Time, backoff time.Duration) error
+	FinishInvocation(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult, finishedAt time.Time) error
+	OnRetryScheduled(ctx context.Context, invocationID string, previousAttempt int, nextAttempt int, retryCount int, delayMs int64, reason string) error
+	OnTimeoutTriggered(ctx context.Context, invocationID string) error
+	OnCancelled(ctx context.Context, invocationID string, reason string) error
+	OnPermissionDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error
+	OnScopeDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error
+	OnSideEffectRecorded(ctx context.Context, invocationID string, effects []capability.RecordedSideEffect) error
 }

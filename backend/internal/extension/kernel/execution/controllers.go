@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -150,56 +151,101 @@ func (g *IdempotencyGuard) Remove(_ context.Context, key string) {
 	delete(g.store, key)
 }
 
-func NewRetryController(opts ...RetryControllerOption) *RetryController {
-	r := &RetryController{}
-	for _, opt := range opts {
-		opt(r)
-	}
-	return r
+type RetryReason string
+
+const (
+	RetryReasonRetryableRuntimeFailure RetryReason = "retryable_runtime_failure"
+	RetryReasonNoBudget               RetryReason = "no_retry_budget"
+	RetryReasonBudgetExhausted        RetryReason = "retry_budget_exhausted"
+	RetryReasonDeadlineInsufficient   RetryReason = "deadline_budget_insufficient"
+	RetryReasonNonRetryableError      RetryReason = "non_retryable_error"
+	RetryReasonUnsafeSideEffect       RetryReason = "unsafe_side_effect"
+	RetryReasonStreamVisible          RetryReason = "stream_visible"
+	RetryReasonStreamFailure          RetryReason = "stream_failure"
+	RetryReasonCancelled              RetryReason = "cancelled"
+	RetryReasonTimedOut               RetryReason = "timed_out"
+)
+
+type RetryDecisionInput struct {
+	Tool            capability.ToolDefinition
+	Invocation      capability.ToolInvocationContext
+	Result          capability.UnifiedToolResult
+	RetryIndex      int
+	AttemptNumber   int
+	RemainingBudget time.Duration
+	StreamVisible   bool
+	StreamFailed    bool
 }
 
-type RetryController struct {
-	OnShouldRetry func(ctx context.Context, tool capability.ToolDefinition, result capability.UnifiedToolResult) (bool, error)
-	attempt       int
-	lastDelay     time.Duration
-	capturedInv   *capability.ToolInvocationContext
+type RetryDecisionResult struct {
+	Retry             bool
+	RetryIndex        int
+	NextAttemptNumber int
+	Delay             time.Duration
+	Reason            RetryReason
 }
 
-func (r *RetryController) ShouldRetry(ctx context.Context, tool capability.ToolDefinition, result capability.UnifiedToolResult) (bool, error) {
-	var inv capability.ToolInvocationContext
-	if r.capturedInv != nil {
-		inv = *r.capturedInv
-	}
-	if result.Status == capability.ToolResultStatusSuccess {
-		return false, nil
-	}
-	if result.Status == capability.ToolResultStatusCancelled {
-		return false, fmt.Errorf("cancelled")
-	}
-	if result.Status == capability.ToolResultStatusTimedOut {
-		return false, fmt.Errorf("timed out")
-	}
-	retry, delay, reason := RetryDecision(tool, inv, result.Error, r.attempt)
-	if retry {
-		r.lastDelay = delay
-		_ = reason
-		return true, nil
-	}
-	if r.OnShouldRetry != nil {
-		return r.OnShouldRetry(ctx, tool, result)
-	}
-	return false, fmt.Errorf("not retryable: %s", reason)
+type RetryController interface {
+	Decide(ctx context.Context, input RetryDecisionInput) RetryDecisionResult
 }
 
-func (r *RetryController) Backoff(_ int) time.Duration {
-	return r.lastDelay
+type DefaultRetryController struct{}
+
+func NewRetryController() RetryController {
+	return &DefaultRetryController{}
 }
 
-type RetryControllerOption func(*RetryController)
+func (c *DefaultRetryController) Decide(ctx context.Context, input RetryDecisionInput) RetryDecisionResult {
+	if ctx.Err() != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return RetryDecisionResult{Retry: false, Reason: RetryReasonCancelled}
+		}
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonTimedOut}
+	}
 
-func WithCapturedInvocation(inv capability.ToolInvocationContext) RetryControllerOption {
-	return func(r *RetryController) {
-		r.capturedInv = &inv
+	if input.Result.Status == capability.ToolResultStatusSuccess ||
+		input.Result.Status == capability.ToolResultStatusCancelled ||
+		input.Result.Status == capability.ToolResultStatusTimedOut {
+		return RetryDecisionResult{Retry: false}
+	}
+
+	tool := input.Tool
+
+	if tool.ExecutionPolicy.RetryPolicy.MaxRetries <= 0 {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonNoBudget}
+	}
+
+	if input.RetryIndex >= tool.ExecutionPolicy.RetryPolicy.MaxRetries {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonBudgetExhausted}
+	}
+
+	if !isRetryableResult(input.Result) {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonNonRetryableError}
+	}
+
+	if !isRetrySafe(tool) {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonUnsafeSideEffect}
+	}
+
+	if input.StreamVisible {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonStreamVisible}
+	}
+	if input.StreamFailed {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonStreamFailure}
+	}
+
+	delay := ComputeRetryBackoff(tool.ExecutionPolicy.RetryPolicy, input.RetryIndex+1)
+
+	if input.RemainingBudget > 0 && delay > input.RemainingBudget {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonDeadlineInsufficient}
+	}
+
+	return RetryDecisionResult{
+		Retry:             true,
+		RetryIndex:        input.RetryIndex + 1,
+		NextAttemptNumber: input.AttemptNumber + 1,
+		Delay:             delay,
+		Reason:            RetryReasonRetryableRuntimeFailure,
 	}
 }
 

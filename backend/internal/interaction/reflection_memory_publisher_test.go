@@ -64,7 +64,7 @@ func TestReflectionMemoryPublisherCreatesMemoryFromAbstractionEvent(t *testing.T
 		t.Fatalf("expected one memory create, got %d", len(mem.requests))
 	}
 	req := mem.requests[0]
-	if req.CharacterID != "char-1" || req.MemoryType != "reflection" || req.Key != "偏好" || req.Value != "用户连续表达了喜欢安静环境的偏好" {
+	if req.CharacterID != "char-1" || req.MemoryType != "reflection" || req.Key != "reflection:ref-1:偏好" || req.Value != "用户连续表达了喜欢安静环境的偏好" {
 		t.Fatalf("unexpected memory request: %#v", req)
 	}
 	if req.Source != "reflection" || req.SourceMsgID != "ref-1" || req.SourceConvID != "conv-1" || req.Confidence != 82 || req.Importance != 8 {
@@ -105,7 +105,7 @@ func TestReflectionMemoryPublisherCreatesMemoryFromApprovedCandidate(t *testing.
 	if mem.requests[0].CharacterID != "char-2" || mem.requests[0].Confidence != 60 || mem.requests[0].Importance != 6 {
 		t.Fatalf("unexpected first request: %#v", mem.requests[0])
 	}
-	if mem.requests[1].Key != "情绪" || mem.requests[1].Value != "用户在考试前更容易紧张" {
+	if mem.requests[1].Key != "reflection:ref-2:情绪" || mem.requests[1].Value != "用户在考试前更容易紧张" {
 		t.Fatalf("unexpected second request: %#v", mem.requests[1])
 	}
 }
@@ -139,7 +139,7 @@ func TestReflectionMemoryPublisherReturnsCreateError(t *testing.T) {
 		ID:          "outbox-1",
 		EventType:   ReflectionMemoryAbstractionEventType,
 		AggregateID: "ref-1",
-		Payload:     []byte(`{"characterId":"char-1","topic":"偏好","abstract":"用户喜欢安静环境"}`),
+		Payload:     []byte(`{"characterId":"char-1","candidateId":"ref-1","topic":"偏好","abstract":"用户喜欢安静环境"}`),
 	})
 	if err == nil {
 		t.Fatal("expected create error")

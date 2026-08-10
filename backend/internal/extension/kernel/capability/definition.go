@@ -16,8 +16,9 @@ type RetryPolicy struct {
 }
 
 type ResourceLimits struct {
-	MaxMemoryBytes int64 `json:"maxMemoryBytes,omitempty"`
-	MaxCPUPercent  int   `json:"maxCpuPercent,omitempty"`
+	MaxMemoryBytes int64                   `json:"maxMemoryBytes,omitempty"`
+	MaxCPUPercent  int                     `json:"maxCpuPercent,omitempty"`
+	Requirement    ResourceLimitRequirement `json:"requirement,omitempty"`
 }
 
 type ToolExecutionPolicy struct {

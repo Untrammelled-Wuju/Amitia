@@ -145,6 +145,7 @@ export interface CommandResultPayload {
 export interface RuntimeBridgeConfig {
   endpoint: string;
   bootstrapTicket: string;
+  userId: string;
   runtimeId: string;
   deviceId: string;
   appVersion?: string;
@@ -160,6 +161,10 @@ type SyncCallback = (msg: RuntimeMessage, payload: SyncPayload) => Promise<Comma
 type StateProbeCallback = (msg: RuntimeMessage) => PetInstanceSummary[];
 type VoidCommandCallback = (msg: RuntimeMessage, desiredRevision: number, reason: string) => Promise<CommandResultPayload>;
 
+export interface DisconnectNotification {
+  reason: string;
+}
+
 export interface RuntimeBridgeCallbacks {
   onSpawn?: SpawnCallback;
   onDestroy?: VoidCommandCallback;
@@ -172,7 +177,7 @@ export interface RuntimeBridgeCallbacks {
   onStateProbe?: StateProbeCallback;
   onShutdown?: (msg: RuntimeMessage, deadline: string, reason: string) => void;
   onConnected?: (welcome: WelcomePayload) => void;
-  onDisconnected?: (reason: string) => void;
+  onDisconnected?: (notification: DisconnectNotification) => void;
   onError?: (err: Error) => void;
 }
 
@@ -269,15 +274,15 @@ export class RuntimeBridgeClient {
     }
 
     const handlerConfig: RuntimeHandlerConfig = {
-      url: this.config.endpoint,
-      userId: this.sessionContext?.userId ?? "",
+      url: this.buildRuntimeV2URL(),
+      userId: this.config.userId,
       deviceId: this.deviceId,
       runtimeId: this.runtimeId,
       contractVersion: "2.0.0",
       runtimeVersion: "2.0.0",
-      autoReconnect: true,
+      autoReconnect: false,
       heartbeatIntervalMs: 15000,
-      maxReconnectAttempts: 5,
+      maxReconnectAttempts: 0,
     };
 
     const hooks = this.buildHandlerHooks();
@@ -286,6 +291,14 @@ export class RuntimeBridgeClient {
     void this.handler.connect("initial").catch((err) => {
       this.callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     });
+  }
+
+  private buildRuntimeV2URL(): string {
+    const url = new URL(this.config.endpoint);
+    url.searchParams.set("ticket", this.config.bootstrapTicket);
+    url.searchParams.set("deviceId", this.config.deviceId);
+    url.searchParams.set("runtimeId", this.config.runtimeId);
+    return url.toString();
   }
 
   disconnect(): void {
@@ -445,6 +458,9 @@ export class RuntimeBridgeClient {
           this.connected = true;
         } else if (state === "disconnected" || state === "degraded") {
           this.connected = false;
+          this.callbacks.onDisconnected?.({
+            reason: "runtime disconnected",
+          });
         }
       },
       onHelloAck: (ack) => {

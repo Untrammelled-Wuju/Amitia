@@ -2196,13 +2196,24 @@ export class DesktopPetManager {
     const runtimeId = getRuntimeId();
     const deviceId = getDeviceId();
 
-    let ticket: string;
     try {
       const issued = await createRuntimeBootstrapTicket(
         deviceId,
         runtimeId,
       );
-      ticket = issued.ticket;
+
+      const config: RuntimeBridgeConfig = {
+        endpoint,
+        bootstrapTicket: issued.ticket,
+        userId: issued.userId,
+        runtimeId,
+        deviceId,
+        appVersion: app.getVersion(),
+      };
+
+      const callbacks = this.buildBridgeCallbacks();
+      this.bridgeClient = new RuntimeBridgeClient(config, callbacks);
+      this.bridgeClient.connect();
     } catch (error) {
       console.warn(
         "[DesktopPetManager] runtime ticket 获取失败:",
@@ -2211,18 +2222,6 @@ export class DesktopPetManager {
       this.scheduleBridgeReconnect();
       return;
     }
-
-    const config: RuntimeBridgeConfig = {
-      endpoint,
-      bootstrapTicket: ticket,
-      runtimeId,
-      deviceId,
-      appVersion: app.getVersion(),
-    };
-
-    const callbacks = this.buildBridgeCallbacks();
-    this.bridgeClient = new RuntimeBridgeClient(config, callbacks);
-    this.bridgeClient.connect();
   }
 
   private scheduleBridgeReconnect(): void {
@@ -2268,10 +2267,10 @@ export class DesktopPetManager {
         }
         this.syncBridgeState();
       },
-      onDisconnected: (reason: string) => {
+      onDisconnected: (notification) => {
         console.warn(
           "[DesktopPetManager] runtime bridge disconnected:",
-          reason,
+          notification?.reason,
         );
         if (this.bridgeStarted) {
           this.scheduleBridgeReconnect();

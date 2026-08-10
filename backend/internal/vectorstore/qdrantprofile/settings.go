@@ -5,28 +5,28 @@ package qdrantprofile
 import "fmt"
 
 type Settings struct {
-	ID                     ID
-	LogLevel               string
-	BindHost               string
-	MaxRequestSizeMB       uint64
-	MaxWorkers             uint64
-	EnableCORS             bool
-	EnableTLS              bool
+	ID                       ID
+	LogLevel                 string
+	BindHost                 string
+	MaxRequestSizeMB         uint64
+	MaxWorkers               uint64
+	EnableCORS               bool
+	EnableTLS                bool
 	EnableSnapshotURLRecovery bool
-	TelemetryDisabled      bool
-	ClusterEnabled         bool
-	OnDiskPayload          bool
-	UpdateConcurrency      uint64
-	WALCapacityMB          uint64
-	WALSegmentsAhead       uint64
-	MaxSearchThreads       uint64
-	OptimizerCPUBudget     int64
-	DefaultSegmentNumber   uint64
-	IndexingThresholdKB    uint64
-	FlushIntervalSeconds   uint64
-	MaxOptimizationThreads uint64
-	MaxIndexingThreads     uint64
-	HNSWMemory             string
+	TelemetryDisabled        bool
+	ClusterEnabled           bool
+	OnDiskPayload            bool
+	UpdateConcurrency        uint64
+	WALCapacityMB            uint64
+	WALSegmentsAhead         uint64
+	MaxSearchThreads         uint64
+	OptimizerCPUBudget       int64
+	DefaultSegmentNumber     uint64
+	IndexingThresholdKB      uint64
+	FlushIntervalSeconds     uint64
+	MaxOptimizationThreads   uint64
+	MaxIndexingThreads       uint64
+	HNSWOnDisk               bool
 }
 
 func CompactSettings() Settings {
@@ -52,7 +52,7 @@ func CompactSettings() Settings {
 		FlushIntervalSeconds:     15,
 		MaxOptimizationThreads:   1,
 		MaxIndexingThreads:       2,
-		HNSWMemory:               "cold",
+		HNSWOnDisk:               true,
 	}
 }
 
@@ -79,7 +79,7 @@ func BalancedSettings() Settings {
 		FlushIntervalSeconds:     10,
 		MaxOptimizationThreads:   1,
 		MaxIndexingThreads:       2,
-		HNSWMemory:               "cached",
+		HNSWOnDisk:               false,
 	}
 }
 
@@ -106,7 +106,7 @@ func PerformanceSettings() Settings {
 		FlushIntervalSeconds:     5,
 		MaxOptimizationThreads:   1,
 		MaxIndexingThreads:       4,
-		HNSWMemory:               "cached",
+		HNSWOnDisk:               false,
 	}
 }
 
@@ -173,9 +173,6 @@ func (s Settings) Validate() error {
 	}
 	if s.MaxIndexingThreads < 2 || s.MaxIndexingThreads > 4 {
 		return fmt.Errorf("%w: maxIndexingThreads out of range: %d", ErrInvalidProfileSettings, s.MaxIndexingThreads)
-	}
-	if s.HNSWMemory != "cold" && s.HNSWMemory != "cached" {
-		return fmt.Errorf("%w: hnswMemory must be cold or cached, got %q", ErrInvalidProfileSettings, s.HNSWMemory)
 	}
 	return nil
 }

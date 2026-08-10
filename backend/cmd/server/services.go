@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 彭旭
+﻿// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 package main
 
@@ -349,7 +349,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.SetObservationBuilder(observationBuilder)
 	goalRegistry := decision.NewGoalRegistry()
 	goalProgressService := interaction.NewGoalProgressService(goalRegistry)
+	continuationService := interaction.NewContinuationService(goalRegistry)
 	chatSvc.SetGoalProgressService(goalProgressService)
+	chatSvc.SetContinuationService(continuationService)
 	if kernelContainer.DevConsoleService != nil {
 		kernelContainer.DevConsoleService.SetToolFacadeProvider(toolFacade.Counters())
 		kernelContainer.DevConsoleService.SetLegacyCallProvider(kernel.GlobalLegacyCallCounter())
@@ -403,6 +405,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	dispatchedPublisher.Register("interaction.completed", interactionPublisher)
 	dispatchedPublisher.Register("interaction.state_changed", interactionPublisher)
 	dispatchedPublisher.Register("interaction.runtime_assembled", interactionPublisher)
+
+	reflectionMemoryAdapter := &reflectionMemoryServiceAdapter{memory: memSvc}
+	reflectionPublisher := interaction.NewReflectionMemoryPublisher(reflectionMemoryAdapter, nil)
+	dispatchedPublisher.Register(interaction.ReflectionCandidateApprovedEventType, reflectionPublisher)
+	dispatchedPublisher.Register(interaction.ReflectionMemoryAbstractionEventType, reflectionPublisher)
 	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, newOutboxStore)
 	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
 		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
@@ -418,6 +425,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimePipeline.SetGoalRegistry(goalRegistry)
 	runtimePipeline.SetDecisionLayer(decision.DefaultCandidateRegistry(), decision.DefaultArbitrationLayer())
 	orch.SetRuntimePipeline(runtimePipeline)
+	chatSvc.SetReplanner(runtimePipeline)
+
+	reflectionOutboxAdapter := &reflectionOutboxServiceAdapter{store: newOutboxStore}
+	reflectionService := interaction.NewReflectionService(
+		interaction.WithReflectionTriggerConfig(mindruntime.DefaultReflectionTriggerConfig()),
+		interaction.WithReflectionRunConfig(mindruntime.DefaultReflectionRunConfig()),
+		interaction.WithReflectionApprovalConfig(mindruntime.DefaultReflectionApprovalConfig()),
+		interaction.WithReflectionSupervisorConfig(mindruntime.DefaultSupervisorConfig()),
+		interaction.WithReflectionOutbox(reflectionOutboxAdapter),
+	)
+	chatSvc.SetReflectionProcessor(reflectionService)
+
 	deadlineCfg := mindruntime.DefaultDeadlineConfig
 	deadlineCfg.TotalTimeout = 180 * time.Second
 	deadlineCfg.GenerationTimeout = 120 * time.Second
@@ -1145,6 +1164,14 @@ func (a *chatDeliveryAdapter) ReleaseOutputLease(leaseID, ownerToken string) err
 func (a *chatDeliveryAdapter) PreemptActiveOutputLeases(characterID string) error {
 	_, err := a.store.PreemptActiveLeasesByCharacter(characterID)
 	return err
+}
+
+type reflectionOutboxServiceAdapter struct {
+	store *newoutbox.SQLiteOutboxStore
+}
+
+func (a *reflectionOutboxServiceAdapter) Append(record newoutbox.OutboxRecord) error {
+	return a.store.Append(record)
 }
 
 type graphReconciliationAdapter struct {

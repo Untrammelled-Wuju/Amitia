@@ -145,8 +145,8 @@ func TestResolver_ExplicitCompact(t *testing.T) {
 	if resolved.Settings == nil {
 		t.Error("expected non-nil settings")
 	}
-	if resolved.Settings.HNSWMemory != "cold" {
-		t.Errorf("HNSWMemory = %q, want cold", resolved.Settings.HNSWMemory)
+	if !resolved.Settings.HNSWOnDisk {
+		t.Error("Compact should have HNSWOnDisk=true for memory-constrained profile")
 	}
 }
 

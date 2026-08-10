@@ -1,0 +1,162 @@
+package sqlite
+
+func init() {
+	appendObservabilityMigrations()
+}
+
+func appendObservabilityMigrations() {
+	schemaMigrations = append(schemaMigrations, []string{
+		`CREATE TABLE IF NOT EXISTS kernel_observability_traces (
+			trace_id TEXT PRIMARY KEY,
+			root_operation_id TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL,
+			metadata_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS kernel_observability_operations (
+			operation_id TEXT PRIMARY KEY,
+			trace_id TEXT NOT NULL DEFAULT '',
+			parent_operation_id TEXT NOT NULL DEFAULT '',
+			type TEXT NOT NULL,
+			actor_type TEXT NOT NULL DEFAULT '',
+			actor_id TEXT NOT NULL DEFAULT '',
+			subject_type TEXT NOT NULL DEFAULT '',
+			subject_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			risk_level TEXT NOT NULL DEFAULT '',
+			started_at DATETIME,
+			finished_at DATETIME,
+			summary TEXT NOT NULL DEFAULT '',
+			error_code TEXT NOT NULL DEFAULT '',
+			outcome TEXT NOT NULL DEFAULT '',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			created_at_extension DATETIME NOT NULL
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS kernel_observability_invocations (
+			invocation_id TEXT PRIMARY KEY,
+			trace_id TEXT NOT NULL DEFAULT '',
+			operation_id TEXT NOT NULL DEFAULT '',
+			parent_id TEXT NOT NULL DEFAULT '',
+			root_id TEXT NOT NULL DEFAULT '',
+			capability_id TEXT NOT NULL DEFAULT '',
+			capability_type TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			owner_type TEXT NOT NULL DEFAULT '',
+			owner_id TEXT NOT NULL DEFAULT '',
+			extension_id TEXT NOT NULL DEFAULT '',
+			module_id TEXT NOT NULL DEFAULT '',
+			runtime_type TEXT NOT NULL DEFAULT '',
+			runtime_id TEXT NOT NULL DEFAULT '',
+			user_id TEXT NOT NULL DEFAULT '',
+			character_id TEXT NOT NULL DEFAULT '',
+			conversation_id TEXT NOT NULL DEFAULT '',
+			scope_snapshot_id TEXT NOT NULL DEFAULT '',
+			permission_snapshot_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			risk_level TEXT NOT NULL DEFAULT '',
+			approval_mode TEXT NOT NULL DEFAULT '',
+			input_hash TEXT NOT NULL DEFAULT '',
+			output_hash TEXT NOT NULL DEFAULT '',
+			input_summary TEXT NOT NULL DEFAULT '',
+			output_summary TEXT NOT NULL DEFAULT '',
+			error_code TEXT NOT NULL DEFAULT '',
+			error_summary TEXT NOT NULL DEFAULT '',
+			retry_count INTEGER NOT NULL DEFAULT 0,
+			side_effect_count INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			queued_at DATETIME,
+			started_at DATETIME,
+			finished_at DATETIME,
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			metadata_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS kernel_observability_attempts (
+			attempt_id TEXT PRIMARY KEY,
+			invocation_id TEXT NOT NULL DEFAULT '',
+			attempt_number INTEGER NOT NULL DEFAULT 0,
+			runtime_type TEXT NOT NULL DEFAULT '',
+			runtime_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			started_at DATETIME NOT NULL,
+			finished_at DATETIME,
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			error_code TEXT NOT NULL DEFAULT '',
+			retryable INTEGER NOT NULL DEFAULT 0,
+			backoff_ms INTEGER NOT NULL DEFAULT 0,
+			resource_usage_json TEXT NOT NULL DEFAULT '{}',
+			metadata_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS kernel_observability_runtime_events (
+			event_id TEXT PRIMARY KEY,
+			trace_id TEXT NOT NULL DEFAULT '',
+			operation_id TEXT NOT NULL DEFAULT '',
+			invocation_id TEXT NOT NULL DEFAULT '',
+			attempt_id TEXT NOT NULL DEFAULT '',
+			event_type TEXT NOT NULL,
+			severity TEXT NOT NULL DEFAULT '',
+			timestamp DATETIME NOT NULL,
+			data_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS kernel_observability_audit_events (
+			audit_id TEXT PRIMARY KEY,
+			trace_id TEXT NOT NULL DEFAULT '',
+			operation_id TEXT NOT NULL DEFAULT '',
+			invocation_id TEXT NOT NULL DEFAULT '',
+			actor_type TEXT NOT NULL DEFAULT '',
+			actor_id TEXT NOT NULL DEFAULT '',
+			subject_type TEXT NOT NULL DEFAULT '',
+			subject_id TEXT NOT NULL DEFAULT '',
+			action TEXT NOT NULL DEFAULT '',
+			decision TEXT NOT NULL DEFAULT '',
+			risk_level TEXT NOT NULL DEFAULT '',
+			scope_summary TEXT NOT NULL DEFAULT '',
+			permission_ids_json TEXT NOT NULL DEFAULT '[]',
+			target_type TEXT NOT NULL DEFAULT '',
+			target_id TEXT NOT NULL DEFAULT '',
+			result TEXT NOT NULL DEFAULT '',
+			error_code TEXT NOT NULL DEFAULT '',
+			grant_id TEXT NOT NULL DEFAULT '',
+			approval_id TEXT NOT NULL DEFAULT '',
+			snapshot_id TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL,
+			metadata_json TEXT NOT NULL DEFAULT '{}'
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS kernel_observability_errors (
+			error_id TEXT PRIMARY KEY,
+			invocation_id TEXT NOT NULL DEFAULT '',
+			attempt_id TEXT NOT NULL DEFAULT '',
+			code TEXT NOT NULL DEFAULT '',
+			category TEXT NOT NULL DEFAULT '',
+			retryable INTEGER NOT NULL DEFAULT 0,
+			user_visible INTEGER NOT NULL DEFAULT 1,
+			sanitized_message TEXT NOT NULL DEFAULT '',
+			internal_reference TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL
+		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_obs_traces_created ON kernel_observability_traces(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_operations_trace_id ON kernel_observability_operations(trace_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_operations_type ON kernel_observability_operations(type)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_operations_status ON kernel_observability_operations(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_invocations_trace_id ON kernel_observability_invocations(trace_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_invocations_operation_id ON kernel_observability_invocations(operation_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_invocations_parent_id ON kernel_observability_invocations(parent_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_invocations_status ON kernel_observability_invocations(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_invocations_extension_id ON kernel_observability_invocations(extension_id)`,
+		`CREATE INDEX IF NOT EXISTS idxObs_invocations_user_id ON kernel_observability_invocations(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_attempts_invocation_id ON kernel_observability_attempts(invocation_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_runtime_events_invocation_id ON kernel_observability_runtime_events(invocation_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_runtime_events_event_type ON kernel_observability_runtime_events(event_type)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_runtime_events_severity ON kernel_observability_runtime_events(severity)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_audit_events_trace_id ON kernel_observability_audit_events(trace_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_audit_events_invocation_id ON kernel_observability_audit_events(invocation_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_audit_events_action ON kernel_observability_audit_events(action)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_audit_events_decision ON kernel_observability_audit_events(decision)`,
+		`CREATE INDEX IF NOT EXISTS idx_obs_errors_invocation_id ON kernel_observability_errors(invocation_id)`,
+	}...)
+}

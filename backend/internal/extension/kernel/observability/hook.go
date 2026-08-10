@@ -15,10 +15,10 @@ type ExecutionHook struct {
 	sanitizer *RecordSanitizer
 }
 
-func NewExecutionHook(writer RecordWriter) *ExecutionHook {
+func NewExecutionHook(writer RecordWriter, sanitizer *RecordSanitizer) *ExecutionHook {
 	return &ExecutionHook{
 		writer:    writer,
-		sanitizer: NewRecordSanitizer(),
+		sanitizer: sanitizer,
 	}
 }
 
@@ -130,20 +130,6 @@ func (h *ExecutionHook) OnAttemptFinished(ctx context.Context, invocationID, att
 	})
 }
 
-func (h *ExecutionHook) OnRetryScheduled(ctx context.Context, invocationID string, attemptNumber int, backoffMs int64) {
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
-		EventID:      NewEventID(),
-		InvocationID: invocationID,
-		EventType:    "retry.scheduled",
-		Severity:     "warn",
-		Timestamp:    time.Now(),
-		Data: map[string]any{
-			"attempt_number": attemptNumber,
-			"backoff_ms":     backoffMs,
-		},
-	})
-}
-
 func (h *ExecutionHook) OnPermissionDecision(ctx context.Context, inv capability.ToolInvocationContext, toolID string, result permission.PermissionEvaluationResult) {
 	decision := string(result.Decision)
 	event := AuditEvent{
@@ -197,43 +183,6 @@ func (h *ExecutionHook) OnScopeDecision(ctx context.Context, inv capability.Tool
 	}
 
 	_ = h.writer.WriteAuditEvent(ctx, event)
-}
-
-func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID string, effects []capability.RecordedSideEffect) {
-	for _, effect := range effects {
-		_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
-			EventID:      NewEventID(),
-			InvocationID: invocationID,
-			EventType:    "side_effect.recorded",
-			Severity:     "info",
-			Timestamp:    time.Now(),
-			Data: map[string]any{
-				"type":        effect.Type,
-				"target":      effect.Target,
-				"description": effect.Description,
-			},
-		})
-	}
-}
-
-func (h *ExecutionHook) OnTimeoutTriggered(ctx context.Context, invocationID string) {
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
-		EventID:      NewEventID(),
-		InvocationID: invocationID,
-		EventType:    "timeout.triggered",
-		Severity:     "warn",
-		Timestamp:    time.Now(),
-	})
-}
-
-func (h *ExecutionHook) OnCancelled(ctx context.Context, invocationID string) {
-	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
-		EventID:      NewEventID(),
-		InvocationID: invocationID,
-		EventType:    "cancel.requested",
-		Severity:     "warn",
-		Timestamp:    time.Now(),
-	})
 }
 
 func (h *ExecutionHook) OnCircuitOpen(ctx context.Context, invocationID, runtimeID string) {
@@ -331,6 +280,434 @@ func (h *ExecutionHook) WriteAuditForScopeBind(ctx context.Context, binding scop
 		CreatedAt:   time.Now(),
 	})
 }
+
+// ==================== ExecutionRecorder interface implementation ====================
+
+func (h *ExecutionHook) BeginInvocation(ctx context.Context, inv capability.ToolInvocationContext, toolID string, rawInput []byte, startedAt time.Time) error {
+	traceID := inv.TraceID
+	if traceID == "" {
+		traceID = NewTraceID()
+	}
+
+	opID := inv.OperationID
+	if opID == "" {
+		opID = NewOperationID()
+	}
+
+	_ = h.writer.WriteTrace(ctx, Trace{
+		TraceID:   traceID,
+		RootOpID:  opID,
+		CreatedAt: startedAt,
+		Metadata:  cloneMap(inv.Metadata),
+	})
+
+	_ = h.writer.WriteOperation(ctx, OperationRecord{
+		OperationID: opID,
+		TraceID:     traceID,
+		Type:        OpToolExecute,
+		ActorType:   mapActorFromSource(inv.Source),
+		ActorID:     inv.UserID,
+		SubjectType: SubjectTool,
+		SubjectID:   toolID,
+		Status:      StatusRunning,
+		StartedAt:   startedAt,
+		CreatedAt:   startedAt,
+	})
+
+	rec := InvocationRecord{
+		InvocationID:         inv.InvocationID,
+		TraceID:              traceID,
+		OperationID:          opID,
+		ParentID:             inv.ParentID,
+		RootID:               inv.RootID,
+		CapabilityID:         toolID,
+		Source:               string(inv.Source),
+		UserID:               inv.UserID,
+		CharacterID:          inv.CharacterID,
+		ConversationID:       inv.ConversationID,
+		ExtensionID:          inv.ExtensionID,
+		ModuleID:             inv.ModuleID,
+		Status:               StatusQueued,
+		ApprovalMode:         ApprovalMode(inv.ApprovalMode),
+		ScopeSnapshotID:      inv.ScopeSnapshotID,
+		PermissionSnapshotID: inv.PermissionSnapshotID,
+		CreatedAt:            startedAt,
+		Metadata:             cloneMap(inv.Metadata),
+	}
+
+	if h.sanitizer != nil {
+		h.sanitizer.SanitizeInvocationInput(&rec, string(rawInput))
+	}
+
+	return h.writer.WriteInvocation(ctx, rec)
+}
+
+func (h *ExecutionHook) MarkInvocationRunning(ctx context.Context, invocationID string, startedAt time.Time) error {
+	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: invocationID,
+		EventType:    "invocation.running",
+		Severity:     "info",
+		Timestamp:    startedAt,
+	})
+
+	return h.writer.WriteInvocation(ctx, InvocationRecord{
+		InvocationID: invocationID,
+		Status:       StatusRunning,
+		StartedAt:    &startedAt,
+	})
+}
+
+func (h *ExecutionHook) BeginAttempt(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition, attemptNumber int, startedAt time.Time) (string, error) {
+	attemptID := NewAttemptID()
+
+	meta := map[string]any{
+		"tool_id":    tool.ID,
+		"tool_name":  tool.Name,
+		"tool_source": string(tool.Source),
+	}
+
+	att := ExecutionAttempt{
+		AttemptID:     attemptID,
+		InvocationID:  inv.InvocationID,
+		AttemptNumber: attemptNumber,
+		RuntimeType:   string(tool.Runtime.RuntimeType),
+		RuntimeID:     tool.Runtime.RuntimeID,
+		Status:        StatusRunning,
+		StartedAt:     startedAt,
+		Metadata:      meta,
+	}
+
+	if err := h.writer.WriteAttempt(ctx, att); err != nil {
+		return "", err
+	}
+
+	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: inv.InvocationID,
+		AttemptID:    attemptID,
+		EventType:    "attempt.started",
+		Severity:     "info",
+		Timestamp:    startedAt,
+		Data: map[string]any{
+			"attempt_number": attemptNumber,
+			"runtime_type":   string(tool.Runtime.RuntimeType),
+			"runtime_id":     tool.Runtime.RuntimeID,
+		},
+	})
+
+	return attemptID, nil
+}
+
+func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, result capability.UnifiedToolResult, finishedAt time.Time, backoff time.Duration) error {
+	status := StatusForUnifiedResult(result)
+	var errCode string
+	var errMsg string
+	if result.Error != nil {
+		errCode = result.Error.Code
+		errMsg = result.Error.Message
+	}
+
+	_ = h.writer.WriteAttempt(ctx, ExecutionAttempt{
+		AttemptID:  attemptID,
+		Status:     status,
+		FinishedAt: &finishedAt,
+		DurationMs: result.DurationMS,
+		ErrorCode:  errCode,
+		Retryable:  result.Error != nil && result.Error.Retryable,
+		BackoffMs:  backoff.Milliseconds(),
+		Metadata: map[string]any{
+			"error_message": errMsg,
+		},
+	})
+
+	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: result.InvocationID,
+		AttemptID:    attemptID,
+		EventType:    "attempt.finished",
+		Severity:     severityForStatus(status),
+		Timestamp:    finishedAt,
+		Data: map[string]any{
+			"status":       string(status),
+			"error_code":   errCode,
+			"duration_ms":  result.DurationMS,
+			"backoff_ms":   backoff.Milliseconds(),
+		},
+	})
+
+	if status == StatusFailed && result.Error != nil {
+		errRec := ErrorRecord{
+			ErrorID:          NewErrorID(),
+			InvocationID:     result.InvocationID,
+			AttemptID:        attemptID,
+			Code:             errCode,
+			Category:         ErrorCodeToCategory(errCode),
+			Retryable:        result.Error.Retryable,
+			UserVisible:      result.Error.UserVisible,
+			SanitizedMessage: result.Error.Message,
+			CreatedAt:        finishedAt,
+		}
+		if h.sanitizer != nil {
+			h.sanitizer.RedactErrorRecord(&errRec, result.Error.Message)
+		}
+		_ = h.writer.WriteErrorRecord(ctx, errRec)
+	}
+
+	return nil
+}
+
+func (h *ExecutionHook) FinishInvocation(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult, finishedAt time.Time) error {
+	status := StatusForUnifiedResult(result)
+	var errCode string
+	var errMsg string
+	if result.Error != nil {
+		errCode = result.Error.Code
+		errMsg = result.Error.Message
+	}
+
+	rec := InvocationRecord{
+		InvocationID:    inv.InvocationID,
+		Status:          status,
+		FinishedAt:      &finishedAt,
+		DurationMs:      result.DurationMS,
+		ErrorCode:       errCode,
+		ErrorSummary:    errMsg,
+		SideEffectCount: len(result.SideEffects),
+	}
+
+	outputStr := ""
+	if len(result.Structured) > 0 {
+		outputStr = string(result.Structured)
+	}
+
+	if h.sanitizer != nil {
+		h.sanitizer.SanitizeInvocationOutput(&rec, outputStr)
+	}
+
+	if err := h.writer.WriteInvocation(ctx, rec); err != nil {
+		return err
+	}
+
+	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: inv.InvocationID,
+		EventType:    "invocation.finished",
+		Severity:     severityForStatus(status),
+		Timestamp:    finishedAt,
+		Data: map[string]any{
+			"status":      string(status),
+			"error_code":  errCode,
+			"duration_ms": result.DurationMS,
+		},
+	})
+
+	return nil
+}
+
+func (h *ExecutionHook) OnRetryScheduled(ctx context.Context, invocationID string, previousAttempt int, nextAttempt int, retryCount int, delayMs int64, reason string) error {
+	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+		InvocationID: invocationID,
+		Status:       StatusRetrying,
+		RetryCount:   retryCount,
+	})
+
+	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: invocationID,
+		EventType:    "retry.scheduled",
+		Severity:     "warn",
+		Timestamp:    time.Now(),
+		Data: map[string]any{
+			"previous_attempt": previousAttempt,
+			"next_attempt":     nextAttempt,
+			"retry_count":      retryCount,
+			"delay_ms":         delayMs,
+			"reason":           reason,
+		},
+	})
+}
+
+func (h *ExecutionHook) OnTimeoutTriggered(ctx context.Context, invocationID string) error {
+	now := time.Now()
+
+	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+		InvocationID: invocationID,
+		Status:       StatusTimedOut,
+		FinishedAt:   &now,
+	})
+
+	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: invocationID,
+		EventType:    "timeout.triggered",
+		Severity:     "error",
+		Timestamp:    now,
+	})
+}
+
+func (h *ExecutionHook) OnCancelled(ctx context.Context, invocationID string, reason string) error {
+	now := time.Now()
+
+	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+		InvocationID: invocationID,
+		Status:       StatusCancelled,
+		FinishedAt:   &now,
+	})
+
+	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: invocationID,
+		EventType:    "cancel.requested",
+		Severity:     "warn",
+		Timestamp:    now,
+		Data: map[string]any{
+			"reason": reason,
+		},
+	})
+}
+
+func (h *ExecutionHook) OnPermissionDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error {
+	now := time.Now()
+
+	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+		InvocationID: inv.InvocationID,
+		Status:       StatusDenied,
+		FinishedAt:   &now,
+		ErrorCode:    capability.ErrorCodePermissionDenied,
+	})
+
+	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: inv.InvocationID,
+		EventType:    "permission.denied",
+		Severity:     "warn",
+		Timestamp:    now,
+		Data: map[string]any{
+			"tool_id": toolID,
+		"reason":  reason,
+		},
+	})
+
+	return h.writer.WriteAuditEvent(ctx, AuditEvent{
+		AuditID:      NewAuditID(),
+		TraceID:      inv.TraceID,
+		InvocationID: inv.InvocationID,
+		ActorType:    mapActorFromSource(inv.Source),
+		ActorID:      inv.UserID,
+		SubjectType:  SubjectTool,
+		SubjectID:    toolID,
+		Action:       "permission.denied",
+		Decision:     "denied",
+		RiskLevel:    "high",
+		Result:       reason,
+		ErrorCode:    capability.ErrorCodePermissionDenied,
+		CreatedAt:    now,
+		Metadata: map[string]any{
+			"reason": reason,
+		},
+	})
+}
+
+func (h *ExecutionHook) OnScopeDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error {
+	now := time.Now()
+
+	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
+		InvocationID: inv.InvocationID,
+		Status:       StatusDenied,
+		FinishedAt:   &now,
+		ErrorCode:    capability.ErrorCodeScopeDenied,
+	})
+
+	_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		InvocationID: inv.InvocationID,
+		EventType:    "scope.denied",
+		Severity:     "warn",
+		Timestamp:    now,
+		Data: map[string]any{
+			"tool_id": toolID,
+		"reason":  reason,
+		},
+	})
+
+	return h.writer.WriteAuditEvent(ctx, AuditEvent{
+		AuditID:      NewAuditID(),
+		TraceID:      inv.TraceID,
+		InvocationID: inv.InvocationID,
+		ActorType:    mapActorFromSource(inv.Source),
+		ActorID:      inv.UserID,
+		SubjectType:  SubjectTool,
+		SubjectID:    toolID,
+		Action:       "scope.denied",
+		Decision:     "denied",
+		RiskLevel:    "high",
+		Result:       reason,
+		ErrorCode:    capability.ErrorCodeScopeDenied,
+		CreatedAt:    now,
+		Metadata: map[string]any{
+			"reason": reason,
+		},
+	})
+}
+
+func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID string, effects []capability.RecordedSideEffect) error {
+	now := time.Now()
+	for _, effect := range effects {
+		_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+			EventID:      NewEventID(),
+			InvocationID: invocationID,
+			EventType:    "side_effect.recorded",
+			Severity:     "info",
+			Timestamp:    now,
+			Data: map[string]any{
+				"type":        effect.Type,
+				"target":      effect.Target,
+				"description": effect.Description,
+				"reversible":  effect.Reversible,
+			},
+		})
+	}
+
+	return h.writer.WriteInvocation(ctx, InvocationRecord{
+		InvocationID:   invocationID,
+		SideEffectCount: len(effects),
+	})
+}
+
+// ==================== Helper functions ====================
+
+func mapActorFromSource(source capability.InvocationSource) ActorType {
+	switch source {
+	case capability.InvocationSourceUser:
+		return ActorUser
+	case capability.InvocationSourceModel:
+		return ActorModel
+	case capability.InvocationSourceSystem, capability.InvocationSourceScheduledTask:
+		return ActorSystem
+	case capability.InvocationSourceWorkflow:
+		return ActorWorkflow
+	case capability.InvocationSourcePlugin:
+		return ActorPlugin
+	case capability.InvocationSourceComputerUse:
+		return ActorSystem
+	default:
+		return ActorSystem
+	}
+}
+
+func cloneMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	dst := make(map[string]any, len(m))
+	for k, v := range m {
+		dst[k] = v
+	}
+	return dst
+}
+
+// ==================== Status helpers ====================
 
 func StatusForUnifiedResult(res capability.UnifiedToolResult) ExecutionStatus {
 	switch res.Status {
