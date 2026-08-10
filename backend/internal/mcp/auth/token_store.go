@@ -15,15 +15,12 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 )
 
 var ErrSecretNotFound = errors.New("MCP_SECRET_NOT_FOUND")
 
-type SecretStore interface {
-	Put(context.Context, string, []byte) (string, error)
-	Get(context.Context, string) ([]byte, error)
-	Delete(context.Context, string) error
-}
+type SecretStore = secret.Store
 
 type EncryptedFileStore struct {
 	path string

@@ -100,7 +100,7 @@ func (b *Broker) Issue(ctx context.Context, req LeaseRequest) (Lease, error) {
 		MaxUses:              maxUses,
 	}
 
-	rawValue, err := b.store.Get(ctx, req.Ref)
+	rawValue, err := b.store.Get(ctx, string(req.Ref))
 	if err != nil {
 		return Lease{}, err
 	}
