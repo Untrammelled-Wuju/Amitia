@@ -17,6 +17,7 @@ internal interface RuntimeHostLayout {
     val cacheRoot: File
     val logRoot: File
     val runRoot: File
+    val homeRoot: File
 
     fun runtimeVersionRoot(
         version: String,
@@ -46,6 +47,7 @@ internal interface RuntimeHostLayout {
         const val DIR_CACHE = "cache"
         const val DIR_LOGS = "logs"
         const val DIR_RUN = "run"
+        const val DIR_HOME = "home"
 
         const val DIR_INSTALL_RECEIPTS = "install-receipts"
 

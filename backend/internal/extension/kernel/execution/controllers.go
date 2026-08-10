@@ -164,6 +164,7 @@ const (
 	RetryReasonStreamFailure          RetryReason = "stream_failure"
 	RetryReasonCancelled              RetryReason = "cancelled"
 	RetryReasonTimedOut               RetryReason = "timed_out"
+	RetryReasonHalfOpenProbe          RetryReason = "half_open_probe"
 )
 
 type RetryDecisionInput struct {
@@ -175,6 +176,7 @@ type RetryDecisionInput struct {
 	RemainingBudget time.Duration
 	StreamVisible   bool
 	StreamFailed    bool
+	CircuitProbe    bool
 }
 
 type RetryDecisionResult struct {
@@ -210,6 +212,10 @@ func (c *DefaultRetryController) Decide(ctx context.Context, input RetryDecision
 	}
 
 	tool := input.Tool
+
+	if input.CircuitProbe {
+		return RetryDecisionResult{Retry: false, Reason: RetryReasonHalfOpenProbe}
+	}
 
 	if tool.ExecutionPolicy.RetryPolicy.MaxRetries <= 0 {
 		return RetryDecisionResult{Retry: false, Reason: RetryReasonNoBudget}

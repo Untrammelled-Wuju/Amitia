@@ -36,6 +36,7 @@ type ExecutionPipeline struct {
 	AuditSink           observability.ExecutionRecorder
 	MetricsRec          *MetricsRecorder
 	CircuitBreaker      *CircuitBreakerCoordinator
+	circuitClassifier   CircuitResultClassifier
 
 	ToolResolver            func(ctx context.Context, toolID string) (capability.ToolDefinition, error)
 	ScopeStore              scope.ScopeStore
@@ -347,6 +348,25 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		}
 	}
 
+	var circuitPermit CircuitPermit
+	circuitCompleted := false
+	dispatched := false
+	if p.CircuitBreaker != nil {
+		circuitPermit = p.CircuitBreaker.Acquire(timeoutCtx, tool)
+		if !circuitPermit.Allowed {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodeCircuitOpen,
+				Category: capability.ToolErrorCategoryAvailability,
+				Message:  "runtime temporarily unavailable",
+			}))), nil
+		}
+	}
+	defer func() {
+		if p.CircuitBreaker != nil && circuitPermit.Allowed && !circuitCompleted {
+			p.CircuitBreaker.Complete(circuitPermit, CircuitOutcomeNeutral)
+		}
+	}()
+
 	p.registerDeadlineAbortHook(timeoutCtx, inv, budget)
 	p.attachRuntimeCanceller(timeoutCtx, tool, inv)
 
@@ -357,7 +377,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	attemptNumber := 1
 	retryCount := 0
 
-	result := p.dispatchAttempt(timeoutCtx, tool, inv, request, stream, attemptNumber, budget)
+	result := p.dispatchAttempt(timeoutCtx, tool, inv, request, stream, attemptNumber, budget, &dispatched)
 	result = p.finalizeAttemptResult(timeoutCtx, inv, toolID, result, stream, budget, startTime, attemptNumber, retryCount)
 
 	for p.RetryCtrl != nil {
@@ -379,6 +399,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 			RemainingBudget: budget.Remaining(p.TimeoutCtrl.Now()),
 			StreamVisible:   streamVisible,
 			StreamFailed:    streamFailed,
+			CircuitProbe:    circuitPermit.Probe,
 		})
 
 		if !decision.Retry {
@@ -420,12 +441,23 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		attemptNumber = decision.NextAttemptNumber
 		retryCount++
 
-		result = p.dispatchAttempt(timeoutCtx, tool, inv, request, stream, attemptNumber, budget)
+		result = p.dispatchAttempt(timeoutCtx, tool, inv, request, stream, attemptNumber, budget, &dispatched)
 		result = p.finalizeAttemptResult(timeoutCtx, inv, toolID, result, stream, budget, startTime, attemptNumber, retryCount)
 	}
 
 	if p.ResultValidator != nil {
 		result = p.ResultValidator.Validate(timeoutCtx, tool, inv, result)
+	}
+
+	if p.CircuitBreaker != nil && circuitPermit.Allowed {
+		outcome := CircuitOutcomeNeutral
+		if p.circuitClassifier != nil {
+			outcome = p.circuitClassifier.Classify(result, dispatched)
+		} else {
+			outcome = NewCircuitResultClassifier().Classify(result, dispatched)
+		}
+		p.CircuitBreaker.Complete(circuitPermit, outcome)
+		circuitCompleted = true
 	}
 
 	result.DurationMS = p.TimeoutCtrl.Now().Sub(startTime).Milliseconds()
@@ -454,12 +486,6 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		p.MetricsRec.Record(timeoutCtx, tool, result, p.TimeoutCtrl.Now().Sub(startTime))
 	}
 
-	if p.CircuitBreaker != nil {
-		if wasDispatched(tool, startTime, result) {
-			p.CircuitBreaker.RecordResult(timeoutCtx, tool, result)
-		}
-	}
-
 	return p.finalizeCancellation(timeoutCtx, inv, result), nil
 }
 
@@ -471,6 +497,7 @@ func (p *ExecutionPipeline) dispatchAttempt(
 	stream *toolStreamSession,
 	attemptNumber int,
 	budget TimeoutBudget,
+	dispatched *bool,
 ) capability.UnifiedToolResult {
 	if result, cancelled := p.checkTimeout(ctx, inv, string(request.ToolID), budget, TimeoutPhaseRuntime); cancelled {
 		return result
@@ -487,6 +514,9 @@ func (p *ExecutionPipeline) dispatchAttempt(
 			result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
 		} else {
 			result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+		}
+		if dispatched != nil {
+			*dispatched = true
 		}
 	} else {
 		result = capability.NewToolFailureResult(inv.InvocationID, string(request.ToolID), &capability.ToolError{
@@ -604,9 +634,6 @@ func (p *ExecutionPipeline) finalizeTimeout(ctx context.Context, inv capability.
 	if result.Status != capability.ToolResultStatusTimedOut {
 		result = capability.NewToolTimedOutResult(inv.InvocationID, result.ToolID)
 	}
-	if p.CircuitBreaker != nil && !wasDispatchedFromBudget(budget) {
-		return result
-	}
 	return p.finalizeCancellation(ctx, inv, result)
 }
 
@@ -669,14 +696,6 @@ func approvalTimeout(err error) bool {
 		return false
 	}
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrToolDeadlineExceeded)
-}
-
-func wasDispatched(tool capability.ToolDefinition, startTime time.Time, result capability.UnifiedToolResult) bool {
-	return !startTime.IsZero() && result.Status != capability.ToolResultStatusTimedOut
-}
-
-func wasDispatchedFromBudget(budget TimeoutBudget) bool {
-	return !budget.Deadline.IsZero() && budget.Source != ""
 }
 
 func getCancelReasonCode(ctx context.Context, inv capability.ToolInvocationContext) string {

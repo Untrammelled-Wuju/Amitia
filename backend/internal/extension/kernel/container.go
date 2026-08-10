@@ -27,6 +27,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
@@ -149,6 +150,8 @@ type Container struct {
 	DesktopAPI          *desktop.DesktopAPI
 	UpdateAPI           *desktop.UpdateAPI
 	DesktopActionBridge *DesktopActionBridge
+
+	ObservabilityStore observability.StorageBackend
 
 	DevConsoleService *developer_console.ConsoleService
 	DevConsoleRepo    *developer_console.DiagnosticRepository

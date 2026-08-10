@@ -469,7 +469,7 @@ func TestReconciliationEngineMultipleScans(t *testing.T) {
 }
 
 func TestBuildDebugPanelData(t *testing.T) {
-	data := BuildDebugPanelData()
+	data := BuildDebugPanelData(NewReconciliationEngine(DefaultReconciliationConfig()))
 	if data.Consistency.ID == "" {
 		t.Fatal("expected non-empty consistency ID")
 	}
@@ -488,7 +488,7 @@ func TestBuildDebugPanelData(t *testing.T) {
 }
 
 func TestBuildSanitizedExport(t *testing.T) {
-	export := BuildSanitizedExport()
+	export := BuildSanitizedExport(NewReconciliationEngine(DefaultReconciliationConfig()))
 	if export.ExportID == "" {
 		t.Fatal("expected non-empty export ID")
 	}

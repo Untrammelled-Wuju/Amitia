@@ -36,12 +36,6 @@ func (b *fakeNativeBridge) Start(_ context.Context, cfg SandboxConfig) error {
 	return nil
 }
 
-func (b *fakeNativeBridge) Stop(_ context.Context) error {
-	b.stopped = true
-	b.availability = BackendUnavailable
-	return nil
-}
-
 func (b *fakeNativeBridge) Execute(_ context.Context, req SandboxExecuteRequest) (SandboxExecuteResult, error) {
 	b.lastReq = req
 	return SandboxExecuteResult{
@@ -73,6 +67,48 @@ func (b *fakeNativeBridge) ActivateRootfs(_ context.Context, _ string) error {
 }
 
 func (b *fakeNativeBridge) RemoveRootfs(_ context.Context, _ string) error {
+	return nil
+}
+
+func (b *fakeNativeBridge) Quiesce(_ context.Context) error {
+	return nil
+}
+
+func (b *fakeNativeBridge) Resume(_ context.Context) error {
+	return nil
+}
+
+func (b *fakeNativeBridge) Restart(_ context.Context, _ SandboxRestartReason) error {
+	b.started = true
+	b.stopped = false
+	b.availability = BackendRunning
+	return nil
+}
+
+func (b *fakeNativeBridge) Recover(_ context.Context) error {
+	b.started = true
+	b.stopped = false
+	b.availability = BackendRunning
+	return nil
+}
+
+func (b *fakeNativeBridge) LifecycleState(_ context.Context) SandboxLifecycleState {
+	if b.availability == BackendRunning {
+		return SandboxStateRunning
+	}
+	return SandboxStateIdle
+}
+
+func (b *fakeNativeBridge) RecoverySnapshot(_ context.Context) SandboxRecoverySnapshot {
+	return SandboxRecoverySnapshot{
+		LifecycleState: b.LifecycleState(context.Background()),
+		Generation:     1,
+	}
+}
+
+func (b *fakeNativeBridge) Stop(_ context.Context, _ SandboxStopReason) error {
+	b.stopped = true
+	b.availability = BackendUnavailable
 	return nil
 }
 
@@ -130,7 +166,7 @@ func TestISHBackendDelegatesStop(t *testing.T) {
 	bridge := newFakeNativeBridge()
 	backend := &ishBackend{bridge: bridge}
 
-	if err := backend.Stop(context.Background()); err != nil {
+	if err := backend.Stop(context.Background(), StopReasonUser); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	if !bridge.stopped {
@@ -253,7 +289,7 @@ func TestISHBackendStateTransitions(t *testing.T) {
 		t.Fatal("expected running after start")
 	}
 
-	if err := backend.Stop(context.Background()); err != nil {
+	if err := backend.Stop(context.Background(), StopReasonUser); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	if backend.Availability(context.Background()) != BackendUnavailable {

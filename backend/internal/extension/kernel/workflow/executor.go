@@ -104,6 +104,10 @@ func (e *WorkflowExecutor) SetRunStore(store RunStore) {
 	e.runStore = store
 }
 
+func (e *WorkflowExecutor) RunStore() RunStore {
+	return e.runStore
+}
+
 func (e *WorkflowExecutor) SetStepGuard(guard StepGuard) {
 	e.guard = guard
 }

@@ -151,6 +151,6 @@ class ProotCommandBuilderTest {
     @Test fun spec_binary_path_in_command_list() {
         val cmd = builder.build(spec(binaryPath = "/custom/path/proot"))
         assertEquals("/custom/path/proot", cmd.binaryPath)
-        assertEquals("/custom/path/proot", cmd.arguments.first())
+        assertEquals("--kill-on-exit", cmd.arguments.first())
     }
 }

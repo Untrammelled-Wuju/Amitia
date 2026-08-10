@@ -1,22 +1,24 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 
 class MCPService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  MCPService(this._api);
 
   Future<List<Map<String, dynamic>>> servers() async {
     final resp = await _api.get<List<dynamic>>('/api/mcp/servers');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createServer(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> updateServer(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/mcp/servers/$id', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<bool> deleteServer(String id) async {
@@ -26,94 +28,98 @@ class MCPService {
 
   Future<Map<String, dynamic>?> getServer(String id) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/mcp/servers/$id');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> testServer(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/test');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> connectServer(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/connect');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> disconnectServer(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/disconnect');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> refreshTools(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/refresh');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> tools(String id) async {
     final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/tools');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<List<Map<String, dynamic>>> interactions() async {
     final resp = await _api.get<List<dynamic>>('/api/mcp/interactions');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> resolveInteraction(String id, Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/mcp/interactions/$id/resolve', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> operations() async {
     final resp = await _api.get<List<dynamic>>('/api/mcp/operations');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 }
 
 class QQService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  QQService(this._api);
 
   Future<Map<String, dynamic>?> status() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/qq/status');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> config() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/qq/config');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> connect(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/qq/connect', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> disconnect() async {
     final resp = await _api.post<Map<String, dynamic>>('/api/qq/disconnect');
-    return resp.data;
+    return resp;
   }
 }
 
 class ImageGenService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  ImageGenService(this._api);
 
   Future<List<Map<String, dynamic>>> configs() async {
     final resp = await _api.get<List<dynamic>>('/api/imagegen/configs');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/imagegen/configs', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> updateConfig(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/imagegen/configs/$id', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<bool> deleteConfig(String id) async {
@@ -128,33 +134,35 @@ class ImageGenService {
 
   Future<Map<String, dynamic>?> test(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/imagegen/configs/$id/test');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> providers() async {
     final resp = await _api.get<List<dynamic>>('/api/imagegen/providers');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 }
 
 class VisionService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  VisionService(this._api);
 
   Future<List<Map<String, dynamic>>> configs() async {
     final resp = await _api.get<List<dynamic>>('/api/vision/configs');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/vision/configs', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> updateConfig(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/vision/configs/$id', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<bool> deleteConfig(String id) async {
@@ -169,33 +177,35 @@ class VisionService {
 
   Future<Map<String, dynamic>?> test(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/vision/configs/$id/test');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> providers() async {
     final resp = await _api.get<List<dynamic>>('/api/vision/providers');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 }
 
 class EmbeddingService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  EmbeddingService(this._api);
 
   Future<List<Map<String, dynamic>>> configs() async {
     final resp = await _api.get<List<dynamic>>('/api/embedding/configs');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/embedding/configs', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> updateConfig(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/embedding/configs/$id', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<bool> deleteConfig(String id) async {
@@ -210,33 +220,35 @@ class EmbeddingService {
 
   Future<Map<String, dynamic>?> test(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/embedding/configs/$id/test');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> providers() async {
     final resp = await _api.get<List<dynamic>>('/api/embedding/providers');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 }
 
 class EmoteService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  EmoteService(this._api);
 
   Future<List<Map<String, dynamic>>> groups() async {
     final resp = await _api.get<List<dynamic>>('/api/emote-groups');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createGroup(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/emote-groups', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> updateGroup(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/emote-groups/$id', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<bool> deleteGroup(String id) async {
@@ -246,13 +258,13 @@ class EmoteService {
 
   Future<List<Map<String, dynamic>>> listEmotes() async {
     final resp = await _api.get<List<dynamic>>('/api/emotes');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> uploadEmote(String filePath) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/emotes/upload', data: {'filePath': filePath});
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> sendEmote(String characterId, String emoteId) async {
@@ -260,12 +272,12 @@ class EmoteService {
       '/api/chat/send-emote',
       data: {'characterId': characterId, 'emoteId': emoteId},
     );
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> getSettings(String characterId) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/characters/$characterId/emote-settings');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> saveSettings(String characterId, Map<String, dynamic> data) async {
@@ -275,22 +287,24 @@ class EmoteService {
 }
 
 class ProactiveService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  ProactiveService(this._api);
 
   Future<List<Map<String, dynamic>>> rules() async {
     final resp = await _api.get<List<dynamic>>('/api/proactive/rules');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createRule(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/proactive/rules', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> updateRule(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/proactive/rules/$id', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<bool> deleteRule(String id) async {
@@ -310,27 +324,29 @@ class ProactiveService {
 
   Future<Map<String, dynamic>?> status() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/proactive/status');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> queueSummary() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/proactive/queue-summary');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> history() async {
     final resp = await _api.get<List<dynamic>>('/api/proactive/history');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 }
 
 class TemporalService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  TemporalService(this._api);
 
   Future<Map<String, dynamic>?> userProfile() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/temporal/profile');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updateUserProfile(Map<String, dynamic> data) async {
@@ -340,7 +356,7 @@ class TemporalService {
 
   Future<Map<String, dynamic>?> characterProfile(String characterId) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/temporal/characters/$characterId/profile');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updateCharacterProfile(String characterId, Map<String, dynamic> data) async {
@@ -350,28 +366,28 @@ class TemporalService {
 
   Future<Map<String, dynamic>?> snapshot() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/temporal/snapshot');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> diagnostics() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/temporal/diagnostics');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> anchors() async {
     final resp = await _api.get<List<dynamic>>('/api/temporal/anchors');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createAnchor(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/temporal/anchors', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> updateAnchor(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/temporal/anchors/$id', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<bool> deleteAnchor(String id) async {

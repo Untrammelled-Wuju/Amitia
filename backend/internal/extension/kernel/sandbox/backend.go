@@ -73,10 +73,16 @@ func (e *NativeBridgeError) Error() string {
 type SandboxBackend interface {
 	Availability(ctx context.Context) BackendAvailability
 	Start(ctx context.Context, config SandboxConfig) error
-	Stop(ctx context.Context) error
+	Stop(ctx context.Context, reason SandboxStopReason) error
 	Execute(ctx context.Context, req SandboxExecuteRequest) (SandboxExecuteResult, error)
 	Cancel(ctx context.Context, executionID string) error
 	Health(ctx context.Context) SandboxHealth
+	Quiesce(ctx context.Context) error
+	Resume(ctx context.Context) error
+	Restart(ctx context.Context, reason SandboxRestartReason) error
+	Recover(ctx context.Context) error
+	LifecycleState(ctx context.Context) SandboxLifecycleState
+	RecoverySnapshot(ctx context.Context) SandboxRecoverySnapshot
 }
 
 type SandboxConfig struct {
@@ -119,12 +125,12 @@ func (c SandboxConfig) Clone() SandboxConfig {
 }
 
 type SandboxExecuteRequest struct {
-	ExecutionID          string
-	Argv                 []string
-	WorkingDirectoryURI  string
-	Environment          map[string]string
-	Stdin                []byte
-	TimeoutSeconds       uint32
+	ExecutionID         string
+	Argv                []string
+	WorkingDirectoryURI string
+	Environment         map[string]string
+	Stdin               []byte
+	TimeoutSeconds      uint32
 }
 
 func (r SandboxExecuteRequest) Validate() error {
@@ -224,8 +230,8 @@ func (b *ishBackend) Start(ctx context.Context, cfg SandboxConfig) error {
 	return b.bridge.Start(ctx, cfg)
 }
 
-func (b *ishBackend) Stop(ctx context.Context) error {
-	return b.bridge.Stop(ctx)
+func (b *ishBackend) Stop(ctx context.Context, reason SandboxStopReason) error {
+	return b.bridge.Stop(ctx, reason)
 }
 
 func (b *ishBackend) Execute(ctx context.Context, req SandboxExecuteRequest) (SandboxExecuteResult, error) {
@@ -247,6 +253,33 @@ func (b *ishBackend) Cancel(ctx context.Context, executionID string) error {
 
 func (b *ishBackend) Health(ctx context.Context) SandboxHealth {
 	return b.bridge.Health(ctx)
+}
+
+func (b *ishBackend) Quiesce(ctx context.Context) error {
+	if err := validateBackendState(ctx, b); err != nil {
+		return err
+	}
+	return b.bridge.Quiesce(ctx)
+}
+
+func (b *ishBackend) Resume(ctx context.Context) error {
+	return b.bridge.Resume(ctx)
+}
+
+func (b *ishBackend) Restart(ctx context.Context, reason SandboxRestartReason) error {
+	return b.bridge.Restart(ctx, reason)
+}
+
+func (b *ishBackend) Recover(ctx context.Context) error {
+	return b.bridge.Recover(ctx)
+}
+
+func (b *ishBackend) LifecycleState(ctx context.Context) SandboxLifecycleState {
+	return b.bridge.LifecycleState(ctx)
+}
+
+func (b *ishBackend) RecoverySnapshot(ctx context.Context) SandboxRecoverySnapshot {
+	return b.bridge.RecoverySnapshot(ctx)
 }
 
 func validateBackendState(ctx context.Context, b *ishBackend) error {
@@ -299,7 +332,7 @@ func (b *unavailableBackend) Start(_ context.Context, _ SandboxConfig) error {
 	return fmt.Errorf("iSH backend unavailable: %s", b.reason)
 }
 
-func (b *unavailableBackend) Stop(_ context.Context) error {
+func (b *unavailableBackend) Stop(_ context.Context, _ SandboxStopReason) error {
 	return nil
 }
 
@@ -322,6 +355,30 @@ func (b *unavailableBackend) Health(_ context.Context) SandboxHealth {
 		Healthy: false,
 		Message: fmt.Sprintf("unavailable: %s", b.reason),
 	}
+}
+
+func (b *unavailableBackend) Quiesce(_ context.Context) error {
+	return &SandboxLifecycleError{Code: SandboxErrInvalidState, State: SandboxStateIdle}
+}
+
+func (b *unavailableBackend) Resume(_ context.Context) error {
+	return &SandboxLifecycleError{Code: SandboxErrInvalidState, State: SandboxStateIdle}
+}
+
+func (b *unavailableBackend) Restart(_ context.Context, _ SandboxRestartReason) error {
+	return &SandboxLifecycleError{Code: SandboxErrRestartFailed, State: SandboxStateIdle}
+}
+
+func (b *unavailableBackend) Recover(_ context.Context) error {
+	return &SandboxLifecycleError{Code: SandboxErrRecoveryFailed, State: SandboxStateIdle}
+}
+
+func (b *unavailableBackend) LifecycleState(_ context.Context) SandboxLifecycleState {
+	return SandboxStateIdle
+}
+
+func (b *unavailableBackend) RecoverySnapshot(_ context.Context) SandboxRecoverySnapshot {
+	return SandboxRecoverySnapshot{LifecycleState: SandboxStateIdle}
 }
 
 func minPlatformBackend() (SandboxBackend, error) {

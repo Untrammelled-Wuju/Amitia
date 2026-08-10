@@ -211,6 +211,7 @@ internal class FakeRuntimeHostLayout(
     override val cacheRoot: File = File(dataDir, RuntimeHostLayout.DIR_CACHE)
     override val logRoot: File = File(dataDir, RuntimeHostLayout.DIR_LOGS)
     override val runRoot: File = File(dataDir, RuntimeHostLayout.DIR_RUN)
+    override val homeRoot: File = File(dataDir, RuntimeHostLayout.DIR_HOME)
 
     override fun runtimeVersionRoot(version: String): File {
         if (!PathValidator.isValidRuntimeVersion(version)) {

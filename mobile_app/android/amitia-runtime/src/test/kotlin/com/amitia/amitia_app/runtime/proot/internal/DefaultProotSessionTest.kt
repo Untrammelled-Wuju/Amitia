@@ -28,7 +28,7 @@ class DefaultProotSessionTest {
     }
 
     private fun sleepCmd(seconds: Int): String =
-        if (isWindows) "timeout /t $seconds /nobreak >nul" else "sleep $seconds"
+        if (isWindows) "ping -n $seconds 127.0.0.1 >nul" else "sleep $seconds"
 
     @Test
     fun session_holdsRealProcess() {
@@ -66,8 +66,10 @@ class DefaultProotSessionTest {
         val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-4", process, ProotObserver {})
         session.markStarted()
-        val result = session.awaitExit(300)
-        assertNull(result)
+        Thread.sleep(200)
+        assertTrue("Process should still be alive", session.isAlive())
+        val result = session.awaitExit(200)
+        assertNull("Should not have exited within timeout", result)
         session.close()
     }
 
@@ -121,11 +123,18 @@ class DefaultProotSessionTest {
     fun session_exitEventContainsSessionId() {
         val process = execProcess("exit 7")
         val capturedSessionId = AtomicReference("")
+        val exited = java.util.concurrent.atomic.AtomicBoolean(false)
         val session = DefaultProotSession("test-special-id", process, ProotObserver { event ->
-            if (event is ProotEvent.Exited) capturedSessionId.set(event.sessionId)
+            if (event is ProotEvent.Exited) {
+                capturedSessionId.set(event.sessionId)
+                exited.set(true)
+            }
         })
         session.markStarted()
-        Thread.sleep(500)
+        Thread.sleep(800)
+        session.awaitExit(3000)
+        Thread.sleep(300)
+        assertTrue("Should have received exit event", exited.get())
         assertEquals("test-special-id", capturedSessionId.get())
         session.close()
     }
@@ -169,12 +178,14 @@ class DefaultProotSessionTest {
 
     @Test
     fun waitForOwner_isSession() {
-        val process = execProcess(sleepCmd(60))
+        val process = execProcess("exit 0")
         val session = DefaultProotSession("test-wait", process, ProotObserver {})
         session.markStarted()
-        assertEquals(session, session)
-        val result = session.awaitExit(5000)
+        process.waitFor(5, TimeUnit.SECONDS)
+        Thread.sleep(100)
+        val result = session.awaitExit(3000)
         assertNotNull(result)
+        assertEquals(session, session)
         session.close()
     }
 }

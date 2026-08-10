@@ -1,9 +1,11 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 import '../models/feedback.dart';
 import '../models/mood.dart';
 
 class FeedbackService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  FeedbackService(this._api);
 
   Future<FeedbackDto?> create(String messageId, int rating, {String? comment}) async {
     final resp = await _api.post<Map<String, dynamic>>(
@@ -13,8 +15,8 @@ class FeedbackService {
         if (comment != null) 'comment': comment,
       },
     );
-    if (resp.data == null) return null;
-    return FeedbackDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return FeedbackDto.fromJson(resp);
   }
 
   Future<FeedbackDto?> getByMessage(String messageId) async {
@@ -22,13 +24,13 @@ class FeedbackService {
       '/api/messages/$messageId/feedback',
       fromJson: (e) => e as Map<String, dynamic>,
     );
-    if (resp.data == null) return null;
-    return FeedbackDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return FeedbackDto.fromJson(resp);
   }
 
   Future<Map<String, dynamic>?> stats() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/messages/feedback/stats');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> delete(String id) async {
@@ -38,18 +40,20 @@ class FeedbackService {
 }
 
 class MoodService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  MoodService(this._api);
 
   Future<List<MoodDto>> list() async {
     final resp = await _api.get<List<dynamic>>('/api/moods');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => MoodDto.fromJson(e as Map<String, dynamic>)).toList();
+    if (resp == null) return [];
+    return resp.map((e) => MoodDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<List<MoodDto>> getByConversation(String conversationId) async {
     final resp = await _api.get<List<dynamic>>('/api/moods/conversations/$conversationId');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => MoodDto.fromJson(e as Map<String, dynamic>)).toList();
+    if (resp == null) return [];
+    return resp.map((e) => MoodDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<bool> delete(String id) async {

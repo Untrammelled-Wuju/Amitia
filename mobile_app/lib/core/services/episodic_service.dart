@@ -1,19 +1,21 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 import '../models/episodic.dart';
 
 class EpisodicService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  EpisodicService(this._api);
 
   Future<List<EpisodicDto>> list() async {
     final resp = await _api.get<List<dynamic>>('/api/episodic');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => EpisodicDto.fromJson(e as Map<String, dynamic>)).toList();
+    if (resp == null) return [];
+    return resp.map((e) => EpisodicDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<EpisodicDto?> create(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/episodic', data: data);
-    if (resp.data == null) return null;
-    return EpisodicDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return EpisodicDto.fromJson(resp);
   }
 
   Future<bool> delete(String id) async {
@@ -23,8 +25,8 @@ class EpisodicService {
 
   Future<List<EpisodicDto>> getByUser() async {
     final resp = await _api.get<List<dynamic>>('/api/episodic/by-user');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => EpisodicDto.fromJson(e as Map<String, dynamic>)).toList();
+    if (resp == null) return [];
+    return resp.map((e) => EpisodicDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<EpisodicDto?> getDetail(String id) async {
@@ -32,18 +34,18 @@ class EpisodicService {
       '/api/episodic/$id/detail',
       fromJson: (e) => e as Map<String, dynamic>,
     );
-    if (resp.data == null) return null;
-    return EpisodicDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return EpisodicDto.fromJson(resp);
   }
 
   Future<List<EpisodicDto>> extract() async {
     final resp = await _api.post<List<dynamic>>('/api/episodic/extract');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => EpisodicDto.fromJson(e as Map<String, dynamic>)).toList();
+    if (resp == null) return [];
+    return resp.map((e) => EpisodicDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<Map<String, dynamic>?> systemPrompt() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/episodic/system-prompt');
-    return resp.data;
+    return resp;
   }
 }

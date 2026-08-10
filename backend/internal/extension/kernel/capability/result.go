@@ -111,6 +111,7 @@ const (
 	ErrorCodeResourceLimitUnavailable = "resource_limit_unavailable"
 	ErrorCodeResourceLimitExceeded  = "resource_limit_exceeded"
 	ErrorCodeResourceUsageUnavailable = "resource_usage_unavailable"
+	ErrorCodeCircuitOpen              = "circuit_open"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -142,6 +143,8 @@ func ErrorCategoryForCode(code string) ToolErrorCategory {
 		return ToolErrorCategoryRateLimit
 	case ErrorCodeDependencyMissing:
 		return ToolErrorCategoryDependency
+	case ErrorCodeCircuitOpen:
+		return ToolErrorCategoryAvailability
 	case ErrorCodeStreamProtocol,
 		ErrorCodeStreamLimitExceeded,
 		ErrorCodeStreamDeliveryFailed:

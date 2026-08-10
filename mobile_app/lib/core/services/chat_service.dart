@@ -1,13 +1,15 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 import '../models/conversation.dart';
 
 class ChatService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  ChatService(this._api);
 
   Future<List<ConversationDto>> listConversations() async {
     final resp = await _api.get<List<dynamic>>('/api/chats/conversations');
-    if (resp.data == null) return [];
-    return resp.data!
+    if (resp == null) return [];
+    return resp
         .map((e) => ConversationDto.fromJson(e as Map<String, dynamic>))
         .toList();
   }
@@ -17,16 +19,16 @@ class ChatService {
       '/api/chats/conversations',
       data: characterId != null ? {'characterId': characterId} : null,
     );
-    if (resp.data == null) return null;
-    return ConversationDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return ConversationDto.fromJson(resp);
   }
 
   Future<List<MessageDto>> getMessages(String conversationId) async {
     final resp = await _api.get<List<dynamic>>(
       '/api/chats/conversations/$conversationId/messages',
     );
-    if (resp.data == null) return [];
-    return resp.data!
+    if (resp == null) return [];
+    return resp
         .map((e) => MessageDto.fromJson(e as Map<String, dynamic>))
         .toList();
   }
@@ -44,6 +46,6 @@ class ChatService {
         if (conversationId != null) 'conversationId': conversationId,
       },
     );
-    return resp.data;
+    return resp;
   }
 }

@@ -11,14 +11,38 @@ import java.util.concurrent.atomic.AtomicReference
 
 class ProotProcessLauncherTest {
 
+    private val isWindows: Boolean = System.getProperty("os.name").lowercase().contains("windows")
     private val fixedIdGen = SessionIdGenerator { "test-session-${counter.incrementAndGet()}" }
     private val counter = AtomicInteger(0)
+
+    private fun noopCommand(): ProotCommand {
+        return if (isWindows) {
+            ProotCommand("cmd.exe", listOf("/c", "exit", "0"), emptyMap())
+        } else {
+            ProotCommand("/bin/true", emptyList(), emptyMap())
+        }
+    }
+
+    private fun echoCommand(text: String): ProotCommand {
+        return if (isWindows) {
+            ProotCommand("cmd.exe", listOf("/c", "echo", text), emptyMap())
+        } else {
+            ProotCommand("/bin/sh", listOf("-c", "echo $text"), emptyMap())
+        }
+    }
+
+    private fun envCommand(env: Map<String, String>): ProotCommand {
+        return if (isWindows) {
+            ProotCommand("cmd.exe", listOf("/c", "set"), env)
+        } else {
+            ProotCommand("/usr/bin/env", emptyList(), env)
+        }
+    }
 
     @Test
     fun launch_returnsSessionWithId() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
-        val command = ProotCommand("/bin/true", emptyList(), emptyMap())
-        val session = launcher.launch(command, ProotObserver {})
+        val session = launcher.launch(noopCommand(), ProotObserver {})
         assertNotNull(session)
         assertTrue(session.sessionId.isNotEmpty())
         session.close()
@@ -27,9 +51,9 @@ class ProotProcessLauncherTest {
     @Test
     fun launch_sessionIdUnique() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
-        val command = ProotCommand("/bin/true", emptyList(), emptyMap())
-        val s1 = launcher.launch(command, ProotObserver {})
-        val s2 = launcher.launch(command, ProotObserver {})
+        val noop = noopCommand()
+        val s1 = launcher.launch(noop, ProotObserver {})
+        val s2 = launcher.launch(noop, ProotObserver {})
         assertTrue(s1.sessionId != s2.sessionId)
         s1.close()
         s2.close()
@@ -39,8 +63,7 @@ class ProotProcessLauncherTest {
     fun launch_observerReceivesStarted() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
         val events = mutableListOf<ProotEvent>()
-        val command = ProotCommand("/bin/true", emptyList(), emptyMap())
-        val session = launcher.launch(command, ProotObserver { events.add(it) })
+        val session = launcher.launch(noopCommand(), ProotObserver { events.add(it) })
         Thread.sleep(200)
         assertTrue(events.any { it is ProotEvent.Started })
         session.close()
@@ -49,11 +72,13 @@ class ProotProcessLauncherTest {
     @Test
     fun launch_observerReceivesExited() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
-        val events = mutableListOf<ProotEvent>()
-        val command = ProotCommand("/bin/true", emptyList(), emptyMap())
-        val session = launcher.launch(command, ProotObserver { events.add(it) })
-        Thread.sleep(500)
-        assertTrue(events.any { it is ProotEvent.Exited })
+        val exitEvent = AtomicReference<ProotEvent.Exited?>(null)
+        val session = launcher.launch(noopCommand(), ProotObserver {
+            if (it is ProotEvent.Exited) exitEvent.set(it)
+        })
+        session.awaitExit(5000)
+        Thread.sleep(50)
+        assertNotNull(exitEvent.get())
         session.close()
     }
 
@@ -73,12 +98,14 @@ class ProotProcessLauncherTest {
     fun launch_capturesStdout() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
         val capturedStdout = AtomicReference("")
-        val command = ProotCommand("/bin/sh", listOf("-c", "echo hello-output"), emptyMap())
+        val command = echoCommand("hello-output-test")
         val session = launcher.launch(command, ProotObserver { event ->
-            if (event is ProotEvent.Stdout) capturedStdout.set(event.data)
+            if (event is ProotEvent.Stdout && event.data.contains("hello-output-test")) {
+                capturedStdout.set(event.data)
+            }
         })
         Thread.sleep(500)
-        assertTrue(capturedStdout.get().contains("hello-output"))
+        assertTrue(capturedStdout.get().contains("hello-output-test"))
         session.close()
     }
 
@@ -87,7 +114,7 @@ class ProotProcessLauncherTest {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
         val captured = AtomicReference("")
         val env = mapOf("PROOT_TEST_VAR" to "test-value-123")
-        val command = ProotCommand("/usr/bin/env", emptyList(), env)
+        val command = envCommand(env)
         val session = launcher.launch(command, ProotObserver { event ->
             if (event is ProotEvent.Stdout && event.data.contains("PROOT_TEST_VAR=test-value-123")) {
                 captured.set(event.data)
@@ -101,11 +128,9 @@ class ProotProcessLauncherTest {
     @Test
     fun launch_commandListNotShellString() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
-        val command = ProotCommand(
-            "/bin/sh",
-            listOf("-c", "echo no-shell-concatenation-safe"),
-            emptyMap(),
-        )
+        val args = if (isWindows) listOf("/c", "echo no-shell-safe") else listOf("-c", "echo no-shell-safe")
+        val binary = if (isWindows) "cmd.exe" else "/bin/sh"
+        val command = ProotCommand(binary, args, emptyMap())
         val session = launcher.launch(command, ProotObserver {})
         assertNotNull(session)
         session.close()
@@ -114,7 +139,7 @@ class ProotProcessLauncherTest {
     @Test
     fun launcherDoesNotHoldGlobalProcess() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
-        val command = ProotCommand("/bin/true", emptyList(), emptyMap())
+        val command = noopCommand()
         launcher.launch(command, ProotObserver {})
         launcher.launch(command, ProotObserver {})
         assertEquals(0, getLauncherHeldProcessCount(launcher))

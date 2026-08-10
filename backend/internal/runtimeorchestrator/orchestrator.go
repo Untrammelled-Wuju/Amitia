@@ -27,6 +27,14 @@ type componentRuntimeState struct {
 	startErr   error
 }
 
+type RestartableComponent interface {
+	Restart(ctx context.Context) error
+}
+
+type ShutdownAwareComponent interface {
+	PrepareShutdown(ctx context.Context) error
+}
+
 func New(descriptor platform.RuntimeDescriptor) *RuntimeOrchestrator {
 	return &RuntimeOrchestrator{
 		descriptor: descriptor,
@@ -125,13 +133,6 @@ func (o *RuntimeOrchestrator) StartPhase(ctx context.Context, phase ComponentPha
 	return runtime.execute(ctx)
 }
 
-func (o *RuntimeOrchestrator) StopAll(ctx context.Context) (err error) {
-	o.stopOnce.Do(func() {
-		o.stopErr = o.doStopAll(ctx)
-	})
-	return o.stopErr
-}
-
 func (o *RuntimeOrchestrator) doStopAll(ctx context.Context) error {
 	o.mu.Lock()
 	o.state = OrchestratorStopping
@@ -178,6 +179,129 @@ func (o *RuntimeOrchestrator) doStopAll(ctx context.Context) error {
 	o.mu.Unlock()
 
 	return joinErrors(errs)
+}
+
+func (o *RuntimeOrchestrator) ReportComponentState(id ComponentID, state ComponentState, err error) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	st, ok := o.statuses[id]
+	if !ok {
+		return unknownComponentErr(id)
+	}
+
+	st.status.State = state
+	if err != nil {
+		st.status.LastError = err.Error()
+	}
+
+	o.updateOverallLocked()
+	return nil
+}
+
+func (o *RuntimeOrchestrator) RestartComponent(ctx context.Context, id ComponentID) error {
+	o.mu.Lock()
+	if o.state == OrchestratorStopping || o.state == OrchestratorStopped || o.state == OrchestratorBlocked {
+		o.mu.Unlock()
+		return newErrOrchestratorStopped()
+	}
+
+	comp, ok := o.components[id]
+	st, stOk := o.statuses[id]
+	if !ok || !stOk {
+		o.mu.Unlock()
+		return unknownComponentErr(id)
+	}
+
+	desc := comp.Descriptor()
+	if !desc.Enabled {
+		o.mu.Unlock()
+		return wrapComponentErr(ErrComponentDisabled, id, "", "component is disabled")
+	}
+
+	if !o.checkDepsReady(id) {
+		o.mu.Unlock()
+		return wrapComponentErr(ErrDependencyNotReady, id, "", "dependencies not ready")
+	}
+
+	restartable, isRestartable := comp.(RestartableComponent)
+	o.mu.Unlock()
+
+	if isRestartable {
+		if err := restartable.Restart(ctx); err != nil {
+			o.mu.Lock()
+			st.status.State = StateDegraded
+			st.status.LastError = err.Error()
+			o.updateOverallLocked()
+			o.mu.Unlock()
+			return wrapComponentErr(ErrRestartFailed, id, "", err.Error())
+		}
+	} else {
+		stopErr := comp.Stop(ctx)
+		if stopErr != nil {
+			o.mu.Lock()
+			st.status.State = StateDegraded
+			o.mu.Unlock()
+			return stopErr
+		}
+
+		startErr := comp.Start(ctx)
+		if startErr != nil {
+			o.mu.Lock()
+			if desc.Required {
+				st.status.State = StateFailed
+				o.state = OrchestratorBlocked
+			} else {
+				st.status.State = StateDegraded
+			}
+			st.status.LastError = startErr.Error()
+			o.updateOverallLocked()
+			o.mu.Unlock()
+			return startErr
+		}
+
+		readyErr := comp.Ready(ctx)
+		if readyErr != nil {
+			o.mu.Lock()
+			st.status.State = StateDegraded
+			st.status.LastError = readyErr.Error()
+			o.updateOverallLocked()
+			o.mu.Unlock()
+			return readyErr
+		}
+	}
+
+	o.mu.Lock()
+	st.status.State = StateReady
+	st.started = true
+	st.status.ReadyAt = o.nowFn()
+	o.updateOverallLocked()
+	o.mu.Unlock()
+
+	return nil
+}
+
+func (o *RuntimeOrchestrator) StopAll(ctx context.Context) (err error) {
+	o.mu.Lock()
+	var shutdownAware []ShutdownAwareComponent
+	for id, comp := range o.components {
+		if sc, ok := comp.(ShutdownAwareComponent); ok {
+			st := o.statuses[id]
+			if st != nil && st.started && !st.stopped {
+				shutdownAware = append(shutdownAware, sc)
+			}
+		}
+	}
+	o.mu.Unlock()
+
+	for _, sc := range shutdownAware {
+		_ = sc.PrepareShutdown(ctx)
+	}
+
+	o.stopOnce.Do(func() {
+		o.stopErr = o.doStopAll(ctx)
+	})
+	return o.stopErr
 }
 
 func (o *RuntimeOrchestrator) Snapshot() RuntimeSnapshot {

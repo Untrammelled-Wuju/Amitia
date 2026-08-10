@@ -1,25 +1,27 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 import '../models/reminder.dart';
 
 class ReminderService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  ReminderService(this._api);
 
   Future<List<ReminderDto>> list() async {
     final resp = await _api.get<List<dynamic>>('/api/reminders');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => ReminderDto.fromJson(e as Map<String, dynamic>)).toList();
+    if (resp == null) return [];
+    return resp.map((e) => ReminderDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<ReminderDto?> create(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/reminders', data: data);
-    if (resp.data == null) return null;
-    return ReminderDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return ReminderDto.fromJson(resp);
   }
 
   Future<ReminderDto?> update(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/reminders/$id', data: data);
-    if (resp.data == null) return null;
-    return ReminderDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return ReminderDto.fromJson(resp);
   }
 
   Future<bool> delete(String id) async {
@@ -44,12 +46,12 @@ class ReminderService {
 
   Future<Map<String, dynamic>?> status() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/reminders/status');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> cleanupConfig() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/reminders/cleanup-config');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> setCleanupConfig(Map<String, dynamic> data) async {

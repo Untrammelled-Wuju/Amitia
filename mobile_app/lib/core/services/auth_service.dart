@@ -1,6 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import '../api/api_client.dart';
-import '../api/api_exception.dart';
+import '../backend_transport/backend_service_api.dart';
 
 class AuthResult {
   final String token;
@@ -30,7 +29,9 @@ class AuthService {
   static const String _userIdKey = 'user_id';
   static const String _usernameKey = 'username';
 
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  AuthService(this._api);
 
   Future<bool> get isLoggedIn async {
     final prefs = await SharedPreferences.getInstance();
@@ -57,12 +58,12 @@ class AuthService {
       data: {'username': username, 'password': password},
     );
 
-    if (resp.data == null) {
-      throw ApiException.fromResponse(10000, '登录响应为空');
+    if (resp == null) {
+      throw ServiceApiException(code: 10000, message: '登录响应为空');
     }
 
-    final token = resp.data!['token'] as String? ?? '';
-    final userInfo = UserInfo.fromJson(resp.data!);
+    final token = resp['token'] as String? ?? '';
+    final userInfo = UserInfo.fromJson(resp);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
@@ -87,6 +88,6 @@ class AuthService {
       '/api/public/auth/setup',
       data: {'username': username, 'password': password},
     );
-    return resp.data;
+    return resp;
   }
 }

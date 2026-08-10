@@ -14,6 +14,7 @@ internal object PathValidator {
         if (version.contains(":")) return false
         if (version.contains("/")) return false
         if (version.contains("\\")) return false
+        if (version.contains("\u0000")) return false
         if (!VALID_VERSION_PATTERN.matches(version)) return false
         if (!version.any { it.isDigit() }) return false
         return true

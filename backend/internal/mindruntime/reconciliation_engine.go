@@ -351,5 +351,8 @@ func DefaultReconciliationWorkerTargets() []ReconciliationWorkerTarget {
 		{Target: ReconciliationLeaseDelivery, Strategy: StrategyReleaseLease},
 		{Target: ReconciliationOutboxSideEffect, Strategy: StrategyCompensate},
 		{Target: ReconciliationInteractionRunMsg, Strategy: StrategyCompensate},
+		{Target: ReconciliationAgentTask, Strategy: StrategyManualConfirm},
+		{Target: ReconciliationAgentWorkflow, Strategy: StrategyManualConfirm},
+		{Target: ReconciliationAgentRuntime, Strategy: StrategyManualConfirm},
 	}
 }

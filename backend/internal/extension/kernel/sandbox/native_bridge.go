@@ -22,6 +22,7 @@ type NativeBridge interface {
 	Restart(ctx context.Context, reason SandboxRestartReason) error
 	Recover(ctx context.Context) error
 	LifecycleState(ctx context.Context) SandboxLifecycleState
+	RecoverySnapshot(ctx context.Context) SandboxRecoverySnapshot
 }
 
 func NewNativeBridge() NativeBridge {

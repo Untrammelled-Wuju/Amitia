@@ -49,7 +49,6 @@ func TestCanTransitionSandboxState_InvalidTransitions(t *testing.T) {
 		{SandboxStateIdle, SandboxStateFailed},
 		{SandboxStateIdle, SandboxStateStopping},
 		{SandboxStateStarting, SandboxStateQuiesced},
-		{SandboxStateStarting, SandboxStateRunning},
 		{SandboxStateFailed, SandboxStateRunning},
 		{SandboxStateFailed, SandboxStateIdle},
 		{SandboxStateQuiesced, SandboxStateIdle},

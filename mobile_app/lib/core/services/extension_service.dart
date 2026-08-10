@@ -1,12 +1,14 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 
 class ExtensionService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  ExtensionService(this._api);
 
   Future<List<Map<String, dynamic>>> skills() async {
     final resp = await _api.get<List<dynamic>>('/api/extensions/skills');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<bool> enableSkill(String id) async {
@@ -21,12 +23,12 @@ class ExtensionService {
 
   Future<Map<String, dynamic>?> getSkill(String id) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/skills/$id');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> getPermissions(String id) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/skills/$id/permissions');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updatePermissions(String id, Map<String, dynamic> data) async {
@@ -36,7 +38,7 @@ class ExtensionService {
 
   Future<Map<String, dynamic>?> getSkillConfig(String id) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/skills/$id/config');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updateSkillConfig(String id, Map<String, dynamic> data) async {
@@ -51,13 +53,13 @@ class ExtensionService {
 
   Future<Map<String, dynamic>?> executeSkill(String id, Map<String, dynamic> params) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/extensions/skills/$id/execute', data: params);
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> plugins() async {
     final resp = await _api.get<List<dynamic>>('/api/extensions/plugins');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<bool> enablePlugin(String id) async {
@@ -77,7 +79,7 @@ class ExtensionService {
 
   Future<Map<String, dynamic>?> getPluginConfig(String id) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/plugins/$id/config');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updatePluginConfig(String id, Map<String, dynamic> data) async {
@@ -87,13 +89,13 @@ class ExtensionService {
 
   Future<Map<String, dynamic>?> getPluginHealth(String id) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/plugins/$id/health');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> agentSkills() async {
     final resp = await _api.get<List<dynamic>>('/api/extensions/agent-skills');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<bool> enableAgentSkill(String id) async {
@@ -113,23 +115,23 @@ class ExtensionService {
 
   Future<List<Map<String, dynamic>>> workshopSessions() async {
     final resp = await _api.get<List<dynamic>>('/api/extensions/workshop/sessions');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> createWorkshopSession(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/extensions/workshop/sessions', data: data);
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> extensionRuns() async {
     final resp = await _api.get<List<dynamic>>('/api/extensions/runs');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<Map<String, dynamic>?> getExtensionRun(String runId) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/runs/$runId');
-    return resp.data;
+    return resp;
   }
 }

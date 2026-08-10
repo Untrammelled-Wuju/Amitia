@@ -23,6 +23,7 @@ internal class DefaultRuntimeHostLayout(
     override val cacheRoot: File = File(dataDir, RuntimeHostLayout.DIR_CACHE)
     override val logRoot: File = File(dataDir, RuntimeHostLayout.DIR_LOGS)
     override val runRoot: File = File(dataDir, RuntimeHostLayout.DIR_RUN)
+    override val homeRoot: File = File(dataDir, RuntimeHostLayout.DIR_HOME)
 
     private val installReceiptsRoot: File = File(metadataRoot, RuntimeHostLayout.DIR_INSTALL_RECEIPTS)
 
@@ -85,6 +86,7 @@ internal class DefaultRuntimeHostLayout(
         cacheRoot,
         logRoot,
         runRoot,
+        homeRoot,
     )
 
     private fun validateVersion(version: String) {

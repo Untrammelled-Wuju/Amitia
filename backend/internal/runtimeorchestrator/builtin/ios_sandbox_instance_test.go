@@ -1,3 +1,6 @@
+//go:build ios
+// +build ios
+
 package builtin
 
 import (
@@ -53,7 +56,7 @@ func (b *controllableBackend) Start(_ context.Context, _ sandbox.SandboxConfig) 
 	return fn()
 }
 
-func (b *controllableBackend) Stop(_ context.Context) error {
+func (b *controllableBackend) Stop(_ context.Context, _ sandbox.SandboxStopReason) error {
 	b.mu.Lock()
 	b.stopCalled++
 	fn := b.stopFn
@@ -74,6 +77,30 @@ func (b *controllableBackend) Health(_ context.Context) sandbox.SandboxHealth {
 	fn := b.healthFn
 	b.mu.Unlock()
 	return fn()
+}
+
+func (b *controllableBackend) Quiesce(_ context.Context) error {
+	return fmt.Errorf("iSH native execution not available in this build")
+}
+
+func (b *controllableBackend) Resume(_ context.Context) error {
+	return fmt.Errorf("iSH native execution not available in this build")
+}
+
+func (b *controllableBackend) Restart(_ context.Context, _ sandbox.SandboxRestartReason) error {
+	return fmt.Errorf("iSH native execution not available in this build")
+}
+
+func (b *controllableBackend) Recover(_ context.Context) error {
+	return fmt.Errorf("iSH native execution not available in this build")
+}
+
+func (b *controllableBackend) LifecycleState(_ context.Context) sandbox.SandboxLifecycleState {
+	return sandbox.SandboxStateIdle
+}
+
+func (b *controllableBackend) RecoverySnapshot(_ context.Context) sandbox.SandboxRecoverySnapshot {
+	return sandbox.SandboxRecoverySnapshot{}
 }
 
 func (b *controllableBackend) setStartError(err error) {

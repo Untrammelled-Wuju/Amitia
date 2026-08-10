@@ -6,6 +6,7 @@ import 'package:logger/logger.dart';
 import '../../backend_connection/backend_connection_availability.dart';
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
+import '../backend_service_api.dart';
 import '../backend_transport.dart';
 import '../default_backend_transport.dart';
 import '../http/backend_http_method.dart';
@@ -95,6 +96,12 @@ final backendTransportApiProvider = Provider<BackendTransportApi?>((ref) {
   final transport = ref.watch(backendCurrentTransportProvider);
   if (transport == null) return null;
   return BackendTransportApi(transport.http, transport.generation);
+});
+
+final backendServiceProvider = Provider<BackendServiceApi?>((ref) {
+  final transport = ref.watch(backendCurrentTransportProvider);
+  if (transport == null) return null;
+  return BackendServiceApi(transport.http, transport.generation);
 });
 
 final streamTimeoutProvider = Provider<Duration>((ref) {

@@ -128,7 +128,7 @@ func observationEntity(o decision.Observation) mindruntime.ReconciliationEntity 
 		Store:      "agent_observation",
 		Kind:       "observation",
 		Key:        o.ID,
-		Version:    o.Version,
+		Version:    string(o.Version),
 		Status:     string(o.Outcome),
 		Hash:       stableHash(fields),
 		Deleted:    false,

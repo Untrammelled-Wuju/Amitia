@@ -291,6 +291,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		CircuitBreaker:      execution.NewCircuitBreakerCoordinator(),
 		SecretBroker:        kernelSecretBroker,
 	}
+
+	executionKernel.CircuitBreaker.SetEventHook(func(snapshot execution.CircuitSnapshot, from, to execution.CircuitState, reason string) {
+		_ = executionAuditHook.OnCircuitStateChange(context.Background(), snapshot.Key, string(from), string(to), reason, snapshot.ConsecutiveFailures, snapshot.State)
+	})
 	executionKernel.ScopeGate.ScopeManager = scopeManager
 	executionKernel.PermissionGate.Broker = permBroker
 	executionKernel.ScopeStore = scopeStore
@@ -830,6 +834,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DesktopAPI:          desktopAPI,
 		UpdateAPI:           updateAPI,
 		DesktopActionBridge: desktopActionBridge,
+
+		ObservabilityStore: observabilityStore,
 
 		DevConsoleService: devConsoleSvc,
 		DevConsoleRepo:    devConsoleRepo,

@@ -92,8 +92,8 @@ var sandboxStateTransitions = map[SandboxLifecycleState]map[SandboxLifecycleStat
 		SandboxStateStarting: true,
 	},
 	SandboxStateStarting: {
-		SandboxStateRunning: true,
-		SandboxStateFailed:  true,
+		SandboxStateRunning:  true,
+		SandboxStateFailed:   true,
 		SandboxStateStopping: true,
 	},
 	SandboxStateRunning: {

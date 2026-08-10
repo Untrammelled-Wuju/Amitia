@@ -8,10 +8,16 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 type iosNativeBridgeClient struct {
-	state BackendAvailability
+	mu         sync.RWMutex
+	state      BackendAvailability
+	lifecycle  SandboxLifecycleState
+	generation uint64
+	desiredRun bool
+	runtimeID  string
 }
 
 func newIOSNativeBridgeClient() *iosNativeBridgeClient {
@@ -26,7 +32,7 @@ func (b *iosNativeBridgeClient) Start(_ context.Context, _ SandboxConfig) error 
 	return &NativeBridgeError{Code: NativeErrRuntimeNotStarted, Message: "iSH native bridge requires iOS platform"}
 }
 
-func (b *iosNativeBridgeClient) Stop(_ context.Context) error {
+func (b *iosNativeBridgeClient) Stop(_ context.Context, _ SandboxStopReason) error {
 	return nil
 }
 
@@ -46,36 +52,75 @@ func (b *iosNativeBridgeClient) Cancel(_ context.Context, _ string) error {
 
 func (b *iosNativeBridgeClient) Health(_ context.Context) SandboxHealth {
 	return SandboxHealth{
-		Healthy: false,
-		Message: "iSH native bridge unavailable on this platform",
+		Healthy:        false,
+		Message:        "iSH native bridge unavailable on this platform",
+		LifecycleState: string(SandboxStateIdle),
 	}
 }
 
 func (b *iosNativeBridgeClient) RootfsStatus(_ context.Context) (RootfsStatus, error) {
 	return RootfsStatus{}, &RootfsError{
 		Code:    RootfsErrNotConfigured,
-		Message: "rootfs provisioning not supported on this platform",
+		Message: "iSH native bridge unavailable on this platform",
 	}
 }
 
 func (b *iosNativeBridgeClient) EnsureRootfs(_ context.Context, _ RootfsInstallSpec) (RootfsInstallResult, error) {
 	return RootfsInstallResult{}, &RootfsError{
 		Code:    RootfsErrNotConfigured,
-		Message: "rootfs provisioning not supported on this platform",
+		Message: "iSH native bridge unavailable on this platform",
 	}
 }
 
 func (b *iosNativeBridgeClient) ActivateRootfs(_ context.Context, _ string) error {
 	return &RootfsError{
 		Code:    RootfsErrNotConfigured,
-		Message: "rootfs provisioning not supported on this platform",
+		Message: "iSH native bridge unavailable on this platform",
 	}
 }
 
 func (b *iosNativeBridgeClient) RemoveRootfs(_ context.Context, _ string) error {
 	return &RootfsError{
 		Code:    RootfsErrNotConfigured,
-		Message: "rootfs provisioning not supported on this platform",
+		Message: "iSH native bridge unavailable on this platform",
+	}
+}
+
+func (b *iosNativeBridgeClient) Quiesce(_ context.Context) error {
+	return &SandboxLifecycleError{
+		Code:  SandboxErrInvalidState,
+		State: SandboxStateIdle,
+	}
+}
+
+func (b *iosNativeBridgeClient) Resume(_ context.Context) error {
+	return &SandboxLifecycleError{
+		Code:  SandboxErrInvalidState,
+		State: SandboxStateIdle,
+	}
+}
+
+func (b *iosNativeBridgeClient) Restart(_ context.Context, _ SandboxRestartReason) error {
+	return &SandboxLifecycleError{
+		Code:  SandboxErrRestartFailed,
+		State: SandboxStateIdle,
+	}
+}
+
+func (b *iosNativeBridgeClient) Recover(_ context.Context) error {
+	return &SandboxLifecycleError{
+		Code:  SandboxErrRecoveryFailed,
+		State: SandboxStateIdle,
+	}
+}
+
+func (b *iosNativeBridgeClient) LifecycleState(_ context.Context) SandboxLifecycleState {
+	return SandboxStateIdle
+}
+
+func (b *iosNativeBridgeClient) RecoverySnapshot(_ context.Context) SandboxRecoverySnapshot {
+	return SandboxRecoverySnapshot{
+		LifecycleState: SandboxStateIdle,
 	}
 }
 
@@ -91,7 +136,7 @@ func (b *unavailableNativeBridge) Start(_ context.Context, _ SandboxConfig) erro
 	return &NativeBridgeError{Code: NativeErrRuntimeNotStarted, Message: fmt.Sprintf("iSH native bridge unavailable: %s", b.reason)}
 }
 
-func (b *unavailableNativeBridge) Stop(_ context.Context) error {
+func (b *unavailableNativeBridge) Stop(_ context.Context, _ SandboxStopReason) error {
 	return nil
 }
 
@@ -113,34 +158,48 @@ func (b *unavailableNativeBridge) Health(_ context.Context) SandboxHealth {
 	return SandboxHealth{
 		Healthy:        false,
 		Message:        fmt.Sprintf("unavailable: %s", b.reason),
-		LifecycleState: "idle",
+		LifecycleState: string(SandboxStateIdle),
 	}
 }
 
 func (b *unavailableNativeBridge) RootfsStatus(_ context.Context) (RootfsStatus, error) {
-	return RootfsStatus{}, &RootfsError{
-		Code:    RootfsErrNotConfigured,
-		Message: fmt.Sprintf("rootfs provisioning unavailable: %s", b.reason),
-	}
+	return RootfsStatus{}, &RootfsError{Code: RootfsErrNotConfigured, Message: fmt.Sprintf("iSH native bridge unavailable: %s", b.reason)}
 }
 
 func (b *unavailableNativeBridge) EnsureRootfs(_ context.Context, _ RootfsInstallSpec) (RootfsInstallResult, error) {
-	return RootfsInstallResult{}, &RootfsError{
-		Code:    RootfsErrNotConfigured,
-		Message: fmt.Sprintf("rootfs provisioning unavailable: %s", b.reason),
-	}
+	return RootfsInstallResult{}, &RootfsError{Code: RootfsErrNotConfigured, Message: fmt.Sprintf("iSH native bridge unavailable: %s", b.reason)}
 }
 
 func (b *unavailableNativeBridge) ActivateRootfs(_ context.Context, _ string) error {
-	return &RootfsError{
-		Code:    RootfsErrNotConfigured,
-		Message: fmt.Sprintf("rootfs provisioning unavailable: %s", b.reason),
-	}
+	return &RootfsError{Code: RootfsErrNotConfigured, Message: fmt.Sprintf("iSH native bridge unavailable: %s", b.reason)}
 }
 
 func (b *unavailableNativeBridge) RemoveRootfs(_ context.Context, _ string) error {
-	return &RootfsError{
-		Code:    RootfsErrNotConfigured,
-		Message: fmt.Sprintf("rootfs provisioning unavailable: %s", b.reason),
+	return &RootfsError{Code: RootfsErrNotConfigured, Message: fmt.Sprintf("iSH native bridge unavailable: %s", b.reason)}
+}
+
+func (b *unavailableNativeBridge) Quiesce(_ context.Context) error {
+	return &SandboxLifecycleError{Code: SandboxErrInvalidState, State: SandboxStateIdle, Cause: fmt.Errorf("iSH native bridge unavailable: %s", b.reason)}
+}
+
+func (b *unavailableNativeBridge) Resume(_ context.Context) error {
+	return &SandboxLifecycleError{Code: SandboxErrInvalidState, State: SandboxStateIdle, Cause: fmt.Errorf("iSH native bridge unavailable: %s", b.reason)}
+}
+
+func (b *unavailableNativeBridge) Restart(_ context.Context, _ SandboxRestartReason) error {
+	return &SandboxLifecycleError{Code: SandboxErrRestartFailed, State: SandboxStateIdle, Cause: fmt.Errorf("iSH native bridge unavailable: %s", b.reason)}
+}
+
+func (b *unavailableNativeBridge) Recover(_ context.Context) error {
+	return &SandboxLifecycleError{Code: SandboxErrRecoveryFailed, State: SandboxStateIdle, Cause: fmt.Errorf("iSH native bridge unavailable: %s", b.reason)}
+}
+
+func (b *unavailableNativeBridge) LifecycleState(_ context.Context) SandboxLifecycleState {
+	return SandboxStateIdle
+}
+
+func (b *unavailableNativeBridge) RecoverySnapshot(_ context.Context) SandboxRecoverySnapshot {
+	return SandboxRecoverySnapshot{
+		LifecycleState: SandboxStateIdle,
 	}
 }

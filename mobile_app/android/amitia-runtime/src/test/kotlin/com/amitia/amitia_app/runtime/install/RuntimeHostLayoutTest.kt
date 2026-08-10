@@ -145,6 +145,78 @@ class RuntimeHostLayoutTest {
     }
 
     @Test
+    fun homeRoot_returnsCorrectPath() {
+        val layout = createLayout()
+        assertTrue(unixPath(layout.homeRoot).contains("/home"))
+        assertFalse(unixPath(layout.homeRoot).startsWith(unixPath(layout.controlRoot)))
+        assertTrue(unixPath(layout.homeRoot).startsWith(unixPath(layout.dataRoot.parentFile!!)))
+    }
+
+    @Test
+    fun homeRoot_notInsideVersionsRoot() {
+        val layout = createLayout()
+        assertFalse(
+            "homeRoot must not be inside versions root",
+            unixPath(layout.homeRoot).startsWith(unixPath(layout.versionsRoot))
+        )
+    }
+
+    @Test
+    fun versionsRoot_notInsideDataRoot() {
+        val layout = createLayout()
+        assertFalse(
+            "versionsRoot must not be inside data root",
+            unixPath(layout.versionsRoot).startsWith(unixPath(layout.dataRoot))
+        )
+    }
+
+    @Test
+    fun stagingAndVersions_sameParentDirectory() {
+        val layout = createLayout()
+        assertEquals(
+            "staging and versions must share the same parent (runtime-control) for atomic rename",
+            unixPath(layout.stagingRoot.parentFile!!),
+            unixPath(layout.versionsRoot.parentFile!!)
+        )
+    }
+
+    @Test
+    fun runtimeVersionRoot_rejectsBackslashVersion() {
+        val layout = createLayout()
+        try {
+            layout.runtimeVersionRoot("evil\\path")
+            fail("Expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun runtimeVersionRoot_rejectsColonVersion() {
+        val layout = createLayout()
+        try {
+            layout.runtimeVersionRoot("C:\\windows")
+            fail("Expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun runtimeVersionRoot_rejectsNullBytes() {
+        val layout = createLayout()
+        try {
+            layout.runtimeVersionRoot("1.0\u0000evil")
+            fail("Expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun homeDir_returnsCorrectPath() {
+        val layout = createLayout()
+        assertTrue(unixPath(layout.homeRoot).contains("home"))
+    }
+
+    @Test
     fun paths_areStableAcrossInstances() {
         val controlBase = tempFolder.newFolder("shared-noBackup")
         val dataBase = tempFolder.newFolder("shared-files")
@@ -152,6 +224,8 @@ class RuntimeHostLayoutTest {
         val layout2 = DefaultRuntimeHostLayout(controlBase, dataBase)
         assertEquals(unixPath(layout1.controlRoot), unixPath(layout2.controlRoot))
         assertEquals(unixPath(layout1.runtimeVersionRoot("1.0.0")), unixPath(layout2.runtimeVersionRoot("1.0.0")))
+        assertEquals(unixPath(layout1.homeRoot), unixPath(layout2.homeRoot))
+        assertEquals(unixPath(layout1.dataRoot), unixPath(layout2.dataRoot))
     }
 
     private fun fail(message: String) {

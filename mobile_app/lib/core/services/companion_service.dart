@@ -1,16 +1,18 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 import '../models/companion.dart';
 
 class CompanionService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  CompanionService(this._api);
 
   Future<CompanionStateDto?> state() async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/companion/state',
       fromJson: (e) => e as Map<String, dynamic>,
     );
-    if (resp.data == null) return null;
-    return CompanionStateDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return CompanionStateDto.fromJson(resp);
   }
 
   Future<LifeStateDto?> lifeState() async {
@@ -18,24 +20,24 @@ class CompanionService {
       '/api/companion/state/life',
       fromJson: (e) => e as Map<String, dynamic>,
     );
-    if (resp.data == null) return null;
-    return LifeStateDto.fromJson(resp.data!);
+    if (resp == null) return null;
+    return LifeStateDto.fromJson(resp);
   }
 
   Future<Map<String, dynamic>?> mindState() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/companion/mind-state');
-    return resp.data;
+    return resp;
   }
 
   Future<Map<String, dynamic>?> schedule() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/companion/schedule');
-    return resp.data;
+    return resp;
   }
 
   Future<List<Map<String, dynamic>>> todaySchedule() async {
     final resp = await _api.get<List<dynamic>>('/api/companion/schedule/today');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<bool> regenerateSchedule() async {
@@ -45,8 +47,8 @@ class CompanionService {
 
   Future<List<Map<String, dynamic>>> fixedEvents() async {
     final resp = await _api.get<List<dynamic>>('/api/companion/fixed-events');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<bool> createFixedEvent(Map<String, dynamic> data) async {
@@ -66,7 +68,7 @@ class CompanionService {
 
   Future<Map<String, dynamic>?> sleepSetting() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/companion/sleep-setting');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updateSleepSetting(Map<String, dynamic> data) async {
@@ -76,7 +78,7 @@ class CompanionService {
 
   Future<Map<String, dynamic>?> activeMessageSetting() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/companion/active-message/setting');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updateActiveMessageSetting(Map<String, dynamic> data) async {
@@ -86,8 +88,8 @@ class CompanionService {
 
   Future<List<Map<String, dynamic>>> delayedReplies() async {
     final resp = await _api.get<List<dynamic>>('/api/companion/delayed-replies');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<bool> cancelDelayedReply(String id) async {
@@ -97,7 +99,7 @@ class CompanionService {
 
   Future<Map<String, dynamic>?> debugOverview() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/companion/debug/overview');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> regenerateAll() async {

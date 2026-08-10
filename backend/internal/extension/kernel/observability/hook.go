@@ -675,6 +675,41 @@ func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID s
 	})
 }
 
+func (h *ExecutionHook) OnCircuitStateChange(ctx context.Context, circuitKey string, fromState string, toState string, reason string, failureCount int, resultingState string) error {
+	if fromState == toState {
+		return nil
+	}
+	severity := "info"
+	if toState == "open" {
+		severity = "error"
+	} else if toState == "half_open" {
+		severity = "warn"
+	}
+	eventType := "circuit.state_change"
+	switch toState {
+	case "open":
+		eventType = "circuit.opened"
+	case "half_open":
+		eventType = "circuit.half_opened"
+	case "closed":
+		eventType = "circuit.closed"
+	}
+	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:      NewEventID(),
+		EventType:    eventType,
+		Severity:     severity,
+		Timestamp:    time.Now(),
+		Data: map[string]any{
+			"circuit_key":     circuitKey,
+			"from_state":      fromState,
+			"to_state":        toState,
+			"reason":          reason,
+			"failure_count":   failureCount,
+			"resulting_state": resultingState,
+		},
+	})
+}
+
 // ==================== Helper functions ====================
 
 func mapActorFromSource(source capability.InvocationSource) ActorType {

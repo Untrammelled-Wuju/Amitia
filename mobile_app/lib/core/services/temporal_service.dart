@@ -1,11 +1,13 @@
-import '../api/api_client.dart';
+import '../backend_transport/backend_service_api.dart';
 
 class TemporalService {
-  final ApiClient _api = ApiClient();
+  final BackendServiceApi _api;
+
+  TemporalService(this._api);
 
   Future<Map<String, dynamic>?> config() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/temporal/config');
-    return resp.data;
+    return resp;
   }
 
   Future<bool> updateConfig(Map<String, dynamic> data) async {
@@ -15,8 +17,8 @@ class TemporalService {
 
   Future<List<Map<String, dynamic>>> anchors() async {
     final resp = await _api.get<List<dynamic>>('/api/temporal/anchors');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => e as Map<String, dynamic>).toList();
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<bool> createAnchor(Map<String, dynamic> data) async {

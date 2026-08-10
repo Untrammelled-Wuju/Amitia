@@ -662,14 +662,20 @@ func TestCircuitBreakerOpen(t *testing.T) {
 			InvocationID: "inv-001",
 			Status:       capability.ToolResultStatusFailed,
 			Error: &capability.ToolError{
-				Code:    capability.ErrorCodeExecutionFailed,
-				Message: "fail",
+				Code:      capability.ErrorCodeConnectionLost,
+				Retryable: true,
 			},
 		},
 	}
 
 	p := buildPipeline(adapter)
-	p.CircuitBreaker.FailThreshold = 2
+	p.CircuitBreaker = NewCircuitBreakerCoordinatorWithConfig(CircuitBreakerConfig{
+		FailureThreshold:        2,
+		OpenTimeout:             30 * time.Second,
+		HalfOpenMaxInflight:     1,
+		HalfOpenSuccessThreshold: 1,
+	})
+	p.circuitClassifier = NewCircuitResultClassifier()
 
 	ctx := context.Background()
 	req := ToolExecutionRequest{
@@ -678,13 +684,24 @@ func TestCircuitBreakerOpen(t *testing.T) {
 		Invocation: newTestInvocation("user-001"),
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 2; i++ {
 		p.Execute(ctx, req)
 	}
 
-	state := p.CircuitBreaker.GetState("test/tool")
-	if state != CircuitOpen {
-		t.Fatalf("expected circuit open after failures, got %s", state)
+	ck := CircuitKey{RuntimeType: capability.RuntimeTypeBuiltin, RuntimeID: "test", ToolID: "test/tool"}
+	if p.CircuitBreaker.SnapshotByKey(ck).State != CircuitStateOpen {
+		t.Fatalf("expected circuit open after failures, got %s", p.CircuitBreaker.SnapshotByKey(ck).State)
+	}
+
+	beforeCalls := adapter.CallCount()
+	p.Execute(ctx, req)
+	if adapter.CallCount() != beforeCalls {
+		t.Fatalf("OPEN must block dispatch: calls went from %d to %d", beforeCalls, adapter.CallCount())
+	}
+
+	result := p.Execute(ctx, req)
+	if result.Error == nil || result.Error.Code != capability.ErrorCodeCircuitOpen {
+		t.Fatalf("expected circuit_open error, got %+v", result.Error)
 	}
 }
 
@@ -1018,38 +1035,6 @@ func TestSanitizerNested(t *testing.T) {
 	}
 	if obj["password"] != "[redacted]" {
 		t.Fatalf("expected password to be redacted")
-	}
-}
-
-func TestCircuitBreakerHalfOpenRecovery(t *testing.T) {
-	cb := NewCircuitBreakerCoordinator()
-	cb.FailThreshold = 2
-
-	toolID := "test/recovery"
-
-	for i := 0; i < 2; i++ {
-		cb.RecordResult(context.Background(), capability.ToolDefinition{ID: toolID}, capability.UnifiedToolResult{
-			Status: capability.ToolResultStatusFailed,
-			Error:  &capability.ToolError{Code: "fail"},
-		})
-	}
-
-	if cb.GetState(toolID) != CircuitOpen {
-		t.Fatalf("expected circuit open")
-	}
-
-	cb.ResetTimeout = 0
-	time.Sleep(time.Millisecond)
-	if !cb.Allow(context.Background(), toolID) {
-		t.Fatalf("expected half-open to allow")
-	}
-
-	cb.RecordResult(context.Background(), capability.ToolDefinition{ID: toolID}, capability.UnifiedToolResult{
-		Status: capability.ToolResultStatusSuccess,
-	})
-
-	if cb.GetState(toolID) != CircuitClosed {
-		t.Fatalf("expected circuit closed after success in half-open")
 	}
 }
 

@@ -165,4 +165,5 @@ type ExecutionRecorder interface {
 	OnPermissionDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error
 	OnScopeDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error
 	OnSideEffectRecorded(ctx context.Context, invocationID string, effects []capability.RecordedSideEffect) error
+	OnCircuitStateChange(ctx context.Context, circuitKey string, fromState string, toState string, reason string, failureCount int, resultingState string) error
 }

@@ -483,6 +483,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err := mindruntime.RegisterRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB, graphReconAdapter, qdrantReconAdapter); err != nil {
 		log.Warn("reconciliation checkers registration warning: ", err)
 	}
+	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
 	cbRegistry.Register("surrealdb", mindruntime.DefaultCircuitBreakerConfig())
@@ -1172,6 +1173,35 @@ type reflectionOutboxServiceAdapter struct {
 
 func (a *reflectionOutboxServiceAdapter) Append(record newoutbox.OutboxRecord) error {
 	return a.store.Append(record)
+}
+
+func registerAgentReconciliation(engine *mindruntime.ReconciliationEngine, goalRegistry *decision.GoalRegistry, kernelContainer *kernel.Container) {
+	if engine == nil || goalRegistry == nil {
+		return
+	}
+	goals := interaction.NewGoalReaderAdapter(goalRegistry)
+	var tasks interaction.TaskReconciliationReader
+	if kernelContainer != nil && kernelContainer.TaskRuntimeService != nil {
+		tasks = interaction.NewTaskReaderAdapter(kernelContainer.TaskRuntimeService)
+	}
+	var workflows interaction.WorkflowReconciliationReader
+	if kernelContainer != nil && kernelContainer.WorkflowExecutor != nil {
+		workflows = interaction.NewWorkflowReaderAdapter(kernelContainer.WorkflowExecutor)
+	}
+	var invocations interaction.InvocationReconciliationReader
+	if kernelContainer != nil && kernelContainer.ObservabilityStore != nil {
+		invocations = interaction.NewInvocationReaderAdapter(kernelContainer.ObservabilityStore)
+	} else {
+		invocations = interaction.NewNoopInvocationReader()
+	}
+	processor := interaction.NewAgentReconciliationProcessor(goals, interaction.NewNoopAgentObservationReader(), tasks, workflows, invocations)
+	settleDelay := mindruntime.DefaultAgentFactSettleDelay()
+	engine.RegisterChecker(mindruntime.ReconciliationAgentGoalAction, interaction.NewGoalActionChecker(processor, settleDelay))
+	engine.RegisterChecker(mindruntime.ReconciliationAgentActionObservation, interaction.NewActionObservationChecker(processor, settleDelay))
+	engine.RegisterChecker(mindruntime.ReconciliationAgentObservationGoal, interaction.NewObservationGoalChecker(processor, settleDelay))
+	engine.RegisterChecker(mindruntime.ReconciliationAgentTask, interaction.NewTaskConsistencyChecker(processor, settleDelay))
+	engine.RegisterChecker(mindruntime.ReconciliationAgentWorkflow, interaction.NewWorkflowConsistencyChecker(processor, settleDelay))
+	engine.RegisterChecker(mindruntime.ReconciliationAgentRuntime, interaction.NewInvocationConsistencyChecker(processor, settleDelay))
 }
 
 type graphReconciliationAdapter struct {

@@ -16,6 +16,10 @@ var (
 	ErrProviderNotFound       = errors.New("provider not found")
 	ErrProviderSlotMismatch    = errors.New("provider slot mismatch")
 	ErrOrchestratorStopped     = errors.New("orchestrator is stopping or stopped")
+	ErrUnknownComponent        = errors.New("unknown component")
+	ErrComponentDisabled       = errors.New("component is disabled")
+	ErrRestartFailed           = errors.New("component restart failed")
+	ErrDependencyNotReady      = errors.New("dependency not ready")
 )
 
 type componentError struct {
@@ -103,4 +107,20 @@ func DependencyUnknown(refID ComponentID, depID ComponentID) error {
 
 func OrchestratorAlreadyStopped() error {
 	return ErrOrchestratorStopped
+}
+
+func unknownComponentErr(id ComponentID) error {
+	return wrapComponentErr(ErrUnknownComponent, id, "", "")
+}
+
+func componentDisabledErr(id ComponentID) error {
+	return wrapComponentErr(ErrComponentDisabled, id, "", "")
+}
+
+func restartFailedErr(id ComponentID, detail string) error {
+	return wrapComponentErr(ErrRestartFailed, id, "", detail)
+}
+
+func dependencyNotReadyErr(id ComponentID, detail string) error {
+	return wrapComponentErr(ErrDependencyNotReady, id, "", detail)
 }
