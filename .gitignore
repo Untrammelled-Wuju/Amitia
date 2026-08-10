@@ -224,6 +224,7 @@ runtime/build/out/
 backend/server.exe~
 U-Ai-source.zip
 artifacts/
+mobile_app/android/.kotlin/
 
 # SDK plugin-sdk build outputs and dependencies
 sdk/plugin-sdk/dist/
