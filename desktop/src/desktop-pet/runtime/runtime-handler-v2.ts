@@ -42,7 +42,9 @@ export interface RuntimeHandlerConfig {
   deviceId: string;
   runtimeId: string;
   contractVersion?: string;
+  runtimeVersion?: string;
   capabilities?: RuntimeCapabilities;
+  autoReconnect?: boolean;
   connectTimeoutMs?: number;
   heartbeatIntervalMs?: number;
   maxReconnectAttempts?: number;
@@ -99,6 +101,7 @@ export class DesktopRuntimeHandlerV2 {
       deviceId: config.deviceId,
       runtimeId: config.runtimeId,
       contractVersion: config.contractVersion ?? "2.0.0",
+      runtimeVersion: config.runtimeVersion ?? "2.0.0",
       capabilities: config.capabilities ?? {
         devicePixelRatio: 1,
         supportsHighDpi: false,
@@ -107,6 +110,7 @@ export class DesktopRuntimeHandlerV2 {
         platform: typeof navigator !== "undefined" ? (navigator.platform ?? "unknown") : "unknown",
         arch: "unknown",
       },
+      autoReconnect: config.autoReconnect ?? false,
       connectTimeoutMs: config.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
       heartbeatIntervalMs: config.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_MS,
       maxReconnectAttempts: config.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT,
@@ -252,27 +256,36 @@ export class DesktopRuntimeHandlerV2 {
     return this.state === "connected" && this.ws?.readyState === WebSocket.OPEN;
   }
 
-  private async send(type: string, name: string, payload: unknown): Promise<void> {
-    if (!this.isConnected()) {
-      throw new Error("runtime socket not connected");
+  private async sendEnvelope(
+    type: RuntimeMessageType,
+    name: string,
+    payload: unknown,
+    allowHandshake = false,
+  ): Promise<void> {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      throw new Error("runtime socket not open");
+    }
+    if (!allowHandshake && this.state !== "connected") {
+      throw new Error("runtime session not ready");
     }
     this.commandSequence += 1;
     const envelope = buildEnvelope(
-      type as any,
+      type,
       name,
       this.config.userId,
       this.config.deviceId,
       this.config.runtimeId,
       this.sessionId,
-      this.connectionGeneration,
+      Math.max(1, this.connectionGeneration),
       this.commandSequence,
       payload,
     );
-    this.ws?.send(JSON.stringify(envelope));
+    ws.send(JSON.stringify(envelope));
   }
 
   private async sendRuntimeEvent(name: string, payload: unknown): Promise<void> {
-    await this.send("runtime_event", name, payload);
+    await this.sendEnvelope("runtime_event", name, payload);
   }
 
   private async handleMessage(raw: unknown): Promise<void> {
