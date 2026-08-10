@@ -1,6 +1,7 @@
 package decision
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -59,21 +60,23 @@ type GoalTrigger struct {
 }
 
 type Goal struct {
-	ID             string         `json:"id"`
-	UserID         string         `json:"userId,omitempty"`
-	CharacterID    string         `json:"characterId,omitempty"`
-	ConversationID string         `json:"conversationId,omitempty"`
-	Type           GoalType       `json:"type"`
-	Priority       GoalPriority   `json:"priority"`
-	Status         GoalStatus     `json:"status"`
-	Progress       float64        `json:"progress"`
-	Description    string         `json:"description,omitempty"`
-	Revision       int64          `json:"revision"`
-	Trigger        GoalTrigger    `json:"trigger"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	UpdatedAt      time.Time      `json:"updatedAt"`
-	ExpiresAt      time.Time      `json:"expiresAt,omitempty"`
-	Metadata       map[string]any `json:"metadata,omitempty"`
+	ID                string         `json:"id"`
+	UserID            string         `json:"userId,omitempty"`
+	CharacterID       string         `json:"characterId,omitempty"`
+	ConversationID    string         `json:"conversationId,omitempty"`
+	Type              GoalType       `json:"type"`
+	Priority          GoalPriority   `json:"priority"`
+	Status            GoalStatus     `json:"status"`
+	Progress          float64        `json:"progress"`
+	Description       string         `json:"description,omitempty"`
+	Revision          int64          `json:"revision"`
+	LastObservationID string         `json:"lastObservationId,omitempty"`
+	LastObservedAt    time.Time      `json:"lastObservedAt,omitempty"`
+	Trigger           GoalTrigger    `json:"trigger"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	UpdatedAt         time.Time      `json:"updatedAt"`
+	ExpiresAt         time.Time      `json:"expiresAt,omitempty"`
+	Metadata          map[string]any `json:"metadata,omitempty"`
 }
 
 type GoalCreateRequest struct {
@@ -128,7 +131,7 @@ func NewGoalRegistry() *GoalRegistry {
 func (r *GoalRegistry) Register(goal Goal) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.goals[goal.ID] = goal
+	r.goals[goal.ID] = cloneGoal(goal)
 	return nil
 }
 
@@ -136,7 +139,10 @@ func (r *GoalRegistry) Get(id string) (Goal, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	g, ok := r.goals[id]
-	return g, ok
+	if !ok {
+		return Goal{}, false
+	}
+	return cloneGoal(g), true
 }
 
 func (r *GoalRegistry) UpdateStatus(id string, status GoalStatus, progress float64) bool {
@@ -151,6 +157,15 @@ func (r *GoalRegistry) UpdateStatusAt(id string, status GoalStatus, progress flo
 		return false
 	}
 	if !canTransitionGoalStatus(goal.Status, status) {
+		return false
+	}
+	if !validGoalProgressValue(progress) {
+		return false
+	}
+	if status == GoalStatusAchieved && progress != 1 {
+		return false
+	}
+	if status != GoalStatusAchieved && status != GoalStatusAbandoned && progress == 1 {
 		return false
 	}
 	goal.Status = status
@@ -183,7 +198,7 @@ func (r *GoalRegistry) ByUser(userID string) []Goal {
 		}
 	}
 	sortGoalsStable(result)
-	return result
+	return cloneGoalSlice(result)
 }
 
 func (r *GoalRegistry) Active() []Goal {
@@ -196,7 +211,7 @@ func (r *GoalRegistry) Active() []Goal {
 		}
 	}
 	sortGoalsStable(result)
-	return result
+	return cloneGoalSlice(result)
 }
 
 func (r *GoalRegistry) ActiveForScope(userID string, characterID string, conversationID string) []Goal {
@@ -219,7 +234,7 @@ func (r *GoalRegistry) ActiveForScope(userID string, characterID string, convers
 		result = append(result, g)
 	}
 	sortGoalsStable(result)
-	return result
+	return cloneGoalSlice(result)
 }
 
 func (r *GoalRegistry) Wishes() []Wish {
@@ -229,7 +244,7 @@ func (r *GoalRegistry) Wishes() []Wish {
 	for _, g := range r.goals {
 		if g.Status == GoalStatusWish {
 			w := Wish{
-				Goal:          g,
+				Goal:          cloneGoal(g),
 				StagnantSince: g.UpdatedAt,
 				ReviewCount:   0,
 			}
@@ -269,6 +284,124 @@ func (r *GoalRegistry) PromoteToWish(goalID string, now time.Time) bool {
 	g.UpdatedAt = now
 	r.goals[goalID] = g
 	return true
+}
+
+func (r *GoalRegistry) ApplyProgressBatch(updates []GoalProgressUpdate, appliedAt time.Time) ([]GoalProgressResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	results := make([]GoalProgressResult, 0, len(updates))
+	pending := make(map[string]Goal, len(updates))
+
+	for _, update := range updates {
+		result := GoalProgressResult{
+			GoalID:        update.GoalRef.ID,
+			ObservationID: update.ObservationID,
+			Disposition:   update.Disposition,
+			ReasonCodes:   update.ReasonCodes,
+			Changed:       false,
+		}
+
+		if !update.Apply {
+			results = append(results, result)
+			continue
+		}
+
+		goal, ok := r.goals[update.GoalRef.ID]
+		if !ok {
+			result.Disposition = GoalProgressMissing
+			result.ReasonCodes = []string{"missing_goal"}
+			results = append(results, result)
+			for k := range pending {
+				delete(pending, k)
+			}
+			return results, fmt.Errorf("goal not found: %s", update.GoalRef.ID)
+		}
+
+		result.BeforeRevision = goal.Revision
+		result.BeforeStatus = goal.Status
+		result.BeforeProgress = goal.Progress
+
+		if isTerminalGoalStatus(goal.Status) {
+			result.Disposition = GoalProgressTerminalIgnore
+			result.AfterRevision = goal.Revision
+			result.AfterStatus = goal.Status
+			result.AfterProgress = goal.Progress
+			results = append(results, result)
+			continue
+		}
+
+		if goal.Revision != update.ExpectedRevision {
+			result.Disposition = GoalProgressStaleRevision
+			result.AfterRevision = goal.Revision
+			result.AfterStatus = goal.Status
+			result.AfterProgress = goal.Progress
+			results = append(results, result)
+			for k := range pending {
+				delete(pending, k)
+			}
+			return results, fmt.Errorf("stale revision: goal=%s expected=%d actual=%d", goal.ID, update.ExpectedRevision, goal.Revision)
+		}
+
+		if !canTransitionGoalStatus(goal.Status, update.NextStatus) {
+			result.Disposition = GoalProgressStateInvalid
+			result.ReasonCodes = []string{"invalid_transition"}
+			results = append(results, result)
+			for k := range pending {
+				delete(pending, k)
+			}
+			return results, fmt.Errorf("invalid status transition: goal=%s from=%s to=%s", goal.ID, goal.Status, update.NextStatus)
+		}
+
+		if !validGoalProgressValue(update.NextProgress) {
+			result.Disposition = GoalProgressStateInvalid
+			result.ReasonCodes = []string{"progress_invalid"}
+			results = append(results, result)
+			for k := range pending {
+				delete(pending, k)
+			}
+			return results, fmt.Errorf("invalid progress value: %f", update.NextProgress)
+		}
+
+		if update.NextStatus == GoalStatusAchieved && update.NextProgress != 1 {
+			result.Disposition = GoalProgressStateInvalid
+			result.ReasonCodes = []string{"achieved_requires_progress_1"}
+			results = append(results, result)
+			for k := range pending {
+				delete(pending, k)
+			}
+			return results, fmt.Errorf("achieved requires progress=1")
+		}
+
+		if update.NextStatus != GoalStatusAchieved && update.NextStatus != GoalStatusAbandoned && update.NextProgress == 1 {
+			result.Disposition = GoalProgressStateInvalid
+			result.ReasonCodes = []string{"progress_1_requires_achieved"}
+			results = append(results, result)
+			for k := range pending {
+				delete(pending, k)
+			}
+			return results, fmt.Errorf("progress=1 requires achieved status")
+		}
+
+		goal.Status = update.NextStatus
+		goal.Progress = update.NextProgress
+		goal.LastObservationID = update.ObservationID
+		goal.LastObservedAt = appliedAt
+		goal.Revision++
+		goal.UpdatedAt = appliedAt
+
+		pending[goal.ID] = goal
+		result.AfterRevision = goal.Revision
+		result.AfterStatus = goal.Status
+		result.AfterProgress = goal.Progress
+		result.Changed = true
+		results = append(results, result)
+	}
+
+	for id, g := range pending {
+		r.goals[id] = g
+	}
+	return results, nil
 }
 
 func sortGoalsStable(goals []Goal) {
@@ -312,4 +445,23 @@ func canTransitionGoalStatus(from GoalStatus, to GoalStatus) bool {
 		return false
 	}
 	return true
+}
+
+func cloneGoal(g Goal) Goal {
+	if g.Metadata != nil {
+		cloned := make(map[string]any, len(g.Metadata))
+		for k, v := range g.Metadata {
+			cloned[k] = v
+		}
+		g.Metadata = cloned
+	}
+	return g
+}
+
+func cloneGoalSlice(goals []Goal) []Goal {
+	out := make([]Goal, 0, len(goals))
+	for _, g := range goals {
+		out = append(out, cloneGoal(g))
+	}
+	return out
 }

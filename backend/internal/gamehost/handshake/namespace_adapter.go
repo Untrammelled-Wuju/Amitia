@@ -17,22 +17,12 @@ type NamespaceAdapter interface {
 }
 
 type rpcNamespaceAdapter struct {
-	registry    rpc.NamespaceRegistry
-	reservedSet map[string]struct{}
+	registry rpc.NamespaceRegistry
 }
 
 func NewNamespaceAdapter(registry rpc.NamespaceRegistry) NamespaceAdapter {
-	reserved := map[string]struct{}{
-		"host":    {},
-		"plugin":  {},
-		"runtime": {},
-		"service": {},
-		"control": {},
-		"channel": {},
-	}
 	return &rpcNamespaceAdapter{
-		registry:    registry,
-		reservedSet: reserved,
+		registry: registry,
 	}
 }
 
@@ -49,14 +39,6 @@ func (a *rpcNamespaceAdapter) Apply(
 	}
 
 	for _, ns := range namespaces {
-		if _, ok := a.reservedSet[ns]; ok {
-			return nil, NewHandshakeError(
-				HandshakeErrorNamespaceInvalid,
-				domain.ErrInvalidArgument,
-				"reserved namespace cannot be registered: "+ns,
-			)
-		}
-
 		if err := rpc.ValidateCustomNamespace(rpc.Namespace(ns)); err != nil {
 			return nil, NewHandshakeError(
 				HandshakeErrorNamespaceInvalid,

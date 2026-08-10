@@ -344,8 +344,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
 	actionMaterializer := interaction.NewActionMaterializer(toolFacade)
 	actionDispatcher := interaction.NewActionDispatcher(toolFacade)
+	observationBuilder := interaction.NewObservationBuilder()
 	chatSvc.SetActionMaterializer(&actionMaterializer)
 	chatSvc.SetActionDispatcher(actionDispatcher)
+	chatSvc.SetObservationBuilder(observationBuilder)
+	goalProgressService := interaction.NewGoalProgressService(goalRegistry)
+	chatSvc.SetGoalProgressService(goalProgressService)
 	if kernelContainer.DevConsoleService != nil {
 		kernelContainer.DevConsoleService.SetToolFacadeProvider(toolFacade.Counters())
 		kernelContainer.DevConsoleService.SetLegacyCallProvider(kernel.GlobalLegacyCallCounter())

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 )
 
 func newTestTool(id string) capability.ToolDefinition {
@@ -102,6 +104,11 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
 	adapterRegistry.Register(capability.RuntimeTypeBuiltin, adapter)
 
+	mockScopeMgr := &mockScopeManager{}
+	mockBroker := &mockPermissionBroker{}
+	scopeStore := &mockScopeStore{}
+	permSnapStore := &mockPermissionSnapshotStore{}
+
 	p := &ExecutionPipeline{
 		InvocationValidator: NewInvocationValidator(),
 		InputValidator:      NewInputValidator(),
@@ -126,9 +133,105 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 		ToolResolver: func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
 			return newTestTool(toolID), nil
 		},
+		ScopeStore:             scopeStore,
+		PermissionSnapshotStore: permSnapStore,
 	}
+	p.ScopeGate.ScopeManager = mockScopeMgr
+	p.PermissionGate.Broker = mockBroker
 	return p
 }
+
+type mockScopeManager struct {
+	denyAll bool
+}
+
+func (m *mockScopeManager) Bind(_ context.Context, _ scope.ScopeBindRequest) (scope.ScopeBinding, error) {
+	return scope.ScopeBinding{}, nil
+}
+func (m *mockScopeManager) Unbind(_ context.Context, _ string) error { return nil }
+func (m *mockScopeManager) Evaluate(_ context.Context, _ scope.ScopeEvaluationRequest) scope.ScopeDecision {
+	if m.denyAll {
+		return scope.ScopeDecision{Allowed: false, Reasons: []scope.ScopeReason{{Code: "test_deny"}}}
+	}
+	return scope.ScopeDecision{Allowed: true}
+}
+func (m *mockScopeManager) Snapshot(_ context.Context, req scope.ScopeResolveRequest) (scope.ScopeSnapshot, error) {
+	return scope.CreateSnapshot(req.InvocationID, []scope.ScopeRef{
+		scope.NewGlobalScope(),
+	}, req.CharacterID, req.ConversationID, req.ExtensionID, req.ModuleID, req.Generation), nil
+}
+func (m *mockScopeManager) Invalidate(_ context.Context, _ scope.ScopeInvalidationFilter) error {
+	return nil
+}
+func (m *mockScopeManager) ListBindings(_ context.Context, _ scope.ScopeBindingFilter) ([]scope.ScopeBinding, error) {
+	return nil, nil
+}
+
+type mockPermissionBroker struct {
+	evalCalls int
+}
+
+func (m *mockPermissionBroker) Evaluate(_ context.Context, req permission.PermissionEvaluationRequest) permission.PermissionEvaluationResult {
+	m.evalCalls++
+	if len(req.Requirements) == 0 {
+		return permission.PermissionEvaluationResult{Decision: permission.DecisionAllow}
+	}
+	return permission.PermissionEvaluationResult{Decision: permission.DecisionAllow, MatchedGrants: []permission.PermissionGrant{}}
+}
+func (m *mockPermissionBroker) Grant(_ context.Context, _ permission.PermissionGrantRequest) (permission.PermissionGrant, error) {
+	return permission.PermissionGrant{}, nil
+}
+func (m *mockPermissionBroker) Revoke(_ context.Context, _ string) error { return nil }
+func (m *mockPermissionBroker) RevokeBySubject(_ context.Context, _ permission.PermissionSubject) (int, error) {
+	return 0, nil
+}
+func (m *mockPermissionBroker) RevokeByExtension(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (m *mockPermissionBroker) ListGrants(_ context.Context, _ permission.PermissionGrantFilter) ([]permission.PermissionGrant, error) {
+	return nil, nil
+}
+func (m *mockPermissionBroker) Explain(_ context.Context, req permission.PermissionEvaluationRequest) permission.PermissionExplanation {
+	return permission.PermissionExplanation{Decision: permission.DecisionAllow}
+}
+func (m *mockPermissionBroker) DetectUpgrade(_ context.Context, _, _ []permission.PermissionRequirement) []permission.PermissionUpgrade {
+	return nil
+}
+func (m *mockPermissionBroker) RecordApproval(_ context.Context, _ permission.PermissionApprovalRecordRequest) (permission.PermissionApprovalRecord, error) {
+	return permission.PermissionApprovalRecord{}, nil
+}
+func (m *mockPermissionBroker) ValidateSnapshot(_ context.Context, _ string, _ permission.PermissionEvaluationRequest) error {
+	return nil
+}
+
+type mockScopeStore struct{}
+
+func (m *mockScopeStore) SaveBinding(_ context.Context, _ scope.ScopeBinding) error { return nil }
+func (m *mockScopeStore) GetBinding(_ context.Context, _ string) (scope.ScopeBinding, error) {
+	return scope.ScopeBinding{}, errors.New("not found")
+}
+func (m *mockScopeStore) DeleteBinding(_ context.Context, _ string) error { return nil }
+func (m *mockScopeStore) ListBindings(_ context.Context, _ scope.ScopeBindingFilter) ([]scope.ScopeBinding, error) {
+	return nil, nil
+}
+func (m *mockScopeStore) SaveSnapshot(_ context.Context, _ scope.ScopeSnapshot) error { return nil }
+func (m *mockScopeStore) GetSnapshot(_ context.Context, _ string) (scope.ScopeSnapshot, error) {
+	return scope.ScopeSnapshot{SnapshotID: "found"}, nil
+}
+func (m *mockScopeStore) DeleteSnapshot(_ context.Context, _ string) error { return nil }
+func (m *mockScopeStore) DeleteSnapshotsBySession(_ context.Context, _ string) error { return nil }
+
+type mockPermissionSnapshotStore struct{}
+
+func (m *mockPermissionSnapshotStore) SaveSnapshot(_ context.Context, _ permission.PermissionSnapshot) error {
+	return nil
+}
+func (m *mockPermissionSnapshotStore) GetSnapshot(_ context.Context, _ string) (permission.PermissionSnapshot, error) {
+	return permission.PermissionSnapshot{SnapshotID: "found"}, nil
+}
+func (m *mockPermissionSnapshotStore) DeleteSnapshot(_ context.Context, _ string) error { return nil }
+func (m *mockPermissionSnapshotStore) RevokeSnapshot(_ context.Context, _ string) error { return nil }
+func (m *mockPermissionSnapshotStore) DeleteBySession(_ context.Context, _ string) error { return nil }
 
 func TestPipelineSuccessPath(t *testing.T) {
 	adapter := &testAdapter{
@@ -262,10 +365,8 @@ func TestPipelineScopeDenied(t *testing.T) {
 	}
 
 	p := buildPipeline(adapter)
-	p.ToolResolver = func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
-		tool := newTestTool(toolID)
-		tool.Scope = capability.ScopeRule{Type: "character", ID: "other-char"}
-		return tool, nil
+	if sm, ok := p.ScopeGate.ScopeManager.(*mockScopeManager); ok {
+		sm.denyAll = true
 	}
 
 	ctx := context.Background()

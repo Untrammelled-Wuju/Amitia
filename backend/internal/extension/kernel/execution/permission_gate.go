@@ -28,6 +28,9 @@ type PermissionGate struct {
 }
 
 func (g *PermissionGate) Evaluate(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) PermissionDecision {
+	if g.OnEvaluate != nil {
+		return g.OnEvaluate(ctx, tool, inv)
+	}
 	if g.Broker == nil {
 		return PermissionDeny
 	}

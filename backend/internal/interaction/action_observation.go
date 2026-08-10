@@ -1,11 +1,10 @@
 package interaction
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/extension/kernel"
@@ -53,16 +52,16 @@ func (b ObservationBuilder) Build(input ObservationBuildInput) (*decision.Observ
 
 func (b ObservationBuilder) buildCompleted(input ObservationBuildInput) (*decision.Observation, error) {
 	action := input.Execution.Action
-	var observedAt = input.Execution.CompletedAt
+	observedAt := input.Execution.CompletedAt
 	if observedAt.IsZero() {
 		return nil, decision.ObservationBuildError{Code: decision.ErrObservationTimeMissing, Err: fmt.Errorf("completed action missing CompletedAt")}
 	}
 
 	switch action.Kind {
 	case MaterializedActionRespond:
-		return b.buildNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
+		return b.buildSkippedNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
 	case MaterializedActionWait:
-		return b.buildNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
+		return b.buildSkippedNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
 	case MaterializedActionTool:
 		return b.buildToolResult(input, observedAt)
 	default:
@@ -72,35 +71,34 @@ func (b ObservationBuilder) buildCompleted(input ObservationBuildInput) (*decisi
 
 func (b ObservationBuilder) buildSkipped(input ObservationBuildInput) (*decision.Observation, error) {
 	action := input.Execution.Action
-	var observedAt = input.Execution.CompletedAt
+	observedAt := input.Execution.CompletedAt
 	if observedAt.IsZero() {
 		return nil, decision.ObservationBuildError{Code: decision.ErrObservationTimeMissing, Err: fmt.Errorf("skipped action missing CompletedAt")}
 	}
 	switch action.Kind {
 	case MaterializedActionRespond:
-		return b.buildNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
+		return b.buildSkippedNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
 	case MaterializedActionWait:
-		return b.buildNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
+		return b.buildSkippedNoAction(input, decision.ObservationOutcomeSkipped, observedAt), nil
 	default:
 		return b.buildToolResult(input, observedAt)
 	}
 }
 
-func (b ObservationBuilder) buildNoAction(input ObservationBuildInput, outcome decision.ObservationOutcome, observedAt time.Time) *decision.Observation {
-	plan := input.Execution.Action.PlanID
-	actionID := input.Execution.Action.ID
+func (b ObservationBuilder) buildSkippedNoAction(input ObservationBuildInput, outcome decision.ObservationOutcome, observedAt time.Time) *decision.Observation {
+	action := input.Execution.Action
 	obs := &decision.Observation{
 		Version:        decision.ObservationVersionV1,
-		ID:             decision.BuildObservationID(actionID),
-		PlanID:         plan,
-		ActionID:       actionID,
-		InteractionID:  input.Execution.Action.InteractionID,
-		RequestID:      input.Execution.Action.RequestID,
+		ID:             decision.BuildObservationID(action.ID),
+		PlanID:         action.PlanID,
+		ActionID:       action.ID,
+		InteractionID:  action.InteractionID,
 		UserID:         input.Scope.UserID,
 		CharacterID:    input.Scope.CharacterID,
 		ConversationID: input.Scope.ConversationID,
-		CandidateID:    input.Execution.Action.CandidateID,
+		CandidateID:    action.CandidateID,
 		GoalIDs:        copyStringSlice(input.Plan.GoalIDs),
+		GoalRefs:       copyGoalRefs(input.Plan.GoalRefs),
 		Kind:           decision.ObservationKindNoAction,
 		TargetKind:     decision.ObservationTargetNone,
 		Outcome:        outcome,
@@ -121,29 +119,29 @@ func (b ObservationBuilder) buildToolResult(input ObservationBuildInput, observe
 	if toolResult == nil {
 		return nil, decision.ObservationBuildError{Code: decision.ErrObservationToolResultMissing, Err: fmt.Errorf("completed tool action missing ToolResult")}
 	}
-	if !strings.EqualFold(toolResult.Status, "SUCCESS") &&
-		!strings.EqualFold(toolResult.Status, "FAILED") &&
-		!strings.EqualFold(toolResult.Status, "CANCELLED") &&
-		!strings.EqualFold(toolResult.Status, "TIMED_OUT") {
+	normalizedStatus := strings.ToUpper(toolResult.Status)
+	switch normalizedStatus {
+	case "SUCCESS", "FAILED", "CANCELLED", "TIMED_OUT":
+	default:
 		return nil, decision.ObservationBuildError{Code: decision.ErrObservationResultInvalid, Err: fmt.Errorf("unknown tool result status: %s", toolResult.Status)}
 	}
-	if !strings.EqualFold(toolResult.Status, "SUCCESS") && toolResult.Error == nil {
+	if normalizedStatus != "SUCCESS" && toolResult.Error == nil {
 		return nil, decision.ObservationBuildError{Code: decision.ErrObservationResultInvalid, Err: fmt.Errorf("failed/cancelled/timed_out tool result missing canonical error")}
 	}
 
-	outcome := b.mapStatusOutcome(toolResult.Status)
+	outcome := mapStatusOutcome(normalizedStatus)
 	obs := &decision.Observation{
 		Version:        decision.ObservationVersionV1,
 		ID:             decision.BuildObservationID(action.ID),
 		PlanID:         action.PlanID,
 		ActionID:       action.ID,
 		InteractionID:  safeInteractionID(action),
-		RequestID:      action.RequestID,
 		UserID:         input.Scope.UserID,
 		CharacterID:    input.Scope.CharacterID,
 		ConversationID: input.Scope.ConversationID,
 		CandidateID:    action.CandidateID,
 		GoalIDs:        copyStringSlice(input.Plan.GoalIDs),
+		GoalRefs:       copyGoalRefs(input.Plan.GoalRefs),
 		Kind:           decision.ObservationKindToolResult,
 		TargetKind:     decision.ObservationTargetTool,
 		Outcome:        outcome,
@@ -156,7 +154,7 @@ func (b ObservationBuilder) buildToolResult(input ObservationBuildInput, observe
 	if obs.InteractionID == "" {
 		obs.InteractionID = input.Scope.InteractionID
 	}
-	obs.Evidence = b.buildEvidence(toolResult)
+	obs.Evidence = buildEvidence(toolResult)
 	if err := decision.ValidateObservation(*obs); err != nil {
 		return nil, err
 	}
@@ -165,34 +163,32 @@ func (b ObservationBuilder) buildToolResult(input ObservationBuildInput, observe
 
 func (b ObservationBuilder) buildDispatchFailure(input ObservationBuildInput) (*decision.Observation, error) {
 	action := input.Execution.Action
-	var observedAt = input.Execution.CompletedAt
+	observedAt := input.Execution.CompletedAt
 	if observedAt.IsZero() {
 		return nil, decision.ObservationBuildError{Code: decision.ErrObservationTimeMissing, Err: fmt.Errorf("failed_to_dispatch action missing CompletedAt")}
 	}
-	plan := action.PlanID
-	actionID := action.ID
 	obs := &decision.Observation{
 		Version:        decision.ObservationVersionV1,
-		ID:             decision.BuildObservationID(actionID),
-		PlanID:         plan,
-		ActionID:       actionID,
+		ID:             decision.BuildObservationID(action.ID),
+		PlanID:         action.PlanID,
+		ActionID:       action.ID,
 		InteractionID:  safeInteractionID(action),
-		RequestID:      action.RequestID,
 		UserID:         input.Scope.UserID,
 		CharacterID:    input.Scope.CharacterID,
 		ConversationID: input.Scope.ConversationID,
 		CandidateID:    action.CandidateID,
 		GoalIDs:        copyStringSlice(input.Plan.GoalIDs),
+		GoalRefs:       copyGoalRefs(input.Plan.GoalRefs),
 		Kind:           decision.ObservationKindDispatchFailure,
 		TargetKind:     decision.ObservationTargetNone,
 		Outcome:        decision.ObservationOutcomeNotDispatched,
-		ToolID:         string(action.Tool.ToolID),
 		ObservedAt:     observedAt,
 	}
 	if obs.InteractionID == "" {
 		obs.InteractionID = input.Scope.InteractionID
 	}
 	if action.Tool != nil {
+		obs.ToolID = string(action.Tool.ToolID)
 		obs.ExternalCallID = action.Tool.ExternalCallID
 	}
 	obs.Evidence = decision.ObservationEvidence{}
@@ -202,7 +198,7 @@ func (b ObservationBuilder) buildDispatchFailure(input ObservationBuildInput) (*
 	return obs, nil
 }
 
-func (ObservationBuilder) buildEvidence(toolResult *kernel.LegacyToolResult) decision.ObservationEvidence {
+func buildEvidence(toolResult *kernel.LegacyToolResult) decision.ObservationEvidence {
 	evidence := decision.ObservationEvidence{}
 	if toolResult.VisibleText != "" {
 		evidence.Contents = append(evidence.Contents, decision.ObservationContent{
@@ -212,7 +208,7 @@ func (ObservationBuilder) buildEvidence(toolResult *kernel.LegacyToolResult) dec
 	}
 	if len(toolResult.Output) > 0 {
 		if isJSONStructured(toolResult.Output) {
-			evidence.structuredJSONCopy(toolResult.Output)
+			evidence.Structured = json.RawMessage(append([]byte(nil), toolResult.Output...))
 		} else {
 			evidence.Contents = append(evidence.Contents, decision.ObservationContent{
 				Kind: decision.ObservationContentText,
@@ -222,23 +218,23 @@ func (ObservationBuilder) buildEvidence(toolResult *kernel.LegacyToolResult) dec
 	}
 	if toolResult.Error != nil {
 		evidence.Error = &decision.ObservationError{
-			Code:      toolResult.Error.Code,
-			Message:   toolResult.Error.Message,
+			Code:       toolResult.Error.Code,
+			Message:    toolResult.Error.Message,
 			DomainCode: toolResult.Error.Detail,
-			Retryable: toolResult.Error.Retryable,
+			Retryable:  toolResult.Error.Retryable,
 		}
 	}
-	if evidence.Metadata == nil {
-		evidence.Metadata = map[string]any{}
-	}
 	if toolResult.DurationMS > 0 {
+		if evidence.Metadata == nil {
+			evidence.Metadata = map[string]any{}
+		}
 		evidence.Metadata["durationMs"] = toolResult.DurationMS
 	}
 	return evidence
 }
 
-func (ObservationBuilder) mapStatusOutcome(status string) decision.ObservationOutcome {
-	switch strings.ToUpper(status) {
+func mapStatusOutcome(status string) decision.ObservationOutcome {
+	switch status {
 	case "SUCCESS":
 		return decision.ObservationOutcomeSucceeded
 	case "FAILED":
@@ -268,6 +264,15 @@ func safeInteractionID(action MaterializedAction) string {
 	return action.InteractionID
 }
 
+func copyGoalRefs(src []decision.GoalRef) []decision.GoalRef {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make([]decision.GoalRef, len(src))
+	copy(dst, src)
+	return dst
+}
+
 func copyStringSlice(src []string) []string {
 	if len(src) == 0 {
 		return nil
@@ -288,11 +293,3 @@ func isJSONStructured(data []byte) bool {
 	}
 	return false
 }
-
-func hashPayload(payload []byte) string {
-	h := sha256.New()
-	h.Write(payload)
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-var _ = hashPayload

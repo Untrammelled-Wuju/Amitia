@@ -6,6 +6,7 @@ import (
 
 	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 // GamePluginContributionMapper 负责将Kernel的game_plugin Contribution转换为GameHost的PluginDescriptor
@@ -18,15 +19,11 @@ type GamePluginContributionMapper interface {
 }
 
 // DefaultGamePluginContributionMapper 默认实现
-type DefaultGamePluginContributionMapper struct {
-	defaultProtocolVersion string
-}
+type DefaultGamePluginContributionMapper struct{}
 
 // NewDefaultGamePluginContributionMapper 创建默认Mapper实例
 func NewDefaultGamePluginContributionMapper() *DefaultGamePluginContributionMapper {
-	return &DefaultGamePluginContributionMapper{
-		defaultProtocolVersion: "amitia-game-host/1",
-	}
+	return &DefaultGamePluginContributionMapper{}
 }
 
 // ToDescriptor 实现转换逻辑
@@ -44,8 +41,8 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 		name = extension.Name.Default
 	}
 
-	// 协议版本使用默认值，后续G4如果增加Contribution的ProtocolVersion字段再调整
-	protocolVersion := m.defaultProtocolVersion
+	// G38: ProtocolVersion 单一来源 protocol.ProtocolVersion (G13)
+	protocolVersion := protocol.ProtocolVersion
 
 	// 转换能力列表，从Contribution的Definition map中读取capabilities，如果没有则返回空
 	capabilities := make([]gamehostdomain.Capability, 0)

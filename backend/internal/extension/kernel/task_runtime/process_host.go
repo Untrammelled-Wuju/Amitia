@@ -16,6 +16,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/u-ai/backend/internal/platform/process"
 )
 
 type ProcessHostState string
@@ -46,18 +48,19 @@ type rpcError struct {
 }
 
 type TaskProcessHost struct {
-	mu          sync.Mutex
-	state       ProcessHostState
-	instanceID  string
-	taskRunID   string
-	extensionID string
-	moduleID    string
-	defHash     string
-	nonce       string
-	nodePath    string
-	hostPath    string
-	workDir     string
-	entryPath   string
+	mu             sync.Mutex
+	state          ProcessHostState
+	instanceID     string
+	taskRunID      string
+	extensionID    string
+	moduleID       string
+	defHash        string
+	nonce          string
+	nodePath       string
+	hostPath       string
+	workDir        string
+	entryPath      string
+	secretLeaseID  string
 
 	cmd        *exec.Cmd
 	stdin      io.WriteCloser
@@ -83,20 +86,21 @@ type TaskProcessHost struct {
 }
 
 type ProcessHostConfig struct {
-	InstanceID  string
-	TaskRunID   string
-	ExtensionID string
-	ModuleID    string
-	DefHash     string
-	NodePath    string
-	HostPath    string
-	WorkDir     string
-	EntryPath   string
-	Input       json.RawMessage
-	Checkpoint  json.RawMessage
-	Deadline    *time.Time
-	Attempt     int
-	MaxAttempts int
+	InstanceID    string
+	TaskRunID     string
+	ExtensionID   string
+	ModuleID      string
+	DefHash       string
+	NodePath      string
+	HostPath      string
+	WorkDir       string
+	EntryPath     string
+	Input         json.RawMessage
+	Checkpoint    json.RawMessage
+	Deadline      *time.Time
+	Attempt       int
+	MaxAttempts   int
+	SecretLeaseID string
 }
 
 type ProgressCallback func(seq int64, current, total, percentage *float64, stage, message string)
@@ -141,21 +145,22 @@ func NewTaskProcessHost(cfg ProcessHostConfig) (*TaskProcessHost, error) {
 		return nil, fmt.Errorf("task_process_host: generate nonce: %w", err)
 	}
 	return &TaskProcessHost{
-		state:       ProcessStateCreated,
-		instanceID:  cfg.InstanceID,
-		taskRunID:   cfg.TaskRunID,
-		extensionID: cfg.ExtensionID,
-		moduleID:    cfg.ModuleID,
-		defHash:     cfg.DefHash,
-		nonce:       nonce,
-		nodePath:    cfg.NodePath,
-		hostPath:    cfg.HostPath,
-		workDir:     cfg.WorkDir,
-		entryPath:   cfg.EntryPath,
-		pending:     make(map[string]chan *rpcMessage),
-		notifiers:   make(map[string]func(json.RawMessage)),
-		exitCh:      make(chan int, 1),
-		done:        make(chan struct{}),
+		state:         ProcessStateCreated,
+		instanceID:    cfg.InstanceID,
+		taskRunID:     cfg.TaskRunID,
+		extensionID:   cfg.ExtensionID,
+		moduleID:      cfg.ModuleID,
+		defHash:       cfg.DefHash,
+		nonce:         nonce,
+		nodePath:      cfg.NodePath,
+		hostPath:      cfg.HostPath,
+		workDir:       cfg.WorkDir,
+		entryPath:     cfg.EntryPath,
+		secretLeaseID: cfg.SecretLeaseID,
+		pending:       make(map[string]chan *rpcMessage),
+		notifiers:     make(map[string]func(json.RawMessage)),
+		exitCh:        make(chan int, 1),
+		done:          make(chan struct{}),
 	}, nil
 }
 
@@ -232,34 +237,31 @@ func (h *TaskProcessHost) Start(ctx context.Context, input json.RawMessage, chec
 	h.procCtx = procCtx
 	h.procCancel = procCancel
 
-	env := []string{}
-	env = append(env, os.Environ()...)
-	env = append(env,
-		"AMITIA_INSTANCE_ID="+h.instanceID,
-		"AMITIA_EXTENSION_ID="+h.extensionID,
-		"AMITIA_MODULE_ID="+h.moduleID,
-		"AMITIA_NONCE="+h.nonce,
-		"AMITIA_HOST_API_VERSION=amitia-runtime-rpc/1",
-		"AMITIA_DEFINITION_HASH="+h.defHash,
-		"AMITIA_TASK_RUN_ID="+h.taskRunID,
-		"AMITIA_TASK_ENTRY="+h.entryPath,
-		"AMITIA_TASK_INPUT="+string(input),
-		"AMITIA_TASK_ATTEMPT="+strconv.Itoa(attempt),
-		"AMITIA_TASK_MAX_ATTEMPTS="+strconv.Itoa(maxAttempts),
-	)
-	if checkpoint != nil {
-		env = append(env, "AMITIA_TASK_CHECKPOINT="+string(checkpoint))
-	}
+	env := process.NewEnvironmentBuilder().
+		SetRuntimeInstance(h.instanceID).
+		SetExtensionID(h.extensionID).
+		SetModuleID(h.moduleID).
+		Set("AMITIA_NONCE", h.nonce).
+		Set("AMITIA_HOST_API_VERSION", "amitia-runtime-rpc/1").
+		Set("AMITIA_DEFINITION_HASH", h.defHash).
+		Set("AMITIA_TASK_RUN_ID", h.taskRunID).
+		Set("AMITIA_TASK_ENTRY", h.entryPath).
+		Set("AMITIA_TASK_ATTEMPT", strconv.Itoa(attempt)).
+		Set("AMITIA_TASK_MAX_ATTEMPTS", strconv.Itoa(maxAttempts))
 	if deadline != nil {
-		env = append(env, "AMITIA_TASK_DEADLINE="+strconv.FormatInt(deadline.UnixMilli(), 10))
+		env.Set("AMITIA_TASK_DEADLINE", strconv.FormatInt(deadline.UnixMilli(), 10))
 	}
 	if h.workDir != "" {
-		env = append(env, "AMITIA_WORKSPACE_PATH="+h.workDir)
+		env.Set("AMITIA_WORKSPACE_PATH", h.workDir)
 	}
+	if h.secretLeaseID != "" {
+		env.Set("AMITIA_SECRET_LEASE", h.secretLeaseID)
+	}
+	envSlice := env.BuildFiltered()
 
 	cmd := exec.CommandContext(procCtx, h.nodePath, h.hostPath)
 	cmd.Dir = h.workDir
-	cmd.Env = env
+	cmd.Env = envSlice
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

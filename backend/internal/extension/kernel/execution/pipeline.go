@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 )
 
 type ExecutionPipeline struct {
@@ -31,7 +33,9 @@ type ExecutionPipeline struct {
 	MetricsRec          *MetricsRecorder
 	CircuitBreaker      *CircuitBreakerCoordinator
 
-	ToolResolver func(ctx context.Context, toolID string) (capability.ToolDefinition, error)
+	ToolResolver            func(ctx context.Context, toolID string) (capability.ToolDefinition, error)
+	ScopeStore              scope.ScopeStore
+	PermissionSnapshotStore permission.PermissionSnapshotStore
 }
 
 func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRequest) capability.UnifiedToolResult {
@@ -176,8 +180,37 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	if p.ScopeGate != nil {
 		if err := p.ScopeGate.Evaluate(timeoutCtx, tool, inv); err != nil {
 			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
-				Code:    capability.ErrorCodeScopeDenied,
-				Message: err.Error(),
+				Code:     capability.ErrorCodeScopeDenied,
+				Category: capability.ToolErrorCategoryPermission,
+				Message:  err.Error(),
+			}))), nil
+		}
+	}
+
+	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
+		return result, nil
+	}
+
+	if p.ScopeGate != nil {
+		if scopeManager, ok := p.ScopeGate.ScopeManager.(scope.ScopeManager); ok && scopeManager != nil {
+			scopeSnap, snapErr := p.createAndStoreScopeSnapshot(timeoutCtx, scopeManager, inv, tool)
+			if snapErr != nil {
+				return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+					Code:     capability.ErrorCodeScopeDenied,
+					Category: capability.ToolErrorCategoryPermission,
+					Message:  fmt.Sprintf("scope snapshot failed: %s", snapErr.Error()),
+				}))), nil
+			}
+			inv.ScopeSnapshotID = scopeSnap.SnapshotID
+		}
+	}
+
+	if inv.ParentID != "" && inv.RootID != inv.InvocationID {
+		if err := p.checkChildScopeEscalation(timeoutCtx, inv); err != nil {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodeScopeDenied,
+				Category: capability.ToolErrorCategoryPermission,
+				Message:  err.Error(),
 			}))), nil
 		}
 	}
@@ -191,23 +224,22 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		switch decision {
 		case PermissionDeny:
 			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
-				Code:    capability.ErrorCodePermissionDenied,
-				Message: "permission denied",
+				Code:     capability.ErrorCodePermissionDenied,
+				Category: capability.ToolErrorCategoryPermission,
+				Message:  "permission denied",
 			}))), nil
 		case PermissionRequireApproval:
-			if p.ApprovalGate != nil {
-				approved, appErr := p.ApprovalGate.Evaluate(timeoutCtx, tool, inv, decision)
-				if appErr != nil || !approved {
-					if approvalTimeout(appErr) || errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
-						result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
-						return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
-					}
-					return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
-						Code:    capability.ErrorCodePermissionDenied,
-						Message: "approval denied",
-					}))), nil
-				}
+			approvalResult := p.handleApproval(timeoutCtx, tool, inv, decision, budget)
+			if approvalResult != nil {
+				return *approvalResult, nil
 			}
+		}
+	}
+
+	if inv.PermissionSnapshotID == "" && p.PermissionGate != nil {
+		grantedPerms := collectGrantedPermissionIDs(tool)
+		if len(grantedPerms) > 0 || len(tool.Permissions) > 0 {
+			p.createPermissionSnapshot(timeoutCtx, inv, grantedPerms, nil, inv.ScopeSnapshotID)
 		}
 	}
 
@@ -281,6 +313,16 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 
 	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
+	}
+
+	if inv.ScopeSnapshotID != "" || inv.PermissionSnapshotID != "" {
+		if err := p.revalidateSnapshots(timeoutCtx, inv); err != nil {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodePermissionDenied,
+				Category: capability.ToolErrorCategoryPermission,
+				Message:  err.Error(),
+			}))), nil
+		}
 	}
 
 	p.registerDeadlineAbortHook(timeoutCtx, inv, budget)
@@ -422,6 +464,16 @@ func (p *ExecutionPipeline) runRetryAttempt(ctx context.Context, tool capability
 
 	if result, cancelled := p.checkCancellation(ctx, inv); cancelled {
 		return result, true
+	}
+
+	if inv.ScopeSnapshotID != "" || inv.PermissionSnapshotID != "" {
+		if err := p.revalidateSnapshots(ctx, inv); err != nil {
+			return p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, string(request.ToolID), capability.NewToolFailureResult(inv.InvocationID, string(request.ToolID), &capability.ToolError{
+				Code:     capability.ErrorCodePermissionDenied,
+				Category: capability.ToolErrorCategoryPermission,
+				Message:  err.Error(),
+			}))), true
+		}
 	}
 
 	if p.AuditRec != nil {
@@ -664,6 +716,262 @@ func firstNonNil(errs ...error) error {
 		}
 	}
 	return nil
+}
+
+func (p *ExecutionPipeline) createAndStoreScopeSnapshot(ctx context.Context, manager scope.ScopeManager, inv capability.ToolInvocationContext, tool capability.ToolDefinition) (scope.ScopeSnapshot, error) {
+	scopeReq := scope.ScopeResolveRequest{
+		Expression:     inferScopeExpression(tool),
+		CharacterID:    inv.CharacterID,
+		ConversationID: inv.ConversationID,
+		ExtensionID:    inv.ExtensionID,
+		ModuleID:       inv.ModuleID,
+		InvocationID:   inv.InvocationID,
+		Generation:     inv.Generation,
+	}
+
+	snapshot, err := manager.Snapshot(ctx, scopeReq)
+	if err != nil {
+		return scope.ScopeSnapshot{}, err
+	}
+
+	if snapshot.SnapshotID == "" {
+		return scope.ScopeSnapshot{}, fmt.Errorf("scopeSnapshot missing ID")
+	}
+
+	if p.ScopeStore != nil {
+		if err := p.ScopeStore.SaveSnapshot(ctx, snapshot); err != nil {
+			return scope.ScopeSnapshot{}, fmt.Errorf("save scope snapshot: %w", err)
+		}
+	}
+
+	return snapshot, nil
+}
+
+func (p *ExecutionPipeline) checkChildScopeEscalation(ctx context.Context, inv capability.ToolInvocationContext) error {
+	if p.ScopeStore == nil {
+		return nil
+	}
+
+	parentSnapshotID := findParentScopeSnapshot(inv)
+	if parentSnapshotID == "" {
+		return nil
+	}
+
+	parentSnap, err := p.ScopeStore.GetSnapshot(ctx, parentSnapshotID)
+	if err != nil {
+		return fmt.Errorf("parent scope snapshot not found: %w", err)
+	}
+
+	if parentSnap.CharacterID != "" && inv.CharacterID != "" && parentSnap.CharacterID != inv.CharacterID {
+		return fmt.Errorf("child character %s exceeds parent character %s", inv.CharacterID, parentSnap.CharacterID)
+	}
+
+	if parentSnap.ConversationID != "" && inv.ConversationID != "" && parentSnap.ConversationID != inv.ConversationID {
+		return fmt.Errorf("child conversation %s exceeds parent conversation %s", inv.ConversationID, parentSnap.ConversationID)
+	}
+
+	if parentSnap.ExtensionID != "" && inv.ExtensionID != "" && parentSnap.ExtensionID != inv.ExtensionID {
+		return fmt.Errorf("child extension %s exceeds parent extension %s", inv.ExtensionID, parentSnap.ExtensionID)
+	}
+
+	if parentSnap.Generation > 0 && inv.Generation > 0 && parentSnap.Generation != inv.Generation {
+		return fmt.Errorf("child generation %d stale (parent %d)", inv.Generation, parentSnap.Generation)
+	}
+
+	return nil
+}
+
+func (p *ExecutionPipeline) handleApproval(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, budget TimeoutBudget) *capability.UnifiedToolResult {
+	toolID := string(tool.ID)
+	result, cancelled := p.checkTimeout(ctx, inv, toolID, budget, TimeoutPhasePreDispatch)
+	if cancelled {
+		return &result
+	}
+
+	if p.ApprovalGate == nil {
+		r := p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:     capability.ErrorCodePermissionDenied,
+			Category: capability.ToolErrorCategoryPermission,
+			Message:  "approval required but approval gate not configured",
+		})))
+		return &r
+	}
+
+	approvalDecision := p.runApprovalWithReEvaluate(ctx, tool, inv, decision, budget)
+	switch approvalDecision {
+	case approvalDecisionApproved:
+		grantedPerms := collectGrantedPermissionIDs(tool)
+		if inv.PermissionSnapshotID == "" {
+			p.createPermissionSnapshot(ctx, inv, grantedPerms, nil, inv.ScopeSnapshotID)
+		}
+		return nil
+	case approvalDecisionDenied:
+		r := p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:     capability.ErrorCodePermissionDenied,
+			Category: capability.ToolErrorCategoryPermission,
+			Message:  "approval denied",
+		})))
+		return &r
+	case approvalDecisionTimedOut:
+		r := p.finalizeTimeout(ctx, inv, capability.NewToolTimedOutResult(inv.InvocationID, toolID), budget)
+		return &r
+	case approvalDecisionCancelled:
+		r := p.finalizeCancellation(ctx, inv, capability.NewToolCancelledResult(inv.InvocationID, toolID))
+		return &r
+	default:
+		r := p.finalizeCancellation(ctx, inv, p.failWithAudit(ctx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+			Code:     capability.ErrorCodePermissionDenied,
+			Category: capability.ToolErrorCategoryPermission,
+			Message:  "approval unavailable",
+		})))
+		return &r
+	}
+}
+
+type approvalFlowDecision string
+
+const (
+	approvalDecisionApproved  approvalFlowDecision = "approved"
+	approvalDecisionDenied    approvalFlowDecision = "denied"
+	approvalDecisionTimedOut  approvalFlowDecision = "timed_out"
+	approvalDecisionCancelled approvalFlowDecision = "cancelled"
+	approvalDecisionError     approvalFlowDecision = "error"
+)
+
+func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, decision PermissionDecision, budget TimeoutBudget) approvalFlowDecision {
+	if p.PermissionGate == nil || p.PermissionGate.Broker == nil {
+		return approvalDecisionError
+	}
+
+	broker := p.PermissionGate.Broker
+
+	approved, appErr := p.ApprovalGate.Evaluate(ctx, tool, inv, decision)
+
+	if appErr != nil {
+		if approvalTimeout(appErr) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return approvalDecisionTimedOut
+		}
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return approvalDecisionCancelled
+		}
+		return approvalDecisionError
+	}
+
+	if !approved {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return approvalDecisionCancelled
+		}
+		return approvalDecisionDenied
+	}
+
+	permissionIDs := collectGrantedPermissionIDs(tool)
+
+	recordReq := permission.PermissionApprovalRecordRequest{
+		InvocationID:    inv.InvocationID,
+		PermissionIDs:   permissionIDs,
+		ScopeSnapshotID: inv.ScopeSnapshotID,
+		Decision:        permission.ApprovalDecisionApproved,
+	}
+
+	if _, err := broker.RecordApproval(ctx, recordReq); err != nil {
+		return approvalDecisionError
+	}
+
+	reEvalReq := permission.PermissionEvaluationRequest{
+		Subject:         permission.SubjectForTool(tool.ExtensionID, tool.ID),
+		Requirements:    buildPermissionRequirements(tool, inv),
+		InvocationID:    inv.InvocationID,
+		RiskLevel:       string(tool.RiskLevel),
+		ScopeSnapshotID: inv.ScopeSnapshotID,
+		ApprovalMode:    string(inv.ApprovalMode),
+	}
+
+	reEvalResult := broker.Evaluate(ctx, reEvalReq)
+
+	switch reEvalResult.Decision {
+	case permission.DecisionAllow:
+		return approvalDecisionApproved
+	default:
+		return approvalDecisionDenied
+	}
+}
+
+func (p *ExecutionPipeline) createPermissionSnapshot(ctx context.Context, inv capability.ToolInvocationContext, grantedPerms, grantedScopes []string, scopeSnapshotID string) {
+	if p.PermissionSnapshotStore == nil {
+		return
+	}
+
+	snap := permission.NewPermissionSnapshot(permission.PermissionSnapshotRequest{
+		ExtensionID:    inv.ExtensionID,
+		ModuleID:       inv.ModuleID,
+		Generation:     inv.Generation,
+		CharacterID:    inv.CharacterID,
+		ConversationID: inv.ConversationID,
+		GrantedPerms:   grantedPerms,
+		GrantedScopes:  grantedScopes,
+	})
+
+	snap.SessionID = scopeSnapshotID
+
+	if err := p.PermissionSnapshotStore.SaveSnapshot(ctx, snap); err == nil {
+		inv.PermissionSnapshotID = snap.SnapshotID
+	}
+}
+
+func (p *ExecutionPipeline) revalidateSnapshots(ctx context.Context, inv capability.ToolInvocationContext) error {
+	if inv.PermissionSnapshotID != "" && p.PermissionGate != nil && p.PermissionGate.Broker != nil {
+		if err := p.PermissionGate.Broker.ValidateSnapshot(ctx, inv.PermissionSnapshotID, permission.PermissionEvaluationRequest{
+			InvocationID: inv.InvocationID,
+		}); err != nil {
+			return fmt.Errorf("permission snapshot invalid: %w", err)
+		}
+	}
+
+	if inv.ScopeSnapshotID != "" && p.ScopeStore != nil {
+		_, err := p.ScopeStore.GetSnapshot(ctx, inv.ScopeSnapshotID)
+		if err != nil {
+			return fmt.Errorf("scope snapshot invalid: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func inferScopeExpression(tool capability.ToolDefinition) scope.ScopeExpression {
+	scopes := []scope.ScopeRef{
+		scope.NewGlobalScope(),
+	}
+
+	if tool.ExtensionID != "" {
+		scopes = append(scopes, scope.NewExtensionScope(tool.ExtensionID))
+	}
+
+	return scope.ScopeExpression{
+		Operator: scope.OpAND,
+		Scopes:   scopes,
+	}
+}
+
+func buildPermissionRequirements(tool capability.ToolDefinition, inv capability.ToolInvocationContext) []permission.PermissionRequirement {
+	requirements := make([]permission.PermissionRequirement, 0)
+	for _, p := range tool.Permissions {
+		requirements = append(requirements, permission.PermissionRequirement{
+			PermissionID: p.Capability,
+		})
+	}
+	return requirements
+}
+
+func collectGrantedPermissionIDs(tool capability.ToolDefinition) []string {
+	ids := make([]string, 0, len(tool.Permissions))
+	for _, p := range tool.Permissions {
+		ids = append(ids, p.Capability)
+	}
+	return ids
+}
+
+func findParentScopeSnapshot(inv capability.ToolInvocationContext) string {
+	return ""
 }
 
 func (p *ExecutionPipeline) CancelInvocation(ctx context.Context, invocationID string, reason capability.ToolCancellationReason) CancellationResult {

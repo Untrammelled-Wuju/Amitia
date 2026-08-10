@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export const RUNTIME_PROTOCOL_VERSION = "amitia.desktop-pet.runtime";
 export const RUNTIME_ENVELOPE_VERSION = 2;
 export const RUNTIME_CONTRACT_VERSION = "2.0.0";
@@ -184,6 +186,26 @@ export interface RuntimeErrorPayload {
   commandId?: string;
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value !== null && typeof value === "object") {
+    const input = value as Record<string, unknown>;
+    const output: Record<string, unknown> = {};
+    for (const key of Object.keys(input).sort()) {
+      output[key] = canonicalize(input[key]);
+    }
+    return output;
+  }
+  return value;
+}
+
+export function computePayloadHash(payload: unknown): string {
+  const canonical = JSON.stringify(canonicalize(payload));
+  return "sha256:" + createHash("sha256").update(canonical, "utf8").digest("hex");
+}
+
 export function buildHelloPayload(input: {
   deviceId: string;
   runtimeId: string;
@@ -234,7 +256,7 @@ export function buildEnvelope<T>(
     connectionGeneration: connectionGen,
     sequence,
     payloadSchemaVersion: 1,
-    payloadHash: "",
+    payloadHash: computePayloadHash(payload),
     sentAt,
     payload,
   };

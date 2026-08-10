@@ -15,7 +15,7 @@ const ObservationVersionV1 ObservationVersion = "agent-observation-v1"
 type ObservationKind string
 
 const (
-	ObservationKindToolResult              ObservationKind = "tool_result"
+	ObservationKindToolResult             ObservationKind = "tool_result"
 	ObservationKindNoAction               ObservationKind = "no_action"
 	ObservationKindMaterializationFailure ObservationKind = "materialization_failure"
 	ObservationKindDispatchFailure        ObservationKind = "dispatch_failure"
@@ -24,21 +24,21 @@ const (
 type ObservationOutcome string
 
 const (
-	ObservationOutcomeSucceeded      ObservationOutcome = "succeeded"
-	ObservationOutcomeFailed         ObservationOutcome = "failed"
-	ObservationOutcomeCancelled      ObservationOutcome = "cancelled"
-	ObservationOutcomeTimedOut       ObservationOutcome = "timed_out"
-	ObservationOutcomeSkipped        ObservationOutcome = "skipped"
+	ObservationOutcomeSucceeded       ObservationOutcome = "succeeded"
+	ObservationOutcomeFailed          ObservationOutcome = "failed"
+	ObservationOutcomeCancelled       ObservationOutcome = "cancelled"
+	ObservationOutcomeTimedOut        ObservationOutcome = "timed_out"
+	ObservationOutcomeSkipped         ObservationOutcome = "skipped"
 	ObservationOutcomeNotMaterialized ObservationOutcome = "not_materialized"
-	ObservationOutcomeNotDispatched  ObservationOutcome = "not_dispatched"
+	ObservationOutcomeNotDispatched   ObservationOutcome = "not_dispatched"
 )
 
 type ObservationTargetKind string
 
 const (
 	ObservationTargetNone     ObservationTargetKind = "none"
-	ObservationTargetTool    ObservationTargetKind = "tool"
-	ObservationTargetTask    ObservationTargetKind = "task"
+	ObservationTargetTool     ObservationTargetKind = "tool"
+	ObservationTargetTask     ObservationTargetKind = "task"
 	ObservationTargetWorkflow ObservationTargetKind = "workflow"
 )
 
@@ -47,7 +47,7 @@ type ObservationContentKind string
 const (
 	ObservationContentText       ObservationContentKind = "text"
 	ObservationContentStructured ObservationContentKind = "structured"
-	ObservationContentResource  ObservationContentKind = "resource"
+	ObservationContentResource   ObservationContentKind = "resource"
 )
 
 type ObservationContent struct {
@@ -59,18 +59,18 @@ type ObservationContent struct {
 }
 
 type ObservationError struct {
-	Code        string `json:"code"`
-	Category    string `json:"category,omitempty"`
-	DomainCode  string `json:"domainCode,omitempty"`
-	Message     string `json:"message,omitempty"`
-	Retryable   bool   `json:"retryable"`
+	Code       string `json:"code"`
+	Category   string `json:"category,omitempty"`
+	DomainCode string `json:"domainCode,omitempty"`
+	Message    string `json:"message,omitempty"`
+	Retryable  bool   `json:"retryable"`
 }
 
 type ObservationSideEffect struct {
-	Kind       string `json:"kind"`
+	Kind        string `json:"kind"`
 	ResourceURI string `json:"resourceUri,omitempty"`
-	ExternalID string `json:"externalId,omitempty"`
-	State      string `json:"state,omitempty"`
+	ExternalID  string `json:"externalId,omitempty"`
+	State       string `json:"state,omitempty"`
 }
 
 type ObservationResource struct {
@@ -80,49 +80,50 @@ type ObservationResource struct {
 }
 
 type ObservationEvidence struct {
-	Contents    []ObservationContent     `json:"contents,omitempty"`
-	Structured  json.RawMessage          `json:"structured,omitempty"`
+	Contents    []ObservationContent    `json:"contents,omitempty"`
+	Structured  json.RawMessage         `json:"structured,omitempty"`
 	Error       *ObservationError       `json:"error,omitempty"`
-	SideEffects []ObservationSideEffect  `json:"sideEffects,omitempty"`
-	Resources   []ObservationResource    `json:"resources,omitempty"`
-	Metadata    map[string]any           `json:"metadata,omitempty"`
+	SideEffects []ObservationSideEffect `json:"sideEffects,omitempty"`
+	Resources   []ObservationResource   `json:"resources,omitempty"`
+	Metadata    map[string]any          `json:"metadata,omitempty"`
 }
 
 type Observation struct {
-	Version        ObservationVersion     `json:"version"`
-	ID             string                 `json:"id"`
-	PlanID         string                 `json:"planId,omitempty"`
-	ActionID       string                 `json:"actionId,omitempty"`
-	InteractionID  string                 `json:"interactionId,omitempty"`
-	RequestID      string                 `json:"requestId,omitempty"`
-	UserID         string                 `json:"userId,omitempty"`
-	CharacterID    string                 `json:"characterId,omitempty"`
-	ConversationID string                 `json:"conversationId,omitempty"`
-	CandidateID    string                 `json:"candidateId,omitempty"`
-	GoalIDs        []string               `json:"goalIds,omitempty"`
-	IntentionIDs   []string               `json:"intentionIds,omitempty"`
-	Kind           ObservationKind        `json:"kind"`
-	TargetKind     ObservationTargetKind  `json:"targetKind"`
-	Outcome        ObservationOutcome     `json:"outcome"`
-	InvocationID   string                 `json:"invocationId,omitempty"`
-	ExternalCallID string                 `json:"externalCallId,omitempty"`
-	ToolID         string                 `json:"toolId,omitempty"`
-	Evidence       ObservationEvidence    `json:"evidence"`
-	ObservedAt     time.Time              `json:"observedAt"`
+	Version        ObservationVersion    `json:"version"`
+	ID             string                `json:"id"`
+	PlanID         string                `json:"planId,omitempty"`
+	ActionID       string                `json:"actionId,omitempty"`
+	InteractionID  string                `json:"interactionId,omitempty"`
+	RequestID      string                `json:"requestId,omitempty"`
+	UserID         string                `json:"userId,omitempty"`
+	CharacterID    string                `json:"characterId,omitempty"`
+	ConversationID string                `json:"conversationId,omitempty"`
+	CandidateID    string                `json:"candidateId,omitempty"`
+	GoalIDs        []string              `json:"goalIds,omitempty"`
+	GoalRefs       []GoalRef             `json:"goalRefs,omitempty"`
+	IntentionIDs   []string              `json:"intentionIds,omitempty"`
+	Kind           ObservationKind       `json:"kind"`
+	TargetKind     ObservationTargetKind `json:"targetKind"`
+	Outcome        ObservationOutcome    `json:"outcome"`
+	InvocationID   string                `json:"invocationId,omitempty"`
+	ExternalCallID string                `json:"externalCallId,omitempty"`
+	ToolID         string                `json:"toolId,omitempty"`
+	Evidence       ObservationEvidence   `json:"evidence"`
+	ObservedAt     time.Time             `json:"observedAt"`
 }
 
 type ObservationBuildErrorCode string
 
 const (
-	ErrObservationPlanInvalid         ObservationBuildErrorCode = "OBSERVATION_PLAN_INVALID"
-	ErrObservationActionInvalid       ObservationBuildErrorCode = "OBSERVATION_ACTION_INVALID"
-	ErrObservationScopeMismatch       ObservationBuildErrorCode = "OBSERVATION_SCOPE_MISMATCH"
-	ErrObservationTimeMissing         ObservationBuildErrorCode = "OBSERVATION_TIME_MISSING"
-	ErrObservationToolResultMissing   ObservationBuildErrorCode = "OBSERVATION_TOOL_RESULT_MISSING"
-	ErrObservationInvocationMismatch  ObservationBuildErrorCode = "OBSERVATION_INVOCATION_MISMATCH"
-	ErrObservationToolMismatch        ObservationBuildErrorCode = "OBSERVATION_TOOL_MISMATCH"
+	ErrObservationPlanInvalid          ObservationBuildErrorCode = "OBSERVATION_PLAN_INVALID"
+	ErrObservationActionInvalid        ObservationBuildErrorCode = "OBSERVATION_ACTION_INVALID"
+	ErrObservationScopeMismatch        ObservationBuildErrorCode = "OBSERVATION_SCOPE_MISMATCH"
+	ErrObservationTimeMissing          ObservationBuildErrorCode = "OBSERVATION_TIME_MISSING"
+	ErrObservationToolResultMissing    ObservationBuildErrorCode = "OBSERVATION_TOOL_RESULT_MISSING"
+	ErrObservationInvocationMismatch   ObservationBuildErrorCode = "OBSERVATION_INVOCATION_MISMATCH"
+	ErrObservationToolMismatch         ObservationBuildErrorCode = "OBSERVATION_TOOL_MISMATCH"
 	ErrObservationExternalCallMismatch ObservationBuildErrorCode = "OBSERVATION_EXTERNAL_CALL_MISMATCH"
-	ErrObservationResultInvalid       ObservationBuildErrorCode = "OBSERVATION_RESULT_INVALID"
+	ErrObservationResultInvalid        ObservationBuildErrorCode = "OBSERVATION_RESULT_INVALID"
 )
 
 type ObservationBuildError struct {

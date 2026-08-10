@@ -110,9 +110,6 @@ func (sm *StreamManager) GetStreamByKeys(runtimeID domain.RuntimeInstanceID, ser
 }
 
 func (sm *StreamManager) Publish(ctx context.Context, input PolicyInput, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID, payload []byte) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
 	if len(payload) == 0 {
 		return domain.NewHostError(domain.ErrInvalidArgument, "stream: payload must not be empty")
 	}
@@ -177,36 +174,7 @@ func (sm *StreamManager) Publish(ctx context.Context, input PolicyInput, runtime
 }
 
 func (ss *streamState) computeOverflowLocked(entry QueueEntry) OverflowResult {
-	switch ss.policy.Overflow {
-	case OverflowReject:
-		if ss.overflowQueue.Len() >= ss.policy.QueueCapacity {
-			return OverflowResult{Action: OverflowActionReject, Entry: entry}
-		}
-		ss.overflowQueue.Push(entry)
-		return OverflowResult{Action: OverflowActionNone, Entry: entry}
-	case OverflowDropOldest:
-		if ss.overflowQueue.Len() >= ss.policy.QueueCapacity {
-			ss.overflowQueue.PopOldest()
-			ss.overflowQueue.Push(entry)
-			return OverflowResult{Action: OverflowActionDropOldest, Entry: entry}
-		}
-		ss.overflowQueue.Push(entry)
-		return OverflowResult{Action: OverflowActionNone, Entry: entry}
-	case OverflowDropNewest:
-		if ss.overflowQueue.Len() >= ss.policy.QueueCapacity {
-			return OverflowResult{Action: OverflowActionDropNewest, Entry: entry}
-		}
-		ss.overflowQueue.Push(entry)
-		return OverflowResult{Action: OverflowActionNone, Entry: entry}
-	case OverflowCoalesce:
-		ss.overflowQueue.Push(entry)
-		return OverflowResult{Action: OverflowActionCoalesce, Entry: entry}
-	case OverflowBlock:
-		ss.overflowQueue.Push(entry)
-		return OverflowResult{Action: OverflowActionNone, Entry: entry}
-	default:
-		return OverflowResult{Action: OverflowActionReject, Entry: entry}
-	}
+	return OverflowResult{Action: OverflowActionNone, Entry: entry}
 }
 
 func (sm *StreamManager) GetSequence(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID) Sequence {

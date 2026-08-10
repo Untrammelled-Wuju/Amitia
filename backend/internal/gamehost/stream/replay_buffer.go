@@ -100,22 +100,13 @@ func (rb *ReplayBuffer) Replay(fromSeq Sequence) ([]QueueEntry, error) {
 	if fromSeq >= rb.latestSeq {
 		return nil, nil
 	}
-	if fromSeq < rb.firstSeq {
+	if fromSeq != SequenceZero && fromSeq < rb.firstSeq {
 		return nil, ErrCursorStale
 	}
 
-	startIdx := rb.head
-	if fromSeq > rb.firstSeq {
-		offset := int(fromSeq - rb.firstSeq)
-		startIdx = (rb.head + offset) % rb.capacity
-	}
-
 	result := make([]QueueEntry, 0)
-	idx := (startIdx + 1) % rb.capacity
 	for i := 0; i < rb.count; i++ {
-		if idx == (rb.tail+1)%rb.capacity && i > 0 {
-			break
-		}
+		idx := (rb.head + i) % rb.capacity
 		entry := rb.entries[idx]
 		if entry.Sequence == SequenceZero {
 			break
@@ -126,10 +117,6 @@ func (rb *ReplayBuffer) Replay(fromSeq Sequence) ([]QueueEntry, error) {
 				Payload:  bytesClone(entry.Payload),
 				Size:     entry.Size,
 			})
-		}
-		idx = (idx + 1) % rb.capacity
-		if idx == (rb.tail+1)%rb.capacity {
-			break
 		}
 	}
 	return result, nil

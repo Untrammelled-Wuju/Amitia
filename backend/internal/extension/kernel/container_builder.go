@@ -278,6 +278,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	executionKernel.ScopeGate.ScopeManager = scopeManager
 	executionKernel.PermissionGate.Broker = permBroker
+	executionKernel.ScopeStore = scopeStore
+	executionKernel.PermissionSnapshotStore = permSnapshotStore
 	executionKernel.ToolResolver = func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
 		def, ok := toolRegistry.Get(ctx, toolID)
 		if !ok {

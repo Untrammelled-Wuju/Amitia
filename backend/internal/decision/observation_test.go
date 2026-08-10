@@ -50,7 +50,7 @@ func TestValidateObservationToolResultMissingToolID(t *testing.T) {
 	o := Observation{
 		Version:        ObservationVersionV1,
 		ID:             BuildObservationID("a1"),
-		ActionID:        "a1",
+		ActionID:       "a1",
 		InteractionID:  "i1",
 		ConversationID: "c1",
 		Kind:           ObservationKindToolResult,
@@ -72,7 +72,7 @@ func TestValidateObservationToolResultMissingInvocationID(t *testing.T) {
 	o := Observation{
 		Version:        ObservationVersionV1,
 		ID:             BuildObservationID("a1"),
-		ActionID:        "a1",
+		ActionID:       "a1",
 		InteractionID:  "i1",
 		ConversationID: "c1",
 		Kind:           ObservationKindToolResult,
@@ -94,7 +94,7 @@ func TestValidateObservationNoActionValid(t *testing.T) {
 	o := Observation{
 		Version:        ObservationVersionV1,
 		ID:             BuildObservationID("a1"),
-		ActionID:        "a1",
+		ActionID:       "a1",
 		InteractionID:  "i1",
 		ConversationID: "c1",
 		Kind:           ObservationKindNoAction,
@@ -111,7 +111,7 @@ func TestValidateObservationNoActionWithToolID(t *testing.T) {
 	o := Observation{
 		Version:        ObservationVersionV1,
 		ID:             BuildObservationID("a1"),
-		ActionID:        "a1",
+		ActionID:       "a1",
 		InteractionID:  "i1",
 		ConversationID: "c1",
 		Kind:           ObservationKindNoAction,
@@ -130,7 +130,7 @@ func TestValidateObservationMaterializationFailureNoInvocation(t *testing.T) {
 	o := Observation{
 		Version:        ObservationVersionV1,
 		ID:             BuildObservationID("a1"),
-		ActionID:        "a1",
+		ActionID:       "a1",
 		InteractionID:  "i1",
 		ConversationID: "c1",
 		Kind:           ObservationKindMaterializationFailure,
@@ -147,7 +147,7 @@ func TestValidateObservationMaterializationFailureWithInvocation(t *testing.T) {
 	o := Observation{
 		Version:        ObservationVersionV1,
 		ID:             BuildObservationID("a1"),
-		ActionID:        "a1",
+		ActionID:       "a1",
 		InteractionID:  "i1",
 		ConversationID: "c1",
 		Kind:           ObservationKindMaterializationFailure,
@@ -166,7 +166,7 @@ func TestValidateObservationRequiresObservedAt(t *testing.T) {
 	o := Observation{
 		Version:        ObservationVersionV1,
 		ID:             BuildObservationID("a1"),
-		ActionID:        "a1",
+		ActionID:       "a1",
 		InteractionID:  "i1",
 		ConversationID: "c1",
 		Kind:           ObservationKindNoAction,

@@ -69,6 +69,8 @@ type Service interface {
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 	SetActionMaterializer(m *interaction.ActionMaterializer)
 	SetActionDispatcher(d interaction.ActionDispatcher)
+	SetObservationBuilder(b interaction.ObservationBuilder)
+	SetGoalProgressService(s interaction.GoalProgressService)
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -102,28 +104,30 @@ const WechatStylePrompt = "你和用户是比较熟悉的长期对话关系，�
 	"不能使用markdown格式。"
 
 type service struct {
-	repo               Repository
-	charRepo           character.Repository
-	db                 *gorm.DB
-	psycheStore        psyche.PsycheStore
-	memorySvc          memory.Service
-	profileSvc         profile.Service
-	episodicSvc        episodic.Service
-	worldBookSvc       worldbook.Service
-	wmCache            *WorkingMemoryCache
-	stateProvider      *ConversationStateProvider
-	compressor         *Compressor
-	pipeline           *memory.Pipeline
-	llmWithTools       llmWithToolsFunc
-	outboxStore        OutboxStore
-	deliveryStore      DeliveryStore
-	toolRuntime        ModelToolRuntime
-	hookInvoker        HookInvoker
-	actionMaterializer *interaction.ActionMaterializer
-	actionDispatcher   interaction.ActionDispatcher
-	actionDirective    decision.ActionDirective
-	hasActionDirective bool
-	relTimeCoordinator *temporal.RelationshipTimeCoordinator
+	repo                Repository
+	charRepo            character.Repository
+	db                  *gorm.DB
+	psycheStore         psyche.PsycheStore
+	memorySvc           memory.Service
+	profileSvc          profile.Service
+	episodicSvc         episodic.Service
+	worldBookSvc        worldbook.Service
+	wmCache             *WorkingMemoryCache
+	stateProvider       *ConversationStateProvider
+	compressor          *Compressor
+	pipeline            *memory.Pipeline
+	llmWithTools        llmWithToolsFunc
+	outboxStore         OutboxStore
+	deliveryStore       DeliveryStore
+	toolRuntime         ModelToolRuntime
+	hookInvoker         HookInvoker
+	actionMaterializer  *interaction.ActionMaterializer
+	actionDispatcher    interaction.ActionDispatcher
+	observationBuilder  interaction.ObservationBuilder
+	actionDirective     decision.ActionDirective
+	hasActionDirective  bool
+	relTimeCoordinator  *temporal.RelationshipTimeCoordinator
+	goalProgressService interaction.GoalProgressService
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -171,6 +175,14 @@ func (s *service) SetActionMaterializer(m *interaction.ActionMaterializer) {
 
 func (s *service) SetActionDispatcher(d interaction.ActionDispatcher) {
 	s.actionDispatcher = d
+}
+
+func (s *service) SetObservationBuilder(b interaction.ObservationBuilder) {
+	s.observationBuilder = b
+}
+
+func (s *service) SetGoalProgressService(svc interaction.GoalProgressService) {
+	s.goalProgressService = svc
 }
 
 func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {

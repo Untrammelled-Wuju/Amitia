@@ -47,6 +47,14 @@ func (m *mockPermissionBroker) DetectUpgrade(_ context.Context, _, _ []Permissio
 	return nil
 }
 
+func (m *mockPermissionBroker) RecordApproval(_ context.Context, _ PermissionApprovalRecordRequest) (PermissionApprovalRecord, error) {
+	return PermissionApprovalRecord{}, nil
+}
+
+func (m *mockPermissionBroker) ValidateSnapshot(_ context.Context, _ string, _ PermissionEvaluationRequest) error {
+	return nil
+}
+
 type mockScopeManager struct {
 	evalResult scope.ScopeDecision
 	evalCalled bool
