@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 )
 
 type ExecutionPipeline struct {
@@ -36,6 +37,7 @@ type ExecutionPipeline struct {
 	ToolResolver            func(ctx context.Context, toolID string) (capability.ToolDefinition, error)
 	ScopeStore              scope.ScopeStore
 	PermissionSnapshotStore permission.PermissionSnapshotStore
+	SecretBroker            *secret.Broker
 }
 
 func (p *ExecutionPipeline) Execute(ctx context.Context, request ToolExecutionRequest) capability.UnifiedToolResult {
@@ -333,6 +335,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	}
 
 	p.recordAuditStart(timeoutCtx, inv.InvocationID, toolID)
+	p.prepareSecrets(timeoutCtx, tool, inv)
 	startTime := p.TimeoutCtrl.Now()
 
 	var result capability.UnifiedToolResult
@@ -595,10 +598,19 @@ func (p *ExecutionPipeline) checkCancellation(ctx context.Context, inv capabilit
 }
 
 func (p *ExecutionPipeline) finalizeCancellation(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult) capability.UnifiedToolResult {
+	if p.SecretBroker != nil {
+		p.SecretBroker.RevokeByInvocation(inv.InvocationID)
+	}
 	if p.CancellationCtrl == nil {
 		return result
 	}
 	return p.CancellationCtrl.Finalize(ctx, inv, result)
+}
+
+func (p *ExecutionPipeline) prepareSecrets(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) {
+	if p.SecretBroker == nil {
+		return
+	}
 }
 
 func (p *ExecutionPipeline) attachRuntimeCanceller(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) {

@@ -123,38 +123,30 @@ func (b *Broker) Consume(ctx context.Context, leaseID LeaseID, use LeaseUseConte
 		return nil, ErrSecretStoreUnavailable
 	}
 
-	st, ok := b.leases.GetState(leaseID)
+	res, ok := b.leases.Consume(leaseID)
 	if !ok {
 		return nil, ErrSecretNotFound
 	}
-
-	if st.descriptor.Revoked {
+	if res.revoked {
 		return nil, ErrSecretLeaseRevoked
 	}
-	if !st.descriptor.ExpiresAt.IsZero() && b.now().After(st.descriptor.ExpiresAt) {
+	if res.expired {
 		return nil, ErrSecretLeaseExpired
 	}
-	if st.descriptor.MaxUses > 0 && st.descriptor.UsedCount >= st.descriptor.MaxUses {
+	if res.exhausted && res.value == nil {
 		return nil, ErrSecretLeaseExhausted
 	}
 
-	if !matchLeaseCaller(&st.descriptor, &use) {
+	lease, _ := b.leases.Get(leaseID)
+	if !matchLeaseCaller(&lease, &use) {
 		return nil, ErrSecretLeaseScopeMismatch
 	}
 
-	st.descriptor.UsedCount++
-
-	if st.value == nil {
-		return nil, ErrSecretLeaseRevoked
-	}
-	valueCopy := make([]byte, len(st.value))
-	copy(valueCopy, st.value)
-
-	if st.descriptor.MaxUses > 0 && st.descriptor.UsedCount >= st.descriptor.MaxUses {
-		b.revokeLeaseState(st, leaseID, "exhausted")
+	if res.exhausted {
+		b.RevokeLease(leaseID)
 	}
 
-	return valueCopy, nil
+	return res.value, nil
 }
 
 func (b *Broker) WithSecret(ctx context.Context, leaseID LeaseID, use LeaseUseContext, fn func([]byte) error) error {
@@ -166,22 +158,9 @@ func (b *Broker) WithSecret(ctx context.Context, leaseID LeaseID, use LeaseUseCo
 	return fn(value)
 }
 
-func (b *Broker) RevokeLease(leaseID LeaseID, reason string) error {
-	st, ok := b.leases.GetState(leaseID)
-	if !ok {
-		return nil
-	}
-	if st.descriptor.Revoked {
-		return nil
-	}
-	b.revokeLeaseState(st, leaseID, reason)
+func (b *Broker) RevokeLease(leaseID LeaseID) error {
+	b.leases.MarkRevoked(leaseID)
 	return nil
-}
-
-func (b *Broker) revokeLeaseState(st *leaseState, id LeaseID, reason string) {
-	st.descriptor.Revoked = true
-	st.zeroize()
-	b.redactor.Remove(st.value)
 }
 
 func (b *Broker) RevokeByInvocation(invocationID string) int {
@@ -190,7 +169,7 @@ func (b *Broker) RevokeByInvocation(invocationID string) int {
 	}
 	affected := b.leases.ListByInvocation(invocationID)
 	for _, l := range affected {
-		_ = b.RevokeLease(l.ID, "invocation_terminal")
+		_ = b.RevokeLease(l.ID)
 	}
 	return len(affected)
 }
@@ -201,7 +180,7 @@ func (b *Broker) RevokeByRuntimeInstance(instanceID string) int {
 	}
 	affected := b.leases.ListByRuntimeInstance(instanceID)
 	for _, l := range affected {
-		_ = b.RevokeLease(l.ID, "runtime_stopped")
+		_ = b.RevokeLease(l.ID)
 	}
 	return len(affected)
 }
@@ -212,7 +191,7 @@ func (b *Broker) RevokeByExtensionGeneration(extensionID string, generation int6
 	}
 	affected := b.leases.ListByExtensionGeneration(extensionID, generation)
 	for _, l := range affected {
-		_ = b.RevokeLease(l.ID, "generation_changed")
+		_ = b.RevokeLease(l.ID)
 	}
 	return len(affected)
 }
@@ -236,7 +215,7 @@ func (b *Broker) CleanupExpired() int {
 func (b *Broker) RevokeAll() int {
 	all := b.leases.List()
 	for _, l := range all {
-		_ = b.RevokeLease(l.ID, "explicit_revoke")
+		_ = b.RevokeLease(l.ID)
 	}
 	return len(all)
 }

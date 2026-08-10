@@ -42,6 +42,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -50,6 +51,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/pkg/sse"
 )
 
@@ -255,6 +257,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
 	toolRegistry := capability.NewToolRegistry()
+
+	kernelSecretBroker := buildKernelSecretBroker(b.extRoot)
 	executionKernel := &execution.ExecutionPipeline{
 		InvocationValidator: execution.NewInvocationValidator(),
 		InputValidator:      execution.NewInputValidator(),
@@ -276,6 +280,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		AuditRec:            execution.NewAuditRecorder(),
 		MetricsRec:          execution.NewMetricsRecorder(),
 		CircuitBreaker:      execution.NewCircuitBreakerCoordinator(),
+		SecretBroker:        kernelSecretBroker,
 	}
 	executionKernel.ScopeGate.ScopeManager = scopeManager
 	executionKernel.PermissionGate.Broker = permBroker
@@ -873,6 +878,17 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	devModeReloader.SetSessionManager(devModeSessions)
 	devModeReloader.SetCleanupFailureStore(NewSQLiteCleanupFailureStore(db))
 
+	kernelSource := gamehost.NewKernelContributionSource(instRepo, defRepo, contribRepo)
+	gameHost, err := gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{
+		DataRoot:          b.extRoot,
+		KernelSource:      kernelSource,
+		TrustedSupervisor: trustedSupervisor,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
+	}
+	container.GameHost = gameHost
+
 	return container, nil
 }
 
@@ -900,4 +916,18 @@ func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error
 		return nil, fmt.Errorf("kernel: migrate session tokens: %w", err)
 	}
 	return store, nil
+}
+
+func buildKernelSecretBroker(extRoot string) *secret.Broker {
+	secretsPath := filepath.Join(extRoot, "kernel-secrets.json")
+	keyPath := filepath.Join(extRoot, "kernel-secrets.key")
+	store, err := secret.NewEncryptedFileStore(secretsPath, keyPath)
+	if err != nil {
+		return nil
+	}
+	broker, err := secret.NewBroker(secret.BrokerConfig{Store: store})
+	if err != nil {
+		return nil
+	}
+	return broker
 }

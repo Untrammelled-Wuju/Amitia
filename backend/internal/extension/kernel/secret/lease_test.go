@@ -12,14 +12,14 @@ type mockStore struct {
 	secrets map[string][]byte
 }
 
-func (m *mockStore) Put(ctx context.Context, namespace string, value []byte) (SecretRef, error) {
-	ref := SecretRef("secret://" + namespace + "/store-id")
-	m.secrets[string(ref)] = value
+func (m *mockStore) Put(ctx context.Context, namespace string, value []byte) (string, error) {
+	ref := "secret://" + namespace + "/store-id"
+	m.secrets[ref] = value
 	return ref, nil
 }
 
-func (m *mockStore) Get(ctx context.Context, ref SecretRef) ([]byte, error) {
-	v, ok := m.secrets[string(ref)]
+func (m *mockStore) Get(ctx context.Context, ref string) ([]byte, error) {
+	v, ok := m.secrets[ref]
 	if !ok {
 		return nil, ErrSecretNotFound
 	}
@@ -28,8 +28,8 @@ func (m *mockStore) Get(ctx context.Context, ref SecretRef) ([]byte, error) {
 	return out, nil
 }
 
-func (m *mockStore) Delete(ctx context.Context, ref SecretRef) error {
-	delete(m.secrets, string(ref))
+func (m *mockStore) Delete(ctx context.Context, ref string) error {
+	delete(m.secrets, ref)
 	return nil
 }
 
@@ -193,7 +193,7 @@ func TestBrokerConsume_Revoked(t *testing.T) {
 		RuntimeInstanceID: "inst-1",
 	})
 
-	if err := broker.RevokeLease(lease.ID, "test"); err != nil {
+	if err := broker.RevokeLease(lease.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
@@ -288,7 +288,7 @@ func TestBrokerRevoke(t *testing.T) {
 		RuntimeInstanceID: "inst-1",
 	})
 
-	if err := broker.RevokeLease(lease.ID, "test"); err != nil {
+	if err := broker.RevokeLease(lease.ID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
@@ -313,8 +313,8 @@ func TestBrokerRevoke_Idempotent(t *testing.T) {
 		RuntimeInstanceID: "inst-1",
 	})
 
-	_ = broker.RevokeLease(lease.ID, "test")
-	if err := broker.RevokeLease(lease.ID, "test"); err != nil {
+	_ = broker.RevokeLease(lease.ID)
+	if err := broker.RevokeLease(lease.ID); err != nil {
 		t.Fatalf("second revoke should be nil: %v", err)
 	}
 }

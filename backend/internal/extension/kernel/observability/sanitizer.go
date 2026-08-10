@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 )
 
 type RecordSanitizer struct {
 	sensitiveFields map[string]DataSensitivity
 	secretPatterns  []*regexp.Regexp
+	redactor        *secret.Redactor
 }
 
 func NewRecordSanitizer() *RecordSanitizer {
@@ -122,9 +125,16 @@ func (s *RecordSanitizer) RegisterSensitiveField(field string, sensitivity DataS
 	s.sensitiveFields[strings.ToLower(field)] = sensitivity
 }
 
+func (s *RecordSanitizer) SetRedactor(r *secret.Redactor) {
+	s.redactor = r
+}
+
 func (s *RecordSanitizer) redactSecrets(text string) string {
 	for _, pattern := range s.secretPatterns {
 		text = pattern.ReplaceAllString(text, "[redacted]")
+	}
+	if s.redactor != nil {
+		text = s.redactor.Redact(text)
 	}
 	return text
 }

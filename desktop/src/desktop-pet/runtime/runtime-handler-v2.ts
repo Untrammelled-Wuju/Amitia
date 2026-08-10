@@ -286,7 +286,7 @@ export class DesktopRuntimeHandlerV2 {
     ws.send(JSON.stringify(envelope));
   }
 
-  private async sendRuntimeEvent(name: string, payload: unknown): Promise<void> {
+  async sendRuntimeEvent(name: string, payload: unknown): Promise<void> {
     await this.sendEnvelope("runtime_event", name, payload);
   }
 

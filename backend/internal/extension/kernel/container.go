@@ -43,6 +43,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/gamehost"
 )
 
 type MCPDuplicateDetail struct {
@@ -195,6 +196,8 @@ type Container struct {
 
 	PageSessionRepository *sqlite.SQLitePageSessionRepository
 	CandidateRepository   *CandidateRepository
+
+	GameHost *gamehost.GameHostContainer
 }
 
 func (c *Container) Close() error {
@@ -230,6 +233,11 @@ func (c *Container) Close() error {
 
 	if c.Store != nil {
 		if err := c.Store.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if c.GameHost != nil {
+		if err := c.GameHost.Shutdown(context.Background()); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

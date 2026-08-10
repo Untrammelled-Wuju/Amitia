@@ -126,6 +126,55 @@ func (s *LeaseStore) GetState(id LeaseID) (*leaseState, bool) {
 	return st, ok
 }
 
+type consumeResult struct {
+	value     []byte
+	revoked   bool
+	exhausted bool
+	expired   bool
+}
+
+func (s *LeaseStore) Consume(id LeaseID) (*consumeResult, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.states[id]
+	if !ok {
+		return nil, false
+	}
+	if st.descriptor.Revoked {
+		return &consumeResult{revoked: true}, true
+	}
+	now := time.Now()
+	if !st.descriptor.ExpiresAt.IsZero() && now.After(st.descriptor.ExpiresAt) {
+		return &consumeResult{expired: true}, true
+	}
+	if st.descriptor.MaxUses > 0 && st.descriptor.UsedCount >= st.descriptor.MaxUses {
+		return &consumeResult{exhausted: true}, true
+	}
+	st.descriptor.UsedCount++
+	if st.value != nil {
+		valueCopy := make([]byte, len(st.value))
+		copy(valueCopy, st.value)
+		out := &consumeResult{value: valueCopy}
+		if st.descriptor.MaxUses > 0 && st.descriptor.UsedCount >= st.descriptor.MaxUses {
+			out.exhausted = true
+		}
+		return out, true
+	}
+	return &consumeResult{}, true
+}
+
+func (s *LeaseStore) MarkRevoked(id LeaseID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.states[id]
+	if !ok || st.descriptor.Revoked {
+		return false
+	}
+	st.descriptor.Revoked = true
+	st.zeroize()
+	return true
+}
+
 func (s *LeaseStore) Delete(id LeaseID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
