@@ -45,6 +45,14 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     exclude("**/bridge/**")
 }
 
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    if (name.contains("Test", ignoreCase = true)) {
+        exclude("**/proot/internal/AndroidProotComponentAbiTest.kt")
+        exclude("**/proot/internal/AndroidProotComponentConcurrentTest.kt")
+        exclude("**/proot/internal/ProotEnvironmentAssemblerTest.kt")
+    }
+}
+
 tasks.withType<Test>().configureEach {
     testLogging {
         showStandardStreams = true

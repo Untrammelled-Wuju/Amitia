@@ -57,9 +57,31 @@ class ProotEnvironmentAssemblerTest {
         val layout = createLayout()
         val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
         val spec = assembler.assembleBackendLaunch()
-        val request = assembler.toProotLaunchRequest(spec)
+        val request = assembler.toProotLaunchRequest(spec, "/usr/lib/libamitia_proot.so")
         assertEquals(listOf("/opt/amitia/backend/amitia-server"), request.command)
         assertEquals("/opt/amitia", request.workingDirectory)
+    }
+
+    @Test
+    fun specContainsAllRequiredMounts() {
+        val layout = createLayout()
+        val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
+        val spec = assembler.assembleBackendLaunch()
+        val guests = spec.bindMounts.map { it.guest }
+        assertTrue(guests.contains("/opt/amitia"))
+        assertTrue(guests.contains("/etc/amitia"))
+        assertTrue(guests.contains("/var/lib/amitia"))
+        assertTrue(guests.contains("/var/cache/amitia"))
+        assertTrue(guests.contains("/var/log/amitia"))
+        assertTrue(guests.contains("/run/amitia"))
+    }
+
+    @Test
+    fun specHasDeterministicBinaryPath() {
+        val layout = createLayout()
+        val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
+        val spec = assembler.assembleBackendLaunch()
+        assertEquals("", spec.binaryPath)
     }
 
     @Test

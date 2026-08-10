@@ -123,7 +123,7 @@ type AuditEntry struct {
 
 var DefaultReconciliationEngine = NewReconciliationEngine(DefaultReconciliationConfig())
 
-func BuildDebugPanelData() DebugPanelData {
+func BuildDebugPanelData(reconciliationEngine *ReconciliationEngine) DebugPanelData {
 	now := time.Now().UTC()
 	reports := DefaultCircuitBreakerRegistry.AllHealthReports()
 	cbSnapshots := make([]CircuitBreakerSnapshot, 0)
@@ -138,7 +138,12 @@ func BuildDebugPanelData() DebugPanelData {
 			})
 		}
 	}
-	scans := DefaultReconciliationEngine.AllScans()
+	var scans []*ReconciliationScan
+	var status ReconciliationStatus
+	if reconciliationEngine != nil {
+		scans = reconciliationEngine.AllScans()
+		status = reconciliationEngine.Status()
+	}
 	metrics := make([]RuntimeMetric, 0)
 	metrics = append(metrics, RuntimeMetric{Name: RuntimeMetricQueueDepth, Value: 0})
 	metrics = append(metrics, RuntimeMetric{Name: RuntimeMetricConsistencyDiffs, Value: 0})
@@ -169,19 +174,19 @@ func BuildDebugPanelData() DebugPanelData {
 			},
 		},
 		ReconciliationScans:  scans,
-		ReconciliationStatus: DefaultReconciliationEngine.Status(),
+		ReconciliationStatus: status,
 		CircuitBreakers:      cbSnapshots,
 		DependencyHealth:     reports,
 		RuntimeMetrics:       metrics,
 		GeneratedAt:          now,
 	}
 }
-func BuildSanitizedExport() SanitizedExport {
+func BuildSanitizedExport(reconciliationEngine *ReconciliationEngine) SanitizedExport {
 	now := time.Now().UTC()
 	return SanitizedExport{
 		ExportID:    "export-" + now.Format("20060102T150405"),
 		GeneratedAt: now,
-		PanelData:   BuildDebugPanelData(),
+		PanelData:   BuildDebugPanelData(reconciliationEngine),
 		AuditLog:    make([]AuditEntry, 0),
 		Sanitized:   true,
 	}

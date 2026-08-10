@@ -225,23 +225,67 @@ func (f *FakeProcessCleaner) CleanupProcessTree(ctx context.Context, runtimeID d
 func newTestEmergencyService(runtimeID domain.RuntimeInstanceID, mode domain.ControlMode, epoch uint64) (*EmergencyStopService, *ControlAuthorityManager, *PluginOutputGate, *FakeTopology, *FakeEmergencyRuntimeStopper) {
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 	_, _ = mgr.Create(context.Background(), runtimeID, "plugin-1")
-	if mode != domain.ControlModeObserveOnly || epoch > 1 {
+
+	targetMode := mode
+	if targetMode == "" {
+		targetMode = domain.ControlModeObserveOnly
+	}
+
+	modes := []domain.ControlMode{
+		domain.ControlModeObserveOnly,
+		domain.ControlModePluginControl,
+		domain.ControlModeSharedControl,
+		domain.ControlModeAssist,
+		domain.ControlModeObserveOnly,
+		domain.ControlModePluginControl,
+		domain.ControlModeUserControl,
+	}
+
+	currentIdx := 0
+	for i := range modes {
+		if modes[i] == targetMode {
+			currentIdx = i
+			break
+		}
+	}
+
+	desiredEpoch := epoch
+	if desiredEpoch < 2 {
+		desiredEpoch = 2
+	}
+
+	for i := 0; i <= currentIdx && i < len(modes); i++ {
+		if modes[i] == domain.ControlModeObserveOnly && i == 0 {
+			continue
+		}
 		_, _ = mgr.Transition(context.Background(), runtimeID, TransitionRequest{
-			Target: mode,
+			Target: modes[i],
 			Actor:  ActorSystem,
 			Reason: ReasonRuntimeLifecycle,
 		})
 	}
+
 	for {
 		snap, _ := mgr.Get(context.Background(), runtimeID)
-		if snap.Epoch >= epoch {
+		if snap.Mode == targetMode && snap.Epoch >= desiredEpoch {
 			break
 		}
 		_, _ = mgr.Transition(context.Background(), runtimeID, TransitionRequest{
-			Target: mode,
+			Target: domain.ControlModeAssist,
 			Actor:  ActorSystem,
 			Reason: ReasonRuntimeLifecycle,
 		})
+		snap2, _ := mgr.Get(context.Background(), runtimeID)
+		if snap2.Mode != targetMode {
+			_, _ = mgr.Transition(context.Background(), runtimeID, TransitionRequest{
+				Target: targetMode,
+				Actor:  ActorSystem,
+				Reason: ReasonRuntimeLifecycle,
+			})
+		}
+		if snap2.Epoch >= desiredEpoch && snap2.Mode == targetMode {
+			break
+		}
 	}
 
 	topo := NewFakeTopology()
@@ -507,5 +551,387 @@ func TestEmergencyStop_RestartSuppressed(t *testing.T) {
 	}
 	if !rtStopper.IsSuppressed(runtimeID) {
 		t.Fatal("auto restart must be suppressed via RuntimeStopper")
+	}
+}
+
+func TestEmergencyStop_IdempotentByRuntimeID(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-idem")
+	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+
+	res1, err1 := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+	if err1 != nil {
+		t.Fatalf("first emergency stop failed: %v", err1)
+	}
+	if !res1.Success() {
+		t.Fatal("first emergency stop should succeed")
+	}
+
+	res2, err2 := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+	if err2 != nil {
+		t.Fatalf("second emergency stop should not error: %v", err2)
+	}
+	if !res2.Success() {
+		t.Fatal("second idempotent call should also report success")
+	}
+	if res1.OperationID != res2.OperationID {
+		t.Fatalf("idempotent call should return same operation: %s vs %s", res1.OperationID, res2.OperationID)
+	}
+}
+
+func TestEmergencyStop_IdempotentByKey(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-idem-key")
+	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+
+	res1, _ := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID:      runtimeID,
+		Actor:          EmergencyActorUser,
+		IdempotencyKey: "idem-key-xyz",
+	})
+
+	res2, _ := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID:      runtimeID,
+		Actor:          EmergencyActorHost,
+		IdempotencyKey: "idem-key-xyz",
+	})
+
+	if res1.OperationID != res2.OperationID {
+		t.Fatalf("idempotency key must map to same operation: %s vs %s", res1.OperationID, res2.OperationID)
+	}
+}
+
+func TestEmergencyStop_TOCTOU_GateAllowThenStopBlocksOldOutput(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-toctou")
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+	_, _ = mgr.Create(context.Background(), runtimeID, "plugin-1")
+	_, _ = mgr.Transition(context.Background(), runtimeID, TransitionRequest{
+		Target: domain.ControlModePluginControl,
+		Actor:  ActorSystem,
+		Reason: ReasonRuntimeLifecycle,
+	})
+
+	topo := NewFakeTopology()
+	topo.RegisterRuntime(runtimeID, "plugin-1")
+
+	rt := NewFakeRuntimeReader()
+	rt.SetActive(runtimeID, true)
+	rt.SetReady(runtimeID, true)
+
+	gate := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:         func() time.Time { return time.Now().UTC() },
+		Topology:      topo,
+		RuntimeReader: rt,
+		PermChecker:   NewFakeEffPermChecker(),
+		Authority:     mgr,
+	})
+
+	rtStopper := NewFakeEmergencyRuntimeStopper()
+	rtStopper.SetActive(runtimeID, true)
+
+	svc := NewEmergencyStopService(EmergencyStopServiceOptions{
+		Clock:          func() time.Time { return time.Now().UTC() },
+		Authority:      mgr,
+		Gate:           gate,
+		RuntimeStopper: rtStopper,
+		RestartSuppress: NewFakeRestartSuppressor(),
+	})
+
+	snap, _ := mgr.Get(context.Background(), runtimeID)
+	req := OutputCheckRequest{
+		Intent: newTestOutputIntent(runtimeID, "", snap.Epoch),
+		Peer:   newTestPeer(runtimeID, "", "plugin-1"),
+	}
+	decision, permit := gate.Check(context.Background(), req)
+	if decision.Deny() {
+		t.Fatalf("pre-stop gate should allow: reason=%s", decision.Reason)
+	}
+	if permit == nil {
+		t.Fatal("expected permit before stop")
+	}
+
+	_, _ = svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+
+	if permit.IsCurrent(snap.Epoch) && !gate.IsRuntimeClosed(runtimeID) {
+		t.Fatal("permit should be invalid after emergency stop")
+	}
+
+	newReq := OutputCheckRequest{
+		Intent: newTestOutputIntent(runtimeID, "", snap.Epoch),
+		Peer:   newTestPeer(runtimeID, "", "plugin-1"),
+	}
+	newDecision, _ := gate.Check(context.Background(), newReq)
+	if !newDecision.Deny() {
+		t.Fatal("gate must deny after emergency stop")
+	}
+}
+
+func TestEmergencyStop_VerificationResult(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-verify")
+	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+
+	result, err := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	v := result.Verification
+	if !v.OutputGateClosed {
+		t.Fatal("verification: gate should be closed")
+	}
+	if !v.AuthoritySuspended {
+		t.Fatal("verification: authority should be suspended")
+	}
+	if !v.RuntimeStopped {
+		t.Fatal("verification: runtime should be stopped")
+	}
+}
+
+func TestEmergencyStop_RaceConcurrentCalls(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-race")
+	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+
+	var wg sync.WaitGroup
+	const N = 20
+	results := make([]EmergencyStopResult, N)
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			res, _ := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+				RuntimeID: runtimeID,
+				Actor:     EmergencyActorUser,
+			})
+			results[idx] = res
+		}(i)
+	}
+	wg.Wait()
+
+	for i, r := range results {
+		if r.RuntimeID != runtimeID {
+			t.Fatalf("result %d wrong runtime: %s", i, r.RuntimeID)
+		}
+	}
+}
+
+func TestEmergencyStop_RaceStopVsOutput(t *testing.T) {
+	topo := NewFakeTopology()
+	topo.RegisterRuntime("rt-race-mix", "plugin-1")
+
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+	_, _ = mgr.Create(context.Background(), "rt-race-mix", "plugin-1")
+	_, _ = mgr.Transition(context.Background(), "rt-race-mix", TransitionRequest{
+		Target: domain.ControlModePluginControl,
+		Actor:  ActorSystem,
+		Reason: ReasonRuntimeLifecycle,
+	})
+
+	rt := NewFakeRuntimeReader()
+	rt.SetActive("rt-race-mix", true)
+	rt.SetReady("rt-race-mix", true)
+
+	gate := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:         func() time.Time { return time.Now().UTC() },
+		Topology:      topo,
+		RuntimeReader: rt,
+		PermChecker:   NewFakeEffPermChecker(),
+		Authority:     mgr,
+	})
+
+	rtStopper := NewFakeEmergencyRuntimeStopper()
+	rtStopper.SetActive("rt-race-mix", true)
+
+	svc := NewEmergencyStopService(EmergencyStopServiceOptions{
+		Clock:           func() time.Time { return time.Now().UTC() },
+		Authority:       mgr,
+		Gate:            gate,
+		RuntimeStopper:  rtStopper,
+		RestartSuppress: NewFakeRestartSuppressor(),
+	})
+
+	var wg sync.WaitGroup
+	const N = 50
+	for i := 0; i < N; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			snap, _ := mgr.Get(context.Background(), "rt-race-mix")
+			req := OutputCheckRequest{
+				Intent: newTestOutputIntent("rt-race-mix", "", snap.Epoch),
+				Peer:   newTestPeer("rt-race-mix", "", "plugin-1"),
+			}
+			_, _ = gate.Check(context.Background(), req)
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+				RuntimeID: "rt-race-mix",
+				Actor:     EmergencyActorUser,
+			})
+		}()
+	}
+	wg.Wait()
+}
+
+func TestEmergencyStop_PendingCancelled(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-pending")
+	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+
+	pending := NewFakePendingCanceller()
+
+	svc.mu.Lock()
+	svc.pendingCanceller = pending
+	svc.mu.Unlock()
+
+	_, _ = svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+
+	if pending.CancelCount(runtimeID) == 0 {
+		t.Fatal("pending canceller must have been invoked")
+	}
+}
+
+func TestEmergencyStop_LeaseRevoked(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-lease")
+	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+
+	revoker := NewFakeLeaseRevoker()
+
+	svc.mu.Lock()
+	svc.leaseRevoker = revoker
+	svc.mu.Unlock()
+
+	_, _ = svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+
+	if revoker.RevokeCount(runtimeID) == 0 {
+		t.Fatal("lease revoker must have been invoked")
+	}
+}
+
+func TestEmergencyStop_ConnectionsClosed(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-conn")
+	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+
+	closer := NewFakeConnectionCloser()
+
+	svc.mu.Lock()
+	svc.connectionCloser = closer
+	svc.mu.Unlock()
+
+	_, _ = svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+
+	if closer.CloseCount(runtimeID) == 0 {
+		t.Fatal("connection closer must have been invoked")
+	}
+}
+
+func TestEmergencyStop_OtherRuntimeUnaffected(t *testing.T) {
+	runtimeA := domain.RuntimeInstanceID("rt-isolation-a")
+	runtimeB := domain.RuntimeInstanceID("rt-isolation-b")
+
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+	_, _ = mgr.Create(context.Background(), runtimeA, "plugin-a")
+	_, _ = mgr.Create(context.Background(), runtimeB, "plugin-b")
+	_, _ = mgr.Transition(context.Background(), runtimeA, TransitionRequest{Target: domain.ControlModePluginControl, Actor: ActorSystem, Reason: ReasonRuntimeLifecycle})
+	_, _ = mgr.Transition(context.Background(), runtimeB, TransitionRequest{Target: domain.ControlModePluginControl, Actor: ActorSystem, Reason: ReasonRuntimeLifecycle})
+
+	topo := NewFakeTopology()
+	topo.RegisterRuntime(runtimeA, "plugin-a")
+	topo.RegisterRuntime(runtimeB, "plugin-b")
+
+	gate := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:    func() time.Time { return time.Now().UTC() },
+		Topology: topo,
+		Authority: mgr,
+	})
+
+	rtStopper := NewFakeEmergencyRuntimeStopper()
+	rtStopper.SetActive(runtimeA, true)
+	rtStopper.SetActive(runtimeB, true)
+
+	svc := NewEmergencyStopService(EmergencyStopServiceOptions{
+		Clock:           func() time.Time { return time.Now().UTC() },
+		Authority:       mgr,
+		Gate:            gate,
+		RuntimeStopper:  rtStopper,
+		RestartSuppress: NewFakeRestartSuppressor(),
+	})
+
+	_, _ = svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeA,
+		Actor:     EmergencyActorUser,
+	})
+
+	if !gate.IsRuntimeClosed(runtimeA) {
+		t.Fatal("runtime A gate should be closed")
+	}
+	if gate.IsRuntimeClosed(runtimeB) {
+		t.Fatal("runtime B gate should NOT be closed")
+	}
+	if active, _ := rtStopper.IsRuntimeActive(context.Background(), runtimeB); !active {
+		t.Fatal("runtime B should still be active")
+	}
+}
+
+func TestEmergencyStop_AlreadySuspendedAuthorityStillSucceeds(t *testing.T) {
+	runtimeID := domain.RuntimeInstanceID("rt-already-suspended")
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+	_, _ = mgr.Create(context.Background(), runtimeID, "plugin-1")
+	_, _ = mgr.Transition(context.Background(), runtimeID, TransitionRequest{
+		Target: domain.ControlModeSuspended,
+		Actor:  ActorSystem,
+		Reason: ReasonSystemRecovery,
+	})
+
+	topo := NewFakeTopology()
+	topo.RegisterRuntime(runtimeID, "plugin-1")
+
+	gate := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:    func() time.Time { return time.Now().UTC() },
+		Topology: topo,
+		Authority: mgr,
+	})
+
+	rtStopper := NewFakeEmergencyRuntimeStopper()
+	rtStopper.SetActive(runtimeID, true)
+
+	svc := NewEmergencyStopService(EmergencyStopServiceOptions{
+		Clock:           func() time.Time { return time.Now().UTC() },
+		Authority:       mgr,
+		Gate:            gate,
+		RuntimeStopper:  rtStopper,
+		RestartSuppress: NewFakeRestartSuppressor(),
+	})
+
+	result, err := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+	})
+	if err != nil {
+		t.Fatalf("emergency stop should still succeed when already suspended: %v", err)
+	}
+	if !result.Success() {
+		t.Fatal("already-suspended should still succeed")
+	}
+	if !gate.IsRuntimeClosed(runtimeID) {
+		t.Fatal("gate must be closed even when authority already suspended")
 	}
 }

@@ -4,25 +4,13 @@ import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
 import com.amitia.amitia_app.runtime.proot.ProotBindMount
+import com.amitia.amitia_app.runtime.proot.ProotEnvironment
 import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
+import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironment
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentBuilder
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentRequest
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult
-
-internal data class ProotLaunchSpec(
-    val rootfsPath: String,
-    val workingDirectory: String,
-    val command: List<String>,
-    val bindMounts: List<ProotBindMount>,
-    val environment: RuntimeEnvironment,
-    val fakeRoot: Boolean = true,
-    val killOnExit: Boolean = true,
-) {
-    companion object {
-        const val DEFAULT_WORKDIR = "/opt/amitia"
-    }
-}
 
 internal class ProotEnvironmentAssembler(
     private val layout: RuntimeHostLayout,
@@ -30,19 +18,11 @@ internal class ProotEnvironmentAssembler(
 ) {
 
     fun assembleRootfsProbe(): ProotLaunchSpec {
-        val envRequest = RuntimeEnvironmentRequest(
-            hostLayout = layout,
-            endpoint = embeddedAndroidBackendPolicy(),
-        )
-        val envResult = environmentBuilder.build(envRequest)
-        val environment = when (envResult) {
-            is RuntimeEnvironmentResult.Success -> envResult.environment
-            is RuntimeEnvironmentResult.Failure -> throw ProotEnvironmentException(envResult.code, envResult.message)
-        }
-
+        val environment = buildEnvironment()
         val bindMounts = buildBindMounts(layout)
 
         return ProotLaunchSpec(
+            binaryPath = "",
             rootfsPath = layout.rootfsRoot.absolutePath,
             workingDirectory = ProotLaunchSpec.DEFAULT_WORKDIR,
             command = listOf("/usr/bin/env"),
@@ -52,19 +32,11 @@ internal class ProotEnvironmentAssembler(
     }
 
     fun assembleBackendLaunch(): ProotLaunchSpec {
-        val envRequest = RuntimeEnvironmentRequest(
-            hostLayout = layout,
-            endpoint = embeddedAndroidBackendPolicy(),
-        )
-        val envResult = environmentBuilder.build(envRequest)
-        val environment = when (envResult) {
-            is RuntimeEnvironmentResult.Success -> envResult.environment
-            is RuntimeEnvironmentResult.Failure -> throw ProotEnvironmentException(envResult.code, envResult.message)
-        }
-
+        val environment = buildEnvironment()
         val bindMounts = buildBindMounts(layout)
 
         return ProotLaunchSpec(
+            binaryPath = "",
             rootfsPath = layout.rootfsRoot.absolutePath,
             workingDirectory = ProotLaunchSpec.DEFAULT_WORKDIR,
             command = listOf("/opt/amitia/backend/amitia-server"),
@@ -73,16 +45,28 @@ internal class ProotEnvironmentAssembler(
         )
     }
 
-    fun toProotLaunchRequest(spec: ProotLaunchSpec): ProotLaunchRequest {
+    fun toProotLaunchRequest(spec: ProotLaunchSpec, binaryPath: String): ProotLaunchRequest {
         return ProotLaunchRequest.create(
             rootfsPath = spec.rootfsPath,
             workingDirectory = spec.workingDirectory,
             command = spec.command,
             bindMountsSource = spec.bindMounts,
-            environmentSource = com.amitia.amitia_app.runtime.proot.ProotEnvironment.of(spec.environment.guestRuntime),
+            environmentSource = spec.environment,
             fakeRoot = spec.fakeRoot,
             killOnExit = spec.killOnExit,
         )
+    }
+
+    private fun buildEnvironment(): ProotEnvironment {
+        val envRequest = RuntimeEnvironmentRequest(
+            hostLayout = layout,
+            endpoint = embeddedAndroidBackendPolicy(),
+        )
+        val envResult = environmentBuilder.build(envRequest)
+        return when (envResult) {
+            is RuntimeEnvironmentResult.Success -> ProotEnvironment.of(envResult.environment.guestRuntime)
+            is RuntimeEnvironmentResult.Failure -> throw ProotEnvironmentException(envResult.code, envResult.message)
+        }
     }
 
     private fun buildBindMounts(layout: RuntimeHostLayout): List<ProotBindMount> {

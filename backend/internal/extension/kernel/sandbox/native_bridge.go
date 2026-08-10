@@ -9,7 +9,7 @@ import (
 type NativeBridge interface {
 	Availability(ctx context.Context) BackendAvailability
 	Start(ctx context.Context, config SandboxConfig) error
-	Stop(ctx context.Context) error
+	Stop(ctx context.Context, reason SandboxStopReason) error
 	Execute(ctx context.Context, req SandboxExecuteRequest) (SandboxExecuteResult, error)
 	Cancel(ctx context.Context, executionID string) error
 	Health(ctx context.Context) SandboxHealth
@@ -17,6 +17,11 @@ type NativeBridge interface {
 	EnsureRootfs(ctx context.Context, spec RootfsInstallSpec) (RootfsInstallResult, error)
 	ActivateRootfs(ctx context.Context, installationID string) error
 	RemoveRootfs(ctx context.Context, installationID string) error
+	Quiesce(ctx context.Context) error
+	Resume(ctx context.Context) error
+	Restart(ctx context.Context, reason SandboxRestartReason) error
+	Recover(ctx context.Context) error
+	LifecycleState(ctx context.Context) SandboxLifecycleState
 }
 
 func NewNativeBridge() NativeBridge {

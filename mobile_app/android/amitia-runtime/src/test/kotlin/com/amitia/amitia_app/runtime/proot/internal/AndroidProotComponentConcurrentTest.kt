@@ -136,8 +136,8 @@ class AndroidProotComponentConcurrentTest {
     }
 
     private class FakeCommandBuilder : ProotCommandBuilder {
-        override fun build(binaryPath: String, request: ProotLaunchRequest): ProotCommand =
-            ProotCommand(binaryPath, listOf(binaryPath) + request.command, emptyMap())
+        override fun build(spec: ProotLaunchSpec): ProotCommand =
+            ProotCommand(spec.binaryPath, listOf(spec.binaryPath) + spec.command, emptyMap())
     }
 
     private class AliveProcessLauncher : ProotProcessLauncher {

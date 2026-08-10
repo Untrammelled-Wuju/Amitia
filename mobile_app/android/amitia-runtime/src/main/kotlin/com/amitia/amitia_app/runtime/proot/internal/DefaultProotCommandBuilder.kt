@@ -2,18 +2,18 @@
 
 import com.amitia.amitia_app.runtime.proot.ProotCommand
 import com.amitia.amitia_app.runtime.proot.ProotCommandBuilder
-import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
+import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
 
 internal class DefaultProotCommandBuilder : ProotCommandBuilder {
-    override fun build(binaryPath: String, request: ProotLaunchRequest): ProotCommand {
+    override fun build(spec: ProotLaunchSpec): ProotCommand {
         val args = ArrayList<String>(32)
-        if (request.killOnExit) args.add("--kill-on-exit")
-        if (request.fakeRoot) args.add("-0")
-        args.add("-r"); args.add(request.rootfsPath)
-        args.add("-w"); args.add(request.workingDirectory)
-        for (mount in request.bindMounts) { args.add("-b"); args.add("${mount.host}:${mount.guest}") }
+        if (spec.killOnExit) args.add("--kill-on-exit")
+        if (spec.fakeRoot) args.add("-0")
+        args.add("-r"); args.add(spec.rootfsPath)
+        args.add("-w"); args.add(spec.workingDirectory)
+        for (mount in spec.bindMounts) { args.add("-b"); args.add("${mount.host}:${mount.guest}") }
         args.add("--")
-        args.addAll(request.command)
-        return ProotCommand(binaryPath, args.toList(), request.environmentSource.toMap())
+        args.addAll(spec.command)
+        return ProotCommand(spec.binaryPath, args.toList(), spec.environment.toMap())
     }
 }

@@ -3,10 +3,12 @@ package com.amitia.amitia_app.runtime.internal
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.api.RuntimeController
 import com.amitia.amitia_app.runtime.api.RuntimeModule
+import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 
 internal class DefaultRuntimeModule(
     override val controller: RuntimeController = UnsupportedRuntimeController(),
+    override val runtimeInstaller: RuntimeInstaller,
     private val stateStore: RuntimeStateStore = RuntimeStateStore(),
     private val abiGate: RuntimeAbiGate? = null,
     private val serviceHost: RuntimeServiceHost? = null

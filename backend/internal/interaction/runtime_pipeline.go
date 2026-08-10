@@ -118,7 +118,7 @@ func (p *RuntimePipeline) SetGoalRegistry(registry *decision.GoalRegistry) {
 	p.goalRegistry = registry
 }
 
-func (p *RuntimePipeline) SetContinuationService(service *ContinuationService) {
+func (p *RuntimePipeline) SetContinuationService(service ContinuationService) {
 }
 
 func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, req *ProcessRequest) RuntimeAssembly {

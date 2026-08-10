@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ type ReconciliationEngine struct {
 	config      ReconciliationConfig
 	scans       map[string]*ReconciliationScan
 	checkers    map[ReconciliationTarget]ReconciliationChecker
+	repairers   map[ReconciliationTarget]ReconciliationRepairer
 	scanCtr     int64
 	status      ReconciliationStatus
 	mu          sync.RWMutex
@@ -36,12 +38,13 @@ type ReconciliationEngine struct {
 
 func NewReconciliationEngine(config ReconciliationConfig) *ReconciliationEngine {
 	return &ReconciliationEngine{
-		config:   config,
-		scans:    make(map[string]*ReconciliationScan),
-		checkers: make(map[ReconciliationTarget]ReconciliationChecker),
-		status:   ReconciliationStatusIdle,
-		control:  make(chan struct{}, 1),
-		done:     make(chan struct{}, 1),
+		config:    config,
+		scans:     make(map[string]*ReconciliationScan),
+		checkers:  make(map[ReconciliationTarget]ReconciliationChecker),
+		repairers: make(map[ReconciliationTarget]ReconciliationRepairer),
+		status:    ReconciliationStatusIdle,
+		control:   make(chan struct{}, 1),
+		done:      make(chan struct{}, 1),
 	}
 }
 
@@ -66,6 +69,57 @@ func (e *ReconciliationEngine) RegisteredTargets() []ReconciliationTarget {
 		return targets[i] < targets[j]
 	})
 	return targets
+}
+
+func (e *ReconciliationEngine) RegisterRepairer(target ReconciliationTarget, repairer ReconciliationRepairer) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if repairer == nil {
+		delete(e.repairers, target)
+		return
+	}
+	e.repairers[target] = repairer
+}
+
+func (e *ReconciliationEngine) RepairDiff(ctx context.Context, scanID string, diff ReconciliationDiff) (bool, string) {
+	e.mu.RLock()
+	checker, hasChecker := e.checkers[ReconciliationTarget(diff.Target)]
+	e.mu.RUnlock()
+	if !hasChecker {
+		return false, "repair_not_supported"
+	}
+	e.mu.RLock()
+	repairer, hasRepairer := e.repairers[ReconciliationTarget(diff.Target)]
+	e.mu.RUnlock()
+	if !hasRepairer || repairer == nil {
+		return false, "repair_not_supported"
+	}
+	if err := repairer.Repair(ctx, diff); err != nil {
+		return false, safeRepairError(err)
+	}
+	req := ReconciliationCheckRequest{
+		ScanID:   scanID,
+		Target:   ReconciliationTarget(diff.Target),
+		Strategy: StrategyManualConfirm,
+	}
+	rechecked, recheckErr := checker.CheckReconciliation(ctx, req)
+	if recheckErr != nil {
+		return false, safeRepairError(recheckErr)
+	}
+	for _, d := range rechecked {
+		if d.DiffType == diff.DiffType && d.SourceKey == diff.SourceKey && d.TargetKey == diff.TargetKey {
+			return false, "repair_persisted"
+		}
+	}
+	return true, ""
+}
+
+func safeRepairError(err error) string {
+	msg := err.Error()
+	if len(msg) > 200 {
+		msg = msg[:200]
+	}
+	return strings.TrimSpace(msg)
 }
 
 func (e *ReconciliationEngine) RunScan(ctx context.Context, target ReconciliationTarget, strategy ReconciliationStrategy, startCursor string) (*ReconciliationScan, error) {

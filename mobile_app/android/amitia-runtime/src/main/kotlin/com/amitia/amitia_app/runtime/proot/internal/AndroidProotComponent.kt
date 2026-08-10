@@ -8,6 +8,7 @@ import com.amitia.amitia_app.runtime.proot.ProotCommandBuilder
 import com.amitia.amitia_app.runtime.proot.ProotComponent
 import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
+import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotProcessLauncher
 import com.amitia.amitia_app.runtime.proot.ProotSession
@@ -57,7 +58,8 @@ internal class AndroidProotComponent(
             if (existing != null && existing.isAlive()) {
                 return AlreadyRunningSession(existing.sessionId)
             }
-            val command = commandBuilder.build(avail.absoluteBinaryPath, request)
+            val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
+            val command = commandBuilder.build(spec)
             val session = processLauncher.launch(command, observer)
             mainSession.set(session)
             activeSessions[session.sessionId] = session
@@ -73,7 +75,8 @@ internal class AndroidProotComponent(
         }
         val avail = availability()
         if (avail !is ProotAvailability.Available) return ClosedSession
-        val command = commandBuilder.build(avail.absoluteBinaryPath, request)
+        val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
+        val command = commandBuilder.build(spec)
         val session = processLauncher.launch(command, observer)
         activeSessions[session.sessionId] = session
         return session

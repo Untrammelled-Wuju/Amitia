@@ -33,11 +33,12 @@ type Handler struct {
 	chatSvc       chat.Service
 	dataLifecycle *mindruntime.DataLifecycleCoordinator
 	unifiedEntry  *interaction.UnifiedEntry
+	reconciliation *mindruntime.ReconciliationEngine
 	versionInfo   atomic.Value
 }
 
-func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry) *Handler {
-	h := &Handler{service: srv, db: db, chatSvc: chatSvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle}
+func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine) *Handler {
+	h := &Handler{service: srv, db: db, chatSvc: chatSvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation}
 	h.versionInfo.Store(srv.GetVersion())
 	return h
 }

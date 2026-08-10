@@ -13,26 +13,36 @@ type ContinuationState struct {
 	ReplanCount   int
 }
 
-type ContinuationService struct {
+type ContinuationService interface {
+	Evaluate(
+		ctx context.Context,
+		plan *decision.BehaviorPlan,
+		observation *decision.Observation,
+		progress decision.GoalProgressBatchResult,
+		state ContinuationState,
+	) (decision.ContinuationDecision, error)
+}
+
+type continuationService struct {
 	goals  *decision.GoalRegistry
 	policy decision.ContinuationPolicy
 }
 
-func NewContinuationService(goals *decision.GoalRegistry) *ContinuationService {
-	return &ContinuationService{
+func NewContinuationService(goals *decision.GoalRegistry) *continuationService {
+	return &continuationService{
 		goals:  goals,
 		policy: decision.DefaultContinuationPolicy(),
 	}
 }
 
-func NewContinuationServiceWithPolicy(goals *decision.GoalRegistry, policy decision.ContinuationPolicy) *ContinuationService {
-	return &ContinuationService{
+func NewContinuationServiceWithPolicy(goals *decision.GoalRegistry, policy decision.ContinuationPolicy) *continuationService {
+	return &continuationService{
 		goals:  goals,
 		policy: policy,
 	}
 }
 
-func (s *ContinuationService) Evaluate(
+func (s *continuationService) Evaluate(
 	ctx context.Context,
 	plan *decision.BehaviorPlan,
 	observation *decision.Observation,
@@ -89,7 +99,7 @@ func (s *ContinuationService) Evaluate(
 	return result, nil
 }
 
-func (s *ContinuationService) resolveGoals(plan *decision.BehaviorPlan, observation *decision.Observation) []decision.Goal {
+func (s *continuationService) resolveGoals(plan *decision.BehaviorPlan, observation *decision.Observation) []decision.Goal {
 	var refs []decision.GoalRef
 	if observation != nil && len(observation.GoalRefs) > 0 {
 		refs = observation.GoalRefs

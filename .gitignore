@@ -223,6 +223,7 @@ runtime/build/out/
 # Backend build artifacts
 backend/server.exe~
 U-Ai-source.zip
+artifacts/
 
 # SDK plugin-sdk build outputs and dependencies
 sdk/plugin-sdk/dist/

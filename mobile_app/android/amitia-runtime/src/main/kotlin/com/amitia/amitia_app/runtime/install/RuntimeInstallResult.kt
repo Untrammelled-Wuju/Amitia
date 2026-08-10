@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.install
 
-internal sealed interface RuntimeInstallResult {
+sealed interface RuntimeInstallResult {
     data class Success(
         val runtimeVersion: String,
         val packageSha256: String,
@@ -24,7 +24,7 @@ internal sealed interface RuntimeInstallResult {
     ) : RuntimeInstallResult
 }
 
-internal enum class RuntimeInstallPhase {
+enum class RuntimeInstallPhase {
     ABI_GATE,
     SPACE_CHECK,
     LOCK_ACQUIRE,
@@ -39,7 +39,7 @@ internal enum class RuntimeInstallPhase {
     CLEANUP,
 }
 
-internal enum class RuntimeInstallErrorCode {
+enum class RuntimeInstallErrorCode {
     UNSUPPORTED_ABI,
     INSTALL_ALREADY_IN_PROGRESS,
     PACKAGE_NOT_FOUND,

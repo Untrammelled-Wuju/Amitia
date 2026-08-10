@@ -242,6 +242,9 @@ func TestRace_AcquireParallelDifferentRuntimes(t *testing.T) {
 		rtID := "rt-" + strconv.Itoa(i)
 		id.AddRuntime(rtID, "p", "ext", "created")
 		id.AddService(rtID, "svc-1", "p", "ext", "running")
+	}
+	for i := 0; i < 20; i++ {
+		rtID := "rt-" + strconv.Itoa(i)
 		wg.Add(1)
 		go func(rt string) {
 			defer wg.Done()

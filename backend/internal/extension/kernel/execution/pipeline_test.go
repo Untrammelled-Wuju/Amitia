@@ -445,7 +445,6 @@ func TestPipelineRetryOnFailure(t *testing.T) {
 		},
 	}
 
-	retryCount := 0
 	adapter := &testAdapter{}
 	p := buildPipeline(adapter)
 
@@ -456,13 +455,8 @@ func TestPipelineRetryOnFailure(t *testing.T) {
 		return tool, nil
 	}
 
-	p.RetryCtrl.OnShouldRetry = func(ctx context.Context, tool capability.ToolDefinition, result capability.UnifiedToolResult) (bool, error) {
-		retryCount++
-		if retryCount <= 1 {
-			return true, nil
-		}
-		return false, nil
-	}
+	// DefaultRetryController: canonical policy; tool.Retryable no longer bypasses error classification.
+	// MaxRetries=2 with connection_lost (canonical allowlist) yields exactly 3 total attempts.
 
 	adapter.result = failResult
 
@@ -624,8 +618,8 @@ func TestPipelineTimeout(t *testing.T) {
 
 	result := p.Execute(ctx, req)
 
-	if result.Status != capability.ToolResultStatusFailed {
-		t.Fatalf("expected failed status for timeout, got %s", result.Status)
+	if result.Status != capability.ToolResultStatusFailed && result.Status != capability.ToolResultStatusTimedOut {
+		t.Fatalf("expected failed or timed_out status for timeout, got %s", result.Status)
 	}
 }
 

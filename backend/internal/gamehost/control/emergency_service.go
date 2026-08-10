@@ -100,7 +100,7 @@ func (s *EmergencyOperationStore) GetByRuntime(runtimeID domain.RuntimeInstanceI
 	defer s.mu.RUnlock()
 	for _, op := range s.operations {
 		if op.RuntimeID == runtimeID && !op.State.IsTerminal() {
-			return op, true
+			return copyOperation(op), true
 		}
 	}
 	return nil, false
@@ -126,10 +126,47 @@ func (s *EmergencyOperationStore) UpdateState(operationID string, state Emergenc
 	}
 }
 
+func (s *EmergencyOperationStore) UpdateEpoch(operationID string, epoch uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if op, ok := s.operations[operationID]; ok {
+		op.NewEpoch = epoch
+	}
+}
+
 func (s *EmergencyOperationStore) Clear(operationID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.operations, operationID)
+}
+
+func (s *EmergencyOperationStore) GetLastByRuntime(runtimeID domain.RuntimeInstanceID) (*EmergencyStopOperation, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var latest *EmergencyStopOperation
+	for _, op := range s.operations {
+		if op.RuntimeID == runtimeID {
+			if latest == nil || op.StartedAt.After(latest.StartedAt) {
+				latest = op
+			}
+		}
+	}
+	if latest == nil {
+		return nil, false
+	}
+	return copyOperation(latest), true
+}
+
+func copyOperation(op *EmergencyStopOperation) *EmergencyStopOperation {
+	if op == nil {
+		return nil
+	}
+	c := *op
+	if op.Errors != nil {
+		c.Errors = make([]error, len(op.Errors))
+		copy(c.Errors, op.Errors)
+	}
+	return &c
 }
 
 func (s *EmergencyOperationStore) ListActive() []*EmergencyStopOperation {
@@ -138,7 +175,7 @@ func (s *EmergencyOperationStore) ListActive() []*EmergencyStopOperation {
 	var active []*EmergencyStopOperation
 	for _, op := range s.operations {
 		if !op.State.IsTerminal() {
-			active = append(active, op)
+			active = append(active, copyOperation(op))
 		}
 	}
 	return active
@@ -274,6 +311,10 @@ func (s *EmergencyStopService) EmergencyStop(ctx context.Context, req EmergencyS
 		return s.buildResult(activeOp), nil
 	}
 
+	if lastOp, ok := s.store.GetLastByRuntime(runtimeID); ok {
+		return s.buildResult(lastOp), nil
+	}
+
 	if s.authority != nil {
 		if _, err := s.authority.Get(ctx, runtimeID); err != nil {
 			return EmergencyStopResult{}, errEmergencyRuntimeNotFound(runtimeID)
@@ -340,8 +381,7 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 
 	fail := func(state EmergencyStopState, cause error) EmergencyStopResult {
 		transitionTo(EmergencyStateFailed, cause)
-		op.State = EmergencyStateFailed
-		return s.buildFailedResult(op, append(cleanupErrors, cause))
+		return s.buildFailedResult(op.OperationID, op.RuntimeID, op.Actor, op.Reason, previousMode, previousEpoch, op.StartedAt, append(cleanupErrors, cause))
 	}
 
 	// SAFETY DOOR 1: Close G9 Plugin Output Gate
@@ -382,7 +422,7 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		}
 		afterSnap, _ := s.authority.Get(ctx, op.RuntimeID)
 		newEpoch = afterSnap.Epoch
-		op.NewEpoch = newEpoch
+		s.store.UpdateEpoch(op.OperationID, newEpoch)
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -458,9 +498,15 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		cleanupErrors = append(cleanupErrors, verificationErrors(verification.ResidueErrors)...)
 	}
 
-	op.State = EmergencyStateCompleted
-	op.FinishedAt = s.clock()
 	s.store.UpdateState(op.OperationID, EmergencyStateCompleted)
+
+	finalOp, _ := s.store.Get(op.OperationID)
+	finishedAt := s.clock()
+	startedAt := finishedAt
+	if finalOp != nil {
+		finishedAt = finalOp.FinishedAt
+		startedAt = finalOp.StartedAt
+	}
 
 	result := EmergencyStopResult{
 		OperationID:     op.OperationID,
@@ -471,9 +517,9 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		PreviousMode:    previousMode,
 		PreviousEpoch:   previousEpoch,
 		NewEpoch:        newEpoch,
-		StartedAt:       op.StartedAt,
-		FinishedAt:      op.FinishedAt,
-		Duration:        op.FinishedAt.Sub(op.StartedAt),
+		StartedAt:       startedAt,
+		FinishedAt:      finishedAt,
+		Duration:        finishedAt.Sub(startedAt),
 		Verification:    verification,
 		CleanupErrors:   cleanupErrors,
 		CriticalFailure: criticalFailure,
@@ -562,20 +608,19 @@ func (s *EmergencyStopService) buildResult(op *EmergencyStopOperation) Emergency
 	}
 }
 
-func (s *EmergencyStopService) buildFailedResult(op *EmergencyStopOperation, errs []error) EmergencyStopResult {
+func (s *EmergencyStopService) buildFailedResult(operationID string, runtimeID domain.RuntimeInstanceID, actor EmergencyStopActor, reason EmergencyStopReason, previousMode domain.ControlMode, previousEpoch uint64, startedAt time.Time, errs []error) EmergencyStopResult {
 	finished := s.clock()
 	return EmergencyStopResult{
-		OperationID:     op.OperationID,
-		RuntimeID:       op.RuntimeID,
+		OperationID:     operationID,
+		RuntimeID:       runtimeID,
 		State:           EmergencyStateFailed,
-		Actor:           op.Actor,
-		Reason:          op.Reason,
-		PreviousMode:    op.PreviousMode,
-		PreviousEpoch:   op.PreviousEpoch,
-		NewEpoch:        op.NewEpoch,
-		StartedAt:       op.StartedAt,
+		Actor:           actor,
+		Reason:          reason,
+		PreviousMode:    previousMode,
+		PreviousEpoch:   previousEpoch,
+		StartedAt:       startedAt,
 		FinishedAt:      finished,
-		Duration:        finished.Sub(op.StartedAt),
+		Duration:        finished.Sub(startedAt),
 		CleanupErrors:   errs,
 		CriticalFailure: true,
 	}

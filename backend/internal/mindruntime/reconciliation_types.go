@@ -2,6 +2,7 @@ package mindruntime
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,13 @@ const (
 	ReconciliationOutboxSideEffect     ReconciliationTarget = "outbox_side_effect"
 	ReconciliationLeaseDelivery        ReconciliationTarget = "lease_delivery"
 	ReconciliationTombstoneDerivedData ReconciliationTarget = "tombstone_derived_data"
+
+	ReconciliationAgentGoalAction       ReconciliationTarget = "agent_goal_action"
+	ReconciliationAgentActionObservation ReconciliationTarget = "agent_action_observation"
+	ReconciliationAgentObservationGoal   ReconciliationTarget = "agent_observation_goal"
+	ReconciliationAgentTask              ReconciliationTarget = "agent_task"
+	ReconciliationAgentWorkflow          ReconciliationTarget = "agent_workflow"
+	ReconciliationAgentRuntime           ReconciliationTarget = "agent_runtime"
 )
 
 type ReconciliationStrategy string
@@ -88,6 +96,67 @@ type ReconciliationCheckRequest struct {
 	CursorID  string                 `json:"cursorId,omitempty"`
 	BatchSize int                    `json:"batchSize"`
 	StartedAt time.Time              `json:"startedAt"`
+	Scope     *ReconciliationScope  `json:"scope,omitempty"`
+}
+
+type ReconciliationScope struct {
+	UserID         string   `json:"userId"`
+	CharacterID    string   `json:"characterId"`
+	ConversationID string   `json:"conversationId"`
+	InteractionID  string   `json:"interactionId,omitempty"`
+	RequestID      string   `json:"requestId,omitempty"`
+	GoalIDs        []string `json:"goalIds,omitempty"`
+}
+
+func (s *ReconciliationScope) Normalize() *ReconciliationScope {
+	if s == nil {
+		return nil
+	}
+	return &ReconciliationScope{
+		UserID:         strings.TrimSpace(s.UserID),
+		CharacterID:    strings.TrimSpace(s.CharacterID),
+		ConversationID: strings.TrimSpace(s.ConversationID),
+		InteractionID:  strings.TrimSpace(s.InteractionID),
+		RequestID:      strings.TrimSpace(s.RequestID),
+		GoalIDs:        s.GoalIDs,
+	}
+}
+
+func (s *ReconciliationScope) MatchesCharacter(characterID string) bool {
+	if s == nil || s.CharacterID == "" {
+		return true
+	}
+	return s.CharacterID == characterID
+}
+
+func (s *ReconciliationScope) MatchesConversation(conversationID string) bool {
+	if s == nil || s.ConversationID == "" {
+		return true
+	}
+	return s.ConversationID == conversationID
+}
+
+func (s *ReconciliationScope) MatchesInteraction(interactionID string) bool {
+	if s == nil || s.InteractionID == "" {
+		return true
+	}
+	return s.InteractionID == interactionID
+}
+
+func (s *ReconciliationScope) HasGoal(goalID string) bool {
+	if s == nil || len(s.GoalIDs) == 0 {
+		return true
+	}
+	for _, id := range s.GoalIDs {
+		if id == goalID {
+			return true
+		}
+	}
+	return false
+}
+
+func DefaultAgentFactSettleDelay() time.Duration {
+	return 3 * time.Second
 }
 type ReconciliationChecker interface {
 	CheckReconciliation(context.Context, ReconciliationCheckRequest) ([]ReconciliationDiff, error)

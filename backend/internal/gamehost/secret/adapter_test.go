@@ -106,6 +106,7 @@ func (b *fakeBroker) RevokeAll() int {
 }
 
 type fakeIdentity struct {
+	mu       sync.RWMutex
 	runtimes map[string]identityEntry
 	services map[string]identityEntry
 	enabled  map[string]bool
@@ -126,15 +127,21 @@ func newFakeIdentity() *fakeIdentity {
 }
 
 func (f *fakeIdentity) AddRuntime(rtID, pluginID, extID, state string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.runtimes[rtID] = identityEntry{pluginID: pluginID, extensionID: extID, state: state}
 	f.enabled[extID] = true
 }
 
 func (f *fakeIdentity) AddService(rtID, svcID, pluginID, extID, state string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.services[rtID+"/"+svcID] = identityEntry{pluginID: pluginID, extensionID: extID, state: state}
 }
 
 func (f *fakeIdentity) ResolveRuntime(rtID string) (string, string, string, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	e, ok := f.runtimes[rtID]
 	if !ok {
 		return "", "", "", errors.New("runtime not found")
@@ -143,6 +150,8 @@ func (f *fakeIdentity) ResolveRuntime(rtID string) (string, string, string, erro
 }
 
 func (f *fakeIdentity) ResolveService(rtID, svcID string) (string, string, string, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	e, ok := f.services[rtID+"/"+svcID]
 	if !ok {
 		return "", "", "", errors.New("service not found")
@@ -151,21 +160,34 @@ func (f *fakeIdentity) ResolveService(rtID, svcID string) (string, string, strin
 }
 
 func (f *fakeIdentity) ExtensionEnabled(extID string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.enabled[extID]
 }
 
 func (f *fakeIdentity) DisableExtension(extID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.enabled[extID] = false
 }
 
 type fakeGate struct {
+	mu    sync.Mutex
 	allow bool
 	calls int
 }
 
 func (g *fakeGate) CanAcquireSecret(ctx context.Context, extID, pluginID, rtID, svcID, ref string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.calls++
 	return g.allow
+}
+
+func (g *fakeGate) Calls() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.calls
 }
 
 const (
@@ -195,8 +217,8 @@ func TestAcquireServiceLease_ValidService_Granted(t *testing.T) {
 	if res.LeaseID == "" {
 		t.Fatal("expected non-empty lease id")
 	}
-	if g.calls != 1 {
-		t.Errorf("expected 1 gate call, got %d", g.calls)
+	if g.Calls() != 1 {
+		t.Errorf("expected 1 gate call, got %d", g.Calls())
 	}
 }
 
