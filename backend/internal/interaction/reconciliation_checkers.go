@@ -249,14 +249,11 @@ func (c *taskConsistencyChecker) CheckReconciliation(ctx context.Context, req mi
 		if t.Completed || t.Status == "" {
 			continue
 		}
-		if !c.base.settleReady(now.Add(-time.Duration(t.Generation) * time.Second)) {
-			continue
-		}
 		diffs = append(diffs, mindruntime.ReconciliationDiff{
 			ScanID:         req.ScanID,
 			Source:         "agent_task",
 			Target:         "agent_runtime",
-			DiffType:       "task_stale_past_settle",
+			DiffType:       "task_incomplete",
 			SourceKey:      t.TaskRunID,
 			TargetKey:      t.InvocationID,
 			Description:    "task has not reached a completed state",
