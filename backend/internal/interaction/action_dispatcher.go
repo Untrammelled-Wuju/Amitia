@@ -20,6 +20,7 @@ const (
 	ActionExecutionCompleted        ActionExecutionState = "completed"
 	ActionExecutionSkipped          ActionExecutionState = "skipped"
 	ActionExecutionFailedToDispatch ActionExecutionState = "failed_to_dispatch"
+	ActionExecutionAcceptedBackground ActionExecutionState = "accepted_background"
 )
 
 type ActionExecutionResult struct {
