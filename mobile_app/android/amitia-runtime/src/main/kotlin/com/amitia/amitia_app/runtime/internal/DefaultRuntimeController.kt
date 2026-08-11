@@ -19,19 +19,8 @@ import com.amitia.amitia_app.runtime.api.RuntimeVerifyRequest
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
-import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
-import com.amitia.amitia_app.runtime.proot.ProotComponent
-import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import com.amitia.amitia_app.runtime.proot.ProotSession
-import com.amitia.amitia_app.runtime.proot.ProotStopResult
-import com.amitia.amitia_app.runtime.recovery.DefaultRuntimeCrashRecoveryPolicy
-import com.amitia.amitia_app.runtime.recovery.ExecutorRuntimeRecoveryScheduler
-import com.amitia.amitia_app.runtime.recovery.InstalledRuntimeResult
-import com.amitia.amitia_app.runtime.recovery.RuntimeCrashRecoveryPolicy
-import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryDecision
-import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryRequest
-import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduler
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostEvent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
@@ -42,6 +31,8 @@ import com.amitia.amitia_app.runtime.startup.RuntimeStartupDetector
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupError
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupRequest
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupResult
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 internal class DefaultRuntimeController(
@@ -49,40 +40,41 @@ internal class DefaultRuntimeController(
     private val serviceHost: RuntimeServiceHost,
     private val installer: RuntimeInstaller? = null,
     private val abiGate: RuntimeAbiGate? = null,
-    private val activeRuntime: ActiveRuntimeManager? = null,
     private val idGenerator: RuntimeIdGenerator = UuidRuntimeIdGenerator,
     private val clock: RuntimeClock = SystemRuntimeClock,
-    private val prootComponent: ProotComponent? = null,
-    private val startupDetector: RuntimeStartupDetector? = DefaultRuntimeStartupDetector(),
-    private val backendEndpoint: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
-    private val recoveryPolicy: RuntimeCrashRecoveryPolicy = DefaultRuntimeCrashRecoveryPolicy(
-        com.amitia.amitia_app.runtime.recovery.ActiveRuntimeBackedInstalledRuntimeSource(activeRuntime),
-    ),
-    private val recoveryScheduler: RuntimeRecoveryScheduler = ExecutorRuntimeRecoveryScheduler(),
+    private val startupDetector: RuntimeStartupDetector = DefaultRuntimeStartupDetector(),
+    private val endpointPolicy: BackendEndpointPolicy = embeddedAndroidBackendPolicy()
 ) : RuntimeController {
 
-    private val expectedStopRequested = AtomicReference(false)
-    private val startupDetectors = AtomicReference<RuntimeStartupDetector?>(null)
-    private val pendingRecoveryJob = AtomicReference<com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryJob?>(null)
+    private val expectedStopRequested = AtomicBoolean(false)
     private val serviceHostListener = RuntimeServiceHostListener { event ->
         onServiceHostEvent(event)
     }
 
+    private val currentStartGeneration = AtomicLong(0L)
+    private val currentStartAttemptId = AtomicReference<String?>(null)
+    private val activeDetectorSession = AtomicReference<ProotSession?>(null)
+    private val startupDetectionThread = AtomicReference<Thread?>(null)
+    private val shutdownAfterFailedStartup = AtomicBoolean(false)
+
     init {
         serviceHost.addListener(serviceHostListener)
-    }
-
-    private fun cancelPendingRecovery() {
-        pendingRecoveryJob.getAndSet(null)?.cancel()
-        recoveryPolicy.cancelPending()
     }
 
     private fun onServiceHostEvent(event: RuntimeServiceHostEvent) {
         when (event) {
             is RuntimeServiceHostEvent.ForegroundStarted -> {
             }
+            is RuntimeServiceHostEvent.SessionReady -> {
+                onSessionReady(event.generation)
+            }
+            is RuntimeServiceHostEvent.SessionExited -> {
+                onSessionExited(event.exitCode)
+            }
             is RuntimeServiceHostEvent.ExpectedStopped -> {
-                cancelPendingRecovery()
+                cancelStartupDetector()
+                currentStartGeneration.set(0L)
+                currentStartAttemptId.set(null)
                 val current = stateStore.snapshot()
                 val target = RuntimeStateMachine.expectedStopTarget(current.state)
                 if (target != null && target != current.state) {
@@ -91,55 +83,239 @@ internal class DefaultRuntimeController(
             }
             is RuntimeServiceHostEvent.UnexpectedTermination -> {
                 cancelStartupDetector()
-                cancelPendingRecovery()
+                currentStartGeneration.set(0L)
+                currentStartAttemptId.set(null)
                 val current = stateStore.snapshot()
                 val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
                 if (target != null && target != current.state) {
                     val error = mapTerminationCauseToError(event.cause)
                     stateStore.update { it.copy(state = target, lastError = error) }
-                    evaluateRecovery(error, requestedStop = false)
                 }
             }
         }
     }
 
-    private fun evaluateRecovery(error: RuntimeError, requestedStop: Boolean) {
+    private fun onSessionReady(generation: Long) {
         val current = stateStore.snapshot()
-        val request = RuntimeRecoveryRequest(
-            failedGeneration = current.generation,
-            currentState = current.state,
-            error = error,
-            requestedStop = requestedStop,
-        )
-        val decision = recoveryPolicy.evaluate(request)
-        when (decision) {
-            is RuntimeRecoveryDecision.DoNotRecover -> { /* do nothing */ }
-            is RuntimeRecoveryDecision.RecoverAfter -> {
-                val failedGen = current.generation
-                val job = recoveryScheduler.schedule(delayMillis = decision.delayMillis) {
-                    if (stateStore.snapshot().generation != failedGen) return@schedule
-                    if (pendingRecoveryJob.get()?.isCancelled != false) return@schedule
-                    start(RuntimeStartRequest(reason = com.amitia.amitia_app.runtime.api.RuntimeStartReason.RECOVERY), object : RuntimeOperationCallback {
-                        override fun onCompleted(result: RuntimeOperationResult) { }
-                    })
-                }
-                pendingRecoveryJob.set(job)
-            }
-            is RuntimeRecoveryDecision.Exhausted -> {
+        if (current.state != RuntimeState.STARTING) return
+        if (currentStartGeneration.get() != 0L && currentStartGeneration.get() != generation) return
+
+        val attemptId = idGenerator.nextOperationId()
+        currentStartAttemptId.set(attemptId)
+
+        val session = serviceHost.currentSession()
+        if (session == null) {
+            val target = RuntimeStateMachine.startupFailureTarget(current.state)
+            if (target != null) {
                 stateStore.update {
-                    it.copy(lastError = RuntimeError(
-                        code = RuntimeErrorCode.RECOVERY_EXHAUSTED,
-                        message = "recovery budget exhausted after ${decision.attempts} attempts",
-                        recoverable = false,
-                    ))
+                    it.copy(
+                        state = target,
+                        lastError = RuntimeError(
+                            code = RuntimeErrorCode.START_FAILED,
+                            message = "startup session is not available after SessionReady event",
+                            recoverable = true
+                        )
+                    )
                 }
             }
+            return
+        }
+        if (!session.isAlive()) {
+            val target = RuntimeStateMachine.startupFailureTarget(current.state)
+            if (target != null) {
+                stateStore.update {
+                    it.copy(
+                        state = target,
+                        lastError = RuntimeError(
+                            code = RuntimeErrorCode.START_FAILED,
+                            message = "startup session exited before detection could start",
+                            recoverable = true
+                        )
+                    )
+                }
+            }
+            return
+        }
+
+        activeDetectorSession.set(session)
+        startStartupDetection(session, generation, attemptId)
+    }
+
+    private fun onSessionExited(exitCode: Int?) {
+        cancelStartupDetector()
+        val current = stateStore.snapshot()
+        if (current.state == RuntimeState.STARTING) {
+            val target = RuntimeStateMachine.startupFailureTarget(RuntimeState.STARTING)
+            if (target != null) {
+                stateStore.update {
+                    it.copy(
+                        state = target,
+                        lastError = RuntimeError(
+                            code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
+                            message = "outer proot session exited unexpectedly with code: ${exitCode ?: "unknown"}",
+                            recoverable = true
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun startStartupDetection(session: ProotSession, generation: Long, attemptId: String) {
+        cancelStartupDetector()
+        val workerThread = Thread({
+            runStartupDetection(session, generation, attemptId)
+        }, "RuntimeStartupDetection").apply {
+            isDaemon = true
+        }
+        startupDetectionThread.set(workerThread)
+        try {
+            workerThread.start()
+        } catch (_: IllegalThreadStateException) {
+            startupDetectionThread.set(null)
+            activeDetectorSession.set(null)
+        } catch (_: Throwable) {
+            startupDetectionThread.set(null)
+            activeDetectorSession.set(null)
+        }
+    }
+
+    private fun runStartupDetection(session: ProotSession, generation: Long, attemptId: String) {
+        val request = RuntimeStartupRequest(
+            generation = generation,
+            session = session,
+            endpoint = endpointPolicy,
+            startAttemptId = attemptId
+        )
+        val result = startupDetector.awaitStartup(request)
+        onStartupDetectionCompleted(result, generation, attemptId)
+    }
+
+    private fun onStartupDetectionCompleted(result: RuntimeStartupResult, expectedGeneration: Long, expectedAttemptId: String) {
+        startupDetectionThread.set(null)
+        if (currentStartAttemptId.get() != expectedAttemptId) return
+        if (currentStartGeneration.get() != expectedGeneration) return
+
+        when (result) {
+            is RuntimeStartupResult.Ready -> {
+                val current = stateStore.snapshot()
+                if (current.state == RuntimeState.STARTING &&
+                    currentStartGeneration.get() == expectedGeneration &&
+                    currentStartAttemptId.get() == expectedAttemptId
+                ) {
+                    val target = RuntimeStateMachine.startupReadyTarget(current.state)
+                    if (target != null) {
+                        stateStore.update { it.copy(state = target) }
+                    }
+                }
+            }
+            is RuntimeStartupResult.Failed -> {
+                val current = stateStore.snapshot()
+                if ((current.state == RuntimeState.STARTING || current.state == RuntimeState.STOPPING) &&
+                    currentStartGeneration.get() == expectedGeneration &&
+                    currentStartAttemptId.get() == expectedAttemptId
+                ) {
+                    val target = RuntimeStateMachine.startupFailureTarget(current.state)
+                    if (target != null) {
+                        stateStore.update {
+                            it.copy(
+                                state = target,
+                                lastError = mapStartupErrorToRuntimeError(result.error)
+                            )
+                        }
+                    }
+                    if (shutdownAfterFailedStartup.compareAndSet(true, false)) {
+                        triggerSessionCleanup()
+                    }
+                }
+            }
+            is RuntimeStartupResult.Cancelled -> {
+                shutdownAfterFailedStartup.set(false)
+            }
+        }
+    }
+
+    private fun triggerSessionCleanup() {
+        try {
+            serviceHost.currentSession()?.let { session ->
+                if (session.isAlive()) {
+                    try {
+                        session.stop(5000)
+                    } catch (_: Throwable) {
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun mapStartupErrorToRuntimeError(error: RuntimeStartupError): RuntimeError {
+        return when (error) {
+            is RuntimeStartupError.Cancelled -> RuntimeError(
+                code = RuntimeErrorCode.OPERATION_CANCELLED,
+                message = "startup detection was cancelled",
+                recoverable = true
+            )
+            is RuntimeStartupError.ProotNotRunning,
+            is RuntimeStartupError.ProotExited -> RuntimeError(
+                code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
+                message = when (error) {
+                    is RuntimeStartupError.ProotExited -> "outer proot process exited with code: ${error.exitCode ?: "unknown"}"
+                    else -> "outer proot process is not running"
+                },
+                recoverable = true
+            )
+            is RuntimeStartupError.Timeout -> RuntimeError(
+                code = RuntimeErrorCode.TIMEOUT,
+                message = "startup timed out after ${error.elapsedMs}ms (${error.probeCount} probes)",
+                recoverable = true
+            )
+            is RuntimeStartupError.InvalidEndpoint -> RuntimeError(
+                code = RuntimeErrorCode.INVALID_REQUEST,
+                message = "invalid backend endpoint",
+                recoverable = true
+            )
+            is RuntimeStartupError.BackendConnectionRefused,
+            is RuntimeStartupError.BackendLivenessFailed,
+            is RuntimeStartupError.BackendReadinessFailed,
+            is RuntimeStartupError.HealthAuthFailed,
+            is RuntimeStartupError.HealthEndpointMissing,
+            is RuntimeStartupError.InvalidResponse -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = when (error) {
+                    is RuntimeStartupError.BackendConnectionRefused -> "backend connection refused"
+                    is RuntimeStartupError.BackendLivenessFailed -> "backend liveness check failed"
+                    is RuntimeStartupError.BackendReadinessFailed -> "backend readiness check failed"
+                    is RuntimeStartupError.HealthAuthFailed -> "backend readiness probe returned auth error"
+                    is RuntimeStartupError.HealthEndpointMissing -> "backend readiness endpoint is missing"
+                    is RuntimeStartupError.InvalidResponse -> "invalid readiness response: ${error.reason}"
+                    else -> "startup detection failed"
+                },
+                recoverable = true
+            )
+            else -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = "startup detection failed",
+                recoverable = true
+            )
         }
     }
 
     private fun cancelStartupDetector() {
-        startupDetectors.getAndSet(null)?.cancel()
-        startupDetector?.cancel()
+        currentStartAttemptId.set(null)
+        activeDetectorSession.set(null)
+        shutdownAfterFailedStartup.set(false)
+        try {
+            startupDetector.cancel()
+        } catch (_: Throwable) {
+        }
+        val thread = startupDetectionThread.getAndSet(null)
+        if (thread != null && thread.isAlive) {
+            try {
+                thread.interrupt()
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     private fun mapTerminationCauseToError(cause: RuntimeServiceTerminationCause): RuntimeError {
@@ -157,6 +333,11 @@ internal class DefaultRuntimeController(
             RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR -> RuntimeError(
                 code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
                 message = "runtime service unexpectedly terminated",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.SESSION_EXITED -> RuntimeError(
+                code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
+                message = "outer proot session exited unexpectedly",
                 recoverable = true
             )
         }
@@ -195,6 +376,8 @@ internal class DefaultRuntimeController(
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.START)
 
+        cancelStartupDetector()
+
         val current = stateStore.snapshot()
         if (current.state == RuntimeState.STARTING) {
             callback.onCompleted(
@@ -229,11 +412,13 @@ internal class DefaultRuntimeController(
             return handle
         }
 
-        cancelPendingRecovery()
-        stateStore.update { it.copy(state = RuntimeState.STARTING) }
+        val newGeneration = clock.nowEpochMillis()
+        currentStartGeneration.set(newGeneration)
+        stateStore.update { it.copy(state = RuntimeState.STARTING, generation = current.generation + 1) }
 
         val startResult = serviceHost.ensureStarted()
         if (startResult is RuntimeServiceResult.Failure) {
+            currentStartGeneration.set(0L)
             val error = RuntimeError(
                 code = RuntimeErrorCode.START_FAILED,
                 message = "failed to ensure service is started: ${startResult.error.message}",
@@ -254,70 +439,6 @@ internal class DefaultRuntimeController(
             return handle
         }
 
-        val proot = prootComponent
-        if (proot == null || startupDetector == null) {
-            val error = RuntimeError(
-                code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
-                message = "runtime execution layer is not available",
-                recoverable = true
-            )
-            val target = RuntimeStateMachine.startupFailureTarget(RuntimeState.STARTING)
-            if (target != null) {
-                stateStore.update { it.copy(state = target, lastError = error) }
-            }
-            callback.onCompleted(
-                RuntimeOperationResult.Failure(
-                    operationId = operationId,
-                    type = RuntimeOperationType.START,
-                    error = error,
-                    snapshot = stateStore.snapshot()
-                )
-            )
-            return handle
-        }
-
-        val session = proot.currentSession()
-        if (session == null || !session.isAlive()) {
-            val error = RuntimeError(
-                code = RuntimeErrorCode.START_FAILED,
-                message = "no active proot session available",
-                recoverable = true
-            )
-            val target = RuntimeStateMachine.startupFailureTarget(RuntimeState.STARTING)
-            if (target != null) {
-                stateStore.update { it.copy(state = target, lastError = error) }
-            }
-            callback.onCompleted(
-                RuntimeOperationResult.Failure(
-                    operationId = operationId,
-                    type = RuntimeOperationType.START,
-                    error = error,
-                    snapshot = stateStore.snapshot()
-                )
-            )
-            return handle
-        }
-
-        val currentGeneration = stateStore.snapshot().generation
-        val startupRequest = RuntimeStartupRequest(
-            generation = currentGeneration,
-            session = session,
-            endpoint = backendEndpoint
-        )
-
-        cancelStartupDetector()
-        val detector = startupDetector
-        startupDetectors.set(detector)
-
-        val startupThread = Thread {
-            val result = detector.awaitStartup(startupRequest)
-            handleStartupResult(result, operationId, callback)
-        }.apply {
-            isDaemon = true
-            name = "runtime-startup-detector"
-            start()
-        }
-
         callback.onCompleted(
             RuntimeOperationResult.Success(
                 operationId = operationId,
@@ -326,114 +447,6 @@ internal class DefaultRuntimeController(
             )
         )
         return handle
-    }
-
-    private fun handleStartupResult(
-        result: RuntimeStartupResult,
-        operationId: String,
-        callback: RuntimeOperationCallback
-    ) {
-        val current = stateStore.snapshot()
-        if (result.generation != current.generation) {
-            return
-        }
-
-        when (result) {
-            is RuntimeStartupResult.Ready -> {
-                val target = RuntimeStateMachine.startupReadyTarget(current.state)
-                if (target != null && target != current.state) {
-                    stateStore.update { it.copy(state = target) }
-                    recoveryPolicy.recordReady(current.generation)
-                }
-            }
-            is RuntimeStartupResult.Failed -> {
-                canceledPendingRecovery()
-                val target = RuntimeStateMachine.startupFailureTarget(current.state)
-                if (target != null && target != current.state) {
-                    val error = mapStartupErrorToRuntimeError(result.error)
-                    stateStore.update { state ->
-                        if (state.lastError != null) {
-                            state.copy(state = target)
-                        } else {
-                            state.copy(state = target, lastError = error)
-                        }
-                    }
-                    evaluateRecovery(error, requestedStop = false)
-                }
-            }
-            is RuntimeStartupResult.Cancelled -> {
-            }
-        }
-        startupDetectors.compareAndSet(startupDetector, null)
-    }
-
-    private fun canceledPendingRecovery() {
-        pendingRecoveryJob.getAndSet(null)?.cancel()
-    }
-
-    private fun mapStartupErrorToRuntimeError(error: RuntimeStartupError): RuntimeError {
-        return when (error) {
-            RuntimeStartupError.Cancelled -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_CANCELLED,
-                message = "startup was cancelled",
-                recoverable = true
-            )
-            RuntimeStartupError.GenerationStale -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_GENERATION_STALE,
-                message = "startup result from stale generation",
-                recoverable = true
-            )
-            RuntimeStartupError.ProotNotRunning -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_PROOT_NOT_RUNNING,
-                message = "proot is not running",
-                recoverable = true
-            )
-            is RuntimeStartupError.ProotExited -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_PROOT_EXITED,
-                message = "proot exited during startup with code ${error.exitCode}",
-                recoverable = true
-            )
-            RuntimeStartupError.BackendConnectionRefused -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_BACKEND_CONNECTION_REFUSED,
-                message = "backend connection refused",
-                recoverable = true
-            )
-            RuntimeStartupError.BackendLivenessFailed -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_BACKEND_LIVENESS_FAILED,
-                message = "backend liveness check failed",
-                recoverable = true
-            )
-            RuntimeStartupError.BackendReadinessFailed -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_BACKEND_READINESS_FAILED,
-                message = "backend readiness check failed",
-                recoverable = true
-            )
-            RuntimeStartupError.HealthAuthFailed -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_HEALTH_AUTH_FAILED,
-                message = "health endpoint authentication failed",
-                recoverable = false
-            )
-            RuntimeStartupError.HealthEndpointMissing -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_HEALTH_ENDPOINT_MISSING,
-                message = "health endpoint not found",
-                recoverable = true
-            )
-            RuntimeStartupError.Timeout -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_TIMEOUT,
-                message = "runtime startup timed out",
-                recoverable = true
-            )
-            RuntimeStartupError.InvalidEndpoint -> RuntimeError(
-                code = RuntimeErrorCode.STARTUP_INVALID_ENDPOINT,
-                message = "invalid backend endpoint",
-                recoverable = true
-            )
-            is RuntimeStartupError.InternalError -> RuntimeError(
-                code = RuntimeErrorCode.INTERNAL_ERROR,
-                message = "internal error: ${error.message}",
-                recoverable = true
-            )
-        }
     }
 
     override fun stop(
@@ -491,43 +504,7 @@ internal class DefaultRuntimeController(
             }
 
             expectedStopRequested.set(true)
-            cancelPendingRecovery()
             cancelStartupDetector()
-
-            val proot = prootComponent
-            if (proot != null) {
-                val session = proot.currentSession()
-                if (session != null && session.isAlive()) {
-                    val sessionResult = proot.stop()
-                    if (sessionResult is ProotStopResult.Failed) {
-                        val error = when (sessionResult.errorCode) {
-                            ProotErrorCode.PROCESS_TIMEOUT -> RuntimeError(
-                                code = RuntimeErrorCode.STOP_GRACEFUL_TIMEOUT,
-                                message = "graceful stop timed out: ${sessionResult.message}",
-                                recoverable = true
-                            )
-                            else -> RuntimeError(
-                                code = RuntimeErrorCode.STOP_FORCE_FAILED,
-                                message = "failed to stop proot session: ${sessionResult.message}",
-                                recoverable = true
-                            )
-                        }
-                        val failTarget = RuntimeStateMachine.startupFailureTarget(RuntimeState.STOPPING)
-                        if (failTarget != null) {
-                            stateStore.update { it.copy(state = failTarget, lastError = error) }
-                        }
-                        callback.onCompleted(
-                            RuntimeOperationResult.Failure(
-                                operationId = operationId,
-                                type = RuntimeOperationType.STOP,
-                                error = error,
-                                snapshot = stateStore.snapshot()
-                            )
-                        )
-                        return handle
-                    }
-                }
-            }
 
             stateStore.update { it.copy(state = RuntimeState.STOPPING) }
 

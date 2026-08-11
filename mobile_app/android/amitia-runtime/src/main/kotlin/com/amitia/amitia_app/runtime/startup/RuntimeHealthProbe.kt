@@ -3,6 +3,5 @@ package com.amitia.amitia_app.runtime.startup
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 
 internal interface RuntimeHealthProbe {
-    fun checkLiveness(endpoint: BackendEndpointPolicy): RuntimeHealthProbeResult
     fun checkReadiness(endpoint: BackendEndpointPolicy): RuntimeHealthProbeResult
 }

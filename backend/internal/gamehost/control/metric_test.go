@@ -8,6 +8,10 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
+type noopMetricsSink struct{}
+
+func (noopMetricsSink) RecordOutputDecision(runtimeID domain.RuntimeInstanceID, kind ControlOutputKind, reason OutputDecisionReason, allowed bool) {}
+
 func TestPluginOutputGate_MetricsRecordAllow(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime("rt-1", "plugin-1")
@@ -88,7 +92,7 @@ func TestPluginOutputGate_NoopMetricsDoesNotPanic(t *testing.T) {
 		RuntimeReader: rt,
 		PermChecker:   NewFakeEffPermChecker(),
 		Authority:     auth,
-		Metrics:       NoopMetricsSink{},
+		Metrics:       noopMetricsSink{},
 	})
 
 	req := OutputCheckRequest{

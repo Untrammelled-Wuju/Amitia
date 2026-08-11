@@ -34,10 +34,6 @@ type MetricsSink interface {
 	RecordOutputDecision(runtimeID domain.RuntimeInstanceID, kind ControlOutputKind, reason OutputDecisionReason, allowed bool)
 }
 
-type NoopMetricsSink struct{}
-
-func (NoopMetricsSink) RecordOutputDecision(runtimeID domain.RuntimeInstanceID, kind ControlOutputKind, reason OutputDecisionReason, allowed bool) {}
-
 type PluginOutputGate struct {
 	mu          sync.RWMutex
 	closedFlags map[domain.RuntimeInstanceID]bool
@@ -70,9 +66,6 @@ func NewPluginOutputGate(opts PluginOutputGateOptions) *PluginOutputGate {
 	clock := opts.Clock
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
-	}
-	if opts.Metrics == nil {
-		opts.Metrics = NoopMetricsSink{}
 	}
 	return &PluginOutputGate{
 		closedFlags:   make(map[domain.RuntimeInstanceID]bool),
@@ -320,27 +313,27 @@ func (g *PluginOutputGate) mapDecisionToError(decision OutputDecision) *Authorit
 
 func (g *PluginOutputGate) recordDecision(intent ControlOutputIntent, peer TrustedPluginIdentity, reason OutputDecisionReason, allowed bool, now time.Time) {
 	if g.audit != nil {
-		if _, ok := g.audit.(NoopAuthorityAuditSink); !ok {
-			result := AuditResultSuccess
-			if !allowed {
-				result = AuditResultDenied
-			}
-			g.audit.RecordTransition(AuthorityAuditEvent{
-				RuntimeID:     intent.RuntimeID,
-				PluginID:      peer.PluginID,
-				PreviousMode:  "",
-				NewMode:       "",
-				PreviousEpoch: intent.AuthorityEpoch,
-				NewEpoch:      intent.AuthorityEpoch,
-				Actor:         ActorPlugin,
-				Reason:        ReasonPluginRequest,
-				Result:        result,
-				Error:         string(reason),
-				Timestamp:     now,
-			})
+		result := AuditResultSuccess
+		if !allowed {
+			result = AuditResultDenied
 		}
+		g.audit.RecordTransition(AuthorityAuditEvent{
+			RuntimeID:     intent.RuntimeID,
+			PluginID:      peer.PluginID,
+			PreviousMode:  "",
+			NewMode:       "",
+			PreviousEpoch: intent.AuthorityEpoch,
+			NewEpoch:      intent.AuthorityEpoch,
+			Actor:         ActorPlugin,
+			Reason:        ReasonPluginRequest,
+			Result:        result,
+			Error:         string(reason),
+			Timestamp:     now,
+		})
 	}
-	g.metrics.RecordOutputDecision(intent.RuntimeID, intent.Kind, reason, allowed)
+	if g.metrics != nil {
+		g.metrics.RecordOutputDecision(intent.RuntimeID, intent.Kind, reason, allowed)
+	}
 }
 
 func (g *PluginOutputGate) recordAudit(intent ControlOutputIntent, peer TrustedPluginIdentity, reason OutputDecisionReason, allowed bool, now time.Time) {

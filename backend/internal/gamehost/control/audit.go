@@ -74,7 +74,3 @@ func (s *InMemoryAuthorityAuditSink) Clear() {
 	defer s.mu.Unlock()
 	s.events = make([]AuthorityAuditEvent, 0)
 }
-
-type NoopAuthorityAuditSink struct{}
-
-func (NoopAuthorityAuditSink) RecordTransition(AuthorityAuditEvent) {}

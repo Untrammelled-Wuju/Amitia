@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.runtime.service.internal
 
 import android.content.Context
+import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.service.RuntimeService
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
@@ -49,5 +50,13 @@ internal class AndroidRuntimeServiceHost(
 
     override fun removeListener(listener: RuntimeServiceHostListener) {
         listeners.remove(listener)
+    }
+
+    override fun currentSession(): ProotSession? {
+        return RuntimeService.currentSession(context)
+    }
+
+    override fun currentGeneration(): Long {
+        return RuntimeService.currentGeneration(context)
     }
 }

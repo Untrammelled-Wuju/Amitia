@@ -2084,6 +2084,23 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_op ON extension_package_confirmation_nonces(operation_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_exp ON extension_package_confirmation_nonces(expires_at)`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_pkg_confirmation_nonces_op_unique ON extension_package_confirmation_nonces(operation_id)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_execution_idempotency (
+		idempotency_key TEXT PRIMARY KEY,
+		request_fingerprint TEXT NOT NULL,
+		state TEXT NOT NULL,
+		work_result_json TEXT,
+		safe_to_replay INTEGER NOT NULL DEFAULT 1,
+		revision INTEGER NOT NULL DEFAULT 0,
+		reservation_json TEXT,
+		owner_instance_id TEXT,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		expires_at DATETIME NOT NULL,
+		released_at DATETIME
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_exec_idemp_state_expires ON extension_execution_idempotency(state, expires_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_exec_idemp_created ON extension_execution_idempotency(created_at)`,
 }
 
 type dbExecutor interface {
@@ -2308,6 +2325,9 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_package_rollback_points", "source_version_id", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_package_rollback_points", "source_generation_id", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_package_rollback_points", "snapshot_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "pause_reason", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_executions", "pause_requested_at", "DATETIME"},
+	{"extension_workflow_executions", "paused_at", "DATETIME"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {

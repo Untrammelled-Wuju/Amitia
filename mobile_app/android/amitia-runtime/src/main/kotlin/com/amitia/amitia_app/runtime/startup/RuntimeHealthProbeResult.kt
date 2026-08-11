@@ -1,8 +1,14 @@
 package com.amitia.amitia_app.runtime.startup
 
 internal sealed interface RuntimeHealthProbeResult {
-    data class Success(val statusCode: Int) : RuntimeHealthProbeResult
-    data class Failure(val error: RuntimeHealthProbeError) : RuntimeHealthProbeResult
+    data class Success(
+        val statusCode: Int,
+        val body: String? = null
+    ) : RuntimeHealthProbeResult
+
+    data class Failure(
+        val error: RuntimeHealthProbeError
+    ) : RuntimeHealthProbeResult
 }
 
 internal sealed class RuntimeHealthProbeError {

@@ -115,6 +115,11 @@ const (
 	ErrorCodeConcurrencyPolicyInvalid = "concurrency_policy_invalid"
 	ErrorCodeRateLimitPolicyInvalid   = "rate_limit_policy_invalid"
 	ErrorCodeBackpressureRejected     = "backpressure_rejected"
+	ErrorCodeIdempotencyConflict        = "idempotency_conflict"
+	ErrorCodeIdempotencyReservationFail = "idempotency_reservation_fail"
+	ErrorCodeIdempotencyIndeterminate    = "idempotency_indeterminate"
+	ErrorCodeIdempotencyTakeoverForbidden = "idempotency_takeover_forbidden"
+	ErrorCodeIdempotencyStateInvalid      = "idempotency_state_invalid"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -158,6 +163,12 @@ func ErrorCategoryForCode(code string) ToolErrorCategory {
 		ErrorCodeStreamLimitExceeded,
 		ErrorCodeStreamDeliveryFailed:
 		return ToolErrorCategoryStream
+	case ErrorCodeIdempotencyConflict,
+		ErrorCodeIdempotencyReservationFail,
+		ErrorCodeIdempotencyIndeterminate,
+		ErrorCodeIdempotencyTakeoverForbidden,
+		ErrorCodeIdempotencyStateInvalid:
+		return ToolErrorCategoryConflict
 	default:
 		return ToolErrorCategoryInternal
 	}

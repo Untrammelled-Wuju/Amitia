@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/internal/gamehost/storage"
@@ -124,11 +125,50 @@ func TestComposeGameHost_StorageTypeSatisfaction(t *testing.T) {
 
 func TestComposeGameHost_ShutdownSafe(t *testing.T) {
 	c := composeTestContainer(t)
+	if err := c.Start(context.Background()); err != nil {
+		t.Errorf("Start returned error: %v", err)
+	}
 	if err := c.Shutdown(context.Background()); err != nil {
 		t.Errorf("Shutdown returned error: %v", err)
 	}
 	if err := c.Shutdown(context.Background()); err != nil {
 		t.Errorf("second Shutdown returned error: %v", err)
+	}
+}
+
+func TestComposeGameHost_ControlComponentsWired(t *testing.T) {
+	c := composeTestContainer(t)
+	if c.AuthorityManager == nil {
+		t.Error("AuthorityManager is nil")
+	}
+	if c.OutputGate == nil {
+		t.Error("OutputGate is nil")
+	}
+	if c.TakeoverService == nil {
+		t.Error("TakeoverService is nil")
+	}
+	if c.AuthorityAudit == nil {
+		t.Error("AuthorityAudit is nil")
+	}
+}
+
+func TestComposeGameHost_ControlComponentsShared(t *testing.T) {
+	c := composeTestContainer(t)
+	if c.TakeoverService == nil || c.AuthorityManager == nil {
+		t.Fatal("control components nil")
+	}
+	ctx := context.Background()
+	runtimeID := domain.RuntimeInstanceID("rt-shared-check")
+	pluginID := domain.PluginID("plugin-shared-check")
+	if _, err := c.AuthorityManager.Create(ctx, runtimeID, pluginID); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	snap, err := c.AuthorityManager.GetSnapshot(ctx, runtimeID)
+	if err != nil {
+		t.Fatalf("GetSnapshot failed: %v", err)
+	}
+	if snap.PluginID != pluginID {
+		t.Errorf("AuthorityManager state not consistent: got %q want %q", snap.PluginID, pluginID)
 	}
 }
 

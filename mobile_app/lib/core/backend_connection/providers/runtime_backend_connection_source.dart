@@ -6,14 +6,15 @@ import '../backend_connection_endpoint.dart';
 import '../backend_connection_source.dart';
 
 class RuntimeBackendConnectionSource implements BackendConnectionSource {
-  static const MethodChannel _channel = MethodChannel('com.amitia.amitia_app/runtime');
+  static const MethodChannel _channel = MethodChannel('com.amitia.runtime/bridge');
+  static const String _methodGetBackendConnection = 'runtime.getBackendConnection';
 
   const RuntimeBackendConnectionSource();
 
   @override
   Future<BackendConnectionAvailability> resolve() async {
     try {
-      final result = await _channel.invokeMethod<Map<Object?, Object?>>('runtime.getBackendConnection');
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>(_methodGetBackendConnection);
       if (result == null) return BackendConnectionUnavailable();
       final converted = <String, dynamic>{};
       for (final entry in result.entries) {

@@ -11,6 +11,7 @@ internal object RuntimeBridgeContract {
     const val METHOD_VERIFY = "runtime.verify"
     const val METHOD_REPAIR = "runtime.repair"
     const val METHOD_MANIFEST_SUMMARY = "runtime.manifestSummary"
+    const val METHOD_GET_BACKEND_CONNECTION = "runtime.getBackendConnection"
 
     const val SCHEMA_VERSION = 1
 }

@@ -235,20 +235,10 @@ type EmergencyMetrics interface {
 	RecordEmergencyCleanupError(runtimeID domain.RuntimeInstanceID, stage EmergencyStopState)
 }
 
-type NoopEmergencyMetrics struct{}
-
-func (NoopEmergencyMetrics) RecordEmergencyStop(runtimeID domain.RuntimeInstanceID, actor EmergencyStopActor, state EmergencyStopState, critical bool) {
-}
-func (NoopEmergencyMetrics) RecordEmergencyCleanupError(runtimeID domain.RuntimeInstanceID, stage EmergencyStopState) {
-}
-
 func NewEmergencyStopService(opts EmergencyStopServiceOptions) *EmergencyStopService {
 	clock := opts.Clock
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
-	}
-	if opts.Metrics == nil {
-		opts.Metrics = NoopEmergencyMetrics{}
 	}
 	maxDL := opts.MaxDeadline
 	if maxDL <= 0 {
@@ -525,7 +515,9 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		CriticalFailure: criticalFailure,
 	}
 
-	s.metrics.RecordEmergencyStop(op.RuntimeID, op.Actor, EmergencyStateCompleted, criticalFailure)
+	if s.metrics != nil {
+		s.metrics.RecordEmergencyStop(op.RuntimeID, op.Actor, EmergencyStateCompleted, criticalFailure)
+	}
 	return result
 }
 

@@ -14,6 +14,8 @@ internal class FakeRuntimeServiceHost : com.amitia.amitia_app.runtime.service.Ru
     override fun requestStop() = com.amitia.amitia_app.runtime.service.RuntimeServiceResult.Success
     override fun addListener(listener: RuntimeServiceHostListener) { listeners.add(listener) }
     override fun removeListener(listener: RuntimeServiceHostListener) { listeners.remove(listener) }
+    override fun currentSession(): com.amitia.amitia_app.runtime.proot.ProotSession? = null
+    override fun currentGeneration(): Long = 0L
     fun emit(event: RuntimeServiceHostEvent) {
         val snapshot = ArrayList(listeners)
         snapshot.forEach { it.onServiceHostEvent(event) }

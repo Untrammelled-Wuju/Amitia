@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.connection
 
-internal data class BackendConnectionDescriptor(
+data class BackendConnectionDescriptor(
     val schemaVersion: Int,
     val generation: Long,
     val host: String,

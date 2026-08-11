@@ -31,7 +31,7 @@ func NewControlAuthorityManager(opts ControlAuthorityManagerOptions) *ControlAut
 	}
 	audit := opts.Audit
 	if audit == nil {
-		audit = NoopAuthorityAuditSink{}
+		audit = NewInMemoryAuthorityAuditSink()
 	}
 	return &ControlAuthorityManager{
 		states:     make(map[domain.RuntimeInstanceID]*ControlAuthorityState),

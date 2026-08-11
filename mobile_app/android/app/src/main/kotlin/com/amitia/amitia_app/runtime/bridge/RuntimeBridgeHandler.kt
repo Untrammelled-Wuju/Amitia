@@ -11,6 +11,8 @@ import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.api.RuntimeStopRequest
 import com.amitia.amitia_app.runtime.api.RuntimeStopReason
 import com.amitia.amitia_app.runtime.api.RuntimeVerifyRequest
+import com.amitia.amitia_app.runtime.connection.BackendConnectionAvailability
+import com.amitia.amitia_app.runtime.connection.BackendConnectionProvider
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import io.flutter.plugin.common.MethodCall
@@ -18,6 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 
 internal class RuntimeBridgeHandler(
     private val controller: RuntimeController,
+    private val backendConnectionProvider: BackendConnectionProvider,
     private val manifestStore: RuntimeManifestStore?,
 ) : MethodChannel.MethodCallHandler {
 
@@ -31,6 +34,7 @@ internal class RuntimeBridgeHandler(
                 RuntimeBridgeContract.METHOD_VERIFY -> handleVerify(result)
                 RuntimeBridgeContract.METHOD_REPAIR -> handleRepair(result)
                 RuntimeBridgeContract.METHOD_MANIFEST_SUMMARY -> handleManifestSummary(result)
+                RuntimeBridgeContract.METHOD_GET_BACKEND_CONNECTION -> handleGetBackendConnection(result)
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
@@ -53,6 +57,16 @@ internal class RuntimeBridgeHandler(
             manifest = (manifest as? RuntimeManifestResult.Success)?.manifest,
             runtimeInstalled = runtimeInstalled,
             runtimeAvailable = runtimeAvailable,
+        )
+        result.success(mapped)
+    }
+
+    private fun handleGetBackendConnection(result: MethodChannel.Result) {
+        val availability = backendConnectionProvider.current()
+        val mapped = BackendConnectionMapper.toPayload(
+            available = availability is BackendConnectionAvailability.Available,
+            descriptor = (availability as? BackendConnectionAvailability.Available)?.descriptor,
+            error = null,
         )
         result.success(mapped)
     }

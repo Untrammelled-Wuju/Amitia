@@ -773,6 +773,54 @@ func (h *ExecutionHook) OnRateLimitWait(ctx context.Context, dimensions []string
 	return h.rateLimitEvent(ctx, "rate_limit.wait_completed", dimensions, "", 0, waitMs)
 }
 
+func (h *ExecutionHook) OnIdempotencyBegin(ctx context.Context, key string) error {
+	return h.idempotencyEvent(ctx, "idempotency.begin", key, "", "", nil)
+}
+
+func (h *ExecutionHook) OnIdempotencyCacheHit(ctx context.Context, key string) error {
+	return h.idempotencyEvent(ctx, "idempotency.cache_hit", key, "", "", nil)
+}
+
+func (h *ExecutionHook) OnIdempotencyConflict(ctx context.Context, key string, prevID string, prevState string) error {
+	return h.idempotencyEvent(ctx, "idempotency.conflict", key, prevID, prevState, nil)
+}
+
+func (h *ExecutionHook) OnIdempotencySingleFlightJoin(ctx context.Context, key string) error {
+	return h.idempotencyEvent(ctx, "idempotency.single_flight_join", key, "", "", nil)
+}
+
+func (h *ExecutionHook) OnIdempotencyComplete(ctx context.Context, key string, opErr error) error {
+	return h.idempotencyEvent(ctx, "idempotency.complete", key, "", "", opErr)
+}
+
+func (h *ExecutionHook) OnIdempotencyIndeterminate(ctx context.Context, key string) error {
+	return h.idempotencyEvent(ctx, "idempotency.indeterminate", key, "", "", nil)
+}
+
+func (h *ExecutionHook) OnIdempotencyReleased(ctx context.Context, key string) error {
+	return h.idempotencyEvent(ctx, "idempotency.released", key, "", "", nil)
+}
+
+func (h *ExecutionHook) idempotencyEvent(_ context.Context, eventType string, key string, prevID string, prevState string, opErr error) error {
+	data := map[string]any{
+		"key": key,
+	}
+	if prevID != "" {
+		data["prev_owner"] = prevID
+	}
+	if prevState != "" {
+		data["prev_state"] = prevState
+	}
+	if opErr != nil {
+		data["error"] = opErr.Error()
+	}
+	return h.writer.WriteRuntimeEvent(context.Background(), RuntimeEventRecord{
+		EventType: eventType,
+		Data:      data,
+		Timestamp: time.Now().UTC(),
+	})
+}
+
 func (h *ExecutionHook) rateLimitEvent(_ context.Context, eventType string, dimensions []string, reason string, retryAfterMs int64, waitMs int64) error {
 	data := map[string]any{
 		"dimensions": dimensions,

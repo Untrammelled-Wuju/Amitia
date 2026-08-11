@@ -77,6 +77,9 @@ func shouldStartupRecover(record *InteractionRecord, cutoff time.Time) bool {
 	if record == nil {
 		return false
 	}
+	if isPausedStatus(record.Status) {
+		return false
+	}
 	if !cutoff.IsZero() && !record.UpdatedAt.Before(cutoff) {
 		return false
 	}

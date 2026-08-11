@@ -14,15 +14,23 @@ type StepHandler interface {
 }
 
 type WorkflowExecutor struct {
-	registry     *WorkflowRegistry
-	handlers     map[string]StepHandler
-	checkpoint   CheckpointStore
-	compensation *CompensationManager
-	retryMax     int
-	runStore     RunStore
-	guard        StepGuard
-	activeMu     sync.Mutex
-	active       map[string]context.CancelFunc
+	registry      *WorkflowRegistry
+	handlers      map[string]StepHandler
+	checkpoint    CheckpointStore
+	compensation  *CompensationManager
+	retryMax      int
+	runStore      RunStore
+	guard         StepGuard
+	activeMu      sync.Mutex
+	active        map[string]context.CancelFunc
+	pauseMu       sync.Mutex
+	pauseControls map[string]*WorkflowExecutionControl
+}
+
+type WorkflowExecutionControl struct {
+	executionID string
+	pauseRequested chan struct{}
+	paused         chan struct{}
 }
 
 type StepGuard interface {
@@ -77,10 +85,11 @@ type StepResult struct {
 
 func NewWorkflowExecutor(registry *WorkflowRegistry) *WorkflowExecutor {
 	return &WorkflowExecutor{
-		registry: registry,
-		handlers: make(map[string]StepHandler),
-		retryMax: 3,
-		active:   make(map[string]context.CancelFunc),
+		registry:        registry,
+		handlers:        make(map[string]StepHandler),
+		retryMax:        3,
+		active:          make(map[string]context.CancelFunc),
+		pauseControls:   make(map[string]*WorkflowExecutionControl),
 	}
 }
 
@@ -126,6 +135,7 @@ func (e *WorkflowExecutor) Recover(ctx context.Context, limit int) error {
 	}
 	for _, run := range runs {
 		run.Context.Recovery = true
+		run.Generation++
 		if _, err := e.Execute(ctx, ExecuteRequest{WorkflowID: run.WorkflowID, Input: run.Input, Context: run.Context}); err != nil {
 			finishedAt := time.Now().UTC()
 			run.Status = RunStatusFailed
@@ -136,6 +146,144 @@ func (e *WorkflowExecutor) Recover(ctx context.Context, limit int) error {
 		}
 	}
 	return nil
+}
+
+func (e *WorkflowExecutor) Pause(ctx context.Context, executionID, reason string) (*WorkflowRun, error) {
+	run, err := e.runStore.Get(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	if run.Status == RunStatusPaused {
+		return run, nil
+	}
+	if run.Status == RunStatusPausing {
+		return run, nil
+	}
+	if !run.Status.IsActive() && run.Status != RunStatusCompensating {
+		return nil, fmt.Errorf("workflow: cannot pause from status %s", run.Status)
+	}
+
+	now := time.Now().UTC()
+	updated := *run
+	updated.Status = RunStatusPausing
+	updated.PauseReason = reason
+	updated.PauseRequestedAt = &now
+	updated.UpdatedAt = now
+
+	ok, err := e.runStore.UpdateStateCAS(ctx, updated, run.Status)
+	if err != nil {
+		return nil, fmt.Errorf("workflow pause cas: %w", err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("workflow pause: concurrent state change")
+	}
+
+	e.pauseMu.Lock()
+	ctrl, exists := e.pauseControls[executionID]
+	if !exists {
+		ctrl = &WorkflowExecutionControl{
+			executionID:   executionID,
+			pauseRequested: make(chan struct{}, 1),
+			paused:         make(chan struct{}),
+		}
+		e.pauseControls[executionID] = ctrl
+	}
+	select {
+	case ctrl.pauseRequested <- struct{}{}:
+	default:
+	}
+	e.pauseMu.Unlock()
+
+	return &updated, nil
+}
+
+func (e *WorkflowExecutor) Resume(ctx context.Context, executionID string) (*WorkflowRun, error) {
+	run, err := e.runStore.Get(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+	if run.Status == RunStatusRunning || run.Status == RunStatusResuming {
+		return run, nil
+	}
+	if run.Status != RunStatusPaused {
+		return nil, fmt.Errorf("workflow: cannot resume from status %s", run.Status)
+	}
+
+	e.pauseMu.Lock()
+	if ctrl, ok := e.pauseControls[executionID]; ok {
+		select {
+		case <-ctrl.paused:
+		default:
+		}
+		delete(e.pauseControls, executionID)
+	}
+	e.pauseMu.Unlock()
+
+	now := time.Now().UTC()
+	updated := *run
+	updated.Status = RunStatusResuming
+	updated.Generation = run.Generation + 1
+	updated.PausedAt = nil
+	updated.Context.Generation = updated.Generation
+	updated.UpdatedAt = now
+
+	ok, err := e.runStore.UpdateStateCAS(ctx, updated, RunStatusPaused)
+	if err != nil {
+		return nil, fmt.Errorf("workflow resume cas: %w", err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("workflow resume: concurrent state change")
+	}
+
+	go func() {
+		_, _ = e.Execute(context.Background(), ExecuteRequest{
+			WorkflowID: updated.WorkflowID,
+			Input:      updated.Input,
+			Context:    updated.Context,
+		})
+	}()
+
+	return &updated, nil
+}
+
+func (e *WorkflowExecutor) getExecutionControl(executionID string) *WorkflowExecutionControl {
+	e.pauseMu.Lock()
+	defer e.pauseMu.Unlock()
+	return e.pauseControls[executionID]
+}
+
+func (e *WorkflowExecutor) removeExecutionControl(executionID string) {
+	e.pauseMu.Lock()
+	delete(e.pauseControls, executionID)
+	e.pauseMu.Unlock()
+}
+
+func (e *WorkflowExecutor) finalisePaused(ctx context.Context, executionID string, gen int64) {
+	e.pauseMu.Lock()
+	ctrl, ok := e.pauseControls[executionID]
+	e.pauseMu.Unlock()
+
+	if !ok {
+		return
+	}
+
+	run, err := e.runStore.Get(ctx, executionID)
+	if err != nil || run == nil {
+		return
+	}
+	if run.Status != RunStatusPausing || run.Generation != gen {
+		return
+	}
+
+	now := time.Now().UTC()
+	updated := *run
+	updated.Status = RunStatusPaused
+	updated.PausedAt = &now
+	updated.UpdatedAt = now
+
+	if ok, err := e.runStore.UpdateStateCAS(ctx, updated, RunStatusPausing); err == nil && ok {
+		close(ctrl.paused)
+	}
 }
 
 func (e *WorkflowExecutor) Cancel(executionID string) bool {
@@ -215,6 +363,7 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 		e.activeMu.Lock()
 		delete(e.active, executionID)
 		e.activeMu.Unlock()
+		e.removeExecutionControl(executionID)
 	}()
 
 	result := &ExecuteResult{
@@ -301,6 +450,7 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 	failed := false
 	var failError string
 
+	currentGeneration := req.Context.Generation
 	for _, level := range levels {
 		if failed {
 			break
@@ -317,6 +467,18 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 			result.Duration = time.Since(start)
 			return result, nil
 		default:
+		}
+
+		if ctrl := e.getExecutionControl(executionID); ctrl != nil {
+			select {
+			case <-ctrl.pauseRequested:
+				result.Success = false
+				result.Error = "paused"
+				result.Duration = time.Since(start)
+				go e.finalisePaused(context.Background(), executionID, currentGeneration)
+				return result, nil
+			default:
+			}
 		}
 
 		type nodeExecResult struct {

@@ -18,6 +18,9 @@ const (
 	InteractionStatusProcessing      InteractionStatus = "processing"
 	InteractionStatusContextReady    InteractionStatus = "context_ready"
 	InteractionStatusDecided         InteractionStatus = "decided"
+	InteractionStatusPausing         InteractionStatus = "pausing"
+	InteractionStatusPaused          InteractionStatus = "paused"
+	InteractionStatusResuming        InteractionStatus = "resuming"
 	InteractionStatusGenerated       InteractionStatus = "generated"
 	InteractionStatusCommitted       InteractionStatus = "committed"
 	InteractionStatusDeliveryPending InteractionStatus = "delivery_pending"
@@ -35,9 +38,12 @@ var validTransitions = map[InteractionStatus][]InteractionStatus{
 	InteractionStatusReceived:        {InteractionStatusNormalized, InteractionStatusQueued, InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
 	InteractionStatusNormalized:      {InteractionStatusQueued, InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
 	InteractionStatusQueued:          {InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
-	InteractionStatusProcessing:      {InteractionStatusContextReady, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusCompleted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusInterrupted},
-	InteractionStatusContextReady:    {InteractionStatusDecided, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled},
-	InteractionStatusDecided:         {InteractionStatusGenerated, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled},
+	InteractionStatusProcessing:      {InteractionStatusContextReady, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusCompleted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusInterrupted, InteractionStatusPausing},
+	InteractionStatusContextReady:    {InteractionStatusDecided, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusPausing},
+	InteractionStatusDecided:         {InteractionStatusGenerated, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusPausing},
+	InteractionStatusPausing:         {InteractionStatusPaused},
+	InteractionStatusPaused:          {InteractionStatusResuming},
+	InteractionStatusResuming:        {InteractionStatusProcessing},
 	InteractionStatusGenerated:       {InteractionStatusCommitted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled},
 	InteractionStatusCommitted:       {InteractionStatusDeliveryPending, InteractionStatusDelivered, InteractionStatusCompleted, InteractionStatusFailed},
 	InteractionStatusDeliveryPending: {InteractionStatusDelivered, InteractionStatusCompleted, InteractionStatusFailed},
@@ -166,6 +172,15 @@ func isTerminalStatus(status InteractionStatus) bool {
 		status == InteractionStatusFailed ||
 		status == InteractionStatusInterrupted ||
 		status == InteractionStatusArchived
+}
+
+func isPausedStatus(status InteractionStatus) bool {
+	switch status {
+	case InteractionStatusPausing, InteractionStatusPaused, InteractionStatusResuming:
+		return true
+	default:
+		return false
+	}
 }
 
 func isActiveStatus(status InteractionStatus) bool {

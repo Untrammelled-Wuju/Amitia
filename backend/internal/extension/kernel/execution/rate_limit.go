@@ -271,6 +271,9 @@ func (r *RateLimiter) Admit(ctx context.Context, tool capability.ToolDefinition,
 		wait := r.computeWaitDuration(blocking)
 		if r.policy.Backpressure.Mode == BackpressureReject {
 			r.mu.Unlock()
+			if onRateLimitRejected != nil {
+				onRateLimitRejected(dimsToStrings(dimsFromKeys(blocking)), "rate_limited", wait.Milliseconds())
+			}
 			return RateLimitAdmission{
 				Decision:           RateLimitRejected,
 				RetryAfter:         wait,

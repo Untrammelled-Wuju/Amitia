@@ -5,46 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
-
-func NewIdempotencyGuard() *IdempotencyGuard {
-	return &IdempotencyGuard{
-		store: make(map[string]capability.UnifiedToolResult),
-	}
-}
-
-type IdempotencyGuard struct {
-	store map[string]capability.UnifiedToolResult
-	mu    sync.RWMutex
-}
-
-func (g *IdempotencyGuard) Check(ctx context.Context, key, toolID string) (capability.UnifiedToolResult, bool) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	result, ok := g.store[key]
-	return result, ok
-}
-
-func (g *IdempotencyGuard) Record(ctx context.Context, key, toolID string, result *capability.UnifiedToolResult) {
-	if result == nil {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if _, exists := g.store[key]; !exists {
-		g.store[key] = *result
-	}
-}
-
-func (g *IdempotencyGuard) Remove(_ context.Context, key string) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	delete(g.store, key)
-}
 
 type RetryReason string
 

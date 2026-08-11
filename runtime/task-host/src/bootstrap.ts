@@ -131,6 +131,14 @@ export async function bootstrap(): Promise<void> {
     abortController.abort(reason);
   });
 
+  rpc.onNotification("task.pause", (params) => {
+    if (shuttingDown) return;
+    if (!contextBundle) return;
+    const p = params as { task_run_id?: string; timeout_ms?: number };
+    const timeoutMs = typeof p.timeout_ms === "number" ? p.timeout_ms : 30000;
+    void handlePause(rpc, contextBundle, p.task_run_id ?? config.taskRunId, timeoutMs, initiateShutdown);
+  });
+
   transport.onClose(() => {
     void initiateShutdown("stdin closed");
   });
@@ -142,7 +150,7 @@ export async function bootstrap(): Promise<void> {
     generation: 1,
     definition_hash: config.definitionHash,
     nonce: config.nonce,
-    features: ["checkpoint", "cancellation", "streaming"],
+    features: ["checkpoint", "cancellation", "streaming", "cooperative_pause"],
   });
 
   const welcomeRaw = await rpc.onceNotification("host.welcome", 30000);
@@ -235,4 +243,64 @@ function waitForTaskExecute(rpc: RpcClient, timeoutMs: number): Promise<TaskExec
       return { accepted: true };
     });
   });
+}
+
+async function handlePause(
+  rpc: RpcClient,
+  contextBundle: TaskContextBundle,
+  taskRunId: string,
+  timeoutMs: number,
+  initiateShutdown: (reason: string) => Promise<void>,
+): Promise<void> {
+  const cpClient = contextBundle.checkpoint;
+  if (!cpClient) {
+    rpc.notify("task.pause_ack", {
+      task_run_id: taskRunId,
+      checkpoint_version: 0,
+      checkpoint_hash: "",
+      paused: false,
+    });
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    rpc.notify("task.pause_ack", {
+      task_run_id: taskRunId,
+      checkpoint_version: 0,
+      checkpoint_hash: "",
+      paused: false,
+    });
+  }, timeoutMs);
+
+  try {
+    const current = cpClient.getCurrent();
+    if (current) {
+      await cpClient.save({
+        ...current,
+        savedAt: new Date().toISOString(),
+      });
+    }
+
+    clearTimeout(timer);
+
+    const finalCp = cpClient.getCurrent();
+    const version = (finalCp?.cursor as number) ?? 0;
+
+    rpc.notify("task.pause_ack", {
+      task_run_id: taskRunId,
+      checkpoint_version: version,
+      checkpoint_hash: "",
+      paused: true,
+    });
+
+    await initiateShutdown("paused");
+  } catch {
+    clearTimeout(timer);
+    rpc.notify("task.pause_ack", {
+      task_run_id: taskRunId,
+      checkpoint_version: 0,
+      checkpoint_hash: "",
+      paused: false,
+    });
+  }
 }

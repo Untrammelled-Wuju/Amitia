@@ -6,6 +6,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
+	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/hostapi"
@@ -168,6 +169,18 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	resourceViewer := resource.NewResourcePolicyViewer(newContainerViewResolver(binaryReg, streamMgr))
 	resourceLifecycle := resource.NewLifecycleCoordinator(resourceAdapter, resourceViewer)
 
+	authorityAuditSink := control.NewInMemoryAuthorityAuditSink()
+	controlManager := control.NewControlAuthorityManager(control.ControlAuthorityManagerOptions{
+		Audit: authorityAuditSink,
+	})
+	pluginOutputGate := control.NewPluginOutputGate(control.PluginOutputGateOptions{
+		Authority: controlManager,
+	})
+	takeoverService := control.NewTakeoverService(control.TakeoverServiceOptions{
+		Manager: controlManager,
+		Audit:   authorityAuditSink,
+	})
+
 	container := &GameHostContainer{
 		DirectoryManager:    dirMgr,
 		CheckpointStore:     checkpointStore,
@@ -191,6 +204,12 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		ResourceAdapter:    resourceAdapter,
 		ResourceViewer:     resourceViewer,
 		ResourceLifecycle:  resourceLifecycle,
+
+		AuthorityManager: controlManager,
+		OutputGate:       pluginOutputGate,
+		TakeoverService:  takeoverService,
+		AuthorityAudit:   authorityAuditSink,
+
 		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, nil),
 		RecoveryCoordinator: ComposeRecoveryCoordinator(checkpointStore, nil),
 		StartupRecovery:     ComposeStartupRecovery(),

@@ -321,7 +321,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ApprovalGate:        execution.NewApprovalGate(),
 		ConcurrencyCtrl:     concurrencyCtrl,
 		RateLimiter:         rateLimiter,
-		IdempotencyGuard:    execution.NewIdempotencyGuard(),
+		IdempotencyGuard:    execution.NewIdempotencyGuard(execution.NewExecutionIdempotencyStorage(db)),
 		RetryCtrl:           execution.NewRetryController(),
 		TimeoutCtrl:         execution.NewTimeoutController(30 * time.Second),
 		CancellationCtrl:    execution.NewCancellationController(),

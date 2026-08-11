@@ -6,6 +6,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
+	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/hostapi"
 	"github.com/u-ai/backend/internal/gamehost/integration"
@@ -49,9 +50,14 @@ type GameHostContainer struct {
 	HostAPIGateway host_api.Gateway
 	HostAPIAdapter *hostapi.HostAPIAdapter
 
-	ResourceAdapter      resource.AdmissionAdapter
-	ResourceViewer      *resource.ResourcePolicyViewer
-	ResourceLifecycle   *resource.LifecycleCoordinator
+	ResourceAdapter    resource.AdmissionAdapter
+	ResourceViewer    *resource.ResourcePolicyViewer
+	ResourceLifecycle *resource.LifecycleCoordinator
+
+	AuthorityManager *control.ControlAuthorityManager
+	OutputGate       *control.PluginOutputGate
+	TakeoverService  *control.TakeoverService
+	AuthorityAudit   *control.InMemoryAuthorityAuditSink
 
 	procAdapter runtime.ProcessSupervisorAdapter
 
@@ -61,18 +67,31 @@ type GameHostContainer struct {
 	StartupGate         *startup.StartupGate
 }
 
+func (c *GameHostContainer) Start(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+	if c.StartupGate != nil {
+		c.StartupGate.Open()
+	}
+	return nil
+}
+
 func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
-	if c.StreamManager != nil {
-		c.StreamManager.Shutdown(ctx)
+	if c.StartupGate != nil {
+		c.StartupGate.Close()
+	}
+	if c.ResourceLifecycle != nil {
+		c.ResourceLifecycle.OnHostShutdown()
 	}
 	if c.HandshakeManager != nil {
 		c.HandshakeManager.Shutdown(ctx)
 	}
-	if c.ResourceLifecycle != nil {
-		c.ResourceLifecycle.OnHostShutdown()
+	if c.StreamManager != nil {
+		c.StreamManager.Shutdown(ctx)
 	}
 	return nil
 }

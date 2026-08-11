@@ -283,20 +283,36 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		return result, nil
 	}
 
+	var idempotencyReservation IdempotencyReservation
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
 		if budget.Expired(p.TimeoutCtrl.Now()) {
 			result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
 			return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
 		}
-		if cached, found := p.IdempotencyGuard.Check(timeoutCtx, inv.IdempotencyKey, toolID); found {
-			if cached.Status == capability.ToolResultStatusCancelled {
-				p.IdempotencyGuard.Remove(timeoutCtx, inv.IdempotencyKey)
-			} else {
-				if stream != nil {
-					_ = stream.Finish(timeoutCtx, cached)
-				}
-				return p.finalizeCancellation(timeoutCtx, inv, cached), nil
+		identity := BuildIdempotencyIdentity(toolID, inv, inv.IdempotencyKey)
+		fingerprint := BuildRequestFingerprintSHA(request.Input, tool.ToolVersion, inv.Generation)
+		res, hit, err := p.IdempotencyGuard.Begin(timeoutCtx, identity, fingerprint)
+		idempotencyReservation = res
+		if err != nil {
+			code := capability.ErrorCodeIdempotencyConflict
+			if errors.Is(err, ErrIdempotencyIndeterminate) {
+				code = capability.ErrorCodeIdempotencyIndeterminate
 			}
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     code,
+				Category: capability.ToolErrorCategoryConflict,
+				Message:  err.Error(),
+			}))), nil
+		}
+		if hit {
+			cached := capability.UnifiedToolResult{}
+			if len(idempotencyReservation.PriorWorkResultJSON) > 0 {
+				_ = json.Unmarshal(idempotencyReservation.PriorWorkResultJSON, &cached)
+			}
+			if stream != nil {
+				_ = stream.Finish(timeoutCtx, cached)
+			}
+			return p.finalizeCancellation(timeoutCtx, inv, cached), nil
 		}
 	}
 
@@ -499,10 +515,12 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		result = p.Sanitizer.Sanitize(timeoutCtx, result)
 	}
 
-	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
-		if result.Status != capability.ToolResultStatusCancelled && result.Status != capability.ToolResultStatusTimedOut {
-			cached := result.Clone()
-			p.IdempotencyGuard.Record(timeoutCtx, inv.IdempotencyKey, toolID, &cached)
+	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" && idempotencyReservation.IdempotencyKey != "" {
+		switch result.Status {
+		case capability.ToolResultStatusCancelled, capability.ToolResultStatusTimedOut:
+			_, _ = p.IdempotencyGuard.MarkIndeterminate(timeoutCtx, idempotencyReservation.IdempotencyKey)
+		case capability.ToolResultStatusSuccess, capability.ToolResultStatusFailed:
+			_ = p.IdempotencyGuard.Complete(timeoutCtx, idempotencyReservation, &result)
 		}
 	}
 

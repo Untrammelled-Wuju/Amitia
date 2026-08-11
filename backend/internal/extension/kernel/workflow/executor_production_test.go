@@ -77,11 +77,25 @@ func (s *memoryRunStore) ListRecoverable(ctx context.Context, limit int) ([]Work
 	defer s.mu.Unlock()
 	result := make([]WorkflowRun, 0)
 	for _, run := range s.runs {
-		if run.Status == RunStatusRunning {
+		if run.Status == RunStatusRunning || run.Status == RunStatusCompensating {
 			result = append(result, run)
 		}
 	}
 	return result, nil
+}
+
+func (s *memoryRunStore) UpdateStateCAS(ctx context.Context, run WorkflowRun, expectedStatus RunStatus) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existing, ok := s.runs[run.ExecutionID]
+	if !ok {
+		return false, ErrWorkflowRunNotFound
+	}
+	if existing.Status != expectedStatus {
+		return false, nil
+	}
+	s.runs[run.ExecutionID] = run
+	return true, nil
 }
 
 func TestWorkflowExecutorPersistsAndDeduplicatesRun(t *testing.T) {

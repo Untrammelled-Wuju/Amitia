@@ -380,7 +380,7 @@ func (r *WorkflowExecutionRepository) Start(ctx context.Context, run workflow.Wo
 	existing, err := r.Get(ctx, run.ExecutionID)
 	if err == nil {
 		if existing.Status == workflow.RunStatusFailed || existing.Status == workflow.RunStatusCancelled || run.Context.Recovery {
-			_, updateErr := r.db.ExecContext(ctx, `UPDATE extension_workflow_executions SET status = ?, error_message = '', finished_at = NULL, attempt = attempt + 1, updated_at = ? WHERE execution_id = ?`, workflow.RunStatusRunning, time.Now().UTC(), run.ExecutionID)
+			_, updateErr := r.db.ExecContext(ctx, `UPDATE extension_workflow_executions SET status = ?, error_message = '', finished_at = NULL, attempt = attempt + 1, generation = ?, updated_at = ? WHERE execution_id = ?`, workflow.RunStatusRunning, run.Context.Generation, time.Now().UTC(), run.ExecutionID)
 			if updateErr != nil {
 				return nil, false, fmt.Errorf("restart workflow execution: %w", updateErr)
 			}
@@ -402,14 +402,16 @@ func (r *WorkflowExecutionRepository) Start(ctx context.Context, run workflow.Wo
 			 extension_id, module_id, character_id, conversation_id, operation_id, invocation_id,
 			 schedule_id, trigger_id, trace_id, idempotency_key, scope_snapshot_id,
 			 permission_snapshot_id, generation, context_json, attempt, steps_json,
-			 compensation_json, started_at, duration_ms, created_at, updated_at)
-		VALUES (?, ?, ?, ?, NULL, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, 0, ?, ?)
-	`, run.ExecutionID, run.WorkflowID, workflow.RunStatusRunning, run.Input,
-		run.Context.ExtensionID, run.Context.ModuleID, run.Context.CharacterID, run.Context.ConversationID,
-		run.Context.OperationID, run.Context.InvocationID, run.Context.ScheduleID, run.Context.TriggerID,
-		run.Context.TraceID, run.Context.IdempotencyKey, run.Context.ScopeSnapshotID,
-		run.Context.PermissionSnapID, run.Context.Generation, contextJSON, maxInt(run.Attempt, 1),
-		run.StartedAt, now, now)
+			 compensation_json, pause_reason, pause_requested_at, paused_at,
+			 started_at, duration_ms, created_at, updated_at)
+		VALUES (?, ?, ?, ?, NULL, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?, NULL, ?, 0, ?, ?)
+`, run.ExecutionID, run.WorkflowID, workflow.RunStatusRunning, run.Input,
+	run.Context.ExtensionID, run.Context.ModuleID, run.Context.CharacterID, run.Context.ConversationID,
+	run.Context.OperationID, run.Context.InvocationID, run.Context.ScheduleID, run.Context.TriggerID,
+	run.Context.TraceID, run.Context.IdempotencyKey, run.Context.ScopeSnapshotID,
+	run.Context.PermissionSnapID, run.Context.Generation, contextJSON, maxInt(run.Attempt, 1),
+	run.PauseReason, run.PauseRequestedAt,
+	run.StartedAt, now, now)
 	if err != nil {
 		if run.Context.IdempotencyKey != "" {
 			duplicate, queryErr := r.getByIdempotency(ctx, run.WorkflowID, run.Context.IdempotencyKey)
@@ -477,10 +479,36 @@ func (r *WorkflowExecutionRepository) Finish(ctx context.Context, run workflow.W
 	return nil
 }
 
+func (r *WorkflowExecutionRepository) UpdateStateCAS(ctx context.Context, run workflow.WorkflowRun, expectedStatus workflow.RunStatus) (bool, error) {
+	var pauseRequestedAt, pausedAt interface{}
+	if run.PauseRequestedAt != nil {
+		pauseRequestedAt = *run.PauseRequestedAt
+	}
+	if run.PausedAt != nil {
+		pausedAt = *run.PausedAt
+	}
+
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE extension_workflow_executions
+		SET status = ?, generation = ?, pause_reason = ?, pause_requested_at = ?, paused_at = ?, updated_at = ?
+		WHERE execution_id = ? AND status = ?
+	`, run.Status, run.Generation, run.PauseReason, pauseRequestedAt, pausedAt, run.UpdatedAt, run.ExecutionID, expectedStatus)
+	if err != nil {
+		return false, fmt.Errorf("update workflow state cas: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 func (r *WorkflowExecutionRepository) Get(ctx context.Context, executionID string) (*workflow.WorkflowRun, error) {
 	return r.scanRun(r.db.QueryRowContext(ctx, `
 		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
-			context_json, steps_json, compensation_json, attempt, started_at, finished_at, updated_at
+			context_json, steps_json, compensation_json, attempt, generation,
+			pause_reason, pause_requested_at, paused_at,
+			started_at, finished_at, updated_at
 		FROM extension_workflow_executions WHERE execution_id = ?
 	`, executionID))
 }
@@ -488,7 +516,9 @@ func (r *WorkflowExecutionRepository) Get(ctx context.Context, executionID strin
 func (r *WorkflowExecutionRepository) getByIdempotency(ctx context.Context, workflowID, idempotencyKey string) (*workflow.WorkflowRun, error) {
 	return r.scanRun(r.db.QueryRowContext(ctx, `
 		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
-			context_json, steps_json, compensation_json, attempt, started_at, finished_at, updated_at
+			context_json, steps_json, compensation_json, attempt, generation,
+			pause_reason, pause_requested_at, paused_at,
+			started_at, finished_at, updated_at
 		FROM extension_workflow_executions WHERE workflow_id = ? AND idempotency_key = ?
 	`, workflowID, idempotencyKey))
 }
@@ -499,9 +529,13 @@ func (r *WorkflowExecutionRepository) ListRecoverable(ctx context.Context, limit
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
-			context_json, steps_json, compensation_json, attempt, started_at, finished_at, updated_at
-		FROM extension_workflow_executions WHERE status IN (?, ?) ORDER BY updated_at LIMIT ?
-	`, workflow.RunStatusRunning, workflow.RunStatusCompensating, limit)
+			context_json, steps_json, compensation_json, attempt, generation,
+			pause_reason, pause_requested_at, paused_at,
+			started_at, finished_at, updated_at
+		FROM extension_workflow_executions
+		WHERE status IN (?, ?) AND status != ? AND status != ? AND status != ?
+		ORDER BY updated_at LIMIT ?
+	`, workflow.RunStatusRunning, workflow.RunStatusCompensating, workflow.RunStatusPaused, workflow.RunStatusPausing, workflow.RunStatusResuming, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list recoverable workflow executions: %w", err)
 	}
@@ -521,9 +555,12 @@ func (r *WorkflowExecutionRepository) scanRun(row scannerInterface) (*workflow.W
 	var run workflow.WorkflowRun
 	var inputJSON, outputJSON, contextJSON, stepsJSON, compensationJSON sql.NullString
 	var errorMessage string
-	var finishedAt sql.NullTime
+	var finishedAt, pauseRequestedAt, pausedAt sql.NullTime
+	var pauseReason sql.NullString
 	err := row.Scan(&run.ExecutionID, &run.WorkflowID, &run.Status, &inputJSON, &outputJSON, &errorMessage,
-		&contextJSON, &stepsJSON, &compensationJSON, &run.Attempt, &run.StartedAt, &finishedAt, &run.UpdatedAt)
+		&contextJSON, &stepsJSON, &compensationJSON, &run.Attempt, &run.Generation,
+		&pauseReason, &pauseRequestedAt, &pausedAt,
+		&run.StartedAt, &finishedAt, &run.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, workflow.ErrWorkflowRunNotFound
@@ -535,6 +572,17 @@ func (r *WorkflowExecutionRepository) scanRun(row scannerInterface) (*workflow.W
 	run.Error = errorMessage
 	if finishedAt.Valid {
 		run.FinishedAt = &finishedAt.Time
+	}
+	if pauseReason.Valid {
+		run.PauseReason = pauseReason.String
+	}
+	if pauseRequestedAt.Valid {
+		t := pauseRequestedAt.Time
+		run.PauseRequestedAt = &t
+	}
+	if pausedAt.Valid {
+		t := pausedAt.Time
+		run.PausedAt = &t
 	}
 	if contextJSON.Valid && contextJSON.String != "" {
 		if err := json.Unmarshal([]byte(contextJSON.String), &run.Context); err != nil {

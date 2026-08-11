@@ -170,6 +170,7 @@ type AppServices struct {
 	DesktopPetMaintenanceHandler *maintenance.Handler
 	MigrationLock                *migrationcore.PersistentLock
 	RecoveryDescriptor           *interaction.RecoveryDescriptorService
+	PauseResumeService           *interaction.PauseResumeService
 }
 
 type RuntimeOrchestrator interface {
@@ -494,6 +495,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	recoveryValidator := interaction.NewRecoveryDescriptorValidator(goalReader, taskReader, wfReader, invReader, pipeReader)
 	recoveryBuilder := interaction.NewRecoveryDescriptorBuilder(goalReader, taskReader, wfReader, invReader, pipeReader)
 	recoveryDescriptor := interaction.NewRecoveryDescriptorService(tracker, recoveryBuilder, recoveryValidator)
+	pauseResumeService := interaction.NewPauseResumeService(tracker)
+	_ = pauseResumeService
 	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer, recoveryDescriptor)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
@@ -930,6 +933,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		DesktopPetMaintenanceHandler: maintenanceHandler,
 		MigrationLock:                migrationLock,
 		RecoveryDescriptor:           recoveryDescriptor,
+		PauseResumeService:           pauseResumeService,
 	}, nil
 }
 

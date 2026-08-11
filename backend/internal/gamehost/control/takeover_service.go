@@ -39,9 +39,6 @@ type TakeoverServiceOptions struct {
 
 func NewTakeoverService(opts TakeoverServiceOptions) *TakeoverService {
 	manager := opts.Manager
-	if manager == nil {
-		manager = NewControlAuthorityManager(ControlAuthorityManagerOptions{})
-	}
 	var store *TakeoverContextStore
 	if opts.ContextStore != nil {
 		store = opts.ContextStore
@@ -49,24 +46,15 @@ func NewTakeoverService(opts TakeoverServiceOptions) *TakeoverService {
 		store = NewTakeoverContextStore()
 	}
 	rtReader := opts.RuntimeReader
-	if rtReader == nil {
-		rtReader = NewFakeRuntimeReader()
-	}
 	pChecker := opts.PermChecker
-	if pChecker == nil {
-		pChecker = NoopPermissionChecker{}
-	}
 	hChecker := opts.PolicyChecker
-	if hChecker == nil {
-		hChecker = NoopHostPolicyChecker{}
-	}
 	clock := opts.Clock
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	audit := opts.Audit
 	if audit == nil {
-		audit = NoopAuthorityAuditSink{}
+		audit = NewInMemoryAuthorityAuditSink()
 	}
 	return &TakeoverService{
 		manager:       manager,

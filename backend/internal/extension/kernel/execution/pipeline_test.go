@@ -2,14 +2,18 @@ package execution
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	_ "github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 )
@@ -107,6 +111,10 @@ func (a *testAdapter) CallCount() int {
 }
 
 func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
+	return buildPipelineForTest(adapter, newNoopIdempotencyStorage())
+}
+
+func buildPipelineForTest(adapter capability.RuntimeAdapter, storage IdempotencyStorage) *ExecutionPipeline {
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
 	adapterRegistry.Register(capability.RuntimeTypeBuiltin, adapter)
 
@@ -130,7 +138,7 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 		ApprovalGate:        NewApprovalGate(),
 		ConcurrencyCtrl:     mustTestConcurrency(NewTestConcurrencyPolicy()),
 		RateLimiter:         rateLimiter,
-		IdempotencyGuard:    NewIdempotencyGuard(),
+		IdempotencyGuard:    NewIdempotencyGuard(storage),
 		RetryCtrl:           NewRetryController(),
 		TimeoutCtrl:         NewTimeoutController(5 * time.Second),
 		CancellationCtrl:    NewCancellationController(),
@@ -139,11 +147,11 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 		ResultValidator:     NewResultValidator(),
 		Sanitizer:           NewSanitizer(),
 		SideEffectRec:       NewSideEffectRecorder(),
-	AuditSink: func() observability.ExecutionRecorder {
-		_testAuditStore = observability.NewMemoryStore()
-		_testAuditWriter = observability.NewRecordWriter(_testAuditStore, observability.DefaultWriterConfig())
-		return observability.NewExecutionHook(_testAuditWriter, nil)
-	}(),
+		AuditSink: func() observability.ExecutionRecorder {
+			_testAuditStore = observability.NewMemoryStore()
+			_testAuditWriter = observability.NewRecordWriter(_testAuditStore, observability.DefaultWriterConfig())
+			return observability.NewExecutionHook(_testAuditWriter, nil)
+		}(),
 		MetricsRec: NewMetricsRecorder(),
 		CircuitBreaker:      NewCircuitBreakerCoordinator(),
 		ToolResolver: func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
@@ -445,7 +453,7 @@ func TestPipelineIdempotencyGuard(t *testing.T) {
 	}
 
 	adapter := &testAdapter{result: successResult}
-	p := buildPipeline(adapter)
+	p := buildPipelineForTest(adapter, NewExecutionIdempotencyStorage(newTestIdempotencyDB(t)))
 
 	ctx := context.Background()
 	inv := newTestInvocation("user-001")
@@ -1104,34 +1112,104 @@ func TestSideEffectRecorderConcurrent(t *testing.T) {
 }
 
 func TestIdempotencyGuardConcurrentSameKey(t *testing.T) {
-	g := NewIdempotencyGuard()
+	db := newTestIdempotencyDB(t)
+	g := NewIdempotencyGuard(NewExecutionIdempotencyStorage(db))
 	ctx := context.Background()
+	inv := newTestInvocation("u1")
+	identity := BuildIdempotencyIdentity("tool-1", inv, "")
+	fp := BuildRequestFingerprintSHA([]byte(`{"op":"hello"}`), newTestTool("tool-1").ToolVersion, inv.Generation)
 
-	expected := capability.UnifiedToolResult{
-		InvocationID: "inv-001",
-		Status:       capability.ToolResultStatusSuccess,
-		Content: []capability.ToolContent{
-			{Type: capability.ToolContentText, Text: "ok"},
-		},
+	res, hit, err := g.Begin(ctx, identity, fp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hit {
+		t.Fatal("expected cache miss on first begin")
 	}
 
-	g.Record(ctx, "key-1", "tool-1", &expected)
-
 	var wg sync.WaitGroup
-	results := make([]capability.UnifiedToolResult, 10)
-	for i := 0; i < 10; i++ {
+	beginResults := make([]idempotencyBeginResult, 50)
+	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			r, _ := g.Check(ctx, "key-1", "tool-1")
-			results[n] = r
+			r, h, e := g.Begin(ctx, identity, fp)
+			beginResults[n] = idempotencyBeginResult{res: r, hit: h, err: e}
 		}(i)
 	}
+
+	result := capability.NewToolSuccessResult("inv-x", "tool-1")
+	result.Content = []capability.ToolContent{{Type: capability.ToolContentText, Text: "ok"}}
+	_ = g.Complete(ctx, res, &result)
+
 	wg.Wait()
 
-	for i, r := range results {
-		if r.Status != capability.ToolResultStatusSuccess {
-			t.Fatalf("concurrent read %d failed: %s", i, r.Status)
+	completed := 0
+	indeterminate := 0
+	other := 0
+	for _, r := range beginResults {
+		if r.err == nil && r.hit {
+			completed++
+		} else if errors.Is(r.err, ErrIdempotencyIndeterminate) {
+			indeterminate++
+		} else {
+			other++
 		}
 	}
+	if completed == 0 && indeterminate == 0 {
+		t.Fatalf("expected at least one cache-hit or indeterminate, got completed=%d indeterminate=%d other=%d", completed, indeterminate, other)
+	}
+}
+
+func newTestIdempotencyDB(t *testing.T) Executor {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA busy_timeout=5000;`); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlite.Migrate(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+func newNoopIdempotencyStorage() IdempotencyStorage {
+	return &noopIdempotencyStorage{}
+}
+
+type noopIdempotencyStorage struct{}
+
+func (s *noopIdempotencyStorage) Reserve(ctx context.Context, rec IdempotencyReservation) error {
+	return nil
+}
+
+func (s *noopIdempotencyStorage) Find(ctx context.Context, key string) (*IdempotencyRecord, error) {
+	return nil, fmt.Errorf("noop: not found")
+}
+
+func (s *noopIdempotencyStorage) Complete(ctx context.Context, key string, result json.RawMessage) (bool, error) {
+	return true, nil
+}
+
+func (s *noopIdempotencyStorage) MarkIndeterminate(ctx context.Context, key string) (bool, error) {
+	return true, nil
+}
+
+func (s *noopIdempotencyStorage) Release(ctx context.Context, key string) (bool, error) {
+	return false, nil
+}
+
+func (s *noopIdempotencyStorage) DeleteExpiredCAS(ctx context.Context, now time.Time) (int64, error) {
+	return 0, nil
+}
+
+type idempotencyBeginResult struct {
+	res IdempotencyReservation
+	hit bool
+	err error
 }

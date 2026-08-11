@@ -1,5 +1,5 @@
 package com.amitia.amitia_app.runtime.connection
 
-internal interface BackendConnectionProvider {
+interface BackendConnectionProvider {
     fun current(): BackendConnectionAvailability
 }

@@ -19,10 +19,12 @@ class RuntimeBridgePlugin : FlutterPlugin {
         val context = binding.applicationContext
         val module = AndroidRuntimeModule.create(context)
         val controller = module.controller
+        val backendConnectionProvider = module.backendConnectionProvider
 
         val methodChannel = MethodChannel(binding.binaryMessenger, RuntimeBridgeContract.METHOD_CHANNEL)
         val methodHandler = RuntimeBridgeHandler(
             controller = controller,
+            backendConnectionProvider = backendConnectionProvider,
             manifestStore = null,
         )
         methodChannel.setMethodCallHandler(methodHandler)

@@ -173,4 +173,11 @@ type ExecutionRecorder interface {
 	OnRateLimitRejected(ctx context.Context, dimensions []string, reason string, retryAfterMs int64) error
 	OnBackpressureRejected(ctx context.Context, dimensions []string, reason string, retryAfterMs int64) error
 	OnRateLimitWait(ctx context.Context, dimensions []string, waitMs int64) error
+	OnIdempotencyBegin(ctx context.Context, key string) error
+	OnIdempotencyCacheHit(ctx context.Context, key string) error
+	OnIdempotencyConflict(ctx context.Context, key string, prevID string, prevState string) error
+	OnIdempotencySingleFlightJoin(ctx context.Context, key string) error
+	OnIdempotencyComplete(ctx context.Context, key string, opErr error) error
+	OnIdempotencyIndeterminate(ctx context.Context, key string) error
+	OnIdempotencyReleased(ctx context.Context, key string) error
 }
