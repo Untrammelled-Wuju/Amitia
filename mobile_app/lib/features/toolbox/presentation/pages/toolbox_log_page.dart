@@ -7,7 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class _LogEntry {
   final String time;
@@ -46,9 +46,15 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final api = ref.read(apiClientProvider);
+      final api = ref.watch(backendServiceProvider);
+      if (api == null) {
+        if (mounted) {
+          setState(() { _error = '后端服务未连接'; _loading = false; });
+        }
+        return;
+      }
       final resp = await api.get<List<dynamic>>('/api/system/logs');
-      final items = resp.data ?? [];
+      final items = resp ?? [];
       final logs = items.map((e) {
         final m = e as Map<String, dynamic>? ?? {};
         return _LogEntry(

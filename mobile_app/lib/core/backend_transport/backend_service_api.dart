@@ -100,7 +100,7 @@ class BackendServiceApi {
 
   int get generation => _generation;
 
-  Future<T> get<T>(
+  Future<T?> get<T>(
     String path, {
     Map<String, dynamic>? queryParameters,
     T Function(dynamic)? fromJson,
@@ -113,7 +113,7 @@ class BackendServiceApi {
     return _parseResponse<T>(response, fromJson, path);
   }
 
-  Future<T> post<T>(
+  Future<T?> post<T>(
     String path, {
     Object? data,
     T Function(dynamic)? fromJson,
@@ -126,7 +126,7 @@ class BackendServiceApi {
     return _parseResponse<T>(response, fromJson, path);
   }
 
-  Future<T> put<T>(
+  Future<T?> put<T>(
     String path, {
     Object? data,
     T Function(dynamic)? fromJson,
@@ -147,7 +147,7 @@ class BackendServiceApi {
     _parseSimpleResponse(response, path);
   }
 
-  T _parseResponse<T>(
+  T? _parseResponse<T>(
     BackendHttpResponse response,
     T Function(dynamic)? fromJson,
     String path,
@@ -161,15 +161,18 @@ class BackendServiceApi {
         throw ServiceApiException(code: code, message: message, detail: detail);
       }
       final responseData = data['data'];
-      if (fromJson != null && responseData != null) {
+      if (responseData == null) {
+        return null;
+      }
+      if (fromJson != null) {
         return fromJson(responseData);
       }
-      return responseData as T;
+      return responseData as T?;
     }
     if (fromJson != null && data != null) {
       return fromJson(data);
     }
-    return data as T;
+    return data as T?;
   }
 
   void _parseSimpleResponse(BackendHttpResponse response, String path) {

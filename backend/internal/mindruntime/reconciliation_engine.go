@@ -354,5 +354,7 @@ func DefaultReconciliationWorkerTargets() []ReconciliationWorkerTarget {
 		{Target: ReconciliationAgentTask, Strategy: StrategyManualConfirm},
 		{Target: ReconciliationAgentWorkflow, Strategy: StrategyManualConfirm},
 		{Target: ReconciliationAgentRuntime, Strategy: StrategyManualConfirm},
+		{Target: ReconciliationAgentDescriptorRefStale, Strategy: StrategyManualConfirm},
+		{Target: ReconciliationAgentDescriptorSchema, Strategy: StrategyManualConfirm},
 	}
 }

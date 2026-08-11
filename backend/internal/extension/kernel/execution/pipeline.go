@@ -10,8 +10,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
-	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 )
 
 type ExecutionPipeline struct {
@@ -22,10 +22,9 @@ type ExecutionPipeline struct {
 	PermissionGate      *PermissionGate
 	ApprovalGate        *ApprovalGate
 	ResourceQuotaCtrl   *ResourceQuotaController
-	ConcurrencyCtrl     *ConcurrencyController
 	RateLimiter         *RateLimiter
 	IdempotencyGuard    *IdempotencyGuard
-	RetryCtrl           RetryController
+	ConcurrencyCtrl     *ConcurrencyController
 	TimeoutCtrl         *TimeoutController
 	CancellationCtrl    *CancellationController
 	DepthGuard          *DepthGuard
@@ -36,6 +35,7 @@ type ExecutionPipeline struct {
 	AuditSink           observability.ExecutionRecorder
 	MetricsRec          *MetricsRecorder
 	CircuitBreaker      *CircuitBreakerCoordinator
+	RetryCtrl           RetryController
 	circuitClassifier   CircuitResultClassifier
 
 	ToolResolver            func(ctx context.Context, toolID string) (capability.ToolDefinition, error)
@@ -283,40 +283,6 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		return result, nil
 	}
 
-	if p.RateLimiter != nil {
-		if err := p.RateLimiter.Allow(timeoutCtx, tool); err != nil {
-			if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
-				result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
-				return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
-			}
-			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
-				Code:    capability.ErrorCodeRateLimited,
-				Message: err.Error(),
-			}))), nil
-		}
-	}
-
-	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
-		return result, nil
-	}
-
-	if p.ConcurrencyCtrl != nil {
-		slot, slotErr := p.ConcurrencyCtrl.Acquire(timeoutCtx, tool, inv)
-		if slotErr != nil {
-			if errors.Is(slotErr, context.DeadlineExceeded) {
-				result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
-				return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
-			}
-			if errors.Is(slotErr, context.Canceled) {
-				result := capability.NewToolCancelledResult(inv.InvocationID, toolID)
-				return p.finalizeCancellation(timeoutCtx, inv, result), nil
-			}
-			result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
-			return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
-		}
-		defer p.ConcurrencyCtrl.Release(slot)
-	}
-
 	if p.IdempotencyGuard != nil && inv.IdempotencyKey != "" {
 		if budget.Expired(p.TimeoutCtrl.Now()) {
 			result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
@@ -336,6 +302,73 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 
 	if result, cancelled := p.checkTimeout(timeoutCtx, inv, toolID, budget, TimeoutPhasePreDispatch); cancelled {
 		return result, nil
+	}
+
+	var rateAdmission RateLimitAdmission
+	if p.RateLimiter != nil {
+		admission, admitErr := p.RateLimiter.Admit(timeoutCtx, tool, inv)
+		if admitErr != nil {
+			if errors.Is(admitErr, context.DeadlineExceeded) || errors.Is(admitErr, context.Canceled) {
+				if errors.Is(admitErr, context.DeadlineExceeded) {
+					result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+					return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+				}
+				result := capability.NewToolCancelledResult(inv.InvocationID, toolID)
+				return p.finalizeCancellation(timeoutCtx, inv, result), nil
+			}
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodeRateLimitPolicyInvalid,
+				Category: capability.ToolErrorCategoryResource,
+				Message:  admitErr.Error(),
+			}))), nil
+		}
+		rateAdmission = admission
+		if admission.Decision == RateLimitRejected {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodeRateLimited,
+				Category: capability.ToolErrorCategoryRateLimit,
+				Message:  "rate limited",
+				Details: map[string]any{
+					"retryAfterMs": admission.RetryAfter.Milliseconds(),
+					"reason":       admission.Reason,
+				},
+			}))), nil
+		}
+		if admission.Decision == RateLimitBackpressureRejected {
+			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodeBackpressureRejected,
+				Category: capability.ToolErrorCategoryRateLimit,
+				Message:  "backpressure rejected: " + admission.Reason,
+				Details: map[string]any{
+					"retryAfterMs": admission.RetryAfter.Milliseconds(),
+					"reason":       admission.Reason,
+				},
+			}))), nil
+		}
+		_ = rateAdmission
+	}
+
+	var concurrencyLease *ConcurrencyLease
+	if p.ConcurrencyCtrl != nil {
+		lease, leaseErr := p.ConcurrencyCtrl.Acquire(timeoutCtx, tool, inv)
+		if leaseErr != nil {
+			if errors.Is(leaseErr, context.DeadlineExceeded) {
+				result := capability.NewToolTimedOutResult(inv.InvocationID, toolID)
+				return p.finalizeTimeout(timeoutCtx, inv, result, budget), nil
+			}
+			if errors.Is(leaseErr, context.Canceled) {
+				result := capability.NewToolCancelledResult(inv.InvocationID, toolID)
+				return p.finalizeCancellation(timeoutCtx, inv, result), nil
+			}
+			result := capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
+				Code:     capability.ErrorCodeConcurrencyPolicyInvalid,
+				Category: capability.ToolErrorCategoryResource,
+				Message:  "invalid concurrency policy",
+			})
+			return p.finalizeCancellation(timeoutCtx, inv, result), nil
+		}
+		concurrencyLease = lease
+		defer concurrencyLease.Release()
 	}
 
 	if inv.ScopeSnapshotID != "" || inv.PermissionSnapshotID != "" {

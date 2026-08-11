@@ -150,6 +150,44 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 	return nil
 }
 
+func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64) (bool, error) {
+	ex := getExecutor(ctx, r.db)
+	res, err := ex.ExecContext(ctx, `
+		UPDATE extension_task_runs
+		SET status = ?, priority = ?,
+		    input_json = ?, input_hash = ?,
+		    runtime_instance_id = ?, checkpoint_id = ?,
+		    result_artifact_id = ?,
+		    attempt = ?, max_attempts = ?,
+		    queued_at = ?, started_at = ?, finished_at = ?,
+		    deadline_at = ?, cancel_requested_at = ?,
+		    pause_reason = ?, pause_requested_at = ?, paused_at = ?, resumed_at = ?,
+		    error_code = ?, error_message = ?,
+		    generation = ?
+		WHERE task_run_id = ? AND status = ? AND generation = ?
+	`,
+		string(run.Status), run.Priority,
+		string(run.Input), run.InputHash,
+		nullableString(run.RuntimeInstanceID), nullableString(run.CheckpointID),
+		nullableString(run.ResultArtifactID),
+		run.Attempt, run.MaxAttempts,
+		nullableTime(run.QueuedAt), nullableTime(run.StartedAt), nullableTime(run.FinishedAt),
+		nullableTime(run.DeadlineAt), nullableTime(run.CancelRequestedAt),
+		nullableString(run.PauseReason), nullableTime(run.PauseRequestedAt), nullableTime(run.PausedAt), nullableTime(run.ResumedAt),
+		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
+		run.Generation,
+		run.TaskRunID, string(expectedStatus), expectedGeneration,
+	)
+	if err != nil {
+		return false, fmt.Errorf("sqlite: cas update task run: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_runtime.TaskRun, error) {
 	ex := getExecutor(ctx, r.db)
 	var run task_runtime.TaskRun

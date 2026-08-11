@@ -8,12 +8,12 @@ import (
 )
 
 type agentReconciliationProcessor struct {
-	goals       GoalReconciliationReader
-	tasks       TaskReconciliationReader
-	workflows   WorkflowReconciliationReader
-	invocations InvocationReconciliationReader
+	goals        GoalReconciliationReader
+	tasks        TaskReconciliationReader
+	workflows    WorkflowReconciliationReader
+	invocations  InvocationReconciliationReader
 	observations AgentObservationReader
-	now         func() time.Time
+	now          func() time.Time
 }
 
 func NewAgentReconciliationProcessor(

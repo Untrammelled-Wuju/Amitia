@@ -1,4 +1,4 @@
-﻿package interaction
+package interaction
 
 import (
 	"context"

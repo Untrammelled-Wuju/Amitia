@@ -42,6 +42,7 @@ type ObjectRegistry interface {
 	ListByRuntime(runtimeID domain.RuntimeInstanceID) ([]BinaryObjectRecord, error)
 	ListByService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (map[BinaryObjectID]BinaryObjectRecord, error)
 	CountActive() int
+	LimitActive() int
 	RemoveByRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) (int, error)
 	RemoveByService(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (int, error)
 	GetActiveObjects() []BinaryObjectRecord
@@ -216,6 +217,12 @@ func (r *memoryObjectRegistry) CountActive() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.countActiveLocked()
+}
+
+func (r *memoryObjectRegistry) LimitActive() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.opts.MaxActiveObjects
 }
 
 func (r *memoryObjectRegistry) countActiveLocked() int {

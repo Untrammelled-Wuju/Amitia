@@ -12,7 +12,6 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
-	"github.com/u-ai/backend/internal/runtimeorchestrator/builtin"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
 	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -98,19 +97,7 @@ func (b *runtimeBootstrap) registerProviderFactories() error {
 		return nil
 	}
 
-	factory := builtin.NewIOSSandboxProviderFactory(
-		builtin.IOSSandboxProviderConfig{
-			Enabled: true,
-		},
-	)
-
-	if err := b.providerRegistry.Register(factory); err != nil {
-		return fmt.Errorf(
-			"register ios sandbox provider factory: %w", err,
-		)
-	}
-
-	return nil
+	return b.registerProviderFactoriesIOS()
 }
 
 func (b *runtimeBootstrap) buildPlatformProviders() error {

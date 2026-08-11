@@ -314,6 +314,10 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		s.mu.Lock()
 		delete(s.activeHosts, run.TaskRunID)
 		s.mu.Unlock()
+		finalRun, _ := s.store.GetTaskRun(ctx, run.TaskRunID)
+		if finalRun != nil && (finalRun.Status == RunStatusPaused || finalRun.Status == RunStatusPausing) {
+			return
+		}
 		s.cleanupWorkspace(run.TaskRunID, workspace)
 	}()
 
@@ -405,8 +409,13 @@ func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun,
 
 	cpID := cp.CheckpointID
 	run.CheckpointID = &cpID
+	wasPausing := run.Status == RunStatusPausing
 	run.Status = RunStatusCheckpointing
 	_ = s.store.PutTaskRun(ctx, run)
+
+	if wasPausing {
+		return
+	}
 	run.Status = RunStatusRunning
 	_ = s.store.PutTaskRun(ctx, run)
 }
@@ -549,10 +558,16 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 
 	now := time.Now().UTC()
 	run.CancelRequestedAt = &now
-	run.Status = RunStatusCancelling
-	_ = s.store.PutTaskRun(ctx, run)
 
-	if run.Status == RunStatusQueued {
+	if run.Status == RunStatusQueued || run.Status == RunStatusPaused {
+		previousStatus := run.Status
+		run.Status = RunStatusCancelling
+		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, run, previousStatus, run.Generation); casErr != nil {
+			return fmt.Errorf("task_runtime: cancel cas: %w", casErr)
+		} else if !ok {
+			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
+		}
+
 		_ = s.queue.Remove(ctx, taskRunID)
 		now := time.Now().UTC()
 		run.Status = RunStatusCancelled
@@ -560,6 +575,24 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 		_ = s.store.PutTaskRun(ctx, run)
 		return nil
 	}
+
+	if run.Status == RunStatusPausing {
+		previousStatus := run.Status
+		run.Status = RunStatusCancelling
+		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, run, previousStatus, run.Generation); casErr != nil {
+			return fmt.Errorf("task_runtime: cancel pausing cas: %w", casErr)
+		} else if !ok {
+			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
+		}
+		run.Status = RunStatusCancelled
+		now := time.Now().UTC()
+		run.FinishedAt = &now
+		_ = s.store.PutTaskRun(ctx, run)
+		return nil
+	}
+
+	run.Status = RunStatusCancelling
+	_ = s.store.PutTaskRun(ctx, run)
 
 	s.mu.RLock()
 	host, ok := s.activeHosts[taskRunID]

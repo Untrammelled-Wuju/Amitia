@@ -268,6 +268,50 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		observabilitySanitizer.SetRedactor(kernelSecretBroker.Redactor())
 	}
 	executionAuditHook := observability.NewExecutionHook(observabilityWriter, observabilitySanitizer)
+	concurrencyCtrl, err := execution.NewConcurrencyController(execution.ConcurrencyPolicy{
+		GlobalLimit:          100,
+		PerToolLimit:         0,
+		PerExtensionLimit:    0,
+		PerCharacterLimit:    0,
+		PerConversationLimit: 0,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("kernel: create concurrency controller: %w", err)
+	}
+	execution.SetConcurrencyObservabilityHooks(func(permits []execution.ConcurrencyPermit) {
+		dims := make([]string, 0, len(permits))
+		for _, p := range permits {
+			dims = append(dims, string(p.Key.Dimension))
+		}
+		_ = executionAuditHook.OnConcurrencyAcquired(context.Background(), dims)
+	}, func(permits []execution.ConcurrencyPermit, waitDuration time.Duration) {
+		dims := make([]string, 0, len(permits))
+		for _, p := range permits {
+			dims = append(dims, string(p.Key.Dimension))
+		}
+		_ = executionAuditHook.OnConcurrencyReleased(context.Background(), dims, waitDuration.Milliseconds())
+	}, func(permits []execution.ConcurrencyPermit, waitDuration time.Duration) {
+		dims := make([]string, 0, len(permits))
+		for _, p := range permits {
+			dims = append(dims, string(p.Key.Dimension))
+		}
+		_ = executionAuditHook.OnConcurrencyWait(context.Background(), dims, waitDuration.Milliseconds())
+	})
+	rateLimitPolicy := execution.RateLimitPolicy{Enabled: false}
+	rateLimiter, err := execution.NewRateLimiter(rateLimitPolicy)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: create rate limiter: %w", err)
+	}
+	execution.SetRateLimitObservabilityHooks(func(dimensions []string) {
+		_ = executionAuditHook.OnRateLimitAdmitted(context.Background(), dimensions)
+	}, func(dimensions []string, reason string, retryAfterMs int64) {
+		_ = executionAuditHook.OnRateLimitRejected(context.Background(), dimensions, reason, retryAfterMs)
+	}, func(dimensions []string, reason string, retryAfterMs int64) {
+		_ = executionAuditHook.OnBackpressureRejected(context.Background(), dimensions, reason, retryAfterMs)
+	}, func(dimensions []string, waitMs int64) {
+		_ = executionAuditHook.OnRateLimitWait(context.Background(), dimensions, waitMs)
+	})
+
 	executionKernel := &execution.ExecutionPipeline{
 		InvocationValidator: execution.NewInvocationValidator(),
 		InputValidator:      execution.NewInputValidator(),
@@ -275,8 +319,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ScopeGate:           execution.NewScopeGate(),
 		PermissionGate:      execution.NewPermissionGate(),
 		ApprovalGate:        execution.NewApprovalGate(),
-		ConcurrencyCtrl:     execution.NewConcurrencyController(),
-		RateLimiter:         execution.NewRateLimiter(),
+		ConcurrencyCtrl:     concurrencyCtrl,
+		RateLimiter:         rateLimiter,
 		IdempotencyGuard:    execution.NewIdempotencyGuard(),
 		RetryCtrl:           execution.NewRetryController(),
 		TimeoutCtrl:         execution.NewTimeoutController(30 * time.Second),
@@ -293,7 +337,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	executionKernel.CircuitBreaker.SetEventHook(func(snapshot execution.CircuitSnapshot, from, to execution.CircuitState, reason string) {
-		_ = executionAuditHook.OnCircuitStateChange(context.Background(), snapshot.Key, string(from), string(to), reason, snapshot.ConsecutiveFailures, snapshot.State)
+		_ = executionAuditHook.OnCircuitStateChange(context.Background(), snapshot.Key, string(from), string(to), reason, snapshot.ConsecutiveFailures, string(snapshot.State))
 	})
 	executionKernel.ScopeGate.ScopeManager = scopeManager
 	executionKernel.PermissionGate.Broker = permBroker
@@ -953,4 +997,12 @@ func buildKernelSecretBroker(extRoot string) *secret.Broker {
 		return nil
 	}
 	return broker
+}
+
+func mustConcurrencyController() *execution.ConcurrencyController {
+	ctrl, err := execution.NewConcurrencyController(execution.ConcurrencyPolicy{})
+	if err != nil {
+		panic(fmt.Sprintf("failed to create default concurrency controller: %v", err))
+	}
+	return ctrl
 }

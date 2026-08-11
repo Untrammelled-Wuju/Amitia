@@ -22,6 +22,9 @@ const (
 	ReconciliationAgentTask              ReconciliationTarget = "agent_task"
 	ReconciliationAgentWorkflow          ReconciliationTarget = "agent_workflow"
 	ReconciliationAgentRuntime           ReconciliationTarget = "agent_runtime"
+
+	ReconciliationAgentDescriptorRefStale ReconciliationTarget = "agent_descriptor_ref_stale"
+	ReconciliationAgentDescriptorSchema   ReconciliationTarget = "agent_descriptor_schema"
 )
 
 type ReconciliationStrategy string

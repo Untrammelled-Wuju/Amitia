@@ -51,6 +51,7 @@ func (c *DefaultCircuitResultClassifier) Classify(result capability.UnifiedToolR
 		capability.ErrorCodeInvalidInput,
 		capability.ErrorCodeNotAvailable,
 		capability.ErrorCodeRateLimited,
+		capability.ErrorCodeBackpressureRejected,
 		capability.ErrorCodeConflict,
 		capability.ErrorCodeDependencyMissing,
 		capability.ErrorCodeCancelled,

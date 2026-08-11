@@ -166,4 +166,11 @@ type ExecutionRecorder interface {
 	OnScopeDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error
 	OnSideEffectRecorded(ctx context.Context, invocationID string, effects []capability.RecordedSideEffect) error
 	OnCircuitStateChange(ctx context.Context, circuitKey string, fromState string, toState string, reason string, failureCount int, resultingState string) error
+	OnConcurrencyAcquired(ctx context.Context, dimensions []string) error
+	OnConcurrencyReleased(ctx context.Context, dimensions []string, waitedMs int64) error
+	OnConcurrencyWait(ctx context.Context, dimensions []string, waitedMs int64) error
+	OnRateLimitAdmitted(ctx context.Context, dimensions []string) error
+	OnRateLimitRejected(ctx context.Context, dimensions []string, reason string, retryAfterMs int64) error
+	OnBackpressureRejected(ctx context.Context, dimensions []string, reason string, retryAfterMs int64) error
+	OnRateLimitWait(ctx context.Context, dimensions []string, waitMs int64) error
 }

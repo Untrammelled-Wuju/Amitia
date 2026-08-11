@@ -14,6 +14,7 @@ type TaskStore interface {
 	ListTaskDefinitions(ctx context.Context, extensionID string) ([]*TaskDefinition, error)
 
 	PutTaskRun(ctx context.Context, run *TaskRun) error
+	UpdateTaskRunCAS(ctx context.Context, run *TaskRun, expectedStatus TaskRunStatus, expectedGeneration int64) (bool, error)
 	GetTaskRun(ctx context.Context, runID string) (*TaskRun, error)
 	ListTaskRuns(ctx context.Context, filter ListTasksFilter) ([]*TaskRun, error)
 	ListTaskRunsByStatus(ctx context.Context, status string) ([]*TaskRun, error)

@@ -112,6 +112,9 @@ const (
 	ErrorCodeResourceLimitExceeded  = "resource_limit_exceeded"
 	ErrorCodeResourceUsageUnavailable = "resource_usage_unavailable"
 	ErrorCodeCircuitOpen              = "circuit_open"
+	ErrorCodeConcurrencyPolicyInvalid = "concurrency_policy_invalid"
+	ErrorCodeRateLimitPolicyInvalid   = "rate_limit_policy_invalid"
+	ErrorCodeBackpressureRejected     = "backpressure_rejected"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -145,6 +148,12 @@ func ErrorCategoryForCode(code string) ToolErrorCategory {
 		return ToolErrorCategoryDependency
 	case ErrorCodeCircuitOpen:
 		return ToolErrorCategoryAvailability
+	case ErrorCodeConcurrencyPolicyInvalid:
+		return ToolErrorCategoryResource
+	case ErrorCodeRateLimitPolicyInvalid:
+		return ToolErrorCategoryResource
+	case ErrorCodeBackpressureRejected:
+		return ToolErrorCategoryRateLimit
 	case ErrorCodeStreamProtocol,
 		ErrorCodeStreamLimitExceeded,
 		ErrorCodeStreamDeliveryFailed:

@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/gamehost/domain"
-	ghBinary "github.com/u-ai/backend/internal/gamehost/stream/binary"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 )
 
@@ -80,7 +78,7 @@ func (a *ResourceAdmissionAdapter) AcquireRuntimeStartup(
 		return nil, err
 	}
 
-	if a.governor != nil {
+	if a.governor != nil && profile != nil {
 		limits := ServiceResourceLimitsSet{
 			MaxMemoryMB:        profile.MaxMemoryMB,
 			MaxCPUPercent:      clampCPU(profile.MaxCPUPercent),
@@ -277,5 +275,3 @@ func clampCPU(cpu int) int {
 	return cpu
 }
 
-var _ = domain.RuntimeInstanceID("")
-var _ = ghBinary.BinaryObjectRecord{}

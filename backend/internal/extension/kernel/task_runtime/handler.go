@@ -54,13 +54,44 @@ func (h *TaskHandler) handleTaskDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	action := parts[1]
+
+	switch action {
+	case "progress", "result", "checkpoint":
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+	}
+
 	switch action {
 	case "cancel":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		h.cancelTask(w, r, taskRunID)
-	case "retry":
-		h.retryTask(w, r, taskRunID)
-	case "recover":
-		h.recoverTask(w, r, taskRunID)
+	case "retry", "recover":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if action == "retry" {
+			h.retryTask(w, r, taskRunID)
+		} else {
+			h.recoverTask(w, r, taskRunID)
+		}
+	case "pause":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.pauseTask(w, r, taskRunID)
+	case "resume":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h.resumeTask(w, r, taskRunID)
 	case "progress":
 		h.getProgress(w, r, taskRunID)
 	case "result":
@@ -164,6 +195,41 @@ func (h *TaskHandler) retryTask(w http.ResponseWriter, r *http.Request, taskRunI
 		return
 	}
 	writeJSON(w, http.StatusCreated, run)
+}
+
+func (h *TaskHandler) pauseTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	if body.Reason == "" {
+		body.Reason = "user_requested"
+	}
+	run, err := h.service.Pause(r.Context(), taskRunID, body.Reason)
+	if err != nil {
+		if te, ok := err.(*TaskError); ok {
+			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
+}
+
+func (h *TaskHandler) resumeTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
+	run, err := h.service.Resume(r.Context(), taskRunID)
+	if err != nil {
+		if te, ok := err.(*TaskError); ok {
+			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
 }
 
 func (h *TaskHandler) recoverTask(w http.ResponseWriter, r *http.Request, taskRunID string) {

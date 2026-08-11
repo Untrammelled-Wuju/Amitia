@@ -75,8 +75,8 @@ func goalEntity(g decision.Goal) mindruntime.ReconciliationEntity {
 
 func observationEntity(o decision.Observation) mindruntime.ReconciliationEntity {
 	fields := map[string]string{
-		"kind":     string(o.Kind),
-		"outcome":  string(o.Outcome),
+		"kind":       string(o.Kind),
+		"outcome":    string(o.Outcome),
 		"targetKind": string(o.TargetKind),
 	}
 	if o.Version != "" {
@@ -162,9 +162,9 @@ func taskEntity(t AgentTaskRef) mindruntime.ReconciliationEntity {
 
 func workflowEntity(w AgentWorkflowRef) mindruntime.ReconciliationEntity {
 	fields := map[string]string{
-		"status":   w.Status,
+		"status":    w.Status,
 		"completed": fmt.Sprintf("%v", w.Completed),
-		"attempts": fmt.Sprintf("%d", w.Attempts),
+		"attempts":  fmt.Sprintf("%d", w.Attempts),
 	}
 	refs := map[string]string{}
 	if w.WorkflowID != "" {

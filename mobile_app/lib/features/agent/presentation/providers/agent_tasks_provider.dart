@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 enum AgentTaskStatus { pending, waitingApproval, running, paused, completed, failed, cancelled }
 
@@ -90,19 +90,21 @@ class AgentTaskItem {
 class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   @override
   Future<List<AgentTaskItem>> build() async {
-    final api = ref.read(apiClientProvider);
+    final api = ref.watch(backendServiceProvider);
+    if (api == null) return [];
     final resp = await api.get<List<dynamic>>('/api/agent/tasks');
-    if (resp.data == null) return [];
-    return resp.data!.map((e) => AgentTaskItem.fromJson(e as Map<String, dynamic>)).toList();
+    if (resp == null) return [];
+    return resp.map((e) => AgentTaskItem.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      final api = ref.read(apiClientProvider);
+      final api = ref.watch(backendServiceProvider);
+      if (api == null) return <AgentTaskItem>[];
       final resp = await api.get<List<dynamic>>('/api/agent/tasks');
-      if (resp.data == null) return <AgentTaskItem>[];
-      return resp.data!.map((e) => AgentTaskItem.fromJson(e as Map<String, dynamic>)).toList();
+      if (resp == null) return <AgentTaskItem>[];
+      return resp.map((e) => AgentTaskItem.fromJson(e as Map<String, dynamic>)).toList();
     });
   }
 
@@ -112,7 +114,8 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     required List<String> abilities,
     int stepCount = 3,
   }) async {
-    final api = ref.read(apiClientProvider);
+    final api = ref.watch(backendServiceProvider);
+    if (api == null) return;
     await api.post('/api/agent/tasks', data: {
       'title': title,
       'description': description,
@@ -123,7 +126,8 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   }
 
   Future<void> changeStatus(String id, AgentTaskStatus newStatus) async {
-    final api = ref.read(apiClientProvider);
+    final api = ref.watch(backendServiceProvider);
+    if (api == null) return;
     await api.post('/api/agent/tasks/$id/status', data: {
       'status': newStatus.name,
     });

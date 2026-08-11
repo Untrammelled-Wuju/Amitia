@@ -200,6 +200,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
       webSocketConnected: false,
       businessAvailable: false,
       generation: runtime.generation,
+      runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
       primaryError: _mapRuntimeError(runtime.lastError),
     );
   }
@@ -215,6 +216,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
       webSocketConnected: false,
       businessAvailable: false,
       generation: runtime.generation,
+      runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
       primaryError: _deriveConnectionError(connection),
     );
   }
@@ -231,6 +233,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
+        runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
         primaryError: _mapRuntimeError(runtime.lastError),
       );
 
@@ -245,6 +248,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
+        runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
       );
 
     case RuntimeBridgeState.stopped:
@@ -258,6 +262,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
+        runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
       );
 
     case RuntimeBridgeState.installing:
@@ -272,6 +277,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
+        runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
         primaryError: _mapRuntimeError(runtime.lastError),
       );
 
@@ -286,6 +292,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
+        runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
       );
 
     case RuntimeBridgeState.failed:
@@ -299,6 +306,7 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
+        runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
         primaryError: _mapRuntimeError(runtime.lastError) ??
             const RuntimeStatusError(
               source: RuntimeStatusErrorSource.runtime,
@@ -318,6 +326,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
   TransportStateSnapshot transport,
 ) {
   final connectionConfigured = _isConnectionConfigured(connection);
+  final runtimeVersion = runtime.manifest?.runtimeVersion ?? '';
 
   if (!connectionConfigured) {
     final connectionError = _deriveConnectionError(connection);
@@ -332,6 +341,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
+        runtimeVersion: runtimeVersion,
         primaryError: connectionError ??
             const RuntimeStatusError(
               source: RuntimeStatusErrorSource.consistency,
@@ -350,11 +360,12 @@ RuntimeStatusSnapshot _deriveReadyStatus(
       webSocketConnected: false,
       businessAvailable: false,
       generation: runtime.generation,
+      runtimeVersion: runtimeVersion,
       primaryError: connectionError,
     );
   }
 
-  final generationConsistent = _isGenerationConsistent(runtime, transport);
+  final generationConsistent = _isGenerationConsistent(runtime, connection, transport);
   if (!generationConsistent) {
     return RuntimeStatusSnapshot(
       phase: RuntimeStatusPhase.degraded,
@@ -366,6 +377,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
       webSocketConnected: false,
       businessAvailable: false,
       generation: runtime.generation,
+      runtimeVersion: runtimeVersion,
       primaryError: const RuntimeStatusError(
         source: RuntimeStatusErrorSource.consistency,
         code: 'GENERATION_MISMATCH',
@@ -389,6 +401,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
       webSocketConnected: false,
       businessAvailable: false,
       generation: runtime.generation,
+      runtimeVersion: runtimeVersion,
       primaryError: const RuntimeStatusError(
         source: RuntimeStatusErrorSource.http,
         code: 'HTTP_UNAVAILABLE',
@@ -408,6 +421,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
       webSocketConnected: false,
       businessAvailable: true,
       generation: runtime.generation,
+      runtimeVersion: runtimeVersion,
       primaryError: const RuntimeStatusError(
         source: RuntimeStatusErrorSource.webSocket,
         code: 'WEBSOCKET_DISCONNECTED',
@@ -426,6 +440,7 @@ RuntimeStatusSnapshot _deriveReadyStatus(
     webSocketConnected: true,
     businessAvailable: true,
     generation: runtime.generation,
+    runtimeVersion: runtimeVersion,
   );
 }
 
@@ -462,8 +477,16 @@ RuntimeStatusError? _mapRuntimeError(RuntimeBridgeError? lastError) {
 
 bool _isGenerationConsistent(
   RuntimeBridgeSnapshot runtime,
+  BackendConnectionAvailability connection,
   TransportStateSnapshot transport,
 ) {
-  if (transport.generation == 0) return true;
-  return transport.generation == runtime.generation;
+  if (transport.generation != 0 && transport.generation != runtime.generation) {
+    return false;
+  }
+  if (connection is BackendConnectionAvailable) {
+    if (connection.config.generation != runtime.generation) {
+      return false;
+    }
+  }
+  return true;
 }

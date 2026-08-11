@@ -303,7 +303,7 @@ func TestReflectionInsignificantResetsTrigger(t *testing.T) {
 	ob := &fakeReflectionOutbox{}
 	svc := NewReflectionService(
 		WithReflectionTriggerConfig(mindruntime.ReflectionTriggerConfig{
-			EventCountThreshold:   1,
+			EventCountThreshold:     1,
 			RelationChangeThreshold: 0,
 			AnomalyScoreThreshold:   0,
 		}),

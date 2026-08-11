@@ -193,6 +193,10 @@ type TaskRun struct {
 	FinishedAt           *time.Time      `json:"finishedAt,omitempty"`
 	DeadlineAt           *time.Time      `json:"deadlineAt,omitempty"`
 	CancelRequestedAt    *time.Time      `json:"cancelRequestedAt,omitempty"`
+	PauseReason          *string         `json:"pauseReason,omitempty"`
+	PauseRequestedAt     *time.Time      `json:"pauseRequestedAt,omitempty"`
+	PausedAt             *time.Time      `json:"pausedAt,omitempty"`
+	ResumedAt            *time.Time      `json:"resumedAt,omitempty"`
 	ErrorCode            *string         `json:"errorCode,omitempty"`
 	ErrorMessage         *string         `json:"errorMessage,omitempty"`
 	Generation           int64           `json:"generation"`
@@ -253,6 +257,7 @@ type TaskRuntimeConfig struct {
 	HostArtifactResolver       script_host.ArtifactResolver
 	LeaseDuration              time.Duration
 	CancelGracePeriod          time.Duration
+	PauseGracePeriod           time.Duration
 }
 
 func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
@@ -268,6 +273,7 @@ func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
 		WorkspaceRoot:              "",
 		LeaseDuration:              2 * time.Minute,
 		CancelGracePeriod:          10 * time.Second,
+		PauseGracePeriod:           30 * time.Second,
 	}
 }
 

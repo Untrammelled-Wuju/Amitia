@@ -5,6 +5,13 @@ import "errors"
 type TaskErrorCode string
 
 const (
+	ErrTaskPauseUnsupported       TaskErrorCode = "task_pause_unsupported"
+	ErrTaskPauseTimeout           TaskErrorCode = "task_pause_timeout"
+	ErrTaskPauseInProgress        TaskErrorCode = "task_pause_in_progress"
+	ErrTaskNotPaused              TaskErrorCode = "task_not_paused"
+	ErrTaskResumeIncompatible     TaskErrorCode = "task_resume_incompatible"
+	ErrTaskResumeStaleGeneration  TaskErrorCode = "task_resume_stale_generation"
+	ErrTaskResumeFailed           TaskErrorCode = "task_resume_failed"
 	ErrTaskDefinitionInvalid      TaskErrorCode = "task_definition_invalid"
 	ErrTaskInputInvalid           TaskErrorCode = "task_input_invalid"
 	ErrTaskNotEnabled             TaskErrorCode = "task_not_enabled"
@@ -88,6 +95,10 @@ func HTTPStatusForErrorCode(code TaskErrorCode) int {
 		return 503
 	case ErrTaskManualIntervention:
 		return 422
+	case ErrTaskPauseUnsupported, ErrTaskNotPaused:
+		return 409
+	case ErrTaskPauseInProgress:
+		return 409
 	default:
 		return 500
 	}

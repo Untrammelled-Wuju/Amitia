@@ -21,6 +21,7 @@ type InteractionMetadataUpdate struct {
 	DeadlineAt            *time.Time
 	ExpectedStatusVersion *int64
 	ExpectedOwner         *string
+	RecoveryDescriptor    *RecoveryDescriptor
 }
 
 type InteractionTracker interface {

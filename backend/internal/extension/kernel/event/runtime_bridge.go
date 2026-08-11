@@ -172,6 +172,8 @@ type HostEventEmitter interface {
 	EmitExtensionEnabled(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error)
 	EmitExtensionDisabled(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error)
 	EmitTaskCompleted(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error)
+	EmitTaskPaused(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error)
+	EmitTaskResumed(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error)
 }
 
 type hostEventEmitter struct {
@@ -234,4 +236,12 @@ func (e *hostEventEmitter) EmitExtensionDisabled(ctx context.Context, payload js
 
 func (e *hostEventEmitter) EmitTaskCompleted(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error) {
 	return e.Emit(ctx, "task.completed", 1, payload, opts)
+}
+
+func (e *hostEventEmitter) EmitTaskPaused(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error) {
+	return e.Emit(ctx, "task.paused", 1, payload, opts)
+}
+
+func (e *hostEventEmitter) EmitTaskResumed(ctx context.Context, payload json.RawMessage, opts PublishOptions) (PublishResult, error) {
+	return e.Emit(ctx, "task.resumed", 1, payload, opts)
 }

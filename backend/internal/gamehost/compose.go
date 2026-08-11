@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/internal/gamehost/registry"
+	"github.com/u-ai/backend/internal/gamehost/resource"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/runtime/checkpoint"
@@ -161,6 +162,12 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		procAdapter = adapt
 	}
 
+	resourceMapper := newResourceSubjectMapper(pluginReg)
+	resourceGovernor := newRuntimeLimitGovernor()
+	resourceAdapter := resource.NewResourceAdmissionAdapter(resourceMapper, nil, binaryReg, resourceGovernor)
+	resourceViewer := resource.NewResourcePolicyViewer(newContainerViewResolver(binaryReg, streamMgr))
+	resourceLifecycle := resource.NewLifecycleCoordinator(resourceAdapter, resourceViewer)
+
 	container := &GameHostContainer{
 		DirectoryManager:    dirMgr,
 		CheckpointStore:     checkpointStore,
@@ -180,6 +187,10 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		RuntimeExecutor:     nil,
 		procAdapter:         procAdapter,
 		HostAPIGateway:      opts.HostAPIGateway,
+
+		ResourceAdapter:    resourceAdapter,
+		ResourceViewer:     resourceViewer,
+		ResourceLifecycle:  resourceLifecycle,
 		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, nil),
 		RecoveryCoordinator: ComposeRecoveryCoordinator(checkpointStore, nil),
 		StartupRecovery:     ComposeStartupRecovery(),

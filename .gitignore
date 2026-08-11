@@ -222,6 +222,8 @@ runtime/build/out/
 
 # Backend build artifacts
 backend/server.exe~
+backend/C:Code*.exe
+backend/D:*.txt
 U-Ai-source.zip
 artifacts/
 mobile_app/android/.kotlin/

@@ -8,7 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class DesktopContributionsPage extends ConsumerStatefulWidget {
   const DesktopContributionsPage({super.key});
@@ -34,9 +34,15 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
       _error = null;
     });
     try {
-      final api = ref.read(apiClientProvider);
+      final api = ref.watch(backendServiceProvider);
+      if (api == null) {
+        if (mounted) {
+          setState(() { _error = '后端服务未连接'; _loading = false; });
+        }
+        return;
+      }
       final resp = await api.get<List<dynamic>>('/api/desktop/contributions');
-      final data = resp.data;
+      final data = resp;
       if (mounted) {
         if (data != null) {
           _contributions = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();

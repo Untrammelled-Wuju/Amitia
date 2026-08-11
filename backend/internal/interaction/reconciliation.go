@@ -8,11 +8,11 @@ import (
 )
 
 type AgentTaskRef struct {
-	TaskRunID   string `json:"taskRunID"`
+	TaskRunID    string `json:"taskRunID"`
 	InvocationID string `json:"invocationID"`
-	Status      string `json:"status"`
-	Generation  int64  `json:"generation"`
-	Completed   bool   `json:"completed"`
+	Status       string `json:"status"`
+	Generation   int64  `json:"generation"`
+	Completed    bool   `json:"completed"`
 }
 
 type AgentWorkflowRef struct {
@@ -31,16 +31,16 @@ type AgentInvocationRef struct {
 }
 
 type AgentReconciliationSnapshot struct {
-	UserID         string                          `json:"userId"`
-	CharacterID    string                          `json:"characterId"`
-	ConversationID string                          `json:"conversationId"`
-	InteractionID  string                          `json:"interactionId"`
-	Goals          []decision.Goal                 `json:"goals"`
-	Observations   []decision.Observation           `json:"observations"`
-	Tasks          []AgentTaskRef                  `json:"tasks"`
-	Workflows      []AgentWorkflowRef              `json:"workflows"`
-	Invocations    []AgentInvocationRef            `json:"invocations"`
-	CapturedAt     time.Time                       `json:"capturedAt"`
+	UserID         string                 `json:"userId"`
+	CharacterID    string                 `json:"characterId"`
+	ConversationID string                 `json:"conversationId"`
+	InteractionID  string                 `json:"interactionId"`
+	Goals          []decision.Goal        `json:"goals"`
+	Observations   []decision.Observation `json:"observations"`
+	Tasks          []AgentTaskRef         `json:"tasks"`
+	Workflows      []AgentWorkflowRef     `json:"workflows"`
+	Invocations    []AgentInvocationRef   `json:"invocations"`
+	CapturedAt     time.Time              `json:"capturedAt"`
 }
 
 type GoalReconciliationReader interface {

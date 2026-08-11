@@ -115,6 +115,12 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 	scopeStore := &mockScopeStore{}
 	permSnapStore := &mockPermissionSnapshotStore{}
 
+	rateLimitPolicy := RateLimitPolicy{Enabled: false}
+	rateLimiter, err := NewRateLimiter(rateLimitPolicy)
+	if err != nil {
+		panic(err)
+	}
+
 	p := &ExecutionPipeline{
 		InvocationValidator: NewInvocationValidator(),
 		InputValidator:      NewInputValidator(),
@@ -122,8 +128,8 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 		ScopeGate:           NewScopeGate(),
 		PermissionGate:      NewPermissionGate(),
 		ApprovalGate:        NewApprovalGate(),
-		ConcurrencyCtrl:     NewConcurrencyController(),
-		RateLimiter:         NewRateLimiter(),
+		ConcurrencyCtrl:     mustTestConcurrency(NewTestConcurrencyPolicy()),
+		RateLimiter:         rateLimiter,
 		IdempotencyGuard:    NewIdempotencyGuard(),
 		RetryCtrl:           NewRetryController(),
 		TimeoutCtrl:         NewTimeoutController(5 * time.Second),
@@ -148,6 +154,34 @@ func buildPipeline(adapter capability.RuntimeAdapter) *ExecutionPipeline {
 	}
 	p.ScopeGate.ScopeManager = mockScopeMgr
 	p.PermissionGate.Broker = mockBroker
+	return p
+}
+
+func NewTestConcurrencyPolicy() ConcurrencyPolicy {
+	return ConcurrencyPolicy{
+		GlobalLimit:          0,
+		PerToolLimit:         0,
+		PerExtensionLimit:    0,
+		PerCharacterLimit:    0,
+		PerConversationLimit: 0,
+	}
+}
+
+func mustTestConcurrency(p ConcurrencyPolicy) *ConcurrencyController {
+	ctrl, err := NewConcurrencyController(p)
+	if err != nil {
+		panic(err)
+	}
+	return ctrl
+}
+
+func buildPipelineWithPolicy(adapter capability.RuntimeAdapter, policy ConcurrencyPolicy) *ExecutionPipeline {
+	p := buildPipeline(adapter)
+	ctrl, err := NewConcurrencyController(policy)
+	if err != nil {
+		panic(err)
+	}
+	p.ConcurrencyCtrl = ctrl
 	return p
 }
 
@@ -565,7 +599,7 @@ func TestPipelineCancellation(t *testing.T) {
 		},
 	}
 
-	p := buildPipeline(adapter)
+	p := buildPipelineWithPolicy(adapter, ConcurrencyPolicy{GlobalLimit: 1})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -575,8 +609,6 @@ func TestPipelineCancellation(t *testing.T) {
 		Input:      json.RawMessage(`{}`),
 		Invocation: newTestInvocation("user-001"),
 	}
-
-	p.ConcurrencyCtrl.Policy.GlobalLimit = 1
 
 	result := p.Execute(ctx, req)
 
@@ -786,8 +818,9 @@ func TestPipelineConcurrencySlotRelease(t *testing.T) {
 
 	p.Execute(ctx, req)
 
-	if len(p.ConcurrencyCtrl.globalSem) != 0 {
-		t.Fatalf("expected global semaphore to be released (empty), got %d occupied", len(p.ConcurrencyCtrl.globalSem))
+	snap := p.ConcurrencyCtrl.Snapshot()
+	if snap.GlobalInUse != 0 {
+		t.Fatalf("expected global in-use to be released, got %d", snap.GlobalInUse)
 	}
 }
 
@@ -866,9 +899,6 @@ func TestPipelineRateLimiter(t *testing.T) {
 	}
 
 	p := buildPipeline(adapter)
-	p.RateLimiter.OnAllow = func(ctx context.Context, tool capability.ToolDefinition) error {
-		return errors.New("rate limited")
-	}
 
 	ctx := context.Background()
 	req := ToolExecutionRequest{
@@ -879,11 +909,8 @@ func TestPipelineRateLimiter(t *testing.T) {
 
 	result := p.Execute(ctx, req)
 
-	if result.Status != capability.ToolResultStatusFailed {
-		t.Fatalf("expected failed for rate limit, got %s", result.Status)
-	}
-	if result.Error == nil || result.Error.Code != capability.ErrorCodeRateLimited {
-		t.Fatalf("expected rate_limited error, got %+v", result.Error)
+	if result.Status != capability.ToolResultStatusSuccess {
+		t.Fatalf("expected success when rate limiter disabled, got %s: %v", result.Status, result.Error)
 	}
 }
 

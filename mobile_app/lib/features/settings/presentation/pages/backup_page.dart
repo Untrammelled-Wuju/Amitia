@@ -6,6 +6,8 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/backend_transport/backend_service_api.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/providers.dart';
 
 class BackupPage extends ConsumerStatefulWidget {
@@ -29,10 +31,16 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   Future<void> _loadBackups() async {
     setState(() { _loadingBackups = true; _backupsError = null; });
     try {
-      final apiClient = ref.read(apiClientProvider);
+      final apiClient = ref.watch(backendServiceProvider);
+      if (apiClient == null) {
+        if (mounted) {
+          setState(() { _backupsError = '后端服务未连接'; _loadingBackups = false; });
+        }
+        return;
+      }
       final resp = await apiClient.get<List<dynamic>>('/api/maintenance/backups');
       if (mounted) {
-        final list = resp.data ?? [];
+        final list = resp ?? [];
         setState(() {
           _backups = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
           _loadingBackups = false;
@@ -45,7 +53,15 @@ class _BackupPageState extends ConsumerState<BackupPage> {
 
   Future<void> _handleAction(String label) async {
     final svc = ref.read(systemServiceProvider);
-    final apiClient = ref.read(apiClientProvider);
+    final apiClient = ref.watch(backendServiceProvider);
+    if (apiClient == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$label · 失败: 后端服务未连接'), duration: const Duration(seconds: 2)),
+        );
+      }
+      return;
+    }
     try {
       switch (label) {
         case '导出数据':

@@ -1,7 +1,5 @@
 package resource
 
-import "context"
-
 type ResourceLifecycleHooks interface {
 	OnRuntimeStop(runtimeID string)
 	OnRuntimeRestart(runtimeID string)
@@ -48,5 +46,3 @@ func (c *LifecycleCoordinator) OnHostShutdown() {
 		c.adapter.Shutdown()
 	}
 }
-
-var _ = context.Background

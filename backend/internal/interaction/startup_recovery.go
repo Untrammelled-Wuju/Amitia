@@ -48,6 +48,10 @@ func RecoverStaleInteractions(ctx context.Context, tracker InteractionTracker, c
 			result.Failed++
 			return true
 		}
+		if descriptorRecoveryPath(record) {
+			result.Skipped++
+			return true
+		}
 		_, err := tracker.Fail(ctx, record.ID, record.StatusVersion, "startup_recovered", "interaction was interrupted by process restart")
 		if err == nil {
 			result.Recovered++
@@ -89,4 +93,23 @@ func shouldStartupRecover(record *InteractionRecord, cutoff time.Time) bool {
 	default:
 		return false
 	}
+}
+
+func descriptorRecoveryPath(record *InteractionRecord) bool {
+	if record == nil {
+		return false
+	}
+	desc := record.RecoveryDescriptor
+	if desc == nil {
+		return false
+	}
+	switch desc.State {
+	case RecoveryDescriptorRecoveryRequired,
+		RecoveryDescriptorManualIntervention:
+		return true
+	case RecoveryDescriptorActive,
+		RecoveryDescriptorPauseReady:
+		return true
+	}
+	return false
 }

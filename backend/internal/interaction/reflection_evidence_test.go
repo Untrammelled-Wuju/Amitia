@@ -8,10 +8,11 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/mindruntime"
 )
+
 func TestObservationToVerifiedEventSkipsEmptyID(t *testing.T) {
 	obs := decision.Observation{
-		Kind:      decision.ObservationKindToolResult,
-		Outcome:   decision.ObservationOutcomeSucceeded,
+		Kind:       decision.ObservationKindToolResult,
+		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
 	}
 	evt, ok := ObservationToVerifiedEvent(obs, decision.GoalProgressBatchResult{}, decision.ContinuationDecision{})
@@ -25,9 +26,9 @@ func TestObservationToVerifiedEventSkipsEmptyID(t *testing.T) {
 
 func TestObservationToVerifiedEventSkipsNoAction(t *testing.T) {
 	obs := decision.Observation{
-		ID:        "obs-1",
-		Kind:      decision.ObservationKindNoAction,
-		Outcome:   decision.ObservationOutcomeSucceeded,
+		ID:         "obs-1",
+		Kind:       decision.ObservationKindNoAction,
+		Outcome:    decision.ObservationOutcomeSucceeded,
 		ObservedAt: time.Now(),
 	}
 	evt, ok := ObservationToVerifiedEvent(obs, decision.GoalProgressBatchResult{}, decision.ContinuationDecision{})
@@ -42,10 +43,10 @@ func TestObservationToVerifiedEventSkipsNoAction(t *testing.T) {
 func TestObservationToVerifiedEventReturnsTrueForToolResult(t *testing.T) {
 	now := time.Now().UTC()
 	obs := decision.Observation{
-		ID:        "obs-tool-1",
-		Kind:      decision.ObservationKindToolResult,
-		Outcome:   decision.ObservationOutcomeSucceeded,
-		ToolID:    "create_schedule",
+		ID:         "obs-tool-1",
+		Kind:       decision.ObservationKindToolResult,
+		Outcome:    decision.ObservationOutcomeSucceeded,
+		ToolID:     "create_schedule",
 		ObservedAt: now,
 	}
 	progress := decision.GoalProgressBatchResult{
@@ -158,7 +159,7 @@ func TestBoundedIDSetEvicts(t *testing.T) {
 func TestEvidenceWindowBoundedEvents(t *testing.T) {
 	w := NewReflectionEvidenceWindow()
 	for i := 0; i < MaxEvidenceEvents+10; i++ {
-		w.AddEvents(mindruntime.VerifiedEvent{ID: string(rune('a' + i%26)) + string(rune('0' + i/26))})
+		w.AddEvents(mindruntime.VerifiedEvent{ID: string(rune('a'+i%26)) + string(rune('0'+i/26))})
 	}
 	if len(w.Events) != MaxEvidenceEvents {
 		t.Errorf("expected events to be capped at %d, got %d", MaxEvidenceEvents, len(w.Events))

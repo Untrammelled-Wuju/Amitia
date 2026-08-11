@@ -12,6 +12,7 @@ final class RuntimeStatusSnapshot {
   final bool webSocketConnected;
   final bool businessAvailable;
   final int generation;
+  final String runtimeVersion;
   final RuntimeStatusError? primaryError;
 
   const RuntimeStatusSnapshot({
@@ -24,6 +25,7 @@ final class RuntimeStatusSnapshot {
     required this.webSocketConnected,
     required this.businessAvailable,
     required this.generation,
+    this.runtimeVersion = '',
     this.primaryError,
   });
 
@@ -51,10 +53,11 @@ final class RuntimeStatusSnapshot {
           runtimeInstalled == other.runtimeInstalled &&
           backendConfigured == other.backendConfigured &&
           httpAvailable == other.httpAvailable &&
-          webSocketConnected == other.webSocketConnected &&
-          businessAvailable == other.businessAvailable &&
-          generation == other.generation &&
-          primaryError == other.primaryError;
+      webSocketConnected == other.webSocketConnected &&
+      businessAvailable == other.businessAvailable &&
+      generation == other.generation &&
+      runtimeVersion == other.runtimeVersion &&
+      primaryError == other.primaryError;
 
   @override
   int get hashCode =>
@@ -67,5 +70,6 @@ final class RuntimeStatusSnapshot {
       webSocketConnected.hashCode ^
       businessAvailable.hashCode ^
       generation.hashCode ^
+      runtimeVersion.hashCode ^
       primaryError.hashCode;
 }

@@ -87,6 +87,7 @@ import (
 	"github.com/u-ai/backend/internal/mindruntime"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
+	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/psyche/appraisal"
@@ -168,6 +169,7 @@ type AppServices struct {
 	DesktopPetMigrationRunner    *migration.Runner
 	DesktopPetMaintenanceHandler *maintenance.Handler
 	MigrationLock                *migrationcore.PersistentLock
+	RecoveryDescriptor           *interaction.RecoveryDescriptorService
 }
 
 type RuntimeOrchestrator interface {
@@ -483,7 +485,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err := mindruntime.RegisterRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB, graphReconAdapter, qdrantReconAdapter); err != nil {
 		log.Warn("reconciliation checkers registration warning: ", err)
 	}
-	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer)
+	pipelineMgr := pipelinecheckpoint.New(ctx.DB)
+	goalReader := interaction.NewGoalRecoveryReaderAdapter(goalRegistry)
+	taskReader := interaction.NewTaskRecoveryReaderAdapter(kernelContainer.TaskRuntimeService)
+	wfReader := interaction.NewWorkflowRecoveryReaderAdapter(kernelContainer.WorkflowExecutor)
+	invReader := interaction.NewInvocationRecoveryReaderAdapter(kernelContainer.ObservabilityStore)
+	pipeReader := interaction.NewPipelineRecoveryReaderAdapter(pipelineMgr)
+	recoveryValidator := interaction.NewRecoveryDescriptorValidator(goalReader, taskReader, wfReader, invReader, pipeReader)
+	recoveryBuilder := interaction.NewRecoveryDescriptorBuilder(goalReader, taskReader, wfReader, invReader, pipeReader)
+	recoveryDescriptor := interaction.NewRecoveryDescriptorService(tracker, recoveryBuilder, recoveryValidator)
+	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer, recoveryDescriptor)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
 	cbRegistry.Register("surrealdb", mindruntime.DefaultCircuitBreakerConfig())
@@ -918,6 +929,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		DesktopPetMigrationRunner:    migrationRunner,
 		DesktopPetMaintenanceHandler: maintenanceHandler,
 		MigrationLock:                migrationLock,
+		RecoveryDescriptor:           recoveryDescriptor,
 	}, nil
 }
 
@@ -1175,7 +1187,7 @@ func (a *reflectionOutboxServiceAdapter) Append(record newoutbox.OutboxRecord) e
 	return a.store.Append(record)
 }
 
-func registerAgentReconciliation(engine *mindruntime.ReconciliationEngine, goalRegistry *decision.GoalRegistry, kernelContainer *kernel.Container) {
+func registerAgentReconciliation(engine *mindruntime.ReconciliationEngine, goalRegistry *decision.GoalRegistry, kernelContainer *kernel.Container, recoveryDescriptor *interaction.RecoveryDescriptorService) {
 	if engine == nil || goalRegistry == nil {
 		return
 	}
@@ -1202,6 +1214,10 @@ func registerAgentReconciliation(engine *mindruntime.ReconciliationEngine, goalR
 	engine.RegisterChecker(mindruntime.ReconciliationAgentTask, interaction.NewTaskConsistencyChecker(processor, settleDelay))
 	engine.RegisterChecker(mindruntime.ReconciliationAgentWorkflow, interaction.NewWorkflowConsistencyChecker(processor, settleDelay))
 	engine.RegisterChecker(mindruntime.ReconciliationAgentRuntime, interaction.NewInvocationConsistencyChecker(processor, settleDelay))
+	if recoveryDescriptor != nil {
+		engine.RegisterChecker(mindruntime.ReconciliationAgentDescriptorRefStale, interaction.NewDescriptorRefStaleChecker(recoveryDescriptor, settleDelay))
+		engine.RegisterChecker(mindruntime.ReconciliationAgentDescriptorSchema, interaction.NewDescriptorRefStaleChecker(recoveryDescriptor, settleDelay))
+	}
 }
 
 type graphReconciliationAdapter struct {

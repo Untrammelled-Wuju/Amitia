@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/internal/gamehost/registry"
+	"github.com/u-ai/backend/internal/gamehost/resource"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/runtime/checkpoint"
@@ -48,6 +49,10 @@ type GameHostContainer struct {
 	HostAPIGateway host_api.Gateway
 	HostAPIAdapter *hostapi.HostAPIAdapter
 
+	ResourceAdapter      resource.AdmissionAdapter
+	ResourceViewer      *resource.ResourcePolicyViewer
+	ResourceLifecycle   *resource.LifecycleCoordinator
+
 	procAdapter runtime.ProcessSupervisorAdapter
 
 	UpgradeCoordinator  *upgrade.UpgradeCoordinator
@@ -65,6 +70,9 @@ func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	}
 	if c.HandshakeManager != nil {
 		c.HandshakeManager.Shutdown(ctx)
+	}
+	if c.ResourceLifecycle != nil {
+		c.ResourceLifecycle.OnHostShutdown()
 	}
 	return nil
 }

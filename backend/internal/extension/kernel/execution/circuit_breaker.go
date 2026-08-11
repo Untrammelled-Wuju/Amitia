@@ -114,7 +114,7 @@ type CircuitBreakerCoordinator struct {
 	mu      sync.Mutex
 	config  CircuitBreakerConfig
 	clock   CircuitClock
-	circuits map[CircuitKey]*circuitBreaker
+	circuits map[string]*circuitBreaker
 
 	onEvent func(snapshot CircuitSnapshot, from, to CircuitState, reason string)
 }
@@ -127,7 +127,7 @@ func NewCircuitBreakerCoordinatorWithConfig(config CircuitBreakerConfig) *Circui
 	return &CircuitBreakerCoordinator{
 		config:   config,
 		clock:    systemClock{},
-		circuits: make(map[CircuitKey]*circuitBreaker),
+		circuits: make(map[string]*circuitBreaker),
 	}
 }
 
@@ -138,7 +138,7 @@ func NewCircuitBreakerCoordinatorWithClock(config CircuitBreakerConfig, clock Ci
 	return &CircuitBreakerCoordinator{
 		config:   config,
 		clock:    clock,
-		circuits: make(map[CircuitKey]*circuitBreaker),
+		circuits: make(map[string]*circuitBreaker),
 	}
 }
 
@@ -163,7 +163,7 @@ func (c *CircuitBreakerCoordinator) Acquire(ctx context.Context, tool capability
 	defer c.mu.Unlock()
 
 	now := c.clock.Now()
-	cb := c.circuits[key]
+	cb := c.circuits[key.String()]
 	if cb == nil {
 		return CircuitPermit{Key: key, Allowed: true, Probe: false}
 	}
@@ -206,9 +206,13 @@ func (c *CircuitBreakerCoordinator) Complete(permit CircuitPermit, outcome Circu
 	defer c.mu.Unlock()
 
 	now := c.clock.Now()
-	cb := c.circuits[key]
-	if cb == nil {
+	cb := c.circuits[key.String()]
+	if cb == nil && outcome == CircuitOutcomeNeutral {
 		return
+	}
+	if cb == nil {
+		cb = &circuitBreaker{state: CircuitStateClosed}
+		c.circuits[key.String()] = cb
 	}
 
 	switch outcome {
@@ -234,13 +238,13 @@ func (c *CircuitBreakerCoordinator) recordSuccess(cb *circuitBreaker, key Circui
 			cb.state = CircuitStateClosed
 			cb.halfOpenInFlight = 0
 			cb.halfOpenSuccesses = 0
-			c.deleteIfClean(key, cb)
+			c.deleteIfClean(key.String(), cb)
 			if c.onEvent != nil {
 				c.onEvent(cb.snapshot(key, now), from, CircuitStateClosed, "recovery_success")
 			}
 		}
 	case CircuitStateClosed:
-		c.deleteIfClean(key, cb)
+		c.deleteIfClean(key.String(), cb)
 	}
 }
 
@@ -275,7 +279,7 @@ func (c *CircuitBreakerCoordinator) recordNeutral(cb *circuitBreaker) {
 	}
 }
 
-func (c *CircuitBreakerCoordinator) deleteIfClean(key CircuitKey, cb *circuitBreaker) {
+func (c *CircuitBreakerCoordinator) deleteIfClean(key string, cb *circuitBreaker) {
 	if cb != nil &&
 		cb.state == CircuitStateClosed &&
 		cb.consecutiveFailures == 0 &&
@@ -288,7 +292,7 @@ func (c *CircuitBreakerCoordinator) deleteIfClean(key CircuitKey, cb *circuitBre
 func (c *CircuitBreakerCoordinator) Reset(key CircuitKey) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.circuits, key)
+	delete(c.circuits, key.String())
 }
 
 func (c *CircuitBreakerCoordinator) ResetTool(tool capability.ToolDefinition) {
@@ -300,21 +304,6 @@ func (c *CircuitBreakerCoordinator) Snapshot(tool capability.ToolDefinition) Cir
 	return c.SnapshotByKey(key)
 }
 
-func (c *CircuitBreakerCoordinator) RecordResult(ctx context.Context, tool capability.ToolDefinition, result capability.UnifiedToolResult) {
-	permit := c.Acquire(ctx, tool)
-	if !permit.Allowed {
-		return
-	}
-	outcome := CircuitOutcomeNeutral
-	switch result.Status {
-	case capability.ToolResultStatusSuccess:
-		outcome = CircuitOutcomeSuccess
-	case capability.ToolResultStatusFailed, capability.ToolResultStatusCancelled, capability.ToolResultStatusTimedOut:
-		outcome = CircuitOutcomeFailure
-	}
-	c.Complete(permit, outcome)
-}
-
 func (c *CircuitBreakerCoordinator) SnapshotByKey(key CircuitKey) CircuitSnapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -322,7 +311,7 @@ func (c *CircuitBreakerCoordinator) SnapshotByKey(key CircuitKey) CircuitSnapsho
 	now := c.clock.Now()
 	zero := CircuitSnapshot{State: CircuitStateClosed}
 
-	cb := c.circuits[key]
+	cb := c.circuits[key.String()]
 	if cb == nil {
 		return zero
 	}
@@ -338,6 +327,6 @@ func (c *CircuitBreakerCoordinator) HasCircuit(tool capability.ToolDefinition) b
 	key := resolveCircuitKey(tool)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	_, ok := c.circuits[key]
+	_, ok := c.circuits[key.String()]
 	return ok
 }

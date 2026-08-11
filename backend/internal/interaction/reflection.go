@@ -24,12 +24,12 @@ type ReflectionProcessInput struct {
 }
 
 type ReflectionProcessResult struct {
-	Triggered    bool
-	TriggerKinds []mindruntime.ReflectionTriggerKind
-	CandidateID  string
-	Significant  bool
-	Approved     bool
-	Escalated    bool
+	Triggered     bool
+	TriggerKinds  []mindruntime.ReflectionTriggerKind
+	CandidateID   string
+	Significant   bool
+	Approved      bool
+	Escalated     bool
 	OutboxEventID string
 }
 
@@ -45,10 +45,10 @@ type ReflectionOutbox interface {
 }
 
 type reflectionScopeState struct {
-	Trigger           mindruntime.ReflectionTriggerState
-	Evidence          *ReflectionEvidenceWindow
-	SeenObservations  *boundedIDSet
-	LastCandidateID   string
+	Trigger          mindruntime.ReflectionTriggerState
+	Evidence         *ReflectionEvidenceWindow
+	SeenObservations *boundedIDSet
+	LastCandidateID  string
 }
 
 type ReflectionService struct {
@@ -319,11 +319,11 @@ func (s *ReflectionService) appendApprovedEvent(
 }
 
 type reflectionCandidateApprovedPayload struct {
-	CandidateID        string                            `json:"candidateId"`
-	CharacterID        string                            `json:"characterId"`
-	ConversationID     string                            `json:"conversationId"`
-	RequestID          string                            `json:"requestId"`
-	Confidence         float64                           `json:"confidence"`
+	CandidateID        string                               `json:"candidateId"`
+	CharacterID        string                               `json:"characterId"`
+	ConversationID     string                               `json:"conversationId"`
+	RequestID          string                               `json:"requestId"`
+	Confidence         float64                              `json:"confidence"`
 	MemoryAbstractions []reflectionMemoryAbstractionPayload `json:"memoryAbstractions"`
 }
 

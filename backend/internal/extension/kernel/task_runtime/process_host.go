@@ -83,6 +83,9 @@ type TaskProcessHost struct {
 	closeOnce sync.Once
 	done      chan struct{}
 	exitCode  int
+
+	pauseAckCh     chan *TaskPauseAck
+	pauseRequested bool
 }
 
 type ProcessHostConfig struct {
@@ -161,6 +164,7 @@ func NewTaskProcessHost(cfg ProcessHostConfig) (*TaskProcessHost, error) {
 		notifiers:     make(map[string]func(json.RawMessage)),
 		exitCh:        make(chan int, 1),
 		done:          make(chan struct{}),
+		pauseAckCh:    make(chan *TaskPauseAck, 1),
 	}, nil
 }
 
@@ -229,6 +233,15 @@ func (h *TaskProcessHost) Start(ctx context.Context, input json.RawMessage, chec
 		}
 		if json.Unmarshal(params, &p) == nil && callbacks.OnFinished != nil {
 			callbacks.OnFinished(p.Status, p.Result, p.ArtifactID, p.ErrorCode, p.ErrorMessage)
+		}
+	}
+	h.notifiers["task.pause_ack"] = func(params json.RawMessage) {
+		var ack TaskPauseAck
+		if json.Unmarshal(params, &ack) == nil {
+			select {
+			case h.pauseAckCh <- &ack:
+			default:
+			}
 		}
 	}
 	h.notifiersMu.Unlock()
@@ -448,6 +461,29 @@ func (h *TaskProcessHost) State() ProcessHostState {
 
 func (h *TaskProcessHost) InstanceID() string {
 	return h.instanceID
+}
+
+func (h *TaskProcessHost) RequestPause(timeout time.Duration) error {
+	h.mu.Lock()
+	if h.state == ProcessStateStopped || h.state == ProcessStateCrashed {
+		h.mu.Unlock()
+		return fmt.Errorf("host already stopped")
+	}
+	h.pauseRequested = true
+	h.mu.Unlock()
+
+	params, _ := json.Marshal(map[string]interface{}{
+		"task_run_id": h.taskRunID,
+		"timeout_ms":  timeout.Milliseconds(),
+	})
+	if err := h.notify("task.pause", params); err != nil {
+		return fmt.Errorf("send task.pause: %w", err)
+	}
+	return nil
+}
+
+func (h *TaskProcessHost) PauseAck() <-chan *TaskPauseAck {
+	return h.pauseAckCh
 }
 
 func (h *TaskProcessHost) waitExit() {

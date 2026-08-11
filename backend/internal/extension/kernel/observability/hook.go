@@ -710,6 +710,91 @@ func (h *ExecutionHook) OnCircuitStateChange(ctx context.Context, circuitKey str
 	})
 }
 
+func (h *ExecutionHook) OnConcurrencyAcquired(ctx context.Context, dimensions []string) error {
+	if len(dimensions) == 0 {
+		return nil
+	}
+	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:   NewEventID(),
+		EventType: "concurrency.acquired",
+		Severity:  "info",
+		Timestamp: time.Now(),
+		Data: map[string]any{
+			"dimensions": dimensions,
+		},
+	})
+}
+
+func (h *ExecutionHook) OnConcurrencyReleased(ctx context.Context, dimensions []string, waitedMs int64) error {
+	if len(dimensions) == 0 {
+		return nil
+	}
+	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:   NewEventID(),
+		EventType: "concurrency.released",
+		Severity:  "info",
+		Timestamp: time.Now(),
+		Data: map[string]any{
+			"dimensions":       dimensions,
+			"wait_duration_ms": waitedMs,
+		},
+	})
+}
+
+func (h *ExecutionHook) OnConcurrencyWait(ctx context.Context, dimensions []string, waitedMs int64) error {
+	if len(dimensions) == 0 {
+		return nil
+	}
+	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
+		EventID:   NewEventID(),
+		EventType: "concurrency.wait_completed",
+		Severity:  "info",
+		Timestamp: time.Now(),
+		Data: map[string]any{
+			"dimensions":       dimensions,
+			"wait_duration_ms": waitedMs,
+		},
+	})
+}
+
+func (h *ExecutionHook) OnRateLimitAdmitted(ctx context.Context, dimensions []string) error {
+	return h.rateLimitEvent(ctx, "rate_limit.admitted", dimensions, "", 0, 0)
+}
+
+func (h *ExecutionHook) OnRateLimitRejected(ctx context.Context, dimensions []string, reason string, retryAfterMs int64) error {
+	return h.rateLimitEvent(ctx, "rate_limit.rejected", dimensions, reason, retryAfterMs, 0)
+}
+
+func (h *ExecutionHook) OnBackpressureRejected(ctx context.Context, dimensions []string, reason string, retryAfterMs int64) error {
+	return h.rateLimitEvent(ctx, "backpressure.rejected", dimensions, reason, retryAfterMs, 0)
+}
+
+func (h *ExecutionHook) OnRateLimitWait(ctx context.Context, dimensions []string, waitMs int64) error {
+	return h.rateLimitEvent(ctx, "rate_limit.wait_completed", dimensions, "", 0, waitMs)
+}
+
+func (h *ExecutionHook) rateLimitEvent(_ context.Context, eventType string, dimensions []string, reason string, retryAfterMs int64, waitMs int64) error {
+	data := map[string]any{
+		"dimensions": dimensions,
+	}
+	if reason != "" {
+		data["reason"] = reason
+	}
+	if retryAfterMs > 0 {
+		data["retry_after_ms"] = retryAfterMs
+	}
+	if waitMs > 0 {
+		data["wait_duration_ms"] = waitMs
+	}
+	return h.writer.WriteRuntimeEvent(context.Background(), RuntimeEventRecord{
+		EventID:   NewEventID(),
+		EventType: eventType,
+		Severity:  "info",
+		Timestamp: time.Now(),
+		Data:      data,
+	})
+}
+
 // ==================== Helper functions ====================
 
 func mapActorFromSource(source capability.InvocationSource) ActorType {

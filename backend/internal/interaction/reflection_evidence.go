@@ -350,10 +350,10 @@ func NewReflectionScopeKey(scope InteractionScope) ReflectionScopeKey {
 }
 
 type ReflectionExternalEvidence struct {
-	Relations          []mindruntime.VerifiedRelation
-	Memories           []mindruntime.VerifiedMemory
+	Relations           []mindruntime.VerifiedRelation
+	Memories            []mindruntime.VerifiedMemory
 	RelationChangeCount int
-	AnomalyScores      []float64
+	AnomalyScores       []float64
 }
 
 type ReflectionEvidenceReader interface {

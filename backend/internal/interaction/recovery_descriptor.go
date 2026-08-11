@@ -21,11 +21,11 @@ const (
 type RecoveryDescriptorState string
 
 const (
-	RecoveryDescriptorActive            RecoveryDescriptorState = "active"
-	RecoveryDescriptorPauseReady        RecoveryDescriptorState = "pause_ready"
-	RecoveryDescriptorRecoveryRequired  RecoveryDescriptorState = "recovery_required"
+	RecoveryDescriptorActive             RecoveryDescriptorState = "active"
+	RecoveryDescriptorPauseReady         RecoveryDescriptorState = "pause_ready"
+	RecoveryDescriptorRecoveryRequired   RecoveryDescriptorState = "recovery_required"
 	RecoveryDescriptorManualIntervention RecoveryDescriptorState = "manual_intervention"
-	RecoveryDescriptorTerminal          RecoveryDescriptorState = "terminal"
+	RecoveryDescriptorTerminal           RecoveryDescriptorState = "terminal"
 )
 
 type RecoveryRequirement string
@@ -39,7 +39,7 @@ type RecoveryCompatibility string
 
 const (
 	RecoveryCompatible RecoveryCompatibility = "compatible"
-	RecoveryStale     RecoveryCompatibility = "stale"
+	RecoveryStale      RecoveryCompatibility = "stale"
 	RecoveryIncomplete RecoveryCompatibility = "incomplete"
 	RecoveryManual     RecoveryCompatibility = "manual"
 )
@@ -101,7 +101,7 @@ type RecoveryObservationRef struct {
 
 type RecoveryTaskRef struct {
 	TaskRunID         string                     `json:"taskRunId"`
-	TaskDefinitionID string                     `json:"taskDefinitionId,omitempty"`
+	TaskDefinitionID  string                     `json:"taskDefinitionId,omitempty"`
 	CheckpointID      string                     `json:"checkpointId,omitempty"`
 	CheckpointVersion int64                      `json:"checkpointVersion"`
 	Generation        int64                      `json:"generation"`
@@ -142,7 +142,7 @@ type RecoveryMindRef struct {
 
 type RecoveryDescriptor struct {
 	SchemaVersion int                            `json:"schemaVersion"`
-	Requirement   RecoveryRequirement             `json:"requirement"`
+	Requirement   RecoveryRequirement            `json:"requirement"`
 	Revision      int64                          `json:"revision"`
 	Interaction   RecoveryInteractionRef         `json:"interaction"`
 	Scope         RecoveryScopeRef               `json:"scope"`
@@ -191,9 +191,6 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 	writeKVI := func(k string, v int64) {
 		writeKV(k, fmt.Sprintf("%d", v))
 	}
-	writeKVIU := func(k string, v uint64) {
-		writeKV(k, fmt.Sprintf("%d", v))
-	}
 	writeKV("interaction.id", d.Interaction.InteractionID)
 	writeKV("interaction.status", string(d.Interaction.Status))
 	writeKVI("interaction.statusVersion", d.Interaction.StatusVersion)
@@ -234,7 +231,7 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 		writeKV("workflow.execId", d.Workflow.ExecutionID)
 		writeKVI("workflow.generation", d.Workflow.Generation)
 		writeKV("workflow.status", string(d.Workflow.Status))
-		writeKVIU("workflow.completedCount", uint64(len(d.Workflow.CompletedCheckpointNodes)))
+		writeKVI("workflow.completedCount", int64(len(d.Workflow.CompletedCheckpointNodes)))
 		for _, n := range d.Workflow.CompletedCheckpointNodes {
 			writeKV("workflow.completedNode", n)
 		}
@@ -247,7 +244,7 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 	if d.Pipeline != nil {
 		writeKV("pipeline.conversationId", d.Pipeline.ConversationID)
 		writeKVI("pipeline.lastSeq", d.Pipeline.LastMessageSequence)
-		writeKVIU("pipeline.version", uint64(d.Pipeline.CheckpointVersion))
+		writeKVI("pipeline.version", int64(d.Pipeline.CheckpointVersion))
 	}
 	if d.Mind != nil {
 		writeKV("mind.reflectionId", d.Mind.ReflectionCandidateID)

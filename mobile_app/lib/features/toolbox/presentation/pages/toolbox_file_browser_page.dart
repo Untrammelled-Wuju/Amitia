@@ -8,6 +8,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class _FileItem {
   final IconData icon;
@@ -50,11 +51,17 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final api = ref.read(apiClientProvider);
+      final api = ref.watch(backendServiceProvider);
+      if (api == null) {
+        if (mounted) {
+          setState(() { _error = '后端服务未连接'; _loading = false; });
+        }
+        return;
+      }
       List<_FileItem> files = [];
       try {
         final resp = await api.get<List<dynamic>>('/api/system/files');
-        final items = resp.data ?? [];
+        final items = resp ?? [];
         files = items.map((e) {
           final m = e as Map<String, dynamic>? ?? {};
           final name = (m['name'] ?? m['fileName'] ?? m['path'] ?? '').toString();
