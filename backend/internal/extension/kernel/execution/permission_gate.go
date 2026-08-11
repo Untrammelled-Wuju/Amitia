@@ -64,6 +64,7 @@ func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability
 		InvocationID:   inv.InvocationID,
 		Input:          input,
 		RiskLevel:      string(tool.RiskLevel),
+		IsBackground:   inv.IsBackground,
 		ScopeSnapshotID: inv.ScopeSnapshotID,
 		ApprovalMode:   string(inv.ApprovalMode),
 	}

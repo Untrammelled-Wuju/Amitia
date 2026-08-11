@@ -519,6 +519,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
+	if hookService != nil {
+		toolFacade.SetHookService(hookService)
+	}
 
 	uiHost := ui_contribution.NewUIHost()
 	uiHost.Bridge().SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {

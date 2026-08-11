@@ -336,13 +336,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		panic("failed to initialize package artifact maintenance")
 	}
 	kernelContainer.ArtifactMaintenance = artifactMaintenance
-	toolFacade := kernel.NewToolFacade(
-		kernelContainer.ToolRegistry,
-		kernelContainer.ExecutionKernel,
-		kernel.DefaultToolFacadeConfig(),
-	)
-	toolFacade.SetAgentSkillCatalog(kernelContainer.AgentSkillCatalog)
-	kernelContainer.ToolFacade = toolFacade
+	toolFacade := kernelContainer.ToolFacade
+	if toolFacade == nil {
+		panic("kernel container did not construct ToolFacade")
+	}
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
 	actionMaterializer := interaction.NewActionMaterializer(toolFacade)
 	actionDispatcher := interaction.NewActionDispatcher(toolFacade)

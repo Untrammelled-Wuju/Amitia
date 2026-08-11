@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.connection
 
-internal class BackendConnectionCredential private constructor(
+class BackendConnectionCredential private constructor(
     private val token: String,
 ) {
     fun reveal(): String = token

@@ -110,6 +110,8 @@ func (d ActionDispatcher) dispatchTool(
 		TraceID:        scope.TraceID,
 		RequestID:      scope.RequestID,
 		ToolCallID:     action.Tool.ExternalCallID,
+		CorrelationID:  scope.InteractionID,
+		CausationID:    action.ID,
 	}
 
 	idempotencyKey := fmt.Sprintf("agent-action:%s", action.ID)
@@ -131,12 +133,40 @@ func (d ActionDispatcher) dispatchTool(
 		}
 	}
 
+	if action.Tool != nil && action.Tool.RuntimeType == string(capability.RuntimeTypeTask) && action.Tool.AllowBackground && extractTaskRunID(&result) != "" {
+		return ActionExecutionResult{
+			Action:      action,
+			State:       ActionExecutionAcceptedBackground,
+			ToolResult:  &result,
+			CompletedAt: now,
+		}
+	}
+
 	return ActionExecutionResult{
 		Action:      action,
 		State:       ActionExecutionCompleted,
 		ToolResult:  &result,
 		CompletedAt: now,
 	}
+}
+
+func extractTaskRunID(toolResult *kernel.LegacyToolResult) string {
+	if toolResult == nil || len(toolResult.Output) == 0 {
+		return ""
+	}
+	var structured map[string]any
+	if err := json.Unmarshal(toolResult.Output, &structured); err != nil {
+		return ""
+	}
+	v, ok := structured["taskRunId"]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
 }
 
 func scopeVerificationLost(action MaterializedAction, scope ActionMaterializationScope) bool {

@@ -39,14 +39,16 @@ const (
 )
 
 type MaterializedToolAction struct {
-	ToolID         string          `json:"toolId"`
-	ModelName      string          `json:"modelName"`
-	ExternalCallID string          `json:"externalCallID"`
-	Input          json.RawMessage `json:"input"`
-	ExtensionID    string          `json:"extensionId,omitempty"`
-	ModuleID       string          `json:"moduleId,omitempty"`
-	Generation     int64           `json:"generation"`
-	RuntimeType    string          `json:"runtimeType,omitempty"`
+	ToolID          string          `json:"toolId"`
+	ModelName       string          `json:"modelName"`
+	ExternalCallID  string          `json:"externalCallID"`
+	Input           json.RawMessage `json:"input"`
+	ExtensionID     string          `json:"extensionId,omitempty"`
+	ModuleID        string          `json:"moduleId,omitempty"`
+	Generation      int64           `json:"generation"`
+	RuntimeType     string          `json:"runtimeType,omitempty"`
+	RuntimeID       string          `json:"runtimeId,omitempty"`
+	AllowBackground bool            `json:"allowBackground,omitempty"`
 }
 
 type MaterializedAction struct {
@@ -252,6 +254,10 @@ func (m ActionMaterializer) MaterializeToolCall(
 	clonedInput := make(json.RawMessage, len(call.Arguments))
 	copy(clonedInput, call.Arguments)
 
+	if resolved.RuntimeType == "task" && !resolved.AllowBackground {
+		return MaterializedAction{}, fmt.Errorf("%w: task tool %s does not allow background execution", decision.ErrActionNotAllowedByPlan, call.Name)
+	}
+
 	action := MaterializedAction{
 		ID:            id,
 		PlanID:        plan.ID,
@@ -260,13 +266,16 @@ func (m ActionMaterializer) MaterializeToolCall(
 		Kind:          MaterializedActionTool,
 		CreatedAt:     now,
 		Tool: &MaterializedToolAction{
-			ToolID:         string(resolved.ID),
-			ModelName:      resolved.ModelName,
-			ExternalCallID: call.ID,
-			Input:          clonedInput,
-			ExtensionID:    resolved.ExtensionID,
-			ModuleID:       resolved.ModuleID,
-			Generation:     resolved.Generation,
+			ToolID:          string(resolved.ID),
+			ModelName:       resolved.ModelName,
+			ExternalCallID:  call.ID,
+			Input:           clonedInput,
+			ExtensionID:     resolved.ExtensionID,
+			ModuleID:        resolved.ModuleID,
+			Generation:      resolved.Generation,
+			RuntimeType:     string(resolved.RuntimeType),
+			RuntimeID:       resolved.RuntimeID,
+			AllowBackground: resolved.AllowBackground,
 		},
 	}
 	return action, nil

@@ -7,14 +7,16 @@ import org.junit.Test
 class RuntimeServiceHostTest {
 
     @Test
-    fun runtimeServiceHost_interfaceHasFourMethods() {
+    fun runtimeServiceHost_interfaceHasExpectedMethods() {
         val methods = RuntimeServiceHost::class.java.declaredMethods
         val names = methods.map { it.name }.toSet()
         assertTrue(names.contains("ensureStarted"))
         assertTrue(names.contains("requestStop"))
         assertTrue(names.contains("addListener"))
         assertTrue(names.contains("removeListener"))
-        assertEquals(4, methods.size)
+        assertTrue(names.contains("currentSession"))
+        assertTrue(names.contains("currentGeneration"))
+        assertEquals(6, methods.size)
     }
 
     @Test

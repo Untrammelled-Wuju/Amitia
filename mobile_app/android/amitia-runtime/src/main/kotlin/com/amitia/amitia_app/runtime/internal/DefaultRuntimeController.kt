@@ -472,14 +472,9 @@ internal class DefaultRuntimeController(
 
             if (current.state == RuntimeState.STOPPING) {
                 callback.onCompleted(
-                    RuntimeOperationResult.Failure(
+                    RuntimeOperationResult.Success(
                         operationId = operationId,
                         type = RuntimeOperationType.STOP,
-                        error = RuntimeError(
-                            code = RuntimeErrorCode.STOP_ALREADY_IN_PROGRESS,
-                            message = "stop is already in progress",
-                            recoverable = false
-                        ),
                         snapshot = stateStore.snapshot()
                     )
                 )

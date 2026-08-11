@@ -11,7 +11,7 @@ import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 internal class DefaultRuntimeModule(
     override val controller: RuntimeController = UnsupportedRuntimeController(),
     override val runtimeInstaller: RuntimeInstaller,
-    override val backendConnectionProvider: BackendConnectionProvider,
+    internal val backendConnectionProvider: BackendConnectionProvider,
     private val stateStore: RuntimeStateStore = RuntimeStateStore(),
     private val abiGate: RuntimeAbiGate? = null,
     private val serviceHost: RuntimeServiceHost? = null,

@@ -1,7 +1,6 @@
 package com.amitia.amitia_app.runtime.startup
 
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
@@ -93,13 +92,70 @@ internal class HttpRuntimeHealthProbe(
         fun readBackendStatus(body: String?): String? {
             if (body.isNullOrBlank()) return null
             return try {
-                val root = JSONObject(body)
-                val data = root.optJSONObject("data") ?: return null
-                val status = data.optString("status", "").takeIf { it.isNotBlank() } ?: return null
+                val dataValue = extractJsonObjectField(body, "data") ?: return null
+                val status = extractJsonStringField(dataValue, "status")?.takeIf { it.isNotBlank() } ?: return null
                 status.lowercase()
             } catch (_: Throwable) {
                 null
             }
+        }
+
+        private fun extractJsonObjectField(json: String, fieldName: String): String? {
+            val keyPattern = "\"" + fieldName + "\""
+            val keyIndex = json.indexOf(keyPattern)
+            if (keyIndex < 0) return null
+            val colonIndex = json.indexOf(':', keyIndex + keyPattern.length)
+            if (colonIndex < 0) return null
+            var i = colonIndex + 1
+            while (i < json.length && json[i].isWhitespace()) i++
+            if (i >= json.length || json[i] != '{') return null
+            var depth = 0
+            val start = i
+            while (i < json.length) {
+                when (json[i]) {
+                    '{' -> depth++
+                    '}' -> {
+                        depth--
+                        if (depth == 0) return json.substring(start, i + 1)
+                    }
+                }
+                i++
+            }
+            return null
+        }
+
+        private fun extractJsonStringField(json: String, fieldName: String): String? {
+            val keyPattern = "\"" + fieldName + "\""
+            val keyIndex = json.indexOf(keyPattern)
+            if (keyIndex < 0) return null
+            val colonIndex = json.indexOf(':', keyIndex + keyPattern.length)
+            if (colonIndex < 0) return null
+            var i = colonIndex + 1
+            while (i < json.length && json[i].isWhitespace()) i++
+            if (i >= json.length || json[i] != '"') return null
+            i++
+            val sb = StringBuilder()
+            while (i < json.length) {
+                val c = json[i]
+                if (c == '"') return sb.toString()
+                if (c == '\\' && i + 1 < json.length) {
+                    val next = json[i + 1]
+                    when (next) {
+                        '"' -> sb.append('"')
+                        '\\' -> sb.append('\\')
+                        '/' -> sb.append('/')
+                        'n' -> sb.append('\n')
+                        'r' -> sb.append('\r')
+                        't' -> sb.append('\t')
+                        else -> { sb.append('\\'); sb.append(next) }
+                    }
+                    i += 2
+                } else {
+                    sb.append(c)
+                    i++
+                }
+            }
+            return null
         }
 
         fun isLoopbackHost(host: String): Boolean {

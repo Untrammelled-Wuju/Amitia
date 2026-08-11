@@ -79,6 +79,8 @@ type ToolInvocationContext struct {
 	ScopeSnapshotID      string `json:"scopeSnapshotId,omitempty"`
 	PermissionSnapshotID string `json:"permissionSnapshotId,omitempty"`
 
+	IsBackground bool `json:"isBackground,omitempty"`
+
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
@@ -117,6 +119,8 @@ type ToolInvocationOptions struct {
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
 
+	IsBackground bool
+
 	Metadata map[string]any
 }
 
@@ -154,6 +158,7 @@ func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext 
 		TriggerID:             opts.TriggerID,
 		ScopeSnapshotID:       opts.ScopeSnapshotID,
 		PermissionSnapshotID:  opts.PermissionSnapshotID,
+		IsBackground:          opts.IsBackground,
 	}
 
 	if opts.Metadata != nil {

@@ -2,6 +2,7 @@ package com.amitia.amitia_app.runtime.bridge
 
 import com.amitia.amitia_app.runtime.AndroidRuntimeModule
 import com.amitia.amitia_app.runtime.api.RuntimeController
+import com.amitia.amitia_app.runtime.internal.DefaultRuntimeModule
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import android.content.Context
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -19,7 +20,7 @@ class RuntimeBridgePlugin : FlutterPlugin {
         val context = binding.applicationContext
         val module = AndroidRuntimeModule.create(context)
         val controller = module.controller
-        val backendConnectionProvider = module.backendConnectionProvider
+        val backendConnectionProvider = (module as DefaultRuntimeModule).backendConnectionProvider
 
         val methodChannel = MethodChannel(binding.binaryMessenger, RuntimeBridgeContract.METHOD_CHANNEL)
         val methodHandler = RuntimeBridgeHandler(

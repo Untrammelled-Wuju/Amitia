@@ -103,11 +103,15 @@ func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.
 }
 
 type ResolvedToolReference struct {
-	ID          capability.CapabilityID
-	ModelName   string
-	ExtensionID string
-	ModuleID    string
-	Generation  int64
+	ID             capability.CapabilityID
+	ModelName      string
+	ExtensionID    string
+	ModuleID       string
+	RuntimeType    capability.RuntimeType
+	RuntimeID      string
+	AllowBackground bool
+	ToolVersion    string
+	Generation     int64
 }
 
 func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, error) {
@@ -119,11 +123,15 @@ func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, 
 		return ResolvedToolReference{}, fmt.Errorf("tool not found: %s", modelName)
 	}
 	return ResolvedToolReference{
-		ID:          capability.CapabilityID(def.ID),
-		ModelName:   def.ModelName,
-		ExtensionID: def.ExtensionID,
-		ModuleID:    def.ModuleID,
-		Generation:  0,
+		ID:              capability.CapabilityID(def.ID),
+		ModelName:       def.ModelName,
+		ExtensionID:     def.ExtensionID,
+		ModuleID:        def.ModuleID,
+		RuntimeType:     def.Runtime.RuntimeType,
+		RuntimeID:       def.Runtime.RuntimeID,
+		AllowBackground: def.ExecutionPolicy.AllowBackground,
+		ToolVersion:     def.Version,
+		Generation:      0,
 	}, nil
 }
 
@@ -286,6 +294,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	if f.executionKernel == nil {
 		return LegacyToolResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &LegacyToolError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
+	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID: externalCallID,
 		UserID:         scope.UserID,
@@ -299,6 +308,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		IdempotencyKey: idempotencyKey,
 		TraceID:        scope.TraceID,
 		OperationID:    scope.RequestID,
+		IsBackground:  isBackground,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),
@@ -332,6 +342,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		return result, false, nil
 	}
 
+	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID: scope.ToolCallID,
 		UserID:         scope.UserID,
@@ -345,6 +356,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		IdempotencyKey: idempotencyKey,
 		TraceID:        scope.TraceID,
 		OperationID:    scope.RequestID,
+		IsBackground:  isBackground,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),
