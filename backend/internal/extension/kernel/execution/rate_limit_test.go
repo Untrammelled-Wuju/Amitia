@@ -92,6 +92,17 @@ func (t *fakeRateLimitTimer) Stop() bool {
 func (t *fakeRateLimitTimer) isStopped() bool  { return atomic.LoadInt32(&t.stopped) == 1 }
 func (t *fakeRateLimitTimer) markFired()       { atomic.StoreInt32(&t.fired, 1) }
 
+func waitForWaiters(r *RateLimiter, n int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if r.Snapshot().Waiters == n {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return false
+}
+
 func newRateLimitTool(id, extID string) capability.ToolDefinition {
 	return capability.ToolDefinition{
 		ID:             id,

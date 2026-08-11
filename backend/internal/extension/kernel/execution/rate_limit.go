@@ -462,12 +462,11 @@ func (r *RateLimiter) computeWaitDuration(blocking []*rateBucket) time.Duration 
 		if missing <= 0 {
 			continue
 		}
-		interval := b.spec.Interval
 		tokens := b.spec.Tokens
-		if interval <= 0 || tokens <= 0 {
+		if tokens <= 0 {
 			continue
 		}
-		waitSec := missing * float64(interval) / float64(tokens)
+		waitSec := missing * b.spec.Interval.Seconds() / float64(tokens)
 		d := time.Duration(waitSec * float64(time.Second))
 		if d < time.Millisecond {
 			d = time.Millisecond
