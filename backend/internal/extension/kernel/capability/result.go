@@ -120,6 +120,8 @@ const (
 	ErrorCodeIdempotencyIndeterminate    = "idempotency_indeterminate"
 	ErrorCodeIdempotencyTakeoverForbidden = "idempotency_takeover_forbidden"
 	ErrorCodeIdempotencyStateInvalid      = "idempotency_state_invalid"
+	ErrorCodeSecretUnavailable             = "secret_unavailable"
+	ErrorCodeSecretLeaseIssueFailed        = "secret_lease_issue_failed"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -169,6 +171,9 @@ func ErrorCategoryForCode(code string) ToolErrorCategory {
 		ErrorCodeIdempotencyTakeoverForbidden,
 		ErrorCodeIdempotencyStateInvalid:
 		return ToolErrorCategoryConflict
+	case ErrorCodeSecretUnavailable,
+		ErrorCodeSecretLeaseIssueFailed:
+		return ToolErrorCategoryResource
 	default:
 		return ToolErrorCategoryInternal
 	}

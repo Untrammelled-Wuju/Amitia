@@ -1,9 +1,81 @@
 import '../backend_transport/backend_service_api.dart';
 
+class ExtensionCenterCard {
+  final String extensionId;
+  final String displayName;
+  final String description;
+  final String version;
+  final String status;
+  final bool enabled;
+  final List<String> contributionTags;
+  final List<String> platforms;
+  final String? installedAt;
+  final String? updatedAt;
+
+  ExtensionCenterCard({
+    required this.extensionId,
+    required this.displayName,
+    required this.description,
+    required this.version,
+    required this.status,
+    required this.enabled,
+    required this.contributionTags,
+    required this.platforms,
+    this.installedAt,
+    this.updatedAt,
+  });
+
+  factory ExtensionCenterCard.fromJson(Map<String, dynamic> json) {
+    return ExtensionCenterCard(
+      extensionId: (json['extensionId'] ?? '').toString(),
+      displayName: (json['displayName'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      version: (json['version'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      enabled: (json['enabled'] as bool?) ?? false,
+      contributionTags: ((json['contributionTags'] as List?) ?? []).map((e) => e.toString()).toList(),
+      platforms: ((json['platforms'] as List?) ?? []).map((e) => e.toString()).toList(),
+      installedAt: json['installedAt'] as String?,
+      updatedAt: json['updatedAt'] as String?,
+    );
+  }
+}
+
+class ExtensionCenterView {
+  final List<ExtensionCenterCard> installed;
+  final List<ExtensionCenterCard> discover;
+  final List<ExtensionCenterCard> updates;
+  final List<ExtensionCenterCard> needsAction;
+
+  ExtensionCenterView({
+    required this.installed,
+    required this.discover,
+    required this.updates,
+    required this.needsAction,
+  });
+
+  factory ExtensionCenterView.fromJson(Map<String, dynamic> json) {
+    return ExtensionCenterView(
+      installed: ((json['installed'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
+      discover: ((json['discover'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
+      updates: ((json['updates'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
+      needsAction: ((json['needsAction'] as List?) ?? []).map((e) => ExtensionCenterCard.fromJson(e as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  List<ExtensionCenterCard> get all => [...installed, ...discover, ...updates, ...needsAction];
+}
+
 class ExtensionService {
   final BackendServiceApi _api;
 
   ExtensionService(this._api);
+
+  Future<ExtensionCenterView> getExtensionCenterView() async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extension-center/view');
+    if (resp == null) return ExtensionCenterView(installed: [], discover: [], updates: [], needsAction: []);
+    return ExtensionCenterView.fromJson(resp);
+  }
 
   Future<List<Map<String, dynamic>>> skills() async {
     final resp = await _api.get<List<dynamic>>('/api/extensions/skills');

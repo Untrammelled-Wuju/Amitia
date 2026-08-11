@@ -24,12 +24,15 @@ const (
 )
 
 type ActionExecutionResult struct {
-	Action      MaterializedAction       `json:"action"`
-	State       ActionExecutionState     `json:"state"`
-	ToolResult  *kernel.LegacyToolResult `json:"toolResult,omitempty"`
-	Err         error                    `json:"-"`
-	ErrCode     string                   `json:"errCode,omitempty"`
-	CompletedAt time.Time                `json:"completedAt"`
+	Action          MaterializedAction       `json:"action"`
+	State           ActionExecutionState     `json:"state"`
+	ToolResult      *kernel.LegacyToolResult `json:"toolResult,omitempty"`
+	TaskRunID       string                   `json:"taskRunId,omitempty"`
+	TaskDefinitionID string                  `json:"taskDefinitionId,omitempty"`
+	Background      bool                     `json:"background,omitempty"`
+	Err             error                    `json:"-"`
+	ErrCode         string                   `json:"errCode,omitempty"`
+	CompletedAt     time.Time                `json:"completedAt"`
 }
 
 type actionToolFacade interface {
@@ -136,10 +139,13 @@ func (d ActionDispatcher) dispatchTool(
 
 	if action.Tool != nil && action.Tool.RuntimeType == string(capability.RuntimeTypeTask) && action.Tool.AllowBackground && extractTaskRunID(&result) != "" {
 		return ActionExecutionResult{
-			Action:      action,
-			State:       ActionExecutionAcceptedBackground,
-			ToolResult:  &result,
-			CompletedAt: now,
+			Action:           action,
+			State:            ActionExecutionAcceptedBackground,
+			ToolResult:       &result,
+			TaskRunID:        extractTaskRunID(&result),
+			TaskDefinitionID: action.Tool.ToolID,
+			Background:       true,
+			CompletedAt:      now,
 		}
 	}
 

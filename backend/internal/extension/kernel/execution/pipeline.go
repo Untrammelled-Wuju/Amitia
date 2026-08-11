@@ -420,7 +420,9 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	p.attachRuntimeCanceller(timeoutCtx, tool, inv)
 
 	p.recordAuditStart(timeoutCtx, inv.InvocationID, toolID)
-	p.prepareSecrets(timeoutCtx, tool, inv)
+	if secretErr := p.issueSecretLeases(timeoutCtx, tool, inv); secretErr != nil {
+		return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, secretErr))), nil
+	}
 	startTime := p.TimeoutCtrl.Now()
 
 	attemptNumber := 1
@@ -561,14 +563,24 @@ func (p *ExecutionPipeline) dispatchAttempt(
 
 	var result capability.UnifiedToolResult
 	if p.Dispatcher != nil {
-		if stream != nil && tool.ResultPolicy.Streaming.Enabled {
-			result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
-		} else {
-			result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
-		}
-		if dispatched != nil {
-			*dispatched = true
-		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					result = capability.NewToolFailureResult(inv.InvocationID, string(request.ToolID), &capability.ToolError{
+						Code:    capability.ErrorCodeExecutionFailed,
+						Message: fmt.Sprintf("runtime dispatch panicked: %v", r),
+					})
+				}
+			}()
+			if stream != nil && tool.ResultPolicy.Streaming.Enabled {
+				result, _ = p.Dispatcher.DispatchStream(ctx, tool, inv, request.Input, stream)
+			} else {
+				result = p.Dispatcher.Dispatch(ctx, tool, inv, request.Input)
+			}
+			if dispatched != nil {
+				*dispatched = true
+			}
+		}()
 	} else {
 		result = capability.NewToolFailureResult(inv.InvocationID, string(request.ToolID), &capability.ToolError{
 			Code:    capability.ErrorCodeInternalError,
@@ -722,10 +734,43 @@ func (p *ExecutionPipeline) finalizeCancellation(ctx context.Context, inv capabi
 	return p.CancellationCtrl.Finalize(ctx, inv, result)
 }
 
-func (p *ExecutionPipeline) prepareSecrets(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) {
+func (p *ExecutionPipeline) issueSecretLeases(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) *capability.ToolError {
 	if p.SecretBroker == nil {
-		return
+		return nil
 	}
+	if len(tool.SecretReferences) == 0 {
+		return nil
+	}
+	instanceID := inv.InvocationID
+	for _, raw := range tool.SecretReferences {
+		ref, err := secret.ParseRef(raw)
+		if err != nil {
+			return &capability.ToolError{
+				Code:     capability.ErrorCodeSecretUnavailable,
+				Category: capability.ToolErrorCategoryResource,
+				Message:  fmt.Sprintf("invalid secret ref %q: %v", raw, err),
+			}
+		}
+		_, err = p.SecretBroker.Issue(ctx, secret.LeaseRequest{
+			Ref:               ref,
+			Purpose:           fmt.Sprintf("tool:%s", tool.ID),
+			InvocationID:      inv.InvocationID,
+			RuntimeInstanceID: instanceID,
+			ExtensionID:       inv.ExtensionID,
+			ModuleID:          inv.ModuleID,
+			UserID:            inv.UserID,
+			CharacterID:       inv.CharacterID,
+			ConversationID:    inv.ConversationID,
+		})
+		if err != nil {
+			return &capability.ToolError{
+				Code:     capability.ErrorCodeSecretLeaseIssueFailed,
+				Category: capability.ToolErrorCategoryResource,
+				Message:  fmt.Sprintf("issue lease for %q: %v", raw, err),
+			}
+		}
+	}
+	return nil
 }
 
 func (p *ExecutionPipeline) attachRuntimeCanceller(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext) {

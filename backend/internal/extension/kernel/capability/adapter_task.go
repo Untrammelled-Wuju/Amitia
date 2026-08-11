@@ -7,7 +7,13 @@ import (
 	"time"
 )
 
-type TaskEnqueueFunc func(ctx context.Context, taskDefinitionID string, input json.RawMessage) (taskRunID string, err error)
+type TaskAdapterEnqueueRequest struct {
+	TaskDefinitionID string
+	Input            json.RawMessage
+	Invocation       ToolInvocationContext
+}
+
+type TaskEnqueueFunc func(ctx context.Context, request TaskAdapterEnqueueRequest) (taskRunID string, err error)
 type TaskStatusFunc func(ctx context.Context, taskRunID string) (TaskRunStatus, error)
 
 type TaskRunStatus struct {
@@ -53,7 +59,11 @@ func (a *TaskRuntimeAdapter) Execute(
 		taskDefID = binding.HandlerName
 	}
 
-	taskRunID, err := a.enqueue(ctx, taskDefID, input)
+	taskRunID, err := a.enqueue(ctx, TaskAdapterEnqueueRequest{
+		TaskDefinitionID: taskDefID,
+		Input:            input,
+		Invocation:       invocation,
+	})
 	if err != nil {
 		return UnifiedToolResult{
 			InvocationID: invocation.InvocationID,

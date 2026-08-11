@@ -45,9 +45,70 @@ func (b ObservationBuilder) Build(input ObservationBuildInput) (*decision.Observ
 		return b.buildSkipped(input)
 	case ActionExecutionFailedToDispatch:
 		return b.buildDispatchFailure(input)
+	case ActionExecutionAcceptedBackground:
+		return b.buildAcceptedBackground(input)
 	default:
 		return nil, decision.ObservationBuildError{Code: decision.ErrObservationActionInvalid, Err: fmt.Errorf("unknown action execution state: %s", input.Execution.State)}
 	}
+}
+
+func (b ObservationBuilder) buildAcceptedBackground(input ObservationBuildInput) (*decision.Observation, error) {
+	action := input.Execution.Action
+	observedAt := input.Execution.CompletedAt
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	if action.Tool == nil || input.Execution.ToolResult == nil {
+		return nil, decision.ObservationBuildError{Code: decision.ErrObservationToolResultMissing, Err: fmt.Errorf("accepted_background missing tool binding or result")}
+	}
+
+	taskRunID := input.Execution.TaskRunID
+	if taskRunID == "" {
+		return nil, decision.ObservationBuildError{Code: decision.ErrObservationResultInvalid, Err: fmt.Errorf("accepted_background missing taskRunId")}
+	}
+
+	result := input.Execution.ToolResult
+	evidence := decision.ObservationEvidence{}
+	acceptedJSON, _ := json.Marshal(map[string]any{
+		"accepted":  true,
+		"status":    "queued",
+		"taskRunId": taskRunID,
+	})
+	if isJSONStructured(acceptedJSON) {
+		evidence.Structured = acceptedJSON
+	}
+
+	invocationID := result.RunID
+	obs := &decision.Observation{
+		Version:          decision.ObservationVersionV1,
+		ID:               decision.BuildTaskAcceptedObservationID(action.ID, taskRunID),
+		PlanID:           action.PlanID,
+		ActionID:         action.ID,
+		InteractionID:    safeInteractionID(action),
+		UserID:           input.Scope.UserID,
+		CharacterID:      input.Scope.CharacterID,
+		ConversationID:   input.Scope.ConversationID,
+		CandidateID:      action.CandidateID,
+		GoalIDs:          copyStringSlice(input.Plan.GoalIDs),
+		GoalRefs:         copyGoalRefs(input.Plan.GoalRefs),
+		Kind:             decision.ObservationKindTaskAccepted,
+		TargetKind:       decision.ObservationTargetTask,
+		Outcome:          decision.ObservationOutcomeAccepted,
+		InvocationID:     invocationID,
+		ExternalCallID:   action.Tool.ExternalCallID,
+		ToolID:           string(action.Tool.ToolID),
+		TaskRunID:        taskRunID,
+		TaskDefinitionID: input.Execution.TaskDefinitionID,
+		Evidence:         evidence,
+		ObservedAt:       observedAt,
+	}
+	if obs.InteractionID == "" {
+		obs.InteractionID = input.Scope.InteractionID
+	}
+	if err := decision.ValidateObservation(*obs); err != nil {
+		return nil, err
+	}
+	return obs, nil
 }
 
 func (b ObservationBuilder) buildCompleted(input ObservationBuildInput) (*decision.Observation, error) {

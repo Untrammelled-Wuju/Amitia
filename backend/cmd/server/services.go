@@ -171,6 +171,7 @@ type AppServices struct {
 	MigrationLock                *migrationcore.PersistentLock
 	RecoveryDescriptor           *interaction.RecoveryDescriptorService
 	PauseResumeService           *interaction.PauseResumeService
+	GameCenterService            *management.GameCenterManagementService
 }
 
 type RuntimeOrchestrator interface {

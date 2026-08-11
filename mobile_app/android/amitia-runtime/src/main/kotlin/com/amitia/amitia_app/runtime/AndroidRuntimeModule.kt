@@ -6,6 +6,7 @@ import com.amitia.amitia_app.runtime.abi.internal.DefaultRuntimeAbiGate
 import com.amitia.amitia_app.runtime.api.RuntimeModule
 import com.amitia.amitia_app.runtime.connection.internal.DefaultBackendConnectionProvider
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
+import com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.internal.DefaultPackageVerifier
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeHostLayout
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeInstaller
@@ -19,6 +20,11 @@ import com.amitia.amitia_app.runtime.proot.internal.DefaultProotArtifactVerifier
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotCommandBuilder
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotProcessLauncher
 import com.amitia.amitia_app.runtime.proot.internal.ProotMetadataLoaderInternal
+import com.amitia.amitia_app.runtime.recovery.ActiveRuntimeBackedInstalledRuntimeSource
+import com.amitia.amitia_app.runtime.recovery.DefaultRuntimeCrashRecoveryPolicy
+import com.amitia.amitia_app.runtime.recovery.ExecutorRuntimeRecoveryScheduler
+import com.amitia.amitia_app.runtime.recovery.RuntimeCrashRecoveryPolicy
+import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduler
 import com.amitia.amitia_app.runtime.service.internal.AndroidRuntimeServiceHost
 import java.io.File
 
@@ -51,10 +57,19 @@ object AndroidRuntimeModule {
         cachedProotComponent = prootComponent
         cachedRootfsPath = layout.rootfsRoot.absolutePath
 
+        val activeRuntimeManager = DefaultActiveRuntimeManager(layout)
+        val installedRuntimeSource = ActiveRuntimeBackedInstalledRuntimeSource(activeRuntimeManager)
+        val recoveryPolicy: RuntimeCrashRecoveryPolicy = DefaultRuntimeCrashRecoveryPolicy(
+            installedRuntimeSource = installedRuntimeSource
+        )
+        val recoveryScheduler: RuntimeRecoveryScheduler = ExecutorRuntimeRecoveryScheduler()
         val controller = DefaultRuntimeController(
             stateStore = stateStore,
             serviceHost = serviceHost,
             abiGate = abiGate,
+            recoveryPolicy = recoveryPolicy,
+            recoveryScheduler = recoveryScheduler,
+            installedRuntimeSource = installedRuntimeSource,
         )
 
         val backendConnectionProvider = DefaultBackendConnectionProvider(

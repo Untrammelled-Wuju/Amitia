@@ -19,6 +19,8 @@ const (
 	ObservationKindNoAction               ObservationKind = "no_action"
 	ObservationKindMaterializationFailure ObservationKind = "materialization_failure"
 	ObservationKindDispatchFailure        ObservationKind = "dispatch_failure"
+	ObservationKindTaskAccepted           ObservationKind = "task_accepted"
+	ObservationKindTaskResult             ObservationKind = "task_result"
 )
 
 type ObservationOutcome string
@@ -31,6 +33,7 @@ const (
 	ObservationOutcomeSkipped         ObservationOutcome = "skipped"
 	ObservationOutcomeNotMaterialized ObservationOutcome = "not_materialized"
 	ObservationOutcomeNotDispatched   ObservationOutcome = "not_dispatched"
+	ObservationOutcomeAccepted        ObservationOutcome = "accepted"
 )
 
 type ObservationTargetKind string
@@ -108,6 +111,9 @@ type Observation struct {
 	InvocationID   string                `json:"invocationId,omitempty"`
 	ExternalCallID string                `json:"externalCallId,omitempty"`
 	ToolID         string                `json:"toolId,omitempty"`
+	TaskRunID      string                `json:"taskRunId,omitempty"`
+	TaskDefinitionID string              `json:"taskDefinitionId,omitempty"`
+	TaskGeneration int64                 `json:"taskGeneration,omitempty"`
 	Evidence       ObservationEvidence   `json:"evidence"`
 	ObservedAt     time.Time             `json:"observedAt"`
 }
@@ -144,6 +150,28 @@ func BuildObservationID(actionID string) string {
 	h.Write([]byte{0x00})
 	h.Write([]byte(actionID))
 	return "obs:" + hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+func BuildTaskAcceptedObservationID(actionID, taskRunID string) string {
+	h := sha256.New()
+	h.Write([]byte("task-accepted-v1"))
+	h.Write([]byte{0x00})
+	h.Write([]byte(actionID))
+	h.Write([]byte{0x00})
+	h.Write([]byte(taskRunID))
+	return "obs-ta:" + hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+func BuildTaskTerminalObservationID(actionID, taskRunID string, generation int64) string {
+	h := sha256.New()
+	h.Write([]byte("task-terminal-v1"))
+	h.Write([]byte{0x00})
+	h.Write([]byte(actionID))
+	h.Write([]byte{0x00})
+	h.Write([]byte(taskRunID))
+	h.Write([]byte{0x00})
+	h.Write([]byte(fmt.Sprintf("%d", generation)))
+	return "obs-tt:" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
 func ValidateObservation(o Observation) error {
@@ -207,7 +235,8 @@ func ValidateObservation(o Observation) error {
 func validObservationKind(k ObservationKind) bool {
 	switch k {
 	case ObservationKindToolResult, ObservationKindNoAction,
-		ObservationKindMaterializationFailure, ObservationKindDispatchFailure:
+		ObservationKindMaterializationFailure, ObservationKindDispatchFailure,
+		ObservationKindTaskAccepted, ObservationKindTaskResult:
 		return true
 	}
 	return false
@@ -217,7 +246,8 @@ func validObservationOutcome(o ObservationOutcome) bool {
 	switch o {
 	case ObservationOutcomeSucceeded, ObservationOutcomeFailed, ObservationOutcomeCancelled,
 		ObservationOutcomeTimedOut, ObservationOutcomeSkipped,
-		ObservationOutcomeNotMaterialized, ObservationOutcomeNotDispatched:
+		ObservationOutcomeNotMaterialized, ObservationOutcomeNotDispatched,
+		ObservationOutcomeAccepted:
 		return true
 	}
 	return false

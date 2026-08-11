@@ -85,6 +85,37 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         const SizedBox(height: AppSpacing.sectionGap),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: AmitiaCard(
+            onTap: () => context.push(AppRoutes.extensions),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: context.accentSoft,
+                    borderRadius: AppRadius.brSmall,
+                  ),
+                  child: Icon(Icons.extension_outlined, size: 18, color: context.accentPrimary),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('扩展中心', style: AppTypography.label(context)),
+                      Text('管理所有扩展', style: AppTypography.caption(context)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 16, color: context.textSecondary),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sectionGap),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaButton(
             label: '生成新桌宠',
             icon: Icons.auto_awesome_outlined,
@@ -112,6 +143,37 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         const AmitiaSectionHeader(title: '显示设置'),
         const SizedBox(height: AppSpacing.sm),
         _buildSettingsCard(context),
+        const SizedBox(height: AppSpacing.sectionGap),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: AmitiaCard(
+            onTap: () => context.push(AppRoutes.extensions),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: context.accentSoft,
+                    borderRadius: AppRadius.brSmall,
+                  ),
+                  child: Icon(Icons.extension_outlined, size: 18, color: context.accentPrimary),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('扩展中心', style: AppTypography.label(context)),
+                      Text('管理所有扩展', style: AppTypography.caption(context)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 16, color: context.textSecondary),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: AppSpacing.sectionGap),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),

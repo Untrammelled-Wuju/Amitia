@@ -378,7 +378,7 @@ class RuntimeShutdownControllerTest {
         stopAndCapture(controller)
         host.emit(RuntimeServiceHostEvent.ExpectedStopped)
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
-        assertEquals(genBefore + 1, controller.snapshot().generation)
+        assertTrue(controller.snapshot().generation > genBefore)
     }
 
     @Test

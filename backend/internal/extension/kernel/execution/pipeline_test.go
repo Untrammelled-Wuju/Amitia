@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -1189,7 +1188,7 @@ func (s *noopIdempotencyStorage) Reserve(ctx context.Context, rec IdempotencyRes
 }
 
 func (s *noopIdempotencyStorage) Find(ctx context.Context, key string) (*IdempotencyRecord, error) {
-	return nil, fmt.Errorf("noop: not found")
+	return nil, sql.ErrNoRows
 }
 
 func (s *noopIdempotencyStorage) Complete(ctx context.Context, key string, result json.RawMessage) (bool, error) {

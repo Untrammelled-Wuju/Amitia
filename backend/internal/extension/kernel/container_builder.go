@@ -361,6 +361,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return def, nil
 	}
 
+	if err := validateExecutionWiring(executionKernel, adapterRegistry, toolRegistry); err != nil {
+		return nil, fmt.Errorf("kernel: validate execution wiring: %w", err)
+	}
+
 	taskRepo := sqlite.NewTaskRepository(db)
 	taskCfg := task_runtime.DefaultTaskRuntimeConfig()
 	taskCfg.WorkspaceRoot = b.extRoot
@@ -1002,10 +1006,29 @@ func buildKernelSecretBroker(extRoot string) *secret.Broker {
 	return broker
 }
 
-func mustConcurrencyController() *execution.ConcurrencyController {
-	ctrl, err := execution.NewConcurrencyController(execution.ConcurrencyPolicy{})
-	if err != nil {
-		panic(fmt.Sprintf("failed to create default concurrency controller: %v", err))
+func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capability.RuntimeAdapterRegistry, tools *capability.ToolRegistry) error {
+	if kernel == nil {
+		return fmt.Errorf("execution pipeline is nil")
 	}
-	return ctrl
+	if kernel.InvocationValidator == nil || kernel.InputValidator == nil ||
+		kernel.AvailabilityGate == nil ||
+		kernel.ScopeGate == nil || kernel.PermissionGate == nil ||
+		kernel.ApprovalGate == nil ||
+		kernel.ConcurrencyCtrl == nil || kernel.RateLimiter == nil ||
+		kernel.IdempotencyGuard == nil || kernel.RetryCtrl == nil ||
+		kernel.TimeoutCtrl == nil || kernel.CancellationCtrl == nil ||
+		kernel.DepthGuard == nil || kernel.Dispatcher == nil ||
+		kernel.ResultValidator == nil || kernel.Sanitizer == nil ||
+		kernel.CircuitBreaker == nil || kernel.ResourceQuotaCtrl == nil ||
+		kernel.AuditSink == nil || kernel.ToolResolver == nil ||
+		kernel.ScopeStore == nil || kernel.PermissionSnapshotStore == nil {
+		return fmt.Errorf("one or more critical execution controllers is nil")
+	}
+	if adapters == nil {
+		return fmt.Errorf("runtime adapter registry is nil")
+	}
+	if tools == nil {
+		return fmt.Errorf("tool registry is nil")
+	}
+	return nil
 }

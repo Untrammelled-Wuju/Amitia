@@ -218,22 +218,22 @@ func makeTrustedServiceHealthFunc(supervisor runtime_supervisor.Supervisor) capa
 }
 
 func makeTaskEnqueueFunc(svc *task_runtime.TaskRuntimeService) capability.TaskEnqueueFunc {
-	return func(ctx context.Context, taskDefinitionID string, input json.RawMessage) (string, error) {
+	return func(ctx context.Context, request capability.TaskAdapterEnqueueRequest) (string, error) {
 		if svc == nil {
 			return "", fmt.Errorf("task runtime service not configured")
 		}
 
-		def, err := svc.GetTaskDefinition(ctx, taskDefinitionID)
+		def, err := svc.GetTaskDefinition(ctx, request.TaskDefinitionID)
 		if err != nil {
-			return "", fmt.Errorf("task definition %s not found in repository: %w", taskDefinitionID, err)
+			return "", fmt.Errorf("task definition %s not found in repository: %w", request.TaskDefinitionID, err)
 		}
 		if def == nil {
-			return "", fmt.Errorf("task definition %s returned nil from repository", taskDefinitionID)
+			return "", fmt.Errorf("task definition %s returned nil from repository", request.TaskDefinitionID)
 		}
 
 		req := task_runtime.EnqueueTaskRequest{
-			TaskDefinitionID: taskDefinitionID,
-			Input:            input,
+			TaskDefinitionID: request.TaskDefinitionID,
+			Input:            request.Input,
 		}
 
 		result, err := svc.Enqueue(ctx, req, def)

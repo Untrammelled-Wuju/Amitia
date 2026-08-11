@@ -10,6 +10,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/extension_service.dart';
 
 class ExtensionCenterPage extends ConsumerStatefulWidget {
   const ExtensionCenterPage({super.key});
@@ -22,63 +23,62 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
   int _selectedCategory = 0;
   bool _loading = true;
   String? _error;
-  final Map<String, bool> _installState = {};
-  final Map<String, bool> _enableState = {};
-  List<Map<String, dynamic>> _allExtensions = [];
+  List<ExtensionCenterCard> _installedCards = [];
+  List<ExtensionCenterCard> _discoverCards = [];
+  List<ExtensionCenterCard> _updateCards = [];
+  List<ExtensionCenterCard> _needsActionCards = [];
 
-  final _categories = const ['全部', 'MCP', 'Skill', '插件', '主题'];
+  final _categories = const ['全部', 'MCP', 'Skill', 'Tools', 'UI'];
 
   @override
   void initState() {
     super.initState();
-    _loadExtensions();
+    _loadView();
   }
 
-  Future<void> _loadExtensions() async {
+  Future<void> _loadView() async {
     setState(() { _loading = true; _error = null; });
     try {
       final svc = ref.read(extensionServiceProvider);
-      final skills = await svc.skills();
-      final plugins = await svc.plugins();
-      final agentSkills = await svc.agentSkills();
-
-      final all = <Map<String, dynamic>>[];
-      for (final s in skills) {
-        final m = Map<String, dynamic>.from(s);
-        m['_category'] = 'Skill';
-        all.add(m);
+      final view = await svc.getExtensionCenterView();
+      if (mounted) {
+        setState(() {
+          _installedCards = view.installed;
+          _discoverCards = view.discover;
+          _updateCards = view.updates;
+          _needsActionCards = view.needsAction;
+          _loading = false;
+        });
       }
-      for (final p in plugins) {
-        final m = Map<String, dynamic>.from(p);
-        m['_category'] = '插件';
-        all.add(m);
-      }
-      for (final a in agentSkills) {
-        final m = Map<String, dynamic>.from(a);
-        m['_category'] = 'Skill';
-        all.add(m);
-      }
-      if (mounted) setState(() { _allExtensions = all; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
-  bool _isInstalled(Map<String, dynamic> e) => _installState[e['id'] ?? ''] ?? ((e['isEnabled'] as bool?) ?? ((e['enabled'] as int?) == 1));
+  bool _isInstalled(ExtensionCenterCard e) => e.status == 'installed_enabled' || e.status == 'installed_disabled';
 
-  bool _isEnabled(Map<String, dynamic> e) => _enableState[e['id'] ?? ''] ?? ((e['isEnabled'] as bool?) ?? ((e['enabled'] as int?) == 1));
+  bool _isEnabled(ExtensionCenterCard e) => e.enabled;
 
-  bool _matchesCategory(Map<String, dynamic> e) {
+  bool _matchesCategory(ExtensionCenterCard e) {
     if (_selectedCategory == 0) return true;
-    return (e['_category'] ?? '').toString() == _categories[_selectedCategory];
+    final cat = _categories[_selectedCategory];
+    return e.contributionTags.any((t) => t.toLowerCase() == cat.toLowerCase());
   }
 
-  List<Map<String, dynamic>> get _filteredInstalled {
-    return _allExtensions.where((e) => _isInstalled(e) && _matchesCategory(e)).toList();
+  List<ExtensionCenterCard> get _filteredInstalled {
+    return _installedCards.where(_matchesCategory).toList();
   }
 
-  List<Map<String, dynamic>> get _filteredRecommended {
-    return _allExtensions.where((e) => !_isInstalled(e) && _matchesCategory(e)).toList();
+  List<ExtensionCenterCard> get _filteredRecommended {
+    return _discoverCards.where(_matchesCategory).toList();
+  }
+
+  List<ExtensionCenterCard> get _filteredUpdates {
+    return _updateCards.where(_matchesCategory).toList();
+  }
+
+  List<ExtensionCenterCard> get _filteredNeedsAction {
+    return _needsActionCards.where(_matchesCategory).toList();
   }
 
   @override
@@ -92,7 +92,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
     if (_error != null) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(title: '扩展', navigation: AmitiaAppBarNavigation.back),
-        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadExtensions)),
+        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadView)),
       );
     }
     return AmitiaScaffold(
@@ -111,19 +111,29 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
               child: ListView(
                 padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                 children: [
+                  if (_filteredNeedsAction.isNotEmpty) ...[
+                    const AmitiaSectionHeader(title: '需要处理'),
+                    const SizedBox(height: AppSpacing.sm),
+                    ..._filteredNeedsAction.map((e) => _buildCard(context, e, isFromRecommended: false)),
+                  ],
                   if (_filteredInstalled.isNotEmpty) ...[
                     const AmitiaSectionHeader(title: '已安装'),
                     const SizedBox(height: AppSpacing.sm),
-                    ..._filteredInstalled.map((e) => _buildExtensionCard(context, e, isFromRecommended: false)),
+                    ..._filteredInstalled.map((e) => _buildCard(context, e, isFromRecommended: false)),
+                  ],
+                  if (_filteredUpdates.isNotEmpty) ...[
+                    const AmitiaSectionHeader(title: '可更新'),
+                    const SizedBox(height: AppSpacing.sm),
+                    ..._filteredUpdates.map((e) => _buildCard(context, e, isFromRecommended: false)),
                   ],
                   if (_filteredInstalled.isNotEmpty && _filteredRecommended.isNotEmpty)
                     const SizedBox(height: AppSpacing.sectionGap),
                   if (_filteredRecommended.isNotEmpty) ...[
                     const AmitiaSectionHeader(title: '推荐扩展'),
                     const SizedBox(height: AppSpacing.sm),
-                    ..._filteredRecommended.map((e) => _buildExtensionCard(context, e, isFromRecommended: true)),
+                    ..._filteredRecommended.map((e) => _buildCard(context, e, isFromRecommended: true)),
                   ],
-                  if (_filteredInstalled.isEmpty && _filteredRecommended.isEmpty)
+                  if (_filteredInstalled.isEmpty && _filteredRecommended.isEmpty && _filteredUpdates.isEmpty && _filteredNeedsAction.isEmpty)
                     AmitiaEmptyState(
                       icon: Icons.extension_outlined,
                       title: '暂无扩展',
@@ -181,12 +191,9 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
     );
   }
 
-  Widget _buildExtensionCard(BuildContext context, Map<String, dynamic> e, {required bool isFromRecommended}) {
-    final name = (e['name'] ?? '').toString();
-    final description = (e['description'] ?? '').toString();
+  Widget _buildCard(BuildContext context, ExtensionCenterCard e, {required bool isFromRecommended}) {
     final isInstalled = _isInstalled(e);
     final isEnabled = _isEnabled(e);
-    final id = (e['id'] ?? '').toString();
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -194,26 +201,25 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
         vertical: AppSpacing.xs,
       ),
       child: AmitiaExtensionCard(
-        name: name,
-        description: description,
+        name: e.displayName,
+        description: e.description,
         icon: Icons.extension_outlined,
-        typeLabel: (e['_category'] ?? '').toString(),
+        typeLabel: e.contributionTags.isNotEmpty ? e.contributionTags.first : '',
         isInstalled: isInstalled,
         isEnabled: isEnabled,
-        isRecommended: isFromRecommended && ((e['isRecommended'] as bool?) ?? false),
+        isRecommended: isFromRecommended,
         onAction: isInstalled
             ? null
             : () {
-                setState(() {
-                  _installState[id] = true;
-                  _enableState[id] = true;
-                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('安装 ${e.displayName}')),
+                );
               },
         onToggle: isInstalled
             ? (value) {
-                setState(() {
-                  _enableState[id] = value;
-                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${value ? "启用" : "禁用"} ${e.displayName}')),
+                );
               }
             : null,
       ),
@@ -277,6 +283,90 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
                 ),
               );
             },
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _buildCrossCenterEntries(context),
+      ],
+    );
+  }
+
+  Widget _buildCrossCenterEntries(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AmitiaSectionHeader(title: '其他中心'),
+        const SizedBox(height: AppSpacing.sm),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => context.push(AppRoutes.gameCenter),
+                  child: AmitiaCard(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: context.accentSoft,
+                            borderRadius: AppRadius.brSmall,
+                          ),
+                          child: Icon(Icons.sports_esports_outlined, size: 18, color: context.accentPrimary),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('游戏中心', style: AppTypography.label(context)),
+                              Text('管理游戏相关扩展', style: AppTypography.caption(context)),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, size: 16, color: context.textSecondary),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => context.push(AppRoutes.desktopPet),
+                  child: AmitiaCard(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: context.accentSoft,
+                            borderRadius: AppRadius.brSmall,
+                          ),
+                          child: Icon(Icons.pets_outlined, size: 18, color: context.accentPrimary),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('桌宠中心', style: AppTypography.label(context)),
+                              Text('管理桌宠相关扩展', style: AppTypography.caption(context)),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, size: 16, color: context.textSecondary),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: AppSpacing.md),

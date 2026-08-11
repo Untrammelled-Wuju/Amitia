@@ -39,8 +39,10 @@ import (
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/feedback"
+	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/mcpapi"
@@ -400,12 +402,25 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
+		if services.KernelContainer != nil {
+			cardProvider := extension_center.NewKernelCardProvider(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
+			centerSvc := extension_center.NewCenterService(cardProvider)
+			centerHandler := extension_center.NewHTTPHandler(centerSvc)
+			centerMux := http.NewServeMux()
+			centerHandler.Register(centerMux)
+			apiGroup.Any("/api/extension-center/*centerPath", gin.WrapH(centerMux))
+		}
 		if services.KernelContainer != nil && services.KernelContainer.WASMRuntimeFactory != nil {
 			wasmService := wasm_runtime.NewAPIService(services.KernelContainer.WASMRuntimeFactory, services.KernelContainer.WASMDefinitionRepo)
 			wasmHandler := wasm_runtime.NewHTTPHandler(wasmService)
 			wasmMux := http.NewServeMux()
 			wasmHandler.Register(wasmMux)
 			apiGroup.Any("/wasm/*wasmPath", gin.WrapH(wasmMux))
+		}
+		if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
+			kernelReader := management.NewKernelReader(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
+			gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
+			management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
 		}
 		emote.RegisterRouter(apiGroup, services.Emote)
 		mcpapi.RegisterRouter(apiGroup, ctx, mcpapi.Services{Repository: services.MCPRepository, Connections: services.MCPConnections, Auth: services.MCPAuth, Discovery: services.MCPDiscovery, Skills: services.MCPSkills, Secrets: services.MCPSecrets, Extensions: services.Extension, Features: services.MCPFeatures, Dependencies: services.MCPDependencies, Interactions: services.MCPInteractions})

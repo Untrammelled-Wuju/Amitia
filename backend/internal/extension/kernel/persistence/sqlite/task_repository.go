@@ -115,14 +115,17 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 		INSERT INTO extension_task_runs
 			(task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
 			 status, priority, input_json, input_hash, input_artifact_id,
+			 trace_id, correlation_id, causation_id, source,
 			 scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 			 runtime_instance_id, checkpoint_id, result_artifact_id,
 			 attempt, max_attempts, created_at, queued_at, started_at, finished_at,
 			 deadline_at, cancel_requested_at, error_code, error_message, generation)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(task_run_id) DO UPDATE SET
 			status = excluded.status, priority = excluded.priority,
 			input_json = excluded.input_json, input_hash = excluded.input_hash,
+			trace_id = excluded.trace_id, correlation_id = excluded.correlation_id,
+			causation_id = excluded.causation_id, source = excluded.source,
 			runtime_instance_id = excluded.runtime_instance_id, checkpoint_id = excluded.checkpoint_id,
 			result_artifact_id = excluded.result_artifact_id,
 			attempt = excluded.attempt, max_attempts = excluded.max_attempts,
@@ -135,6 +138,7 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 		run.TaskRunID, run.OperationID, run.InvocationID, run.TaskDefinitionID,
 		run.ExtensionID, run.ModuleID, string(run.Status), run.Priority,
 		string(run.Input), run.InputHash, nullableString(run.InputArtifactID),
+		run.TraceID, run.CorrelationID, run.CausationID, run.Source,
 		run.ScopeSnapshotID, run.PermissionSnapshotID, run.DependencySnapshotID,
 		nullableString(run.RuntimeInstanceID), nullableString(run.CheckpointID),
 		nullableString(run.ResultArtifactID),
@@ -200,6 +204,7 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 	err := ex.QueryRowContext(ctx, `
 		SELECT task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
 		       status, priority, input_json, input_hash, input_artifact_id,
+		       trace_id, correlation_id, causation_id, source,
 		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
 		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
@@ -209,6 +214,7 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		&run.TaskRunID, &run.OperationID, &invocationID, &run.TaskDefinitionID,
 		&run.ExtensionID, &run.ModuleID, &run.Status, &run.Priority,
 		&inputJSON, &run.InputHash, &inputArtifactID,
+		&run.TraceID, &run.CorrelationID, &run.CausationID, &run.Source,
 		&run.ScopeSnapshotID, &run.PermissionSnapshotID, &run.DependencySnapshotID,
 		&runtimeInstanceID, &checkpointID, &resultArtifactID,
 		&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
@@ -241,6 +247,7 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 	ex := getExecutor(ctx, r.db)
 	query := `SELECT task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
 		       status, priority, input_json, input_hash, input_artifact_id,
+		       trace_id, correlation_id, causation_id, source,
 		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
 		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
@@ -289,6 +296,7 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 			&run.TaskRunID, &run.OperationID, &invocationID, &run.TaskDefinitionID,
 			&run.ExtensionID, &run.ModuleID, &run.Status, &run.Priority,
 			&inputJSON, &run.InputHash, &inputArtifactID,
+			&run.TraceID, &run.CorrelationID, &run.CausationID, &run.Source,
 			&run.ScopeSnapshotID, &run.PermissionSnapshotID, &run.DependencySnapshotID,
 			&runtimeInstanceID, &checkpointID, &resultArtifactID,
 			&run.Attempt, &run.MaxAttempts, &run.CreatedAt,

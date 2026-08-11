@@ -108,6 +108,13 @@ func EvaluateContinuation(input ContinuationInput) (ContinuationDecision, error)
 		return decision, nil
 	}
 
+	if input.Observation != nil && input.Observation.Outcome == ObservationOutcomeAccepted &&
+		input.Observation.Kind == ObservationKindTaskAccepted {
+		decision.Disposition = ContinuationWait
+		decision.ReasonCodes = []string{"background_task_running"}
+		return decision, nil
+	}
+
 	if input.Observation != nil && len(input.Observation.GoalRefs) > 0 {
 		allAchieved := true
 		anySuspended := false

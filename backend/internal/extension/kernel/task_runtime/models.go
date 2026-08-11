@@ -179,6 +179,10 @@ type TaskRun struct {
 	Input                json.RawMessage `json:"input"`
 	InputHash            string          `json:"inputHash"`
 	InputArtifactID      *string         `json:"inputArtifactId,omitempty"`
+	TraceID              string          `json:"traceId,omitempty"`
+	CorrelationID        string          `json:"correlationId,omitempty"`
+	CausationID          string          `json:"causationId,omitempty"`
+	Source               string          `json:"source,omitempty"`
 	ScopeSnapshotID      string          `json:"scopeSnapshotId,omitempty"`
 	PermissionSnapshotID string          `json:"permissionSnapshotId,omitempty"`
 	DependencySnapshotID string          `json:"dependencySnapshotId,omitempty"`
@@ -284,6 +288,11 @@ type EnqueueTaskRequest struct {
 	Input                json.RawMessage `json:"input"`
 	Priority             int             `json:"priority"`
 	OperationID          string          `json:"operationId"`
+	InvocationID         string          `json:"invocationId,omitempty"`
+	TraceID              string          `json:"traceId,omitempty"`
+	CorrelationID        string          `json:"correlationId,omitempty"`
+	CausationID          string          `json:"causationId,omitempty"`
+	Source               string          `json:"source,omitempty"`
 	ScopeSnapshotID      string          `json:"scopeSnapshotId"`
 	PermissionSnapshotID string          `json:"permissionSnapshotId"`
 }

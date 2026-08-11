@@ -191,6 +191,8 @@ func EvaluateGoalProgress(
 	}
 
 	switch observation.Outcome {
+	case ObservationOutcomeAccepted:
+		applyAcceptedBackground(&update, goal)
 	case ObservationOutcomeSucceeded:
 		switch expectation.Mode {
 		case GoalProgressObserveOnly:
@@ -214,6 +216,19 @@ func EvaluateGoalProgress(
 	}
 
 	return update, nil
+}
+
+func applyAcceptedBackground(update *GoalProgressUpdate, goal Goal) {
+	if goal.Status == GoalStatusPending {
+		update.NextStatus = GoalStatusActive
+		update.Disposition = GoalProgressActivated
+		update.ReasonCodes = []string{"task_accepted", "pending_to_active"}
+		update.Apply = true
+		return
+	}
+	update.Disposition = GoalProgressObserved
+	update.ReasonCodes = []string{"task_accepted"}
+	update.Apply = true
 }
 
 func applySucceededObserveOnly(update *GoalProgressUpdate, goal Goal) {
