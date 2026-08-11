@@ -90,6 +90,17 @@ func (a *kernelRuntimeAdapter) Install(ctx context.Context, archivePath string) 
 	return kernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
 }
 
+func (a *kernelRuntimeAdapter) Update(ctx context.Context, archivePath string) (kernelInstalledExtension, error) {
+	if a.runtime == nil {
+		return kernelInstalledExtension{}, ErrKernelUnavailable
+	}
+	installed, err := a.runtime.Update(ctx, archivePath)
+	if err != nil {
+		return kernelInstalledExtension{}, err
+	}
+	return kernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
+}
+
 func (a *kernelRuntimeAdapter) Enable(ctx context.Context, extensionID string) error {
 	if a.runtime == nil {
 		return ErrKernelUnavailable

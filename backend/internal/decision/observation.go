@@ -21,6 +21,7 @@ const (
 	ObservationKindDispatchFailure        ObservationKind = "dispatch_failure"
 	ObservationKindTaskAccepted           ObservationKind = "task_accepted"
 	ObservationKindTaskResult             ObservationKind = "task_result"
+	ObservationKindCoordinationResult     ObservationKind = "coordination_result"
 )
 
 type ObservationOutcome string
@@ -39,10 +40,11 @@ const (
 type ObservationTargetKind string
 
 const (
-	ObservationTargetNone     ObservationTargetKind = "none"
-	ObservationTargetTool     ObservationTargetKind = "tool"
-	ObservationTargetTask     ObservationTargetKind = "task"
-	ObservationTargetWorkflow ObservationTargetKind = "workflow"
+	ObservationTargetNone        ObservationTargetKind = "none"
+	ObservationTargetTool        ObservationTargetKind = "tool"
+	ObservationTargetTask        ObservationTargetKind = "task"
+	ObservationTargetWorkflow    ObservationTargetKind = "workflow"
+	ObservationTargetCoordination ObservationTargetKind = "coordination"
 )
 
 type ObservationContentKind string
@@ -236,7 +238,8 @@ func validObservationKind(k ObservationKind) bool {
 	switch k {
 	case ObservationKindToolResult, ObservationKindNoAction,
 		ObservationKindMaterializationFailure, ObservationKindDispatchFailure,
-		ObservationKindTaskAccepted, ObservationKindTaskResult:
+		ObservationKindTaskAccepted, ObservationKindTaskResult,
+		ObservationKindCoordinationResult:
 		return true
 	}
 	return false
@@ -256,7 +259,8 @@ func validObservationOutcome(o ObservationOutcome) bool {
 func validObservationTargetKind(t ObservationTargetKind) bool {
 	switch t {
 	case ObservationTargetNone, ObservationTargetTool,
-		ObservationTargetTask, ObservationTargetWorkflow:
+		ObservationTargetTask, ObservationTargetWorkflow,
+		ObservationTargetCoordination:
 		return true
 	}
 	return false

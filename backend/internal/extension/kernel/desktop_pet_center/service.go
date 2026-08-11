@@ -31,6 +31,7 @@ type kernelContainer interface {
 
 type kernelRuntime interface {
 	Install(ctx context.Context, archivePath string) (kernelInstalledExtension, error)
+	Update(ctx context.Context, archivePath string) (kernelInstalledExtension, error)
 	Enable(ctx context.Context, extensionID string) error
 	Disable(ctx context.Context, extensionID string) error
 	Uninstall(ctx context.Context, extensionID string) error
@@ -190,6 +191,24 @@ func (s *DesktopPetPluginManagementService) Install(ctx context.Context, archive
 		return nil, ErrInvalidInput
 	}
 	installed, err := s.runtime.Install(ctx, archivePath)
+	if err != nil {
+		return nil, err
+	}
+	return &InstallResult{
+		ExtensionID:  installed.ID,
+		Version:      installed.Version,
+		InstallState: string(PluginInstallStateInstalled),
+	}, nil
+}
+
+func (s *DesktopPetPluginManagementService) Update(ctx context.Context, archivePath string) (*InstallResult, error) {
+	if s.runtime == nil {
+		return nil, ErrKernelUnavailable
+	}
+	if archivePath == "" {
+		return nil, ErrInvalidInput
+	}
+	installed, err := s.runtime.Update(ctx, archivePath)
 	if err != nil {
 		return nil, err
 	}

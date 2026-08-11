@@ -67,6 +67,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
+	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
@@ -171,6 +172,7 @@ type AppServices struct {
 	MigrationLock                *migrationcore.PersistentLock
 	RecoveryDescriptor           *interaction.RecoveryDescriptorService
 	PauseResumeService           *interaction.PauseResumeService
+	BackgroundTaskCoordinator   *interaction.BackgroundTaskCoordinator
 	GameCenterService            *management.GameCenterManagementService
 }
 
@@ -494,6 +496,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	recoveryBuilder := interaction.NewRecoveryDescriptorBuilder(goalReader, taskReader, wfReader, invReader, pipeReader)
 	recoveryDescriptor := interaction.NewRecoveryDescriptorService(tracker, recoveryBuilder, recoveryValidator)
 	pauseResumeService := interaction.NewPauseResumeService(tracker)
+	backgroundTaskCoordinator := interaction.NewBackgroundTaskCoordinator(tracker, recoveryDescriptor, kernelContainer.TaskRuntimeService)
+	_ = backgroundTaskCoordinator
 	_ = pauseResumeService
 	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer, recoveryDescriptor)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
@@ -932,6 +936,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		MigrationLock:                migrationLock,
 		RecoveryDescriptor:           recoveryDescriptor,
 		PauseResumeService:           pauseResumeService,
+		BackgroundTaskCoordinator:   backgroundTaskCoordinator,
 	}, nil
 }
 

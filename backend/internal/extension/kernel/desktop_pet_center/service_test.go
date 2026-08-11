@@ -82,6 +82,7 @@ func (f *fakeContainer) ListGrants(ctx context.Context, extID domain.ExtensionID
 
 type fakeRuntime struct {
 	installFn   func(ctx context.Context, archivePath string) (kernelInstalledExtension, error)
+	updateFn    func(ctx context.Context, archivePath string) (kernelInstalledExtension, error)
 	enableFn    func(ctx context.Context, extensionID string) error
 	disableFn   func(ctx context.Context, extensionID string) error
 	uninstallFn func(ctx context.Context, extensionID string) error
@@ -90,6 +91,13 @@ type fakeRuntime struct {
 func (f *fakeRuntime) Install(ctx context.Context, archivePath string) (kernelInstalledExtension, error) {
 	if f.installFn != nil {
 		return f.installFn(ctx, archivePath)
+	}
+	return kernelInstalledExtension{}, nil
+}
+
+func (f *fakeRuntime) Update(ctx context.Context, archivePath string) (kernelInstalledExtension, error) {
+	if f.updateFn != nil {
+		return f.updateFn(ctx, archivePath)
 	}
 	return kernelInstalledExtension{}, nil
 }
@@ -608,6 +616,62 @@ func TestEnable_KernelErrorPropagation(t *testing.T) {
 	_, err := svc.Enable(context.Background(), "com.example/pet-err")
 	if err == nil {
 		t.Error("expected error from kernel Enable")
+	}
+}
+
+func TestUpdate_CallsKernel(t *testing.T) {
+	updated := false
+	rt := &fakeRuntime{
+		updateFn: func(ctx context.Context, archivePath string) (kernelInstalledExtension, error) {
+			updated = true
+			return kernelInstalledExtension{ID: "com.example/pet-upd", Name: "Pet Updated", Version: "2.0.0"}, nil
+		},
+	}
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt)
+	result, err := svc.Update(context.Background(), "/tmp/pkg-v2.zip")
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !updated {
+		t.Error("expected kernel Update to be called")
+	}
+	if result.ExtensionID != "com.example/pet-upd" {
+		t.Errorf("expected extensionId=com.example/pet-upd, got %s", result.ExtensionID)
+	}
+	if result.Version != "2.0.0" {
+		t.Errorf("expected version=2.0.0, got %s", result.Version)
+	}
+	if result.InstallState != string(PluginInstallStateInstalled) {
+		t.Errorf("expected installState=installed, got %s", result.InstallState)
+	}
+}
+
+func TestUpdate_EmptyPathReturnsInvalidInput(t *testing.T) {
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, &fakeRuntime{})
+	_, err := svc.Update(context.Background(), "")
+	if err != ErrInvalidInput {
+		t.Errorf("expected ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestUpdate_ErrorPropagation(t *testing.T) {
+	rt := &fakeRuntime{
+		updateFn: func(ctx context.Context, archivePath string) (kernelInstalledExtension, error) {
+			return kernelInstalledExtension{}, errors.New("update failed: version conflict")
+		},
+	}
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt)
+	_, err := svc.Update(context.Background(), "/tmp/bad.zip")
+	if err == nil {
+		t.Error("expected error from kernel Update")
+	}
+}
+
+func TestUpdate_KernelUnavailable(t *testing.T) {
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, nil)
+	_, err := svc.Update(context.Background(), "/tmp/pkg.zip")
+	if err != ErrKernelUnavailable {
+		t.Errorf("expected ErrKernelUnavailable, got %v", err)
 	}
 }
 

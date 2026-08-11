@@ -15,6 +15,7 @@ import 'model_config_service.dart';
 import 'feedback_service.dart';
 import 'voice_service.dart';
 import 'extension_service.dart';
+import 'extension_view_invalidator.dart';
 import 'system_service.dart';
 import 'channel_service.dart';
 import '../models/character.dart';
@@ -165,3 +166,7 @@ final startupStageProvider = FutureProvider<String>((ref) async {
   if (!loggedIn) return 'needsLogin';
   return 'ready';
 });
+
+final extensionViewInvalidatorProvider = Provider<ExtensionViewInvalidator>(
+  (ref) => ExtensionViewInvalidatorImpl(),
+);

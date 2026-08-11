@@ -6,7 +6,7 @@ import (
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/internal/gamehost/control"
-	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
+	dom "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
@@ -36,15 +36,15 @@ func NewGameHostPluginRegistry(reg *registry.Registry) *GameHostPluginRegistry {
 	return &GameHostPluginRegistry{registry: reg}
 }
 
-func (r *GameHostPluginRegistry) Get(ctx context.Context, pluginID string) (ghdomain.PluginDescriptor, error) {
-	return r.registry.Get(ctx, ghydomain.PluginID(pluginID))
+func (r *GameHostPluginRegistry) Get(ctx context.Context, pluginID string) (dom.PluginDescriptor, error) {
+	return r.registry.Get(ctx, dom.PluginID(pluginID))
 }
 
-func (r *GameHostPluginRegistry) ListByExtension(ctx context.Context, extensionID string) ([]ghdomain.PluginDescriptor, error) {
+func (r *GameHostPluginRegistry) ListByExtension(ctx context.Context, extensionID string) ([]dom.PluginDescriptor, error) {
 	return r.registry.ListByExtension(ctx, extensionID)
 }
 
-func (r *GameHostPluginRegistry) List(ctx context.Context) ([]ghdomain.PluginDescriptor, error) {
+func (r *GameHostPluginRegistry) List(ctx context.Context) ([]dom.PluginDescriptor, error) {
 	return r.registry.List(ctx)
 }
 
@@ -61,7 +61,7 @@ func (m *GameHostRuntimeManager) ListRuntimes() []*runtime.RuntimeInstanceRef {
 }
 
 func (m *GameHostRuntimeManager) GetRuntime(runtimeID string) (*runtime.RuntimeInstanceRef, error) {
-	return m.manager.GetRuntime(ghdomain.RuntimeInstanceID(runtimeID))
+	return m.manager.GetRuntime(dom.RuntimeInstanceID(runtimeID))
 }
 
 type GameHostTopologyStore struct {
@@ -72,8 +72,8 @@ func NewGameHostTopologyStore(store runtime.RuntimeTopologyStore) *GameHostTopol
 	return &GameHostTopologyStore{store: store}
 }
 
-func (t *GameHostTopologyStore) GetTopologySnapshot(runtimeID string) (*runtime.RuntimeTopologySnapshot, error) {
-	return t.store.GetTopologySnapshot(ghdomain.RuntimeInstanceID(runtimeID))
+func (t *GameHostTopologyStore) GetTopologySnapshot(runtimeID string) (runtime.RuntimeTopologySnapshot, error) {
+	return t.store.GetTopologySnapshot(dom.RuntimeInstanceID(runtimeID))
 }
 
 type GameHostHandshakeManager struct {
@@ -106,7 +106,7 @@ func NewGameHostAuthorityManager(manager *control.ControlAuthorityManager) *Game
 }
 
 func (m *GameHostAuthorityManager) GetSnapshot(ctx context.Context, runtimeID string) (control.ControlAuthoritySnapshot, bool) {
-	snap, err := m.manager.GetSnapshot(ctx, ghydomain.RuntimeInstanceID(runtimeID))
+	snap, err := m.manager.GetSnapshot(ctx, dom.RuntimeInstanceID(runtimeID))
 	if err != nil {
 		return control.ControlAuthoritySnapshot{}, false
 	}
@@ -126,9 +126,9 @@ func NewGameHostHealthAdapter(adapter runtime.HealthAdapter) *GameHostHealthAdap
 }
 
 func (h *GameHostHealthAdapter) GetServiceHealth(runtimeID string, serviceID string) (runtime.ServiceHealthSnapshot, bool) {
-	return h.adapter.GetServiceHealth(ghdomain.RuntimeInstanceID(runtimeID), ghydomain.ServiceID(serviceID))
+	return h.adapter.GetServiceHealth(dom.RuntimeInstanceID(runtimeID), dom.ServiceID(serviceID))
 }
 
 func (h *GameHostHealthAdapter) ListServiceHealth(runtimeID string) []runtime.ServiceHealthSnapshot {
-	return h.adapter.ListServiceHealth(ghdomain.RuntimeInstanceID(runtimeID))
+	return h.adapter.ListServiceHealth(dom.RuntimeInstanceID(runtimeID))
 }

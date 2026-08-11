@@ -474,6 +474,11 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 			"moduleId":         run.ModuleID,
 			"status":           string(run.Status),
 			"operationId":      run.OperationID,
+			"invocationId":     run.InvocationID,
+			"traceId":          run.TraceID,
+			"correlationId":    run.CorrelationID,
+			"causationId":      run.CausationID,
+			"generation":       run.Generation,
 			"attempt":          run.Attempt,
 			"finishedAt":       now.Format(time.RFC3339),
 		})
@@ -723,6 +728,10 @@ func (s *TaskRuntimeService) GetProgress(ctx context.Context, taskRunID string) 
 
 func (s *TaskRuntimeService) GetResult(ctx context.Context, taskRunID string) (*TaskRunResult, error) {
 	return s.store.GetResult(ctx, taskRunID)
+}
+
+func (s *TaskRuntimeService) GetTaskResult(ctx context.Context, taskRunID string) (*TaskRunResult, error) {
+	return s.GetResult(ctx, taskRunID)
 }
 
 func (s *TaskRuntimeService) GetLatestCheckpoint(ctx context.Context, taskRunID string) (*TaskCheckpoint, error) {

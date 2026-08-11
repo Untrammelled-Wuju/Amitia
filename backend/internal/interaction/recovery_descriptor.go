@@ -140,6 +140,23 @@ type RecoveryMindRef struct {
 	SnapshotVersion       string `json:"snapshotVersion,omitempty"`
 }
 
+type MultiAgentRecoveryRef struct {
+	CoordinationID        string                   `json:"coordinationId"`
+	ParentGoalID          string                   `json:"parentGoalId"`
+	ParentGoalRevision    int64                    `json:"parentGoalRevision"`
+	Status                string                   `json:"status"`
+	AssignmentRefs        []AssignmentRecoveryRef  `json:"assignmentRefs,omitempty"`
+	DeriveAssignmentRefs  func() []AssignmentRecoveryRef `json:"-"`
+}
+
+type AssignmentRecoveryRef struct {
+	AssignmentID       string `json:"assignmentId"`
+	WorkerID           string `json:"workerId"`
+	ChildInteractionID string `json:"childInteractionId,omitempty"`
+	ChildGoalID        string `json:"childGoalId,omitempty"`
+	Status             string `json:"status"`
+}
+
 type RecoveryDescriptor struct {
 	SchemaVersion int                            `json:"schemaVersion"`
 	Requirement   RecoveryRequirement            `json:"requirement"`
@@ -155,6 +172,7 @@ type RecoveryDescriptor struct {
 	Kernel        *RecoveryInvocationRef         `json:"kernel,omitempty"`
 	Pipeline      *RecoveryPipelineCheckpointRef `json:"pipeline,omitempty"`
 	Mind          *RecoveryMindRef               `json:"mind,omitempty"`
+	MultiAgent    *MultiAgentRecoveryRef        `json:"multiAgent,omitempty"`
 	State         RecoveryDescriptorState        `json:"state"`
 	Fingerprint   string                         `json:"fingerprint"`
 	CreatedAt     time.Time                      `json:"createdAt"`
@@ -250,6 +268,21 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 		writeKV("mind.reflectionId", d.Mind.ReflectionCandidateID)
 		writeKV("mind.scanId", d.Mind.ReconciliationScanID)
 		writeKV("mind.snapshotVersion", d.Mind.SnapshotVersion)
+	}
+	if d.MultiAgent != nil {
+		writeKV("multiAgent.coordId", d.MultiAgent.CoordinationID)
+		writeKV("multiAgent.parentGoalId", d.MultiAgent.ParentGoalID)
+		writeKVI("multiAgent.parentGoalRev", d.MultiAgent.ParentGoalRevision)
+		writeKV("multiAgent.status", d.MultiAgent.Status)
+		writeKVI("multiAgent.assignmentCount", int64(len(d.MultiAgent.AssignmentRefs)))
+		for i, a := range d.MultiAgent.AssignmentRefs {
+			prefix := fmt.Sprintf("multiAgent.assignment.%d.", i)
+			writeKV(prefix+"id", a.AssignmentID)
+			writeKV(prefix+"workerId", a.WorkerID)
+			writeKV(prefix+"childInteractionId", a.ChildInteractionID)
+			writeKV(prefix+"childGoalId", a.ChildGoalID)
+			writeKV(prefix+"status", a.Status)
+		}
 	}
 	writeKV("state", string(d.State))
 	d.Fingerprint = "fp:" + hex.EncodeToString(h.Sum(nil))[:32]

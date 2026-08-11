@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../app/center_navigation.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -86,7 +87,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaCard(
-            onTap: () => context.push(AppRoutes.extensions),
+            onTap: () => CenterNavigation.openExtensionCenter(context),
             child: Row(
               children: [
                 Container(
@@ -147,7 +148,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaCard(
-            onTap: () => context.push(AppRoutes.extensions),
+            onTap: () => CenterNavigation.openExtensionCenter(context),
             child: Row(
               children: [
                 Container(

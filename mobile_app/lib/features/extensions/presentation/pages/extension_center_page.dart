@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../app/center_navigation.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -303,7 +304,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
             children: [
               Expanded(
                 child: GestureDetector(
-                  onTap: () => context.push(AppRoutes.gameCenter),
+                  onTap: () => CenterNavigation.openGameCenter(context),
                   child: AmitiaCard(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                     child: Row(
@@ -336,7 +337,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: GestureDetector(
-                  onTap: () => context.push(AppRoutes.desktopPet),
+                  onTap: () => CenterNavigation.openDesktopPetCenter(context),
                   child: AmitiaCard(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                     child: Row(

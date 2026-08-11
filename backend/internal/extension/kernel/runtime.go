@@ -360,6 +360,10 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 	return item, nil
 }
 
+func (r *Runtime) Update(ctx context.Context, archivePath string) (InstalledExtension, error) {
+	return r.Install(ctx, archivePath)
+}
+
 func installedFromManifest(manifest manifest_v2.Manifest, path string, installedAt time.Time) InstalledExtension {
 	return InstalledExtension{ID: manifest.Extension.ID, Name: manifest.Extension.Name.Default, Version: manifest.Extension.Version, Publisher: manifest.Publisher.ID, Path: path, ModuleCount: len(manifest.Modules), InstalledAt: installedAt.UTC()}
 }
