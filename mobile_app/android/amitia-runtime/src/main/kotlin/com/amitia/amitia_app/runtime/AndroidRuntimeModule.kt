@@ -16,6 +16,7 @@ import com.amitia.amitia_app.runtime.internal.RuntimeStateStore
 import com.amitia.amitia_app.runtime.proot.ProotComponent
 import com.amitia.amitia_app.runtime.proot.internal.AndroidProotBinaryLocator
 import com.amitia.amitia_app.runtime.proot.internal.AndroidProotComponent
+import com.amitia.amitia_app.runtime.proot.internal.AndroidProotRawResourceMetadataLoader
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotArtifactVerifier
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotCommandBuilder
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotProcessLauncher
@@ -90,8 +91,13 @@ object AndroidRuntimeModule {
     }
 
     private fun createProotComponent(context: Context): ProotComponent {
-        val metadataLoader = object : ProotMetadataLoaderInternal {
-            override fun load() = null
+        val rawResourceId = context.resources.getIdentifier("proot_artifact", "raw", context.packageName)
+        val metadataLoader = if (rawResourceId != 0) {
+            AndroidProotRawResourceMetadataLoader(context, rawResourceId)
+        } else {
+            object : ProotMetadataLoaderInternal {
+                override fun load() = null
+            }
         }
         val binaryLocator = AndroidProotBinaryLocator(context, metadataLoader)
         val artifactVerifier = DefaultProotArtifactVerifier(binaryLocator, null)

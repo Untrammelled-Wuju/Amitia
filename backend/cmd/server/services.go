@@ -173,6 +173,7 @@ type AppServices struct {
 	RecoveryDescriptor           *interaction.RecoveryDescriptorService
 	PauseResumeService           *interaction.PauseResumeService
 	BackgroundTaskCoordinator   *interaction.BackgroundTaskCoordinator
+	MultiAgentCoordinator       *interaction.MultiAgentCoordinator
 	GameCenterService            *management.GameCenterManagementService
 }
 
@@ -499,6 +500,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	backgroundTaskCoordinator := interaction.NewBackgroundTaskCoordinator(tracker, recoveryDescriptor, kernelContainer.TaskRuntimeService)
 	_ = backgroundTaskCoordinator
 	_ = pauseResumeService
+	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewUnifiedEntryWorkerRunner(entry), pauseResumeService, interaction.DefaultMultiAgentPolicy())
+	_ = multiAgentCoordinator
 	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer, recoveryDescriptor)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
@@ -937,6 +940,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		RecoveryDescriptor:           recoveryDescriptor,
 		PauseResumeService:           pauseResumeService,
 		BackgroundTaskCoordinator:   backgroundTaskCoordinator,
+	MultiAgentCoordinator:       multiAgentCoordinator,
 	}, nil
 }
 

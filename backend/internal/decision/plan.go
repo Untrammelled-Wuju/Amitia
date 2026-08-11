@@ -125,6 +125,12 @@ type BehaviorConstraint struct {
 	Hard     bool    `json:"hard"`
 }
 
+type CoordinationPlanIntent string
+
+const (
+	PlanIntentCoordination CoordinationPlanIntent = "coordination"
+)
+
 type BehaviorPlan struct {
 	Version              PlanVersion               `json:"version"`
 	ID                   string                    `json:"id,omitempty"`
@@ -156,6 +162,18 @@ type BehaviorPlan struct {
 	GoalRefs             []GoalRef                 `json:"goalRefs,omitempty"`
 	GoalProgress         []GoalProgressExpectation `json:"goalProgress,omitempty"`
 	IntentionIDs         []string                  `json:"intentionIds,omitempty"`
+	Coordination         *CoordinationPlanRef      `json:"coordination,omitempty"`
+}
+
+type CoordinationPlanRef struct {
+	CoordinationID       string   `json:"coordinationId"`
+	ParentGoalID         string   `json:"parentGoalId"`
+	ParentGoalRevision   int64    `json:"parentGoalRevision"`
+	Strategy             string   `json:"strategy"`
+	CompletionPlan       string   `json:"completionPlan"`
+	WorkerCount          int      `json:"workerCount"`
+	MaxWorkers           int      `json:"maxWorkers"`
+	SourceCharacterIDs   []string `json:"sourceCharacterIds,omitempty"`
 }
 
 type PsycheSignalSet struct {

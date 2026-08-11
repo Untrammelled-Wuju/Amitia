@@ -255,6 +255,7 @@ func TestMultiAgentCoordinator_Start_DepthLimit(t *testing.T) {
 
 func TestMultiAgentCoordinator_Start_And_Aggregate(t *testing.T) {
 	tracker := newFakeTracker()
+	_ = tracker.Create(context.Background(), &InteractionRecord{ID: "parent-1", Status: InteractionStatusProcessing})
 	goals := decision.NewGoalRegistry()
 
 	goal := decision.Goal{
@@ -317,7 +318,10 @@ func TestMultiAgentCoordinator_Start_And_Aggregate(t *testing.T) {
 func TestMultiAgentCoordinator_OnAssignmentTerminal_RequireAll(t *testing.T) {
 	c := newTestCoordinator()
 
-	_, _ = c.Start(context.Background(), StartCoordinationRequest{
+	workers := &fakeWorkerRunner{}
+	c.starter = workers
+
+	res, err := c.Start(context.Background(), StartCoordinationRequest{
 		ParentGoalID:       "goal-1",
 		ParentGoalRevision: 1,
 		WorkerRefs:         []AgentWorkerRef{{WorkerID: "w1", CharacterID: "c1"}},
@@ -327,13 +331,12 @@ func TestMultiAgentCoordinator_OnAssignmentTerminal_RequireAll(t *testing.T) {
 		},
 		CompletionPlan: CoordinationRequireAll,
 	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 
 	c.mu.Lock()
-	var ac *activeCoordination
-	for _, v := range c.coordinations {
-		ac = v
-		break
-	}
+	ac := c.coordinations[string(res.CoordinationID)]
 	c.mu.Unlock()
 
 	id1 := ac.assignments[0].ID
@@ -359,7 +362,7 @@ func TestMultiAgentCoordinator_OnAssignmentTerminal_RequireAll(t *testing.T) {
 func TestMultiAgentCoordinator_OnAssignmentTerminal_FirstSuccess(t *testing.T) {
 	c := newTestCoordinator()
 
-	_, _ = c.Start(context.Background(), StartCoordinationRequest{
+	res, err := c.Start(context.Background(), StartCoordinationRequest{
 		ParentGoalID:       "goal-1",
 		ParentGoalRevision: 1,
 		WorkerRefs:         []AgentWorkerRef{{WorkerID: "w1", CharacterID: "c1"}},
@@ -370,13 +373,12 @@ func TestMultiAgentCoordinator_OnAssignmentTerminal_FirstSuccess(t *testing.T) {
 		},
 		CompletionPlan: CoordinationFirstSuccess,
 	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 
 	c.mu.Lock()
-	var ac *activeCoordination
-	for _, v := range c.coordinations {
-		ac = v
-		break
-	}
+	ac := c.coordinations[string(res.CoordinationID)]
 	c.mu.Unlock()
 
 	id1 := ac.assignments[0].ID
@@ -394,14 +396,17 @@ func TestMultiAgentCoordinator_OnAssignmentTerminal_FirstSuccess(t *testing.T) {
 func TestMultiAgentCoordinator_Cancel(t *testing.T) {
 	c := newTestCoordinator()
 
-	res, _ := c.Start(context.Background(), StartCoordinationRequest{
+	res, err := c.Start(context.Background(), StartCoordinationRequest{
 		ParentGoalID:       "goal-1",
 		ParentGoalRevision: 1,
 		WorkerRefs:         []AgentWorkerRef{{WorkerID: "w1", CharacterID: "c1"}},
 		Objectives:         []AssignmentObjective{{WorkerIndex: 0, Objective: "a"}},
 	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 
-	err := c.Cancel(context.Background(), string(res.CoordinationID))
+	err = c.Cancel(context.Background(), string(res.CoordinationID))
 	if err != nil {
 		t.Fatalf("Cancel: %v", err)
 	}
@@ -420,47 +425,50 @@ func TestMultiAgentCoordinator_Cancel(t *testing.T) {
 func TestMultiAgentCoordinator_Cancel_Idempotent(t *testing.T) {
 	c := newTestCoordinator()
 
-	res, _ := c.Start(context.Background(), StartCoordinationRequest{
+	res, err := c.Start(context.Background(), StartCoordinationRequest{
 		ParentGoalID:       "goal-1",
 		ParentGoalRevision: 1,
 		WorkerRefs:         []AgentWorkerRef{{WorkerID: "w1", CharacterID: "c1"}},
 		Objectives:         []AssignmentObjective{{WorkerIndex: 0, Objective: "a"}},
 	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 
 	_ = c.Cancel(context.Background(), string(res.CoordinationID))
-	err := c.Cancel(context.Background(), string(res.CoordinationID))
+	err = c.Cancel(context.Background(), string(res.CoordinationID))
 	if err != nil {
 		t.Fatalf("second cancel should succeed: %v", err)
 	}
 }
 
 func TestMultiAgentCoordinator_Resume_StaleRevision(t *testing.T) {
-	tracker := newFakeTracker()
 	goals := decision.NewGoalRegistry()
 	_ = goals.Register(decision.Goal{ID: "goal-1", Status: decision.GoalStatusActive, Revision: 1})
 	clock := fakeClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
-	c := NewMultiAgentCoordinator(tracker, goals, nil, &fakeWorkerRunner{}, nil, DefaultMultiAgentPolicy())
+	c := NewMultiAgentCoordinator(nil, goals, nil, &fakeWorkerRunner{}, nil, DefaultMultiAgentPolicy())
 	c.clock = clock
 
-	_, _ = c.Start(context.Background(), StartCoordinationRequest{
+	res, err := c.Start(context.Background(), StartCoordinationRequest{
 		ParentGoalID:       "goal-1",
 		ParentGoalRevision: 1,
 		WorkerRefs:         []AgentWorkerRef{{WorkerID: "w1", CharacterID: "c1"}},
 		Objectives:         []AssignmentObjective{{WorkerIndex: 0, Objective: "a"}},
 	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 
 	c.mu.Lock()
-	var ac *activeCoordination
-	for _, v := range c.coordinations {
-		ac = v
-		break
-	}
+	ac := c.coordinations[string(res.CoordinationID)]
 	c.mu.Unlock()
 
 	ac.status = CoordinationPaused
-	_ = goals.UpdateStatus("goal-1", decision.GoalStatusActive, 0.5)
 
-	err := c.Resume(context.Background(), string(ac.id))
+	_ = goals.UpdateStatus("goal-1", decision.GoalStatusActive, 0.9)
+	_ = goals.UpdateStatusAt("goal-1", decision.GoalStatusActive, 0.9, time.Now().UTC())
+
+	err = c.Resume(context.Background(), string(ac.id))
 	if err != nil {
 		t.Fatalf("Resume: %v", err)
 	}
@@ -565,10 +573,11 @@ func TestDefaultMultiAgentPolicy(t *testing.T) {
 }
 
 func newTestCoordinator() *MultiAgentCoordinator {
+	tracker := newFakeTracker()
 	goals := decision.NewGoalRegistry()
 	_ = goals.Register(decision.Goal{ID: "goal-1", Status: decision.GoalStatusActive, Revision: 1})
 	clock := fakeClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
-	c := NewMultiAgentCoordinator(nil, goals, nil, &fakeWorkerRunner{}, nil, DefaultMultiAgentPolicy())
+	c := NewMultiAgentCoordinator(tracker, goals, nil, &fakeWorkerRunner{}, nil, DefaultMultiAgentPolicy())
 	c.clock = clock
 	return c
 }

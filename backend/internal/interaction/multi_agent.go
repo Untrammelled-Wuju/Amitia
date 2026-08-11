@@ -234,9 +234,6 @@ type StartCoordinationResult struct {
 }
 
 func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordinationRequest) (*StartCoordinationResult, error) {
-	if c.recovery == nil {
-		return nil, fmt.Errorf("multi_agent: recovery not configured")
-	}
 	if len(req.Objectives) == 0 {
 		return nil, fmt.Errorf("multi_agent: no objectives provided")
 	}
@@ -487,7 +484,6 @@ func (c *MultiAgentCoordinator) startOneAssignment(ctx context.Context, ac *acti
 
 func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assignmentID string, result AgentAssignmentResult) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	var ac *activeCoordination
 	var target *AgentAssignment
@@ -504,10 +500,12 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 		}
 	}
 	if ac == nil || target == nil {
+		c.mu.Unlock()
 		return fmt.Errorf("multi_agent: unknown assignment %s", assignmentID)
 	}
 
 	if target.Status.IsTerminal() {
+		c.mu.Unlock()
 		return nil
 	}
 	now := c.clock.Now()
@@ -556,25 +554,25 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 		ac.status = CoordinationAggregating
 	}
 
-	if !allTerminal && ac.status != CoordinationAggregating {
+	shouldAggregate := ac.status == CoordinationAggregating
+
+	if !allTerminal && !shouldAggregate {
 		c.mu.Unlock()
 		_ = c.launchReadyAssignments(ctx, ac)
 		c.mu.Lock()
 	}
 
-	if ac.status == CoordinationAggregating {
-		unlockDone := false
-		c.mu.Unlock()
-		unlockDone = true
-		_ = c.aggregate(ctx, ac)
-		if unlockDone {
-			return nil
-		}
-	}
-
 	ac.updatedAt = now
 	_ = anySucceeded
 	_ = anyCancelled
+
+	if shouldAggregate {
+		c.mu.Unlock()
+		_ = c.aggregate(ctx, ac)
+		return nil
+	}
+
+	c.mu.Unlock()
 	return nil
 }
 
@@ -1008,4 +1006,29 @@ func truncateOutcome(out string) string {
 		return out[:4096]
 	}
 	return out
+}
+
+type unifiedEntryWorkerRunner struct {
+	entry *UnifiedEntry
+}
+
+func NewUnifiedEntryWorkerRunner(entry *UnifiedEntry) AgentWorkerRunner {
+	return &unifiedEntryWorkerRunner{entry: entry}
+}
+
+func (r *unifiedEntryWorkerRunner) StartWorker(ctx context.Context, req WorkerRunRequest) (string, error) {
+	res, err := r.entry.Handle(ctx, &UnifiedEntryRequest{
+		Channel:        "web",
+		Message:        req.Objective,
+		UserID:         req.UserID,
+		CharacterID:    req.CharacterID,
+		ConversationID: req.ConversationID,
+		Source:         req.Source,
+		RequestID:      "ma-" + req.AssignmentID,
+		IsInternal:     true,
+	})
+	if err != nil {
+		return "", err
+	}
+	return res.InteractionID, nil
 }

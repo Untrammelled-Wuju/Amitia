@@ -24,3 +24,18 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 		gameCenter.GET("/authority", handler.GetControlAuthority)
 	}
 }
+
+func RegisterGameCenterMutationRouter(group *gin.RouterGroup, mutationHandler *MutationHandler) {
+	gameCenter := group.Group("/game-center")
+	{
+		gameCenter.POST("/plugins/install", mutationHandler.Install)
+		gameCenter.POST("/plugins/:extensionId/update", mutationHandler.Update)
+		gameCenter.POST("/plugins/:extensionId/enable", mutationHandler.Enable)
+		gameCenter.POST("/plugins/:extensionId/disable", mutationHandler.Disable)
+		gameCenter.DELETE("/plugins/:extensionId", mutationHandler.Uninstall)
+
+		gameCenter.POST("/runtimes/:runtimeId/start", mutationHandler.StartRuntime)
+		gameCenter.POST("/runtimes/:runtimeId/stop", mutationHandler.StopRuntime)
+		gameCenter.POST("/runtimes/:runtimeId/restart", mutationHandler.RestartRuntime)
+	}
+}
