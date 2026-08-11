@@ -120,11 +120,12 @@ type ToolDefinition struct {
 	Version        string                  `json:"version,omitempty"`
 	InputSchema    json.RawMessage         `json:"inputSchema"`
 	OutputSchema   json.RawMessage         `json:"outputSchema"`
-	Permissions    []PermissionRequirement `json:"permissions,omitempty"`
-	RiskLevel      RiskLevel               `json:"riskLevel,omitempty"`
-	SideEffect     SideEffectLevel         `json:"sideEffect,omitempty"`
-	Scope          ScopeRule               `json:"scope,omitempty"`
-	Enabled        bool                    `json:"enabled"`
+	Permissions       []PermissionRequirement `json:"permissions,omitempty"`
+	SecretReferences  []string                `json:"secretReferences,omitempty"`
+	RiskLevel         RiskLevel               `json:"riskLevel,omitempty"`
+	SideEffect        SideEffectLevel         `json:"sideEffect,omitempty"`
+	Scope             ScopeRule               `json:"scope,omitempty"`
+	Enabled           bool                    `json:"enabled"`
 	Compatible     bool                    `json:"compatible,omitempty"`
 	Internal       bool                    `json:"internal,omitempty"`
 	HasSideEffects bool                    `json:"hasSideEffects"`
