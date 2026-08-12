@@ -1,0 +1,27 @@
+package calendar
+
+const (
+	ErrCalendarUnsupported           = "CALENDAR_UNSUPPORTED"
+	ErrPermissionNotDetermined       = "CALENDAR_PERMISSION_NOT_DETERMINED"
+	ErrPermissionDenied              = "CALENDAR_PERMISSION_DENIED"
+	ErrPermissionRestricted          = "CALENDAR_PERMISSION_RESTRICTED"
+	ErrWriteOnlyRequired             = "CALENDAR_WRITE_ONLY_REQUIRED"
+	ErrFullAccessRequired             = "CALENDAR_FULL_ACCESS_REQUIRED"
+	ErrDefaultCalendarUnavailable    = "CALENDAR_DEFAULT_UNAVAILABLE"
+	ErrCalendarNotFound              = "CALENDAR_NOT_FOUND"
+	ErrCalendarReadOnly              = "CALENDAR_READ_ONLY"
+	ErrEventNotFound                 = "CALENDAR_EVENT_NOT_FOUND"
+	ErrEventNotEditable              = "CALENDAR_EVENT_NOT_EDITABLE"
+	ErrInvalidDateRange              = "CALENDAR_INVALID_DATE_RANGE"
+	ErrQueryRangeTooLarge            = "CALENDAR_QUERY_RANGE_TOO_LARGE"
+	ErrInvalidTimezone               = "CALENDAR_INVALID_TIMEZONE"
+	ErrInvalidRecurrence             = "CALENDAR_INVALID_RECURRENCE"
+	ErrInvalidSpan                   = "CALENDAR_INVALID_SPAN"
+	ErrAvailabilityUnsupported       = "CALENDAR_AVAILABILITY_UNSUPPORTED"
+	ErrNativeBridgeUnavailable       = "CALENDAR_NATIVE_BRIDGE_UNAVAILABLE"
+	ErrEventKitFailed                = "CALENDAR_EVENTKIT_FAILED"
+	ErrTimeout                       = "CALENDAR_TIMEOUT"
+	ErrCancelled                     = "CALENDAR_CANCELLED"
+	ErrInvalidResponse               = "CALENDAR_INVALID_RESPONSE"
+	ErrOutcomeUnknown                = "CALENDAR_OUTCOME_UNKNOWN"
+)

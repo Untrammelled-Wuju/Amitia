@@ -116,14 +116,21 @@ class RuntimeService : Service() {
     private fun startProotSessionLocked() {
         val component = AndroidRuntimeModule.prootComponent ?: return
         val rootfsPath = AndroidRuntimeModule.prootRootfsPath ?: return
+        val assembler = AndroidRuntimeModule.prootEnvironmentAssembler
         val nextGen = sessionGeneration.incrementAndGet()
-        val request = ProotLaunchRequest.create(
-            rootfsPath = rootfsPath,
-            workingDirectory = WORKING_DIRECTORY,
-            command = listOf(GUEST_SERVER_COMMAND),
-            bindMountsSource = emptyList(),
-            environmentSource = ProotEnvironment.EMPTY
-        )
+
+        val request = if (assembler != null) {
+            val spec = assembler.assembleBackendLaunch()
+            assembler.toProotLaunchRequest(spec, "")
+        } else {
+            ProotLaunchRequest.create(
+                rootfsPath = rootfsPath,
+                workingDirectory = WORKING_DIRECTORY,
+                command = listOf(GUEST_SERVER_COMMAND),
+                bindMountsSource = emptyList(),
+                environmentSource = ProotEnvironment.EMPTY
+            )
+        }
         val observer = ProotObserver { event -> onProotEvent(event, nextGen) }
         val session = component.launch(request, observer)
         currentSessionRef.set(session)

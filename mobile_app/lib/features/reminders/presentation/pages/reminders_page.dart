@@ -278,7 +278,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   Future<void> _toggleReminder(String id, bool enable) async {
     try {
       final svc = ref.read(reminderServiceProvider);
-      await svc.toggle(id);
+      await svc.toggle(id, enable);
       _loadReminders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

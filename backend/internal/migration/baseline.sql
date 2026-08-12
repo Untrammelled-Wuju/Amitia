@@ -200,6 +200,10 @@ CREATE TABLE IF NOT EXISTS model_configs (
     last_test_status TEXT DEFAULT '',
     last_test_message TEXT DEFAULT '',
     last_test_at TEXT DEFAULT '',
+    protocol TEXT DEFAULT '',
+    context_window INTEGER DEFAULT 0,
+    max_output_tokens INTEGER DEFAULT 0,
+    capabilities_json TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -5568,3 +5572,21 @@ CREATE TABLE IF NOT EXISTS workspace_mounts (
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL
 );
+
+--- 来源: model_config_protocol.go ---
+CREATE TABLE IF NOT EXISTS message_attachments (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL DEFAULT '',
+    sequence INTEGER NOT NULL DEFAULT 0,
+    type TEXT NOT NULL DEFAULT '',
+    resource_uri TEXT NOT NULL DEFAULT '',
+    mime_type TEXT DEFAULT '',
+    filename TEXT DEFAULT '',
+    size_bytes INTEGER DEFAULT 0,
+    content_hash TEXT DEFAULT '',
+    width INTEGER DEFAULT 0,
+    height INTEGER DEFAULT 0,
+    duration_ms INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);

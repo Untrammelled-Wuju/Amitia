@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal data class RuntimeManifest(
+data class RuntimeManifest(
     val schemaVersion: Int,
     val runtimeVersion: String,
     val sourceCommit: String,

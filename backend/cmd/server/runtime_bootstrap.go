@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
@@ -33,6 +34,8 @@ type runtimeBootstrap struct {
 	artifactResolver sidecar.ArtifactResolver
 
 	iosSandboxProvider runtimeorchestrator.ProviderInstance
+	iosNativeProvider  runtimeorchestrator.ProviderInstance
+	iosNativeBridge    nativebridge.Bridge
 }
 
 func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
@@ -184,6 +187,10 @@ func (b *runtimeBootstrap) SidecarArtifactResolver() sidecar.ArtifactResolver {
 
 func (b *runtimeBootstrap) IOSSandboxProvider() runtimeorchestrator.ProviderInstance {
 	return b.iosSandboxProvider
+}
+
+func (b *runtimeBootstrap) IOSNativeProvider() runtimeorchestrator.ProviderInstance {
+	return b.iosNativeProvider
 }
 
 type vectorStoreProviderAdapter struct {

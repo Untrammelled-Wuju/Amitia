@@ -5,6 +5,7 @@ import com.amitia.amitia_app.runtime.api.RuntimeListener
 import com.amitia.amitia_app.runtime.api.RuntimeSnapshot
 import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.api.RuntimeSubscription
+import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeSnapshotMapper
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import io.flutter.plugin.common.EventChannel

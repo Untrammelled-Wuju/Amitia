@@ -3,6 +3,8 @@
 package chat
 
 import (
+	"context"
+	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
@@ -95,33 +97,225 @@ func (m *Message) BeforeCreate(tx *gorm.DB) error {
 }
 
 type ModelConfig struct {
-	ID              int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name            string  `gorm:"column:name" json:"name"`
-	APIType         string  `gorm:"column:api_type" json:"apiType"`
-	BaseURL         string  `gorm:"column:base_url" json:"baseUrl"`
-	APIKey          string  `gorm:"column:api_key" json:"apiKey"`
-	ModelName       string  `gorm:"column:model_name" json:"modelName"`
-	Temperature     float64 `gorm:"column:temperature;default:0.7" json:"temperature"`
-	MaxTokens       int     `gorm:"column:max_tokens;default:4096" json:"maxTokens"`
-	TopP            float64 `gorm:"column:top_p;default:1" json:"topP"`
-	TimeoutSeconds  int     `gorm:"column:timeout_seconds;default:60" json:"timeoutSeconds"`
-	RetryCount      int     `gorm:"column:retry_count;default:1" json:"retryCount"`
-	IsActive        int     `gorm:"column:is_active;default:0" json:"isActive"`
-	LastTestStatus  string  `gorm:"column:last_test_status" json:"lastTestStatus"`
-	LastTestMessage string  `gorm:"column:last_test_message" json:"lastTestMessage"`
-	LastTestAt      string  `gorm:"column:last_test_at" json:"lastTestAt"`
-	HasAPIKey       bool    `gorm:"-" json:"hasApiKey"`
-	CreatedAt       string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt       string  `gorm:"column:updated_at" json:"updatedAt"`
+	ID                int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Name              string  `gorm:"column:name" json:"name"`
+	APIType           string  `gorm:"column:api_type" json:"apiType"`
+	Protocol          string  `gorm:"column:protocol" json:"protocol"`
+	BaseURL           string  `gorm:"column:base_url" json:"baseUrl"`
+	APIKey            string  `gorm:"column:api_key" json:"apiKey"`
+	ModelName         string  `gorm:"column:model_name" json:"modelName"`
+	Temperature       float64 `gorm:"column:temperature;default:0.7" json:"temperature"`
+	MaxTokens         int     `gorm:"column:max_tokens;default:4096" json:"maxTokens"`
+	ContextWindow     int     `gorm:"column:context_window;default:0" json:"contextWindow"`
+	MaxOutputTokens   int     `gorm:"column:max_output_tokens;default:0" json:"maxOutputTokens"`
+	CapabilitiesJSON  string  `gorm:"column:capabilities_json" json:"capabilitiesJson"`
+	TopP              float64 `gorm:"column:top_p;default:1" json:"topP"`
+	TimeoutSeconds    int     `gorm:"column:timeout_seconds;default:60" json:"timeoutSeconds"`
+	RetryCount        int     `gorm:"column:retry_count;default:1" json:"retryCount"`
+	IsActive          int     `gorm:"column:is_active;default:0" json:"isActive"`
+	LastTestStatus    string  `gorm:"column:last_test_status" json:"lastTestStatus"`
+	LastTestMessage   string  `gorm:"column:last_test_message" json:"lastTestMessage"`
+	LastTestAt        string  `gorm:"column:last_test_at" json:"lastTestAt"`
+	HasAPIKey         bool    `gorm:"-" json:"hasApiKey"`
+	CreatedAt         string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt         string  `gorm:"column:updated_at" json:"updatedAt"`
+}
+
+type ModelCapabilities struct {
+	TextInput             bool `json:"textInput"`
+	ImageInput            bool `json:"imageInput"`
+	FileInput             bool `json:"fileInput"`
+	AudioInput            bool `json:"audioInput"`
+	VideoInput            bool `json:"videoInput"`
+	TextOutput            bool `json:"textOutput"`
+	ToolCalling           bool `json:"toolCalling"`
+	ParallelToolCalls     bool `json:"parallelToolCalls"`
+	Streaming             bool `json:"streaming"`
+	StructuredOutput      bool `json:"structuredOutput"`
+	ReasoningContinuation bool `json:"reasoningContinuation"`
+	ProviderFileUpload    bool `json:"providerFileUpload"`
+}
+
+type ModelProtocol string
+
+const (
+	ProtocolOpenAIChat          ModelProtocol = "openai_chat"
+	ProtocolOpenAIResponses     ModelProtocol = "openai_responses"
+	ProtocolAnthropicMessages   ModelProtocol = "anthropic_messages"
+	ProtocolGeminiGenerate      ModelProtocol = "gemini_generate_content"
+	ProtocolOllamaChat          ModelProtocol = "ollama_chat"
+)
+
+type ModelContentType string
+
+const (
+	ContentTypeText  ModelContentType = "text"
+	ContentTypeImage ModelContentType = "image"
+	ContentTypeFile  ModelContentType = "file"
+	ContentTypeAudio ModelContentType = "audio"
+	ContentTypeVideo ModelContentType = "video"
+)
+
+type ModelContentPart struct {
+	Type        ModelContentType `json:"type"`
+	Text        string           `json:"text,omitempty"`
+	ResourceURI string           `json:"resourceUri,omitempty"`
+	MIMEType    string           `json:"mimeType,omitempty"`
+	Filename    string           `json:"filename,omitempty"`
+	Detail      string           `json:"detail,omitempty"`
+}
+
+type ModelMessage struct {
+	Role  string              `json:"role"`
+	Parts []ModelContentPart  `json:"parts"`
+}
+
+type ModelToolDefinition struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+	Strict      bool           `json:"strict"`
+}
+
+type ModelToolCall struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	ArgumentsJSON  string `json:"argumentsJson"`
+}
+
+type ModelToolResult struct {
+	CallID  string `json:"callId"`
+	Name    string `json:"name"`
+	Output  string `json:"output"`
+	IsError bool   `json:"isError"`
+}
+
+type ModelResponseFormat struct {
+	Type    string         `json:"type"`
+	Name    string         `json:"name"`
+	Schema  map[string]any `json:"schema"`
+	Strict  bool           `json:"strict"`
+}
+
+type ModelContinuationState struct {
+	Protocol           string            `json:"protocol"`
+	OpaqueItems        []json.RawMessage `json:"opaqueItems"`
+	ProviderResponseID string            `json:"providerResponseID"`
+	ExpiresAt          *time.Time        `json:"expiresAt,omitempty"`
+}
+
+type ModelRequest struct {
+	Model          string                 `json:"model"`
+	Instructions   []string               `json:"instructions"`
+	Messages       []ModelMessage         `json:"messages"`
+	Tools          []ModelToolDefinition  `json:"tools"`
+	ToolResults    []ModelToolResult      `json:"toolResults"`
+	ResponseFormat ModelResponseFormat    `json:"responseFormat"`
+	Temperature    *float64               `json:"temperature,omitempty"`
+	TopP           *float64               `json:"topP,omitempty"`
+	MaxOutputTokens int                    `json:"maxOutputTokens"`
+	Stream         bool                   `json:"stream"`
+	Continuation   *ModelContinuationState `json:"continuation,omitempty"`
+}
+
+type ModelUsage struct {
+	InputTokens      int `json:"inputTokens"`
+	OutputTokens     int `json:"outputTokens"`
+	ReasoningTokens  int `json:"reasoningTokens"`
+	CachedInputTokens int `json:"cachedInputTokens"`
+	TotalTokens      int `json:"totalTokens"`
+}
+
+type ModelError struct {
+	Code         string       `json:"code"`
+	Provider     string       `json:"provider"`
+	Protocol     ModelProtocol `json:"protocol"`
+	HTTPStatus   int          `json:"httpStatus"`
+	Message      string       `json:"message"`
+	Retryable    bool         `json:"retryable"`
+	AuthRelated  bool         `json:"authRelated"`
+	RateLimited  bool         `json:"rateLimited"`
+	Timeout      bool         `json:"timeout"`
+	RequestID    string       `json:"requestId"`
+}
+
+type ModelResult struct {
+	Text               string                 `json:"text"`
+	Refusal            string                 `json:"refusal"`
+	ToolCalls          []ModelToolCall        `json:"toolCalls"`
+	Usage              ModelUsage             `json:"usage"`
+	Continuation       *ModelContinuationState `json:"continuation"`
+	FinishReason       string                 `json:"finishReason"`
+	ProviderResponseID string                 `json:"providerResponseID"`
+}
+
+type ModelEventType string
+
+const (
+	ModelEventResponseStarted      ModelEventType = "response_started"
+	ModelEventTextDelta            ModelEventType = "text_delta"
+	ModelEventTextDone             ModelEventType = "text_done"
+	ModelEventRefusalDelta         ModelEventType = "refusal_delta"
+	ModelEventRefusalDone          ModelEventType = "refusal_done"
+	ModelEventToolCallStarted      ModelEventType = "tool_call_started"
+	ModelEventToolCallArgumentsDelta ModelEventType = "tool_call_arguments_delta"
+	ModelEventToolCallDone         ModelEventType = "tool_call_done"
+	ModelEventReasoningSummaryDelta ModelEventType = "reasoning_summary_delta"
+	ModelEventReasoningSummaryDone ModelEventType = "reasoning_summary_done"
+	ModelEventUsage                ModelEventType = "usage"
+	ModelEventCompleted            ModelEventType = "completed"
+	ModelEventFailed               ModelEventType = "failed"
+	ModelEventCancelled            ModelEventType = "cancelled"
+)
+
+type ModelEvent struct {
+	Type            ModelEventType `json:"type"`
+	TextDelta       string         `json:"textDelta,omitempty"`
+	ToolCallID      string         `json:"toolCallID,omitempty"`
+	ToolName        string         `json:"toolName,omitempty"`
+	ArgumentsDelta  string         `json:"argumentsDelta,omitempty"`
+	Usage           *ModelUsage    `json:"usage,omitempty"`
+	Error           *ModelError    `json:"error,omitempty"`
+}
+
+type ModelEventSink interface {
+	Emit(ctx context.Context, event ModelEvent) error
+}
+
+type MessageAttachment struct {
+	ID           string `gorm:"column:id;primaryKey" json:"id"`
+	MessageID    string `gorm:"column:message_id;not null;index" json:"messageId"`
+	Sequence     int    `gorm:"column:sequence;not null;default:0" json:"sequence"`
+	Type         string `gorm:"column:type;not null" json:"type"`
+	ResourceURI  string `gorm:"column:resource_uri;not null" json:"resourceUri"`
+	MIMEType     string `gorm:"column:mime_type" json:"mimeType"`
+	Filename     string `gorm:"column:filename" json:"filename"`
+	SizeBytes    int64  `gorm:"column:size_bytes;default:0" json:"sizeBytes"`
+	ContentHash  string `gorm:"column:content_hash" json:"contentHash"`
+	Width        int    `gorm:"column:width;default:0" json:"width"`
+	Height       int    `gorm:"column:height;default:0" json:"height"`
+	DurationMS   int64  `gorm:"column:duration_ms;default:0" json:"durationMs"`
+	CreatedAt    string `gorm:"column:created_at" json:"createdAt"`
+}
+
+func (MessageAttachment) TableName() string { return "message_attachments" }
+
+type MessageAttachmentInput struct {
+	Type        string `json:"type"`
+	ResourceURI string `json:"resourceUri"`
+	MIMEType    string `json:"mimeType,omitempty"`
+	Filename    string `json:"filename,omitempty"`
 }
 
 type ProviderInfo struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Protocol       string `json:"protocol"`
-	DefaultBaseURL string `json:"defaultBaseUrl"`
-	DefaultModel   string `json:"defaultModel"`
-	DocsURL        string `json:"docsUrl"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Protocol           string   `json:"protocol"`
+	DefaultProtocol    string   `json:"defaultProtocol"`
+	SupportedProtocols []string `json:"supportedProtocols"`
+	DefaultBaseURL     string   `json:"defaultBaseUrl"`
+	DefaultModel       string   `json:"defaultModel"`
+	DocsURL            string   `json:"docsUrl"`
 }
 
 func (ModelConfig) TableName() string { return "model_configs" }
@@ -237,6 +431,7 @@ type ProcessMessageRequest struct {
 	VoiceMessage             bool                         `json:"voiceMessage"`
 	ImageUrl                 string                       `json:"imageUrl"`
 	VideoUrl                 string                       `json:"videoUrl"`
+	Attachments              []MessageAttachmentInput     `json:"attachments,omitempty"`
 	RequestID                string                       `json:"requestId"`
 	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
 	ImageContext             string                       `json:"-"`

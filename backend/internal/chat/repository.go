@@ -33,6 +33,9 @@ type Repository interface {
 	CountMessagesByConv(convID string) int64
 	GetAllMessagesByConv(convID string) ([]Message, error)
 	ListProviders() []ProviderInfo
+	CreateMessageAttachment(attachment *MessageAttachment) error
+	GetMessageAttachments(messageID string) ([]MessageAttachment, error)
+	GetAttachmentByID(id string) (*MessageAttachment, error)
 }
 
 type repository struct {
@@ -224,26 +227,26 @@ func (r *repository) GetConversationByChannel(channel string) (*Conversation, er
 
 func (r *repository) ListProviders() []ProviderInfo {
 	return []ProviderInfo{
-		{ID: "openai", Name: "OpenAI", Protocol: "openai", DefaultBaseURL: "https://api.openai.com/v1", DefaultModel: "gpt-4o", DocsURL: "https://platform.openai.com/docs"},
-		{ID: "deepseek", Name: "DeepSeek", Protocol: "openai", DefaultBaseURL: "https://api.deepseek.com", DefaultModel: "deepseek-chat", DocsURL: "https://platform.deepseek.com/docs"},
-		{ID: "qwen", Name: "通义千问 (Qwen)", Protocol: "openai", DefaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", DefaultModel: "qwen-plus", DocsURL: "https://help.aliyun.com/zh/dashscope"},
-		{ID: "zhipu", Name: "智谱AI (GLM)", Protocol: "openai", DefaultBaseURL: "https://open.bigmodel.cn/api/paas/v4", DefaultModel: "glm-4-plus", DocsURL: "https://open.bigmodel.cn/dev/api"},
-		{ID: "moonshot", Name: "月之暗面 (Kimi)", Protocol: "openai", DefaultBaseURL: "https://api.moonshot.cn/v1", DefaultModel: "moonshot-v1-8k", DocsURL: "https://platform.moonshot.cn/docs"},
-		{ID: "baichuan", Name: "百川智能", Protocol: "openai", DefaultBaseURL: "https://api.baichuan-ai.com/v1", DefaultModel: "Baichuan4", DocsURL: "https://platform.baichuan-ai.com/docs"},
-		{ID: "minimax", Name: "MiniMax", Protocol: "openai", DefaultBaseURL: "https://api.minimax.chat/v1", DefaultModel: "abab6.5s-chat", DocsURL: "https://platform.minimaxi.com/document"},
-		{ID: "lingyi", Name: "零一万物 (Yi)", Protocol: "openai", DefaultBaseURL: "https://api.lingyiwanwu.com/v1", DefaultModel: "yi-large", DocsURL: "https://platform.lingyiwanwu.com/docs"},
-		{ID: "stepfun", Name: "阶跃星辰 (Step)", Protocol: "openai", DefaultBaseURL: "https://api.stepfun.com/v1", DefaultModel: "step-2-16k", DocsURL: "https://platform.stepfun.com/docs"},
-		{ID: "hunyuan", Name: "腾讯混元", Protocol: "openai", DefaultBaseURL: "https://api.hunyuan.cloud.tencent.com/v1", DefaultModel: "hunyuan-turbos-latest", DocsURL: "https://cloud.tencent.com/document/product/1729"},
-		{ID: "ernie", Name: "百度文心 (ERNIE)", Protocol: "openai", DefaultBaseURL: "https://qianfan.baidubce.com/v2", DefaultModel: "ernie-4.0-8k-latest", DocsURL: "https://cloud.baidu.com/doc/WENXINWORKSHOP"},
-		{ID: "spark", Name: "讯飞星火 (Spark)", Protocol: "openai", DefaultBaseURL: "https://spark-api-open.xf-yun.com/v1", DefaultModel: "generalv3.5", DocsURL: "https://www.xfyun.cn/doc/spark"},
-		{ID: "siliconflow", Name: "硅基流动 (SiliconFlow)", Protocol: "openai", DefaultBaseURL: "https://api.siliconflow.cn/v1", DefaultModel: "Qwen/Qwen2.5-72B-Instruct", DocsURL: "https://docs.siliconflow.cn"},
-		{ID: "openrouter", Name: "OpenRouter", Protocol: "openai", DefaultBaseURL: "https://openrouter.ai/api/v1", DefaultModel: "openai/gpt-4o", DocsURL: "https://openrouter.ai/docs"},
-		{ID: "groq", Name: "Groq", Protocol: "openai", DefaultBaseURL: "https://api.groq.com/openai/v1", DefaultModel: "llama-3.3-70b-versatile", DocsURL: "https://console.groq.com/docs"},
-		{ID: "together", Name: "Together AI", Protocol: "openai", DefaultBaseURL: "https://api.together.xyz/v1", DefaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo", DocsURL: "https://docs.together.ai"},
-		{ID: "ollama", Name: "Ollama (本地)", Protocol: "ollama", DefaultBaseURL: "http://127.0.0.1:11434", DefaultModel: "llama3.1", DocsURL: "https://ollama.com/library"},
-		{ID: "anthropic", Name: "Anthropic (Claude)", Protocol: "anthropic", DefaultBaseURL: "https://api.anthropic.com", DefaultModel: "claude-sonnet-4-20250514", DocsURL: "https://docs.anthropic.com"},
-		{ID: "gemini", Name: "Google Gemini", Protocol: "gemini", DefaultBaseURL: "https://generativelanguage.googleapis.com", DefaultModel: "gemini-2.0-flash", DocsURL: "https://ai.google.dev/gemini-api/docs"},
-		{ID: "custom-http", Name: "自定义 HTTP", Protocol: "openai", DefaultBaseURL: "", DefaultModel: "", DocsURL: ""},
+		{ID: "openai", Name: "OpenAI", Protocol: "openai", DefaultProtocol: "openai_responses", SupportedProtocols: []string{"openai_responses", "openai_chat"}, DefaultBaseURL: "https://api.openai.com/v1", DefaultModel: "gpt-4o", DocsURL: "https://platform.openai.com/docs"},
+		{ID: "deepseek", Name: "DeepSeek", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.deepseek.com", DefaultModel: "deepseek-chat", DocsURL: "https://platform.deepseek.com/docs"},
+		{ID: "qwen", Name: "通义千问 (Qwen)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", DefaultModel: "qwen-plus", DocsURL: "https://help.aliyun.com/zh/dashscope"},
+		{ID: "zhipu", Name: "智谱AI (GLM)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://open.bigmodel.cn/api/paas/v4", DefaultModel: "glm-4-plus", DocsURL: "https://open.bigmodel.cn/dev/api"},
+		{ID: "moonshot", Name: "月之暗面 (Kimi)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.moonshot.cn/v1", DefaultModel: "moonshot-v1-8k", DocsURL: "https://platform.moonshot.cn/docs"},
+		{ID: "baichuan", Name: "百川智能", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.baichuan-ai.com/v1", DefaultModel: "Baichuan4", DocsURL: "https://platform.baichuan-ai.com/docs"},
+		{ID: "minimax", Name: "MiniMax", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.minimax.chat/v1", DefaultModel: "abab6.5s-chat", DocsURL: "https://platform.minimaxi.com/document"},
+		{ID: "lingyi", Name: "零一万物 (Yi)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.lingyiwanwu.com/v1", DefaultModel: "yi-large", DocsURL: "https://platform.lingyiwanwu.com/docs"},
+		{ID: "stepfun", Name: "阶跃星辰 (Step)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.stepfun.com/v1", DefaultModel: "step-2-16k", DocsURL: "https://platform.stepfun.com/docs"},
+		{ID: "hunyuan", Name: "腾讯混元", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.hunyuan.cloud.tencent.com/v1", DefaultModel: "hunyuan-turbos-latest", DocsURL: "https://cloud.tencent.com/document/product/1729"},
+		{ID: "ernie", Name: "百度文心 (ERNIE)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://qianfan.baidubce.com/v2", DefaultModel: "ernie-4.0-8k-latest", DocsURL: "https://cloud.baidu.com/doc/WENXINWORKSHOP"},
+		{ID: "spark", Name: "讯飞星火 (Spark)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://spark-api-open.xf-yun.com/v1", DefaultModel: "generalv3.5", DocsURL: "https://www.xfyun.cn/doc/spark"},
+		{ID: "siliconflow", Name: "硅基流动 (SiliconFlow)", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.siliconflow.cn/v1", DefaultModel: "Qwen/Qwen2.5-72B-Instruct", DocsURL: "https://docs.siliconflow.cn"},
+		{ID: "openrouter", Name: "OpenRouter", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://openrouter.ai/api/v1", DefaultModel: "openai/gpt-4o", DocsURL: "https://openrouter.ai/docs"},
+		{ID: "groq", Name: "Groq", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.groq.com/openai/v1", DefaultModel: "llama-3.3-70b-versatile", DocsURL: "https://console.groq.com/docs"},
+		{ID: "together", Name: "Together AI", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat"}, DefaultBaseURL: "https://api.together.xyz/v1", DefaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo", DocsURL: "https://docs.together.ai"},
+		{ID: "ollama", Name: "Ollama (本地)", Protocol: "ollama", DefaultProtocol: "ollama_chat", SupportedProtocols: []string{"ollama_chat"}, DefaultBaseURL: "http://127.0.0.1:11434", DefaultModel: "llama3.1", DocsURL: "https://ollama.com/library"},
+		{ID: "anthropic", Name: "Anthropic (Claude)", Protocol: "anthropic", DefaultProtocol: "anthropic_messages", SupportedProtocols: []string{"anthropic_messages"}, DefaultBaseURL: "https://api.anthropic.com", DefaultModel: "claude-sonnet-4-20250514", DocsURL: "https://docs.anthropic.com"},
+		{ID: "gemini", Name: "Google Gemini", Protocol: "gemini", DefaultProtocol: "gemini_generate_content", SupportedProtocols: []string{"gemini_generate_content"}, DefaultBaseURL: "https://generativelanguage.googleapis.com", DefaultModel: "gemini-2.0-flash", DocsURL: "https://ai.google.dev/gemini-api/docs"},
+		{ID: "custom-http", Name: "自定义 HTTP", Protocol: "openai", DefaultProtocol: "openai_chat", SupportedProtocols: []string{"openai_chat", "openai_responses", "anthropic_messages", "gemini_generate_content", "ollama_chat"}, DefaultBaseURL: "", DefaultModel: "", DocsURL: ""},
 	}
 }
 
@@ -260,4 +263,23 @@ func (r *repository) GetAllMessagesByConv(convID string) ([]Message, error) {
 		msgs = []Message{}
 	}
 	return msgs, err
+}
+
+func (r *repository) CreateMessageAttachment(attachment *MessageAttachment) error {
+	return r.db.Create(attachment).Error
+}
+
+func (r *repository) GetMessageAttachments(messageID string) ([]MessageAttachment, error) {
+	var attachments []MessageAttachment
+	err := r.db.Where("message_id = ?", messageID).Order("sequence ASC").Find(&attachments).Error
+	if attachments == nil {
+		attachments = []MessageAttachment{}
+	}
+	return attachments, err
+}
+
+func (r *repository) GetAttachmentByID(id string) (*MessageAttachment, error) {
+	var attachment MessageAttachment
+	err := r.db.Where("id = ?", id).First(&attachment).Error
+	return &attachment, err
 }

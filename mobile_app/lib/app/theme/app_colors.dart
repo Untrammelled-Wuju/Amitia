@@ -5,6 +5,12 @@ class AppColors {
 
   static const light = _LightColors();
   static const dark = _DarkColors();
+
+  // Static accessors defaulting to light theme
+  static Color get success => light.success;
+  static Color get warning => light.warning;
+  static Color get error => light.error;
+  static Color get info => light.info;
 }
 
 class _LightColors {

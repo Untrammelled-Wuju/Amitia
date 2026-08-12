@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal sealed class RuntimeManifestResult {
+sealed class RuntimeManifestResult {
     data class Success(val manifest: RuntimeManifest) : RuntimeManifestResult()
     data class Failure(val error: RuntimeManifestError) : RuntimeManifestResult()
 

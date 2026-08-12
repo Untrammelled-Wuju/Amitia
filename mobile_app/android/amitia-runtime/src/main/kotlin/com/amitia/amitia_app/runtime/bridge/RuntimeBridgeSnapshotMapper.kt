@@ -4,7 +4,7 @@ import com.amitia.amitia_app.runtime.api.RuntimeSnapshot
 import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifest
 
-internal object RuntimeBridgeSnapshotMapper {
+object RuntimeBridgeSnapshotMapper {
 
     fun toBridgeSnapshot(
         snapshot: RuntimeSnapshot,

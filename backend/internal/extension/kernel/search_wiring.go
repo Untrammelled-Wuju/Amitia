@@ -137,8 +137,12 @@ func mapSearchToToolError(serr *search.Error) *capability.ToolError {
 	case search.SEARCH_PROVIDER_INVALID_RESPONSE:
 	case search.SEARCH_INVALID_QUERY, search.SEARCH_INVALID_LIMIT,
 		search.SEARCH_INVALID_OFFSET, search.SEARCH_INVALID_LANGUAGE,
-		search.SEARCH_INVALID_COUNTRY, search.SEARCH_INVALID_SAFE_SEARCH:
+		search.SEARCH_INVALID_COUNTRY, search.SEARCH_INVALID_SAFE_SEARCH,
+		search.SEARCH_INVALID_KIND, search.SEARCH_SPECIALIZED_OPTIONS_INVALID:
 		code = capability.ErrorCodeInvalidInput
+	case search.SEARCH_KIND_UNSUPPORTED, search.SEARCH_FILTER_UNSUPPORTED,
+		search.SEARCH_TIME_RANGE_UNSUPPORTED, search.SEARCH_DOMAIN_FILTER_UNSUPPORTED:
+		code = capability.ErrorCodeNotAvailable
 	case search.SEARCH_CANCELLED:
 		code = capability.ErrorCodeCancelled
 	default:
@@ -186,8 +190,8 @@ func RegisterWebSearchTool(deps SearchToolsDeps) error {
 	if deps.Registry == nil || deps.Service == nil {
 		return nil
 	}
-	inputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"required":["query"],"properties":{"query":{"type":"string","minLength":1,"maxLength":2048},"limit":{"type":"integer","minimum":1,"maximum":20},"offset":{"type":"integer","minimum":0,"maximum":100},"language":{"type":"string"},"country":{"type":"string"},"safeSearch":{"type":"string","enum":["off","moderate","strict"]}}}`)
-	outputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"required":["query","provider","results","returned","retrievedAt"],"properties":{"query":{"type":"string"},"provider":{"type":"string"},"results":{"type":"array","items":{"type":"object"}},"returned":{"type":"integer"},"hasMore":{"type":"boolean"},"retrievedAt":{"type":"string","format":"date-time"}}}`)
+	inputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"required":["query"],"properties":{"query":{"type":"string","minLength":1,"maxLength":2048},"kind":{"type":"string","enum":["web","news","academic","code","image","video","places","product"]},"limit":{"type":"integer","minimum":1,"maximum":20},"offset":{"type":"integer","minimum":0,"maximum":100},"language":{"type":"string"},"country":{"type":"string"},"safeSearch":{"type":"string","enum":["off","moderate","strict"]},"domains":{"type":"array","maxItems":16,"items":{"type":"string","maxLength":253}},"specialized":{"type":"object"}}}`)
+	outputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"required":["query","provider","results","returned","retrievedAt"],"properties":{"query":{"type":"string"},"kind":{"type":"string"},"provider":{"type":"string"},"results":{"type":"array","items":{"type":"object"}},"returned":{"type":"integer"},"hasMore":{"type":"boolean"},"retrievedAt":{"type":"string","format":"date-time"},"citations":{"type":"array","items":{"type":"object"}}}}`)
 	enabled := deps.Config.Enabled && deps.Config.HasProvider()
 	definition := capability.ToolDefinition{
 		ID:          "internal/search/web",

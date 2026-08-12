@@ -78,6 +78,7 @@ internal class ProotEnvironmentAssembler(
         mounts.add(ProotBindMount.create(layout.cacheRoot.absolutePath, "/var/cache/amitia"))
         mounts.add(ProotBindMount.create(layout.logRoot.absolutePath, "/var/log/amitia"))
         mounts.add(ProotBindMount.create(layout.runRoot.absolutePath, "/run/amitia"))
+        mounts.add(ProotBindMount.create(layout.homeRoot.absolutePath, "/home/amitia"))
         mounts.add(ProotBindMount.create("/system", "/system"))
         mounts.add(ProotBindMount.create("/proc", "/proc"))
 

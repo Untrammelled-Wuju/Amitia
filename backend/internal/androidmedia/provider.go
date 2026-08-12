@@ -5,6 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/androidmedia/camera"
+	"github.com/u-ai/backend/internal/androidmedia/ffmpeg"
+	"github.com/u-ai/backend/internal/androidmedia/mediaread"
 	"github.com/u-ai/backend/internal/androidmedia/screenframe"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
@@ -181,4 +184,125 @@ func BuildScreenshotCapabilityConstants() ScreenshotCapabilityConstants {
 		),
 		PermissionID: PermissionScreenCapture,
 	}
+}
+
+type CameraCapabilityConstants struct {
+	StatusHandlerID  string
+	ListHandlerID    string
+	CaptureHandlerID string
+	PermissionID     string
+}
+
+func BuildCameraCapabilityConstants() CameraCapabilityConstants {
+	return CameraCapabilityConstants{
+		StatusHandlerID:  ToolIDCameraStatus,
+		ListHandlerID:    ToolIDCameraList,
+		CaptureHandlerID: ToolIDCameraCapture,
+		PermissionID:     PermissionCamera,
+	}
+}
+
+func BuildCameraTools() ([]capability.ToolDefinition, error) {
+	status, err := camera.BuildStatusToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	list, err := camera.BuildListToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	capture, err := camera.BuildCaptureToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	return []capability.ToolDefinition{status, list, capture}, nil
+}
+
+func BuildCameraPermissionDefinitions() []camera.PermissionDefinition {
+	return []camera.PermissionDefinition{
+		camera.BuildPermissionDefinition(),
+	}
+}
+
+type MediaReadCapabilityConstants struct {
+	InfoHandlerID  string
+	ImageHandlerID string
+	PermissionID   string
+}
+
+type MediaReadProvider interface {
+	Info(ctx context.Context, uri string) (mediaread.ImageInfo, error)
+	Image(ctx context.Context, uri string, opts mediaread.DecodeOptions) (mediaread.NormalizedImage, error)
+}
+
+type blockedMediaReadProvider struct{}
+
+func NewBlockedMediaReadProvider() MediaReadProvider {
+	return &blockedMediaReadProvider{}
+}
+
+func (b *blockedMediaReadProvider) Info(ctx context.Context, uri string) (mediaread.ImageInfo, error) {
+	return mediaread.ImageInfo{}, &MediaReadError{
+		Code:    BLOCKED_ANDROID_NATIVE_HOST_SOURCE,
+		Message: "android native host source not available; media read blocked",
+	}
+}
+
+func (b *blockedMediaReadProvider) Image(ctx context.Context, uri string, opts mediaread.DecodeOptions) (mediaread.NormalizedImage, error) {
+	return mediaread.NormalizedImage{}, &MediaReadError{
+		Code:    BLOCKED_ANDROID_NATIVE_HOST_SOURCE,
+		Message: "android native host source not available; media read blocked",
+	}
+}
+
+type MediaReadError struct {
+	Code    string
+	Message string
+}
+
+func (e *MediaReadError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Code + ": " + e.Message
+}
+
+func BuildMediaReadCapabilityConstants() MediaReadCapabilityConstants {
+	return MediaReadCapabilityConstants{
+		InfoHandlerID:  ToolIDMediaReadInfo,
+		ImageHandlerID: ToolIDMediaReadImage,
+		PermissionID:   PermissionMediaRead,
+	}
+}
+
+func BuildMediaReadTools() ([]capability.ToolDefinition, error) {
+	infoTool, err := mediaread.BuildInfoToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	imageTool, err := mediaread.BuildImageToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	return []capability.ToolDefinition{infoTool, imageTool}, nil
+}
+
+func BuildMediaReadPermissionDefinitions() []mediaread.PermissionDefinition {
+	return []mediaread.PermissionDefinition{
+		mediaread.BuildPermissionDefinition(),
+	}
+}
+
+type FFmpegCapabilityConstants struct {
+	PermissionID string
+}
+
+func BuildFFmpegCapabilityConstants() FFmpegCapabilityConstants {
+	return FFmpegCapabilityConstants{
+		PermissionID: PermissionFFmpeg,
+	}
+}
+
+func NewDefaultFFmpegProvider() ffmpeg.FFmpegProvider {
+	return ffmpeg.NewBlockedFFmpegProvider()
 }

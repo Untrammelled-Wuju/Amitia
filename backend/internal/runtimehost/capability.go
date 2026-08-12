@@ -16,9 +16,14 @@ const (
 	CapFilesystemLocal      HostCapabilityID = "filesystem.local"
 	CapFilesystemExecutable HostCapabilityID = "filesystem.executable"
 	CapNetworkLoopback      HostCapabilityID = "network.loopback"
+	CapNetworkDNS           HostCapabilityID = "network.dns"
+	CapNetworkOutbound      HostCapabilityID = "network.outbound"
+	CapNetworkTCP           HostCapabilityID = "network.tcp"
+	CapNetworkHTTP          HostCapabilityID = "network.http"
 	CapRuntimeNativeOffload HostCapabilityID = "runtime.native-offload"
 	CapRuntimeBgPersistence HostCapabilityID = "runtime.background-persistence"
 	CapRuntimeSandboxedExec HostCapabilityID = "runtime.sandboxed-execution"
+	CapRuntimeIOSNative     HostCapabilityID = "runtime.ios-native"
 )
 
 const (

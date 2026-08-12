@@ -672,7 +672,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
   Future<void> _installPet(String taskName) async {
     try {
       final svc = ref.read(extensionServiceProvider);
-      await svc.installPlugin(taskName);
+      await svc.enablePlugin(taskName);
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

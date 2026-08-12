@@ -14,7 +14,7 @@ type testProvider struct {
 
 func (p *testProvider) ID() string                        { return p.id }
 func (p *testProvider) Capabilities() ProviderCapabilities { return p.caps }
-func (p *testProvider) Search(_ context.Context, _ GeneralSearchRequest) (ProviderSearchResponse, error) {
+func (p *testProvider) Search(_ context.Context, _ SearchRequest) (ProviderSearchResponse, error) {
 	return ProviderSearchResponse{}, p.err
 }
 func (p *testProvider) Health(_ context.Context) ProviderHealth {

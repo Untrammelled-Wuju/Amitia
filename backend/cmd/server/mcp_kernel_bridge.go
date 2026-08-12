@@ -7,15 +7,87 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/mcp"
+	legacymcp "github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/extension/kernel/mcp"
 	mcpclient "github.com/u-ai/backend/internal/mcp/client"
 	mcpmanager "github.com/u-ai/backend/internal/mcp/manager"
 )
 
-func makeKernelMCPCaller(mgr *mcpmanager.Manager) capability.MCPCallFunc {
+// MCPConnectionCaller is the abstract interface for MCP tool calls.
+// Both Legacy adapter and Canonical stdio connector implement this interface.
+type MCPConnectionCaller interface {
+	Call(
+		ctx context.Context,
+		serverID string,
+		method string,
+		params any,
+	) (json.RawMessage, error)
+}
+
+// LegacyMCPCallerAdapter wraps Legacy mcpmanager.Manager to implement MCPConnectionCaller.
+// migration-only: temporary compatibility adapter
+// remove at step 65 cutover
+type LegacyMCPCallerAdapter struct {
+	mgr *mcpmanager.Manager
+}
+
+// NewLegacyMCPCallerAdapter creates a new adapter for Legacy MCP Manager.
+func NewLegacyMCPCallerAdapter(mgr *mcpmanager.Manager) *LegacyMCPCallerAdapter {
+	return &LegacyMCPCallerAdapter{mgr: mgr}
+}
+
+// Call implements MCPConnectionCaller.
+func (a *LegacyMCPCallerAdapter) Call(ctx context.Context, serverID string, method string, params any) (json.RawMessage, error) {
+	if a.mgr == nil {
+		return nil, fmt.Errorf("MCP manager not configured")
+	}
+	return a.mgr.Call(ctx, serverID, method, params, mcpclient.CallOptions{})
+}
+
+// CanonicalStdioCaller implements MCPConnectionCaller for Extension Kernel stdio connections.
+type CanonicalStdioCaller struct {
+	registry *mcp.CanonicalStdioRegistry
+}
+
+// NewCanonicalStdioCaller creates a new caller for Canonical stdio connections.
+func NewCanonicalStdioCaller(registry *mcp.CanonicalStdioRegistry) *CanonicalStdioCaller {
+	return &CanonicalStdioCaller{registry: registry}
+}
+
+// Call implements MCPConnectionCaller.
+func (c *CanonicalStdioCaller) Call(ctx context.Context, serverID string, method string, params any) (json.RawMessage, error) {
+	conn, ok := c.registry.Get(serverID)
+	if !ok {
+		return nil, fmt.Errorf("MCP server not found: %s", serverID)
+	}
+	return conn.Call(ctx, method, params)
+}
+
+// CanonicalRemoteCaller implements MCPConnectionCaller for Extension Kernel remote connections.
+type CanonicalRemoteCaller struct {
+	registry *mcp.CanonicalRemoteRegistry
+}
+
+// NewCanonicalRemoteCaller creates a new caller for Canonical remote connections.
+func NewCanonicalRemoteCaller(registry *mcp.CanonicalRemoteRegistry) *CanonicalRemoteCaller {
+	return &CanonicalRemoteCaller{registry: registry}
+}
+
+// Call implements MCPConnectionCaller.
+func (c *CanonicalRemoteCaller) Call(ctx context.Context, serverID string, method string, params any) (json.RawMessage, error) {
+	conn, ok := c.registry.Get(serverID)
+	if !ok {
+		return nil, fmt.Errorf("MCP server not found: %s", serverID)
+	}
+	return conn.Call(ctx, method, params)
+}
+
+// makeKernelMCPCaller creates an MCPCallFunc from the abstract MCPConnectionCaller.
+// The caller parameter abstracts over Legacy and Canonical implementations.
+func makeKernelMCPCaller(caller MCPConnectionCaller) capability.MCPCallFunc {
 	return func(ctx context.Context, serverID string, toolName string, input json.RawMessage) (json.RawMessage, error) {
-		if mgr == nil {
-			return nil, fmt.Errorf("MCP manager not configured")
+		if caller == nil {
+			return nil, fmt.Errorf("MCP caller not configured")
 		}
 
 		var arguments any
@@ -23,10 +95,10 @@ func makeKernelMCPCaller(mgr *mcpmanager.Manager) capability.MCPCallFunc {
 			arguments = map[string]any{}
 		}
 
-		result, err := mgr.Call(ctx, serverID, "tools/call", map[string]any{
+		result, err := caller.Call(ctx, serverID, "tools/call", map[string]any{
 			"name":      toolName,
 			"arguments": arguments,
-		}, mcpclient.CallOptions{})
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -35,7 +107,22 @@ func makeKernelMCPCaller(mgr *mcpmanager.Manager) capability.MCPCallFunc {
 	}
 }
 
-func makeKernelMCPHealth(mgr *mcpmanager.Manager) capability.MCPHealthFunc {
+// makeKernelMCPHealth creates an MCPHealthFunc from the abstract MCPConnectionCaller.
+func makeKernelMCPHealth(caller MCPConnectionCaller) capability.MCPHealthFunc {
+	return func(ctx context.Context, serverID string) capability.HealthStatus {
+		if caller == nil {
+			return capability.HealthUnknown
+		}
+		_, err := caller.Call(ctx, serverID, "ping", map[string]any{})
+		if err != nil {
+			return capability.HealthUnknown
+		}
+		return capability.HealthReady
+	}
+}
+
+// makeLegacyMCPHealth creates an MCPHealthFunc from Legacy Manager (for backward compatibility).
+func makeLegacyMCPHealth(mgr *mcpmanager.Manager) capability.MCPHealthFunc {
 	return func(ctx context.Context, serverID string) capability.HealthStatus {
 		if mgr == nil {
 			return capability.HealthUnknown
@@ -63,10 +150,10 @@ type mcpRemoteCallResult struct {
 }
 
 type mcpPostProcessor struct {
-	repo *mcp.Repository
+	repo *legacymcp.Repository
 }
 
-func newMCPPostProcessor(repo *mcp.Repository) *mcpPostProcessor {
+func newMCPPostProcessor(repo *legacymcp.Repository) *mcpPostProcessor {
 	return &mcpPostProcessor{repo: repo}
 }
 
@@ -110,7 +197,7 @@ func (p *mcpPostProcessor) handleRemoteTask(ctx context.Context, serverID string
 		expires = parsed
 	}
 
-	_ = p.repo.UpsertTask(ctx, mcp.Task{
+	_ = p.repo.UpsertTask(ctx, legacymcp.Task{
 		ServerID:      serverID,
 		RemoteTaskID:  remoteResult.Task.TaskID,
 		CharacterID:   invocation.CharacterID,

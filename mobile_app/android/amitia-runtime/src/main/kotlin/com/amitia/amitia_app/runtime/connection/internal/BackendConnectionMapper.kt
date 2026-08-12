@@ -7,7 +7,7 @@ import com.amitia.amitia_app.runtime.connection.BackendConnectionError
 import com.amitia.amitia_app.runtime.connection.BackendConnectionErrorCode
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 
-internal object BackendConnectionMapper {
+object BackendConnectionMapper {
     private const val SCHEMA_VERSION = 1
     private const val LIVENESS_PATH = "/livez"
     private const val READINESS_PATH = "/readyz"

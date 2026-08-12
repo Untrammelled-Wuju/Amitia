@@ -63,8 +63,8 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                   status: c['status'] as String? ?? '',
                 );
               }
-              return const RuntimeComponent(name: '', status: '');
-            }).toList();
+              return RuntimeComponent(name: '', status: '');
+            }).toList().cast<RuntimeComponent>();
           }
           _initialized = true;
         });

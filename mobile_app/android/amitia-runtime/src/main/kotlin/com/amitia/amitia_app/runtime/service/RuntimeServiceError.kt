@@ -12,7 +12,7 @@ enum class RuntimeServiceErrorCode {
     SERVICE_INTERNAL_ERROR
 }
 
-internal data class RuntimeServiceError(
+data class RuntimeServiceError(
     val code: RuntimeServiceErrorCode,
     override val message: String,
     override val cause: Throwable? = null

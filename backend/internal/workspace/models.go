@@ -11,6 +11,7 @@ type WorkspaceKind string
 const (
 	WorkspaceKindLocal WorkspaceKind = "local"
 	WorkspaceKindSAF   WorkspaceKind = "saf"
+	WorkspaceKindRemote WorkspaceKind = "remote"
 )
 
 type WorkspaceStatus string
@@ -26,15 +27,23 @@ const (
 )
 
 type WorkspaceMount struct {
-	ID        WorkspaceID     `json:"id"`
-	Name      string          `json:"name"`
-	Kind      WorkspaceKind   `json:"kind"`
-	ReadOnly  bool            `json:"readOnly"`
-	Available bool            `json:"available"`
-	Status    WorkspaceStatus `json:"status"`
-	RootURI   string          `json:"rootUri"`
-	CreatedAt time.Time       `json:"createdAt"`
-	UpdatedAt time.Time       `json:"updatedAt"`
+	ID             WorkspaceID     `json:"id"`
+	Name           string          `json:"name"`
+	Kind           WorkspaceKind   `json:"kind"`
+	ReadOnly       bool            `json:"readOnly"`
+	Available      bool            `json:"available"`
+	Status         WorkspaceStatus `json:"status"`
+	StatusReason   string          `json:"statusReason,omitempty"`
+	RootURI        string          `json:"rootUri"`
+	NativeGrant    string          `json:"-"`
+	BackendConfig  string          `json:"-"`
+	CredentialRef  string          `json:"-"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
+}
+
+func (m WorkspaceMount) backendConfig() (string, bool) {
+	return m.BackendConfig, m.BackendConfig != ""
 }
 
 type WorkspaceEntryType string

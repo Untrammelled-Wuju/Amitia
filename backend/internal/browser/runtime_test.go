@@ -140,12 +140,12 @@ func TestUnsupportedManagers(t *testing.T) {
 	}
 
 	tm := &unsupportedTabManager{}
-	if _, err := tm.OpenTab(ctx, "s1", "url"); err == nil || !IsUnsupportedOperation(err) {
-		t.Fatal("unsupportedTabManager.OpenTab should return unsupported error")
+	if _, err := tm.CreateTab(ctx, "s1"); err == nil || !IsUnsupportedOperation(err) {
+		t.Fatal("unsupportedTabManager.CreateTab should return unsupported error")
 	}
 
 	nav := &unsupportedNavigator{}
-	if _, err := nav.Navigate(ctx, "s1", "t1", "url"); err == nil || !IsUnsupportedOperation(err) {
+	if _, err := nav.Navigate(ctx, "s1", "t1", NavigateRequest{}); err == nil || !IsUnsupportedOperation(err) {
 		t.Fatal("unsupportedNavigator.Navigate should return unsupported error")
 	}
 
@@ -222,4 +222,44 @@ func (e *fakeEngine) Health(_ context.Context) BrowserRuntimeHealth {
 		return BrowserHealthHealthy
 	}
 	return BrowserHealthUnavailable
+}
+
+func (e *fakeEngine) Contexts() BrowserContextController {
+	return &fakeContextController{}
+}
+
+func (e *fakeEngine) Targets() BrowserTargetController {
+	return &fakeTargetController{}
+}
+
+func (e *fakeEngine) Pages() BrowserPageController {
+	return &fakePageController{}
+}
+
+type fakeContextController struct{}
+
+func (c *fakeContextController) CreateBrowserContext(_ context.Context) (BrowserContextID, error) {
+	return BrowserContextID("fake-context-1"), nil
+}
+
+func (c *fakeContextController) DisposeBrowserContext(_ context.Context, _ BrowserContextID) error {
+	return nil
+}
+
+type fakeTargetController struct{}
+
+func (c *fakeTargetController) CreateTarget(_ context.Context, _ BrowserContextID, _ string) (TargetID, error) {
+	return TargetID("fake-target-1"), nil
+}
+
+func (c *fakeTargetController) CloseTarget(_ context.Context, _ TargetID) error {
+	return nil
+}
+
+func (c *fakeTargetController) ActivateTarget(_ context.Context, _ TargetID) error {
+	return nil
+}
+
+func (c *fakeTargetController) TargetInfo(_ context.Context, targetID TargetID) (TargetInfo, error) {
+	return TargetInfo{TargetID: targetID, Type: "page"}, nil
 }

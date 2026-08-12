@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.connection
 
-internal enum class BackendConnectionErrorCode {
+enum class BackendConnectionErrorCode {
     RUNTIME_NOT_READY,
     BACKEND_NOT_READY,
     ENDPOINT_UNAVAILABLE,
@@ -14,7 +14,7 @@ internal enum class BackendConnectionErrorCode {
     INTERNAL_ERROR,
 }
 
-internal class BackendConnectionError(
+class BackendConnectionError(
     val code: BackendConnectionErrorCode,
     override val message: String,
 ) : Exception(message)

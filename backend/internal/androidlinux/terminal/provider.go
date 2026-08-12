@@ -5,10 +5,16 @@ package terminal
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/u-ai/backend/internal/androidlinux/archive"
+	"github.com/u-ai/backend/internal/androidlinux/chroot"
+	"github.com/u-ai/backend/internal/androidlinux/fileops"
+	"github.com/u-ai/backend/internal/androidlinux/network"
 	"github.com/u-ai/backend/internal/androidlinux/packages"
 	"github.com/u-ai/backend/internal/androidlinux/shell"
+	"github.com/u-ai/backend/internal/androidlinux/ssh"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
@@ -28,6 +34,54 @@ const (
 	OpCancel      = "terminal.cancel"
 	OpShellExec   = "shell.exec"
 	OpPackages    = "packages.*"
+)
+
+const (
+	OpFileStat     = "file.stat"
+	OpFileList     = "file.list"
+	OpFileRead     = "file.read"
+	OpFileWrite    = "file.write"
+	OpFileAppend   = "file.append"
+	OpFileMkdir    = "file.mkdir"
+	OpFileTouch    = "file.touch"
+	OpFileCopy     = "file.copy"
+	OpFileMove     = "file.move"
+	OpFileDelete   = "file.delete"
+	OpFileSearch   = "file.search"
+	OpFileChmod    = "file.chmod"
+	OpFileReadlink = "file.readlink"
+	OpFileSymlink  = "file.symlink"
+)
+
+const (
+	OpArchiveDetect  = "archive.detect"
+	OpArchiveList    = "archive.list"
+	OpArchiveExtract = "archive.extract"
+	OpArchiveCreate  = "archive.create"
+	OpArchiveVerify  = "archive.verify"
+)
+
+const (
+	OpNetworkStatus      = "network.status"
+	OpNetworkInterfaces  = "network.interfaces"
+	OpNetworkRoutes      = "network.routes"
+	OpNetworkDNSLookup   = "network.dns.lookup"
+	OpNetworkPing        = "network.ping"
+	OpNetworkTCPProbe    = "network.tcp.probe"
+	OpNetworkHTTPRequest = "network.http.request"
+	OpNetworkDownload    = "network.download"
+)
+
+const (
+	OpSSHStatus     = "ssh.status"
+	OpSSHExec       = "ssh.exec"
+	OpSSHHostKeyScan = "ssh.hostkey.scan"
+)
+
+const (
+	OpChrootStatus  = "chroot.status"
+	OpChrootInspect = "chroot.inspect"
+	OpChrootExec    = "chroot.exec"
 )
 
 var DefaultShellAllowlist = []string{"/bin/sh", "/bin/bash"}
@@ -71,15 +125,25 @@ const (
 )
 
 type Provider struct {
-	manager       *SessionManager
-	host          runtimehost.RuntimeHost
-	workspace     string
-	clock         Clock
-	shellExecutor shell.ShellExecutor
-	shellPolicy   shell.ShellPolicy
-	shellHandler  shell.ShellHandler
-	paths         util.RuntimePaths
-	packagesSvc   *packages.PackageRuntimeService
+	manager        *SessionManager
+	host           runtimehost.RuntimeHost
+	workspace      string
+	clock          Clock
+	shellExecutor  shell.ShellExecutor
+	shellPolicy    shell.ShellPolicy
+	shellHandler   shell.ShellHandler
+	paths          util.RuntimePaths
+	packagesSvc    *packages.PackageRuntimeService
+	fileService    *fileops.Service
+	fileHandler    *fileops.Handler
+	networkSvc     *network.Service
+	networkHandler *network.Handler
+	archiveSvc     *archive.Service
+	archiveHandler *archive.Handler
+	sshSvc         *ssh.Service
+	sshHandler     *ssh.Handler
+	chrootSvc      *chroot.Service
+	chrootHandler  *chroot.Handler
 }
 
 func IsAndroidLinuxRuntime(host runtimehost.RuntimeHost) bool {
@@ -143,16 +207,51 @@ func NewProvider(host runtimehost.RuntimeHost, workspaceRoot string, policy Poli
 	packagesPolicy := packages.DefaultPackagesPolicy()
 	packagesSvc := packages.NewPackageRuntimeService(shellExecutor, nil, packagesPolicy, paths)
 
+	filePolicy := fileops.DefaultPolicy(paths.WorkspaceDir, paths.TempDir)
+	fileSvc := fileops.NewService(paths, filePolicy)
+	fileHdl := fileops.NewHandler(fileSvc)
+
+	networkPolicy := network.DefaultPolicy()
+	networkSvc := network.NewServiceFromFileOps(host, paths, networkPolicy, fileSvc)
+	networkHdl := network.NewHandler(networkSvc)
+
+	archivePolicy := archive.DefaultPolicy()
+	archiveSvc := archive.NewService(fileSvc, archivePolicy)
+	archiveHdl := archive.NewHandler(archiveSvc)
+
+	sshPolicy := ssh.DefaultPolicy()
+	sshStorePath := filepath.Join(paths.ConfigDir, "ssh", "known_hosts.json")
+	sshStore, err := ssh.NewHostKeyStore(sshStorePath, true)
+	if err != nil {
+		sshStore, _ = ssh.NewHostKeyStore("", false)
+	}
+	sshSvc := ssh.NewService(sshPolicy, sshStore)
+	sshHdl := ssh.NewHandler(sshSvc)
+
+	chrootPolicy := chroot.DefaultPolicy()
+	chrootSvc := chroot.NewService(chrootPolicy)
+	chrootHdl := chroot.NewHandler(chrootSvc, paths.WorkspaceDir)
+
 	return &Provider{
-		manager:       manager,
-		host:          host,
-		workspace:     workspaceRoot,
-		clock:         clock,
-		shellExecutor: shellExecutor,
-		shellPolicy:   shellPolicy,
-		shellHandler:  shellHandler,
-		paths:         paths,
-		packagesSvc:   packagesSvc,
+		manager:        manager,
+		host:           host,
+		workspace:      workspaceRoot,
+		clock:          clock,
+		shellExecutor:  shellExecutor,
+		shellPolicy:    shellPolicy,
+		shellHandler:   shellHandler,
+		paths:          paths,
+		packagesSvc:    packagesSvc,
+		fileService:    fileSvc,
+		fileHandler:    fileHdl,
+		networkSvc:     networkSvc,
+		networkHandler: networkHdl,
+		archiveSvc:     archiveSvc,
+		archiveHandler: archiveHdl,
+		sshSvc:         sshSvc,
+		sshHandler:     sshHdl,
+		chrootSvc:      chrootSvc,
+		chrootHandler:  chrootHdl,
 	}, nil
 }
 
@@ -232,8 +331,10 @@ func (p *Provider) Execute(ctx context.Context, request AndroidLinuxRequest) And
 		}
 		resp.Status = "success"
 		resp.Result = result
-	default:
-		result, err := p.handlePackages(ctx, request)
+	case OpFileStat, OpFileList, OpFileRead, OpFileWrite, OpFileAppend,
+		OpFileMkdir, OpFileTouch, OpFileCopy, OpFileMove, OpFileDelete,
+		OpFileSearch, OpFileChmod, OpFileReadlink, OpFileSymlink:
+		result, err := p.handleFile(ctx, request)
 		if err != nil {
 			resp.Status = "error"
 			resp.Error = toAndroidLinuxError(err)
@@ -241,6 +342,50 @@ func (p *Provider) Execute(ctx context.Context, request AndroidLinuxRequest) And
 		}
 		resp.Status = "success"
 		resp.Result = result
+	case OpNetworkStatus, OpNetworkInterfaces, OpNetworkRoutes,
+		OpNetworkDNSLookup, OpNetworkPing, OpNetworkTCPProbe,
+		OpNetworkHTTPRequest, OpNetworkDownload:
+		result, err := p.handleNetwork(ctx, request)
+		if err != nil {
+			resp.Status = "error"
+			resp.Error = toAndroidLinuxError(err)
+			return resp
+		}
+		resp.Status = "success"
+		resp.Result = result
+	case OpArchiveDetect, OpArchiveList, OpArchiveExtract, OpArchiveCreate, OpArchiveVerify:
+		result, err := p.handleArchive(ctx, request)
+		if err != nil {
+			resp.Status = "error"
+			resp.Error = toAndroidLinuxError(err)
+			return resp
+		}
+		resp.Status = "success"
+		resp.Result = result
+	case OpSSHStatus, OpSSHExec, OpSSHHostKeyScan:
+		result, err := p.handleSSH(ctx, request)
+		if err != nil {
+			resp.Status = "error"
+			resp.Error = toAndroidLinuxError(err)
+			return resp
+		}
+		resp.Status = "success"
+		resp.Result = result
+	case OpChrootStatus, OpChrootInspect, OpChrootExec:
+		result, err := p.handleChroot(ctx, request)
+		if err != nil {
+			resp.Status = "error"
+			resp.Error = toAndroidLinuxError(err)
+			return resp
+		}
+		resp.Status = "success"
+		resp.Result = result
+	default:
+		resp.Status = "error"
+		resp.Error = &AndroidLinuxError{
+			Code:    "UNSUPPORTED_OPERATION",
+			Message: "unsupported operation: " + request.Operation,
+		}
 	}
 
 	return resp
@@ -624,6 +769,71 @@ func (p *Provider) handlePackages(ctx context.Context, req AndroidLinuxRequest) 
 
 	handler := packages.NewPackagesHandler(p.packagesSvc)
 	return handler.Handle(ctx, req.Operation, req.Payload)
+}
+
+func (p *Provider) handleFile(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
+	if p.fileHandler == nil {
+		return nil, fileops.ErrNotAvailable("file handler not initialized")
+	}
+
+	result, err := p.fileHandler.Handle(req.Operation, req.Payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (p *Provider) handleNetwork(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
+	if p.networkHandler == nil {
+		return nil, network.ErrUnavailable("network handler not initialized")
+	}
+
+	result, err := p.networkHandler.Handle(ctx, req.Operation, req.Payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (p *Provider) handleArchive(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
+	if p.archiveHandler == nil {
+		return nil, archive.ErrInvalidRequest("archive handler not initialized")
+	}
+
+	result, err := p.archiveHandler.Handle(ctx, req.Operation, req.Payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (p *Provider) handleSSH(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
+	if p.sshHandler == nil {
+		return nil, ssh.ErrInternal("ssh handler not initialized")
+	}
+
+	result, err := p.sshHandler.Handle(ctx, req.Operation, req.Payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (p *Provider) handleChroot(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
+	if p.chrootHandler == nil {
+		return nil, chroot.ErrInternal("chroot handler not initialized")
+	}
+
+	result, err := p.chrootHandler.Handle(ctx, req.Operation, req.Payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func toAndroidLinuxError(err error) *AndroidLinuxError {

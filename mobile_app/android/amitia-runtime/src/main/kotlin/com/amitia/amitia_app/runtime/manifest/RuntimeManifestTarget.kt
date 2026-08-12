@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal data class RuntimeManifestTarget(
+data class RuntimeManifestTarget(
     val hostPlatform: String,
     val hostAbi: String,
     val runtimeKind: String,

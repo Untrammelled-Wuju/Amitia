@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal data class RuntimeManifestPaths(
+data class RuntimeManifestPaths(
     val rootfsHostPath: String,
     val runtimeRootHostPath: String,
     val configHostPath: String,

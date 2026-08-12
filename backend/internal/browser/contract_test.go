@@ -86,7 +86,7 @@ func (m *fakeSessionManager) ListSessions(_ context.Context) ([]BrowserSessionIn
 
 type fakeTabManager struct{}
 
-func (m *fakeTabManager) OpenTab(_ context.Context, sessionID BrowserSessionID, _ string) (BrowserTabInfo, *BrowserError) {
+func (m *fakeTabManager) CreateTab(_ context.Context, sessionID BrowserSessionID) (BrowserTabInfo, *BrowserError) {
 	if sessionID == "" {
 		return BrowserTabInfo{}, &BrowserError{Code: ErrCodeSessionNotFound, Message: "session not found"}
 	}
@@ -100,6 +100,12 @@ func (m *fakeTabManager) OpenTab(_ context.Context, sessionID BrowserSessionID, 
 func (m *fakeTabManager) CloseTab(_ context.Context, _ BrowserSessionID, _ BrowserTabID) *BrowserError {
 	return nil
 }
+func (m *fakeTabManager) GetTab(_ context.Context, _ BrowserSessionID, tabID BrowserTabID) (BrowserTabInfo, *BrowserError) {
+	if tabID == "" {
+		return BrowserTabInfo{}, &BrowserError{Code: ErrCodeTabNotFound, Message: "tab not found"}
+	}
+	return BrowserTabInfo{TabID: tabID, State: TabStateReady}, nil
+}
 func (m *fakeTabManager) ActivateTab(_ context.Context, _ BrowserSessionID, _ BrowserTabID) *BrowserError {
 	return nil
 }
@@ -109,28 +115,35 @@ func (m *fakeTabManager) ListTabs(_ context.Context, _ BrowserSessionID) ([]Brow
 
 type fakeNavigator struct{}
 
-func (n *fakeNavigator) Navigate(_ context.Context, sessionID BrowserSessionID, tabID BrowserTabID, url string) (*BrowserNavigationResult, *BrowserError) {
+func (n *fakeNavigator) Navigate(_ context.Context, sessionID BrowserSessionID, tabID BrowserTabID, request NavigateRequest) (NavigationResult, *BrowserError) {
 	if sessionID == "" {
-		return nil, &BrowserError{Code: ErrCodeSessionNotFound, Message: "session not found"}
+		return NavigationResult{}, &BrowserError{Code: ErrCodeSessionNotFound, Message: "session not found"}
 	}
 	if tabID == "" {
-		return nil, &BrowserError{Code: ErrCodeTabNotFound, Message: "tab not found"}
+		return NavigationResult{}, &BrowserError{Code: ErrCodeTabNotFound, Message: "tab not found"}
 	}
-	if url == "" {
-		return nil, &BrowserError{Code: ErrCodeInvalidRequest, Message: "url required"}
+	if request.URL == "" {
+		return NavigationResult{}, &BrowserError{Code: ErrCodeInvalidRequest, Message: "url required"}
 	}
-	return &BrowserNavigationResult{
-		SessionID: sessionID,
-		TabID:     tabID,
-		URL:       url,
-		FinalURL:  url,
+	return NavigationResult{
+		SessionID:    sessionID,
+		TabID:        tabID,
+		RequestedURL: request.URL,
+		FinalURL:     request.URL,
+		WaitUntil:    request.WaitUntil,
 	}, nil
 }
-func (n *fakeNavigator) Reload(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (*BrowserNavigationResult, *BrowserError) {
-	return &BrowserNavigationResult{}, nil
+func (n *fakeNavigator) Reload(_ context.Context, _ BrowserSessionID, _ BrowserTabID, _ NavigateRequest) (NavigationResult, *BrowserError) {
+	return NavigationResult{}, nil
 }
-func (n *fakeNavigator) GoBack(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (*BrowserNavigationResult, *BrowserError) {
-	return &BrowserNavigationResult{}, nil
+func (n *fakeNavigator) GoBack(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (NavigationResult, *BrowserError) {
+	return NavigationResult{}, nil
+}
+func (n *fakeNavigator) GoForward(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (NavigationResult, *BrowserError) {
+	return NavigationResult{}, nil
+}
+func (n *fakeNavigator) Stop(_ context.Context, _ BrowserSessionID, _ BrowserTabID) *BrowserError {
+	return nil
 }
 
 type fakeObserver struct{}
@@ -254,15 +267,15 @@ func TestBrowserProviderContract(t *testing.T) {
 		t.Fatal("session ID should not be empty")
 	}
 
-	tab, err := provider.Tabs().OpenTab(ctx, sess.SessionID, "https://example.com")
+	tab, err := provider.Tabs().CreateTab(ctx, sess.SessionID)
 	if err != nil {
-		t.Fatalf("open tab failed: %v", err)
+		t.Fatalf("create tab failed: %v", err)
 	}
 	if tab.SessionID != sess.SessionID {
 		t.Fatalf("tab should belong to session")
 	}
 
-	nav, err := provider.Navigate().Navigate(ctx, sess.SessionID, tab.TabID, "https://example.com")
+	nav, err := provider.Navigate().Navigate(ctx, sess.SessionID, tab.TabID, NavigateRequest{URL: "https://example.com"})
 	if err != nil {
 		t.Fatalf("navigate failed: %v", err)
 	}
@@ -363,7 +376,7 @@ func TestBrowserProviderSessionNotFound(t *testing.T) {
 	provider := newFakeBrowserProvider()
 	ctx := context.Background()
 
-	_, err := provider.Navigate().Navigate(ctx, "", "tab-1", "https://example.com")
+	_, err := provider.Navigate().Navigate(ctx, "", "tab-1", NavigateRequest{URL: "https://example.com"})
 	if err == nil {
 		t.Fatal("should return error for empty session")
 	}
@@ -439,4 +452,75 @@ func TestBrowserDownloadResultContainsResourceURI(t *testing.T) {
 	if result.ResourceURI != "amitia://workspace/downloads/report.xlsx" {
 		t.Fatalf("download result ResourceURI mismatch: %s", result.ResourceURI)
 	}
+}
+
+func TestProductionProviderSessionManagerIsProduction(t *testing.T) {
+	engine := &fakeEngine{state: BrowserRuntimeReady, stopped: false}
+	factory := &fakeEngineFactory{engine: engine}
+	config := BrowserConfig{
+		Enabled:      true,
+		MaxSessions:  8,
+		Headless:     true,
+	}
+
+	provider, err := NewProductionProvider(config, factory)
+	if err != nil {
+		t.Fatalf("NewProductionProvider failed: %v", err)
+	}
+
+	sessions := provider.Sessions()
+	if sessions == nil {
+		t.Fatal("Sessions() should not return nil")
+	}
+
+	_, createErr := sessions.CreateSession(context.Background())
+	if createErr != nil && IsUnsupportedOperation(createErr) {
+		t.Fatal("production provider should not return unsupported for CreateSession")
+	}
+}
+
+func TestProductionProviderOtherManagersStillUnsupported(t *testing.T) {
+	engine := &fakeEngine{state: BrowserRuntimeReady, stopped: false}
+	factory := &fakeEngineFactory{engine: engine}
+	config := BrowserConfig{
+		Enabled:      true,
+		MaxSessions:  8,
+		Headless:     true,
+	}
+
+	provider, err := NewProductionProvider(config, factory)
+	if err != nil {
+		t.Fatalf("NewProductionProvider failed: %v", err)
+	}
+
+	ctx := context.Background()
+
+	_, err = provider.Tabs().CreateTab(ctx, "s1")
+	if IsUnsupportedOperation(err) {
+		t.Fatal("Tabs should be supported in production provider")
+	}
+	_, err = provider.Navigate().Navigate(ctx, "s1", "t1", NavigateRequest{URL: "url"})
+	if IsUnsupportedOperation(err) {
+		t.Fatal("Navigate should be supported in production provider")
+	}
+	_, err = provider.Observe().GetDOMSnapshot(ctx, "s1", "t1", 3)
+	if IsUnsupportedOperation(err) {
+		t.Fatal("Observe should be supported in production provider")
+	}
+	_, err = provider.Interact().Click(ctx, "s1", "t1", BrowserElementRef{})
+	if IsUnsupportedOperation(err) {
+		t.Fatal("Interact should be supported in production provider")
+	}
+	_, err = provider.Resources().Download(ctx, BrowserDownloadRequest{})
+	if IsUnsupportedOperation(err) {
+		t.Fatal("Resources should be supported in production provider")
+	}
+}
+
+type fakeEngineFactory struct {
+	engine *fakeEngine
+}
+
+func (f *fakeEngineFactory) Create(_ BrowserConfig) (BrowserEngine, error) {
+	return f.engine, nil
 }

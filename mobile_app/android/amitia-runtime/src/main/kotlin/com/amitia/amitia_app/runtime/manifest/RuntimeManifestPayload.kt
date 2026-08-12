@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal data class RuntimeManifestPayload(
+data class RuntimeManifestPayload(
     val id: String,
     val role: String,
     val sha256: String,

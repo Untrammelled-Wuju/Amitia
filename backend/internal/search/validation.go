@@ -6,13 +6,16 @@ import (
 )
 
 const (
-	MaxQueryRunes   = 2048
-	MaxQueryBytes   = 8192
-	MaxLimit        = 20
-	DefaultLimit    = 8
-	MaxOffset       = 100
-	MaxTitleRunes   = 512
-	MaxSnippetRunes = 4096
+	MaxQueryRunes     = 2048
+	MaxQueryBytes     = 8192
+	MaxLimit          = 20
+	DefaultLimit      = 8
+	MaxOffset         = 100
+	MaxTitleRunes     = 512
+	MaxSnippetRunes   = 4096
+	MaxDomains        = 16
+	MaxDomainRunes    = 253
+	MaxFreshnessRunes = 32
 )
 
 type asciiOnlyRe struct{}
@@ -28,7 +31,6 @@ func (a *asciiOnlyRe) MatchString(s string) bool {
 	}
 	return false
 }
-
 
 func hasNonASCII(s string) bool {
 	if s == "" {
@@ -125,6 +127,38 @@ func validateSafeSearch(mode SafeSearchMode) *Error {
 	return nil
 }
 
+func validateKind(kind SearchKind) *Error {
+	if kind == "" {
+		return nil
+	}
+	if !kind.Valid() {
+		return &Error{Code: SEARCH_INVALID_KIND}
+	}
+	return nil
+}
+
+func validateDomains(domains []string) *Error {
+	if len(domains) > MaxDomains {
+		return &Error{Code: SEARCH_INVALID_QUERY}
+	}
+	for _, d := range domains {
+		if utf8.RuneCountInString(d) > MaxDomainRunes {
+			return &Error{Code: SEARCH_INVALID_QUERY}
+		}
+	}
+	return nil
+}
+
+func validateTimeRange(tr *TimeRangeFilter) *Error {
+	if tr == nil {
+		return nil
+	}
+	if tr.From != nil && tr.To != nil && tr.From.After(*tr.To) {
+		return &Error{Code: SEARCH_SPECIALIZED_OPTIONS_INVALID}
+	}
+	return nil
+}
+
 type validatedInput struct {
 	query      string
 	limit      int
@@ -132,6 +166,8 @@ type validatedInput struct {
 	language   string
 	country    string
 	safeSearch SafeSearchMode
+	kind       SearchKind
+	domains    []string
 }
 
 func validateAndNormalize(in *ToolInput) (*validatedInput, *Error) {
@@ -158,6 +194,18 @@ func validateAndNormalize(in *ToolInput) (*validatedInput, *Error) {
 	if err := validateSafeSearch(in.SafeSearch); err != nil {
 		return nil, err
 	}
+	if err := validateKind(in.Kind); err != nil {
+		return nil, err
+	}
+	if err := validateDomains(in.Domains); err != nil {
+		return nil, err
+	}
+	if err := validateTimeRange(in.Specialized.timeRange()); err != nil {
+		return nil, err
+	}
+	if err := ValidateSpecializedOptions(in.Kind, &in.Specialized); err != nil {
+		return nil, err
+	}
 	if in.SafeSearch == "" {
 		in.SafeSearch = SafeSearchModerate
 	}
@@ -168,5 +216,17 @@ func validateAndNormalize(in *ToolInput) (*validatedInput, *Error) {
 		language:   lang,
 		country:    country,
 		safeSearch: in.SafeSearch,
+		kind:       in.Kind,
+		domains:    NormalizeDomains(in.Domains),
 	}, nil
+}
+
+func (o *SpecializedSearchOptions) timeRange() *TimeRangeFilter {
+	if o == nil {
+		return nil
+	}
+	if o.News != nil {
+		return &TimeRangeFilter{From: o.News.From, To: o.News.To}
+	}
+	return nil
 }

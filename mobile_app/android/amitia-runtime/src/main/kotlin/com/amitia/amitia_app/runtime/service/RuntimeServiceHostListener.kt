@@ -1,13 +1,13 @@
 package com.amitia.amitia_app.runtime.service
 
-internal enum class RuntimeServiceTerminationCause {
+enum class RuntimeServiceTerminationCause {
     FOREGROUND_FAILED,
     NOTIFICATION_FAILED,
     SERVICE_INTERNAL_ERROR,
     SESSION_EXITED
 }
 
-internal sealed interface RuntimeServiceHostEvent {
+sealed interface RuntimeServiceHostEvent {
     data object ForegroundStarted : RuntimeServiceHostEvent
     data class SessionReady(
         val generation: Long,
@@ -24,6 +24,6 @@ internal sealed interface RuntimeServiceHostEvent {
     ) : RuntimeServiceHostEvent
 }
 
-internal fun interface RuntimeServiceHostListener {
+fun interface RuntimeServiceHostListener {
     fun onServiceHostEvent(event: RuntimeServiceHostEvent)
 }

@@ -2,6 +2,8 @@ package deepsearch
 
 import (
 	"strings"
+
+	"github.com/u-ai/backend/internal/search"
 )
 
 type RoundPlanner interface {
@@ -39,9 +41,11 @@ func NewDeterministicRoundPlanner(policy DeepSearchPolicy) *DeterministicRoundPl
 }
 
 func (p *DeterministicRoundPlanner) PlanInitial(req DeepSearchRequest) []SearchQueryPlan {
+	kind := search.NormalizeKind(req.Kind)
 	var plans []SearchQueryPlan
 	plans = append(plans, SearchQueryPlan{
 		Query:  req.Query,
+		Kind:   kind,
 		Round:  1,
 		Reason: "seed",
 	})
@@ -65,6 +69,7 @@ func (p *DeterministicRoundPlanner) PlanInitial(req DeepSearchRequest) []SearchQ
 		seen[key] = struct{}{}
 		plans = append(plans, SearchQueryPlan{
 			Query:     candidate,
+			Kind:      kind,
 			Round:     1,
 			Reason:    "focus_gap",
 			FocusArea: fa,
@@ -76,6 +81,7 @@ func (p *DeterministicRoundPlanner) PlanInitial(req DeepSearchRequest) []SearchQ
 
 func (p *DeterministicRoundPlanner) PlanNext(req DeepSearchRequest, state *SearchState) []SearchQueryPlan {
 	state.CurrentRound++
+	kind := search.NormalizeKind(req.Kind)
 
 	if state.CurrentRound >= p.policy.MaxRounds {
 		return nil
@@ -105,6 +111,7 @@ func (p *DeterministicRoundPlanner) PlanNext(req DeepSearchRequest, state *Searc
 		seen[key] = struct{}{}
 		plans = append(plans, SearchQueryPlan{
 			Query:     candidate,
+			Kind:      kind,
 			Round:     state.CurrentRound,
 			Reason:    "focus_gap",
 			FocusArea: fa,
@@ -117,6 +124,7 @@ func (p *DeterministicRoundPlanner) PlanNext(req DeepSearchRequest, state *Searc
 		if _, ok := seen[key]; !ok {
 			plans = append(plans, SearchQueryPlan{
 				Query:  clarify,
+				Kind:   kind,
 				Round:  state.CurrentRound,
 				Reason: "coverage_gap",
 			})

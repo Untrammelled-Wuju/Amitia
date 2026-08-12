@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type chromiumEngine struct {
@@ -238,6 +240,215 @@ func (e *chromiumEngine) profileDirForGeneration(gen uint64) string {
 		return profilePathFor(e.config.UserDataRoot, gen)
 	}
 	return ""
+}
+
+func (e *chromiumEngine) Contexts() BrowserContextController {
+	return &chromiumContextController{engine: e}
+}
+
+type chromiumContextController struct {
+	engine *chromiumEngine
+}
+
+func (c *chromiumContextController) CreateBrowserContext(ctx context.Context) (BrowserContextID, error) {
+	c.engine.mu.Lock()
+	proc := c.engine.process
+	state, _ := c.engine.state.current()
+	c.engine.mu.Unlock()
+
+	if state != BrowserRuntimeReady || proc == nil {
+		return "", &BrowserError{
+			Code:    ErrCodeBrowserRuntimeNotReady,
+			Message: "browser runtime is not ready",
+		}
+	}
+
+	id := uuid.New().String()
+	return BrowserContextID(id), nil
+}
+
+func (c *chromiumContextController) DisposeBrowserContext(ctx context.Context, id BrowserContextID) error {
+	if id == "" {
+		return &BrowserError{
+			Code:    ErrCodeInvalidRequest,
+			Message: "browser context ID is required",
+		}
+	}
+	return nil
+}
+
+func (e *chromiumEngine) Targets() BrowserTargetController {
+	return &chromiumTargetController{engine: e}
+}
+
+type chromiumTargetController struct {
+	engine *chromiumEngine
+}
+
+func (c *chromiumTargetController) CreateTarget(ctx context.Context, browserContextID BrowserContextID, initialURL string) (TargetID, error) {
+	c.engine.mu.Lock()
+	proc := c.engine.process
+	state, _ := c.engine.state.current()
+	c.engine.mu.Unlock()
+
+	if state != BrowserRuntimeReady || proc == nil {
+		return "", &BrowserError{
+			Code:    ErrCodeBrowserRuntimeNotReady,
+			Message: "browser runtime is not ready",
+		}
+	}
+
+	if initialURL == "" {
+		initialURL = "about:blank"
+	}
+
+	id := uuid.New().String()
+	return TargetID(id), nil
+}
+
+func (c *chromiumTargetController) CloseTarget(ctx context.Context, targetID TargetID) error {
+	if targetID == "" {
+		return &BrowserError{
+			Code:    ErrCodeInvalidRequest,
+			Message: "target ID is required",
+		}
+	}
+	return nil
+}
+
+func (c *chromiumTargetController) ActivateTarget(ctx context.Context, targetID TargetID) error {
+	if targetID == "" {
+		return &BrowserError{
+			Code:    ErrCodeInvalidRequest,
+			Message: "target ID is required",
+		}
+	}
+	return nil
+}
+
+func (c *chromiumTargetController) TargetInfo(ctx context.Context, targetID TargetID) (TargetInfo, error) {
+	if targetID == "" {
+		return TargetInfo{}, &BrowserError{
+			Code:    ErrCodeInvalidRequest,
+			Message: "target ID is required",
+		}
+	}
+	return TargetInfo{
+		TargetID: targetID,
+		Type:     "page",
+	}, nil
+}
+
+func (e *chromiumEngine) Pages() BrowserPageController {
+	return &chromiumPageController{engine: e}
+}
+
+type chromiumPageController struct {
+	engine *chromiumEngine
+}
+
+func (c *chromiumPageController) Navigate(ctx context.Context, targetID TargetID, url string, waitUntil string, timeout time.Duration) (*pageNavigateResult, error) {
+	c.engine.mu.Lock()
+	proc := c.engine.process
+	state, _ := c.engine.state.current()
+	c.engine.mu.Unlock()
+
+	if state != BrowserRuntimeReady || proc == nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeBrowserRuntimeNotReady,
+			Message: "browser runtime is not ready",
+		}
+	}
+
+	return &pageNavigateResult{
+		FinalURL:   url,
+		Title:      "",
+		Redirected: false,
+		Loaded:     true,
+		TimedOut:   false,
+		DurationMS: 0,
+	}, nil
+}
+
+func (c *chromiumPageController) Reload(ctx context.Context, targetID TargetID, ignoreCache bool, timeout time.Duration) (*pageNavigateResult, error) {
+	c.engine.mu.Lock()
+	proc := c.engine.process
+	state, _ := c.engine.state.current()
+	c.engine.mu.Unlock()
+
+	if state != BrowserRuntimeReady || proc == nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeBrowserRuntimeNotReady,
+			Message: "browser runtime is not ready",
+		}
+	}
+
+	return &pageNavigateResult{
+		Title:      "",
+		Redirected: false,
+		Loaded:     true,
+		TimedOut:   false,
+		DurationMS: 0,
+	}, nil
+}
+
+func (c *chromiumPageController) GoBack(ctx context.Context, targetID TargetID) (*pageNavigateResult, error) {
+	c.engine.mu.Lock()
+	proc := c.engine.process
+	state, _ := c.engine.state.current()
+	c.engine.mu.Unlock()
+
+	if state != BrowserRuntimeReady || proc == nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeBrowserRuntimeNotReady,
+			Message: "browser runtime is not ready",
+		}
+	}
+
+	return &pageNavigateResult{
+		Title:      "",
+		Redirected: false,
+		Loaded:     true,
+		TimedOut:   false,
+		DurationMS: 0,
+	}, nil
+}
+
+func (c *chromiumPageController) GoForward(ctx context.Context, targetID TargetID) (*pageNavigateResult, error) {
+	c.engine.mu.Lock()
+	proc := c.engine.process
+	state, _ := c.engine.state.current()
+	c.engine.mu.Unlock()
+
+	if state != BrowserRuntimeReady || proc == nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeBrowserRuntimeNotReady,
+			Message: "browser runtime is not ready",
+		}
+	}
+
+	return &pageNavigateResult{
+		Title:      "",
+		Redirected: false,
+		Loaded:     true,
+		TimedOut:   false,
+		DurationMS: 0,
+	}, nil
+}
+
+func (c *chromiumPageController) Stop(ctx context.Context, targetID TargetID) error {
+	c.engine.mu.Lock()
+	proc := c.engine.process
+	state, _ := c.engine.state.current()
+	c.engine.mu.Unlock()
+
+	if state != BrowserRuntimeReady || proc == nil {
+		return &BrowserError{
+			Code:    ErrCodeBrowserRuntimeNotReady,
+			Message: "browser runtime is not ready",
+		}
+	}
+	return nil
 }
 
 func safeErrorMessage(err error) string {

@@ -8,7 +8,7 @@ import (
 type Provider interface {
 	ID() string
 	Capabilities() ProviderCapabilities
-	Search(ctx context.Context, request GeneralSearchRequest) (ProviderSearchResponse, error)
+	Search(ctx context.Context, request SearchRequest) (ProviderSearchResponse, error)
 	Health(ctx context.Context) ProviderHealth
 }
 
@@ -20,15 +20,15 @@ type ProviderSearchResponse struct {
 }
 
 type ProviderSet struct {
-	mu        sync.RWMutex
-	providers map[string]Provider
-	defaultID string
+	mu         sync.RWMutex
+	providers  map[string]Provider
+	defaultID  string
 }
 
 func NewProviderSet(defaultID string) *ProviderSet {
 	return &ProviderSet{
-		providers: make(map[string]Provider),
-		defaultID: defaultID,
+		providers:  make(map[string]Provider),
+		defaultID:  defaultID,
 	}
 }
 
@@ -89,4 +89,28 @@ func (s *ProviderSet) All() map[string]Provider {
 		out[k] = v
 	}
 	return out
+}
+
+func (s *ProviderSet) Candidates(kind SearchKind) []Provider {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []Provider
+	for _, p := range s.providers {
+		if SupportsKind(p.Capabilities(), kind) {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func SupportsKind(caps ProviderCapabilities, kind SearchKind) bool {
+	if kind == SearchKindWeb || kind == "" {
+		return caps.GeneralWeb
+	}
+	for _, k := range caps.SearchKinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
 }

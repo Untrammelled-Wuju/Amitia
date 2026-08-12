@@ -5,10 +5,12 @@ import (
 )
 
 type ProviderConfig struct {
-	Type           string `mapstructure:"type"`
-	Endpoint       string `mapstructure:"endpoint"`
-	CredentialRef  string `mapstructure:"credentialRef"`
-	Enabled        bool   `mapstructure:"enabled"`
+	Type           string   `mapstructure:"type"`
+	Endpoint       string   `mapstructure:"endpoint"`
+	CredentialRef  string   `mapstructure:"credentialRef"`
+	Enabled        bool     `mapstructure:"enabled"`
+	Priority       int      `mapstructure:"priority"`
+	Kinds          []string `mapstructure:"kinds"`
 }
 
 type Config struct {

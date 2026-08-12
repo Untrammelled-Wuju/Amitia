@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal enum class RuntimeManifestErrorCode {
+enum class RuntimeManifestErrorCode {
     MANIFEST_NOT_FOUND,
     MANIFEST_HASH_MISMATCH,
     MANIFEST_READ_FAILED,
@@ -40,7 +40,7 @@ internal enum class RuntimeManifestErrorCode {
     INTERNAL_ERROR,
 }
 
-internal class RuntimeManifestError(
+class RuntimeManifestError(
     val code: RuntimeManifestErrorCode,
     val manifestMessage: String,
     val componentId: String? = null,

@@ -2,6 +2,8 @@ package deepsearch
 
 import (
 	"time"
+
+	"github.com/u-ai/backend/internal/search"
 )
 
 const (
@@ -22,22 +24,25 @@ const (
 )
 
 type DeepSearchRequest struct {
-	Query              string   `json:"query"`
-	FocusAreas         []string `json:"focusAreas,omitempty"`
-	MaxRounds          int      `json:"maxRounds,omitempty"`
-	MaxQueriesPerRound int      `json:"maxQueriesPerRound,omitempty"`
-	ResultsPerQuery    int      `json:"resultsPerQuery,omitempty"`
-	MaxSources         int      `json:"maxSources,omitempty"`
-	Language           string   `json:"language,omitempty"`
-	Country            string   `json:"country,omitempty"`
-	SafeSearch         string   `json:"safeSearch,omitempty"`
+	Query              string                      `json:"query"`
+	Kind               search.SearchKind           `json:"kind,omitempty"`
+	FocusAreas         []string                    `json:"focusAreas,omitempty"`
+	MaxRounds          int                         `json:"maxRounds,omitempty"`
+	MaxQueriesPerRound int                         `json:"maxQueriesPerRound,omitempty"`
+	ResultsPerQuery    int                         `json:"resultsPerQuery,omitempty"`
+	MaxSources         int                         `json:"maxSources,omitempty"`
+	Language           string                      `json:"language,omitempty"`
+	Country            string                      `json:"country,omitempty"`
+	SafeSearch         string                      `json:"safeSearch,omitempty"`
+	Specialized        search.SpecializedSearchOptions `json:"specialized,omitempty"`
 }
 
 type SearchQueryPlan struct {
-	Query     string `json:"query"`
-	Round     int    `json:"round"`
-	Reason    string `json:"reason,omitempty"`
-	FocusArea string `json:"focusArea,omitempty"`
+	Query     string            `json:"query"`
+	Kind      search.SearchKind `json:"kind,omitempty"`
+	Round     int               `json:"round"`
+	Reason    string            `json:"reason,omitempty"`
+	FocusArea string            `json:"focusArea,omitempty"`
 }
 
 type ExecutedQuery struct {
@@ -56,17 +61,28 @@ type QueryHit struct {
 	Rank       int `json:"rank"`
 }
 
+type SourceObservation struct {
+	Provider     string    `json:"provider"`
+	ProviderRank int       `json:"providerRank"`
+	RetrievedAt  time.Time `json:"retrievedAt"`
+	Round        int       `json:"round"`
+	QueryIndex   int       `json:"queryIndex"`
+}
+
 type AggregatedSource struct {
-	CanonicalURL string     `json:"canonicalUrl"`
-	URL          string     `json:"url"`
-	Domain       string     `json:"domain"`
-	Title        string     `json:"title"`
-	Snippet      string     `json:"snippet"`
-	PublishedAt  *time.Time `json:"publishedAt,omitempty"`
-	BestRank     int        `json:"bestRank"`
-	SeenCount    int        `json:"seenCount"`
-	QueryHits    []QueryHit `json:"queryHits"`
-	Score        float64    `json:"score"`
+	CanonicalURL  string     `json:"canonicalUrl"`
+	URL           string     `json:"url"`
+	Domain        string     `json:"domain"`
+	Title         string     `json:"title"`
+	Snippet       string     `json:"snippet"`
+	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
+	BestRank      int        `json:"bestRank"`
+	SeenCount     int        `json:"seenCount"`
+	QueryHits     []QueryHit `json:"queryHits"`
+	Score         float64    `json:"score"`
+	CitationID    string     `json:"citationId"`
+	CitationIndex int        `json:"citationIndex"`
+	Observations  []SourceObservation `json:"observations,omitempty"`
 }
 
 type FocusCoverage struct {
@@ -86,6 +102,7 @@ type CoverageState struct {
 
 type DeepSearchResult struct {
 	Query           string             `json:"query"`
+	Kind            search.SearchKind  `json:"kind"`
 	Status          string             `json:"status"`
 	RoundsCompleted int                `json:"roundsCompleted"`
 	SearchCalls     int                `json:"searchCalls"`
@@ -94,6 +111,7 @@ type DeepSearchResult struct {
 	Coverage        CoverageState      `json:"coverage"`
 	StoppedReason   string             `json:"stoppedReason"`
 	CompletedAt     time.Time          `json:"completedAt"`
+	Citations       []search.Citation  `json:"citations,omitempty"`
 }
 
 type DeepSearchCheckpoint struct {

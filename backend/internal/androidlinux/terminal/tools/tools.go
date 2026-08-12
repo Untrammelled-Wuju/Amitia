@@ -42,6 +42,26 @@ func (r *terminalToolRegistrar) RegisterTerminalTools(
 		}
 	}
 
+	if err := r.RegisterLinuxFileTools(host, registry); err != nil {
+		return fmt.Errorf("register linux file tools: %w", err)
+	}
+
+	if err := r.RegisterNetworkTools(host, registry); err != nil {
+		return fmt.Errorf("register network tools: %w", err)
+	}
+
+	if err := r.RegisterArchiveTools(host, registry); err != nil {
+		return fmt.Errorf("register archive tools: %w", err)
+	}
+
+	if err := r.RegisterSSHTools(host, registry); err != nil {
+		return fmt.Errorf("register ssh tools: %w", err)
+	}
+
+	if err := r.RegisterChrootTools(host, registry); err != nil {
+		return fmt.Errorf("register chroot tools: %w", err)
+	}
+
 	return nil
 }
 

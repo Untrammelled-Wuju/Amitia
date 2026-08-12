@@ -245,3 +245,8 @@ backend/runtime/
 
 
 backend/server_old.exe.bak
+
+mobile_app/android/amitia-runtime/build/
+mobile_app/android/app/build/
+mobile_app/android/build/
+runtime/mobile_app/

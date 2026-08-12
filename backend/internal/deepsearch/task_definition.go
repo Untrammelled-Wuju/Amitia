@@ -27,6 +27,7 @@ func BuildTaskDefinition(entry string) task_runtime.TaskDefinition {
 		"required": ["query"],
 		"properties": {
 			"query": {"type": "string", "minLength": 1, "maxLength": 2048},
+			"kind": {"enum": ["web", "news", "academic", "code", "image", "video", "places", "product"]},
 			"focusAreas": {
 				"type": "array",
 				"maxItems": 8,
@@ -38,7 +39,8 @@ func BuildTaskDefinition(entry string) task_runtime.TaskDefinition {
 			"maxSources": {"type": "integer", "minimum": 1, "maximum": 100},
 			"language": {"type": "string"},
 			"country": {"type": "string"},
-			"safeSearch": {"enum": ["off", "moderate", "strict"]}
+			"safeSearch": {"enum": ["off", "moderate", "strict"]},
+			"specialized": {"type": "object"}
 		}
 	}`)
 

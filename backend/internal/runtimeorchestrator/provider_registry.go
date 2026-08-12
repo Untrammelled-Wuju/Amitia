@@ -14,7 +14,8 @@ const (
 	ProviderSlotVectorStore   ProviderSlot = "vector-store"
 	ProviderSlotGraphStore    ProviderSlot = "graph-store"
 
-	ProviderSlotIOSSandbox ProviderSlot = "ios-sandbox"
+	ProviderSlotIOSSandbox  ProviderSlot = "ios-sandbox"
+	ProviderSlotIOSNative   ProviderSlot = "ios-native"
 )
 
 type ProviderBuildContext struct {

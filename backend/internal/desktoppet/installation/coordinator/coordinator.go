@@ -112,6 +112,7 @@ type InstallationCoordinator interface {
 	UpdateSettings(ctx context.Context, req SettingsRequest) (*SettingsResult, error)
 	ChangeDefaultAction(ctx context.Context, req DefaultActionRequest) (*EnableDisableResult, error)
 	Recenter(ctx context.Context, req RecenterRequest) (*EnableDisableResult, error)
+	PlayAction(ctx context.Context, userID, installationID, actionKey string) error
 	GetOperationStatus(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error)
 	CancelOperation(ctx context.Context, userID, deviceID, operationID string) error
 }
@@ -261,6 +262,13 @@ func (c *Coordinator) Recenter(ctx context.Context, req RecenterRequest) (*Enabl
 	}
 	idempotencyKey := c.buildIdempotencyKey(operation.TypeRecenter, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
 	return c.executeRecenter(ctx, req, idempotencyKey)
+}
+
+func (c *Coordinator) PlayAction(ctx context.Context, userID, installationID, actionKey string) error {
+	if userID == "" || installationID == "" || actionKey == "" {
+		return errors.New("coordinator: userID, installationID and actionKey are required")
+	}
+	return nil
 }
 
 func (c *Coordinator) GetOperationStatus(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error) {

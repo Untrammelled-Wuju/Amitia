@@ -65,6 +65,7 @@ import (
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/gamehost/management"
@@ -166,6 +167,9 @@ type AppServices struct {
 	MCPHost                      *mcphost.Service
 	MCPInteractions              *mcphost.Broker
 	MCPDependencies              *mcpdependency.Service
+	CanonicalStdioFactory        *extensionmcp.CanonicalStdioFactory
+	CanonicalStdioRegistry       *extensionmcp.CanonicalStdioRegistry
+	CanonicalStdioCaller         *CanonicalStdioCaller
 	DesktopInstanceStore         *security.DesktopInstanceStore
 	DeviceRepository             *device.Repository
 	RuntimeOrchestrator          RuntimeOrchestrator
@@ -588,7 +592,17 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err := connectionManager.Restore(context.Background()); err != nil {
 		log.Warn("MCP connection restore warning: ", err)
 	}
-	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(connectionManager), makeKernelMCPHealth(connectionManager), newMCPPostProcessor(mcpRepository))
+	canonicalStdioFactory := extensionmcp.NewCanonicalStdioFactory(commandResolver)
+	canonicalStdioRegistry := extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
+	canonicalStdioCaller := NewCanonicalStdioCaller(canonicalStdioRegistry)
+	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
+	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
+	canonicalRemoteCaller := NewCanonicalRemoteCaller(canonicalRemoteRegistry)
+	legacyMCPCaller := NewLegacyMCPCallerAdapter(connectionManager)
+	legacyMCPHealth := makeLegacyMCPHealth(connectionManager)
+	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(legacyMCPCaller), legacyMCPHealth, newMCPPostProcessor(mcpRepository))
+	_ = canonicalStdioCaller
+	_ = canonicalRemoteCaller
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)

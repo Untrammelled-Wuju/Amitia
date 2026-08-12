@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.bridge
 
-internal object RuntimeBridgeContract {
+object RuntimeBridgeContract {
     const val METHOD_CHANNEL = "com.amitia.runtime/bridge"
     const val EVENT_CHANNEL = "com.amitia.runtime/events"
 

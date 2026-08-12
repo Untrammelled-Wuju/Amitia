@@ -29,22 +29,85 @@ func NewProductionProvider(config BrowserConfig, engineFactory BrowserEngineFact
 
 	runtime := NewRuntimeController(engine)
 
+	sessionBackend := NewChromiumSessionBackend(engine.Contexts())
+	sessionManager := NewProductionSessionManager(
+		runtime,
+		sessionBackend,
+		config.MaxSessions,
+	)
+
+	tabBackend := NewChromiumTabBackend(engine.Targets())
+	tabManager := NewProductionTabManager(
+		sessionManager.(SessionResolver),
+		tabBackend,
+		config.MaxTabsPerSession,
+		config.MaxTabsTotal,
+	)
+
+	if sm, ok := sessionManager.(*productionSessionManager); ok {
+		sm.SetTabCleaner(tabManager.(SessionTabCleaner))
+	}
+
+	navigationPolicy := NewNavigationPolicy(config)
+	pageController := engine.Pages()
+	navigator := NewProductionNavigator(
+		tabManager.(TabResolver),
+		pageController,
+		navigationPolicy,
+	)
+
+	if pn, ok := navigator.(*productionNavigator); ok {
+		if tm, ok := tabManager.(*productionTabManager); ok {
+			pn.SetTabManager(tm)
+		}
+	}
+
+	interactionPolicy := NewInteractionPolicy()
+	elementStore := newElementStore(interactionPolicy.MaxElementRefsPerTab)
+	domBackend := NewChromiumDOMBackend(engine)
+	inputBackend := NewChromiumInputBackend(engine)
+
+	observer := NewProductionObserver(
+		tabManager.(TabResolver),
+		domBackend,
+		elementStore,
+		interactionPolicy,
+		tabManager.(*productionTabManager),
+	)
+
+	interact := NewProductionInteractor(
+		tabManager.(TabResolver),
+		domBackend,
+		inputBackend,
+		elementStore,
+		interactionPolicy,
+		tabManager.(*productionTabManager),
+	)
+
+	resources := NewProductionResourceTransfer(
+		tabManager.(TabResolver),
+		domBackend,
+		elementStore,
+		interactionPolicy,
+		tabManager.(*productionTabManager),
+	)
+
 	return &productionProvider{
 		runtime:   runtime,
-		sessions:  &unsupportedSessionManager{},
-		tabs:      &unsupportedTabManager{},
-		navigator: &unsupportedNavigator{},
-		observer:  &unsupportedObserver{},
-		interact:  &unsupportedInteractor{},
-		resources: &unsupportedResourceTransfer{},
+		sessions:  sessionManager,
+		tabs:      tabManager,
+		navigator: navigator,
+		observer:  observer,
+		interact:  interact,
+		resources: resources,
 		caps: BrowserCapabilities{
-			SupportsNavigation:  false,
-			SupportsDOM:         false,
-			SupportsInteraction: false,
-			SupportsDownload:    false,
-			SupportsUpload:      false,
-			SupportsScreenshot:  false,
-			RiskLevels:          []string{"browser_runtime"},
+			SupportsNavigation:  true,
+			SupportsDOM:         true,
+			SupportsInteraction: true,
+			SupportsDownload:    true,
+			SupportsUpload:      true,
+			SupportsScreenshot:  true,
+			RiskLevels:          []string{"browser_runtime", "browser_navigation", "browser_dom", "browser_interaction", "browser_resource"},
 		},
 	}, nil
 }
@@ -211,7 +274,7 @@ func (m *unsupportedSessionManager) ListSessions(_ context.Context) ([]BrowserSe
 
 type unsupportedTabManager struct{}
 
-func (m *unsupportedTabManager) OpenTab(_ context.Context, _ BrowserSessionID, _ string) (BrowserTabInfo, *BrowserError) {
+func (m *unsupportedTabManager) CreateTab(_ context.Context, _ BrowserSessionID) (BrowserTabInfo, *BrowserError) {
 	return BrowserTabInfo{}, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser tabs are not supported in this build"}
 }
 
@@ -219,26 +282,38 @@ func (m *unsupportedTabManager) CloseTab(_ context.Context, _ BrowserSessionID, 
 	return &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser tabs are not supported in this build"}
 }
 
-func (m *unsupportedTabManager) ActivateTab(_ context.Context, _ BrowserSessionID, _ BrowserTabID) *BrowserError {
-	return &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser tabs are not supported in this build"}
+func (m *unsupportedTabManager) GetTab(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (BrowserTabInfo, *BrowserError) {
+	return BrowserTabInfo{}, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser tabs are not supported in this build"}
 }
 
 func (m *unsupportedTabManager) ListTabs(_ context.Context, _ BrowserSessionID) ([]BrowserTabInfo, *BrowserError) {
 	return nil, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser tabs are not supported in this build"}
 }
 
+func (m *unsupportedTabManager) ActivateTab(_ context.Context, _ BrowserSessionID, _ BrowserTabID) *BrowserError {
+	return &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser tabs are not supported in this build"}
+}
+
 type unsupportedNavigator struct{}
 
-func (n *unsupportedNavigator) Navigate(_ context.Context, _ BrowserSessionID, _ BrowserTabID, _ string) (*BrowserNavigationResult, *BrowserError) {
-	return nil, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
+func (n *unsupportedNavigator) Navigate(_ context.Context, _ BrowserSessionID, _ BrowserTabID, _ NavigateRequest) (NavigationResult, *BrowserError) {
+	return NavigationResult{}, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
 }
 
-func (n *unsupportedNavigator) Reload(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (*BrowserNavigationResult, *BrowserError) {
-	return nil, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
+func (n *unsupportedNavigator) Reload(_ context.Context, _ BrowserSessionID, _ BrowserTabID, _ NavigateRequest) (NavigationResult, *BrowserError) {
+	return NavigationResult{}, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
 }
 
-func (n *unsupportedNavigator) GoBack(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (*BrowserNavigationResult, *BrowserError) {
-	return nil, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
+func (n *unsupportedNavigator) GoBack(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (NavigationResult, *BrowserError) {
+	return NavigationResult{}, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
+}
+
+func (n *unsupportedNavigator) GoForward(_ context.Context, _ BrowserSessionID, _ BrowserTabID) (NavigationResult, *BrowserError) {
+	return NavigationResult{}, &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
+}
+
+func (n *unsupportedNavigator) Stop(_ context.Context, _ BrowserSessionID, _ BrowserTabID) *BrowserError {
+	return &BrowserError{Code: ErrCodeUnsupportedAction, Message: "browser navigation is not supported in this build"}
 }
 
 type unsupportedObserver struct{}

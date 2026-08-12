@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/chat/modelprotocol"
 	"io"
 	"net/http"
 	"strings"
@@ -290,6 +291,143 @@ func (s *service) callOllamaWithTools(ctx context.Context, cfg *ModelConfig, mes
 	}
 	total := r.EvalCount + r.PromptEvalCount
 	return r.Message.Content, "", toolCalls, total, nil
+}
+
+func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, jsonOnly bool) ModelRequest {
+	var instructions []string
+	var msgs []ModelMessage
+	for _, m := range messages {
+		role, _ := m["role"].(string)
+		switch role {
+		case "system":
+			if content, ok := m["content"].(string); ok {
+				instructions = append(instructions, content)
+			}
+		case "user":
+			parts := extractContentParts(m)
+			msgs = append(msgs, ModelMessage{Role: "user", Parts: parts})
+		case "assistant":
+			parts := extractContentParts(m)
+			if len(parts) == 0 {
+				parts = []ModelContentPart{{Type: ContentTypeText, Text: ""}}
+			}
+			msgs = append(msgs, ModelMessage{Role: "assistant", Parts: parts})
+		case "tool":
+			parts := extractContentParts(m)
+			msgs = append(msgs, ModelMessage{Role: "tool", Parts: parts})
+		}
+	}
+	req := ModelRequest{
+		Model:    cfg.ModelName,
+		Messages: msgs,
+		Stream:   false,
+	}
+	if cfg.MaxOutputTokens > 0 {
+		req.MaxOutputTokens = cfg.MaxOutputTokens
+	} else if cfg.MaxTokens > 0 {
+		req.MaxOutputTokens = cfg.MaxTokens
+	}
+	if cfg.Temperature > 0 {
+		t := cfg.Temperature
+		req.Temperature = &t
+	}
+	if cfg.TopP > 0 && cfg.TopP < 1 {
+		p := cfg.TopP
+		req.TopP = &p
+	}
+	if jsonOnly {
+		req.ResponseFormat = ModelResponseFormat{Type: "json_object"}
+	}
+	if len(tools) > 0 {
+		req.Tools = toolsToDefinitions(tools)
+	}
+	return req
+}
+
+func extractContentParts(m map[string]interface{}) []ModelContentPart {
+	if content, ok := m["content"].(string); ok {
+		if content == "" {
+			return nil
+		}
+		return []ModelContentPart{{Type: ContentTypeText, Text: content}}
+	}
+	if parts, ok := m["parts"].([]ModelContentPart); ok {
+		return parts
+	}
+	return nil
+}
+
+func toolsToDefinitions(tools []tool.Tool) []ModelToolDefinition {
+	defs := make([]ModelToolDefinition, 0, len(tools))
+	for _, t := range tools {
+		params := map[string]any{
+			"type":       t.Function.Parameters.Type,
+			"properties": t.Function.Parameters.Properties,
+		}
+		if len(t.Function.Parameters.Required) > 0 {
+			params["required"] = t.Function.Parameters.Required
+		}
+		defs = append(defs, ModelToolDefinition{
+			Name:        t.Function.Name,
+			Description: t.Function.Description,
+			Parameters:  params,
+		})
+	}
+	return defs
+}
+
+func modelResultToLegacy(result *ModelResult) (string, string, []map[string]interface{}, int) {
+	var toolCalls []map[string]interface{}
+	for _, tc := range result.ToolCalls {
+		toolCalls = append(toolCalls, map[string]interface{}{
+			"id":   tc.ID,
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":      tc.Name,
+				"arguments": tc.ArgumentsJSON,
+			},
+		})
+	}
+	reasoning := ""
+	return result.Text, reasoning, toolCalls, result.Usage.TotalTokens
+}
+
+func (s *service) callLLMWithAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+	protocol := resolveProtocol(cfg)
+	adapter := modelprotocol.AdapterForProtocol(protocol)
+	req := messagesToModelRequest(cfg, messages, nil, jsonOnly)
+	result, err := adapter.Generate(ctx, cfg, req)
+	if err != nil {
+		return "", 0, err
+	}
+	text, _, _, tokens := modelResultToLegacy(result)
+	return text, tokens, nil
+}
+
+func (s *service) callLLMWithToolsAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+	protocol := resolveProtocol(cfg)
+	adapter := modelprotocol.AdapterForProtocol(protocol)
+	req := messagesToModelRequest(cfg, messages, tools, false)
+	result, err := adapter.Generate(ctx, cfg, req)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+	return modelResultToLegacy(result)
+}
+
+type noopEventSink struct{}
+
+func (noopEventSink) Emit(ctx context.Context, event ModelEvent) error { return nil }
+
+func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, sink ModelEventSink) (*ModelResult, error) {
+	protocol := resolveProtocol(cfg)
+	adapter := modelprotocol.AdapterForProtocol(protocol)
+	req := messagesToModelRequest(cfg, messages, tools, false)
+	req.Stream = true
+	if sink == nil {
+		sink = noopEventSink{}
+	}
+	return adapter.Stream(ctx, cfg, req, sink)
 }
 
 func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {

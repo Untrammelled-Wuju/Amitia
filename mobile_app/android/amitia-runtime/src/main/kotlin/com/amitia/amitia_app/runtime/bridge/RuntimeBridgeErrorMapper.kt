@@ -3,7 +3,7 @@ package com.amitia.amitia_app.runtime.bridge
 import com.amitia.amitia_app.runtime.api.RuntimeErrorCode
 import com.amitia.amitia_app.runtime.api.RuntimeError
 
-internal object RuntimeBridgeErrorMapper {
+object RuntimeBridgeErrorMapper {
 
     fun mapToBridgeError(error: RuntimeError): Map<String, Any?> {
         val result = LinkedHashMap<String, Any?>()

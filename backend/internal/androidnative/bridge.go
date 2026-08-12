@@ -2,35 +2,19 @@ package androidnative
 
 import (
 	"context"
+
+	"github.com/u-ai/backend/internal/nativebridge"
 )
 
-type NativeBridgeRequest struct {
-	ProtocolVersion int            `json:"protocolVersion"`
-	RequestID       string         `json:"requestId"`
-	Operation       string         `json:"operation"`
-	Payload         map[string]any `json:"payload,omitempty"`
-}
-
-type NativeBridgeResponse struct {
-	ProtocolVersion int            `json:"protocolVersion"`
-	RequestID       string         `json:"requestId"`
-	Status          string         `json:"status"`
-	Result          map[string]any `json:"result,omitempty"`
-	Error           *NativeBridgeError `json:"error,omitempty"`
-}
-
-type NativeBridgeError struct {
-	Code       string `json:"code"`
-	Message    string `json:"message"`
-	DomainCode string `json:"domainCode,omitempty"`
-}
-
-type NativeBridgeHealth string
+type NativeBridgeRequest = nativebridge.Request
+type NativeBridgeResponse = nativebridge.Response
+type NativeBridgeError = nativebridge.Error
+type NativeBridgeHealth = nativebridge.Health
 
 const (
-	NativeBridgeHealthReady     NativeBridgeHealth = "ready"
-	NativeBridgeHealthUnhealthy NativeBridgeHealth = "unhealthy"
-	NativeBridgeHealthUnknown   NativeBridgeHealth = "unknown"
+	NativeBridgeHealthReady     = nativebridge.HealthReady
+	NativeBridgeHealthUnhealthy = nativebridge.HealthUnhealthy
+	NativeBridgeHealthUnknown   = nativebridge.HealthUnknown
 )
 
 type NativeBridge interface {

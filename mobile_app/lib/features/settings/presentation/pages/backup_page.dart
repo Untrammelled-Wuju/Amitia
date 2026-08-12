@@ -153,7 +153,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             ..._backups.map(
               (b) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child._BackupRecord(
+                child: _BackupRecord(
                   time: (b['time'] ?? b['created_at'] ?? '').toString(),
                   size: (b['size'] ?? '').toString(),
                   source: (b['source'] ?? '本地').toString(),

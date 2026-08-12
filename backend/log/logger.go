@@ -40,6 +40,7 @@ func InitLogger(logPath string) {
 }
 
 func Info(args ...interface{})  { Logger.Info(args...) }
+func Infof(format string, args ...interface{}) { Logger.Infof(format, args...) }
 func Error(args ...interface{}) { Logger.Error(args...) }
 func Warn(args ...interface{})  { Logger.Warn(args...) }
 func Debug(args ...interface{}) { Logger.Debug(args...) }

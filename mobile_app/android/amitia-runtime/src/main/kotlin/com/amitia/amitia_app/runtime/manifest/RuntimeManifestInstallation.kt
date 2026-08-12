@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal data class RuntimeManifestInstallation(
+data class RuntimeManifestInstallation(
     val activeVersion: String,
     val rootfsId: String,
     val runtimeRootId: String,

@@ -131,6 +131,10 @@ func (n *Normalizer) NormalizeResults(results []SearchResult, provider string) (
 	normalized := make([]SearchResult, 0, len(results))
 	discarded := 0
 	for _, r := range results {
+		originalURL := r.URL
+		if r.Source.OriginalURL == "" {
+			r.Source.OriginalURL = originalURL
+		}
 		parsed, ok := validateResultURL(r.URL)
 		if !ok {
 			discarded++
@@ -141,17 +145,92 @@ func (n *Normalizer) NormalizeResults(results []SearchResult, provider string) (
 		r.Domain = extractDomain(parsed)
 		r.URL = parsed.String()
 		r.Source.CanonicalURL = canonicalizeURL(parsed)
+		if r.Source.Provider == "" {
+			r.Source.Provider = provider
+		}
 		if r.Source.RetrievedAt.IsZero() {
 			r.Source.RetrievedAt = n.now()
 		}
+		n.NormalizeMetadata(&r.Metadata)
 		normalized = append(normalized, r)
 	}
 	return normalized, discarded
 }
 
+func (n *Normalizer) NormalizeMetadata(meta *SearchResultMetadata) {
+	if meta == nil {
+		return
+	}
+	meta.DOI = sanitizeText(meta.DOI, 256)
+	meta.Journal = sanitizeText(meta.Journal, 512)
+	meta.Repository = sanitizeText(meta.Repository, 512)
+	meta.Path = sanitizeText(meta.Path, 1024)
+	meta.License = sanitizeText(meta.License, 128)
+	meta.Address = sanitizeText(meta.Address, 512)
+	meta.Merchant = sanitizeText(meta.Merchant, 256)
+	meta.Currency = sanitizeText(meta.Currency, 16)
+	meta.Availability = sanitizeText(meta.Availability, 64)
+	meta.ProductID = sanitizeText(meta.ProductID, 128)
+	meta.Type = sanitizeText(meta.Type, 64)
+	if meta.ThumbnailURL != "" {
+		if _, ok := validateResultURL(meta.ThumbnailURL); !ok {
+			meta.ThumbnailURL = ""
+		}
+	}
+	if meta.MediaURL != "" {
+		if _, ok := validateResultURL(meta.MediaURL); !ok {
+			meta.MediaURL = ""
+		}
+	}
+	if meta.Width < 0 {
+		meta.Width = 0
+	}
+	if meta.Height < 0 {
+		meta.Height = 0
+	}
+	if meta.DurationSeconds < 0 {
+		meta.DurationSeconds = 0
+	}
+	if meta.ReviewCount < 0 {
+		meta.ReviewCount = 0
+	}
+	if meta.Latitude != nil {
+		if *meta.Latitude < -90 || *meta.Latitude > 90 {
+			meta.Latitude = nil
+		}
+	}
+	if meta.Longitude != nil {
+		if *meta.Longitude < -180 || *meta.Longitude > 180 {
+			meta.Longitude = nil
+		}
+	}
+	if meta.Rating != nil {
+		if *meta.Rating < 0 {
+			meta.Rating = nil
+		}
+	}
+	if meta.Price != nil {
+		if *meta.Price < 0 {
+			meta.Price = nil
+		}
+	}
+	for i := range meta.Authors {
+		meta.Authors[i] = sanitizeText(meta.Authors[i], 256)
+	}
+	var cleanedAuthors []string
+	for _, a := range meta.Authors {
+		if a != "" {
+			cleanedAuthors = append(cleanedAuthors, a)
+		}
+	}
+	meta.Authors = cleanedAuthors
+}
+
 func (n *Normalizer) AssignRanks(results []SearchResult) {
 	for i := range results {
 		results[i].Rank = i + 1
-		results[i].Source.ProviderRank = i + 1
+		if results[i].Source.ProviderRank <= 0 {
+			results[i].Source.ProviderRank = i + 1
+		}
 	}
 }

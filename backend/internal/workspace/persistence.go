@@ -67,6 +67,14 @@ func (r *MountRepository) Delete(id string) error {
 	return r.db.Exec("DELETE FROM workspace_mounts WHERE id = ?", id).Error
 }
 
+func (r *MountRepository) UpdateGrant(id string, grantID string, readOnly bool, status string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return r.db.Exec(
+		"UPDATE workspace_mounts SET native_grant_id = ?, read_only = ?, updated_at = ? WHERE id = ?",
+		grantID, boolToInt(readOnly), now, id,
+	).Error
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

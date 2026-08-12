@@ -31,16 +31,19 @@ type BrowserSessionManager interface {
 }
 
 type BrowserTabManager interface {
-	OpenTab(ctx context.Context, sessionID BrowserSessionID, url string) (BrowserTabInfo, *BrowserError)
+	CreateTab(ctx context.Context, sessionID BrowserSessionID) (BrowserTabInfo, *BrowserError)
 	CloseTab(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) *BrowserError
-	ActivateTab(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) *BrowserError
+	GetTab(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) (BrowserTabInfo, *BrowserError)
 	ListTabs(ctx context.Context, sessionID BrowserSessionID) ([]BrowserTabInfo, *BrowserError)
+	ActivateTab(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) *BrowserError
 }
 
 type BrowserNavigator interface {
-	Navigate(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID, url string) (*BrowserNavigationResult, *BrowserError)
-	Reload(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) (*BrowserNavigationResult, *BrowserError)
-	GoBack(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) (*BrowserNavigationResult, *BrowserError)
+	Navigate(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID, request NavigateRequest) (NavigationResult, *BrowserError)
+	Reload(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID, request NavigateRequest) (NavigationResult, *BrowserError)
+	GoBack(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) (NavigationResult, *BrowserError)
+	GoForward(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) (NavigationResult, *BrowserError)
+	Stop(ctx context.Context, sessionID BrowserSessionID, tabID BrowserTabID) *BrowserError
 }
 
 type BrowserObserver interface {

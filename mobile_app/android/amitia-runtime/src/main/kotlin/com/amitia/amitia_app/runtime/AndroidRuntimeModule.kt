@@ -32,9 +32,13 @@ import java.io.File
 object AndroidRuntimeModule {
     @Volatile private var cachedModule: RuntimeModule? = null
     @Volatile private var cachedProotComponent: ProotComponent? = null
+    @Volatile private var cachedProotEnvironmentAssembler: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler? = null
+    @Volatile private var cachedRuntimeHostLayout: com.amitia.amitia_app.runtime.install.RuntimeHostLayout? = null
     @Volatile private var cachedRootfsPath: String? = null
 
     val prootComponent: ProotComponent? get() = cachedProotComponent
+    internal val prootEnvironmentAssembler: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler? get() = cachedProotEnvironmentAssembler
+    internal val runtimeHostLayout: com.amitia.amitia_app.runtime.install.RuntimeHostLayout? get() = cachedRuntimeHostLayout
     val prootRootfsPath: String? get() = cachedRootfsPath
 
     fun create(context: Context): RuntimeModule {
@@ -57,6 +61,14 @@ object AndroidRuntimeModule {
         val prootComponent = createProotComponent(appContext)
         cachedProotComponent = prootComponent
         cachedRootfsPath = layout.rootfsRoot.absolutePath
+        cachedRuntimeHostLayout = layout
+
+        val environmentBuilder = com.amitia.amitia_app.runtime.proot.internal.DefaultRuntimeEnvironmentBuilder()
+        val prootEnvironmentAssembler = com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler(
+            layout = layout,
+            environmentBuilder = environmentBuilder,
+        )
+        cachedProotEnvironmentAssembler = prootEnvironmentAssembler
 
         val activeRuntimeManager = DefaultActiveRuntimeManager(layout)
         val installedRuntimeSource = ActiveRuntimeBackedInstalledRuntimeSource(activeRuntimeManager)
@@ -135,6 +147,8 @@ object AndroidRuntimeModule {
         }
         cachedModule = null
         cachedProotComponent = null
+        cachedProotEnvironmentAssembler = null
+        cachedRuntimeHostLayout = null
         cachedRootfsPath = null
     }
 }

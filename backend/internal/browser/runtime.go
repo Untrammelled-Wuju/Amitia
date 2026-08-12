@@ -14,4 +14,7 @@ type BrowserEngine interface {
 	Stop(ctx context.Context) error
 	Status(ctx context.Context) BrowserRuntimeInfo
 	Health(ctx context.Context) BrowserRuntimeHealth
+	Contexts() BrowserContextController
+	Targets() BrowserTargetController
+	Pages() BrowserPageController
 }

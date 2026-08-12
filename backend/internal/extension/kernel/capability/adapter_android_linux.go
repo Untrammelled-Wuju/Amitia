@@ -5,7 +5,6 @@ package capability
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/u-ai/backend/internal/androidlinux/terminal"
 )

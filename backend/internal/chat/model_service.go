@@ -183,3 +183,41 @@ func (s *service) detectAnthropicModels(baseURL, apiKey string) ([]ModelDetectIt
 func (s *service) ListProviders() []ProviderInfo {
 	return s.repo.ListProviders()
 }
+
+func resolveProtocol(cfg *ModelConfig) ModelProtocol {
+	if cfg.Protocol != "" {
+		return ModelProtocol(cfg.Protocol)
+	}
+	switch cfg.APIType {
+	case "ollama":
+		return ProtocolOllamaChat
+	case "anthropic":
+		return ProtocolAnthropicMessages
+	case "gemini":
+		return ProtocolGeminiGenerate
+	case "openai":
+		return ProtocolOpenAIResponses
+	default:
+		return ProtocolOpenAIChat
+	}
+}
+
+func (s *service) GetActiveModelProtocol() (ModelProtocol, error) {
+	cfg, err := s.repo.GetActiveModel()
+	if err != nil {
+		return "", err
+	}
+	return resolveProtocol(cfg), nil
+}
+
+func (s *service) CreateMessageAttachment(attachment *MessageAttachment) error {
+	return s.repo.CreateMessageAttachment(attachment)
+}
+
+func (s *service) GetMessageAttachments(messageID string) ([]MessageAttachment, error) {
+	return s.repo.GetMessageAttachments(messageID)
+}
+
+func (s *service) GetAttachmentByID(id string) (*MessageAttachment, error) {
+	return s.repo.GetAttachmentByID(id)
+}

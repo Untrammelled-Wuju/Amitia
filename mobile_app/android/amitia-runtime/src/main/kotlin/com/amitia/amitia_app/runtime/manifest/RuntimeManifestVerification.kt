@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal data class RuntimeManifestVerification(
+data class RuntimeManifestVerification(
     val packageVerified: Boolean,
     val rootfsVerified: Boolean,
     val runtimeRootVerified: Boolean,

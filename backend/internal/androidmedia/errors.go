@@ -1,6 +1,10 @@
 package androidmedia
 
 const (
+	ANDROID_MEDIA_FFMPEG_UNAVILABLE           = "ANDROID_MEDIA_FFMPEG_UNAVAILABLE"
+	ANDROID_MEDIA_FFMPEG_RUNTIME_PACKAGE_MISSING = "ANDROID_MEDIA_FFMPEG_RUNTIME_PACKAGE_MISSING"
+	ANDROID_MEDIA_FFMPEG_ARCH_UNSUPPORTED      = "ANDROID_MEDIA_FFMPEG_ARCH_UNSUPPORTED"
+
 	SCREENSHOT_UNSUPPORTED              = "SCREENSHOT_UNSUPPORTED"
 	SCREENSHOT_ACCESSIBILITY_DISABLED   = "SCREENSHOT_ACCESSIBILITY_DISABLED"
 	SCREENSHOT_ACCESSIBILITY_NOT_CONNECTED = "SCREENSHOT_ACCESSIBILITY_NOT_CONNECTED"
@@ -37,11 +41,29 @@ const (
 
 const (
 	PermissionContinuousCapture = "android.media.screen_capture.continuous"
+	PermissionCamera            = "android.media.camera"
+	PermissionMediaRead         = "android.media.read"
+	PermissionFFmpeg            = "android.media.ffmpeg"
+)
+
+const (
+	ToolIDCameraStatus  = "android.camera.status"
+	ToolIDCameraList    = "android.camera.list"
+	ToolIDCameraCapture = "android.camera.capture"
+)
+
+const (
+	ToolIDMediaReadInfo  = "android.media.read.info"
+	ToolIDMediaReadImage = "android.media.read.image"
 )
 
 const (
 	ToolIDScreenshot    = "android.screen.screenshot"
 	HandlerScreenshot   = OperationScreenshotCapture
+)
+
+const (
+	ToolIDFFmpegStatus = "android.media.ffmpeg.status"
 )
 
 const (

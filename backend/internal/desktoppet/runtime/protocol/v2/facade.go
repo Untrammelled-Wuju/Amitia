@@ -157,7 +157,7 @@ func (f *RuntimeFacade) runReconciler(ctx context.Context) {
 			if err != nil {
 				log.Warn("[v2-runtime-facade] reconciler expire failed: ", err)
 			} else if expired > 0 {
-				log.Info("[v2-runtime-facade] expired %d commands", expired)
+				log.Infof("[v2-runtime-facade] expired %d commands", expired)
 			}
 		}
 	}
@@ -175,7 +175,7 @@ func (f *RuntimeFacade) runRetentionGC(ctx context.Context) {
 			if err != nil {
 				log.Warn("[v2-runtime-facade] retention gc failed: ", err)
 			} else if count > 0 {
-				log.Info("[v2-runtime-facade] retention gc removed %d events", count)
+				log.Infof("[v2-runtime-facade] retention gc removed %d events", count)
 			}
 		}
 	}

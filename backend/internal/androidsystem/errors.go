@@ -30,6 +30,19 @@ const (
 )
 
 const (
+	PermissionOverlayInspect = "android.overlay.inspect"
+	PermissionOverlayCreate  = "android.overlay.create"
+)
+
+const (
+	PermissionExternalAutomationInspect  = "android.external_automation.inspect"
+	PermissionExternalAutomationLaunch   = "android.external_automation.launch"
+	PermissionExternalAutomationOpenURI  = "android.external_automation.open_uri"
+	PermissionExternalAutomationSettings = "android.external_automation.settings"
+	PermissionExternalAutomationIntent   = "android.external_automation.intent"
+)
+
+const (
 	NotificationListenerGranted       = "granted"
 	NotificationListenerNotGranted    = "not_granted"
 	NotificationListenerNotConnected  = "not_connected"

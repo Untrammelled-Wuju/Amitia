@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.withLock
 
-internal class RuntimeStateStore(
+class RuntimeStateStore(
     private val clock: RuntimeClock = SystemRuntimeClock
 ) {
     private val lock = ReentrantReadWriteLock()

@@ -4,6 +4,7 @@ import com.amitia.amitia_app.runtime.AndroidRuntimeModule
 import com.amitia.amitia_app.runtime.api.RuntimeController
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeModule
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
+import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeContract
 import android.content.Context
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel

@@ -56,6 +56,7 @@ func (p *Provider) ID() string {
 func (p *Provider) Capabilities() search.ProviderCapabilities {
 	return search.ProviderCapabilities{
 		GeneralWeb:     true,
+		SearchKinds:    []search.SearchKind{search.SearchKindWeb, search.SearchKindNews},
 		LanguageFilter: true,
 		CountryFilter:  true,
 		SafeSearch:     true,
@@ -64,7 +65,7 @@ func (p *Provider) Capabilities() search.ProviderCapabilities {
 	}
 }
 
-func (p *Provider) Search(ctx context.Context, req search.GeneralSearchRequest) (search.ProviderSearchResponse, error) {
+func (p *Provider) Search(ctx context.Context, req search.SearchRequest) (search.ProviderSearchResponse, error) {
 	p.calls++
 	select {
 	case <-ctx.Done():

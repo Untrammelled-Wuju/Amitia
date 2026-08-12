@@ -377,7 +377,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
 
     final avatarInitial = character?.name.isNotEmpty == true ? character!.name[0] : '?';
-    final avatarColor = Color((character!.name.hashCode & 0xFFFFFF) | 0xFF000000);
+    final avatarColor = '#${((character!.name.hashCode & 0xFFFFFF) | 0xFF000000).toRadixString(16).padLeft(8, '0')}';
     final characterName = character?.name ?? '';
 
     return AmitiaScaffold(

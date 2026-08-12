@@ -412,12 +412,18 @@ func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
 	result, err := h.coordinator.Install(c.Request.Context(), coordinator.InstallRequest{
 		DeviceCtx:       deviceCtx,
 		TargetReleaseID: packageID,
+		CharacterID:     payload.CharacterID,
 	})
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		writeCoordinatorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "安装成功", gin.H{"operationId": result.OperationID, "status": result.Status})
+	install, getErr := h.repo.GetInstallation(result.OperationID)
+	if getErr != nil {
+		util.SuccessMsgResponse(c, "安装成功", gin.H{"operationId": result.OperationID, "status": result.Status})
+		return
+	}
+	util.SuccessMsgResponse(c, "安装成功", install)
 }
 
 func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
@@ -492,7 +498,7 @@ func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
 		InstallationID: installationID,
 	})
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		writeCoordinatorError(c, err)
 		return
 	}
 	util.SuccessMsgResponse(c, "桌宠已启用", gin.H{"operationId": result.OperationID, "status": result.Status})
@@ -525,7 +531,7 @@ func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
 		InstallationID: installationID,
 	})
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		writeCoordinatorError(c, err)
 		return
 	}
 	util.SuccessMsgResponse(c, "桌宠已停用", gin.H{"operationId": result.OperationID, "status": result.Status})
@@ -552,7 +558,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 	}
 	var payload updateDefaultActionPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeActionNotFound})
 		return
 	}
 	if payload.ActionKey == "" {
@@ -568,7 +574,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 		DesiredActionKey: payload.ActionKey,
 	})
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		writeCoordinatorError(c, err)
 		return
 	}
 	util.SuccessMsgResponse(c, "默认动作已更新", gin.H{"operationId": result.OperationID, "status": result.Status})
@@ -606,7 +612,7 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 		InstallationID: installationID,
 	})
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		writeCoordinatorError(c, err)
 		return
 	}
 	util.SuccessMsgResponse(c, "运行配置已更新", gin.H{"operationId": result.OperationID, "status": result.Status})
@@ -639,7 +645,7 @@ func (h *CoordinatorHandler) Recenter(c *gin.Context) {
 		InstallationID: installationID,
 	})
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
+		writeCoordinatorError(c, err)
 		return
 	}
 	util.SuccessMsgResponse(c, "桌宠已重置位置", gin.H{"operationId": result.OperationID, "status": result.Status})
@@ -669,5 +675,18 @@ func (h *CoordinatorHandler) PlayAction(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
+	if err := h.coordinator.PlayAction(c.Request.Context(), actor.UserID, installationID, actionKey); err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
 	util.SuccessMsgResponse(c, "动作已触发", gin.H{"installationId": installationID, "actionKey": actionKey})
+}
+
+func writeCoordinatorError(c *gin.Context, err error) {
+	var ie *InstallationError
+	if errors.As(err, &ie) {
+		writeInstallationError(c, err)
+		return
+	}
+	util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
 }

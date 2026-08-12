@@ -1,6 +1,6 @@
 package com.amitia.amitia_app.runtime.manifest
 
-internal data class RuntimeManifestComponent(
+data class RuntimeManifestComponent(
     val id: String,
     val version: String?,
     val architecture: String?,

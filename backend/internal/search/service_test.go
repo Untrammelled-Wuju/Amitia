@@ -19,7 +19,7 @@ func (p *fakeProviderForService) ID() string { return "fake" }
 func (p *fakeProviderForService) Capabilities() ProviderCapabilities {
 	return ProviderCapabilities{GeneralWeb: true, MaxResults: 20}
 }
-func (p *fakeProviderForService) Search(ctx context.Context, req GeneralSearchRequest) (ProviderSearchResponse, error) {
+func (p *fakeProviderForService) Search(ctx context.Context, req SearchRequest) (ProviderSearchResponse, error) {
 	p.calls++
 	select {
 	case <-ctx.Done():

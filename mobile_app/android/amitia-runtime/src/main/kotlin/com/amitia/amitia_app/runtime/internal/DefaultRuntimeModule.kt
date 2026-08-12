@@ -8,10 +8,10 @@ import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.proot.ProotComponent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 
-internal class DefaultRuntimeModule(
+class DefaultRuntimeModule(
     override val controller: RuntimeController = UnsupportedRuntimeController(),
     override val runtimeInstaller: RuntimeInstaller,
-    internal val backendConnectionProvider: BackendConnectionProvider,
+    val backendConnectionProvider: BackendConnectionProvider,
     private val stateStore: RuntimeStateStore = RuntimeStateStore(),
     private val abiGate: RuntimeAbiGate? = null,
     private val serviceHost: RuntimeServiceHost? = null,
@@ -31,9 +31,9 @@ internal class DefaultRuntimeModule(
         }
     }
 
-    internal fun abiGate(): RuntimeAbiGate? = abiGate
-    internal fun serviceHost(): RuntimeServiceHost? = serviceHost
-    internal fun stateStore(): RuntimeStateStore = stateStore
+    fun abiGate(): RuntimeAbiGate? = abiGate
+    fun serviceHost(): RuntimeServiceHost? = serviceHost
+    fun stateStore(): RuntimeStateStore = stateStore
 
     private object NoopProotComponent {
         fun availability(): Any = UnsupportedOperationException("not implemented")

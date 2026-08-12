@@ -399,7 +399,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     final qualityLabel = frameMap['qualityLabel']?.toString();
 
     return GestureDetector(
-      onTap: () => _showFramePreview(frameMap, index),
+      onTap: () => _showFramePreview(frameMap.cast<String, dynamic>(), index),
       child: Container(
         decoration: BoxDecoration(
           color: _frameColor(context, status, qualityLabel),

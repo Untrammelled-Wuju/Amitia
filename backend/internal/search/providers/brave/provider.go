@@ -102,15 +102,18 @@ func (p *Provider) ID() string {
 func (p *Provider) Capabilities() search.ProviderCapabilities {
 	return search.ProviderCapabilities{
 		GeneralWeb:     true,
+		SearchKinds:    []search.SearchKind{search.SearchKindWeb, search.SearchKindNews, search.SearchKindImage},
 		LanguageFilter: true,
 		CountryFilter:  true,
 		SafeSearch:     true,
 		Pagination:     true,
+		TimeRangeFilter: true,
+		DomainFilter:    true,
 		MaxResults:     maxResults,
 	}
 }
 
-func (p *Provider) Search(ctx context.Context, req search.GeneralSearchRequest) (search.ProviderSearchResponse, error) {
+func (p *Provider) Search(ctx context.Context, req search.SearchRequest) (search.ProviderSearchResponse, error) {
 	if !p.enabled {
 		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_DISABLED, providerID, false, nil)
 	}
@@ -169,7 +172,7 @@ func (p *Provider) Health(ctx context.Context) search.ProviderHealth {
 	return search.ProviderHealthReady
 }
 
-func (p *Provider) buildRequest(ctx context.Context, req search.GeneralSearchRequest) (*http.Request, error) {
+func (p *Provider) buildRequest(ctx context.Context, req search.SearchRequest) (*http.Request, error) {
 	u, err := url.Parse(p.endpoint)
 	if err != nil {
 		return nil, search.NewError(search.SEARCH_PROVIDER_REQUEST_FAILED, providerID, false, err)
@@ -248,7 +251,7 @@ func (p *Provider) readBody(body io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
-func (p *Provider) handleResponse(status int, body []byte, req search.GeneralSearchRequest) (search.ProviderSearchResponse, error) {
+func (p *Provider) handleResponse(status int, body []byte, req search.SearchRequest) (search.ProviderSearchResponse, error) {
 	if status >= 400 {
 		var bErr braveErrorResponse
 		if len(body) > 0 {
@@ -259,7 +262,7 @@ func (p *Provider) handleResponse(status int, body []byte, req search.GeneralSea
 	return p.mapSuccess(body, status, req)
 }
 
-func (p *Provider) mapSuccess(body []byte, status int, req search.GeneralSearchRequest) (search.ProviderSearchResponse, error) {
+func (p *Provider) mapSuccess(body []byte, status int, req search.SearchRequest) (search.ProviderSearchResponse, error) {
 	var resp braveResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return search.ProviderSearchResponse{}, search.NewError(search.SEARCH_PROVIDER_INVALID_RESPONSE, providerID, false, err)

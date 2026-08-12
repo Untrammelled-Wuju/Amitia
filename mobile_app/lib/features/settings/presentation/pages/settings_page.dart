@@ -12,7 +12,7 @@ import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../shared/models/models.dart';
 
-static final _settingsGroups = <SettingGroup>[
+final _settingsGroups = <SettingGroup>[
   SettingGroup(title: 'AI 与个性化', items: [
     SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: 'GPT-4', route: AppRoutes.settingsModels),
     SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),

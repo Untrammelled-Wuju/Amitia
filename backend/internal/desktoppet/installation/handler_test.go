@@ -13,8 +13,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/pkg/comment/response"
+	"gorm.io/gorm"
 )
 
 func TestMapInstallationErrorCode_NotFoundGroup(t *testing.T) {
@@ -278,9 +281,180 @@ func newHandlerTestRouter(svc Service) *gin.Engine {
 		})
 		c.Next()
 	})
-	RegisterRoutes(r.Group("/api"), svc, &stubInstallGuard{})
+	stubCoord := &stubCoordinator{svc: svc}
+	stubRepo := &stubRepository{svc: svc}
+	RegisterRoutes(r.Group("/api"), stubCoord, stubRepo, &stubInstallGuard{})
 	return r
 }
+
+type stubCoordinator struct {
+	svc Service
+}
+
+func (s *stubCoordinator) Install(ctx context.Context, req coordinator.InstallRequest) (*coordinator.InstallResult, error) {
+	inst, err := s.svc.InstallPackage(req.TargetReleaseID, req.DeviceCtx.UserID, req.CharacterID)
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.InstallResult{OperationID: inst.ID, Status: inst.Status}, nil
+}
+
+func (s *stubCoordinator) Enable(ctx context.Context, req coordinator.EnableDisableRequest) (*coordinator.EnableDisableResult, error) {
+	err := s.svc.EnableInstallation(req.DeviceCtx.UserID, req.InstallationID)
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.EnableDisableResult{OperationID: req.InstallationID, Status: "enabled"}, nil
+}
+
+func (s *stubCoordinator) Disable(ctx context.Context, req coordinator.EnableDisableRequest) (*coordinator.EnableDisableResult, error) {
+	err := s.svc.DisableInstallation(req.DeviceCtx.UserID, req.InstallationID)
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.EnableDisableResult{OperationID: req.InstallationID, Status: "disabled"}, nil
+}
+
+func (s *stubCoordinator) Switch(ctx context.Context, req coordinator.SwitchRequest) (*coordinator.SwitchResult, error) {
+	err := s.svc.SwitchInstallation(req.DeviceCtx.UserID, req.SourceInstallationID)
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.SwitchResult{OperationID: req.SourceInstallationID, Status: "switched"}, nil
+}
+
+func (s *stubCoordinator) Upgrade(ctx context.Context, req coordinator.UpgradeRequest) (*coordinator.InstallResult, error) {
+	return &coordinator.InstallResult{OperationID: req.InstallationID, Status: "upgraded"}, nil
+}
+
+func (s *stubCoordinator) Downgrade(ctx context.Context, req coordinator.DowngradeRequest) (*coordinator.InstallResult, error) {
+	return &coordinator.InstallResult{OperationID: req.InstallationID, Status: "downgraded"}, nil
+}
+
+func (s *stubCoordinator) Rollback(ctx context.Context, req coordinator.UpgradeRequest) (*coordinator.InstallResult, error) {
+	return &coordinator.InstallResult{OperationID: req.InstallationID, Status: "rolled_back"}, nil
+}
+
+func (s *stubCoordinator) Repair(ctx context.Context, req coordinator.RepairRequest) (*coordinator.InstallResult, error) {
+	return &coordinator.InstallResult{OperationID: req.InstallationID, Status: "repaired"}, nil
+}
+
+func (s *stubCoordinator) Uninstall(ctx context.Context, req coordinator.UninstallRequest) (*coordinator.UninstallResult, error) {
+	err := s.svc.Uninstall(req.DeviceCtx.UserID, req.InstallationID)
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.UninstallResult{OperationID: req.InstallationID, Status: "uninstalled"}, nil
+}
+
+func (s *stubCoordinator) UpdateSettings(ctx context.Context, req coordinator.SettingsRequest) (*coordinator.SettingsResult, error) {
+	_, err := s.svc.UpdateRuntimeSettings(req.DeviceCtx.UserID, req.InstallationID, &UpdateRuntimeSettingsRequest{})
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.SettingsResult{OperationID: req.InstallationID, SettingsRevision: 1, Status: "updated"}, nil
+}
+
+func (s *stubCoordinator) ChangeDefaultAction(ctx context.Context, req coordinator.DefaultActionRequest) (*coordinator.EnableDisableResult, error) {
+	err := s.svc.UpdateDefaultAction(req.InstallationID, req.DesiredActionKey)
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.EnableDisableResult{OperationID: req.InstallationID, Status: "changed"}, nil
+}
+
+func (s *stubCoordinator) Recenter(ctx context.Context, req coordinator.RecenterRequest) (*coordinator.EnableDisableResult, error) {
+	err := s.svc.Recenter(req.DeviceCtx.UserID, req.InstallationID)
+	if err != nil {
+		return nil, mapInstallErr(err)
+	}
+	return &coordinator.EnableDisableResult{OperationID: req.InstallationID, Status: "recenter"}, nil
+}
+
+func (s *stubCoordinator) PlayAction(ctx context.Context, userID, installationID, actionKey string) error {
+	return mapInstallErr(s.svc.PlayAction(userID, installationID, actionKey))
+}
+
+func (s *stubCoordinator) GetOperationStatus(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error) {
+	return nil, nil
+}
+
+func (s *stubCoordinator) CancelOperation(ctx context.Context, userID, deviceID, operationID string) error {
+	return nil
+}
+
+func mapInstallErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	var installErr *InstallationError
+	if errors.As(err, &installErr) {
+		return installErr
+	}
+	return NewInstallationError(ErrCodeInstallationFailed, err.Error(), err)
+}
+
+type stubRepository struct {
+	svc Service
+}
+
+func (s *stubRepository) DB() *gorm.DB { return nil }
+
+func (s *stubRepository) CreateInstallation(installation *Installation) error { return nil }
+
+func (s *stubRepository) GetInstallation(id string) (*Installation, error) {
+	return s.svc.GetInstallation(id)
+}
+
+func (s *stubRepository) GetInstallationByPackageVersion(packageID, packageVersion string) (*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ListInstallationsByUser(userID string) ([]*Installation, error) {
+	return s.svc.ListInstallations(userID)
+}
+
+func (s *stubRepository) ListInstallationsByCharacter(characterID string) ([]*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ListInstallations(userID string) ([]*Installation, error) {
+	return s.svc.ListInstallations(userID)
+}
+
+func (s *stubRepository) UpdateInstallationStatus(id, status string) error { return nil }
+
+func (s *stubRepository) SetActiveInstallation(userID, installationID string) error { return nil }
+
+func (s *stubRepository) GetActiveInstallation(userID string) (*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) DeleteInstallation(id string) error { return nil }
+
+func (s *stubRepository) CreateRuntimeSettings(settings *RuntimeSettings) error { return nil }
+
+func (s *stubRepository) GetRuntimeSettings(installationID string) (*RuntimeSettings, error) {
+	return s.svc.GetRuntimeSettings(installationID)
+}
+
+func (s *stubRepository) UpdateRuntimeSettings(installationID string, updates map[string]interface{}) error {
+	return nil
+}
+
+func (s *stubRepository) UpdateRuntimeSettingsWithCAS(installationID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) Transaction(fn func(tx *gorm.DB) error) error { return fn(nil) }
 
 type stubInstallGuard struct{}
 

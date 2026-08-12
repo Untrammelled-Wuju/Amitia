@@ -10,23 +10,175 @@ import (
 )
 
 type Service struct {
-	registry   *Registry
-	physicalResolver PhysicalResolverProvider
+	registry          *Registry
+	physicalResolver  PhysicalResolverProvider
+	mountRepo         *MountRepository
+	safGrantResolver  SAFGrantResolver
 }
 
 type PhysicalResolverProvider interface {
 	Resolve(uri resourceuri.ResourceURI) (resourceuri.ResolvedResource, error)
 }
 
+type SAFGrantResolver interface {
+	ResolveGrant(grantID string) (SAFGrantStatus, error)
+}
+
 func NewService(registry *Registry, provider PhysicalResolverProvider) *Service {
 	return &Service{
-		registry:   registry,
+		registry:         registry,
 		physicalResolver: provider,
+	}
+}
+
+func NewServiceWithPersistence(registry *Registry, provider PhysicalResolverProvider, mountRepo *MountRepository, safGrantResolver SAFGrantResolver) *Service {
+	return &Service{
+		registry:         registry,
+		physicalResolver: provider,
+		mountRepo:        mountRepo,
+		safGrantResolver: safGrantResolver,
 	}
 }
 
 func (s *Service) ListMounts(ctx context.Context) ([]WorkspaceMount, error) {
 	return s.registry.ListMounts(), nil
+}
+
+func (s *Service) RegisterSAFMount(ctx context.Context, name string, grantID string, readOnly bool) (WorkspaceMount, error) {
+	if s.safGrantResolver != nil {
+		status, err := s.safGrantResolver.ResolveGrant(grantID)
+		if err != nil {
+			return WorkspaceMount{}, fmt.Errorf("%w: grant validation failed: %v", ErrSAFUnavailable, err)
+		}
+		if !status.Valid {
+			return WorkspaceMount{}, ErrSAFPermissionRevoked
+		}
+	}
+
+	if s.mountRepo != nil {
+		existing, err := s.mountRepo.LoadAll()
+		if err == nil {
+			for _, rec := range existing {
+				if rec.nativeGrant == grantID {
+					m, _ := s.registry.GetMountOrEmpty(WorkspaceID(rec.id))
+					return m, nil
+				}
+			}
+		}
+	}
+
+	mount, err := s.registry.RegisterSAFMount(ctx, name, grantID, readOnly)
+	if err != nil {
+		return mount, err
+	}
+
+	if s.mountRepo != nil {
+		rec := persistenceRecord{
+			id:          string(mount.ID),
+			name:        mount.Name,
+			kind:        mount.Kind,
+			nativeGrant: grantID,
+			readOnly:    readOnly,
+			enabled:     true,
+			createdAt:   mount.CreatedAt,
+			updatedAt:   mount.UpdatedAt,
+		}
+		if err := s.mountRepo.Insert(rec); err != nil {
+			s.registry.RemoveMount(ctx, mount.ID)
+			return WorkspaceMount{}, fmt.Errorf("%w: persist mount failed: %v", ErrSAFUnavailable, err)
+		}
+	}
+
+	return mount, nil
+}
+
+func (s *Service) ReplaceSAFGrant(ctx context.Context, mountID WorkspaceID, grantID string, readOnly bool) (WorkspaceMount, error) {
+	if s.safGrantResolver != nil {
+		status, err := s.safGrantResolver.ResolveGrant(grantID)
+		if err != nil {
+			return WorkspaceMount{}, fmt.Errorf("%w: grant validation failed: %v", ErrSAFUnavailable, err)
+		}
+		if !status.Valid {
+			return WorkspaceMount{}, ErrSAFPermissionRevoked
+		}
+	}
+
+	mount, ok := s.registry.ReplaceSAFGrant(mountID, grantID, readOnly)
+	if !ok {
+		return WorkspaceMount{}, fmt.Errorf("%w: mount %q not found", ErrMountNotFound, mountID)
+	}
+
+	if s.mountRepo != nil {
+		s.mountRepo.UpdateGrant(string(mountID), grantID, readOnly, string(mount.Status))
+	}
+
+	return mount, nil
+}
+
+func (s *Service) RemoveMount(ctx context.Context, id WorkspaceID) error {
+	if err := s.registry.RemoveMount(ctx, id); err != nil {
+		return err
+	}
+	if s.mountRepo != nil {
+		return s.mountRepo.Delete(string(id))
+	}
+	return nil
+}
+
+func (s *Service) RefreshMountStatus(ctx context.Context, id WorkspaceID) (WorkspaceMount, error) {
+	mount, ok := s.registry.GetMount(id)
+	if !ok {
+		return WorkspaceMount{}, fmt.Errorf("%w: %q", ErrMountNotFound, id)
+	}
+	if mount.Kind != WorkspaceKindSAF {
+		return mount, nil
+	}
+	if s.safGrantResolver == nil {
+		return mount, nil
+	}
+
+	status, err := s.safGrantResolver.ResolveGrant(mount.NativeGrant)
+	if err != nil {
+		return mount, nil
+	}
+	newStatus, available := GrantStatusToMountUpdate(mount.NativeGrant, status)
+	s.registry.UpdateStatus(id, newStatus, available)
+	m, _ := s.registry.GetMountOrEmpty(id)
+	return m, nil
+}
+
+func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
+	if s.mountRepo == nil {
+		return nil
+	}
+	records, err := s.mountRepo.LoadAll()
+	if err != nil {
+		return fmt.Errorf("%w: load mounts: %v", ErrSAFUnavailable, err)
+	}
+	for _, rec := range records {
+		mount := WorkspaceMount{
+			ID:          WorkspaceID(rec.id),
+			Name:        rec.name,
+			Kind:        rec.kind,
+			ReadOnly:    rec.readOnly,
+			Available:   true,
+			Status:      WorkspaceStatusReady,
+			RootURI:     MountURI(WorkspaceID(rec.id)),
+			NativeGrant: rec.nativeGrant,
+			CreatedAt:   rec.createdAt,
+			UpdatedAt:   rec.updatedAt,
+		}
+		switch rec.kind {
+		case WorkspaceKindLocal:
+			if _, err := s.registry.RegisterLocalMount(ctx, rec.name, rec.localRoot, rec.readOnly); err == nil {
+			}
+		case WorkspaceKindSAF:
+			if err := s.registry.RestoreMount(mount); err != nil {
+				continue
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Service) Stat(ctx context.Context, uriStr string) (WorkspaceEntry, error) {
