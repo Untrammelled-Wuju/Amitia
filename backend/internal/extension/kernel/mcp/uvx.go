@@ -148,8 +148,10 @@ func buildUvxArgs(spec UvxLaunchSpec, req PythonToolRequirement, policy UvxPolic
 }
 
 func buildUvxEnvironment(spec UvxLaunchSpec, policy UvxPolicy) map[string]string {
-	env := map[string]string{
-		"UV_CACHE_DIR": policy.cacheDir(),
+	env := map[string]string{}
+
+	if policy.cacheDir() != "" {
+		env["UV_CACHE_DIR"] = policy.cacheDir()
 	}
 
 	for k, v := range spec.Environment {

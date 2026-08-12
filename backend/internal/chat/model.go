@@ -3,8 +3,6 @@
 package chat
 
 import (
-	"context"
-	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"

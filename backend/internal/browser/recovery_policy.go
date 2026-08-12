@@ -70,6 +70,20 @@ func (s *RecoveryStore) GetRecoverableTabs() []*tabRecoveryState {
 	return result
 }
 
+func (s *RecoveryStore) GetTabState(tabID BrowserTabID) (*tabRecoveryState, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state, ok := s.tabs[tabID]
+	return state, ok
+}
+
+func (s *RecoveryStore) GetSession(sessionID BrowserSessionID) (*sessionRecoveryDescriptor, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	desc, ok := s.sessions[sessionID]
+	return desc, ok
+}
+
 func (s *RecoveryStore) MarkSessionRecoverable(sessionID BrowserSessionID, recoverable bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
