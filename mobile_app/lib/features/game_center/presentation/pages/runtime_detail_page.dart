@@ -4,9 +4,9 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../domain/game_center_dto.dart';
 import '../controllers/game_center_providers.dart';
+import '../controllers/game_center_controller.dart';
 
 class RuntimeDetailPage extends ConsumerWidget {
   final String runtimeId;

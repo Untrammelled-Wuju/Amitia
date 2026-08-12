@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_dialogs.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../domain/game_center_dto.dart';
 import '../controllers/game_center_providers.dart';
+import '../controllers/game_center_controller.dart';
+import 'plugin_detail_page.dart';
 
 class GameCenterPage extends ConsumerStatefulWidget {
   const GameCenterPage({super.key});
@@ -66,7 +65,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
         title: '尚未安装游戏插件',
         subtitle: '安装游戏插件后即可在此管理',
         actionText: '安装插件',
-        onPressed: () => _showInstallDialog(context),
+        onAction: () => _showInstallDialog(context),
       );
     }
     return _buildPluginList(context, state);
@@ -82,10 +81,21 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
           final plugin = state.plugins[index];
           return _PluginCard(
             plugin: plugin,
-            onTap: () => ref.read(gameCenterControllerProvider.notifier).selectPlugin(
-              plugin.pluginId,
-              extensionId: plugin.extensionId,
-            ),
+            onTap: () {
+              ref.read(gameCenterControllerProvider.notifier).selectPlugin(
+                plugin.pluginId,
+                extensionId: plugin.extensionId,
+              );
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PluginDetailPage(
+                    pluginId: plugin.pluginId,
+                    extensionId: plugin.extensionId,
+                  ),
+                ),
+              );
+            },
             onEnable: plugin.enabled
                 ? null
                 : () => ref.read(gameCenterControllerProvider.notifier).enable(plugin.extensionId),

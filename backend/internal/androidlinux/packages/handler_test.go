@@ -3,17 +3,17 @@ package packages
 import (
 	"context"
 	"testing"
+
+	"github.com/u-ai/backend/internal/androidlinux/shell"
 )
 
 type mockShellExecutor struct {
-	executions []ShellExecuteResultT
+	executions []shell.ShellExecuteRequest
 }
 
-type ShellExecuteResultT = ShellExecuteRequest
-
-func (m *mockShellExecutor) Execute(ctx context.Context, req ShellExecuteRequest) ShellExecuteResult {
+func (m *mockShellExecutor) Execute(ctx context.Context, req shell.ShellExecuteRequest) shell.ShellExecuteResult {
 	m.executions = append(m.executions, req)
-	return ShellExecuteResult{ExitCode: 0}
+	return shell.ShellExecuteResult{ExitCode: 0}
 }
 
 func TestHandler_Handle_InvalidOperation(t *testing.T) {

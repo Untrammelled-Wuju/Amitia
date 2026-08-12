@@ -147,6 +147,19 @@ class BackendServiceApi {
     _parseSimpleResponse(response, path);
   }
 
+  Future<T?> deleteWithResponse<T>(
+    String path, {
+    Object? data,
+    T Function(dynamic)? fromJson,
+  }) async {
+    final response = await _http.send(BackendHttpRequest(
+      method: BackendHttpMethod.delete,
+      path: path,
+      body: data,
+    ));
+    return _parseResponse<T>(response, fromJson, path);
+  }
+
   T? _parseResponse<T>(
     BackendHttpResponse response,
     T Function(dynamic)? fromJson,

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/androidlinux/shell"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type fakeShellExecutor struct {
@@ -95,7 +96,7 @@ func TestAptDetector_Detect_NonRoot(t *testing.T) {
 
 func TestAptManager_Install_ValidatesPackage(t *testing.T) {
 	executor := &fakeShellExecutor{}
-	mgr := NewAptManager(executor, PackagesPolicy{}, util_RuntimePaths())
+	mgr := NewAptManager(executor, PackagesPolicy{}, util.RuntimePaths{})
 
 	_, err := mgr.Install(context.Background(), []string{"git; rm -rf /"}, 5000)
 	if err == nil {
@@ -104,8 +105,4 @@ func TestAptManager_Install_ValidatesPackage(t *testing.T) {
 	if executor.calls > 0 {
 		t.Error("expected no shell calls for invalid package")
 	}
-}
-
-func util_RuntimePaths() util_RuntimePaths {
-	return util_RuntimePaths{}
 }

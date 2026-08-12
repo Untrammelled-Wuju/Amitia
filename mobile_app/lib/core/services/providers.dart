@@ -18,6 +18,7 @@ import 'extension_service.dart';
 import 'extension_view_invalidator.dart';
 import 'system_service.dart';
 import 'channel_service.dart';
+import 'workspace_service.dart';
 import '../models/character.dart';
 import '../models/conversation.dart';
 import '../models/memory.dart';
@@ -88,6 +89,8 @@ final emoteServiceProvider = Provider<EmoteService>((ref) => EmoteService(_getSe
 final proactiveServiceProvider = Provider<ProactiveService>((ref) => ProactiveService(_getServiceApi(ref)));
 
 final temporalServiceProvider = Provider<TemporalService>((ref) => TemporalService(_getServiceApi(ref)));
+
+final workspaceServiceProvider = Provider<WorkspaceService>((ref) => WorkspaceService(_getServiceApi(ref)));
 
 final moodServiceProvider = Provider<MoodService>((ref) => MoodService(_getServiceApi(ref)));
 
