@@ -23,6 +23,8 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		group.POST("/saf", h.registerSAFMount)
 		group.PUT("/:id/grant", h.replaceSAFGrant)
 		group.POST("/:id/refresh", h.refreshMountStatus)
+		group.POST("/remote", h.registerRemoteMount)
+		group.PATCH("/:id/remote", h.updateRemoteMount)
 	}
 }
 
@@ -93,6 +95,44 @@ func (h *Handler) replaceSAFGrant(c *gin.Context) {
 func (h *Handler) refreshMountStatus(c *gin.Context) {
 	id := c.Param("id")
 	mount, err := h.service.RefreshMountStatus(c.Request.Context(), WorkspaceID(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, mount)
+}
+
+func (h *Handler) registerRemoteMount(c *gin.Context) {
+	var req struct {
+		Name          string            `json:"name" binding:"required"`
+		Config        RemoteMountConfig `json:"config" binding:"required"`
+		CredentialRef string            `json:"credentialRef"`
+		ReadOnly      bool              `json:"readOnly"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	mount, err := h.service.RegisterRemoteMount(c.Request.Context(), req.Name, req.Config, req.CredentialRef, req.ReadOnly)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, mount)
+}
+
+func (h *Handler) updateRemoteMount(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Config        RemoteMountConfig `json:"config" binding:"required"`
+		CredentialRef string            `json:"credentialRef"`
+		ReadOnly      bool              `json:"readOnly"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	mount, err := h.service.UpdateRemoteMountConfig(c.Request.Context(), WorkspaceID(id), req.Config, req.CredentialRef, req.ReadOnly)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
