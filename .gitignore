@@ -239,3 +239,7 @@ mobile_app/android/.kotlin/
 sdk/plugin-sdk/dist/
 sdk/plugin-sdk/node_modules/
 sdk/plugin-sdk/D:*
+
+b35_test_output.txt
+backend/runtime/
+

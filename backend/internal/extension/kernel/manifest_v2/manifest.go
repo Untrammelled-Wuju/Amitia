@@ -14,6 +14,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/mcp_manifest"
 )
 
 const ManifestVersion = 2
@@ -402,6 +403,11 @@ func (m Manifest) Validate() ValidationReport {
 			if c.Kind == "desktop_pet_plugin" {
 				if err := validateDesktopPetPluginContribution(c.Spec, cpath, moduleIDs); err != nil {
 					report.AddError(cpath+".spec", "invalid_desktop_pet_plugin", err.Error())
+				}
+			}
+			if c.Kind == "mcp_server" {
+				if err := validateMCPServerContribution(c.Spec, cpath, mod.Runtime); err != nil {
+					report.AddError(cpath+".spec", "invalid_mcp_server", err.Error())
 				}
 			}
 		}
@@ -1029,6 +1035,28 @@ func validateDesktopPetPluginContribution(spec map[string]any, cpath string, mod
 		if !moduleIDs[runtimeModuleID] {
 			return fmt.Errorf("desktop_pet_plugin references unknown module: %s", runtimeModuleID)
 		}
+	}
+	return nil
+}
+
+func validateMCPServerContribution(spec map[string]any, cpath string, runtime *RuntimeMeta) error {
+	if spec == nil {
+		return fmt.Errorf("mcp_server contribution requires spec")
+	}
+	parsed, err := mcp_manifest.ParseSpec(spec)
+	if err != nil {
+		return fmt.Errorf("mcp_server spec parse error: %w", err)
+	}
+	validationErrors := mcp_manifest.Validate(parsed, cpath+".spec")
+	if len(validationErrors) > 0 {
+		var msgs []string
+		for _, ve := range validationErrors {
+			msgs = append(msgs, fmt.Sprintf("%s: %s", ve.Path, ve.Code))
+		}
+		return fmt.Errorf("mcp_server spec validation failed: %s", strings.Join(msgs, "; "))
+	}
+	if runtime != nil && runtime.Type != "" && runtime.Type != "mcp" {
+		return fmt.Errorf("mcp_server contribution requires module runtime.type='mcp', got '%s'", runtime.Type)
 	}
 	return nil
 }

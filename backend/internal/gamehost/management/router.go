@@ -39,3 +39,12 @@ func RegisterGameCenterMutationRouter(group *gin.RouterGroup, mutationHandler *M
 		gameCenter.POST("/runtimes/:runtimeId/restart", mutationHandler.RestartRuntime)
 	}
 }
+
+func RegisterGameCenterControlRouter(group *gin.RouterGroup, controlHandler *ControlHandler) {
+	gameCenter := group.Group("/game-center")
+	{
+		gameCenter.POST("/runtimes/:runtimeId/takeover", controlHandler.Takeover)
+		gameCenter.POST("/runtimes/:runtimeId/release", controlHandler.Release)
+		gameCenter.POST("/runtimes/:runtimeId/emergency-stop", controlHandler.EmergencyStop)
+	}
+}

@@ -7,17 +7,18 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
 type noopAdapter struct {
-	kind ContributionKind
+	KindField ContributionKind
 }
 
-func (a *noopAdapter) Kind() ContributionKind                                  { return a.kind }
+func (a *noopAdapter) Kind() ContributionKind { return a.KindField }
 func (a *noopAdapter) Register(ctx context.Context, ref ContributionRef, def map[string]any, rev int, enabled bool) (ContributionRegistration, error) {
 	return ContributionRegistration{
 		Ref:        ref,
-		Kind:       a.kind,
+		Kind:       a.KindField,
 		Revision:   rev,
 		Status:     ContributionStatusRegistered,
 		Definition: cloneMap(def),
@@ -274,7 +275,7 @@ func isValidPlaybackMode(mode string) bool {
 
 func isValidRuntimeCapabilityKind(kind string) bool {
 	switch kind {
-	case "activate_pet", "apply_resource", "trigger_action", "refresh_state", "idle_interval"]:
+	case "activate_pet", "apply_resource", "trigger_action", "refresh_state", "idle_interval":
 		return true
 	}
 	return false
@@ -300,7 +301,7 @@ func validateResourceRef(ref string) error {
 
 func defaultAdapters() []ContributionAdapter {
 	return []ContributionAdapter{
-		&noopAdapter{Kind: KindUnknown},
+		&noopAdapter{KindField: KindUnknown},
 		&resourceContributionAdapter{},
 		&actionContributionAdapter{},
 		&runtimeCapabilityContributionAdapter{},
@@ -308,7 +309,7 @@ func defaultAdapters() []ContributionAdapter {
 	}
 }
 
-var _ kernelContributionSource = (*adapterBridge)(nil)
+var _ KernelContributionSource = (*adapterBridge)(nil)
 
 type adapterBridge struct {
 	inner func(ctx context.Context, extID domain.ExtensionID) ([]domain.ContributionDefinition, error)
@@ -325,4 +326,29 @@ func (b *adapterBridge) GetInstallation(ctx context.Context, id domain.Extension
 	return domain.ExtensionInstallation{}, fmt.Errorf("not implemented")
 }
 
-var _ = kernelContributionSource(nil)
+var _ = KernelContributionSource(nil)
+
+type containerSource struct {
+	contribs sqlite.ContributionRepository
+	installs domain.InstallationRepository
+}
+
+func NewContainerSource(contribs sqlite.ContributionRepository, installs domain.InstallationRepository) KernelContributionSource {
+	return &containerSource{contribs: contribs, installs: installs}
+}
+
+func (s *containerSource) ListContributions(ctx context.Context, extID domain.ExtensionID) ([]domain.ContributionDefinition, error) {
+	if s.contribs == nil {
+		return nil, nil
+	}
+	return s.contribs.ListContributions(ctx, extID)
+}
+
+func (s *containerSource) GetInstallation(ctx context.Context, id domain.ExtensionID) (domain.ExtensionInstallation, error) {
+	if s.installs == nil {
+		return domain.ExtensionInstallation{}, fmt.Errorf("not installed")
+	}
+	return s.installs.GetInstallation(ctx, id)
+}
+
+var _ KernelContributionSource = (*containerSource)(nil)

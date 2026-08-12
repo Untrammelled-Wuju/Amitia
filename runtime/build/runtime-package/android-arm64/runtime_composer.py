@@ -34,7 +34,28 @@ def _open_deterministic_xz(filename, mode="wb"):
     return lzma.open(filename, mode=mode)
 
 
-def extract_archive_to_dir(archive_path, target_dir):
+def _detect_common_prefix(members):
+    """Detect common directory prefix among archive members."""
+    dir_prefixes = set()
+    for m in members:
+        if m.name.startswith("/"):
+            continue
+        parts = m.name.split("/")
+        if len(parts) > 1:
+            dir_prefixes.add(parts[0])
+    # Only strip prefix if ALL entries share the same top-level directory
+    if len(dir_prefixes) == 1:
+        prefix = list(dir_prefixes)[0]
+        for m in members:
+            if m.name.startswith("/"):
+                continue
+            if not m.name.startswith(prefix + "/") and m.name != prefix:
+                return None
+        return prefix
+    return None
+
+
+def extract_archive_to_dir(archive_path, target_dir, expected_prefix=None):
     with tarfile.open(str(archive_path), "r:*") as tf:
         members = tf.getmembers()
         for m in members:
@@ -42,11 +63,21 @@ def extract_archive_to_dir(archive_path, target_dir):
                 raise RuntimeError(f"禁止的成员类型 {m.type}: {m.name}")
             if m.issym() and m.linkname.startswith("/"):
                 raise RuntimeError(f"Runtime禁止绝对Symlink: {m.name} -> {m.linkname}")
+        # Detect common directory prefix to strip, or use expected_prefix
+        strip_prefix = expected_prefix if expected_prefix else _detect_common_prefix(members)
         for m in members:
-            dest = os.path.join(target_dir, m.name)
+            rel_name = m.name
+            if strip_prefix and rel_name.startswith(strip_prefix + "/"):
+                rel_name = rel_name[len(strip_prefix) + 1:]
+            elif strip_prefix and rel_name == strip_prefix:
+                continue
+            # Skip entries not under the expected prefix when expected_prefix is set
+            if expected_prefix and not m.name.startswith(expected_prefix + "/") and m.name != expected_prefix:
+                continue
+            dest = os.path.join(target_dir, rel_name)
             abs_target = os.path.abspath(dest)
             abs_dir = os.path.abspath(target_dir)
-            if not abs_target.startswith(abs_dir):
+            if not abs_target.startswith(abs_dir + os.sep) and abs_target != abs_dir:
                 raise RuntimeError(f"路径穿越: {m.name}")
             if m.isdir():
                 os.makedirs(dest, exist_ok=True)
@@ -76,10 +107,10 @@ def compose_runtime_root(backend_artifact, node_artifact, node_scripts_artifact,
     try:
         parts_dir = work_dir / "parts"
         parts_dir.mkdir()
-        extract_archive_to_dir(backend_artifact, str(parts_dir / "backend"))
-        extract_archive_to_dir(node_artifact, str(parts_dir / "node"))
-        extract_archive_to_dir(node_scripts_artifact, str(parts_dir / "scripts"))
-        extract_archive_to_dir(qdrant_artifact, str(parts_dir / "qdrant"))
+        extract_archive_to_dir(backend_artifact, str(parts_dir / "backend"), expected_prefix="backend")
+        extract_archive_to_dir(node_artifact, str(parts_dir / "node"), expected_prefix="linux-arm64.partial/node")
+        extract_archive_to_dir(node_scripts_artifact, str(parts_dir / "scripts"), expected_prefix="scripts")
+        extract_archive_to_dir(qdrant_artifact, str(parts_dir / "qdrant"), expected_prefix="qdrant")
         plugin_dir = parts_dir / "plugin-host"
         plugin_dir.mkdir(parents=True, exist_ok=True)
         for rel, src in plugin_host_files:

@@ -63,14 +63,14 @@ func ContributionRefFromJSON(j ContributionRefJSON) (ContributionRef, error) {
 }
 
 func ParseContributionRef(s string) (ContributionRef, error) {
-	parts := strings.SplitN(s, "/", 3)
-	if len(parts) != 3 {
+	parts := strings.SplitN(s, "/", 4)
+	if len(parts) < 4 {
 		return ContributionRef{}, fmt.Errorf("plugin_boundary: invalid contribution ref: %s", s)
 	}
 	return ContributionRefFromJSON(ContributionRefJSON{
-		ExtensionID:    parts[0],
-		PluginID:       parts[1],
-		ContributionID: parts[2],
+		ExtensionID:    parts[0] + "/" + parts[1],
+		PluginID:       parts[2],
+		ContributionID: strings.Join(parts[3:], "/"),
 	})
 }
 

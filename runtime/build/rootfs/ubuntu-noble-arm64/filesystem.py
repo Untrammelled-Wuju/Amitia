@@ -89,9 +89,6 @@ def safe_extract_archive(archive_path, extract_dir, expected_files=None):
             if m.issym():
                 link_target = m.linkname
                 if link_target.startswith("/"):
-                    # For directory symlinks like "bin -> usr/bin", preserve the absolute path
-                    # For file symlinks like "sh -> dash", keep the original relative path
-                    # Only reject if target points outside rootfs scope after normalization
                     normalized = "/" + link_target.lstrip("/")
                     if not normalized.startswith("/"):
                         raise RuntimeError(f"无效符号链接目标: {m.name} -> {link_target}")
@@ -112,7 +109,6 @@ def safe_extract_archive(archive_path, extract_dir, expected_files=None):
                     target_path.mkdir(parents=True, exist_ok=True)
                     continue
                 raise RuntimeError(f"设备/FIFO/Socket 成员: {m.name}")
-        # Use filter to allow absolute symlinks (needed for merged-usr layout)
         for m in members:
             if m.ischr() or m.isblk() or m.isfifo() or m.isdev():
                 continue
@@ -121,7 +117,6 @@ def safe_extract_archive(archive_path, extract_dir, expected_files=None):
             except (tarfile.TarError, OSError) as e:
                 error_msg = str(e)
                 if "absolute path" in error_msg and m.issym():
-                    # Manually create symlinks that reference absolute paths
                     link_path = extract_dir / m.name
                     link_path.parent.mkdir(parents=True, exist_ok=True)
                     if link_path.exists() or link_path.is_symlink():
@@ -129,7 +124,11 @@ def safe_extract_archive(archive_path, extract_dir, expected_files=None):
                     os.symlink(m.linkname, link_path)
                 else:
                     raise
-    return extract_dir
+            # Restore mode permissions (workaround for set_attrs=False)
+            if m.isdir() or m.isfile() or m.islnk():
+                extracted_path = extract_dir / m.name
+                if extracted_path.exists():
+                    os.chmod(extracted_path, m.mode)
 
 
 def apply_overlay(overlays_dir, target_root):

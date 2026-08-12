@@ -92,3 +92,11 @@ func (c *Container) WireIOSPlatformAdapter(provider capability.IOSProvider) {
 	adapter := capability.NewIOSRuntimeAdapter(provider)
 	c.AdapterRegistry.Register(capability.RuntimeTypeIOS_Native, adapter)
 }
+
+func (c *Container) WireBrowserAdapter(call capability.BrowserCallFunc, health capability.BrowserHealthFunc) {
+	if c == nil || c.AdapterRegistry == nil || call == nil {
+		return
+	}
+	adapter := capability.NewBrowserRuntimeAdapter(call, health)
+	c.AdapterRegistry.Register(capability.RuntimeTypeBrowser, adapter)
+}

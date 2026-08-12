@@ -105,3 +105,13 @@ func NewGameHostPluginRegistryFromContainer(container *gamehost.GameHostContaine
 	}
 	return NewGameHostPluginRegistry(container.PluginRegistry)
 }
+
+type ControlServiceOptions struct {
+	TakeoverFn      TakeoverFunc
+	ReleaseFn       ReleaseFunc
+	EmergencyStopFn EmergencyStopFunc
+}
+
+func NewControlHandlerFromFuncs(opts ControlServiceOptions) *ControlHandler {
+	return NewControlHandler(opts.TakeoverFn, opts.ReleaseFn, opts.EmergencyStopFn)
+}

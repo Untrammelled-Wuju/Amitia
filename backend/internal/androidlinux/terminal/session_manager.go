@@ -5,8 +5,8 @@ package terminal
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimehost"
@@ -162,7 +162,7 @@ func (m *SessionManager) Close(ctx context.Context, owner SessionOwner, id Sessi
 		done := make(chan struct{})
 		go func() {
 			if sess.cmd != nil && sess.cmd.Process != nil {
-				_ = sess.cmd.Process.Signal(exec.Command("true").Run())
+				_ = sess.cmd.Process.Signal(syscall.SIGTERM)
 			}
 			close(done)
 		}()

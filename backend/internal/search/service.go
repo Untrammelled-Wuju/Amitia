@@ -39,6 +39,9 @@ func (s *Service) Search(ctx context.Context, req GeneralSearchRequest, invocati
 	if !s.config.Enabled {
 		return nil, NewError(SEARCH_DISABLED, "", false, nil)
 	}
+	if _, verr := sanitizeQuery(req.Query); verr != nil {
+		return nil, NewError(SEARCH_INVALID_QUERY, "", false, verr)
+	}
 	provider, serr := s.resolveProvider()
 	if serr != nil {
 		return nil, serr

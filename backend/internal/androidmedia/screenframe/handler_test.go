@@ -2,6 +2,7 @@ package screenframe
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 )

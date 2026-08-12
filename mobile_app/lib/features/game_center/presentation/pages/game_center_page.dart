@@ -1,51 +1,279 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../../../app/app_routes.dart';
-import '../../../../app/center_navigation.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_dialogs.dart';
+import '../../../../core/widgets/amitia_button.dart';
+import '../../domain/game_center_dto.dart';
+import '../controllers/game_center_providers.dart';
 
-class GameCenterPage extends ConsumerWidget {
+class GameCenterPage extends ConsumerStatefulWidget {
   const GameCenterPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GameCenterPage> createState() => _GameCenterPageState();
+}
+
+class _GameCenterPageState extends ConsumerState<GameCenterPage> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(gameCenterControllerProvider.notifier).loadPlugins();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(gameCenterControllerProvider);
+
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '游戏中心',
         navigation: AmitiaAppBarNavigation.back,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: state.pluginsRefreshing
+                ? null
+                : () => ref.read(gameCenterControllerProvider.notifier).refreshPlugins(),
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: AmitiaEmptyState(
-                icon: Icons.sports_esports_outlined,
-                title: '暂无已连接的游戏',
-                subtitle: '游戏中心功能即将上线，敬请期待',
-              ),
+        child: _buildBody(context, state),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, GameCenterState state) {
+    if (state.pluginsLoading) {
+      return const AmitiaLoadingState(message: '加载中...');
+    }
+    if (state.pluginsError != null) {
+      return AmitiaErrorState(
+        message: '加载失败: ${state.pluginsError}',
+        onRetry: () => ref.read(gameCenterControllerProvider.notifier).loadPlugins(),
+      );
+    }
+    if (state.plugins.isEmpty) {
+      return AmitiaEmptyState(
+        icon: Icons.sports_esports_outlined,
+        title: '尚未安装游戏插件',
+        subtitle: '安装游戏插件后即可在此管理',
+        actionText: '安装插件',
+        onPressed: () => _showInstallDialog(context),
+      );
+    }
+    return _buildPluginList(context, state);
+  }
+
+  Widget _buildPluginList(BuildContext context, GameCenterState state) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(gameCenterControllerProvider.notifier).refreshPlugins(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        itemCount: state.plugins.length,
+        itemBuilder: (context, index) {
+          final plugin = state.plugins[index];
+          return _PluginCard(
+            plugin: plugin,
+            onTap: () => ref.read(gameCenterControllerProvider.notifier).selectPlugin(
+              plugin.pluginId,
+              extensionId: plugin.extensionId,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: AmitiaButton(
-                label: '插件管理',
-                icon: Icons.extension_outlined,
-                isFullWidth: true,
-                isSecondary: true,
-                onPressed: () => CenterNavigation.openExtensionCenter(context),
+            onEnable: plugin.enabled
+                ? null
+                : () => ref.read(gameCenterControllerProvider.notifier).enable(plugin.extensionId),
+            onDisable: plugin.enabled
+                ? () => ref.read(gameCenterControllerProvider.notifier).disable(plugin.extensionId)
+                : null,
+            onUninstall: () => _confirmUninstall(context, plugin),
+            isOperating: ref.read(gameCenterControllerProvider.notifier).hasPackageOp(plugin.extensionId),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showInstallDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('安装游戏插件'),
+        content: const Text('请选择插件安装包文件'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+            },
+            child: const Text('选择文件'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmUninstall(BuildContext context, GamePluginSummary plugin) {
+    showAmitiaConfirmDialog(
+      context,
+      title: '卸载游戏插件',
+      message: '确定要卸载「${plugin.name}」吗？此操作不可撤销。',
+      confirmLabel: '卸载',
+      isDestructive: true,
+    ).then((confirmed) {
+      if (confirmed == true) {
+        ref.read(gameCenterControllerProvider.notifier).uninstall(plugin.extensionId);
+      }
+    });
+  }
+}
+
+class _PluginCard extends StatelessWidget {
+  final GamePluginSummary plugin;
+  final VoidCallback onTap;
+  final VoidCallback? onEnable;
+  final VoidCallback? onDisable;
+  final VoidCallback onUninstall;
+  final bool isOperating;
+
+  const _PluginCard({
+    required this.plugin,
+    required this.onTap,
+    this.onEnable,
+    this.onDisable,
+    required this.onUninstall,
+    this.isOperating = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: InkWell(
+        onTap: isOperating ? null : onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(plugin.name, style: AppTypography.cardTitle(context)),
+                        const SizedBox(height: 2),
+                        Text('v${plugin.version}', style: AppTypography.caption(context)),
+                      ],
+                    ),
+                  ),
+                  _buildStatusBadges(context),
+                ],
               ),
-            ),
-            const SizedBox(height: AppSpacing.sectionGap),
-          ],
+              if (plugin.description.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  plugin.description,
+                  style: AppTypography.bodySmall(context),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  if (plugin.runtimeCount > 0)
+                    AmitiaStatusBadge(
+                      label: '${plugin.runtimeCount} 运行中',
+                      type: BadgeType.info,
+                    ),
+                  const Spacer(),
+                  if (isOperating)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else ...[
+                    if (onEnable != null)
+                      AmitiaButtonOutline(
+                        label: '启用',
+                        onPressed: onEnable,
+                      ),
+                    if (onDisable != null) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      AmitiaButtonOutline(
+                        label: '禁用',
+                        onPressed: onDisable,
+                      ),
+                    ],
+                    const SizedBox(width: AppSpacing.sm),
+                    AmitiaButtonOutline(
+                      label: '卸载',
+                      onPressed: onUninstall,
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildStatusBadges(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AmitiaStatusBadge(
+          label: plugin.enabled ? '已启用' : '已禁用',
+          type: plugin.enabled ? BadgeType.success : BadgeType.neutral,
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        if (plugin.health.isNotEmpty)
+          AmitiaStatusBadge(
+            label: _healthLabel(plugin.health),
+            type: _healthBadgeType(plugin.health),
+          ),
+      ],
+    );
+  }
+
+  String _healthLabel(String health) {
+    switch (health.toLowerCase()) {
+      case 'healthy':
+        return '正常';
+      case 'degraded':
+        return '异常';
+      case 'unhealthy':
+        return '故障';
+      default:
+        return health;
+    }
+  }
+
+  BadgeType _healthBadgeType(String health) {
+    switch (health.toLowerCase()) {
+      case 'healthy':
+        return BadgeType.success;
+      case 'degraded':
+        return BadgeType.warning;
+      case 'unhealthy':
+        return BadgeType.error;
+      default:
+        return BadgeType.neutral;
+    }
   }
 }

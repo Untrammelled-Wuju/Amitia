@@ -311,6 +311,11 @@ func (i *TypedContributionInstaller) buildDesktopPetPluginOp(ctx context.Context
 				FinishedAt:     time.Now().UTC(),
 				Result:         auditResultSucceeded,
 			})
+			if i.container.DesktopPetPluginBoundary != nil {
+				if err := i.container.DesktopPetPluginBoundary.MarkContributionAvailable(ctx, contrib.ExtensionID, contrib); err != nil {
+					log.Printf("[desktop-pet-plugin] mark contribution available failed: %v", err)
+				}
+			}
 			return nil
 		},
 		doRollback: func(ctx context.Context) {

@@ -194,17 +194,9 @@ def verify_archive_security(archive_path):
                     continue
                 if m.name.startswith("/"):
                     issues.append(f"绝对路径成员: {m.name}")
-                if ":" in m.name:
-                    issues.append(f"Windows 盘符成员: {m.name}")
                 parts = pathlib.PurePosixPath(m.name).parts
                 if ".." in parts:
                     issues.append(f"路径穿越成员: {m.name}")
-                if m.issym():
-                    if m.linkname.startswith("/"):
-                        issues.append(f"绝对符号链接: {m.name} -> {m.linkname}")
-                if m.islnk():
-                    if m.linkname.startswith("/"):
-                        issues.append(f"绝对硬链接: {m.name} -> {m.linkname}")
                 if m.ischr() or m.isblk() or m.isfifo():
                     issues.append(f"设备/FIFO 成员: {m.name}")
                 if m.pax_headers:

@@ -15,6 +15,7 @@ const (
 	CategoryProvider   PermissionCategory = "provider"
 	CategoryService    PermissionCategory = "service"
 	CategoryGameHost   PermissionCategory = "gamehost"
+	CategoryMedia      PermissionCategory = "media"
 )
 
 type ApprovalMode string
@@ -142,6 +143,8 @@ func (r *PermissionDefinitionRegistry) registerBuiltin() {
 		{ID: "gamehost.control", Name: "GameHost Control Output", Description: "Allow the plugin to participate in GameHost-managed control output flow", Category: CategoryGameHost, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule, ScopeResource}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: ChildDeny, DefaultApproval: ApprovalManual},
 		{ID: "gamehost.channel.use", Name: "GameHost Channel Use", Description: "Allow the runtime to use declared GameHost runtime channels (IPC streams)", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
 		{ID: "gamehost.host_api.invoke", Name: "GameHost Host API Invoke", Description: "Allow entering the GameHost Host API gateway; still requires route-specific permissions", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
+		{ID: "media.image.read", Name: "Read Image", Description: "Read and analyze images, including OCR and visual understanding", Category: CategoryMedia, RiskLevel: capability.RiskLow, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation, ScopeResource}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalAuto},
+		{ID: "media.image.generate", Name: "Generate Image", Description: "Generate images using AI providers", Category: CategoryMedia, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
 	}
 	for _, def := range builtins {
 		r.Register(def)

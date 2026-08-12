@@ -153,6 +153,13 @@ def compute_sha256sums(work_dir):
     for parts in targets:
         p = work_dir.joinpath(*parts)
         if p.exists():
+            if p.is_dir():
+                # Find the archive file inside the directory
+                archive_files = list(p.glob("*.tar.xz"))
+                if archive_files:
+                    p = archive_files[0]
+                else:
+                    continue
             sha = hashlib.sha256(p.read_bytes()).hexdigest()
             rel = "/".join(parts)
             lines.append((rel, sha))
@@ -163,6 +170,12 @@ def compute_sha256sums(work_dir):
 
 def atomic_publish(work_dir, output_dir):
     output_dir = pathlib.Path(output_dir)
+    # Collect existing ZIP and SHA files to preserve them
+    preserved = []
+    if output_dir.exists():
+        for child in output_dir.iterdir():
+            if child.suffix in ('.zip', '.sha256'):
+                preserved.append((child.name, child.read_bytes()))
     if output_dir.exists():
         for child in output_dir.iterdir():
             if child.is_dir():
@@ -177,6 +190,9 @@ def atomic_publish(work_dir, output_dir):
             shutil.copytree(str(child), str(dest), dirs_exist_ok=False)
         else:
             shutil.copy2(str(child), str(dest))
+    # Restore preserved ZIP and SHA files
+    for name, data in preserved:
+        (output_dir / name).write_bytes(data)
 
 
 def update_runtime_version_in_lock(lock, version):

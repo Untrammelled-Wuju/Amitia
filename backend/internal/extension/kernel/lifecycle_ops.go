@@ -255,6 +255,12 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	r.logEnableStep(operationID, extensionID, "activate_contributions", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "activate_contributions", LifecycleStepSucceeded, nil)
 
+	if r.container.DesktopPetPluginBoundary != nil {
+		if err := r.container.DesktopPetPluginBoundary.HandleExtensionEnabled(ctx, extID, inst.InstalledVersion.String(), operationID); err != nil {
+			log.Printf("[enable-tx] desktop_pet_plugin boundary error: %v", err)
+		}
+	}
+
 	if r.container.UIContributionRepo != nil {
 		uiDefs, uiErr := r.container.UIContributionRepo.ListByExtension(ctx, extensionID)
 		if uiErr != nil {
@@ -634,6 +640,13 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		}
 	}
 
+	if r.container.DesktopPetPluginBoundary != nil {
+		disableOpID := fmt.Sprintf("disable-%s-%d", extensionID, time.Now().UnixNano())
+		if err := r.container.DesktopPetPluginBoundary.HandleExtensionDisabled(ctx, extID, inst.InstalledVersion.String(), disableOpID, ""); err != nil {
+			log.Printf("[disable-tx] desktop_pet_plugin boundary error: %v", err)
+		}
+	}
+
 	finalState := domain.EnablementDisabled
 	if len(stopErrs) > 0 || len(disableErrs) > 0 {
 		finalState = domain.EnablementPartiallyDisabled
@@ -701,6 +714,12 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 				}
 			}
 			return fmt.Errorf("kernel: uninstall contributions: %w", err)
+		}
+	}
+
+	if r.container.DesktopPetPluginBoundary != nil {
+		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUninstalled(ctx, extID, version, "", ""); err != nil {
+			log.Printf("[uninstall-tx] desktop_pet_plugin boundary error: %v", err)
 		}
 	}
 

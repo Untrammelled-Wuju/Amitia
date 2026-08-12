@@ -14,8 +14,8 @@
     "rootfs": {
       "componentId": "runtime.rootfs",
       "version": "24.04.4",
-      "artifact": "runtime/build/out/rootfs/ubuntu-noble-arm64/amitia-ubuntu-rootfs-seed-24.04.4-arm64.tar.xz",
-      "sha256": "PENDING_BUILD",
+      "artifact": "runtime/build/out/rootfs/amitia-ubuntu-base-24.04.4-arm64.tar.xz",
+      "sha256": "1443264bed3987c0908f297d608bdfdee586223a6523037d79038cfdf7b54f8d",
       "platform": "linux",
       "architecture": "arm64"
     },

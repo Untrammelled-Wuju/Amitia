@@ -44,6 +44,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/gamehost"
 )
 
@@ -144,12 +145,13 @@ type Container struct {
 	OrderingEngine        *ui_ordering.OrderingEngine
 	ExtRoot               string
 
-	DesktopHost         *desktop.DesktopHost
-	UpdateManager       *desktop_update.UpdateManager
-	UpdateAdapter       *UpdateManagerAdapter
-	DesktopAPI          *desktop.DesktopAPI
-	UpdateAPI           *desktop.UpdateAPI
-	DesktopActionBridge *DesktopActionBridge
+	DesktopHost              *desktop.DesktopHost
+	UpdateManager            *desktop_update.UpdateManager
+	UpdateAdapter            *UpdateManagerAdapter
+	DesktopAPI               *desktop.DesktopAPI
+	UpdateAPI                *desktop.UpdateAPI
+	DesktopActionBridge      *DesktopActionBridge
+	DesktopPetPluginBoundary *plugin_boundary.DesktopPetPluginBoundary
 
 	ObservabilityStore observability.StorageBackend
 

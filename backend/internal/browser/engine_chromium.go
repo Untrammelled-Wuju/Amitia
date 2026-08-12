@@ -207,7 +207,7 @@ func (e *chromiumEngine) snapshotLocked() BrowserRuntimeInfo {
 	return e.snapshotLockedWithTime(now)
 }
 
-func (e *chromiumEngine) snapshotLockedWithTime(now time.Time) BrowserRuntimeInfo {
+func (e *chromiumEngine) snapshotLockedWithTime(_ time.Time) BrowserRuntimeInfo {
 	state, generation := e.state.current()
 	info := BrowserRuntimeInfo{
 		State:     state,
@@ -224,10 +224,10 @@ func (e *chromiumEngine) snapshotLockedWithTime(now time.Time) BrowserRuntimeInf
 	}
 
 	if state == BrowserRuntimeReady && !info.ProcessAlive {
-		info.LastErrorCode = ErrCodeBrowserProcessExited
+		info.LastErrorCode = string(ErrCodeBrowserProcessExited)
 		info.State = BrowserRuntimeFailed
 	} else if state == BrowserRuntimeReady && !info.CDPConnected {
-		info.LastErrorCode = ErrCodeBrowserConnFailed
+		info.LastErrorCode = string(ErrCodeBrowserConnFailed)
 	}
 
 	return info

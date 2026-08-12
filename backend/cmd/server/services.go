@@ -69,6 +69,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
@@ -104,6 +105,7 @@ import (
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
+	"github.com/u-ai/backend/pkg/resourceuri"
 	"gorm.io/gorm"
 )
 
@@ -297,6 +299,21 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
+	imagegenRepo := imagegen.NewRepository(ctx.DB)
+	imagegenSvc := imagegen.NewService(imagegenRepo)
+	providerRegistry := desktoppet.NewProviderRegistry()
+	var resourceResolver *resourceuri.PhysicalResolver
+	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
+		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRoots{
+			Data: config.AppCfg.Storage.DataDir,
+		})
+		if resolverErr != nil {
+			log.Warn("failed to create resource resolver for image intelligence:", resolverErr)
+		} else {
+			resourceResolver = resolver
+		}
+	}
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -306,7 +323,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
 		WithRuntimeHost(bootstrap.RuntimeHost()).
-		WithSearchConfig(search.DefaultConfig())
+		WithSearchConfig(search.DefaultConfig()).
+		WithDeepSearchTaskEntry("tasks/deep-search/index.js").
+		WithVisionService(visionSvc).
+		WithImageGenService(imagegenSvc).
+		WithImageProviderRegistry(providerRegistry).
+		WithResourceResolver(resourceResolver)
 
 	kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
 
@@ -568,8 +590,7 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 	}
 	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(connectionManager), makeKernelMCPHealth(connectionManager), newMCPPostProcessor(mcpRepository))
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
-	desktopPetRegistry := desktoppet.NewProviderRegistry()
-	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, desktopPetRegistry)
+	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
 	processingDataDir := mcpDataDirectory(ctx)
 

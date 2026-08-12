@@ -82,16 +82,11 @@ func NewError(code, provider string, retryable bool, cause error) *Error {
 }
 
 func WrapHTTPError(code, provider string, status int, cause error) *Error {
-	var retryable bool
-	switch {
-	case status >= 500 && status != 501:
-		retryable = true
-	}
 	return &Error{
 		Code:       code,
 		Provider:   provider,
 		HTTPStatus: status,
-		Retryable:  retryable,
+		Retryable:  IsRetryableStatus(status),
 		Cause:      cause,
 	}
 }

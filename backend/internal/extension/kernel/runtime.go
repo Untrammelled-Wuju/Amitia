@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -357,11 +358,30 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 	r.mu.Lock()
 	r.installed[item.ID] = item
 	r.mu.Unlock()
+
+	if r.container != nil && r.container.DesktopPetPluginBoundary != nil {
+		extID := domain.ExtensionID(pkg.Manifest.Extension.ID)
+		version := pkg.Manifest.Extension.Version
+		if err := r.container.DesktopPetPluginBoundary.HandleExtensionInstalled(ctx, extID, version, ""); err != nil {
+			log.Printf("[install] desktop_pet_plugin boundary error: %v", err)
+		}
+	}
+
 	return item, nil
 }
 
 func (r *Runtime) Update(ctx context.Context, archivePath string) (InstalledExtension, error) {
-	return r.Install(ctx, archivePath)
+	item, err := r.Install(ctx, archivePath)
+	if err != nil {
+		return item, err
+	}
+	if r.container != nil && r.container.DesktopPetPluginBoundary != nil {
+		extID := domain.ExtensionID(item.ID)
+		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUpdated(ctx, extID, "", item.Version, ""); err != nil {
+			log.Printf("[update] desktop_pet_plugin boundary error: %v", err)
+		}
+	}
+	return item, nil
 }
 
 func installedFromManifest(manifest manifest_v2.Manifest, path string, installedAt time.Time) InstalledExtension {

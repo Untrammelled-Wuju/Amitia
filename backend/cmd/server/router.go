@@ -42,6 +42,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/feedback"
+	"github.com/u-ai/backend/internal/gamehost/control"
+	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
@@ -446,6 +448,38 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 			runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost, nil)
 			gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
 			management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
+
+			if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.TakeoverService != nil {
+				controlHandler := management.NewControlHandlerFromFuncs(management.ControlServiceOptions{
+					TakeoverFn: func(ctx context.Context, runtimeID string) (management.TakeoverResult, error) {
+						_, err := services.KernelContainer.GameHost.TakeoverService.Takeover(ctx, control.TakeoverRequest{
+							RuntimeID: domain.RuntimeInstanceID(runtimeID),
+							Actor:     "game_center_user",
+						})
+						if err != nil {
+							return management.TakeoverResult{}, err
+						}
+						return management.TakeoverResult{Success: true}, nil
+					},
+					ReleaseFn: func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (management.ReleaseResult, error) {
+						_, err := services.KernelContainer.GameHost.TakeoverService.Release(ctx, control.ReleaseRequest{
+							RuntimeID:     domain.RuntimeInstanceID(runtimeID),
+							TargetMode:    domain.ControlMode(targetMode),
+							Actor:         "game_center_user",
+							ExpectedEpoch: expectedEpoch,
+							UseExpected:   expectedEpoch > 0,
+						})
+						if err != nil {
+							return management.ReleaseResult{}, err
+						}
+						return management.ReleaseResult{Success: true}, nil
+					},
+					EmergencyStopFn: func(ctx context.Context, runtimeID string) error {
+						return nil
+					},
+				})
+				management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
+			}
 		}
 	}
 	emote.RegisterRouter(apiGroup, services.Emote)

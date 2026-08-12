@@ -30,6 +30,7 @@ type AdapterRegistrationDeps struct {
 	SearchHealth        capability.SearchHealthFunc
 	BrowserCaller       capability.BrowserCallFunc
 	BrowserHealth       capability.BrowserHealthFunc
+	InternalDispatcher  capability.InternalCallFunc
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -112,6 +113,11 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if deps.BrowserCaller != nil {
 		browserAdapter := capability.NewBrowserRuntimeAdapter(deps.BrowserCaller, deps.BrowserHealth)
 		registry.Register(capability.RuntimeTypeBrowser, browserAdapter)
+	}
+
+	if deps.InternalDispatcher != nil {
+		internalAdapter := capability.NewInternalRuntimeAdapter(deps.InternalDispatcher)
+		registry.Register(capability.RuntimeTypeInternal, internalAdapter)
 	}
 
 	return nil

@@ -4,14 +4,14 @@ package terminal
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/androidlinux/packages"
 	"github.com/u-ai/backend/internal/androidlinux/shell"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/pkg/platform"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 const (
@@ -19,14 +19,15 @@ const (
 )
 
 const (
-	OpOpen    = "terminal.open"
-	OpWrite   = "terminal.write"
-	OpRead    = "terminal.read"
-	OpResize  = "terminal.resize"
-	OpStatus  = "terminal.status"
-	OpClose   = "terminal.close"
-	OpCancel  = "terminal.cancel"
-	OpShellExec = "shell.exec"
+	OpOpen        = "terminal.open"
+	OpWrite       = "terminal.write"
+	OpRead        = "terminal.read"
+	OpResize      = "terminal.resize"
+	OpStatus      = "terminal.status"
+	OpClose       = "terminal.close"
+	OpCancel      = "terminal.cancel"
+	OpShellExec   = "shell.exec"
+	OpPackages    = "packages.*"
 )
 
 var DefaultShellAllowlist = []string{"/bin/sh", "/bin/bash"}
@@ -70,13 +71,15 @@ const (
 )
 
 type Provider struct {
-	manager      *SessionManager
-	host         runtimehost.RuntimeHost
-	workspace    string
-	clock        Clock
+	manager       *SessionManager
+	host          runtimehost.RuntimeHost
+	workspace     string
+	clock         Clock
 	shellExecutor shell.ShellExecutor
 	shellPolicy   shell.ShellPolicy
 	shellHandler  shell.ShellHandler
+	paths         util.RuntimePaths
+	packagesSvc   *packages.PackageRuntimeService
 }
 
 func IsAndroidLinuxRuntime(host runtimehost.RuntimeHost) bool {
@@ -136,6 +139,10 @@ func NewProvider(host runtimehost.RuntimeHost, workspaceRoot string, policy Poli
 	shellExecutor := shell.NewShellExecutor(shellPolicy, workspaceRoot, "")
 	shellHandler := shell.NewShellHandler(shellExecutor)
 
+	paths := host.Paths()
+	packagesPolicy := packages.DefaultPackagesPolicy()
+	packagesSvc := packages.NewPackageRuntimeService(shellExecutor, nil, packagesPolicy, paths)
+
 	return &Provider{
 		manager:       manager,
 		host:          host,
@@ -144,6 +151,8 @@ func NewProvider(host runtimehost.RuntimeHost, workspaceRoot string, policy Poli
 		shellExecutor: shellExecutor,
 		shellPolicy:   shellPolicy,
 		shellHandler:  shellHandler,
+		paths:         paths,
+		packagesSvc:   packagesSvc,
 	}, nil
 }
 
@@ -224,11 +233,14 @@ func (p *Provider) Execute(ctx context.Context, request AndroidLinuxRequest) And
 		resp.Status = "success"
 		resp.Result = result
 	default:
-		resp.Status = "error"
-		resp.Error = &AndroidLinuxError{
-			Code:    "invalid_operation",
-			Message: "unknown operation: " + request.Operation,
+		result, err := p.handlePackages(ctx, request)
+		if err != nil {
+			resp.Status = "error"
+			resp.Error = toAndroidLinuxError(err)
+			return resp
 		}
+		resp.Status = "success"
+		resp.Result = result
 	}
 
 	return resp
@@ -364,14 +376,6 @@ func (p *Provider) handleWrite(ctx context.Context, req AndroidLinuxRequest) (ma
 		"accepted":    true,
 		"bytesWritten": bytesWritten,
 	}, nil
-}
-
-type ReadParams struct {
-	Owner           SessionID
-	SessionID       SessionID
-	AfterSequence   uint64
-	MaxBytes        int
-	WaitMs          int
 }
 
 func (p *Provider) handleRead(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
@@ -611,6 +615,15 @@ func (p *Provider) handleShellExec(ctx context.Context, req AndroidLinuxRequest)
 		"signal":          result.Signal,
 		"workingDir":      result.WorkingDir,
 	}, nil
+}
+
+func (p *Provider) handlePackages(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
+	if p.packagesSvc == nil {
+		return nil, &packages.Error{Code: packages.ErrCodeLinuxPackagesUnavailable, Message: "packages service not available"}
+	}
+
+	handler := packages.NewPackagesHandler(p.packagesSvc)
+	return handler.Handle(ctx, req.Operation, req.Payload)
 }
 
 func toAndroidLinuxError(err error) *AndroidLinuxError {

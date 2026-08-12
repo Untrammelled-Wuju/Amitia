@@ -5556,3 +5556,15 @@ CREATE TABLE IF NOT EXISTS desktop_pet_devices (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dpd_user_device ON desktop_pet_devices(user_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_dpd_status ON desktop_pet_devices(status);
+
+CREATE TABLE IF NOT EXISTS workspace_mounts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    local_root TEXT,
+    native_grant_id TEXT,
+    read_only INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);

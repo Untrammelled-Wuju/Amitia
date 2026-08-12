@@ -52,10 +52,17 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
+	"github.com/u-ai/backend/internal/deepsearch"
 	"github.com/u-ai/backend/internal/gamehost"
+	"github.com/u-ai/backend/internal/imagegen"
+	"github.com/u-ai/backend/internal/imageintelligence"
+	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/internal/vision"
+	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
 )
 
@@ -71,6 +78,11 @@ type ContainerBuilder struct {
 	androidLinuxProvider    interface{}
 	host                    runtimehost.RuntimeHost
 	searchConfig            search.Config
+	deepSearchTaskEntry     string
+	visionSvc               vision.Service
+	imagegenSvc             imagegen.Service
+	providerRegistry        *imageprovider.Registry
+	resourceResolver        *resourceuri.PhysicalResolver
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -130,6 +142,31 @@ func (b *ContainerBuilder) WithRuntimeHost(
 
 func (b *ContainerBuilder) WithSearchConfig(cfg search.Config) *ContainerBuilder {
 	b.searchConfig = cfg
+	return b
+}
+
+func (b *ContainerBuilder) WithDeepSearchTaskEntry(entry string) *ContainerBuilder {
+	b.deepSearchTaskEntry = entry
+	return b
+}
+
+func (b *ContainerBuilder) WithVisionService(svc vision.Service) *ContainerBuilder {
+	b.visionSvc = svc
+	return b
+}
+
+func (b *ContainerBuilder) WithImageGenService(svc imagegen.Service) *ContainerBuilder {
+	b.imagegenSvc = svc
+	return b
+}
+
+func (b *ContainerBuilder) WithImageProviderRegistry(reg *imageprovider.Registry) *ContainerBuilder {
+	b.providerRegistry = reg
+	return b
+}
+
+func (b *ContainerBuilder) WithResourceResolver(resolver *resourceuri.PhysicalResolver) *ContainerBuilder {
+	b.resourceResolver = resolver
 	return b
 }
 
@@ -444,6 +481,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	hostEmitter := event.NewHostEventEmitter(eventSvc)
 	lifecycleEmitter := event.NewLifecycleEventEmitter(hostEmitter)
 
+	var petPluginSource plugin_boundary.KernelContributionSource
+	if contribRepo != nil && instRepo != nil {
+		petPluginSource = plugin_boundary.NewContainerSource(contribRepo, instRepo)
+	}
+	var petPluginBoundary *plugin_boundary.DesktopPetPluginBoundary
+	if petPluginSource != nil {
+		petPluginBoundary = plugin_boundary.NewBoundary(petPluginSource)
+	}
+
 	jsFactory := javascript_main.NewRuntimeFactory()
 	eventDeliveryAdapter := javascript_main.NewEventDeliveryAdapter(jsFactory)
 	eventBridge.SetDeliveryCallback(eventDeliveryAdapter.HandleDelivery)
@@ -524,6 +570,20 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return json.Marshal(result)
 	}
 
+	var imageIntelligenceHandler *imageintelligence.ToolHandler
+	if b.visionSvc != nil || b.imagegenSvc != nil {
+		imgIntFactory := imageintelligence.NewImageIntelligenceFactory(b.visionSvc, b.imagegenSvc, b.providerRegistry, b.resourceResolver)
+		imgIntFacade := imgIntFactory.Build()
+		imageIntelligenceHandler = imageintelligence.NewToolHandler(imgIntFacade)
+	}
+
+	internalDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage) (json.RawMessage, error) {
+		if imageIntelligenceHandler == nil {
+			return nil, fmt.Errorf("image intelligence not configured")
+		}
+		return imageIntelligenceHandler.Dispatch(ctx, handlerName, input)
+	}
+
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
 		JSGlobalFactory:     jsFactory,
 		WASMFactory:         wasmFactory,
@@ -536,11 +596,26 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		AndroidLinuxProvider: b.androidLinuxProvider,
 		SearchCaller:        makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
 		SearchHealth:        makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
+		InternalDispatcher: internalDispatcher,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
 	if err := registerSearchTools(toolRegistry, b.searchConfig, kernelSecretBroker); err != nil {
 		return nil, err
+	}
+	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
+		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
+	}
+	if err := registerDeepSearchTool(toolRegistry, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
+		return nil, fmt.Errorf("kernel: register deep search tool: %w", err)
+	}
+	if imageIntelligenceHandler != nil {
+		if err := toolRegistry.BatchRegister(ctx, imageintelligence.BuildToolDefinitions(imageIntelligenceHandler)); err != nil {
+			return nil, err
+		}
+		if err := toolRegistry.Register(ctx, imageintelligence.BuildInternalStatusToolDefinition()); err != nil {
+			return nil, err
+		}
 	}
 	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry)
 
@@ -908,12 +983,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		OrderingEngine:        orderingEngine,
 		ExtRoot:               b.extRoot,
 
-		DesktopHost:         desktopHost,
-		UpdateManager:       updateManager,
-		UpdateAdapter:       updateAdapter,
-		DesktopAPI:          desktopAPI,
-		UpdateAPI:           updateAPI,
-		DesktopActionBridge: desktopActionBridge,
+		DesktopHost:              desktopHost,
+		UpdateManager:            updateManager,
+		UpdateAdapter:            updateAdapter,
+		DesktopAPI:               desktopAPI,
+		UpdateAPI:                updateAPI,
+		DesktopActionBridge:      desktopActionBridge,
+		DesktopPetPluginBoundary: petPluginBoundary,
 
 		ObservabilityStore: observabilityStore,
 
@@ -1084,5 +1160,18 @@ func registerSearchTools(registry *capability.ToolRegistry, cfg search.Config, b
 		Registry: registry,
 		Service:  svc,
 		Config:   cfg,
+	})
+}
+
+func registerDeepSearchSystemTask(ctx context.Context, svc *task_runtime.TaskRuntimeService, entry string) error {
+	return RegisterDeepSearchSystemTask(ctx, svc, entry)
+}
+
+func registerDeepSearchTool(registry *capability.ToolRegistry, svc *task_runtime.TaskRuntimeService, entry string) error {
+	return RegisterDeepSearchTool(DeepSearchDeps{
+		TaskService:  svc,
+		ToolRegistry: registry,
+		Config:       deepsearch.Config{},
+		TaskEntry:    entry,
 	})
 }

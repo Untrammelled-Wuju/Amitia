@@ -2,7 +2,6 @@ package search
 
 import (
 	"errors"
-	"net/http"
 	"testing"
 )
 
@@ -26,9 +25,8 @@ func TestNewError_Basic(t *testing.T) {
 func TestError_ErrorString(t *testing.T) {
 	e := NewError(SEARCH_DISABLED, "fake", false, errors.New("x"))
 	got := e.Error()
-	want := "SEARCH_DISABLED (fake): x"
-	if got != want {
-		t.Fatalf("error string: got %q, want %q", got, want)
+	if got != "SEARCH_DISABLED (fake): x" {
+		t.Fatalf("error string: got %q", got)
 	}
 }
 
@@ -78,19 +76,21 @@ func TestError_Is_DifferentCode(t *testing.T) {
 }
 
 func TestWrapHTTPError_Retryable(t *testing.T) {
-	e := WrapHTTPError(SEARCH_PROVIDER_UNAVAILABLE, "p", http.StatusBadGateway, nil)
+	e := WrapHTTPError(SEARCH_PROVIDER_UNAVAILABLE, "p", 507, nil)
 	if !e.Retryable {
-		t.Fatal("502 should be retryable")
+		t.Fatal("507 should be retryable")
 	}
-	if e.HTTPStatus != http.StatusBadGateway {
+	if e.HTTPStatus != 507 {
 		t.Fatal("HTTPStatus not set")
 	}
 }
 
 func TestWrapHTTPError_NonRetryable(t *testing.T) {
-	e := WrapHTTPError(SEARCH_PROVIDER_TIMEOUT, "p", http.StatusGatewayTimeout, nil)
-	if e.Retryable {
-		t.Fatal("504 should not be retryable per spec")
+	for _, status := range []int{502, 503, 504, 429, 500} {
+		e := WrapHTTPError(SEARCH_PROVIDER_TIMEOUT, "p", status, nil)
+		if e.Retryable {
+			t.Fatalf("%d should NOT be retryable per spec", status)
+		}
 	}
 }
 

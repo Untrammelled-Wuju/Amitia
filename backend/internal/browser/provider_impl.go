@@ -181,9 +181,9 @@ func (r *disabledRuntime) Stop(_ context.Context) *BrowserError {
 
 func (r *disabledRuntime) Status(_ context.Context) BrowserRuntimeInfo {
 	return BrowserRuntimeInfo{
-		State:        BrowserRuntimeStopped,
-		Engine:       "disabled",
-		LastErrorCode: ErrCodeBrowserDisabled,
+		State:         BrowserRuntimeStopped,
+		Engine:        "disabled",
+		LastErrorCode: string(ErrCodeBrowserDisabled),
 	}
 }
 

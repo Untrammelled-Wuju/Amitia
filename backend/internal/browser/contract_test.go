@@ -7,6 +7,7 @@ import (
 
 type fakeBrowserProvider struct {
 	caps       BrowserCapabilities
+	runtime    BrowserRuntime
 	sessions   *fakeSessionManager
 	tabs       *fakeTabManager
 	navigator  *fakeNavigator
@@ -25,6 +26,7 @@ func newFakeBrowserProvider() *fakeBrowserProvider {
 			SupportsUpload:      true,
 			SupportsScreenshot:  true,
 		},
+		runtime:    &fakeRuntime{},
 		sessions:   &fakeSessionManager{},
 		tabs:       &fakeTabManager{},
 		navigator:  &fakeNavigator{},
@@ -35,12 +37,31 @@ func newFakeBrowserProvider() *fakeBrowserProvider {
 }
 
 func (p *fakeBrowserProvider) BrowserCapabilities() BrowserCapabilities { return p.caps }
+func (p *fakeBrowserProvider) Runtime() BrowserRuntime                  { return p.runtime }
 func (p *fakeBrowserProvider) Sessions() BrowserSessionManager          { return p.sessions }
 func (p *fakeBrowserProvider) Tabs() BrowserTabManager                  { return p.tabs }
 func (p *fakeBrowserProvider) Navigate() BrowserNavigator               { return p.navigator }
 func (p *fakeBrowserProvider) Observe() BrowserObserver                 { return p.observer }
 func (p *fakeBrowserProvider) Interact() BrowserInteractor              { return p.interactor }
 func (p *fakeBrowserProvider) Resources() BrowserResourceTransfer       { return p.resources }
+
+type fakeRuntime struct{}
+
+func (r *fakeRuntime) Start(_ context.Context) (*BrowserRuntimeInfo, *BrowserError) {
+	return &BrowserRuntimeInfo{State: BrowserRuntimeReady, Generation: 1}, nil
+}
+
+func (r *fakeRuntime) Stop(_ context.Context) *BrowserError {
+	return nil
+}
+
+func (r *fakeRuntime) Status(_ context.Context) BrowserRuntimeInfo {
+	return BrowserRuntimeInfo{State: BrowserRuntimeReady, Generation: 1}
+}
+
+func (r *fakeRuntime) Health(_ context.Context) BrowserRuntimeHealth {
+	return BrowserHealthHealthy
+}
 
 type fakeSessionManager struct{}
 
@@ -196,6 +217,33 @@ func TestBrowserProviderContract(t *testing.T) {
 	caps := provider.BrowserCapabilities()
 	if !caps.SupportsNavigation {
 		t.Fatal("fake provider should support navigation")
+	}
+
+	rt := provider.Runtime()
+	if rt == nil {
+		t.Fatal("provider Runtime() should not return nil")
+	}
+
+	info, err := rt.Start(ctx)
+	if err != nil {
+		t.Fatalf("runtime Start failed: %v", err)
+	}
+	if info.State != BrowserRuntimeReady {
+		t.Fatalf("expected runtime state ready, got: %s", info.State)
+	}
+
+	status := rt.Status(ctx)
+	if status.State != BrowserRuntimeReady {
+		t.Fatalf("expected runtime status ready, got: %s", status.State)
+	}
+
+	health := rt.Health(ctx)
+	if health != BrowserHealthHealthy {
+		t.Fatalf("expected runtime healthy, got: %s", health)
+	}
+
+	if stopErr := rt.Stop(ctx); stopErr != nil {
+		t.Fatalf("runtime Stop failed: %v", stopErr)
 	}
 
 	sess, err := provider.Sessions().CreateSession(ctx)

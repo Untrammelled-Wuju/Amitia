@@ -144,5 +144,6 @@ func DefaultMigrations() []Migration {
 		DesktopPetDevicesMigration(),
 		DesktopPetLocalSessionFixMigration(),
 		DesktopPetImportSagaFieldsMigration(),
+		WorkspaceMountsMigration(),
 	}
 }

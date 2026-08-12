@@ -163,20 +163,32 @@ func TestBlockedSessionStore_SessionLimit(t *testing.T) {
 
 	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
-	for i := 1; i <= 3; i++ {
-		session := ScreenFrameSession{
-			ID:    ScreenFrameSessionID("session-" + string(rune('0'+i))),
-			Owner: owner,
-			State: SessionStateRunning,
-			Width: 1080, Height: 2400, TargetFPS: 2,
-			StartedAt: time.Now(),
-		}
-		store.sessions[session.ID] = &session
+	preExisting := ScreenFrameSession{
+		ID:    ScreenFrameSessionID("s-pre"),
+		Owner: owner,
+		State: SessionStateRunning,
+		Width: 1080, Height: 2400, TargetFPS: 2,
+		StartedAt: time.Now(),
+	}
+	store.sessions[preExisting.ID] = &preExisting
+
+	result, err := store.Create(ctx, ScreenFrameSession{
+		ID:    ScreenFrameSessionID("s-1"),
+		Owner: owner,
+		State: SessionStateRunning,
+		Width: 1080, Height: 2400, TargetFPS: 2,
+		StartedAt: time.Now(),
+	})
+	if err == nil {
+		t.Fatal("expected error when session limit reached")
+	}
+	if result != nil {
+		t.Error("expected nil result on blocked create")
 	}
 
 	sessions, _ := store.ListActive(ctx)
-	if len(sessions) > 2 {
-		t.Errorf("expected at most 2 active sessions, got %v", len(sessions))
+	if len(sessions) != 1 {
+		t.Errorf("expected 1 active sessions (pre-existing only), got %v", len(sessions))
 	}
 }
 

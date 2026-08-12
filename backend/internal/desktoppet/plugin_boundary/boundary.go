@@ -2,7 +2,7 @@ package plugin_boundary
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"

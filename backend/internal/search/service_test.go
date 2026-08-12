@@ -5,11 +5,49 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-
-	"github.com/u-ai/backend/internal/search/providers/fake"
+	"time"
 )
 
-func newTestService(provider *fake.Provider) *Service {
+type fakeProviderForService struct {
+	results []SearchResult
+	err     *Error
+	enabled bool
+	calls   int
+}
+
+func (p *fakeProviderForService) ID() string { return "fake" }
+func (p *fakeProviderForService) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{GeneralWeb: true, MaxResults: 20}
+}
+func (p *fakeProviderForService) Search(ctx context.Context, req GeneralSearchRequest) (ProviderSearchResponse, error) {
+	p.calls++
+	select {
+	case <-ctx.Done():
+		return ProviderSearchResponse{}, NewError(SEARCH_CANCELLED, "fake", false, ctx.Err())
+	default:
+	}
+	if p.err != nil {
+		return ProviderSearchResponse{}, p.err
+	}
+	limit := req.Limit
+	if limit <= 0 || limit > len(p.results) {
+		limit = len(p.results)
+	}
+	out := make([]SearchResult, 0, limit)
+	for i := 0; i < limit && i < len(p.results); i++ {
+		out = append(out, p.results[i])
+	}
+	return ProviderSearchResponse{Results: out, HasMore: len(p.results) > limit}, nil
+}
+func (p *fakeProviderForService) Health(_ context.Context) ProviderHealth {
+	if !p.enabled {
+		return ProviderHealthDisabled
+	}
+	return ProviderHealthReady
+}
+func (p *fakeProviderForService) SetCredential(string) {}
+
+func newTestService(provider *fakeProviderForService) *Service {
 	cfg := DefaultConfig()
 	cfg.Enabled = true
 	cfg.Providers = map[string]ProviderConfig{
@@ -21,10 +59,10 @@ func newTestService(provider *fake.Provider) *Service {
 }
 
 func TestService_Search_Basic(t *testing.T) {
-	provider := fake.NewProvider().WithResults(
-		SearchResult{Title: "Result1", URL: "https://a.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-		SearchResult{Title: "Result2", URL: "https://b.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-	)
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "Result1", URL: "https://a.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+		{Title: "Result2", URL: "https://b.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
 	svc := newTestService(provider)
 	resp, err := svc.Search(context.Background(), GeneralSearchRequest{Query: "test"}, "inv-1")
 	if err != nil {
@@ -42,7 +80,7 @@ func TestService_Search_Basic(t *testing.T) {
 }
 
 func TestService_Search_Disabled(t *testing.T) {
-	provider := fake.NewProvider()
+	provider := &fakeProviderForService{enabled: true}
 	cfg := DefaultConfig()
 	cfg.Enabled = false
 	set := NewProviderSet("fake")
@@ -55,7 +93,7 @@ func TestService_Search_Disabled(t *testing.T) {
 }
 
 func TestService_Search_EmptyQuery(t *testing.T) {
-	provider := fake.NewProvider()
+	provider := &fakeProviderForService{enabled: true}
 	svc := newTestService(provider)
 	_, err := svc.Search(context.Background(), GeneralSearchRequest{Query: ""}, "")
 	if err == nil || err.Code != SEARCH_INVALID_QUERY {
@@ -64,7 +102,7 @@ func TestService_Search_EmptyQuery(t *testing.T) {
 }
 
 func TestService_Search_TooLongQuery(t *testing.T) {
-	provider := fake.NewProvider()
+	provider := &fakeProviderForService{enabled: true}
 	svc := newTestService(provider)
 	longQuery := ""
 	for i := 0; i < MaxQueryRunes+1; i++ {
@@ -77,7 +115,7 @@ func TestService_Search_TooLongQuery(t *testing.T) {
 }
 
 func TestService_Search_ProviderError(t *testing.T) {
-	provider := fake.NewProvider().WithError(NewError(SEARCH_PROVIDER_TIMEOUT, "fake", true, errors.New("timeout")))
+	provider := &fakeProviderForService{enabled: true, err: NewError(SEARCH_PROVIDER_TIMEOUT, "fake", true, errors.New("timeout"))}
 	svc := newTestService(provider)
 	_, err := svc.Search(context.Background(), GeneralSearchRequest{Query: "test"}, "")
 	if err == nil {
@@ -89,7 +127,7 @@ func TestService_Search_ProviderError(t *testing.T) {
 }
 
 func TestService_Search_ZeroResults(t *testing.T) {
-	provider := fake.NewProvider()
+	provider := &fakeProviderForService{enabled: true}
 	svc := newTestService(provider)
 	resp, err := svc.Search(context.Background(), GeneralSearchRequest{Query: "no-match-query-xyz"}, "")
 	if err != nil {
@@ -101,9 +139,9 @@ func TestService_Search_ZeroResults(t *testing.T) {
 }
 
 func TestService_Search_WithCredentialResolver(t *testing.T) {
-	provider := fake.NewProvider().WithResults(
-		SearchResult{Title: "T", URL: "https://x.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-	)
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "T", URL: "https://x.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
 	svc := newTestService(provider)
 	resolverCalls := 0
 	svc.WithCredentialResolver(func(ctx context.Context, providerID, invocation, credentialRef string) (string, func(), error) {
@@ -126,7 +164,7 @@ func TestService_Search_WithCredentialResolver(t *testing.T) {
 }
 
 func TestService_Search_CredentialError(t *testing.T) {
-	provider := fake.NewProvider()
+	provider := &fakeProviderForService{enabled: true}
 	svc := newTestService(provider)
 	resolverErr := errors.New("no lease")
 	svc.WithCredentialResolver(func(ctx context.Context, providerID, invocation, credentialRef string) (string, func(), error) {
@@ -142,7 +180,7 @@ func TestService_Search_CredentialError(t *testing.T) {
 }
 
 func TestService_ExecuteFromJSON_InvalidJSON(t *testing.T) {
-	provider := fake.NewProvider()
+	provider := &fakeProviderForService{enabled: true}
 	svc := newTestService(provider)
 	_, err := svc.ExecuteFromJSON(context.Background(), json.RawMessage("{not json"), "")
 	if err == nil || err.Code != SEARCH_INVALID_QUERY {
@@ -151,9 +189,9 @@ func TestService_ExecuteFromJSON_InvalidJSON(t *testing.T) {
 }
 
 func TestService_ExecuteFromJSON_Routing(t *testing.T) {
-	provider := fake.NewProvider().WithResults(
-		SearchResult{Title: "JSON test", URL: "https://json.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-	)
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "JSON test", URL: "https://json.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
 	svc := newTestService(provider)
 	input := ToolInput{Query: "json-query", Limit: 5}
 	raw, _ := json.Marshal(input)
@@ -173,14 +211,12 @@ func TestService_ExecuteFromJSON_Routing(t *testing.T) {
 }
 
 func TestService_ExecuteFromJSON_DefaultLimit(t *testing.T) {
-	var capturedLimit int
-	provider := fake.NewProvider().WithResults(
-		SearchResult{Title: "A", URL: "https://a.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-		SearchResult{Title: "B", URL: "https://b.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-		SearchResult{Title: "C", URL: "https://c.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-	)
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "A", URL: "https://a.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+		{Title: "B", URL: "https://b.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+		{Title: "C", URL: "https://c.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
 	svc := newTestService(provider)
-	_ = capturedLimit
 	input := ToolInput{Query: "limit-test"}
 	raw, _ := json.Marshal(input)
 	resp, err := svc.ExecuteFromJSON(context.Background(), raw, "")
@@ -188,15 +224,15 @@ func TestService_ExecuteFromJSON_DefaultLimit(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if resp.Returned != 3 {
-		t.Fatalf("expected default 3 since all fit, got %d", resp.Returned)
+		t.Fatalf("expected 3 results since all fit, got %d", resp.Returned)
 	}
 }
 
 func TestService_ExecuteFromJSON_DropsBadURLs(t *testing.T) {
-	provider := fake.NewProvider().WithResults(
-		SearchResult{Title: "Good", URL: "https://good.com/", Source: SearchSourceMetadata{Provider: "fake"}},
-		SearchResult{Title: "Bad", URL: "javascript:alert(1)", Source: SearchSourceMetadata{Provider: "fake"}},
-	)
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "Good", URL: "https://good.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+		{Title: "Bad", URL: "javascript:alert(1)", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
 	svc := newTestService(provider)
 	raw, _ := json.Marshal(ToolInput{Query: "clean-me"})
 	resp, err := svc.ExecuteFromJSON(context.Background(), raw, "")
@@ -209,9 +245,9 @@ func TestService_ExecuteFromJSON_DropsBadURLs(t *testing.T) {
 }
 
 func TestService_ExecuteFromHTMLStripped(t *testing.T) {
-	provider := fake.NewProvider().WithResults(
-		SearchResult{Title: "<b>Bold</b>", URL: "https://bold.com/", Snippet: "<em>hi</em>", Source: SearchSourceMetadata{Provider: "fake"}},
-	)
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "<b>Bold</b>", URL: "https://bold.com/", Snippet: "<em>hi</em>", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
 	svc := newTestService(provider)
 	raw, _ := json.Marshal(ToolInput{Query: "html-test"})
 	resp, err := svc.ExecuteFromJSON(context.Background(), raw, "")
@@ -235,5 +271,35 @@ func TestService_DefaultProvider_NotConfigured(t *testing.T) {
 	_, err := svc.Search(context.Background(), GeneralSearchRequest{Query: "test"}, "")
 	if err == nil || err.Code != SEARCH_PROVIDER_NOT_CONFIGURED {
 		t.Fatalf("expected SEARCH_PROVIDER_NOT_CONFIGURED, got %v", err)
+	}
+}
+
+func TestService_Search_DurationMs(t *testing.T) {
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "A", URL: "https://a.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
+	svc := newTestService(provider)
+	resp, err := svc.Search(context.Background(), GeneralSearchRequest{Query: "duration"}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.DurationMs < 0 {
+		t.Fatal("DurationMs should be non-negative")
+	}
+	_ = time.Now
+}
+
+func TestService_ExecuteFromJSON_SafeSearchDefault(t *testing.T) {
+	provider := &fakeProviderForService{enabled: true, results: []SearchResult{
+		{Title: "S", URL: "https://s.com/", Source: SearchSourceMetadata{Provider: "fake"}},
+	}}
+	svc := newTestService(provider)
+	raw, _ := json.Marshal(ToolInput{Query: "safesearch"})
+	resp, err := svc.ExecuteFromJSON(context.Background(), raw, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(resp.Results))
 	}
 }

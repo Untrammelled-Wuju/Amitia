@@ -56,7 +56,7 @@ type ContributionReconciler interface {
 	IsExecutable(ref ContributionRef) bool
 }
 
-type kernelContributionSource interface {
+type KernelContributionSource interface {
 	ListContributions(ctx context.Context, extID domain.ExtensionID) ([]domain.ContributionDefinition, error)
 	GetInstallation(ctx context.Context, id domain.ExtensionID) (domain.ExtensionInstallation, error)
 }
@@ -81,7 +81,7 @@ func WithClock(fn func() time.Time) ReconcilerOption {
 
 type Reconciler struct {
 	mu       sync.RWMutex
-	source   kernelContributionSource
+	source   KernelContributionSource
 	registry map[string]ContributionRegistration
 	enabled  map[string]bool
 	logger   *log.Logger
@@ -97,7 +97,7 @@ type ContributionAdapter interface {
 	Validate(ctx context.Context, ref ContributionRef, def map[string]any) error
 }
 
-func NewReconciler(source kernelContributionSource, adapters []ContributionAdapter, opts ...ReconcilerOption) *Reconciler {
+func NewReconciler(source KernelContributionSource, adapters []ContributionAdapter, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		source:   source,
 		registry: make(map[string]ContributionRegistration),
@@ -112,7 +112,7 @@ func NewReconciler(source kernelContributionSource, adapters []ContributionAdapt
 	return r
 }
 
-func (r *Reconciler) AttachSource(source kernelContributionSource) {
+func (r *Reconciler) AttachSource(source KernelContributionSource) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.source = source
