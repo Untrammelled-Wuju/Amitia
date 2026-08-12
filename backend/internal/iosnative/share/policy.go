@@ -105,7 +105,7 @@ func ValidateIncomingManifest(manifest IOSIncomingShareManifest) error {
 		return fmt.Errorf("%v: shareId is required", ErrShareStagingInvalid)
 	}
 	if !manifest.Complete {
-		return ErrShareStagingNotCommitted
+		return fmt.Errorf("%v", ErrShareStagingNotCommitted)
 	}
 	if len(manifest.Items) > MaxIntakeResourcesCount {
 		return fmt.Errorf("%v: item count %d exceeds max %d", ErrShareStagingTooManyResources, len(manifest.Items), MaxIntakeResourcesCount)

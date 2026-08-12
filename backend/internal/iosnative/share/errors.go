@@ -22,7 +22,7 @@ const (
 	ErrShareUIContextRequired       = "SHARE_UI_CONTEXT_REQUIRED"
 	ErrShareUserIntentRequired      = "SHARE_USER_INTENT_REQUIRED"
 	ErrShareCannotPresentOnPhone    = "SHARE_CANNOT_PRESENT_ON_PHONE"
-	ErrShareCannotPresentOn iPad    = "SHARE_CANNOT_PRESENT_ON_IPAD"
+	ErrShareCannotPresentOnIPad    = "SHARE_CANNOT_PRESENT_ON_IPAD"
 	ErrShareReceivedNotFound        = "SHARE_RECEIVED_NOT_FOUND"
 	ErrShareReceivedStale           = "SHARE_RECEIVED_STALE"
 	ErrShareReceivedEmpty           = "SHARE_RECEIVED_EMPTY"
