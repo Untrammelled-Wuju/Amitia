@@ -10,10 +10,11 @@ import (
 )
 
 type Service struct {
-	registry          *Registry
-	physicalResolver  PhysicalResolverProvider
-	mountRepo         *MountRepository
-	safGrantResolver  SAFGrantResolver
+	registry           *Registry
+	physicalResolver   PhysicalResolverProvider
+	mountRepo          *MountRepository
+	safGrantResolver   SAFGrantResolver
+	remoteCredResolver RemoteCredentialResolver
 }
 
 type PhysicalResolverProvider interface {
@@ -33,10 +34,21 @@ func NewService(registry *Registry, provider PhysicalResolverProvider) *Service 
 
 func NewServiceWithPersistence(registry *Registry, provider PhysicalResolverProvider, mountRepo *MountRepository, safGrantResolver SAFGrantResolver) *Service {
 	return &Service{
-		registry:         registry,
-		physicalResolver: provider,
-		mountRepo:        mountRepo,
-		safGrantResolver: safGrantResolver,
+		registry:           registry,
+		physicalResolver:   provider,
+		mountRepo:          mountRepo,
+		safGrantResolver:   safGrantResolver,
+		remoteCredResolver: nil,
+	}
+}
+
+func NewServiceWithRemote(registry *Registry, provider PhysicalResolverProvider, mountRepo *MountRepository, safGrantResolver SAFGrantResolver, remoteCredResolver RemoteCredentialResolver) *Service {
+	return &Service{
+		registry:           registry,
+		physicalResolver:   provider,
+		mountRepo:          mountRepo,
+		safGrantResolver:   safGrantResolver,
+		remoteCredResolver: remoteCredResolver,
 	}
 }
 
