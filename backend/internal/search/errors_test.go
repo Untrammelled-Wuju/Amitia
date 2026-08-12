@@ -100,7 +100,7 @@ func TestIsRetryableStatus(t *testing.T) {
 		400: false,
 		403: false,
 		429: false,
-		500: true,
+		500: false,
 		502: false,
 		503: false,
 		504: false,
