@@ -239,7 +239,7 @@ func TestStatusHandler_Handle_Blocked(t *testing.T) {
 
 func TestStatusHandler_Handle_ActiveSession(t *testing.T) {
 	ctx := context.Background()
-	store := NewBlockedSessionStore(2).(*blockedSessionstore)
+	store := NewBlockedSessionStore(2).(*blockedSessionStore)
 	h := NewStatusHandler(store)
 	owner := SessionOwner{UserID: "u1", CharacterID: "c1", ConversationID: "v1"}
 
