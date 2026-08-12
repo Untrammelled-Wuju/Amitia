@@ -3,16 +3,14 @@ package workspace
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
-
-const WorkspaceKindRemote WorkspaceKind = "remote"
 
 type RemoteBackend struct {
 	credentials    RemoteCredentialResolver

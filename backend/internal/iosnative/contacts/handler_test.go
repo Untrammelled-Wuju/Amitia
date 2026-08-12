@@ -29,7 +29,7 @@ func (m *mockContactsBridge) Execute(ctx context.Context, req nativebridge.Reque
 }
 
 func (m *mockContactsBridge) Health(context.Context) nativebridge.Health {
-	return nativebridge.Health{}
+	return ""
 }
 
 func newMockBridge(resp nativebridge.Response, err error) *mockContactsBridge {
