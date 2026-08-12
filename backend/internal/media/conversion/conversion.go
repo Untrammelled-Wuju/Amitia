@@ -173,6 +173,20 @@ type ConversionPreview struct {
 	Warnings             []string `json:"warnings"`
 }
 
+func (p *ConversionPlan) VideoMode() string {
+	if p.VideoPlan.Mode != "" {
+		return p.VideoPlan.Mode
+	}
+	return ModeCopy
+}
+
+func (p *ConversionPlan) AudioMode() string {
+	if p.AudioPlan.Mode != "" {
+		return p.AudioPlan.Mode
+	}
+	return ModeCopy
+}
+
 type ConversionPlan struct {
 	Backend string
 

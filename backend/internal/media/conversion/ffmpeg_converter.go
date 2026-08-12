@@ -78,10 +78,10 @@ func (c *Converter) buildFFmpegArgs(source metadata.MediaMetadata, request Conve
 	trimArgs := (*ffmpeg.TrimArgs)(nil)
 	if request.Trim != nil {
 		t := &ffmpeg.TrimArgs{
-			StartMs:   request.Trim.StartMs,
-			EndMS:     request.Trim.EndMs,
-			DurationMS: request.Trim.DurationMS,
-			Precision: request.Trim.Precision,
+			StartMs:    request.Trim.StartMs,
+			EndMs:      request.Trim.EndMs,
+			DurationMs: request.Trim.DurationMs,
+			Precision:  request.Trim.Precision,
 		}
 		trimArgs = t
 	}
