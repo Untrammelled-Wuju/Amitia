@@ -16,6 +16,7 @@ type Repository interface {
 	Update(id string, updates map[string]interface{}) error
 	Delete(id string) error
 	GetAll() ([]WorldBookEntry, error)
+	GetByCharacterID(characterID string) ([]WorldBookEntry, error)
 	GetByMatchType(matchType string) ([]WorldBookEntry, error)
 	IncrementHitCount(id string) error
 	DeleteAll() error
@@ -33,6 +34,9 @@ func (r *repository) List(q WorldBookListQuery) ([]WorldBookEntry, int64, error)
 	query := r.db.Model(&WorldBookEntry{})
 	if q.MatchType != "" {
 		query = query.Where("match_type = ?", q.MatchType)
+	}
+	if q.CharacterID != "" {
+		query = query.Where("character_id = ? OR character_id = ''", q.CharacterID)
 	}
 	var total int64
 	query.Count(&total)
@@ -78,6 +82,21 @@ func (r *repository) Delete(id string) error {
 func (r *repository) GetAll() ([]WorldBookEntry, error) {
 	var items []WorldBookEntry
 	err := r.db.Order("priority DESC, created_at DESC").Find(&items).Error
+	if items == nil {
+		items = []WorldBookEntry{}
+	}
+	return items, err
+}
+
+func (r *repository) GetByCharacterID(characterID string) ([]WorldBookEntry, error) {
+	var items []WorldBookEntry
+	query := r.db.Order("priority DESC, created_at DESC")
+	if characterID != "" {
+		query = query.Where("character_id = ? OR character_id = ''", characterID)
+	} else {
+		query = query.Where("character_id = ''")
+	}
+	err := query.Find(&items).Error
 	if items == nil {
 		items = []WorldBookEntry{}
 	}

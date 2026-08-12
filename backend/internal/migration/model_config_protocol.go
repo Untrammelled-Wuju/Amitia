@@ -4,7 +4,7 @@ package migration
 
 func ModelConfigProtocolMigration() Migration {
 	return Migration{
-		Version: "202608120001",
+		Version: "202608120004",
 		Name:    "add_protocol_and_message_attachments",
 		Up: func(s *Step) error {
 			if err := s.AddColumn("model_configs", "protocol", "TEXT DEFAULT ''"); err != nil {

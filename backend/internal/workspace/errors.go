@@ -46,6 +46,7 @@ var (
 	ErrVirtualDocumentUnsupported    = errors.New("virtual document unsupported")
 	ErrOperationCancelled            = errors.New("workspace operation cancelled")
 	ErrOperationTimeout              = errors.New("workspace operation timeout")
+	ErrInternalMetadataDenied        = errors.New("workspace internal metadata denied")
 )
 
 type WorkspaceError struct {

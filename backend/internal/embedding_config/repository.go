@@ -63,5 +63,6 @@ func (r *repository) ListProviders() []ProviderInfo {
 		{ID: "zhipu", Name: "智谱", DefaultBaseURL: "https://open.bigmodel.cn/api/paas/v4", DefaultModel: "embedding-3"},
 		{ID: "siliconflow", Name: "硅基流动", DefaultBaseURL: "https://api.siliconflow.cn/v1", DefaultModel: "BAAI/bge-large-zh-v1.5"},
 		{ID: "jina", Name: "Jina AI", DefaultBaseURL: "https://api.jina.ai/v1", DefaultModel: "jina-embeddings-v3"},
+		{ID: "llama_cpp", Name: "llama.cpp (本地 GGUF)", DefaultBaseURL: "", DefaultModel: ""},
 	}
 }

@@ -15,6 +15,8 @@ type WorldBookEntry struct {
 	InjectContent string `gorm:"column:inject_content;not null" json:"injectContent"`
 	Priority      int    `gorm:"column:priority;default:0" json:"priority"`
 	HitCount      int    `gorm:"column:hit_count;default:0" json:"hitCount"`
+	CharacterID   string `gorm:"column:character_id;default:''" json:"characterId"`
+	ConfigJSON    string `gorm:"column:config_json;default:{}" json:"configJson"`
 	CreatedAt     string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt     string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -34,6 +36,7 @@ type CreateWorldBookRequest struct {
 	MatchScope    string `json:"matchScope"`
 	InjectContent string `json:"injectContent" binding:"required"`
 	Priority      int    `json:"priority"`
+	CharacterID   string `json:"characterId"`
 }
 
 type UpdateWorldBookRequest struct {
@@ -42,12 +45,14 @@ type UpdateWorldBookRequest struct {
 	MatchScope    *string `json:"matchScope"`
 	InjectContent *string `json:"injectContent"`
 	Priority      *int    `json:"priority"`
+	CharacterID   *string `json:"characterId"`
 }
 
 type WorldBookListQuery struct {
-	MatchType string `form:"matchType"`
-	Page      int    `form:"page"`
-	PageSize  int    `form:"pageSize"`
+	MatchType   string `form:"matchType"`
+	CharacterID string `form:"characterId"`
+	Page        int    `form:"page"`
+	PageSize    int    `form:"pageSize"`
 }
 
 type WorldBookListResponse struct {

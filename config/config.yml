@@ -14,6 +14,7 @@ jwt:
 
 security:
   mode: "local_single_user"
+  localToken: "2kUNkGYS8ZGb13sI2L7YXV7e9bZ3WGYiVxzBsBybErI"
   allowRemoteAccess: false
   localUserId: "1"
   allowedOrigins:

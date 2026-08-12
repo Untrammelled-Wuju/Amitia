@@ -150,28 +150,29 @@ func (m *Message) BeforeCreate(tx *gorm.DB) error {
 }
 
 type ModelConfig struct {
-	ID                int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Name              string  `gorm:"column:name" json:"name"`
-	APIType           string  `gorm:"column:api_type" json:"apiType"`
-	Protocol          string  `gorm:"column:protocol" json:"protocol"`
-	BaseURL           string  `gorm:"column:base_url" json:"baseUrl"`
-	APIKey            string  `gorm:"column:api_key" json:"apiKey"`
-	ModelName         string  `gorm:"column:model_name" json:"modelName"`
-	Temperature       float64 `gorm:"column:temperature;default:0.7" json:"temperature"`
-	MaxTokens         int     `gorm:"column:max_tokens;default:4096" json:"maxTokens"`
-	ContextWindow     int     `gorm:"column:context_window;default:0" json:"contextWindow"`
-	MaxOutputTokens   int     `gorm:"column:max_output_tokens;default:0" json:"maxOutputTokens"`
-	CapabilitiesJSON  string  `gorm:"column:capabilities_json" json:"capabilitiesJson"`
-	TopP              float64 `gorm:"column:top_p;default:1" json:"topP"`
-	TimeoutSeconds    int     `gorm:"column:timeout_seconds;default:60" json:"timeoutSeconds"`
-	RetryCount        int     `gorm:"column:retry_count;default:1" json:"retryCount"`
-	IsActive          int     `gorm:"column:is_active;default:0" json:"isActive"`
-	LastTestStatus    string  `gorm:"column:last_test_status" json:"lastTestStatus"`
-	LastTestMessage   string  `gorm:"column:last_test_message" json:"lastTestMessage"`
-	LastTestAt        string  `gorm:"column:last_test_at" json:"lastTestAt"`
-	HasAPIKey         bool    `gorm:"-" json:"hasApiKey"`
-	CreatedAt         string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt         string  `gorm:"column:updated_at" json:"updatedAt"`
+	ID                 int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Name               string  `gorm:"column:name" json:"name"`
+	APIType            string  `gorm:"column:api_type" json:"apiType"`
+	Protocol           string  `gorm:"column:protocol" json:"protocol"`
+	BaseURL            string  `gorm:"column:base_url" json:"baseUrl"`
+	APIKey             string  `gorm:"column:api_key" json:"apiKey"`
+	ModelName          string  `gorm:"column:model_name" json:"modelName"`
+	Temperature        float64 `gorm:"column:temperature;default:0.7" json:"temperature"`
+	MaxTokens          int     `gorm:"column:max_tokens;default:4096" json:"maxTokens"`
+	ContextWindow      int     `gorm:"column:context_window;default:0" json:"contextWindow"`
+	MaxOutputTokens    int     `gorm:"column:max_output_tokens;default:0" json:"maxOutputTokens"`
+	CapabilitiesJSON   string  `gorm:"column:capabilities_json" json:"capabilitiesJson"`
+	ProviderConfigJSON string  `gorm:"column:provider_config_json;default:{}" json:"providerConfig,omitempty"`
+	TopP               float64 `gorm:"column:top_p;default:1" json:"topP"`
+	TimeoutSeconds     int     `gorm:"column:timeout_seconds;default:60" json:"timeoutSeconds"`
+	RetryCount         int     `gorm:"column:retry_count;default:1" json:"retryCount"`
+	IsActive           int     `gorm:"column:is_active;default:0" json:"isActive"`
+	LastTestStatus     string  `gorm:"column:last_test_status" json:"lastTestStatus"`
+	LastTestMessage    string  `gorm:"column:last_test_message" json:"lastTestMessage"`
+	LastTestAt         string  `gorm:"column:last_test_at" json:"lastTestAt"`
+	HasAPIKey          bool    `gorm:"-" json:"hasApiKey"`
+	CreatedAt          string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt          string  `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 type MessageAttachment struct {

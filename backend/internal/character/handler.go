@@ -4,14 +4,15 @@ package character
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
-	"io"
-	"os"
-	"path/filepath"
 )
 
 type ChatTester interface {
@@ -145,17 +146,103 @@ func (h *Handler) Test(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"characterId": id, "reply": reply})
 }
 func (h *Handler) ExportPack(c *gin.Context) {
-	util.SuccessResponse(c, gin.H{"id": c.Param("id"), "pack": map[string]interface{}{}})
+	characterID := c.Param("id")
+	format := c.DefaultQuery("format", "v3_charx")
+
+	result, _, err := h.service.ExportCard(characterID, format)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+
+	if c.Query("download") == "true" {
+		_, data, err := h.service.ExportCard(characterID, format)
+		if err == nil {
+			c.Header("Content-Disposition", "attachment; filename="+result.Filename)
+			c.Header("Content-Type", "application/octet-stream")
+			c.Data(http.StatusOK, "application/octet-stream", data)
+			return
+		}
+	}
+
+	util.SuccessResponse(c, result)
 }
+
 func (h *Handler) ImportPackPreview(c *gin.Context) {
-	util.SuccessMsgResponse(c, "预览成功", gin.H{"preview": map[string]interface{}{}})
+	file, header, err := c.Request.FormFile("card")
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "缺少卡片文件（字段名: card）", nil)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取文件失败", nil)
+		return
+	}
+
+	result, err := h.service.PreviewCard(data, header.Filename)
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+
+	util.SuccessResponse(c, result)
 }
+
 func (h *Handler) ImportPackConfirm(c *gin.Context) {
-	util.SuccessMsgResponse(c, "导入成功", gin.H{"imported": true})
+	file, header, err := c.Request.FormFile("card")
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "缺少卡片文件（字段名: card）", nil)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取文件失败", nil)
+		return
+	}
+
+	result, err := h.service.ImportCard(data, header.Filename, true)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+
+	util.SuccessMsgResponse(c, "导入成功", result)
 }
-func (h *Handler) PacksHistory(c *gin.Context) { util.SuccessResponse(c, []map[string]interface{}{}) }
+
+func (h *Handler) PacksHistory(c *gin.Context) {
+	util.SuccessResponse(c, []map[string]interface{}{})
+}
+
 func (h *Handler) CreateFromTemplate(c *gin.Context) {
 	util.SuccessMsgResponse(c, "创建成功", gin.H{"id": c.Param("id")})
+}
+
+func (h *Handler) ExportCardV2(c *gin.Context) {
+	characterID := c.Param("id")
+	format := c.DefaultQuery("format", "v3_charx")
+
+	result, _, err := h.service.ExportCard(characterID, format)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+
+	if c.Query("download") == "true" {
+		_, data, err := h.service.ExportCard(characterID, format)
+		if err == nil {
+			c.Header("Content-Disposition", "attachment; filename="+result.Filename)
+			c.Header("Content-Type", "application/octet-stream")
+			c.Data(http.StatusOK, "application/octet-stream", data)
+			return
+		}
+	}
+
+	util.SuccessResponse(c, result)
 }
 
 func (h *Handler) UpdateRoleProfile(c *gin.Context) {

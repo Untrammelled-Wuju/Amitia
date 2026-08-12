@@ -10,9 +10,10 @@ import (
 )
 
 var knownKinds = map[WorkspaceKind]bool{
-	WorkspaceKindLocal:  true,
-	WorkspaceKindSAF:    true,
-	WorkspaceKindRemote: true,
+	WorkspaceKindLocal:    true,
+	WorkspaceKindSAF:      true,
+	WorkspaceKindRemote:   true,
+	WorkspaceKindIsolated: true,
 }
 
 func RegisterKnownKind(kind WorkspaceKind) {
@@ -121,6 +122,47 @@ func (r *Registry) UpdateRemoteMountConfig(id WorkspaceID, config RemoteMountCon
 func (r *Registry) InvalidateRemoteClients(id WorkspaceID) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+}
+
+func (r *Registry) RegisterIsolatedMount(ctx context.Context, name string, backendConfig string, readOnly bool) (WorkspaceMount, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now().UTC()
+	id := WorkspaceID(uuid.NewString())
+	status := WorkspaceStatusReady
+	if readOnly {
+		status = WorkspaceStatusReadOnly
+	}
+	mount := WorkspaceMount{
+		ID:            id,
+		Name:          name,
+		Kind:          WorkspaceKindIsolated,
+		ReadOnly:      readOnly,
+		Available:     true,
+		Status:        status,
+		RootURI:       MountURI(id),
+		BackendConfig: backendConfig,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	r.mounts[id] = mount
+	return mount, nil
+}
+
+func (r *Registry) UpdateIsolatedMountConfig(id WorkspaceID, backendConfig string, readOnly bool) (WorkspaceMount, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m, ok := r.mounts[id]
+	if !ok {
+		return WorkspaceMount{}, false
+	}
+	if backendConfig != "" {
+		m.BackendConfig = backendConfig
+	}
+	m.ReadOnly = readOnly
+	m.UpdatedAt = time.Now().UTC()
+	r.mounts[id] = m
+	return m, true
 }
 
 func (r *Registry) RegisterSAFMount(ctx context.Context, name string, grantID string, readOnly bool) (WorkspaceMount, error) {

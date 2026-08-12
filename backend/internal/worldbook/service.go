@@ -83,6 +83,7 @@ func (s *service) Create(req *CreateWorldBookRequest) (*WorldBookEntry, error) {
 		MatchScope:    req.MatchScope,
 		InjectContent: req.InjectContent,
 		Priority:      req.Priority,
+		CharacterID:   req.CharacterID,
 	}
 	if err := s.repo.Create(e); err != nil {
 		return nil, err
@@ -108,6 +109,9 @@ func (s *service) Update(id string, req *UpdateWorldBookRequest) (*WorldBookEntr
 	}
 	if req.Priority != nil {
 		updates["priority"] = *req.Priority
+	}
+	if req.CharacterID != nil {
+		updates["character_id"] = *req.CharacterID
 	}
 	if err := s.repo.Update(id, updates); err != nil {
 		return nil, err
@@ -172,6 +176,17 @@ func (s *service) loadRules() []WorldBookEntry {
 	return rules
 }
 
+func (s *service) loadRulesForCharacter(characterID string) []WorldBookEntry {
+	if characterID == "" {
+		return s.loadRules()
+	}
+	rules, err := s.repo.GetByCharacterID(characterID)
+	if err != nil {
+		return []WorldBookEntry{}
+	}
+	return rules
+}
+
 func (s *service) getRegex(pattern string) (*regexp.Regexp, error) {
 	s.mu.RLock()
 	entry, exists := s.regexCache[pattern]
@@ -213,7 +228,11 @@ func (s *service) TestMatch(text string) (*TestMatchResponse, error) {
 }
 
 func (s *service) MatchAndCollect(userMessage, assistantReply string) []MatchResult {
-	rules := s.loadRules()
+	return s.MatchAndCollectForCharacter(userMessage, assistantReply, "")
+}
+
+func (s *service) MatchAndCollectForCharacter(userMessage, assistantReply string, characterID string) []MatchResult {
+	rules := s.loadRulesForCharacter(characterID)
 	var results []MatchResult
 	for _, rule := range rules {
 		fullText := userMessage

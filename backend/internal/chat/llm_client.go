@@ -8,12 +8,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 )
+
+type LocalModelInfer = localmodel.LocalModelInference
 
 type llmWithToolsFunc func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error)
 
@@ -25,6 +28,10 @@ func protocolForApiType(apiType string) string {
 		return "anthropic"
 	case "gemini":
 		return "gemini"
+	case "mnn":
+		return "mnn"
+	case "llama_cpp":
+		return "llama_cpp"
 	default:
 		return "openai"
 	}
@@ -59,6 +66,10 @@ func (s *service) callLLMJSON(ctx context.Context, cfg *ModelConfig, messages []
 
 func (s *service) callLLMMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
 	switch protocolForApiType(cfg.APIType) {
+	case "mnn":
+		return s.callMNNMode(ctx, cfg, messages, jsonOnly)
+	case "llama_cpp":
+		return s.callLlamaCppMode(ctx, cfg, messages, jsonOnly)
 	case "ollama":
 		return s.callOllamaMode(ctx, cfg, messages, jsonOnly)
 	case "anthropic":
@@ -79,6 +90,10 @@ func (s *service) invokeProcessLLMWithTools(ctx context.Context, cfg *ModelConfi
 
 func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 	switch protocolForApiType(cfg.APIType) {
+	case "mnn":
+		return s.callMNNWithTools(ctx, cfg, messages, tools)
+	case "llama_cpp":
+		return s.callLlamaCppWithTools(ctx, cfg, messages, tools)
 	case "ollama":
 		return s.callOllamaWithTools(ctx, cfg, messages, tools)
 	case "anthropic":
@@ -88,6 +103,156 @@ func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messag
 	default:
 		return s.callOpenAIWithTools(ctx, cfg, messages, tools)
 	}
+}
+
+func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+	backend, err := s.getLocalModelBackend(cfg)
+	if err != nil {
+		return "", 0, err
+	}
+
+	req := messagesToModelRequest(cfg, messages, nil, jsonOnly)
+	localReq := toLocalModelRequest(req, messages)
+
+	result, err := backend.Generate(ctx, localReq, nil)
+	if err != nil {
+		return "", 0, err
+	}
+	return result.Text, result.Usage.TotalTokens, nil
+}
+
+func (s *service) callMNNWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+	backend, err := s.getLocalModelBackend(cfg)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+
+	req := messagesToModelRequest(cfg, messages, tools, false)
+	localReq := toLocalModelRequest(req, messages)
+	localReq.Tools = toolsToLocalModelTools(tools)
+
+	result, err := backend.Generate(ctx, localReq, nil)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+
+	var toolCalls []map[string]interface{}
+	for _, tc := range result.ToolCalls {
+		toolCalls = append(toolCalls, map[string]interface{}{
+			"id":   tc.ID,
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":      tc.Name,
+				"arguments": tc.Arguments,
+			},
+		})
+	}
+	return result.Text, "", toolCalls, result.Usage.TotalTokens, nil
+}
+
+func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+	backend, err := s.getLocalModelBackend(cfg)
+	if err != nil {
+		return "", 0, err
+	}
+
+	req := messagesToModelRequest(cfg, messages, nil, jsonOnly)
+	localReq := toLocalModelRequest(req, messages)
+
+	result, err := backend.Generate(ctx, localReq, nil)
+	if err != nil {
+		return "", 0, err
+	}
+	return result.Text, result.Usage.TotalTokens, nil
+}
+
+func (s *service) callLlamaCppWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+	backend, err := s.getLocalModelBackend(cfg)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+
+	req := messagesToModelRequest(cfg, messages, tools, false)
+	localReq := toLocalModelRequest(req, messages)
+	localReq.Tools = toolsToLocalModelTools(tools)
+
+	result, err := backend.Generate(ctx, localReq, nil)
+	if err != nil {
+		return "", "", nil, 0, err
+	}
+
+	var toolCalls []map[string]interface{}
+	for _, tc := range result.ToolCalls {
+		toolCalls = append(toolCalls, map[string]interface{}{
+			"id":   tc.ID,
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":      tc.Name,
+				"arguments": tc.Arguments,
+			},
+		})
+	}
+	return result.Text, "", toolCalls, result.Usage.TotalTokens, nil
+}
+
+func (s *service) getLocalModelBackend(cfg *ModelConfig) (LocalModelInfer, error) {
+	return localmodel.Create(localmodel.CreateLocalModelParams{
+		Provider:     cfg.APIType,
+		ModelName:    cfg.ModelName,
+		ProviderJSON: cfg.ProviderConfigJSON,
+		Timeout:      time.Duration(cfg.TimeoutSeconds) * time.Second,
+	})
+}
+
+func toLocalModelRequest(req ModelRequest, messages []map[string]interface{}) localmodel.LocalModelRequest {
+	localReq := localmodel.LocalModelRequest{
+		MaxNewTokens: req.MaxOutputTokens,
+		Temperature:  cfgTemperature(req),
+		TopP:         cfgTopP(req),
+		JSONOnly:     req.ResponseFormat.Type == "json_object" || req.ResponseFormat.Type == "json",
+	}
+	for _, msg := range messages {
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+		localReq.Messages = append(localReq.Messages, localmodel.LocalModelMessage{
+			Role: role,
+			Parts: []localmodel.LocalModelContent{{Type: "text", Text: content}},
+		})
+	}
+	return localReq
+}
+
+func cfgTemperature(req ModelRequest) float64 {
+	if req.Temperature != nil {
+		return *req.Temperature
+	}
+	return 0.7
+}
+
+func cfgTopP(req ModelRequest) float64 {
+	if req.TopP != nil {
+		return *req.TopP
+	}
+	return 1.0
+}
+
+func toolsToLocalModelTools(tools []tool.Tool) []localmodel.LocalModelTool {
+	result := make([]localmodel.LocalModelTool, 0, len(tools))
+	for _, t := range tools {
+		params := map[string]any{
+			"type":       t.Function.Parameters.Type,
+			"properties": t.Function.Parameters.Properties,
+		}
+		if len(t.Function.Parameters.Required) > 0 {
+			params["required"] = t.Function.Parameters.Required
+		}
+		result = append(result, localmodel.LocalModelTool{
+			Name:        t.Function.Name,
+			Description: t.Function.Description,
+			Parameters:  params,
+		})
+	}
+	return result
 }
 
 func (s *service) callOpenAIMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {

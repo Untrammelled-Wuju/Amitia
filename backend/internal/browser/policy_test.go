@@ -16,9 +16,9 @@ func TestSanitizeFilename(t *testing.T) {
 		{"C:\\Windows\\System32\\evil.dll", "evil.dll"},
 		{"normal-file_name.txt", "normal-file_name.txt"},
 		{"/absolute/path/file.doc", "file.doc"},
-		{"file/with/slashes.txt", "filewithslashestxt"},
+		{"file/with/slashes.txt", "slashes.txt"},
 		{"   spaces.pdf  ", "spaces.pdf"},
-		{"file\x00null.exe", "filenullexe"},
+		{"file\x00null.exe", "filenull.exe"},
 	}
 
 	for _, tt := range tests {

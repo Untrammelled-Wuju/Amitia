@@ -2,7 +2,7 @@ package migration
 
 func WorkspaceMountsMigration() Migration {
 	return Migration{
-		Version: "202608120001",
+		Version: "202608120003",
 		Name:    "add_workspace_mounts_table",
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS workspace_mounts (

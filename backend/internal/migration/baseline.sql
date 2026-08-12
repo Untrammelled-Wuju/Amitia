@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS model_configs (
     context_window INTEGER DEFAULT 0,
     max_output_tokens INTEGER DEFAULT 0,
     capabilities_json TEXT DEFAULT '',
+    provider_config_json TEXT DEFAULT '{}',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -710,6 +711,7 @@ CREATE TABLE IF NOT EXISTS embedding_configs (
     model_name TEXT DEFAULT 'doubao-embedding-vision-251215',
     base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
     is_active INTEGER DEFAULT 0,
+    provider_config_json TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -3976,7 +3978,7 @@ CREATE TABLE IF NOT EXISTS trigger_histories (
 				updated_at TEXT DEFAULT ''
 			);
 
---- 来源: backup.go
+--- 来源: backup.go + backup_tables_upgrade.go
 CREATE TABLE IF NOT EXISTS backup_records (
 id TEXT PRIMARY KEY,
 backup_path TEXT NOT NULL DEFAULT '',
@@ -3985,17 +3987,37 @@ checksum TEXT DEFAULT '',
 status TEXT NOT NULL DEFAULT 'pending',
 started_at TEXT DEFAULT '',
 finished_at TEXT DEFAULT '',
-error_message TEXT DEFAULT ''
+error_message TEXT DEFAULT '',
+purpose TEXT DEFAULT 'user',
+format_version INTEGER DEFAULT 1,
+profile TEXT DEFAULT 'full',
+scope TEXT DEFAULT 'all',
+encrypted INTEGER DEFAULT 0,
+manifest_checksum TEXT DEFAULT '',
+app_version TEXT DEFAULT '',
+schema_fingerprint TEXT DEFAULT ''
 );
+CREATE INDEX IF NOT EXISTS idx_backup_records_purpose ON backup_records(purpose);
+CREATE INDEX IF NOT EXISTS idx_backup_records_created ON backup_records(started_at);
 
---- 来源: backup.go
+--- 来源: backup.go + backup_tables_upgrade.go
 CREATE TABLE IF NOT EXISTS backup_contents (
 id TEXT PRIMARY KEY,
 backup_id TEXT NOT NULL DEFAULT '',
 table_name TEXT NOT NULL DEFAULT '',
 row_count INTEGER DEFAULT 0,
-checksum TEXT DEFAULT ''
+checksum TEXT DEFAULT '',
+component_id TEXT DEFAULT '',
+kind TEXT DEFAULT '',
+logical_name TEXT DEFAULT '',
+size_bytes INTEGER DEFAULT 0,
+item_count INTEGER DEFAULT 0,
+required INTEGER DEFAULT 1,
+source_of_truth INTEGER DEFAULT 0,
+rebuildable INTEGER DEFAULT 0
 );
+CREATE INDEX IF NOT EXISTS idx_backup_contents_backup_id ON backup_contents(backup_id);
+CREATE INDEX IF NOT EXISTS idx_backup_contents_component ON backup_contents(component_id);
 
 --- 来源: legacy_data_migration.go
 CREATE TABLE IF NOT EXISTS migration_checkpoints (

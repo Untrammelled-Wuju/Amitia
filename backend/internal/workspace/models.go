@@ -9,9 +9,10 @@ type WorkspaceID string
 type WorkspaceKind string
 
 const (
-	WorkspaceKindLocal WorkspaceKind = "local"
-	WorkspaceKindSAF   WorkspaceKind = "saf"
-	WorkspaceKindRemote WorkspaceKind = "remote"
+	WorkspaceKindLocal    WorkspaceKind = "local"
+	WorkspaceKindSAF      WorkspaceKind = "saf"
+	WorkspaceKindRemote   WorkspaceKind = "remote"
+	WorkspaceKindIsolated WorkspaceKind = "isolated"
 )
 
 type WorkspaceStatus string

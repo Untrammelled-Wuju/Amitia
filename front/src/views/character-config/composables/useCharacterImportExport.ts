@@ -5,7 +5,7 @@ import { ElMessage } from "element-plus";
 import { useApi } from "../../../composables/useApi";
 
 export function useCharacterImportExport() {
-  const { get, post } = useApi();
+  const { get, post, postUpload } = useApi();
 
   const exportingPack = ref(false);
   const showImportDialog = ref(false);
@@ -15,13 +15,19 @@ export function useCharacterImportExport() {
   const importConfirmText = ref("");
   const importing = ref(false);
   const packHistory = ref<any[]>([]);
+  const selectedFile = ref<File | null>(null);
 
   async function exportPack(characterId: string, characterName: string) {
     if (!characterId) return;
     exportingPack.value = true;
     try {
-      await post<any>(`/api/characters/${characterId}/export-pack`);
+      const result = await post<any>(
+        `/api/characters/${characterId}/export-card?format=v3_charx`,
+      );
       ElMessage.success(`已导出角色包: ${characterName}`);
+      if (result?.resourceUri) {
+        window.open(result.resourceUri, "_blank");
+      }
     } catch (err: any) {
       ElMessage.error(
         "导出失败: " + (err.response?.data?.message || err.message),
@@ -32,13 +38,17 @@ export function useCharacterImportExport() {
   }
 
   async function previewImport() {
-    if (!importPackName.value.trim()) return;
+    if (!selectedFile.value) {
+      ElMessage.warning("请先选择角色卡片文件");
+      return;
+    }
     importPreviewing.value = true;
     importPreview.value = null;
     try {
-      const d = await get<any>("/api/characters/packs/preview", {
-        name: importPackName.value,
-      });
+      const d = await postUpload<any>(
+        "/api/characters/import-card/preview",
+        selectedFile.value,
+      );
       importPreview.value = d;
     } catch (err: any) {
       ElMessage.error(
@@ -51,15 +61,20 @@ export function useCharacterImportExport() {
 
   async function confirmImport(): Promise<any> {
     if (importConfirmText.value !== "确认导入") return null;
+    if (!selectedFile.value) {
+      ElMessage.warning("请先选择角色卡片文件");
+      return null;
+    }
     importing.value = true;
     try {
-      const d = await post<any>("/api/characters/packs/import", {
-        name: importPackName.value,
-        confirmText: "确认导入",
-      });
+      const d = await postUpload<any>(
+        "/api/characters/import-card/confirm",
+        selectedFile.value,
+      );
       ElMessage.success("导入成功");
       importPreview.value = null;
       importConfirmText.value = "";
+      selectedFile.value = null;
       showImportDialog.value = false;
       await loadPackHistory();
       return d;
@@ -85,6 +100,11 @@ export function useCharacterImportExport() {
   function cancelImportPreview() {
     importPreview.value = null;
     importConfirmText.value = "";
+    selectedFile.value = null;
+  }
+
+  function setSelectedFile(file: File | null) {
+    selectedFile.value = file;
   }
 
   return {
@@ -96,10 +116,12 @@ export function useCharacterImportExport() {
     importConfirmText,
     importing,
     packHistory,
+    selectedFile,
     exportPack,
     previewImport,
     confirmImport,
     loadPackHistory,
     cancelImportPreview,
+    setSelectedFile,
   };
 }

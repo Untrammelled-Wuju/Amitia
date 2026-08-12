@@ -31,17 +31,24 @@ func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) getConfig() (baseURL, apiKey, modelName, apiType string) {
-	var dbURL, dbKey, dbModel, dbApiType string
+func (s *Service) getConfig() (baseURL, apiKey, modelName, apiType, providerConfigJSON string) {
+	var dbURL, dbKey, dbModel, dbApiType, dbProviderConfigJSON string
 	err := s.db.Table("embedding_configs").
-		Select("base_url, api_key, model_name, api_type").
+		Select("base_url, api_key, model_name, api_type, provider_config_json").
 		Where("is_active = 1").Limit(1).Row().
-		Scan(&dbURL, &dbKey, &dbModel, &dbApiType)
+		Scan(&dbURL, &dbKey, &dbModel, &dbApiType, &dbProviderConfigJSON)
 	if err == nil && dbURL != "" {
 		baseURL = dbURL
 		apiKey = dbKey
 		modelName = dbModel
 		apiType = dbApiType
+		providerConfigJSON = dbProviderConfigJSON
+		return
+	}
+	if err == nil && dbApiType == "llama_cpp" {
+		apiType = dbApiType
+		modelName = dbModel
+		providerConfigJSON = dbProviderConfigJSON
 		return
 	}
 	ec := config.AppCfg.Embedding
@@ -58,7 +65,10 @@ func (s *Service) Embed(text string) ([]float32, error) {
 }
 
 func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
-	baseURL, apiKey, modelName, apiType := s.getConfig()
+	baseURL, apiKey, modelName, apiType, providerConfigJSON := s.getConfig()
+	if apiType == "llama_cpp" {
+		return s.embedLocal(text, modelName, providerConfigJSON)
+	}
 	if baseURL == "" || apiKey == "" {
 		return fallbackEmbedding(text), "", nil
 	}
@@ -124,7 +134,10 @@ func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
 }
 
 func (s *Service) BatchEmbed(texts []string) ([][]float32, error) {
-	baseURL, apiKey, modelName, apiType := s.getConfig()
+	baseURL, apiKey, modelName, apiType, providerConfigJSON := s.getConfig()
+	if apiType == "llama_cpp" {
+		return s.batchEmbedLocal(texts, modelName, providerConfigJSON)
+	}
 	if baseURL == "" || apiKey == "" {
 		return fallbackEmbeddings(texts), nil
 	}
@@ -338,4 +351,47 @@ func embeddingTokens(text string) []string {
 	}
 	flush()
 	return tokens
+}
+
+type localEmbeddingProvider interface {
+	EmbedSingle(text string, purpose string) ([]float32, error)
+	EmbedBatch(texts []string, purpose string) ([][]float32, error)
+}
+
+var localEmbeddingProviders = make(map[string]func(configJSON string) (localEmbeddingProvider, error))
+
+func registerLocalEmbeddingProvider(providerType string, factory func(configJSON string) (localEmbeddingProvider, error)) {
+	localEmbeddingProviders[providerType] = factory
+}
+
+func (s *Service) embedLocal(text string, modelName string, configJSON string) ([]float32, string, error) {
+	provider, err := getLocalEmbeddingProvider("llama_cpp", configJSON)
+	if err != nil {
+		return fallbackEmbedding(text), err.Error(), nil
+	}
+	vector, err := provider.EmbedSingle(text, "document")
+	if err != nil {
+		return fallbackEmbedding(text), err.Error(), nil
+	}
+	return vector, "", nil
+}
+
+func (s *Service) batchEmbedLocal(texts []string, modelName string, configJSON string) ([][]float32, error) {
+	provider, err := getLocalEmbeddingProvider("llama_cpp", configJSON)
+	if err != nil {
+		return fallbackEmbeddings(texts), nil
+	}
+	vectors, err := provider.EmbedBatch(texts, "document")
+	if err != nil {
+		return fallbackEmbeddings(texts), nil
+	}
+	return vectors, nil
+}
+
+func getLocalEmbeddingProvider(providerType string, configJSON string) (localEmbeddingProvider, error) {
+	factory, exists := localEmbeddingProviders[providerType]
+	if !exists {
+		return nil, fmt.Errorf("local embedding provider %s not registered", providerType)
+	}
+	return factory(configJSON)
 }

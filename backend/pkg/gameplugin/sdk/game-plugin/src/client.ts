@@ -84,6 +84,10 @@ export class Client {
     this.serviceId = options.serviceId || '';
   }
 
+  getTransport(): Transport {
+    return this.transport;
+  }
+
   async sendRequest(
     method: string,
     payload?: unknown,

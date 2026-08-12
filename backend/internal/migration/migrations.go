@@ -136,6 +136,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetBehaviorV2ColumnsMigration(),
 		DesktopPetLocalSessionMigration(),
 		CharacterCardMigration(),
+		BackupTablesUpgradeMigration(),
 		RuntimeBootstrapTicketMigration(),
 		RuntimeBootstrapTicketRuntimeIDForwardFix(),
 		RotationJournalMigration(),
@@ -148,5 +149,7 @@ func DefaultMigrations() []Migration {
 		WorkspaceMountsMigration(),
 		WorkspaceMountsRemoteMigration(),
 		ModelConfigProtocolMigration(),
+		ModelConfigProviderConfigMigration(),
+		EmbeddingConfigProviderConfigMigration(),
 	}
 }

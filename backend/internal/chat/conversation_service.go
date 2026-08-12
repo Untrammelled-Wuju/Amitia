@@ -140,6 +140,19 @@ func (s *service) DeleteAllConversations() error {
 }
 
 func (s *service) ChangeCharacter(convID, charID string) (*Conversation, error) {
+	conv, err := s.repo.GetConversation(convID)
+	if err != nil {
+		return nil, fmt.Errorf("会话不存在")
+	}
+
+	actualCharacterID := strings.TrimSpace(conv.CharacterID)
+	if actualCharacterID != "" && actualCharacterID != strings.TrimSpace(charID) {
+		msgCount := s.repo.CountMessagesByConv(convID)
+		if msgCount > 0 {
+			return nil, fmt.Errorf("非空会话禁止更换角色")
+		}
+	}
+
 	s.db.Exec("UPDATE conversations SET character_id = ?, updated_at = ? WHERE id = ?", charID, time.Now().Format("2006-01-02 15:04:05"), convID)
 	return s.repo.GetConversation(convID)
 }

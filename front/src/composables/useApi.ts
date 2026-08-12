@@ -116,6 +116,20 @@ export function useApi() {
     }
   }
 
+  async function postUpload<T>(url: string, file: File, fieldName: string = "card"): Promise<T> {
+    loading.value = true;
+    try {
+      const formData = new FormData();
+      formData.append(fieldName, file);
+      const res = await apiClient.post(url, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data as T;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function put<T>(url: string, data?: any): Promise<T> {
     loading.value = true;
     try {
@@ -136,7 +150,7 @@ export function useApi() {
     }
   }
 
-  return { loading, get, post, put, del };
+  return { loading, get, post, postUpload, put, del };
 }
 
 // Auth helpers

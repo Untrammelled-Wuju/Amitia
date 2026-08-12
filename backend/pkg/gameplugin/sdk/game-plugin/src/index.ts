@@ -5,5 +5,13 @@ export * from './errors';
 export { Client, ClientOptions, IDGenerator, FixedIDGenerator, UUIDGenerator, withRuntimeID, withPluginID, withServiceID, withMetadata } from './client';
 export { createPluginDescriptor } from './descriptor';
 export { Plugin } from './plugin';
+export { StdioTransport, StdioTransportOptions } from './transport_stdio';
+export { Runner, RunnerConfig, HandlerRegistry, RequestHandler, NotificationHandler, HelloConfiguration, ServiceHelloDescriptor } from './runner';
+export * from './event';
+export * from './state';
+export * from './channel';
+export * from './binary';
+export * from './stream';
+export * from './service';
 
 export { SDK_NAME, SDK_VERSION } from './version';

@@ -76,7 +76,6 @@ var AppleTypeToCanonical = map[string]string{
 	"HMCharacteristicTypeCurrentPosition":      CharacteristicTypeCurrentPosition,
 	"HMCharacteristicTypeTargetPosition":       CharacteristicTypeTargetPosition,
 
-	"HMCharacteristicTypeTargetDoorState":      CharacteristicTypeGarageDoorTargetState,
 	"HMCharacteristicTypeSecuritySystemTargetState": CharacteristicTypeSecuritySystemTarget,
 }
 

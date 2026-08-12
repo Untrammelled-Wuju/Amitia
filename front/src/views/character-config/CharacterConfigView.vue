@@ -125,6 +125,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @preview="previewImport"
       @cancel-preview="cancelImportPreview"
       @confirm="onConfirmImport"
+      @file-selected="setSelectedFile"
     />
   </div>
 </template>

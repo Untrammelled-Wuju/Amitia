@@ -20,10 +20,16 @@ func RegisterCharacterRouter(r *gin.RouterGroup, ctx *app.AppContext, chatTester
 	r.DELETE("/characters/:id", handler.Delete)
 	r.POST("/characters/:id/active", handler.SetActive)
 	r.POST("/characters/:id/test", handler.Test)
+
 	r.POST("/characters/:id/export-pack", handler.ExportPack)
 	r.POST("/characters/import-pack/preview", handler.ImportPackPreview)
 	r.POST("/characters/import-pack/confirm", handler.ImportPackConfirm)
 	r.GET("/characters/packs/history", handler.PacksHistory)
+
+	r.POST("/characters/import-card/preview", handler.ImportPackPreview)
+	r.POST("/characters/import-card/confirm", handler.ImportPackConfirm)
+	r.GET("/characters/:id/export-card", handler.ExportCardV2)
+
 	r.GET("/character-templates", handler.ListTemplates)
 	r.GET("/character-templates/:id", handler.GetTemplate)
 	r.POST("/character-templates/:id/create-character", handler.CreateFromTemplate)

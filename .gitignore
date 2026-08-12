@@ -250,3 +250,6 @@ mobile_app/android/amitia-runtime/build/
 mobile_app/android/app/build/
 mobile_app/android/build/
 runtime/mobile_app/
+
+testplugins/
+runtime/build/proot/android-x86_64/

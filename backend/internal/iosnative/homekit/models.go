@@ -3,11 +3,11 @@ package homekit
 type InitializationState string
 
 const (
-	StateNotInitialized  InitializationState = "not_initialized"
-	StateLoading         InitializationState = "loading"
-	StateReady           InitializationState = "ready"
-	StateUnauthorized    InitializationState = "unauthorized"
-	StateFailed          InitializationState = "failed"
+	StateNotInitialized InitializationState = "not_initialized"
+	StateLoading        InitializationState = "loading"
+	StateReady          InitializationState = "ready"
+	StateUnauthorized   InitializationState = "unauthorized"
+	StateFailed         InitializationState = "failed"
 )
 
 type AuthorizationStatus string
@@ -24,7 +24,7 @@ type HomeKitStatus struct {
 
 	EnabledByUser bool `json:"enabledByUser"`
 
-	Initialized         bool `json:"initialized"`
+	Initialized          bool `json:"initialized"`
 	InitialLoadCompleted bool `json:"initialLoadCompleted"`
 
 	Authorization string `json:"authorization"`
@@ -84,9 +84,9 @@ type HomeAccessoryInfo struct {
 
 	Category string `json:"category,omitempty"`
 
-	Manufacturer     string `json:"manufacturer,omitempty"`
-	Model            string `json:"model,omitempty"`
-	FirmwareVersion  string `json:"firmwareVersion,omitempty"`
+	Manufacturer    string `json:"manufacturer,omitempty"`
+	Model           string `json:"model,omitempty"`
+	FirmwareVersion string `json:"firmwareVersion,omitempty"`
 
 	Reachable bool `json:"reachable"`
 
@@ -112,10 +112,10 @@ type HomeServiceInfo struct {
 type HomeCharacteristicValue struct {
 	Type string `json:"type"`
 
-	Bool     *bool    `json:"bool,omitempty"`
-	Integer  *int64   `json:"integer,omitempty"`
-	Float    *float64 `json:"float,omitempty"`
-	String   *string  `json:"string,omitempty"`
+	Bool    *bool    `json:"bool,omitempty"`
+	Integer *int64   `json:"integer,omitempty"`
+	Float   *float64 `json:"float,omitempty"`
+	String  *string  `json:"string,omitempty"`
 
 	DataBase64 string `json:"dataBase64,omitempty"`
 }
@@ -123,16 +123,16 @@ type HomeCharacteristicValue struct {
 type HomeCharacteristicInfo struct {
 	CharacteristicID string `json:"characteristicId"`
 
-	ServiceID    string `json:"serviceId"`
-	AccessoryID  string `json:"accessoryId"`
+	ServiceID   string `json:"serviceId"`
+	AccessoryID string `json:"accessoryId"`
 
 	Type string `json:"type"`
 
 	Name string `json:"name,omitempty"`
 
-	Readable        bool `json:"readable"`
-	Writable        bool `json:"writable"`
-	SupportsEvents  bool `json:"supportsEvents"`
+	Readable       bool `json:"readable"`
+	Writable       bool `json:"writable"`
+	SupportsEvents bool `json:"supportsEvents"`
 
 	Value *HomeCharacteristicValue `json:"value,omitempty"`
 
@@ -160,9 +160,9 @@ type CharacteristicWriteResult struct {
 }
 
 type HomeSceneAction struct {
-	AccessoryID       string `json:"accessoryId"`
-	ServiceID         string `json:"serviceId"`
-	CharacteristicID  string `json:"characteristicId"`
+	AccessoryID      string `json:"accessoryId"`
+	ServiceID        string `json:"serviceId"`
+	CharacteristicID string `json:"characteristicId"`
 
 	CharacteristicType string `json:"characteristicType"`
 
@@ -207,20 +207,20 @@ type HomeAutomationInfo struct {
 	EventCount int `json:"eventCount,omitempty"`
 
 	Conditions string `json:"conditions,omitempty"`
-)
+}
 
 type HomeKitCharacteristicEvent struct {
-	HomeID            string `json:"homeId"`
-	AccessoryID       string `json:"accessoryId"`
-	ServiceID         string `json:"serviceId"`
-	CharacteristicID  string `json:"characteristicId"`
+	HomeID           string `json:"homeId"`
+	AccessoryID      string `json:"accessoryId"`
+	ServiceID        string `json:"serviceId"`
+	CharacteristicID string `json:"characteristicId"`
 
 	Type string `json:"type"`
 
 	Value HomeCharacteristicValue `json:"value"`
 
 	ObservedAt int64 `json:"observedAt"`
-)
+}
 
 type CharacteristicEventAutomationInput struct {
 	AccessoryID      string `json:"accessoryId"`
@@ -231,9 +231,9 @@ type CharacteristicEventAutomationInput struct {
 }
 
 type CalendarEventAutomationInput struct {
-	FireAt        string  `json:"fireAt"`
-	Recurrence    string  `json:"recurrence,omitempty"`
-	TimezoneOffset *int    `json:"timezoneOffset,omitempty"`
+	FireAt         string `json:"fireAt"`
+	Recurrence     string `json:"recurrence,omitempty"`
+	TimezoneOffset *int   `json:"timezoneOffset,omitempty"`
 }
 
 type PresenceEventAutomationInput struct {
@@ -259,13 +259,13 @@ type UpdateAutomationInput struct {
 }
 
 type AccessorySetupRequest struct {
-	HomeID     string `json:"homeId,omitempty"`
-	RoomID     string `json:"roomId,omitempty"`
-	SetupCode  string `json:"setupCode,omitempty"`
+	HomeID    string `json:"homeId,omitempty"`
+	RoomID    string `json:"roomId,omitempty"`
+	SetupCode string `json:"setupCode,omitempty"`
 }
 
 type AccessorySetupResult struct {
-	Status    string `json:"status"`
+	Status      string `json:"status"`
 	AccessoryID string `json:"accessoryId,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Error       string `json:"error,omitempty"`
 }

@@ -3,13 +3,35 @@
 package character
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/character/card"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
+
+type CardPreviewResult struct {
+	Preview      *card.CharacterCardPreview `json:"preview"`
+	SourceHash   string                     `json:"sourceHash"`
+	Format       card.CharacterCardFormat   `json:"format"`
+}
+
+type CardImportResult struct {
+	CharacterID  string `json:"characterId"`
+	Name         string `json:"name"`
+	SourceFormat string `json:"sourceFormat"`
+}
+
+type CardExportResult struct {
+	ResourceURI string `json:"resourceUri"`
+	Format      string `json:"format"`
+	Filename    string `json:"filename"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	ContentHash string `json:"contentHash"`
+}
 
 type Service interface {
 	List(includeDisabled bool) ([]Character, error)
@@ -23,6 +45,11 @@ type Service interface {
 	GetRoleProfile(characterID string) (*RoleProfileResponse, error)
 	UpdateRoleProfile(characterID string, updates map[string]interface{}) (*RoleProfileResponse, error)
 	UpdateAvatar(id string, avatarUrl string) error
+	PreviewCard(data []byte, filename string) (*CardPreviewResult, error)
+	ImportCard(data []byte, filename string, confirm bool) (*CardImportResult, error)
+	ExportCard(characterID string, format string) (*CardExportResult, []byte, error)
+	GetCardData(characterID string) (*card.CharacterCardData, error)
+	UpdateCardData(characterID string, cardData *card.CharacterCardData) error
 }
 
 type service struct {
@@ -320,4 +347,151 @@ func (s *service) UpdateAvatar(id string, avatarUrl string) error {
 		return fmt.Errorf("角色不存在")
 	}
 	return s.repo.Update(id, map[string]interface{}{"avatar": avatarUrl})
+}
+
+func (s *service) PreviewCard(data []byte, filename string) (*CardPreviewResult, error) {
+	parser := card.NewCardParser()
+	c, _, err := parser.Parse(data, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	sourceHash := card.ComputeSourceHash(data)
+	format, _ := card.DetectFormat(data, filename)
+
+	return &CardPreviewResult{
+		Preview:    c.BuildPreview(),
+		SourceHash: sourceHash,
+		Format:     format,
+	}, nil
+}
+
+func (s *service) ImportCard(data []byte, filename string, confirm bool) (*CardImportResult, error) {
+	parser := card.NewCardParser()
+	c, _, err := parser.Parse(data, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.ValidateForImport(); err != nil {
+		return nil, err
+	}
+
+	mapping := c.ToCharacterMapping()
+	name := c.SanitizeName()
+
+	char := &Character{
+		ID:              uuid.New().String(),
+		Name:            name,
+		Description:     mapping.Description,
+		Personality:     mapping.Personality,
+		BasePrompt:      mapping.SystemPrompt,
+		Status:          "enabled",
+		CardDataJSON:    "",
+		CharacterBase:    mapping.Scenario,
+	}
+
+	cardData := c.ToCardData()
+	cardDataBytes, err := json.Marshal(cardData)
+	if err != nil {
+		return nil, fmt.Errorf("序列化卡片数据失败: %w", err)
+	}
+	char.CardDataJSON = string(cardDataBytes)
+
+	if err := s.repo.Create(char); err != nil {
+		return nil, fmt.Errorf("创建角色失败: %w", err)
+	}
+
+	convID := uuid.New().String()
+	now := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'web', 'system', ?, ?)",
+		convID, char.ID, char.Name, now, now)
+	s.db.Table("characters").Where("id = ?", char.ID).Update("conversation_id", convID)
+
+	return &CardImportResult{
+		CharacterID:  char.ID,
+		Name:         char.Name,
+		SourceFormat: string(c.SourceFormat),
+	}, nil
+}
+
+func (s *service) ExportCard(characterID string, format string) (*CardExportResult, []byte, error) {
+	char, err := s.repo.FindByID(characterID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("角色不存在")
+	}
+
+	var cardData card.CharacterCardData
+	if char.CardDataJSON != "" && char.CardDataJSON != "{}" {
+		if err := json.Unmarshal([]byte(char.CardDataJSON), &cardData); err != nil {
+			return nil, nil, fmt.Errorf("解析卡片数据失败: %w", err)
+		}
+	}
+
+	exporter := card.NewExporter("data")
+	input := card.ExportInput{
+		Name:                char.Name,
+		Description:         char.Description,
+		Personality:         char.Personality,
+		Scenario:            cardData.Scenario,
+		FirstMessage:        cardData.FirstMessage,
+		AlternateGreetings:  cardData.AlternateGreetings,
+		ExampleMessages:     cardData.ExampleMessages,
+		SystemPrompt:        cardData.SystemPrompt,
+		PostHistory:         cardData.PostHistoryInstructions,
+		Creator:             cardData.Creator,
+		CreatorNotes:        cardData.CreatorNotes,
+		CharacterVersion:    cardData.CharacterVersion,
+		Tags:                cardData.Tags,
+		Nickname:            cardData.Nickname,
+		GroupOnlyGreetings:  cardData.GroupOnlyGreetings,
+		Source:              "Amitia",
+		Extensions:          cardData.ExternalExtensions,
+		AvatarURL:           char.Avatar,
+		SourceFormat:        cardData.SourceFormat,
+	}
+
+	result, data, err := exporter.Export(input, format)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &CardExportResult{
+		ResourceURI: result.ResourceURI,
+		Format:      result.Format,
+		Filename:    result.Filename,
+		SizeBytes:   result.SizeBytes,
+		ContentHash: result.ContentHash,
+	}, data, nil
+}
+
+func (s *service) GetCardData(characterID string) (*card.CharacterCardData, error) {
+	char, err := s.repo.FindByID(characterID)
+	if err != nil {
+		return nil, fmt.Errorf("角色不存在")
+	}
+
+	if char.CardDataJSON == "" || char.CardDataJSON == "{}" {
+		return &card.CharacterCardData{}, nil
+	}
+
+	var cardData card.CharacterCardData
+	if err := json.Unmarshal([]byte(char.CardDataJSON), &cardData); err != nil {
+		return nil, fmt.Errorf("解析卡片数据失败: %w", err)
+	}
+	return &cardData, nil
+}
+
+func (s *service) UpdateCardData(characterID string, cardData *card.CharacterCardData) error {
+	_, err := s.repo.FindByID(characterID)
+	if err != nil {
+		return fmt.Errorf("角色不存在")
+	}
+
+	data, err := json.Marshal(cardData)
+	if err != nil {
+		return fmt.Errorf("序列化卡片数据失败: %w", err)
+	}
+
+	return s.repo.Update(characterID, map[string]interface{}{"card_data_json": string(data)})
 }

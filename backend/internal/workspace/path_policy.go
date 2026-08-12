@@ -51,6 +51,14 @@ func validateSegment(seg string) error {
 	return nil
 }
 
+func ValidateSegment(seg string) error {
+	return validateSegment(seg)
+}
+
+func AssertWithinRoot(rootPath, childPath string) error {
+	return assertWithinRoot(rootPath, childPath)
+}
+
 func ValidateRelativePath(rel string) error {
 	if rel == "" {
 		return nil

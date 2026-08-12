@@ -17,11 +17,25 @@ func (s *service) GetMessages(convID string, page, pageSize int) ([]Message, int
 	return s.repo.GetMessages(convID, page, pageSize)
 }
 
+func (s *service) GetMessagesScoped(convID string, characterID string, page, pageSize int) ([]Message, int64, error) {
+	if err := s.requireConversationCharacter(convID, characterID); err != nil {
+		return nil, 0, err
+	}
+	return s.repo.GetMessages(convID, page, pageSize)
+}
+
 func (s *service) DeleteMessages(convID string) error {
 	if err := s.repo.DeleteMessagesByConv(convID); err != nil {
 		return err
 	}
 	return pipelinecheckpoint.New(s.db).ResetConversation(convID)
+}
+
+func (s *service) DeleteMessagesScoped(convID string, characterID string) error {
+	if err := s.requireConversationCharacter(convID, characterID); err != nil {
+		return err
+	}
+	return s.DeleteMessages(convID)
 }
 
 func (s *service) DeleteSingleMessage(id string) error {
@@ -38,6 +52,20 @@ func (s *service) DeleteSingleMessage(id string) error {
 	return pipelinecheckpoint.New(s.db).ResetConversation(msg.ConversationID)
 }
 
+func (s *service) DeleteSingleMessageScoped(id string, characterID string) error {
+	var msg Message
+	if err := s.db.Where("id = ?", id).First(&msg).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("消息不存在")
+		}
+		return err
+	}
+	if err := s.requireConversationCharacter(msg.ConversationID, characterID); err != nil {
+		return err
+	}
+	return s.DeleteSingleMessage(id)
+}
+
 func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListResponse, error) {
 	if q.Page <= 0 {
 		q.Page = 1
@@ -52,6 +80,35 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListRespons
 	totalPages := int((total + int64(q.PageSize) - 1) / int64(q.PageSize))
 	items := make([]Conversation, 0)
 	return &ConversationListResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
+}
+
+func (s *service) SearchMessagesScoped(q MessageSearchQuery, characterID string) (*ConversationListResponse, error) {
+	if q.ConversationID != "" {
+		if err := s.requireConversationCharacter(q.ConversationID, characterID); err != nil {
+			return nil, err
+		}
+	}
+	return s.SearchMessages(q)
+}
+
+func (s *service) requireConversationCharacter(convID string, characterID string) error {
+	convID = strings.TrimSpace(convID)
+	characterID = strings.TrimSpace(characterID)
+	if convID == "" || characterID == "" {
+		return nil
+	}
+	conv, err := s.repo.GetConversation(convID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("会话不存在")
+		}
+		return err
+	}
+	actualCharacterID := strings.TrimSpace(conv.CharacterID)
+	if actualCharacterID != "" && actualCharacterID != characterID {
+		return fmt.Errorf("%w: conversation belongs to different character", ErrConversationScopeMismatch)
+	}
+	return nil
 }
 
 func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
