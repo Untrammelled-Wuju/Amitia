@@ -208,7 +208,10 @@ func TestValidateUvxWorkDir(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_Basic(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server-fetch==1.2.3",

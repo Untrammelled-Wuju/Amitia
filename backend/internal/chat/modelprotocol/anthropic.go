@@ -19,7 +19,7 @@ func (a *AnthropicAdapter) Protocol() ModelProtocol {
 	return ProtocolAnthropicMessages
 }
 
-func (a *AnthropicAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) ModelCapabilities {
+func (a *AnthropicAdapter) Capabilities(ctx context.Context, cfg ProviderConfig) ModelCapabilities {
 	var caps ModelCapabilities
 	if cfg.CapabilitiesJSON != "" {
 		json.Unmarshal([]byte(cfg.CapabilitiesJSON), &caps)
@@ -27,7 +27,7 @@ func (a *AnthropicAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig
 	return caps
 }
 
-func (a *AnthropicAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req ModelRequest) (*ModelResult, error) {
+func (a *AnthropicAdapter) Generate(ctx context.Context, cfg ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -71,7 +71,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, cfg *ProviderConfig, re
 	return a.parseResponse(respBytes)
 }
 
-func (a *AnthropicAdapter) Stream(ctx context.Context, cfg *ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
+func (a *AnthropicAdapter) Stream(ctx context.Context, cfg ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{

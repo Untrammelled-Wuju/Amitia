@@ -154,7 +154,7 @@ func TestRemoteBackend_Rename(t *testing.T) {
 		Status:        WorkspaceStatusReady,
 	}
 
-	_, err := backend.Rename(context.Background(), "old.txt", "new.txt")
+	_, err := backend.Rename(context.Background(), mount, "old.txt", "new.txt")
 	if err != nil && err != ErrFileNotFound {
 		t.Logf("rename result: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestRemoteBackend_Delete(t *testing.T) {
 		Status:        WorkspaceStatusReady,
 	}
 
-	err := backend.Delete(context.Background(), "deleteme.txt", DeleteOptions{Recursive: false})
+	err := backend.Delete(context.Background(), mount, "deleteme.txt", DeleteOptions{Recursive: false})
 	if err != nil && err != ErrFileNotFound {
 		t.Logf("delete result: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestRemoteBackend_Copy(t *testing.T) {
 		Status:        WorkspaceStatusReady,
 	}
 
-	_, err := backend.Copy(context.Background(), "src.txt", "dstdir")
+	_, err := backend.Copy(context.Background(), mount, "src.txt", "dstdir")
 	if err != nil && err != ErrFileNotFound {
 		t.Logf("copy result: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestRemoteBackend_Move(t *testing.T) {
 		Status:        WorkspaceStatusReady,
 	}
 
-	_, err := backend.Move(context.Background(), "src.txt", "dstdir")
+	_, err := backend.Move(context.Background(), mount, "src.txt", "dstdir")
 	if err != nil && err != ErrFileNotFound {
 		t.Logf("move result: %v", err)
 	}

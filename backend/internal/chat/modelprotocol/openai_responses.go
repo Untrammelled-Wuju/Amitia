@@ -19,7 +19,7 @@ func (a *OpenAIResponsesAdapter) Protocol() ModelProtocol {
 	return ProtocolOpenAIResponses
 }
 
-func (a *OpenAIResponsesAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) ModelCapabilities {
+func (a *OpenAIResponsesAdapter) Capabilities(ctx context.Context, cfg ProviderConfig) ModelCapabilities {
 	var caps ModelCapabilities
 	if cfg.CapabilitiesJSON != "" {
 		json.Unmarshal([]byte(cfg.CapabilitiesJSON), &caps)
@@ -27,7 +27,7 @@ func (a *OpenAIResponsesAdapter) Capabilities(ctx context.Context, cfg *Provider
 	return caps
 }
 
-func (a *OpenAIResponsesAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req ModelRequest) (*ModelResult, error) {
+func (a *OpenAIResponsesAdapter) Generate(ctx context.Context, cfg ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 
 	requestBody := map[string]interface{}{
@@ -84,7 +84,7 @@ func (a *OpenAIResponsesAdapter) Generate(ctx context.Context, cfg *ProviderConf
 	return a.parseResponse(respBytes)
 }
 
-func (a *OpenAIResponsesAdapter) Stream(ctx context.Context, cfg *ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
+func (a *OpenAIResponsesAdapter) Stream(ctx context.Context, cfg ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 
 	requestBody := map[string]interface{}{

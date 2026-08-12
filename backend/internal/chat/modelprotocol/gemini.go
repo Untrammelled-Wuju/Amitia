@@ -19,7 +19,7 @@ func (a *GeminiAdapter) Protocol() ModelProtocol {
 	return ProtocolGeminiGenerate
 }
 
-func (a *GeminiAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) ModelCapabilities {
+func (a *GeminiAdapter) Capabilities(ctx context.Context, cfg ProviderConfig) ModelCapabilities {
 	var caps ModelCapabilities
 	if cfg.CapabilitiesJSON != "" {
 		json.Unmarshal([]byte(cfg.CapabilitiesJSON), &caps)
@@ -27,7 +27,7 @@ func (a *GeminiAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) M
 	return caps
 }
 
-func (a *GeminiAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req ModelRequest) (*ModelResult, error) {
+func (a *GeminiAdapter) Generate(ctx context.Context, cfg ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -76,7 +76,7 @@ func (a *GeminiAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req M
 	return a.parseResponse(respBytes)
 }
 
-func (a *GeminiAdapter) Stream(ctx context.Context, cfg *ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
+func (a *GeminiAdapter) Stream(ctx context.Context, cfg ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -174,7 +174,7 @@ func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{}
 	return contents
 }
 
-func (a *GeminiAdapter) buildGenConfig(cfg *ProviderConfig) map[string]interface{} {
+func (a *GeminiAdapter) buildGenConfig(cfg ProviderConfig) map[string]interface{} {
 	config := map[string]interface{}{
 		"temperature":     cfg.Temperature,
 		"maxOutputTokens": cfg.MaxOutputTokens,

@@ -20,7 +20,7 @@ func (a *OllamaAdapter) Protocol() ModelProtocol {
 	return ProtocolOllamaChat
 }
 
-func (a *OllamaAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) ModelCapabilities {
+func (a *OllamaAdapter) Capabilities(ctx context.Context, cfg ProviderConfig) ModelCapabilities {
 	var caps ModelCapabilities
 	if cfg.CapabilitiesJSON != "" {
 		json.Unmarshal([]byte(cfg.CapabilitiesJSON), &caps)
@@ -28,7 +28,7 @@ func (a *OllamaAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) M
 	return caps
 }
 
-func (a *OllamaAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req ModelRequest) (*ModelResult, error) {
+func (a *OllamaAdapter) Generate(ctx context.Context, cfg ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -77,7 +77,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req M
 	return a.parseResponse(respBytes)
 }
 
-func (a *OllamaAdapter) Stream(ctx context.Context, cfg *ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
+func (a *OllamaAdapter) Stream(ctx context.Context, cfg ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
