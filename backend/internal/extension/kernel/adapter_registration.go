@@ -28,6 +28,8 @@ type AdapterRegistrationDeps struct {
 	AndroidLinuxProvider interface{}
 	SearchCaller        capability.SearchCallFunc
 	SearchHealth        capability.SearchHealthFunc
+	BrowserCaller       capability.BrowserCallFunc
+	BrowserHealth       capability.BrowserHealthFunc
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -105,6 +107,11 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if deps.SearchCaller != nil {
 		searchAdapter := capability.NewSearchRuntimeAdapter(deps.SearchCaller, deps.SearchHealth)
 		registry.Register(capability.RuntimeTypeSearch, searchAdapter)
+	}
+
+	if deps.BrowserCaller != nil {
+		browserAdapter := capability.NewBrowserRuntimeAdapter(deps.BrowserCaller, deps.BrowserHealth)
+		registry.Register(capability.RuntimeTypeBrowser, browserAdapter)
 	}
 
 	return nil
