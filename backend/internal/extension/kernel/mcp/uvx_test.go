@@ -289,7 +289,10 @@ func TestBuildUvxInvocation_Basic(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_WithPython(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server==1.0.0",
@@ -317,7 +320,10 @@ func TestBuildUvxInvocation_WithPython(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_Offline(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server==1.0.0",
@@ -345,7 +351,10 @@ func TestBuildUvxInvocation_Offline(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_NoExactVersion(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server",
@@ -361,7 +370,10 @@ func TestBuildUvxInvocation_NoExactVersion(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_CommandInjection(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server==1.0.0",
@@ -377,7 +389,10 @@ func TestBuildUvxInvocation_CommandInjection(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_DirectURL(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server @ https://evil.com/pkg.tar.gz",
@@ -393,7 +408,10 @@ func TestBuildUvxInvocation_DirectURL(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_GitDependency(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "git+https://github.com/user/repo.git",

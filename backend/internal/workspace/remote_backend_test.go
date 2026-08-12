@@ -19,6 +19,11 @@ func (r *fakeRemoteCredResolver) ResolveCredential(ctx context.Context, ref stri
 
 func newFakeRemoteBackend() (*RemoteBackend, *remoteClientCache) {
 	credResolver := &fakeRemoteCredResolver{creds: make(map[string]*RemoteCredential)}
+	credResolver.creds["cred-1"] = &RemoteCredential{
+		Type:     RemoteAuthTypePassword,
+		Username: "testuser",
+		Password: []byte("testpass"),
+	}
 	policy := DefaultRemotePolicy
 	backend := NewRemoteBackend(credResolver, policy)
 	return backend, backend.clients
