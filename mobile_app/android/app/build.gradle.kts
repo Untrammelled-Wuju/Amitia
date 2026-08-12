@@ -34,11 +34,40 @@ android {
         }
     }
 
+    val keystorePath: String? = System.getenv("AMITIA_KEYSTORE_PATH")
+    val keystorePassword: String? = System.getenv("AMITIA_KEYSTORE_PASSWORD")
+    val keyAliasValue: String? = System.getenv("AMITIA_KEY_ALIAS")
+    val keyPasswordValue: String? = System.getenv("AMITIA_KEY_PASSWORD")
+    val hasReleaseKeystore = keystorePath != null && file(keystorePath).exists()
+
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword ?: ""
+                keyAlias = keyAliasValue ?: "amitia"
+                keyPassword = keyPasswordValue ?: ""
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            isDebuggable = true
+        }
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 

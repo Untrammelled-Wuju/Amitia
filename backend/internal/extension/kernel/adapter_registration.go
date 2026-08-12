@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/androidlinux/terminal"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -14,17 +15,18 @@ import (
 )
 
 type AdapterRegistrationDeps struct {
-	JSGlobalFactory   *javascript_main.RuntimeFactory
-	WASMFactory       *wasm_runtime.WASMRuntimeFactory
-	WASMModuleMgr     *wasm_runtime.ModuleManager
-	Supervisor        runtime_supervisor.Supervisor
-	TaskService       *task_runtime.TaskRuntimeService
-	MCPCaller         capability.MCPCallFunc
-	MCPHealth         capability.MCPHealthFunc
-	WorkflowCaller    capability.WorkflowCallFunc
-	WorkflowCancel    capability.WorkflowCancelFunc
-	BuiltinDispatcher capability.DispatchFunc
-	DesktopProvider   capability.DesktopProvider
+	JSGlobalFactory    *javascript_main.RuntimeFactory
+	WASMFactory        *wasm_runtime.WASMRuntimeFactory
+	WASMModuleMgr      *wasm_runtime.ModuleManager
+	Supervisor         runtime_supervisor.Supervisor
+	TaskService        *task_runtime.TaskRuntimeService
+	MCPCaller          capability.MCPCallFunc
+	MCPHealth          capability.MCPHealthFunc
+	WorkflowCaller     capability.WorkflowCallFunc
+	WorkflowCancel     capability.WorkflowCancelFunc
+	BuiltinDispatcher  capability.DispatchFunc
+	DesktopProvider    capability.DesktopProvider
+	AndroidLinuxProvider terminal.AndroidLinuxProvider
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -93,6 +95,11 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if deps.DesktopProvider != nil {
 		desktopAdapter := capability.NewDesktopRuntimeAdapter(deps.DesktopProvider)
 		registry.Register(capability.RuntimeTypeDesktop_Extension, desktopAdapter)
+	}
+
+	if deps.AndroidLinuxProvider != nil {
+		androidLinuxAdapter := capability.NewAndroidLinuxRuntimeAdapter(deps.AndroidLinuxProvider)
+		registry.Register(capability.RuntimeTypeAndroidLinux, androidLinuxAdapter)
 	}
 
 	return nil

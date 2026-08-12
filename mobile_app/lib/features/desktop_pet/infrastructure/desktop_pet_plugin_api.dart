@@ -13,9 +13,9 @@ class DesktopPetPluginApi {
     int pageSize = 20,
     String? search,
   }) async {
-    final query = <String, dynamic>{
-      'page': page,
-      'pageSize': pageSize,
+    final query = <String, String>{
+      'page': '$page',
+      'pageSize': '$pageSize',
     };
     if (search != null && search.isNotEmpty) {
       query['search'] = search;
@@ -61,9 +61,9 @@ class DesktopPetPluginApi {
     return DesktopPetPluginInstallResult.fromJson(resp);
   }
 
-  Future<DesktopPetPluginInstallResult> update(String packagePath) async {
+  Future<DesktopPetPluginInstallResult> update(String extensionId, String packagePath) async {
     final resp = await _api.post<Map<String, dynamic>>(
-      '$_basePath/update',
+      '$_basePath/$extensionId/update',
       data: {'packagePath': packagePath},
     );
     if (resp == null) {

@@ -2,10 +2,7 @@ package management
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/u-ai/backend/internal/extension"
-	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/gamehost"
 )
 
@@ -35,96 +32,76 @@ func NewProductionService(container *gamehost.GameHostContainer, kernel KernelMa
 	return NewGameCenterManagementService(opts)
 }
 
-type extensionKernelAdapter struct {
-	runtime *extension.Runtime
+type KernelMutationOptions struct {
+	InstallFn   func(ctx context.Context, archivePath string) (KernelInstalledExtension, error)
+	UpdateFn    func(ctx context.Context, archivePath string) (KernelInstalledExtension, error)
+	EnableFn    func(ctx context.Context, extensionID string) error
+	DisableFn   func(ctx context.Context, extensionID string) error
+	UninstallFn func(ctx context.Context, extensionID string) error
 }
 
-func NewExtensionKernelAdapter(rt *extension.Runtime) KernelMutation {
-	return &extensionKernelAdapter{runtime: rt}
+type kernelMutationFromFuncs struct {
+	opts KernelMutationOptions
 }
 
-func (a *extensionKernelAdapter) Install(ctx context.Context, archivePath string) (KernelInstalledExtension, error) {
-	if a.runtime == nil || a.runtime.Kernel == nil {
-		return KernelInstalledExtension{}, ErrKernelUnavailable
-	}
-	installed, err := a.runtime.Kernel.Install(ctx, archivePath)
-	if err != nil {
-		return KernelInstalledExtension{}, err
-	}
-	return KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
+func NewKernelMutationFromFuncs(opts KernelMutationOptions) KernelMutation {
+	return &kernelMutationFromFuncs{opts: opts}
 }
 
-func (a *extensionKernelAdapter) Update(ctx context.Context, archivePath string) (KernelInstalledExtension, error) {
-	if a.runtime == nil || a.runtime.Kernel == nil {
-		return KernelInstalledExtension{}, ErrKernelUnavailable
-	}
-	installed, err := a.runtime.Kernel.Update(ctx, archivePath)
-	if err != nil {
-		return KernelInstalledExtension{}, err
-	}
-	return KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
+func (f *kernelMutationFromFuncs) Install(ctx context.Context, archivePath string) (KernelInstalledExtension, error) {
+	return f.opts.InstallFn(ctx, archivePath)
 }
 
-func (a *extensionKernelAdapter) Enable(ctx context.Context, extensionID string) error {
-	if a.runtime == nil || a.runtime.Kernel == nil {
-		return ErrKernelUnavailable
-	}
-	return a.runtime.Kernel.Enable(ctx, extensionID)
+func (f *kernelMutationFromFuncs) Update(ctx context.Context, archivePath string) (KernelInstalledExtension, error) {
+	return f.opts.UpdateFn(ctx, archivePath)
 }
 
-func (a *extensionKernelAdapter) Disable(ctx context.Context, extensionID string) error {
-	if a.runtime == nil || a.runtime.Kernel == nil {
-		return ErrKernelUnavailable
-	}
-	return a.runtime.Kernel.Disable(ctx, extensionID)
+func (f *kernelMutationFromFuncs) Enable(ctx context.Context, extensionID string) error {
+	return f.opts.EnableFn(ctx, extensionID)
 }
 
-func (a *extensionKernelAdapter) Uninstall(ctx context.Context, extensionID string) error {
-	if a.runtime == nil || a.runtime.Kernel == nil {
-		return ErrKernelUnavailable
-	}
-	return a.runtime.Kernel.Uninstall(ctx, extensionID)
+func (f *kernelMutationFromFuncs) Disable(ctx context.Context, extensionID string) error {
+	return f.opts.DisableFn(ctx, extensionID)
 }
 
-type gameHostTargetReaderAdapter struct {
-	container *gamehost.GameHostContainer
+func (f *kernelMutationFromFuncs) Uninstall(ctx context.Context, extensionID string) error {
+	return f.opts.UninstallFn(ctx, extensionID)
 }
 
-func NewGameHostTargetReaderAdapter(container *gamehost.GameHostContainer) KernelTargetReader {
-	return &gameHostTargetReaderAdapter{container: container}
-}
-
-func (a *gameHostTargetReaderAdapter) ListGameCenterExtensions(ctx context.Context) ([]domain.ExtensionDefinition, []domain.ExtensionInstallation, error) {
-	return nil, nil, fmt.Errorf("not implemented: use KernelReader")
-}
-
-func (a *gameHostTargetReaderAdapter) GetGameCenterExtension(ctx context.Context, extensionID string) (*domain.ExtensionDefinition, *domain.ExtensionInstallation, error) {
-	return nil, nil, fmt.Errorf("not implemented: use KernelReader")
-}
-
-func (a *gameHostTargetReaderAdapter) ListGameCenterContributions(ctx context.Context, extensionID string) ([]domain.ContributionDefinition, error) {
-	return nil, fmt.Errorf("not implemented: use KernelReader")
-}
-
-func NewProductionPackageMutationService(extRuntime *extension.Runtime, kernelReader KernelTargetReader, pluginReg PluginRegistryReader) *PackageMutationService {
-	var kv KernelMutation
-	if extRuntime != nil {
-		kv = NewExtensionKernelAdapter(extRuntime)
+func NewProductionPackageMutationServiceFromKernelReader(kernelReader *KernelReader, pluginReg PluginRegistryReader, kernelMutation KernelMutation) *PackageMutationService {
+	var reader KernelTargetReader
+	if kernelReader != nil {
+		reader = kernelReader
 	}
 	return NewPackageMutationService(PackageMutationServiceOptions{
-		Kernel:   kv,
-		Reader:   kernelReader,
+		Kernel:   kernelMutation,
+		Reader:   reader,
 		Registry: pluginReg,
 	})
 }
 
-func NewProductionRuntimeMutationService(container *gamehost.GameHostContainer) *RuntimeMutationService {
+func NewProductionRuntimeMutationService(container *gamehost.GameHostContainer, runtimeLister RuntimeLister) *RuntimeMutationService {
 	if container == nil {
 		return NewRuntimeMutationService(RuntimeMutationServiceOptions{})
 	}
+	var lister RuntimeLister
+	if runtimeLister != nil {
+		lister = runtimeLister
+	}
+	var pluginReg PluginRegistryReader
+	if container.PluginRegistry != nil {
+		pluginReg = NewGameHostPluginRegistry(container.PluginRegistry)
+	}
 	return NewRuntimeMutationService(RuntimeMutationServiceOptions{
-		Executor: container.RuntimeExecutor,
-		Manager:  NewGameHostRuntimeManager(container),
-		Registry: NewGameHostPluginRegistry(container.PluginRegistry),
+		Executor:       container.RuntimeExecutor,
+		RuntimeLister:  lister,
+		PluginRegistry: pluginReg,
 	})
+}
+
+func NewGameHostPluginRegistryFromContainer(container *gamehost.GameHostContainer) PluginRegistryReader {
+	if container == nil || container.PluginRegistry == nil {
+		return nil
+	}
+	return NewGameHostPluginRegistry(container.PluginRegistry)
 }

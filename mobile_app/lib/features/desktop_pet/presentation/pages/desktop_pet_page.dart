@@ -11,6 +11,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../sections/desktop_pet_plugin_section.dart';
 
 class _PetAction {
   final String name;
@@ -76,9 +77,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         const SizedBox(height: AppSpacing.sm),
         _buildActionEntry(context),
         const SizedBox(height: AppSpacing.sectionGap),
-        const AmitiaSectionHeader(title: '已安装桌宠插件'),
-        const SizedBox(height: AppSpacing.sm),
-        _buildPluginsCard(context),
+        const DesktopPetPluginSection(),
         const SizedBox(height: AppSpacing.sectionGap),
         const AmitiaSectionHeader(title: '显示设置'),
         const SizedBox(height: AppSpacing.sm),
@@ -137,9 +136,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
         const SizedBox(height: AppSpacing.sm),
         _buildActionEntry(context),
         const SizedBox(height: AppSpacing.sectionGap),
-        const AmitiaSectionHeader(title: '已安装桌宠插件'),
-        const SizedBox(height: AppSpacing.sm),
-        _buildPluginsCard(context),
+        const DesktopPetPluginSection(),
         const SizedBox(height: AppSpacing.sectionGap),
         const AmitiaSectionHeader(title: '显示设置'),
         const SizedBox(height: AppSpacing.sm),
@@ -421,133 +418,6 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
               ),
             );
           },
-        );
-      },
-    );
-  }
-
-  Widget _buildPluginsCard(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: AmitiaCard(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Column(
-          children: [
-            for (int i = 0; i < _defaultPetNames.length; i++) ...[
-              _buildPluginItem(context, _defaultPetNames[i], i),
-              if (i < _defaultPetNames.length - 1)
-                Divider(height: 1, color: context.borderSecondary),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPluginItem(BuildContext context, String name, int index) {
-    final colorHex = _petColors[index % _petColors.length];
-    final color = _parseColor(colorHex);
-    final initial = _getInitial(name);
-    final isCurrent = index == _currentPetIndex;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _showPluginManagementSheet(context, name, index),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Text(name, style: AppTypography.body(context)),
-            ),
-            if (isCurrent)
-              const AmitiaStatusBadge(label: '当前', type: BadgeType.accent)
-            else
-              Icon(Icons.chevron_right, size: 18, color: context.textTertiary),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showPluginManagementSheet(BuildContext context, String name, int index) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetCtx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(name, style: AppTypography.pageTitle(context)),
-                const SizedBox(height: 16),
-                AmitiaListTile(
-                  leading: Icon(Icons.info_outline, size: 20, color: context.accentPrimary),
-                  title: '查看详情',
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    amitiaSnackBar(context, '$name · 桌宠插件 v1.0.0');
-                  },
-                ),
-                if (index != _currentPetIndex)
-                  AmitiaListTile(
-                    leading: Icon(Icons.star_outline, size: 20, color: context.accentPrimary),
-                    title: '设为当前桌宠',
-                    onTap: () {
-                      Navigator.pop(sheetCtx);
-                      setState(() {
-                        _currentPetIndex = index;
-                      });
-                      amitiaSnackBar(context, '已切换到 $name');
-                    },
-                  ),
-                AmitiaListTile(
-                  leading: Icon(Icons.visibility_outlined, size: 20, color: context.accentPrimary),
-                  title: '预览',
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    amitiaSnackBar(context, '正在预览 $name');
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
         );
       },
     );

@@ -4,11 +4,13 @@ import (
 	"context"
 
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
 type KernelReader struct {
 	DefinitionRepo   kerneldomain.DefinitionRepository
 	InstallationRepo kerneldomain.InstallationRepository
+	ContributionRepo sqlite.ContributionRepository
 }
 
 func NewKernelReader(defRepo kerneldomain.DefinitionRepository, instRepo kerneldomain.InstallationRepository) *KernelReader {
@@ -16,6 +18,31 @@ func NewKernelReader(defRepo kerneldomain.DefinitionRepository, instRepo kerneld
 		DefinitionRepo:   defRepo,
 		InstallationRepo: instRepo,
 	}
+}
+
+func NewKernelReaderWithContributions(defRepo kerneldomain.DefinitionRepository, instRepo kerneldomain.InstallationRepository, contribRepo sqlite.ContributionRepository) *KernelReader {
+	return &KernelReader{
+		DefinitionRepo:   defRepo,
+		InstallationRepo: instRepo,
+		ContributionRepo: contribRepo,
+	}
+}
+
+func (r *KernelReader) ListGameCenterContributions(ctx context.Context, extensionID string) ([]kerneldomain.ContributionDefinition, error) {
+	if r.ContributionRepo == nil {
+		return nil, nil
+	}
+	contribs, err := r.ContributionRepo.ListContributions(ctx, kerneldomain.ExtensionID(extensionID))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]kerneldomain.ContributionDefinition, 0, len(contribs))
+	for _, c := range contribs {
+		if c.Kind == kerneldomain.ContributionKindGamePlugin {
+			result = append(result, c)
+		}
+	}
+	return result, nil
 }
 
 func (r *KernelReader) ListGameCenterExtensions(ctx context.Context) ([]kerneldomain.ExtensionDefinition, []kerneldomain.ExtensionInstallation, error) {

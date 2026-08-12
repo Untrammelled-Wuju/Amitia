@@ -97,6 +97,12 @@ android/app/src/main/assets/proot_linux_aarch64
 android/app/src/main/assets/qdrant_linux_aarch64
 android/app/src/main/assets/surreal_linux_aarch64
 
+# A25 Android Runtime Candidate staged assets (build-time only, never commit)
+mobile_app/android/app/src/main/assets/amitia-runtime/
+mobile_app/android/amitia-runtime/src/main/jniLibs/
+mobile_app/android/amitia-runtime/src/main/res/raw/proot_artifact.json
+runtime/out/
+
 # Android UI reference (external assets)
 安卓端APPUI参考/
 

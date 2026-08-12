@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../infrastructure/desktop_pet_plugin_api.dart';
 import '../../infrastructure/desktop_pet_plugin_dto.dart';
 
 final desktopPetPluginApiProvider = Provider<DesktopPetPluginApi>((ref) {
-  final api = ref.watch(_backendServiceProvider);
+  final api = ref.watch(backendServiceProvider);
   if (api == null) {
     throw StateError('BackendServiceApi not available');
   }
@@ -176,16 +176,12 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     } catch (_) {
       return false;
     } finally {
-      if (!mounted) return;
-      final newOps = Set<String>.from(state.operationByPluginId)..remove(pluginId);
-      state = state.copyWith(operationByPluginId: newOps);
+      if (mounted) {
+        final newOps = Set<String>.from(state.operationByPluginId)..remove(pluginId);
+        state = state.copyWith(operationByPluginId: newOps);
+      }
     }
   }
 
   bool hasOperation(String pluginId) => state.operationByPluginId.contains(pluginId);
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

@@ -8,6 +8,7 @@ import (
 
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
+	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 )
 
 type KernelMutation interface {
@@ -206,23 +207,28 @@ type RuntimeMutationExecutor interface {
 	StopRuntime(ctx context.Context, runtimeID ghdomain.RuntimeInstanceID) error
 }
 
+type RuntimeLister interface {
+	ListRuntimes() []*ghruntime.RuntimeInstanceRef
+	GetRuntime(runtimeID string) (*ghruntime.RuntimeInstanceRef, error)
+}
+
 type RuntimeMutationService struct {
-	executor RuntimeMutationExecutor
-	manager  RuntimeManagerReader
-	registry PluginRegistryReader
+	executor       RuntimeMutationExecutor
+	runtimeLister  RuntimeLister
+	pluginRegistry PluginRegistryReader
 }
 
 type RuntimeMutationServiceOptions struct {
-	Executor RuntimeMutationExecutor
-	Manager  RuntimeManagerReader
-	Registry PluginRegistryReader
+	Executor       RuntimeMutationExecutor
+	RuntimeLister  RuntimeLister
+	PluginRegistry PluginRegistryReader
 }
 
 func NewRuntimeMutationService(opts RuntimeMutationServiceOptions) *RuntimeMutationService {
 	return &RuntimeMutationService{
-		executor: opts.Executor,
-		manager:  opts.Manager,
-		registry: opts.Registry,
+		executor:       opts.Executor,
+		runtimeLister:  opts.RuntimeLister,
+		pluginRegistry: opts.PluginRegistry,
 	}
 }
 
@@ -299,14 +305,14 @@ func (s *RuntimeMutationService) Restart(ctx context.Context, runtimeID string) 
 }
 
 func (s *RuntimeMutationService) validateRuntimeBelongsToGameCenter(ctx context.Context, runtimeID string) bool {
-	if s.manager == nil || s.registry == nil {
+	if s.runtimeLister == nil || s.pluginRegistry == nil {
 		return false
 	}
-	rt, err := s.manager.GetRuntime(runtimeID)
-	if err != nil {
+	rt, err := s.runtimeLister.GetRuntime(runtimeID)
+	if err != nil || rt == nil {
 		return false
 	}
-	plugin, err := s.registry.Get(ctx, string(rt.PluginID))
+	plugin, err := s.pluginRegistry.Get(ctx, string(rt.PluginID))
 	if err != nil {
 		return false
 	}

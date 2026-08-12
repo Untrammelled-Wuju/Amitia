@@ -417,12 +417,26 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 			wasmHandler.Register(wasmMux)
 			apiGroup.Any("/wasm/*wasmPath", gin.WrapH(wasmMux))
 		}
-		if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
-			kernelReader := management.NewKernelReader(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
-			gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
-			management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
+	if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
+		kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
+		gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
+		management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
+
+		if services.Extension != nil {
+			kernelMutation := management.NewKernelMutationFromFuncs(management.KernelMutationOptions{
+				InstallFn:   func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) { return services.Extension.Kernel.Install(ctx, archivePath) },
+				UpdateFn:    func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) { return services.Extension.Kernel.Update(ctx, archivePath) },
+				EnableFn:    func(ctx context.Context, extensionID string) error { return services.Extension.Kernel.Enable(ctx, extensionID) },
+				DisableFn:   func(ctx context.Context, extensionID string) error { return services.Extension.Kernel.Disable(ctx, extensionID) },
+				UninstallFn: func(ctx context.Context, extensionID string) error { return services.Extension.Kernel.Uninstall(ctx, extensionID) },
+			})
+			packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation)
+			runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost, nil)
+			gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
+			management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
 		}
-		emote.RegisterRouter(apiGroup, services.Emote)
+	}
+	emote.RegisterRouter(apiGroup, services.Emote)
 		mcpapi.RegisterRouter(apiGroup, ctx, mcpapi.Services{Repository: services.MCPRepository, Connections: services.MCPConnections, Auth: services.MCPAuth, Discovery: services.MCPDiscovery, Skills: services.MCPSkills, Secrets: services.MCPSecrets, Extensions: services.Extension, Features: services.MCPFeatures, Dependencies: services.MCPDependencies, Interactions: services.MCPInteractions})
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)

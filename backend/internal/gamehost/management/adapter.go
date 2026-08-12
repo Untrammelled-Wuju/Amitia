@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"fmt"
 
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/gamehost"
@@ -62,6 +63,28 @@ func (m *GameHostRuntimeManager) ListRuntimes() []*runtime.RuntimeInstanceRef {
 
 func (m *GameHostRuntimeManager) GetRuntime(runtimeID string) (*runtime.RuntimeInstanceRef, error) {
 	return m.manager.GetRuntime(dom.RuntimeInstanceID(runtimeID))
+}
+
+type GameHostRuntimeManagerAdapter struct {
+	manager runtime.RuntimeManager
+}
+
+func NewGameHostRuntimeManagerAdapter(manager runtime.RuntimeManager) *GameHostRuntimeManagerAdapter {
+	return &GameHostRuntimeManagerAdapter{manager: manager}
+}
+
+func (a *GameHostRuntimeManagerAdapter) ListRuntimes() []*runtime.RuntimeInstanceRef {
+	if a.manager == nil {
+		return nil
+	}
+	return a.manager.ListRuntimes()
+}
+
+func (a *GameHostRuntimeManagerAdapter) GetRuntime(runtimeID string) (*runtime.RuntimeInstanceRef, error) {
+	if a.manager == nil {
+		return nil, fmt.Errorf("runtime manager not available")
+	}
+	return a.manager.GetRuntime(dom.RuntimeInstanceID(runtimeID))
 }
 
 type GameHostTopologyStore struct {

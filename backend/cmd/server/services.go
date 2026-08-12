@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 
+	"github.com/u-ai/backend/internal/androidlinux/terminal"
 	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
@@ -296,15 +297,39 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
-	kernelContainer, err := kernel.NewContainerBuilder().
-		WithDBPath(kernelDBPath).
-		WithExtensionRoot(kernelRoot).
-		WithCharacterReader(kernelCharReader).
-		WithConversationReader(kernelConvReader).
-		WithMemoryQueryService(kernelMemQuerySvc).
-		WithNodeEnvironmentResolver(nodeResolver).
-		WithHostArtifactResolver(artifactResolver).
-		Build(context.Background())
+	var androidLinuxProvider terminal.AndroidLinuxProvider
+if terminal.IsAndroidLinuxRuntime(bootstrap.RuntimeHost()) {
+	workspaceRoot := ""
+	if bootstrap.RuntimeHost() != nil {
+		workspaceRoot = bootstrap.RuntimeHost().Paths().WorkspaceDir
+	}
+	provider, err := terminal.NewProvider(
+		bootstrap.RuntimeHost(),
+		workspaceRoot,
+		terminal.DefaultPolicy(),
+	)
+	if err == nil {
+		androidLinuxProvider = provider
+	} else {
+		log.Warn("failed to create android linux terminal provider:", err)
+	}
+}
+
+kernelBuilder := kernel.NewContainerBuilder().
+	WithDBPath(kernelDBPath).
+	WithExtensionRoot(kernelRoot).
+	WithCharacterReader(kernelCharReader).
+	WithConversationReader(kernelConvReader).
+	WithMemoryQueryService(kernelMemQuerySvc).
+	WithNodeEnvironmentResolver(nodeResolver).
+	WithHostArtifactResolver(artifactResolver).
+	WithRuntimeHost(bootstrap.RuntimeHost())
+
+if androidLinuxProvider != nil {
+	kernelBuilder.WithAndroidLinuxProvider(androidLinuxProvider)
+}
+
+kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")

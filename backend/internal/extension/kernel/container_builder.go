@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/androidlinux/terminal"
+	terminaltools "github.com/u-ai/backend/internal/androidlinux/terminal/tools"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
@@ -54,6 +56,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/internal/platform/process"
+	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/pkg/sse"
 )
 
@@ -66,6 +69,8 @@ type ContainerBuilder struct {
 	memoryQueryService      MemoryQueryService
 	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
 	hostArtifactResolver    script_host.ArtifactResolver
+	androidLinuxProvider    terminal.AndroidLinuxProvider
+	host                    runtimehost.RuntimeHost
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -113,6 +118,20 @@ func (b *ContainerBuilder) WithHostArtifactResolver(
 	resolver script_host.ArtifactResolver,
 ) *ContainerBuilder {
 	b.hostArtifactResolver = resolver
+	return b
+}
+
+func (b *ContainerBuilder) WithAndroidLinuxProvider(
+	provider terminal.AndroidLinuxProvider,
+) *ContainerBuilder {
+	b.androidLinuxProvider = provider
+	return b
+}
+
+func (b *ContainerBuilder) WithRuntimeHost(
+	host runtimehost.RuntimeHost,
+) *ContainerBuilder {
+	b.host = host
 	return b
 }
 
@@ -508,18 +527,26 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
-		JSGlobalFactory:   jsFactory,
-		WASMFactory:       wasmFactory,
-		WASMModuleMgr:     wasmModuleMgr,
-		Supervisor:        supervisor,
-		TaskService:       taskRuntimeService,
-		WorkflowCaller:    makeWorkflowCallFunc(workflowExecutor),
-		WorkflowCancel:    makeWorkflowCancelFunc(workflowExecutor),
-		BuiltinDispatcher: builtinDispatcher,
+		JSGlobalFactory:     jsFactory,
+		WASMFactory:         wasmFactory,
+		WASMModuleMgr:       wasmModuleMgr,
+		Supervisor:          supervisor,
+		TaskService:         taskRuntimeService,
+		WorkflowCaller:      makeWorkflowCallFunc(workflowExecutor),
+		WorkflowCancel:      makeWorkflowCancelFunc(workflowExecutor),
+		BuiltinDispatcher:   builtinDispatcher,
+		AndroidLinuxProvider: b.androidLinuxProvider,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
 	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry)
+
+	if b.host != nil && b.androidLinuxProvider != nil {
+		registrar := terminaltools.NewToolRegistrar()
+		if err := registrar.RegisterTerminalTools(b.host, toolRegistry); err != nil {
+			return nil, fmt.Errorf("kernel: register terminal tools: %w", err)
+		}
+	}
 
 	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
