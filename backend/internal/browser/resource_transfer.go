@@ -147,13 +147,6 @@ func (r *productionResourceTransfer) Download(ctx context.Context, request Brows
 	}
 	r.downloads[downloadID] = rec
 
-	var docGen uint64
-	if r.tabMgr != nil {
-		if tabRec, ok := r.tabMgr.store.get(request.TabID); ok {
-			docGen = tabRec.documentGeneration
-		}
-	}
-
 	resultFilename := filename
 	if resultFilename == "" {
 		resultFilename = rec.suggestedFilename
@@ -263,8 +256,6 @@ func (r *productionResourceTransfer) Upload(ctx context.Context, request Browser
 			Cause:   err,
 		}
 	}
-
-	stagedPath := "/tmp/staging/" + string(record.stableID)
 
 	return &BrowserUploadResult{
 		ResourceURI:    request.ResourceURI,
