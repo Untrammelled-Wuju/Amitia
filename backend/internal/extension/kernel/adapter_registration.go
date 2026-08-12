@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/androidlinux/terminal"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -26,7 +25,7 @@ type AdapterRegistrationDeps struct {
 	WorkflowCancel     capability.WorkflowCancelFunc
 	BuiltinDispatcher  capability.DispatchFunc
 	DesktopProvider    capability.DesktopProvider
-	AndroidLinuxProvider terminal.AndroidLinuxProvider
+	AndroidLinuxProvider interface{}
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -98,8 +97,7 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	}
 
 	if deps.AndroidLinuxProvider != nil {
-		androidLinuxAdapter := capability.NewAndroidLinuxRuntimeAdapter(deps.AndroidLinuxProvider)
-		registry.Register(capability.RuntimeTypeAndroidLinux, androidLinuxAdapter)
+		registerAndroidLinuxAdapter(registry, deps.AndroidLinuxProvider)
 	}
 
 	return nil
