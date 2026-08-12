@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -142,21 +143,102 @@ func (s *Service) RefreshMountStatus(ctx context.Context, id WorkspaceID) (Works
 	if !ok {
 		return WorkspaceMount{}, fmt.Errorf("%w: %q", ErrMountNotFound, id)
 	}
-	if mount.Kind != WorkspaceKindSAF {
-		return mount, nil
+	if mount.Kind == WorkspaceKindSAF && s.safGrantResolver != nil {
+		status, err := s.safGrantResolver.ResolveGrant(mount.NativeGrant)
+		if err != nil {
+			return mount, nil
+		}
+		newStatus, available := GrantStatusToMountUpdate(mount.NativeGrant, status)
+		s.registry.UpdateStatus(id, newStatus, available)
+		m, _ := s.registry.GetMountOrEmpty(id)
+		return m, nil
 	}
-	if s.safGrantResolver == nil {
-		return mount, nil
+	if mount.Kind == WorkspaceKindRemote {
+		s.registry.UpdateStatus(id, WorkspaceStatusUnavailable, false)
+		m, _ := s.registry.GetMountOrEmpty(id)
+		return m, nil
+	}
+	return mount, nil
+}
+
+func (s *Service) RegisterRemoteMount(ctx context.Context, name string, config RemoteMountConfig, credRef string, readOnly bool) (WorkspaceMount, error) {
+	if s.remoteCredResolver != nil && credRef != "" {
+		_, err := s.remoteCredResolver.ResolveCredential(ctx, credRef)
+		if err != nil {
+			return WorkspaceMount{}, fmt.Errorf("%w: %v", ErrRemoteCredentialNotFound, err)
+		}
 	}
 
-	status, err := s.safGrantResolver.ResolveGrant(mount.NativeGrant)
+	mount, err := s.registry.RegisterRemoteMount(ctx, name, config, credRef, readOnly)
 	if err != nil {
-		return mount, nil
+		return mount, err
 	}
-	newStatus, available := GrantStatusToMountUpdate(mount.NativeGrant, status)
-	s.registry.UpdateStatus(id, newStatus, available)
-	m, _ := s.registry.GetMountOrEmpty(id)
-	return m, nil
+
+	if s.mountRepo != nil {
+		configJSON, _ := json.Marshal(config)
+		rec := persistenceRecord{
+			id:            string(mount.ID),
+			name:          mount.Name,
+			kind:          mount.Kind,
+			readOnly:      readOnly,
+			enabled:       true,
+			createdAt:     mount.CreatedAt,
+			updatedAt:     mount.UpdatedAt,
+			backendConfig: string(configJSON),
+			credentialRef: credRef,
+		}
+		if err := s.mountRepo.Insert(rec); err != nil {
+			s.registry.RemoveMount(ctx, mount.ID)
+			return WorkspaceMount{}, fmt.Errorf("%w: persist remote mount failed: %v", ErrRemoteUnavailable, err)
+		}
+	}
+
+	backend, ok := s.registry.GetBackend(WorkspaceKindRemote)
+	if ok {
+		if remoteBackend, isRemote := backend.(*RemoteBackend); isRemote {
+			remoteBackend.SetStatusUpdater(mount.ID, func(status WorkspaceStatus, reason string) {
+				s.registry.UpdateStatus(mount.ID, status, status == WorkspaceStatusReady || status == WorkspaceStatusReadOnly)
+			})
+		}
+	}
+
+	return mount, nil
+}
+
+func (s *Service) UpdateRemoteMountConfig(ctx context.Context, mountID WorkspaceID, config RemoteMountConfig, credRef string, readOnly bool) (WorkspaceMount, error) {
+	mount, ok := s.registry.GetMount(mountID)
+	if !ok {
+		return WorkspaceMount{}, fmt.Errorf("%w: %q", ErrMountNotFound, mountID)
+	}
+	if mount.Kind != WorkspaceKindRemote {
+		return WorkspaceMount{}, fmt.Errorf("%w: not a remote mount", ErrRemoteConfigInvalid)
+	}
+
+	if s.remoteCredResolver != nil && credRef != "" {
+		_, err := s.remoteCredResolver.ResolveCredential(ctx, credRef)
+		if err != nil {
+			return WorkspaceMount{}, fmt.Errorf("%w: %v", ErrRemoteCredentialNotFound, err)
+		}
+	}
+
+	updated, ok := s.registry.UpdateRemoteMountConfig(mountID, config, credRef, readOnly)
+	if !ok {
+		return WorkspaceMount{}, fmt.Errorf("%w: update failed", ErrRemoteUnavailable)
+	}
+
+	backend, ok := s.registry.GetBackend(WorkspaceKindRemote)
+	if ok {
+		if remoteBackend, isRemote := backend.(*RemoteBackend); isRemote {
+			remoteBackend.clients.invalidate(mountID)
+		}
+	}
+
+	if s.mountRepo != nil {
+		configJSON, _ := json.Marshal(config)
+		_ = s.mountRepo.UpdateConfig(string(mountID), string(configJSON), credRef, readOnly)
+	}
+
+	return updated, nil
 }
 
 func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
