@@ -49,38 +49,26 @@ func TestRegister(t *testing.T) {
 func TestRegister_CreateAndGet(t *testing.T) {
 	bridge := &mockNativeBridge{}
 	adapter := androidnative.NewNativeProviderAdapter(bridge)
-	Register(adapter, bridge)
-	createResp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
-		ProtocolVersion: 1,
-		RequestID:       "test-create",
-		Operation:       OperationCreate,
-		Payload: map[string]any{
-			"width":      1080,
-			"height":     1920,
-			"densityDpi": 420,
-		},
+	_ = adapter
+	svc := Register(adapter, bridge)
+	createResult, err := svc.Create(context.Background(), CreateRequest{
+		Width:      1080,
+		Height:     1920,
+		DensityDPI: 420,
 	})
-	if createResp.Status != "success" {
-		t.Fatalf("create failed: %s %+v", createResp.Status, createResp.Error)
+	if err != nil {
+		t.Fatalf("create error: %v", err)
 	}
-	displayMap, ok := createResp.Result["display"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected display object, got %T: %v", createResp.Result["display"], createResp.Result["display"])
+	ref := createResult.Display.Ref
+	if ref.IsEmpty() {
+		t.Fatal("expected non-empty ref")
 	}
-	ref, _ := displayMap["ref"].(string)
-	if ref == "" {
-		t.Error("expected non-empty ref")
+	getResult, err := svc.Get(context.Background(), GetRequest{Ref: ref})
+	if err != nil {
+		t.Fatalf("get error: %v", err)
 	}
-	getResp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
-		ProtocolVersion: 1,
-		RequestID:       "test-get",
-		Operation:       OperationGet,
-		Payload: map[string]any{
-			"ref": ref,
-		},
-	})
-	if getResp.Status != "success" {
-		t.Fatalf("get failed: %s %+v", getResp.Status, getResp.Error)
+	if getResult.Ref != ref {
+		t.Errorf("ref mismatch: got %s, want %s", getResult.Ref, ref)
 	}
 }
 

@@ -53,7 +53,6 @@ func ParsePythonToolRequirement(requirement string) (PythonToolRequirement, erro
 
 	var nameEnd int
 	var extras []string
-	var versionSpec string
 
 	bracketIdx := strings.IndexByte(requirement, '[')
 	if bracketIdx >= 0 {
