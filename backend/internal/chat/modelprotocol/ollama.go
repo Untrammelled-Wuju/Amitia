@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/u-ai/backend/internal/chat"
 	"io"
 	"net/http"
 	"strings"
@@ -17,19 +16,19 @@ import (
 
 type OllamaAdapter struct{}
 
-func (a *OllamaAdapter) Protocol() chat.ModelProtocol {
-	return chat.ProtocolOllamaChat
+func (a *OllamaAdapter) Protocol() ModelProtocol {
+	return ProtocolOllamaChat
 }
 
-func (a *OllamaAdapter) Capabilities(ctx context.Context, cfg *chat.ModelConfig) chat.ModelCapabilities {
-	var caps chat.ModelCapabilities
+func (a *OllamaAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) ModelCapabilities {
+	var caps ModelCapabilities
 	if cfg.CapabilitiesJSON != "" {
 		json.Unmarshal([]byte(cfg.CapabilitiesJSON), &caps)
 	}
 	return caps
 }
 
-func (a *OllamaAdapter) Generate(ctx context.Context, cfg *chat.ModelConfig, req chat.ModelRequest) (*chat.ModelResult, error) {
+func (a *OllamaAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -78,7 +77,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, cfg *chat.ModelConfig, req
 	return a.parseResponse(respBytes)
 }
 
-func (a *OllamaAdapter) Stream(ctx context.Context, cfg *chat.ModelConfig, req chat.ModelRequest, sink chat.ModelEventSink) (*chat.ModelResult, error) {
+func (a *OllamaAdapter) Stream(ctx context.Context, cfg *ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -123,7 +122,7 @@ func (a *OllamaAdapter) Stream(ctx context.Context, cfg *chat.ModelConfig, req c
 	return a.parseStream(resp.Body, sink)
 }
 
-func (a *OllamaAdapter) buildMessages(req chat.ModelRequest) []map[string]interface{} {
+func (a *OllamaAdapter) buildMessages(req ModelRequest) []map[string]interface{} {
 	var messages []map[string]interface{}
 	
 	for _, inst := range req.Instructions {
@@ -151,15 +150,15 @@ func (a *OllamaAdapter) buildMessages(req chat.ModelRequest) []map[string]interf
 	return messages
 }
 
-func (a *OllamaAdapter) buildContent(parts []chat.ModelContentPart) interface{} {
-	if len(parts) == 1 && parts[0].Type == chat.ContentTypeText {
+func (a *OllamaAdapter) buildContent(parts []ModelContentPart) interface{} {
+	if len(parts) == 1 && parts[0].Type == ContentTypeText {
 		return parts[0].Text
 	}
 	
 	content := parts[0].Text
 	var images []string
 	for _, part := range parts {
-		if part.Type == chat.ContentTypeImage {
+		if part.Type == ContentTypeImage {
 			images = append(images, part.ResourceURI)
 		}
 	}
@@ -174,7 +173,7 @@ func (a *OllamaAdapter) buildContent(parts []chat.ModelContentPart) interface{} 
 	return content
 }
 
-func (a *OllamaAdapter) buildTools(tools []chat.ModelToolDefinition) []map[string]interface{} {
+func (a *OllamaAdapter) buildTools(tools []ModelToolDefinition) []map[string]interface{} {
 	var result []map[string]interface{}
 	for _, t := range tools {
 		result = append(result, map[string]interface{}{
@@ -189,7 +188,7 @@ func (a *OllamaAdapter) buildTools(tools []chat.ModelToolDefinition) []map[strin
 	return result
 }
 
-func (a *OllamaAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, error) {
+func (a *OllamaAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 	var result struct {
 		Message struct {
 			Content   string `json:"content"`
@@ -208,18 +207,18 @@ func (a *OllamaAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, erro
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 	
-	res := &chat.ModelResult{
+	res := &ModelResult{
 		Text: result.Message.Content,
 	}
 	
 	for _, tc := range result.Message.ToolCalls {
-		res.ToolCalls = append(res.ToolCalls, chat.ModelToolCall{
+			res.ToolCalls = append(res.ToolCalls, ModelToolCall{
 			Name:          tc.Function.Name,
 			ArgumentsJSON: string(tc.Function.Arguments),
 		})
 	}
 	
-	res.Usage = chat.ModelUsage{
+	res.Usage = ModelUsage{
 		InputTokens:  result.PromptEvalCount,
 		OutputTokens: result.EvalCount,
 		TotalTokens:  result.PromptEvalCount + result.EvalCount,
@@ -228,9 +227,9 @@ func (a *OllamaAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, erro
 	return res, nil
 }
 
-func (a *OllamaAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*chat.ModelResult, error) {
-	result := &chat.ModelResult{
-		ToolCalls: []chat.ModelToolCall{},
+func (a *OllamaAdapter) parseStream(body io.Reader, sink ModelEventSink) (*ModelResult, error) {
+	result := &ModelResult{
+		ToolCalls: []ModelToolCall{},
 	}
 	
 	scanner := bufio.NewScanner(body)
@@ -263,11 +262,11 @@ func (a *OllamaAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*
 		}
 		
 		if chunk.Error != "" {
-			sink.Emit(context.Background(), chat.ModelEvent{
-				Type: chat.ModelEventFailed,
-				Error: &chat.ModelError{
-					Code:     "MODEL_PROVIDER_FAILED",
-					Protocol: chat.ProtocolOllamaChat,
+				sink.Emit(context.Background(), ModelEvent{
+					Type: ModelEventFailed,
+					Error: &ModelError{
+						Code:     "MODEL_PROVIDER_FAILED",
+						Protocol: ProtocolOllamaChat,
 					Message:  chunk.Error,
 				},
 			})
@@ -276,15 +275,15 @@ func (a *OllamaAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*
 		
 		if chunk.Message.Content != "" {
 			result.Text += chunk.Message.Content
-			sink.Emit(context.Background(), chat.ModelEvent{
-				Type:      chat.ModelEventTextDelta,
+				sink.Emit(context.Background(), ModelEvent{
+					Type:      ModelEventTextDelta,
 				TextDelta: chunk.Message.Content,
 			})
 		}
 		
 		for _, tc := range chunk.Message.ToolCalls {
 			if tc.Function.Name != "" {
-				result.ToolCalls = append(result.ToolCalls, chat.ModelToolCall{
+					result.ToolCalls = append(result.ToolCalls, ModelToolCall{
 					Name:          tc.Function.Name,
 					ArgumentsJSON: string(tc.Function.Arguments),
 				})
@@ -292,13 +291,13 @@ func (a *OllamaAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*
 		}
 		
 		if chunk.Done {
-			result.Usage = chat.ModelUsage{
+			result.Usage = ModelUsage{
 				InputTokens:  chunk.PromptEvalCount,
 				OutputTokens: chunk.EvalCount,
 				TotalTokens:  chunk.PromptEvalCount + chunk.EvalCount,
 			}
-			sink.Emit(context.Background(), chat.ModelEvent{
-				Type: chat.ModelEventCompleted,
+			sink.Emit(context.Background(), ModelEvent{
+				Type: ModelEventCompleted,
 			})
 			return result, nil
 		}

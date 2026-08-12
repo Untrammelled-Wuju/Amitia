@@ -97,13 +97,15 @@ type ListResult struct {
 }
 
 type persistenceRecord struct {
-	id           string
-	name         string
-	kind         WorkspaceKind
-	localRoot    string
-	nativeGrant  string
-	readOnly     bool
-	enabled      bool
-	createdAt    time.Time
-	updatedAt    time.Time
+	id            string
+	name          string
+	kind          WorkspaceKind
+	localRoot     string
+	nativeGrant   string
+	readOnly      bool
+	enabled       bool
+	createdAt     time.Time
+	updatedAt     time.Time
+	backendConfig string
+	credentialRef string
 }

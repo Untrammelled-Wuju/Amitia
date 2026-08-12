@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/u-ai/backend/internal/chat"
 	"io"
 	"net/http"
 	"strings"
@@ -16,19 +15,19 @@ import (
 
 type AnthropicAdapter struct{}
 
-func (a *AnthropicAdapter) Protocol() chat.ModelProtocol {
-	return chat.ProtocolAnthropicMessages
+func (a *AnthropicAdapter) Protocol() ModelProtocol {
+	return ProtocolAnthropicMessages
 }
 
-func (a *AnthropicAdapter) Capabilities(ctx context.Context, cfg *chat.ModelConfig) chat.ModelCapabilities {
-	var caps chat.ModelCapabilities
+func (a *AnthropicAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) ModelCapabilities {
+	var caps ModelCapabilities
 	if cfg.CapabilitiesJSON != "" {
 		json.Unmarshal([]byte(cfg.CapabilitiesJSON), &caps)
 	}
 	return caps
 }
 
-func (a *AnthropicAdapter) Generate(ctx context.Context, cfg *chat.ModelConfig, req chat.ModelRequest) (*chat.ModelResult, error) {
+func (a *AnthropicAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -72,7 +71,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, cfg *chat.ModelConfig, 
 	return a.parseResponse(respBytes)
 }
 
-func (a *AnthropicAdapter) Stream(ctx context.Context, cfg *chat.ModelConfig, req chat.ModelRequest, sink chat.ModelEventSink) (*chat.ModelResult, error) {
+func (a *AnthropicAdapter) Stream(ctx context.Context, cfg *ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -117,7 +116,7 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, cfg *chat.ModelConfig, re
 	return a.parseStream(resp.Body, sink)
 }
 
-func (a *AnthropicAdapter) buildMessages(req chat.ModelRequest) []map[string]interface{} {
+func (a *AnthropicAdapter) buildMessages(req ModelRequest) []map[string]interface{} {
 	var messages []map[string]interface{}
 	
 	for _, msg := range req.Messages {
@@ -145,20 +144,20 @@ func (a *AnthropicAdapter) buildMessages(req chat.ModelRequest) []map[string]int
 	return messages
 }
 
-func (a *AnthropicAdapter) buildContent(parts []chat.ModelContentPart) interface{} {
-	if len(parts) == 1 && parts[0].Type == chat.ContentTypeText {
+func (a *AnthropicAdapter) buildContent(parts []ModelContentPart) interface{} {
+	if len(parts) == 1 && parts[0].Type == ContentTypeText {
 		return parts[0].Text
 	}
 	
 	var content []map[string]interface{}
 	for _, part := range parts {
 		switch part.Type {
-		case chat.ContentTypeText:
+		case ContentTypeText:
 			content = append(content, map[string]interface{}{
 				"type": "text",
 				"text": part.Text,
 			})
-		case chat.ContentTypeImage:
+		case ContentTypeImage:
 			content = append(content, map[string]interface{}{
 				"type": "image",
 				"source": map[string]interface{}{
@@ -172,7 +171,7 @@ func (a *AnthropicAdapter) buildContent(parts []chat.ModelContentPart) interface
 	return content
 }
 
-func (a *AnthropicAdapter) buildTools(tools []chat.ModelToolDefinition) []map[string]interface{} {
+func (a *AnthropicAdapter) buildTools(tools []ModelToolDefinition) []map[string]interface{} {
 	var result []map[string]interface{}
 	for _, t := range tools {
 		result = append(result, map[string]interface{}{
@@ -184,7 +183,7 @@ func (a *AnthropicAdapter) buildTools(tools []chat.ModelToolDefinition) []map[st
 	return result
 }
 
-func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, error) {
+func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 	var result struct {
 		ID      string `json:"id"`
 		Content []struct {
@@ -205,7 +204,7 @@ func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, e
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 	
-	res := &chat.ModelResult{
+	res := &ModelResult{
 		FinishReason: result.StopReason,
 	}
 	
@@ -215,7 +214,7 @@ func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, e
 			res.Text += block.Text
 		case "tool_use":
 			args, _ := json.Marshal(block.Input)
-			res.ToolCalls = append(res.ToolCalls, chat.ModelToolCall{
+			res.ToolCalls = append(res.ToolCalls, ModelToolCall{
 				ID:            block.ID,
 				Name:          block.Name,
 				ArgumentsJSON: string(args),
@@ -223,7 +222,7 @@ func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, e
 		}
 	}
 	
-	res.Usage = chat.ModelUsage{
+	res.Usage = ModelUsage{
 		InputTokens:  result.Usage.InputTokens,
 		OutputTokens: result.Usage.OutputTokens,
 		TotalTokens:  result.Usage.InputTokens + result.Usage.OutputTokens,
@@ -233,9 +232,9 @@ func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, e
 	return res, nil
 }
 
-func (a *AnthropicAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*chat.ModelResult, error) {
-	result := &chat.ModelResult{
-		ToolCalls: []chat.ModelToolCall{},
+func (a *AnthropicAdapter) parseStream(body io.Reader, sink ModelEventSink) (*ModelResult, error) {
+	result := &ModelResult{
+		ToolCalls: []ModelToolCall{},
 	}
 	
 	type toolCallInfo struct {
@@ -310,8 +309,8 @@ func (a *AnthropicAdapter) parseStream(body io.Reader, sink chat.ModelEventSink)
 					switch event.Delta.Type {
 					case "text_delta":
 						result.Text += event.Delta.Text
-						sink.Emit(context.Background(), chat.ModelEvent{
-							Type:      chat.ModelEventTextDelta,
+					sink.Emit(context.Background(), ModelEvent{
+						Type:      ModelEventTextDelta,
 							TextDelta: event.Delta.Text,
 						})
 					case "input_json_delta":
@@ -321,14 +320,14 @@ func (a *AnthropicAdapter) parseStream(body io.Reader, sink chat.ModelEventSink)
 					}
 				case "message_stop":
 					for _, tc := range toolCalls {
-						result.ToolCalls = append(result.ToolCalls, chat.ModelToolCall{
+						result.ToolCalls = append(result.ToolCalls, ModelToolCall{
 							ID:            tc.ID,
 							Name:          tc.Name,
 							ArgumentsJSON: tc.Args.String(),
 						})
 					}
-					sink.Emit(context.Background(), chat.ModelEvent{
-						Type: chat.ModelEventCompleted,
+				sink.Emit(context.Background(), ModelEvent{
+					Type: ModelEventCompleted,
 					})
 					return result, nil
 				}

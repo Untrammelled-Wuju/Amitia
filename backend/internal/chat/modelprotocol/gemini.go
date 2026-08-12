@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/u-ai/backend/internal/chat"
 	"io"
 	"net/http"
 	"strings"
@@ -16,19 +15,19 @@ import (
 
 type GeminiAdapter struct{}
 
-func (a *GeminiAdapter) Protocol() chat.ModelProtocol {
-	return chat.ProtocolGeminiGenerate
+func (a *GeminiAdapter) Protocol() ModelProtocol {
+	return ProtocolGeminiGenerate
 }
 
-func (a *GeminiAdapter) Capabilities(ctx context.Context, cfg *chat.ModelConfig) chat.ModelCapabilities {
-	var caps chat.ModelCapabilities
+func (a *GeminiAdapter) Capabilities(ctx context.Context, cfg *ProviderConfig) ModelCapabilities {
+	var caps ModelCapabilities
 	if cfg.CapabilitiesJSON != "" {
 		json.Unmarshal([]byte(cfg.CapabilitiesJSON), &caps)
 	}
 	return caps
 }
 
-func (a *GeminiAdapter) Generate(ctx context.Context, cfg *chat.ModelConfig, req chat.ModelRequest) (*chat.ModelResult, error) {
+func (a *GeminiAdapter) Generate(ctx context.Context, cfg *ProviderConfig, req ModelRequest) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -77,7 +76,7 @@ func (a *GeminiAdapter) Generate(ctx context.Context, cfg *chat.ModelConfig, req
 	return a.parseResponse(respBytes)
 }
 
-func (a *GeminiAdapter) Stream(ctx context.Context, cfg *chat.ModelConfig, req chat.ModelRequest, sink chat.ModelEventSink) (*chat.ModelResult, error) {
+func (a *GeminiAdapter) Stream(ctx context.Context, cfg *ProviderConfig, req ModelRequest, sink ModelEventSink) (*ModelResult, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	
 	requestBody := map[string]interface{}{
@@ -126,7 +125,7 @@ func (a *GeminiAdapter) Stream(ctx context.Context, cfg *chat.ModelConfig, req c
 	return a.parseStream(resp.Body, sink)
 }
 
-func (a *GeminiAdapter) buildContents(req chat.ModelRequest) []map[string]interface{} {
+func (a *GeminiAdapter) buildContents(req ModelRequest) []map[string]interface{} {
 	var contents []map[string]interface{}
 	
 	for _, msg := range req.Messages {
@@ -138,11 +137,11 @@ func (a *GeminiAdapter) buildContents(req chat.ModelRequest) []map[string]interf
 		var parts []map[string]interface{}
 		for _, part := range msg.Parts {
 			switch part.Type {
-			case chat.ContentTypeText:
+			case ContentTypeText:
 				parts = append(parts, map[string]interface{}{
 					"text": part.Text,
 				})
-			case chat.ContentTypeImage:
+			case ContentTypeImage:
 				parts = append(parts, map[string]interface{}{
 					"inlineData": map[string]interface{}{
 						"mimeType": part.MIMEType,
@@ -175,7 +174,7 @@ func (a *GeminiAdapter) buildContents(req chat.ModelRequest) []map[string]interf
 	return contents
 }
 
-func (a *GeminiAdapter) buildGenConfig(cfg *chat.ModelConfig) map[string]interface{} {
+func (a *GeminiAdapter) buildGenConfig(cfg *ProviderConfig) map[string]interface{} {
 	config := map[string]interface{}{
 		"temperature":     cfg.Temperature,
 		"maxOutputTokens": cfg.MaxOutputTokens,
@@ -188,7 +187,7 @@ func (a *GeminiAdapter) buildGenConfig(cfg *chat.ModelConfig) map[string]interfa
 	return config
 }
 
-func (a *GeminiAdapter) buildTools(tools []chat.ModelToolDefinition) []map[string]interface{} {
+func (a *GeminiAdapter) buildTools(tools []ModelToolDefinition) []map[string]interface{} {
 	var result []map[string]interface{}
 	for _, t := range tools {
 		result = append(result, map[string]interface{}{
@@ -200,7 +199,7 @@ func (a *GeminiAdapter) buildTools(tools []chat.ModelToolDefinition) []map[strin
 	return result
 }
 
-func (a *GeminiAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, error) {
+func (a *GeminiAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 	var result struct {
 		Candidates []struct {
 			Content struct {
@@ -228,21 +227,21 @@ func (a *GeminiAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, erro
 		return nil, fmt.Errorf("API 未返回有效回复")
 	}
 	
-	res := &chat.ModelResult{}
+	res := &ModelResult{}
 	
 	for _, part := range result.Candidates[0].Content.Parts {
 		if part.Text != "" {
 			res.Text += part.Text
 		}
 		if part.FuncCall.Name != "" {
-			res.ToolCalls = append(res.ToolCalls, chat.ModelToolCall{
+			res.ToolCalls = append(res.ToolCalls, ModelToolCall{
 				Name:          part.FuncCall.Name,
 				ArgumentsJSON: string(part.FuncCall.Args),
 			})
 		}
 	}
 	
-	res.Usage = chat.ModelUsage{
+	res.Usage = ModelUsage{
 		InputTokens:  result.UsageMetadata.PromptTokenCount,
 		OutputTokens: result.UsageMetadata.CandidatesTokenCount,
 		TotalTokens:  result.UsageMetadata.TotalTokenCount,
@@ -251,9 +250,9 @@ func (a *GeminiAdapter) parseResponse(respBytes []byte) (*chat.ModelResult, erro
 	return res, nil
 }
 
-func (a *GeminiAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*chat.ModelResult, error) {
-	result := &chat.ModelResult{
-		ToolCalls: []chat.ModelToolCall{},
+func (a *GeminiAdapter) parseStream(body io.Reader, sink ModelEventSink) (*ModelResult, error) {
+	result := &ModelResult{
+		ToolCalls: []ModelToolCall{},
 	}
 	
 	buf := make([]byte, 4096)
@@ -305,13 +304,13 @@ func (a *GeminiAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*
 				for _, part := range chunk.Candidates[0].Content.Parts {
 					if part.Text != "" {
 						result.Text += part.Text
-						sink.Emit(context.Background(), chat.ModelEvent{
-							Type:      chat.ModelEventTextDelta,
+					sink.Emit(context.Background(), ModelEvent{
+						Type:      ModelEventTextDelta,
 							TextDelta: part.Text,
 						})
 					}
 					if part.FuncCall.Name != "" {
-						result.ToolCalls = append(result.ToolCalls, chat.ModelToolCall{
+						result.ToolCalls = append(result.ToolCalls, ModelToolCall{
 							Name:          part.FuncCall.Name,
 							ArgumentsJSON: string(part.FuncCall.Args),
 						})
@@ -327,8 +326,8 @@ func (a *GeminiAdapter) parseStream(body io.Reader, sink chat.ModelEventSink) (*
 		}
 	}
 	
-	sink.Emit(context.Background(), chat.ModelEvent{
-		Type: chat.ModelEventCompleted,
+	sink.Emit(context.Background(), ModelEvent{
+		Type: ModelEventCompleted,
 	})
 	
 	return result, nil

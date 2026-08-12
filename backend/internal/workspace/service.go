@@ -251,16 +251,18 @@ func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
 	}
 	for _, rec := range records {
 		mount := WorkspaceMount{
-			ID:          WorkspaceID(rec.id),
-			Name:        rec.name,
-			Kind:        rec.kind,
-			ReadOnly:    rec.readOnly,
-			Available:   true,
-			Status:      WorkspaceStatusReady,
-			RootURI:     MountURI(WorkspaceID(rec.id)),
-			NativeGrant: rec.nativeGrant,
-			CreatedAt:   rec.createdAt,
-			UpdatedAt:   rec.updatedAt,
+			ID:            WorkspaceID(rec.id),
+			Name:          rec.name,
+			Kind:          rec.kind,
+			ReadOnly:      rec.readOnly,
+			Available:     true,
+			Status:        WorkspaceStatusReady,
+			RootURI:       MountURI(WorkspaceID(rec.id)),
+			NativeGrant:   rec.nativeGrant,
+			BackendConfig: rec.backendConfig,
+			CredentialRef: rec.credentialRef,
+			CreatedAt:     rec.createdAt,
+			UpdatedAt:     rec.updatedAt,
 		}
 		switch rec.kind {
 		case WorkspaceKindLocal:
@@ -269,6 +271,20 @@ func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
 		case WorkspaceKindSAF:
 			if err := s.registry.RestoreMount(mount); err != nil {
 				continue
+			}
+		case WorkspaceKindRemote:
+			mount.Available = false
+			mount.Status = WorkspaceStatusUnavailable
+			if err := s.registry.RestoreMount(mount); err != nil {
+				continue
+			}
+			backend, ok := s.registry.GetBackend(WorkspaceKindRemote)
+			if ok {
+				if remoteBackend, isRemote := backend.(*RemoteBackend); isRemote {
+					remoteBackend.SetStatusUpdater(mount.ID, func(status WorkspaceStatus, reason string) {
+						s.registry.UpdateStatus(mount.ID, status, status == WorkspaceStatusReady || status == WorkspaceStatusReadOnly)
+					})
+				}
 			}
 		}
 	}
