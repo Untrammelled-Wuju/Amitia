@@ -149,7 +149,7 @@ func isValidVersion(ver string) bool {
 		return false
 	}
 	for _, ch := range ver {
-		if !unicode.IsDigit(ch) && ch != '.' && ch != '-' && ch != '_' && ch != '*' && ch != 'a' && ch != 'b' && ch != 'r' && ch != 'c' {
+		if !unicode.IsDigit(ch) && ch != '.' && ch != '-' && ch != '_' && ch != 'a' && ch != 'b' && ch != 'r' && ch != 'c' {
 			return false
 		}
 	}

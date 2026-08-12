@@ -176,21 +176,6 @@ type ModelConfig struct {
 	UpdatedAt         string  `gorm:"column:updated_at" json:"updatedAt"`
 }
 
-type ModelCapabilities struct {
-	TextInput             bool `json:"textInput"`
-	ImageInput            bool `json:"imageInput"`
-	FileInput             bool `json:"fileInput"`
-	AudioInput            bool `json:"audioInput"`
-	VideoInput            bool `json:"videoInput"`
-	TextOutput            bool `json:"textOutput"`
-	ToolCalling           bool `json:"toolCalling"`
-	ParallelToolCalls     bool `json:"parallelToolCalls"`
-	Streaming             bool `json:"streaming"`
-	StructuredOutput      bool `json:"structuredOutput"`
-	ReasoningContinuation bool `json:"reasoningContinuation"`
-	ProviderFileUpload    bool `json:"providerFileUpload"`
-}
-
 type MessageAttachment struct {
 	ID           string `gorm:"column:id;primaryKey" json:"id"`
 	MessageID    string `gorm:"column:message_id;not null;index" json:"messageId"`

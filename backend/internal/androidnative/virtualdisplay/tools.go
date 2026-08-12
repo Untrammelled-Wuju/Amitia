@@ -125,8 +125,7 @@ func buildCreateTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 			"frameSourceReady": {"type": "boolean"},
 			"thirdPartyLaunchSupported": {"type": "boolean"},
 			"uiTreeSupported": {"type": "boolean"},
-			"visualTapSupported": {"type": "boolean"},
-			"keyboardInjectSupported": {"type": "boolean"}
+			"gestureSupported": {"type": "boolean"}
 		}
 	}`)
 

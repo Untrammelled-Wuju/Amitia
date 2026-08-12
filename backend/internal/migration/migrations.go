@@ -135,6 +135,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetInstallationV2Migration(),
 		DesktopPetBehaviorV2ColumnsMigration(),
 		DesktopPetLocalSessionMigration(),
+		CharacterCardMigration(),
 		RuntimeBootstrapTicketMigration(),
 		RuntimeBootstrapTicketRuntimeIDForwardFix(),
 		RotationJournalMigration(),
@@ -145,6 +146,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetLocalSessionFixMigration(),
 		DesktopPetImportSagaFieldsMigration(),
 		WorkspaceMountsMigration(),
+		WorkspaceMountsRemoteMigration(),
 		ModelConfigProtocolMigration(),
 	}
 }

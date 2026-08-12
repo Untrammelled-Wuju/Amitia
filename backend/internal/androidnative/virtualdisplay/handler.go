@@ -126,8 +126,7 @@ func (h *Handler) handleCreate(ctx context.Context, request capability.AndroidBr
 			"frameSourceReady":        result.FrameSourceReady,
 			"thirdPartyLaunchSupported": result.ThirdPartyLaunchSupported,
 			"uiTreeSupported":         result.UITreeSupported,
-			"visualTapSupported":       result.VisualTapSupported,
-			"keyboardInjectSupported": result.KeyboardInjectSupported,
+			"gestureSupported":        result.GestureSupported,
 		},
 	}
 }
@@ -323,8 +322,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 			FrameSourceReady: true,
 			ThirdPartyLaunchSupported: true,
 			UITreeSupported:      true,
-			VisualTapSupported:   true,
-			KeyboardInjectSupported: true,
+			GestureSupported:     true,
 		}, nil
 	}
 	rec := &VirtualDisplayRecord{
@@ -343,8 +341,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		FrameSourceReady: true,
 		ThirdPartyLaunchSupported: true,
 		UITreeSupported:      true,
-		VisualTapSupported:   true,
-		KeyboardInjectSupported: true,
+		GestureSupported:     true,
 	}, nil
 }
 

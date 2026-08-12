@@ -430,7 +430,8 @@ func (s *service) callLLMWithToolsAdapter(ctx context.Context, cfg *ModelConfig,
 	if err != nil {
 		return "", "", nil, 0, err
 	}
-	return modelResultToLegacy(result)
+	text, reasoning, toolCalls, tokens := modelResultToLegacy(result)
+	return text, reasoning, toolCalls, tokens, nil
 }
 
 type noopEventSink struct{}

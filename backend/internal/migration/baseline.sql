@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS characters (
     emotion TEXT DEFAULT '',
     emotion_scale INTEGER DEFAULT 0,
     silence_duration INTEGER DEFAULT 0,
-    character_base TEXT DEFAULT ''
+    character_base TEXT DEFAULT '',
+    card_data_json TEXT DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS character_templates (
@@ -681,6 +682,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(characte
 CREATE INDEX IF NOT EXISTS idx_conversations_channel_peer ON conversations(channel, peer_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_channel_peer_unique ON conversations(channel, peer_id) WHERE peer_id <> '';
 CREATE INDEX IF NOT EXISTS idx_conversations_character_channel_updated ON conversations(character_id, channel, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_character_updated ON conversations(character_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS retrieval_logs (
     id TEXT PRIMARY KEY,
@@ -5567,6 +5569,8 @@ CREATE TABLE IF NOT EXISTS workspace_mounts (
     kind TEXT NOT NULL,
     local_root TEXT,
     native_grant_id TEXT,
+    backend_config_json TEXT,
+    credential_ref TEXT,
     read_only INTEGER NOT NULL DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL,

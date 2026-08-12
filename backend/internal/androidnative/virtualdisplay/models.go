@@ -89,8 +89,7 @@ type CreateResult struct {
 	FrameSourceReady        bool               `json:"frameSourceReady"`
 	ThirdPartyLaunchSupported bool             `json:"thirdPartyLaunchSupported"`
 	UITreeSupported         bool               `json:"uiTreeSupported"`
-	VisualTapSupported       bool               `json:"visualTapSupported"`
-	KeyboardInjectSupported bool               `json:"keyboardInjectSupported"`
+	GestureSupported        bool               `json:"gestureSupported"`
 }
 
 type GetRequest struct {

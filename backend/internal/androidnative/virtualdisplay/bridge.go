@@ -2,7 +2,6 @@ package virtualdisplay
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync/atomic"
 
