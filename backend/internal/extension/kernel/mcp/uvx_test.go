@@ -450,7 +450,10 @@ func TestUVXLauncher_NilCommandResolver(t *testing.T) {
 }
 
 func TestUVXLauncher_Resolve(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 	launcher := NewUVXLauncher(resolver)
 
 	spec := MCPStdioSpec{
@@ -525,7 +528,10 @@ func TestBuildUvxEnvironment(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_CustomIndex(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server==1.0.0",
@@ -558,7 +564,10 @@ func TestBuildUvxInvocation_CustomIndex(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_CustomIndexDenied(t *testing.T) {
-	resolver := commandenv.NewNativeLookupResolver()
+	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
+	if err != nil {
+		t.Fatalf("failed to create resolver: %v", err)
+	}
 
 	spec := UvxLaunchSpec{
 		Package: "mcp-server==1.0.0",
