@@ -82,12 +82,13 @@ func (h *Handler) handleStatus(ctx context.Context, request capability.AndroidBr
 		Status:          "success",
 		Result: map[string]any{
 			"supported":           result.Supported,
+			"featureSecondaryDisplays": result.FeatureSecondaryDisplays,
 			"canCreate":           result.CanCreate,
 			"active":              result.Active,
 			"display":             result.Display,
 			"frameSourceSupported": result.FrameSourceSupported,
 			"uiTreeSupported":     result.UITreeSupported,
-			"visualTapSupported":  result.VisualTapSupported,
+			"gestureSupported":    result.GestureSupported,
 			"thirdPartyLaunchSupported": result.ThirdPartyLaunchSupported,
 			"state":               result.State,
 			"reason":              result.Reason,
@@ -242,11 +243,12 @@ func (s *Service) Status(ctx context.Context) StatusResult {
 	if rec == nil {
 		return StatusResult{
 			Supported:           true,
+			FeatureSecondaryDisplays: true,
 			CanCreate:           true,
 			Active:              false,
 			FrameSourceSupported: true,
 			UITreeSupported:      true,
-			VisualTapSupported:   true,
+			GestureSupported:    true,
 			ThirdPartyLaunchSupported: true,
 			State:               "none",
 			Reason:              "no active virtual display",
@@ -255,12 +257,13 @@ func (s *Service) Status(ctx context.Context) StatusResult {
 	info := recordToInfo(rec)
 	return StatusResult{
 		Supported:           true,
+		FeatureSecondaryDisplays: true,
 		CanCreate:           false,
 		Active:              true,
 		Display:             &info,
 		FrameSourceSupported: true,
 		UITreeSupported:      true,
-		VisualTapSupported:   true,
+		GestureSupported:    true,
 		ThirdPartyLaunchSupported: true,
 		State:               string(rec.State),
 		Reason:              "",

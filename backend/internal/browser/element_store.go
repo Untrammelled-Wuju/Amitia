@@ -19,6 +19,9 @@ type elementRecord struct {
 	frameID           FrameID
 	backendNodeID     BackendNodeID
 	selector          string
+	isFileInput       bool
+	disabled          bool
+	accept            string
 	createdAt         time.Time
 	lastResolvedAt    time.Time
 }

@@ -7,10 +7,65 @@ import (
 	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/chat/modelprotocol"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"gorm.io/gorm"
 	"time"
 )
+
+type ModelProtocol = modelprotocol.ModelProtocol
+
+const (
+	ProtocolOpenAIChat        = modelprotocol.ProtocolOpenAIChat
+	ProtocolOpenAIResponses   = modelprotocol.ProtocolOpenAIResponses
+	ProtocolAnthropicMessages = modelprotocol.ProtocolAnthropicMessages
+	ProtocolGeminiGenerate    = modelprotocol.ProtocolGeminiGenerate
+	ProtocolOllamaChat        = modelprotocol.ProtocolOllamaChat
+)
+
+type ModelContentType = modelprotocol.ModelContentType
+
+const (
+	ContentTypeText  = modelprotocol.ContentTypeText
+	ContentTypeImage = modelprotocol.ContentTypeImage
+	ContentTypeFile  = modelprotocol.ContentTypeFile
+	ContentTypeAudio = modelprotocol.ContentTypeAudio
+	ContentTypeVideo = modelprotocol.ContentTypeVideo
+)
+
+type ModelContentPart = modelprotocol.ModelContentPart
+type ModelMessage = modelprotocol.ModelMessage
+type ModelToolDefinition = modelprotocol.ModelToolDefinition
+type ModelToolCall = modelprotocol.ModelToolCall
+type ModelToolResult = modelprotocol.ModelToolResult
+type ModelResponseFormat = modelprotocol.ModelResponseFormat
+type ModelContinuationState = modelprotocol.ModelContinuationState
+type ModelRequest = modelprotocol.ModelRequest
+type ModelUsage = modelprotocol.ModelUsage
+type ModelError = modelprotocol.ModelError
+type ModelResult = modelprotocol.ModelResult
+type ModelEventType = modelprotocol.ModelEventType
+
+const (
+	ModelEventResponseStarted        = modelprotocol.ModelEventResponseStarted
+	ModelEventTextDelta              = modelprotocol.ModelEventTextDelta
+	ModelEventTextDone               = modelprotocol.ModelEventTextDone
+	ModelEventRefusalDelta           = modelprotocol.ModelEventRefusalDelta
+	ModelEventRefusalDone            = modelprotocol.ModelEventRefusalDone
+	ModelEventToolCallStarted        = modelprotocol.ModelEventToolCallStarted
+	ModelEventToolCallArgumentsDelta = modelprotocol.ModelEventToolCallArgumentsDelta
+	ModelEventToolCallDone           = modelprotocol.ModelEventToolCallDone
+	ModelEventReasoningSummaryDelta  = modelprotocol.ModelEventReasoningSummaryDelta
+	ModelEventReasoningSummaryDone   = modelprotocol.ModelEventReasoningSummaryDone
+	ModelEventUsage                  = modelprotocol.ModelEventUsage
+	ModelEventCompleted              = modelprotocol.ModelEventCompleted
+	ModelEventFailed                 = modelprotocol.ModelEventFailed
+	ModelEventCancelled              = modelprotocol.ModelEventCancelled
+)
+
+type ModelEvent = modelprotocol.ModelEvent
+type ModelEventSink = modelprotocol.ModelEventSink
+type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
 	ID           string `gorm:"column:id;primaryKey" json:"id"`
@@ -134,152 +189,6 @@ type ModelCapabilities struct {
 	StructuredOutput      bool `json:"structuredOutput"`
 	ReasoningContinuation bool `json:"reasoningContinuation"`
 	ProviderFileUpload    bool `json:"providerFileUpload"`
-}
-
-type ModelProtocol string
-
-const (
-	ProtocolOpenAIChat          ModelProtocol = "openai_chat"
-	ProtocolOpenAIResponses     ModelProtocol = "openai_responses"
-	ProtocolAnthropicMessages   ModelProtocol = "anthropic_messages"
-	ProtocolGeminiGenerate      ModelProtocol = "gemini_generate_content"
-	ProtocolOllamaChat          ModelProtocol = "ollama_chat"
-)
-
-type ModelContentType string
-
-const (
-	ContentTypeText  ModelContentType = "text"
-	ContentTypeImage ModelContentType = "image"
-	ContentTypeFile  ModelContentType = "file"
-	ContentTypeAudio ModelContentType = "audio"
-	ContentTypeVideo ModelContentType = "video"
-)
-
-type ModelContentPart struct {
-	Type        ModelContentType `json:"type"`
-	Text        string           `json:"text,omitempty"`
-	ResourceURI string           `json:"resourceUri,omitempty"`
-	MIMEType    string           `json:"mimeType,omitempty"`
-	Filename    string           `json:"filename,omitempty"`
-	Detail      string           `json:"detail,omitempty"`
-}
-
-type ModelMessage struct {
-	Role  string              `json:"role"`
-	Parts []ModelContentPart  `json:"parts"`
-}
-
-type ModelToolDefinition struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
-	Strict      bool           `json:"strict"`
-}
-
-type ModelToolCall struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	ArgumentsJSON  string `json:"argumentsJson"`
-}
-
-type ModelToolResult struct {
-	CallID  string `json:"callId"`
-	Name    string `json:"name"`
-	Output  string `json:"output"`
-	IsError bool   `json:"isError"`
-}
-
-type ModelResponseFormat struct {
-	Type    string         `json:"type"`
-	Name    string         `json:"name"`
-	Schema  map[string]any `json:"schema"`
-	Strict  bool           `json:"strict"`
-}
-
-type ModelContinuationState struct {
-	Protocol           string            `json:"protocol"`
-	OpaqueItems        []json.RawMessage `json:"opaqueItems"`
-	ProviderResponseID string            `json:"providerResponseID"`
-	ExpiresAt          *time.Time        `json:"expiresAt,omitempty"`
-}
-
-type ModelRequest struct {
-	Model          string                 `json:"model"`
-	Instructions   []string               `json:"instructions"`
-	Messages       []ModelMessage         `json:"messages"`
-	Tools          []ModelToolDefinition  `json:"tools"`
-	ToolResults    []ModelToolResult      `json:"toolResults"`
-	ResponseFormat ModelResponseFormat    `json:"responseFormat"`
-	Temperature    *float64               `json:"temperature,omitempty"`
-	TopP           *float64               `json:"topP,omitempty"`
-	MaxOutputTokens int                    `json:"maxOutputTokens"`
-	Stream         bool                   `json:"stream"`
-	Continuation   *ModelContinuationState `json:"continuation,omitempty"`
-}
-
-type ModelUsage struct {
-	InputTokens      int `json:"inputTokens"`
-	OutputTokens     int `json:"outputTokens"`
-	ReasoningTokens  int `json:"reasoningTokens"`
-	CachedInputTokens int `json:"cachedInputTokens"`
-	TotalTokens      int `json:"totalTokens"`
-}
-
-type ModelError struct {
-	Code         string       `json:"code"`
-	Provider     string       `json:"provider"`
-	Protocol     ModelProtocol `json:"protocol"`
-	HTTPStatus   int          `json:"httpStatus"`
-	Message      string       `json:"message"`
-	Retryable    bool         `json:"retryable"`
-	AuthRelated  bool         `json:"authRelated"`
-	RateLimited  bool         `json:"rateLimited"`
-	Timeout      bool         `json:"timeout"`
-	RequestID    string       `json:"requestId"`
-}
-
-type ModelResult struct {
-	Text               string                 `json:"text"`
-	Refusal            string                 `json:"refusal"`
-	ToolCalls          []ModelToolCall        `json:"toolCalls"`
-	Usage              ModelUsage             `json:"usage"`
-	Continuation       *ModelContinuationState `json:"continuation"`
-	FinishReason       string                 `json:"finishReason"`
-	ProviderResponseID string                 `json:"providerResponseID"`
-}
-
-type ModelEventType string
-
-const (
-	ModelEventResponseStarted      ModelEventType = "response_started"
-	ModelEventTextDelta            ModelEventType = "text_delta"
-	ModelEventTextDone             ModelEventType = "text_done"
-	ModelEventRefusalDelta         ModelEventType = "refusal_delta"
-	ModelEventRefusalDone          ModelEventType = "refusal_done"
-	ModelEventToolCallStarted      ModelEventType = "tool_call_started"
-	ModelEventToolCallArgumentsDelta ModelEventType = "tool_call_arguments_delta"
-	ModelEventToolCallDone         ModelEventType = "tool_call_done"
-	ModelEventReasoningSummaryDelta ModelEventType = "reasoning_summary_delta"
-	ModelEventReasoningSummaryDone ModelEventType = "reasoning_summary_done"
-	ModelEventUsage                ModelEventType = "usage"
-	ModelEventCompleted            ModelEventType = "completed"
-	ModelEventFailed               ModelEventType = "failed"
-	ModelEventCancelled            ModelEventType = "cancelled"
-)
-
-type ModelEvent struct {
-	Type            ModelEventType `json:"type"`
-	TextDelta       string         `json:"textDelta,omitempty"`
-	ToolCallID      string         `json:"toolCallID,omitempty"`
-	ToolName        string         `json:"toolName,omitempty"`
-	ArgumentsDelta  string         `json:"argumentsDelta,omitempty"`
-	Usage           *ModelUsage    `json:"usage,omitempty"`
-	Error           *ModelError    `json:"error,omitempty"`
-}
-
-type ModelEventSink interface {
-	Emit(ctx context.Context, event ModelEvent) error
 }
 
 type MessageAttachment struct {

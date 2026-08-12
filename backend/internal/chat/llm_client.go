@@ -392,11 +392,28 @@ func modelResultToLegacy(result *ModelResult) (string, string, []map[string]inte
 	return result.Text, reasoning, toolCalls, result.Usage.TotalTokens
 }
 
+func cfgToProviderConfig(cfg *ModelConfig) modelprotocol.ProviderConfig {
+	return modelprotocol.ProviderConfig{
+		ModelName:        cfg.ModelName,
+		BaseURL:          cfg.BaseURL,
+		APIKey:           cfg.APIKey,
+		Temperature:      cfg.Temperature,
+		TopP:             cfg.TopP,
+		TimeoutSeconds:   cfg.TimeoutSeconds,
+		MaxTokens:        cfg.MaxTokens,
+		MaxOutputTokens:  cfg.MaxOutputTokens,
+		ContextWindow:    cfg.ContextWindow,
+		Protocol:         cfg.Protocol,
+		CapabilitiesJSON: cfg.CapabilitiesJSON,
+	}
+}
+
 func (s *service) callLLMWithAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
 	req := messagesToModelRequest(cfg, messages, nil, jsonOnly)
-	result, err := adapter.Generate(ctx, cfg, req)
+	pcfg := cfgToProviderConfig(cfg)
+	result, err := adapter.Generate(ctx, pcfg, req)
 	if err != nil {
 		return "", 0, err
 	}
@@ -408,7 +425,8 @@ func (s *service) callLLMWithToolsAdapter(ctx context.Context, cfg *ModelConfig,
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
 	req := messagesToModelRequest(cfg, messages, tools, false)
-	result, err := adapter.Generate(ctx, cfg, req)
+	pcfg := cfgToProviderConfig(cfg)
+	result, err := adapter.Generate(ctx, pcfg, req)
 	if err != nil {
 		return "", "", nil, 0, err
 	}
@@ -424,10 +442,11 @@ func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, me
 	adapter := modelprotocol.AdapterForProtocol(protocol)
 	req := messagesToModelRequest(cfg, messages, tools, false)
 	req.Stream = true
+	pcfg := cfgToProviderConfig(cfg)
 	if sink == nil {
 		sink = noopEventSink{}
 	}
-	return adapter.Stream(ctx, cfg, req, sink)
+	return adapter.Stream(ctx, pcfg, req, sink)
 }
 
 func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {

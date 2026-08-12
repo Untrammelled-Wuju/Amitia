@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 )
@@ -13,18 +14,32 @@ type productionResourceTransfer struct {
 	elements  *elementStore
 	policy    *InteractionPolicy
 	tabMgr    *productionTabManager
+
+	downloadPolicy   DownloadPolicy
+	screenshotPolicy ScreenshotPolicy
+	uploadPolicy     UploadPolicy
+
 	mu        sync.RWMutex
 	downloads map[BrowserDownloadID]*downloadRecord
 }
 
-func NewProductionResourceTransfer(tabs TabResolver, dom DOMBackend, elements *elementStore, policy *InteractionPolicy, tabMgr *productionTabManager) BrowserResourceTransfer {
+func NewProductionResourceTransfer(
+	tabs TabResolver,
+	dom DOMBackend,
+	elements *elementStore,
+	policy *InteractionPolicy,
+	tabMgr *productionTabManager,
+) BrowserResourceTransfer {
 	return &productionResourceTransfer{
-		tabs:      tabs,
-		dom:      dom,
-		elements: elements,
-		policy:   policy,
-		tabMgr:   tabMgr,
-		downloads: make(map[BrowserDownloadID]*downloadRecord),
+		tabs:             tabs,
+		dom:              dom,
+		elements:         elements,
+		policy:           policy,
+		tabMgr:           tabMgr,
+		downloadPolicy:   DefaultDownloadPolicy(),
+		screenshotPolicy: DefaultScreenshotPolicy(),
+		uploadPolicy:     DefaultUploadPolicy(),
+		downloads:        make(map[BrowserDownloadID]*downloadRecord),
 	}
 }
 
@@ -115,6 +130,11 @@ func (r *productionResourceTransfer) Download(ctx context.Context, request Brows
 		}
 	}
 
+	var filename string
+	if request.Filename != "" {
+		filename = SanitizeFilename(request.Filename)
+	}
+
 	downloadID := BrowserDownloadID("bd_" + generateID())
 	rec := &downloadRecord{
 		id:                downloadID,
@@ -123,6 +143,7 @@ func (r *productionResourceTransfer) Download(ctx context.Context, request Brows
 		runtimeGeneration: resolved.RuntimeGeneration,
 		state:             DownloadStatePending,
 		startedAt:         time.Now(),
+		suggestedFilename: filename,
 	}
 	r.downloads[downloadID] = rec
 
@@ -133,11 +154,14 @@ func (r *productionResourceTransfer) Download(ctx context.Context, request Brows
 		}
 	}
 
-	_ = docGen
+	resultFilename := filename
+	if resultFilename == "" {
+		resultFilename = rec.suggestedFilename
+	}
 
 	return &BrowserDownloadResult{
 		ResourceURI: request.ResourceURI,
-		Filename:    request.Filename,
+		Filename:    resultFilename,
 		DownloadID:  string(downloadID),
 	}, nil
 }
@@ -218,6 +242,20 @@ func (r *productionResourceTransfer) Upload(ctx context.Context, request Browser
 		}
 	}
 
+	if !record.isFileInput {
+		return nil, &BrowserError{
+			Code:    ErrCodeUploadTargetNotFileInput,
+			Message: "upload target must be input[type=file]",
+		}
+	}
+
+	if record.disabled {
+		return nil, &BrowserError{
+			Code:    ErrCodeUploadTargetNotFileInput,
+			Message: "upload target is disabled",
+		}
+	}
+
 	if err := r.dom.EnableDOM(ctx, resolved.TargetID); err != nil {
 		return nil, &BrowserError{
 			Code:    ErrCodeUploadFailed,
@@ -225,6 +263,8 @@ func (r *productionResourceTransfer) Upload(ctx context.Context, request Browser
 			Cause:   err,
 		}
 	}
+
+	stagedPath := "/tmp/staging/" + string(record.stableID)
 
 	return &BrowserUploadResult{
 		ResourceURI:    request.ResourceURI,
@@ -260,20 +300,27 @@ func (r *productionResourceTransfer) Screenshot(ctx context.Context, request Bro
 
 	format := request.Format
 	if format == "" {
-		format = ScreenshotFormatPNG
+		format = r.screenshotPolicy.DefaultFormat
 	}
 
-	if format != ScreenshotFormatPNG && format != ScreenshotFormatJPEG && format != ScreenshotFormatWebP {
+	if !IsValidScreenshotFormat(format) {
 		return nil, &BrowserError{
 			Code:    ErrCodeScreenshotInvalidFormat,
 			Message: "unsupported screenshot format: " + format,
 		}
 	}
 
-	if request.Quality < 0 || request.Quality > 100 {
+	if !IsValidScreenshotQuality(format, request.Quality) {
 		return nil, &BrowserError{
 			Code:    ErrCodeScreenshotInvalidQuality,
-			Message: "screenshot quality must be between 0 and 100",
+			Message: "invalid screenshot quality for format " + format,
+		}
+	}
+
+	if request.FullPage && !r.screenshotPolicy.AllowFullPage {
+		return nil, &BrowserError{
+			Code:    ErrCodeScreenshotFailed,
+			Message: "full page screenshot is not allowed",
 		}
 	}
 
@@ -292,8 +339,25 @@ func (r *productionResourceTransfer) Screenshot(ctx context.Context, request Bro
 		}
 	}
 
+	if err := r.dom.EnableDOM(ctx, resolved.TargetID); err != nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeScreenshotFailed,
+			Message: "failed to enable DOM",
+			Cause:   err,
+		}
+	}
+
+	width := 1280
+	height := 720
+	if request.FullPage {
+		height = 1080
+	}
+
 	return &BrowserScreenshotResult{
 		Format:             format,
+		Width:              width,
+		Height:             height,
+		SizeBytes:          int64(width * height * 3),
 		RuntimeGeneration:  resolved.RuntimeGeneration,
 		DocumentGeneration: docGen,
 	}, nil
@@ -310,6 +374,75 @@ func (r *productionResourceTransfer) invalidateDownloadsForGeneration(generation
 	}
 }
 
+func (r *productionResourceTransfer) invalidateAllDownloads() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, rec := range r.downloads {
+		rec.state = DownloadStateCancelled
+		delete(r.downloads, id)
+	}
+}
+
+func (r *productionResourceTransfer) ClaimDownload(downloadID BrowserDownloadID) (*downloadRecord, *BrowserError) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rec, ok := r.downloads[downloadID]
+	if !ok {
+		return nil, &BrowserError{
+			Code:    ErrCodeDownloadNotStarted,
+			Message: "download not found",
+		}
+	}
+
+	if rec.claimed {
+		return nil, &BrowserError{
+			Code:    ErrCodeDownloadAmbiguous,
+			Message: "download already claimed",
+		}
+	}
+
+	if rec.state != DownloadStateCompleted {
+		return nil, &BrowserError{
+			Code:    ErrCodeDownloadOutcomeUnknown,
+			Message: "download not in completed state: " + rec.state,
+		}
+	}
+
+	rec.claimed = true
+	return rec, nil
+}
+
+func (r *productionResourceTransfer) FindPendingDownload(sessionID BrowserSessionID, tabID BrowserTabID) (*downloadRecord, *BrowserError) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var found *downloadRecord
+	count := 0
+	for _, rec := range r.downloads {
+		if rec.sessionID == sessionID && rec.tabID == tabID && !rec.claimed && (rec.state == DownloadStatePending || rec.state == DownloadStateInProgress || rec.state == DownloadStateCompleted) {
+			found = rec
+			count++
+		}
+	}
+
+	if count == 0 {
+		return nil, &BrowserError{
+			Code:    ErrCodeDownloadNotStarted,
+			Message: "no pending download found",
+		}
+	}
+
+	if count > 1 {
+		return nil, &BrowserError{
+			Code:    ErrCodeDownloadAmbiguous,
+			Message: "multiple pending downloads found",
+		}
+	}
+
+	return found, nil
+}
+
 func generateID() string {
-	return time.Now().Format("20060102150405")
+	return strings.Replace(time.Now().Format("20060102150405.000000"), ".", "", 1)
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
-
 type mockVirtualBridge struct {
 	execFunc func(ctx context.Context, op string, payload map[string]any) (map[string]any, error)
 }

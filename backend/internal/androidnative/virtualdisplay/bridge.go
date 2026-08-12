@@ -71,8 +71,3 @@ func mapNativeOperationError(code string) string {
 		return ErrVirtualDisplayNative
 	}
 }
-
-func mustJSON(v interface{}) []byte {
-	b, _ := json.Marshal(v)
-	return b
-}

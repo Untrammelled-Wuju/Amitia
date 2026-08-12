@@ -121,12 +121,13 @@ type ReleaseResult struct {
 
 type StatusResult struct {
 	Supported          bool                `json:"supported"`
+	FeatureSecondaryDisplays bool           `json:"featureSecondaryDisplays"`
 	CanCreate          bool                `json:"canCreate"`
 	Active             bool                `json:"active"`
 	Display            *VirtualDisplayInfo `json:"display,omitempty"`
 	FrameSourceSupported bool              `json:"frameSourceSupported"`
-	UITreeSupported     bool              `json:"uiTreeSupported"`
-	VisualTapSupported  bool              `json:"visualTapSupported"`
+	UITreeSupported    bool                `json:"uiTreeSupported"`
+	GestureSupported   bool                `json:"gestureSupported"`
 	ThirdPartyLaunchSupported bool         `json:"thirdPartyLaunchSupported"`
 	State              string              `json:"state"`
 	Reason             string              `json:"reason"`

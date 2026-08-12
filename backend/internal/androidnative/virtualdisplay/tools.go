@@ -33,12 +33,13 @@ func buildStatusTool(runtime capability.RuntimeBinding) capability.ToolDefinitio
 		"type": "object",
 		"properties": {
 			"supported": {"type": "boolean"},
+			"featureSecondaryDisplays": {"type": "boolean"},
 			"canCreate": {"type": "boolean"},
 			"active": {"type": "boolean"},
 			"display": {"type": "object"},
 			"frameSourceSupported": {"type": "boolean"},
 			"uiTreeSupported": {"type": "boolean"},
-			"visualTapSupported": {"type": "boolean"},
+			"gestureSupported": {"type": "boolean"},
 			"thirdPartyLaunchSupported": {"type": "boolean"},
 			"state": {"type": "string"},
 			"reason": {"type": "string"}

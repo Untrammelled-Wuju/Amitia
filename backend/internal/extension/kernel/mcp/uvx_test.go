@@ -363,7 +363,7 @@ func TestBuildUvxInvocation_NoExactVersion(t *testing.T) {
 
 	policy := UvxPolicy{RequireExactVersion: true}
 
-	_, _, err := BuildUvxInvocation(context.Background(), spec, policy, resolver)
+	_, _, err = BuildUvxInvocation(context.Background(), spec, policy, resolver)
 	if err == nil {
 		t.Error("expected error for missing exact version with strict policy")
 	}
@@ -382,7 +382,7 @@ func TestBuildUvxInvocation_CommandInjection(t *testing.T) {
 
 	policy := UvxPolicy{RequireExactVersion: true}
 
-	_, _, err := BuildUvxInvocation(context.Background(), spec, policy, resolver)
+	_, _, err = BuildUvxInvocation(context.Background(), spec, policy, resolver)
 	if err == nil {
 		t.Error("expected error for command injection")
 	}
@@ -401,7 +401,7 @@ func TestBuildUvxInvocation_DirectURL(t *testing.T) {
 
 	policy := UvxPolicy{RequireExactVersion: true}
 
-	_, _, err := BuildUvxInvocation(context.Background(), spec, policy, resolver)
+	_, _, err = BuildUvxInvocation(context.Background(), spec, policy, resolver)
 	if err == nil {
 		t.Error("expected error for direct URL")
 	}
@@ -420,7 +420,7 @@ func TestBuildUvxInvocation_GitDependency(t *testing.T) {
 
 	policy := UvxPolicy{RequireExactVersion: true}
 
-	_, _, err := BuildUvxInvocation(context.Background(), spec, policy, resolver)
+	_, _, err = BuildUvxInvocation(context.Background(), spec, policy, resolver)
 	if err == nil {
 		t.Error("expected error for git dependency")
 	}
