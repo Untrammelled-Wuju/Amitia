@@ -37,6 +37,16 @@ func NewRunner(host runtimehost.RuntimeHost, config Config) *Runner {
 }
 
 func (r *Runner) RunProcess(ctx context.Context, executable string, args []string) (*ProcessResult, error) {
+	return r.RunProcessWithOptions(ctx, executable, args, RunOptions{})
+}
+
+type RunOptions struct {
+	StdinInput   []byte
+	OnStdoutLine func(line string)
+	OnStderrLine func(line string)
+}
+
+func (r *Runner) RunProcessWithOptions(ctx context.Context, executable string, args []string, opts RunOptions) (*ProcessResult, error) {
 	if !r.host.Capabilities().Supports(runtimehost.CapProcessSpawn) {
 		return nil, NewError(FFMPEG_PROCESS_SPAWN_UNSUPPORTED, "process spawn capability not available")
 	}
@@ -55,8 +65,10 @@ func (r *Runner) RunProcess(ctx context.Context, executable string, args []strin
 	r.trackProcess(processID, cancel)
 	defer r.untrackProcess(processID)
 
-	processDone := make(chan struct{})
-	defer close(processDone)
+	var stdoutBuf, stderrBuf []byte
+	var stdoutLen, stderrLen int64
+	maxStdout := r.config.EffectiveMaxStdout()
+	maxStderr := r.config.EffectiveMaxStderr()
 
 	spec := runtimehost.ProcessSpec{
 		ID:         processID,
@@ -68,6 +80,26 @@ func (r *Runner) RunProcess(ctx context.Context, executable string, args []strin
 		},
 		RestartPolicy: runtimehost.RestartPolicy{
 			Mode: runtimehost.RestartNever,
+		},
+		OnStdout: func(line string) {
+			if int64(len(line))+stdoutLen <= maxStdout {
+				stdoutBuf = append(stdoutBuf, line...)
+				stdoutLen += int64(len(line)) + 1
+				stdoutBuf = append(stdoutBuf, '\n')
+			}
+			if opts.OnStdoutLine != nil {
+				opts.OnStdoutLine(line)
+			}
+		},
+		OnStderr: func(line string) {
+			if int64(len(line))+stderrLen <= maxStderr {
+				stderrBuf = append(stderrBuf, line...)
+				stderrLen += int64(len(line)) + 1
+				stderrBuf = append(stderrBuf, '\n')
+			}
+			if opts.OnStderrLine != nil {
+				opts.OnStderrLine(line)
+			}
 		},
 	}
 
@@ -89,6 +121,8 @@ func (r *Runner) RunProcess(ctx context.Context, executable string, args []strin
 		_ = supervisor.Stop(context.Background(), processID)
 		return &ProcessResult{
 			ExitCode: -1,
+			Stdout:   stdoutBuf,
+			Stderr:   stderrBuf,
 			Duration: duration,
 		}, NewError(FFMPEG_PROCESS_TIMEOUT, "process exceeded maximum duration")
 	}
@@ -96,12 +130,17 @@ func (r *Runner) RunProcess(ctx context.Context, executable string, args []strin
 	if runCtx.Err() == context.Canceled {
 		return &ProcessResult{
 			ExitCode: -1,
+			Stdout:   stdoutBuf,
+			Stderr:   stderrBuf,
 			Duration: duration,
 		}, NewError(FFMPEG_PROCESS_CANCELLED, "process was cancelled")
 	}
 
+	snapshot, _ := supervisor.Snapshot(processID)
 	return &ProcessResult{
-		ExitCode: 0,
+		ExitCode: snapshot.LastExitCode,
+		Stdout:   stdoutBuf,
+		Stderr:   stderrBuf,
 		Duration: duration,
 	}, nil
 }
