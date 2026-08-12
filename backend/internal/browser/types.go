@@ -1,6 +1,8 @@
 package browser
 
-import "time"
+import (
+	"time"
+)
 
 type BrowserSessionID string
 type BrowserTabID string
@@ -116,4 +118,54 @@ type BrowserTabInfo struct {
 	URL       string           `json:"url,omitempty"`
 	Title     string           `json:"title,omitempty"`
 	Active    bool             `json:"active"`
+}
+
+type BrowserRuntimeState string
+
+const (
+	BrowserRuntimeStopped  BrowserRuntimeState = "stopped"
+	BrowserRuntimeStarting BrowserRuntimeState = "starting"
+	BrowserRuntimeReady    BrowserRuntimeState = "ready"
+	BrowserRuntimeStopping BrowserRuntimeState = "stopping"
+	BrowserRuntimeFailed   BrowserRuntimeState = "failed"
+)
+
+type BrowserRuntimeHealth string
+
+const (
+	BrowserHealthUnknown     BrowserRuntimeHealth = "unknown"
+	BrowserHealthHealthy     BrowserRuntimeHealth = "healthy"
+	BrowserHealthUnhealthy   BrowserRuntimeHealth = "unhealthy"
+	BrowserHealthUnavailable BrowserRuntimeHealth = "unavailable"
+	BrowserHealthStarting    BrowserRuntimeHealth = "starting"
+)
+
+type BrowserRuntimeInfo struct {
+	State          BrowserRuntimeState `json:"state"`
+	Generation     uint64              `json:"generation"`
+	Engine         string              `json:"engine"`
+	BrowserName    string              `json:"browserName,omitempty"`
+	BrowserVersion string              `json:"browserVersion,omitempty"`
+	Headless       bool                `json:"headless"`
+	StartedAt      *time.Time          `json:"startedAt,omitempty"`
+	ProcessAlive   bool                `json:"processAlive"`
+	CDPConnected   bool                `json:"cdpConnected"`
+	LastErrorCode  string              `json:"lastErrorCode,omitempty"`
+}
+
+type BrowserExecutable struct {
+	Path    string
+	Kind    string
+	Version string
+}
+
+type BrowserConfig struct {
+	Enabled               bool          `json:"enabled"`
+	ExecutablePath        string        `json:"executablePath,omitempty"`
+	Headless              bool          `json:"headless"`
+	StartupTimeout        time.Duration `json:"startupTimeout"`
+	ShutdownTimeout       time.Duration `json:"shutdownTimeout"`
+	UserDataRoot          string        `json:"userDataRoot,omitempty"`
+	MaxBrowserMemoryBytes int64         `json:"maxBrowserMemoryBytes"`
+	AllowedSchemes        []string      `json:"allowedSchemes"`
 }

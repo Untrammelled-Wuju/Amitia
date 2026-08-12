@@ -20,7 +20,9 @@ const (
 	RuntimeTypeTrustedService RuntimeType = "trusted_service"
 	RuntimeTypeTask           RuntimeType = "task"
 	RuntimeTypeBrowser        RuntimeType = "browser"
+	RuntimeTypeSearch         RuntimeType = "search"
 	RuntimeTypeAndroid_Native     RuntimeType = "android_native"
+	RuntimeTypeAndroidLinux       RuntimeType = "android_linux"
 	RuntimeTypeIOS_Native         RuntimeType = "ios_native"
 	RuntimeTypeDesktop_Extension  RuntimeType = "desktop_extension"
 )

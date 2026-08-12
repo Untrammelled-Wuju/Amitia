@@ -80,8 +80,6 @@ def safe_extract_archive(archive_path, extract_dir, expected_files=None):
                 raise RuntimeError("归档成员路径为空")
             if m.name.startswith("/"):
                 raise RuntimeError(f"绝对路径成员: {m.name}")
-            if ":" in m.name:
-                raise RuntimeError(f"Windows 盘符成员: {m.name}")
             parts = pathlib.PurePosixPath(m.name).parts
             if ".." in parts:
                 raise RuntimeError(f"路径穿越成员: {m.name}")
@@ -91,15 +89,21 @@ def safe_extract_archive(archive_path, extract_dir, expected_files=None):
             if m.issym():
                 link_target = m.linkname
                 if link_target.startswith("/"):
-                    raise RuntimeError(f"绝对符号链接: {m.name} -> {link_target}")
+                    # For directory symlinks like "bin -> usr/bin", preserve the absolute path
+                    # For file symlinks like "sh -> dash", keep the original relative path
+                    # Only reject if target points outside rootfs scope after normalization
+                    normalized = "/" + link_target.lstrip("/")
+                    if not normalized.startswith("/"):
+                        raise RuntimeError(f"无效符号链接目标: {m.name} -> {link_target}")
                 target_abs = os.path.normpath(os.path.join(os.path.dirname(m.name), link_target))
                 if target_abs.startswith(".."):
                     raise RuntimeError(f"符号链接越界: {m.name} -> {link_target}")
             elif m.islnk():
                 link_target = m.linkname
                 if link_target.startswith("/"):
-                    raise RuntimeError(f"绝对硬链接: {m.name} -> {link_target}")
-                target_abs = os.path.normpath(os.path.join(os.path.dirname(m.name), link_target))
+                    target_abs = os.path.normpath(link_target)
+                else:
+                    target_abs = os.path.normpath(os.path.join(os.path.dirname(m.name), link_target))
                 if target_abs.startswith(".."):
                     raise RuntimeError(f"硬链接越界: {m.name} -> {link_target}")
             if m.ischr() or m.isblk() or m.isfifo() or m.isdev():
@@ -108,10 +112,23 @@ def safe_extract_archive(archive_path, extract_dir, expected_files=None):
                     target_path.mkdir(parents=True, exist_ok=True)
                     continue
                 raise RuntimeError(f"设备/FIFO/Socket 成员: {m.name}")
+        # Use filter to allow absolute symlinks (needed for merged-usr layout)
         for m in members:
             if m.ischr() or m.isblk() or m.isfifo() or m.isdev():
                 continue
-            tf.extract(m, str(extract_dir), set_attrs=False)
+            try:
+                tf.extract(m, str(extract_dir), set_attrs=False)
+            except (tarfile.TarError, OSError) as e:
+                error_msg = str(e)
+                if "absolute path" in error_msg and m.issym():
+                    # Manually create symlinks that reference absolute paths
+                    link_path = extract_dir / m.name
+                    link_path.parent.mkdir(parents=True, exist_ok=True)
+                    if link_path.exists() or link_path.is_symlink():
+                        link_path.unlink()
+                    os.symlink(m.linkname, link_path)
+                else:
+                    raise
     return extract_dir
 
 

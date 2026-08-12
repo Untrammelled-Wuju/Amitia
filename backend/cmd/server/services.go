@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 
-	"github.com/u-ai/backend/internal/androidlinux/terminal"
 	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
@@ -98,6 +97,7 @@ import (
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
+	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
@@ -297,37 +297,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
-	var androidLinuxProvider terminal.AndroidLinuxProvider
-if terminal.IsAndroidLinuxRuntime(bootstrap.RuntimeHost()) {
-	workspaceRoot := ""
-	if bootstrap.RuntimeHost() != nil {
-		workspaceRoot = bootstrap.RuntimeHost().Paths().WorkspaceDir
-	}
-	provider, err := terminal.NewProvider(
-		bootstrap.RuntimeHost(),
-		workspaceRoot,
-		terminal.DefaultPolicy(),
-	)
-	if err == nil {
-		androidLinuxProvider = provider
-	} else {
-		log.Warn("failed to create android linux terminal provider:", err)
-	}
-}
+	kernelBuilder := kernel.NewContainerBuilder().
+		WithDBPath(kernelDBPath).
+		WithExtensionRoot(kernelRoot).
+		WithCharacterReader(kernelCharReader).
+		WithConversationReader(kernelConvReader).
+		WithMemoryQueryService(kernelMemQuerySvc).
+		WithNodeEnvironmentResolver(nodeResolver).
+		WithHostArtifactResolver(artifactResolver).
+		WithRuntimeHost(bootstrap.RuntimeHost()).
+		WithSearchConfig(search.DefaultConfig())
 
-kernelBuilder := kernel.NewContainerBuilder().
-	WithDBPath(kernelDBPath).
-	WithExtensionRoot(kernelRoot).
-	WithCharacterReader(kernelCharReader).
-	WithConversationReader(kernelConvReader).
-	WithMemoryQueryService(kernelMemQuerySvc).
-	WithNodeEnvironmentResolver(nodeResolver).
-	WithHostArtifactResolver(artifactResolver).
-	WithRuntimeHost(bootstrap.RuntimeHost())
-
-if androidLinuxProvider != nil {
-	kernelBuilder.WithAndroidLinuxProvider(androidLinuxProvider)
-}
+	kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
 
 kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {

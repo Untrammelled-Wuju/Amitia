@@ -26,13 +26,13 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
       PermissionItem(
         name: '无障碍服务',
         icon: Icons.accessibility_new,
-        status: '已授权',
+        status: '需要设置',
         description: '允许 Amitia 读取屏幕内容并提供辅助',
       ),
       PermissionItem(
         name: '通知读取',
         icon: Icons.notifications_outlined,
-        status: '已授权',
+        status: '需要设置',
         description: '读取系统通知以提供智能提醒',
       ),
       PermissionItem(
@@ -104,6 +104,31 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
       ),
       builder: (ctx) => _PermissionGuideSheet(item: item),
     );
+  }
+
+  List<String> _guideStepsFor(String name) {
+    if (name == '无障碍服务') {
+      return const [
+        '打开系统设置',
+        '找到「无障碍」或「辅助功能」',
+        '选择「Amitia Accessibility Service」',
+        '开启服务开关并确认',
+      ];
+    }
+    if (name == '通知读取') {
+      return const [
+        '打开系统设置',
+        '找到「无障碍」或「通知」',
+        '选择「通知访问」或「Notification Listener」',
+        '开启 Amitia 并确认',
+      ];
+    }
+    return const [
+      '打开系统设置',
+      '找到「应用管理」',
+      '选择 Amitia',
+      '找到权限并开启',
+    ];
   }
 
   @override
@@ -195,7 +220,8 @@ class _PermissionGuideSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final steps = <String>[
+    final state = context.findAncestorStateOfType<_PermissionsPageState>();
+    final steps = state?._guideStepsFor(item.name) ?? <String>[
       '打开系统设置',
       '找到「应用管理」',
       '选择 Amitia',

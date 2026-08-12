@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/androidlinux/shell"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/pkg/platform"
 )
@@ -25,6 +26,7 @@ const (
 	OpStatus  = "terminal.status"
 	OpClose   = "terminal.close"
 	OpCancel  = "terminal.cancel"
+	OpShellExec = "shell.exec"
 )
 
 var DefaultShellAllowlist = []string{"/bin/sh", "/bin/bash"}
@@ -68,10 +70,13 @@ const (
 )
 
 type Provider struct {
-	manager    *SessionManager
-	host       runtimehost.RuntimeHost
-	workspace  string
-	clock      Clock
+	manager      *SessionManager
+	host         runtimehost.RuntimeHost
+	workspace    string
+	clock        Clock
+	shellExecutor shell.ShellExecutor
+	shellPolicy   shell.ShellPolicy
+	shellHandler  shell.ShellHandler
 }
 
 func IsAndroidLinuxRuntime(host runtimehost.RuntimeHost) bool {
@@ -127,11 +132,18 @@ func NewProvider(host runtimehost.RuntimeHost, workspaceRoot string, policy Poli
 		done:     make(chan struct{}),
 	}
 
+	shellPolicy := shell.DefaultShellPolicy()
+	shellExecutor := shell.NewShellExecutor(shellPolicy, workspaceRoot, "")
+	shellHandler := shell.NewShellHandler(shellExecutor)
+
 	return &Provider{
-		manager:   manager,
-		host:      host,
-		workspace: workspaceRoot,
-		clock:     clock,
+		manager:       manager,
+		host:          host,
+		workspace:     workspaceRoot,
+		clock:         clock,
+		shellExecutor: shellExecutor,
+		shellPolicy:   shellPolicy,
+		shellHandler:  shellHandler,
 	}, nil
 }
 
@@ -195,6 +207,15 @@ func (p *Provider) Execute(ctx context.Context, request AndroidLinuxRequest) And
 		resp.Result = result
 	case OpCancel:
 		result, err := p.handleCancel(ctx, request)
+		if err != nil {
+			resp.Status = "error"
+			resp.Error = toAndroidLinuxError(err)
+			return resp
+		}
+		resp.Status = "success"
+		resp.Result = result
+	case OpShellExec:
+		result, err := p.handleShellExec(ctx, request)
 		if err != nil {
 			resp.Status = "error"
 			resp.Error = toAndroidLinuxError(err)
@@ -558,6 +579,38 @@ func extractOwner(payload map[string]any) SessionOwner {
 	}
 
 	return owner
+}
+
+func (p *Provider) handleShellExec(ctx context.Context, req AndroidLinuxRequest) (map[string]any, error) {
+	payload := req.Payload
+
+	if !p.shellPolicy.Enabled {
+		return nil, shell.ErrShellNotAvailable("disabled")
+	}
+
+	shellReq, err := shell.ParseShellExecuteInput(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := p.shellHandler.Handle(ctx, shellReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"exitCode":        result.ExitCode,
+		"stdout":          result.Stdout,
+		"stderr":          result.Stderr,
+		"stdoutTruncated": result.StdoutTruncated,
+		"stderrTruncated": result.StderrTruncated,
+		"stdoutBytes":     result.StdoutBytes,
+		"stderrBytes":     result.StderrBytes,
+		"durationMs":      result.DurationMs,
+		"timedOut":        result.TimedOut,
+		"signal":          result.Signal,
+		"workingDir":      result.WorkingDir,
+	}, nil
 }
 
 func toAndroidLinuxError(err error) *AndroidLinuxError {

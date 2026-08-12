@@ -18,7 +18,7 @@ REQUESTED_PACKAGES_FILE = SCRIPT_DIR / "packages.requested.json"
 PACKAGES_LOCK_FILE = SCRIPT_DIR / "packages.lock.json"
 OVERLAYS_DIR = SCRIPT_DIR / "overlays"
 DEFAULT_CACHE_DIR = SCRIPT_DIR / ".cache"
-DEFAULT_WORK_DIR = SCRIPT_DIR / ".work"
+DEFAULT_WORK_DIR = pathlib.Path("/tmp/amitia-rootfs-work")
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR.parent.parent / "out" / "rootfs" / "ubuntu-noble-arm64"
 
 from archive import (
@@ -89,31 +89,30 @@ def find_qemu_aarch64_static():
 
 
 def proot_run(rootfs_path, command, env=None, binds=None, working_dir="/", timeout=None):
-    proot_path = find_proot()
     qemu_needed = find_qemu_needed()
-    cmd = [proot_path]
-    if qemu_needed:
-        qemu_path = find_qemu_aarch64_static()
-        cmd.extend(["-q", qemu_path])
-    cmd.extend(["-S", str(rootfs_path)])
-    cmd.extend(["-b", "/proc:proc"])
-    cmd.extend(["-b", "/dev:dev"])
-    cmd.extend(["-b", "/sys:sys"])
-    if binds:
-        for host_path, guest_path in binds:
-            cmd.extend(["-b", f"{pathlib.Path(host_path).resolve()}:{guest_path}"])
-    cmd.extend(["-w", working_dir])
     clean_env = dict(DEFAULT_BUILD_ENV)
     if env:
         blocked_keys = {"HOME", "USER", "PATH", "http_proxy", "https_proxy", "GOPATH", "GOROOT", "NODE_PATH", "ANDROID_HOME"}
         for k, v in env.items():
             if k not in blocked_keys:
                 clean_env[k] = v
-    for k, v in clean_env.items():
-        cmd.extend(["-e", f"{k}={v}"])
     if not isinstance(command, (list, tuple)):
         raise RuntimeError("command 必须为数组参数")
-    cmd.extend([str(c) for c in command])
+    # Build command with environment variables
+    if clean_env:
+        exports = " ".join(f'{k}="{v}"' for k, v in clean_env.items())
+        full_cmd_string = f"{exports} {' '.join(str(c) for c in command)}"
+    else:
+        full_cmd_string = " ".join(str(c) for c in command)
+    guset_shell = str(pathlib.Path(rootfs_path) / "usr" / "bin" / "dash")
+    if qemu_needed:
+        qemu_path = find_qemu_aarch64_static()
+        # Use QEMU user mode with rootfs -L prefix
+        # Must use full path to guest shell - QEMU -L doesn't resolve /bin/sh merged-usr symlink
+        cmd = [qemu_path, "-L", str(rootfs_path), guset_shell, "-c", f"cd {working_dir} && {full_cmd_string}"]
+    else:
+        proot_path = find_proot()
+        cmd = [proot_path, "-S", str(rootfs_path), "-w", working_dir, guset_shell, "-c", full_cmd_string]
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=timeout)
         return subprocess.CompletedProcess(
@@ -130,8 +129,11 @@ def proot_run_checked(rootfs_path, command, env=None, binds=None, working_dir="/
     result = proot_run(rootfs_path, command, env=env, binds=binds, working_dir=working_dir, timeout=timeout)
     if result.returncode != 0:
         stderr_text = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+        stdout_text = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
         raise RuntimeError(
-            f"PRoot 命令失败 (exit={result.returncode}): {' '.join(command)}\n{stderr_text}"
+            f"PRoot 命令失败 (exit={result.returncode}): {' '.join(command)}\n"
+            f"STDOUT:\n{stdout_text}\n"
+            f"STDERR:\n{stderr_text}"
         )
     return result
 

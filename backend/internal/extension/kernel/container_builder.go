@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
-	"github.com/u-ai/backend/internal/androidlinux/terminal"
-	terminaltools "github.com/u-ai/backend/internal/androidlinux/terminal/tools"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
@@ -55,6 +53,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/gamehost"
+	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/pkg/sse"
@@ -69,8 +68,9 @@ type ContainerBuilder struct {
 	memoryQueryService      MemoryQueryService
 	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
 	hostArtifactResolver    script_host.ArtifactResolver
-	androidLinuxProvider    terminal.AndroidLinuxProvider
+	androidLinuxProvider    interface{}
 	host                    runtimehost.RuntimeHost
+	searchConfig            search.Config
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -121,17 +121,15 @@ func (b *ContainerBuilder) WithHostArtifactResolver(
 	return b
 }
 
-func (b *ContainerBuilder) WithAndroidLinuxProvider(
-	provider terminal.AndroidLinuxProvider,
-) *ContainerBuilder {
-	b.androidLinuxProvider = provider
-	return b
-}
-
 func (b *ContainerBuilder) WithRuntimeHost(
 	host runtimehost.RuntimeHost,
 ) *ContainerBuilder {
 	b.host = host
+	return b
+}
+
+func (b *ContainerBuilder) WithSearchConfig(cfg search.Config) *ContainerBuilder {
+	b.searchConfig = cfg
 	return b
 }
 
@@ -536,15 +534,19 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		WorkflowCancel:      makeWorkflowCancelFunc(workflowExecutor),
 		BuiltinDispatcher:   builtinDispatcher,
 		AndroidLinuxProvider: b.androidLinuxProvider,
+		SearchCaller:        makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
+		SearchHealth:        makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
+	}
+	if err := registerSearchTools(toolRegistry, b.searchConfig, kernelSecretBroker); err != nil {
+		return nil, err
 	}
 	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry)
 
 	if b.host != nil && b.androidLinuxProvider != nil {
-		registrar := terminaltools.NewToolRegistrar()
-		if err := registrar.RegisterTerminalTools(b.host, toolRegistry); err != nil {
-			return nil, fmt.Errorf("kernel: register terminal tools: %w", err)
+		if err := registerTerminalTools(b.host, b.androidLinuxProvider, toolRegistry); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1058,4 +1060,29 @@ func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capa
 		return fmt.Errorf("tool registry is nil")
 	}
 	return nil
+}
+
+func makeSearchCallFunc(cfg search.Config, broker *secret.Broker) capability.SearchCallFunc {
+	svc := buildSearchService(cfg, broker)
+	if svc == nil {
+		return nil
+	}
+	return buildSearchCallFunc(svc)
+}
+
+func makeSearchHealthFunc(cfg search.Config, broker *secret.Broker) capability.SearchHealthFunc {
+	svc := buildSearchService(cfg, broker)
+	if svc == nil {
+		return nil
+	}
+	return buildSearchHealthFunc(svc)
+}
+
+func registerSearchTools(registry *capability.ToolRegistry, cfg search.Config, broker *secret.Broker) error {
+	svc := buildSearchService(cfg, broker)
+	return RegisterWebSearchTool(SearchToolsDeps{
+		Registry: registry,
+		Service:  svc,
+		Config:   cfg,
+	})
 }

@@ -29,6 +29,17 @@ const (
 )
 
 const (
+	OperationScreenFrameStatus  = "screen_frame.status"
+	OperationScreenFrameStart   = "screen_frame.start"
+	OperationScreenFrameLatest  = "screen_frame.latest"
+	OperationScreenFrameStop    = "screen_frame.stop"
+)
+
+const (
+	PermissionContinuousCapture = "android.media.screen_capture.continuous"
+)
+
+const (
 	ToolIDScreenshot    = "android.screen.screenshot"
 	HandlerScreenshot   = OperationScreenshotCapture
 )

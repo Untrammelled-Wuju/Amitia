@@ -14,18 +14,20 @@ import (
 )
 
 type AdapterRegistrationDeps struct {
-	JSGlobalFactory    *javascript_main.RuntimeFactory
-	WASMFactory        *wasm_runtime.WASMRuntimeFactory
-	WASMModuleMgr      *wasm_runtime.ModuleManager
-	Supervisor         runtime_supervisor.Supervisor
-	TaskService        *task_runtime.TaskRuntimeService
-	MCPCaller          capability.MCPCallFunc
-	MCPHealth          capability.MCPHealthFunc
-	WorkflowCaller     capability.WorkflowCallFunc
-	WorkflowCancel     capability.WorkflowCancelFunc
-	BuiltinDispatcher  capability.DispatchFunc
-	DesktopProvider    capability.DesktopProvider
+	JSGlobalFactory     *javascript_main.RuntimeFactory
+	WASMFactory         *wasm_runtime.WASMRuntimeFactory
+	WASMModuleMgr       *wasm_runtime.ModuleManager
+	Supervisor          runtime_supervisor.Supervisor
+	TaskService         *task_runtime.TaskRuntimeService
+	MCPCaller           capability.MCPCallFunc
+	MCPHealth           capability.MCPHealthFunc
+	WorkflowCaller      capability.WorkflowCallFunc
+	WorkflowCancel      capability.WorkflowCancelFunc
+	BuiltinDispatcher   capability.DispatchFunc
+	DesktopProvider     capability.DesktopProvider
 	AndroidLinuxProvider interface{}
+	SearchCaller        capability.SearchCallFunc
+	SearchHealth        capability.SearchHealthFunc
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -98,6 +100,11 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 
 	if deps.AndroidLinuxProvider != nil {
 		registerAndroidLinuxAdapter(registry, deps.AndroidLinuxProvider)
+	}
+
+	if deps.SearchCaller != nil {
+		searchAdapter := capability.NewSearchRuntimeAdapter(deps.SearchCaller, deps.SearchHealth)
+		registry.Register(capability.RuntimeTypeSearch, searchAdapter)
 	}
 
 	return nil

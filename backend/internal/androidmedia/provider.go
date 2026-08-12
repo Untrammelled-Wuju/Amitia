@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/androidmedia/screenframe"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
@@ -132,6 +133,41 @@ type ScreenshotArtifactRecord struct {
 type ScreenshotCapabilityConstants struct {
 	CapabilityID capability.CapabilityID
 	PermissionID string
+}
+
+type ScreenFrameProvider interface {
+	Start(ctx context.Context, owner screenframe.SessionOwner, request screenframe.StartRequest) (screenframe.StartResult, error)
+	Latest(ctx context.Context, owner screenframe.SessionOwner, request screenframe.LatestRequest) (screenframe.LatestResult, error)
+	Stop(ctx context.Context, owner screenframe.SessionOwner, sessionID screenframe.ScreenFrameSessionID) (screenframe.StopResult, error)
+	Status(ctx context.Context, owner screenframe.SessionOwner) (screenframe.StatusResult, error)
+}
+
+type blockedScreenFrameProvider struct{}
+
+func NewBlockedScreenFrameProvider() ScreenFrameProvider {
+	return &blockedScreenFrameProvider{}
+}
+
+func (b *blockedScreenFrameProvider) Start(ctx context.Context, owner screenframe.SessionOwner, request screenframe.StartRequest) (screenframe.StartResult, error) {
+	return screenframe.StartResult{}, screenframe.NewFrameError(screenframe.ErrBlockedNativeHost, "android native host source not available; screen frame capture blocked")
+}
+
+func (b *blockedScreenFrameProvider) Latest(ctx context.Context, owner screenframe.SessionOwner, request screenframe.LatestRequest) (screenframe.LatestResult, error) {
+	return screenframe.LatestResult{}, screenframe.NewFrameError(screenframe.ErrBlockedNativeHost, "android native host source not available; screen frame latest blocked")
+}
+
+func (b *blockedScreenFrameProvider) Stop(ctx context.Context, owner screenframe.SessionOwner, sessionID screenframe.ScreenFrameSessionID) (screenframe.StopResult, error) {
+	return screenframe.StopResult{}, screenframe.NewFrameError(screenframe.ErrBlockedNativeHost, "android native host source not available; screen frame stop blocked")
+}
+
+func (b *blockedScreenFrameProvider) Status(ctx context.Context, owner screenframe.SessionOwner) (screenframe.StatusResult, error) {
+	return screenframe.StatusResult{
+		Supported:          false,
+		PermissionState:    "native_host_unavailable",
+		ActiveSession:      false,
+		UserActionRequired: true,
+		State:              "native_host_missing",
+	}, nil
 }
 
 func BuildScreenshotCapabilityConstants() ScreenshotCapabilityConstants {

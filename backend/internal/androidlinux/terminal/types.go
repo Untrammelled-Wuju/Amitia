@@ -4,6 +4,7 @@ package terminal
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
